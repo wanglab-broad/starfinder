@@ -23,7 +23,7 @@ import starfinder.assembly._persist as persist_module
 from starfinder.assembly import AssemblyConfig, AssemblyInput, assemble, load_assembly, sample_anndata, save_assembly
 from starfinder.assignment import AssignmentConfig, assign_molecules, write_h5ad
 from starfinder.assignment._persist import write_assignment
-from starfinder.dataset.workflow import _cell_obs, _in_box, _write_raw_h5ad
+from starfinder._snakemake import _cell_obs, _in_box, _write_raw_h5ad
 from starfinder.segmentation import ExpandLabelsConfig
 
 from .assembly_fixtures import (GOLDEN_IDS, TILE_ZYX, golden_molecule_tables, golden_placement, golden_results,
@@ -133,7 +133,7 @@ def test_as11_and_as13_without_anndata(monkeypatch, tmp_path):
 # --- AS13: write_h5ad and the adapter ----------------------------------------------------------------------------
 
 def frozen_write_raw_h5ad(result, path, *, sample, fov_id, tile):
-    """starfinder/dataset/workflow.py's _write_raw_h5ad before write_h5ad (the frozen reference)."""
+    """_write_raw_h5ad (now in starfinder/_snakemake.py) before write_h5ad (the frozen reference)."""
     import anndata
 
     from starfinder._records import jsonable as _jsonable

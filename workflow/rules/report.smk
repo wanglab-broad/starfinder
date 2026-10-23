@@ -6,7 +6,7 @@
     Uses variables from common.smk; the block is validated there (_report_block).
 """
 
-from starfinder.dataset.workflow import _report_dataset_files, _report_sample_files
+from starfinder._snakemake import _report_dataset_files, _report_sample_files
 
 # Every sample of the run, in the order of the sample annotation.
 REPORT_SAMPLES = [sample for sample in SAMPLE_ANNOT['sample_id'].unique() if sample in SAMPLE]

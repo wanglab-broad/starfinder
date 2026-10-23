@@ -44,7 +44,7 @@ import pandas as pd
 import pytest
 import tifffile
 
-from starfinder.dataset.workflow import _run_reads_assignment
+from starfinder._snakemake import _run_reads_assignment
 
 from .test_assignment_golden import GENES, legacy_assignment, write_genes
 from .test_workflow_stitching_golden import _affine, legacy_tile_config

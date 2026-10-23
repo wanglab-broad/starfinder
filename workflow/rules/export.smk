@@ -9,7 +9,7 @@
     _check_export_route).
 """
 
-from starfinder.dataset.workflow import _export_sample_files
+from starfinder._snakemake import _export_sample_files
 
 ### ==================== [ Helper Functions ] =========================
 

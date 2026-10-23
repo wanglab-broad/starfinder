@@ -44,7 +44,7 @@ from skimage.segmentation import expand_labels
 from skimage.transform import rescale
 from skimage.util import img_as_float
 
-from starfinder.dataset.workflow import _run_enhance_dapi_with_flamingo, _run_nuclei_amplicon_overlay
+from starfinder._snakemake import _run_enhance_dapi_with_flamingo, _run_nuclei_amplicon_overlay
 from starfinder.preprocessing import ProjectionConfig, project_image
 from starfinder.segmentation import composite_nuclei_amplicon, enhance_with_flamingo
 from starfinder.segmentation import ExpandLabelsConfig, expand_labels as package_expand_labels

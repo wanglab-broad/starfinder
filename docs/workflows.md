@@ -300,3 +300,67 @@ missing accounting information is treated as still running. Scheduler access,
 account/project allocation, tool modules, environment paths, model files and
 licenses must be checked on the submission host. A local dry run does not test
 them or validate cluster resource sufficiency.
+
+## What §2.13 replaces
+
+§2.13 (workflow orchestration) replaces the code that talks to Snakemake and keeps
+what that code calls. This section records today's state as input for §2.13; it
+proposes no design.
+
+**Replaced.** The private module `starfinder._snakemake`, which only `workflow/` and
+the tests import, holds:
+
+- the runners that take a rule script's `snakemake` object: `_run_workflow` for the
+  five processing rules and one `_run_*` function for each other Python rule;
+- the rule input lists that the rule files call (`_stitching_position_inputs`,
+  `_reference_image_inputs`, `_export_sample_files`, `_report_sample_files` and
+  `_report_dataset_files`), which plan the files the engine schedules;
+- the writers of the MATLAB-shaped files of `reads_assignment` and `stitch_sample`
+  (`raw.h5ad`, `reads_assignment.csv`, `log.txt`, the assignment figures and
+  `tile_config_<sample>.csv`).
+
+§2.13 also replaces the input enumeration spread over the rule files (`SAMPLE_TO_FOV`
+and the `get_*_input` functions, from `documents/sample-annotation.csv`) and the
+start-up validation in `workflow/rules/common.smk`: the backend and workflow-mode
+checks and the translation of each enabled Python rule and block when Snakemake
+parses the rule files.
+
+**Kept.** The seam is `starfinder.dataset.workflow`: `WorkflowConfig`,
+`from_workflow_config`, the block translators (such as `_stitching_block`,
+`_export_config` and `_report_block`) and `_rule_checkpoints`
+([Configuration reference](workflow-configuration.md)). Behind it are the single-FOV,
+stage and sample operations they configure: `FOV.run` and the `FOV` stage methods,
+`Dataset.stitch`, `Dataset.export`, `Dataset.report` and `Dataset.compare_samples`.
+The runner and planner signatures do not change before §2.13.
+
+### Logs, time and memory
+
+- **Snakemake** records the wall time and peak RSS of a job through the rule's
+  `benchmark:` directive, a tab-separated file under `log/benchmark/<rule>/`. Only
+  these rules have one: `rsf_single_fov`, `gr_single_fov_subtile`,
+  `deep_create_subtile`, `lrsf_single_fov_subtile`, `deep_rsf_subtile`,
+  `stardist_segmentation`, `bigstitcher_engine` and the legacy
+  `run_BigStitcher_macro`. No rule has a `log:` directive. On the cluster, a job's
+  standard output and error go to the file the UGER profile names (above).
+- **STARfinder** records the seconds of each FOV step in `checkpoints/<fov>/run.json`
+  (`steps`, appended by the `_log_step` decorator of the `FOV` methods). The
+  processing rules always write it: `_run_workflow` passes `FOV.run` the
+  `CheckpointConfig` of `_rule_checkpoints`
+  ([Run records of the processing rules](workflow-configuration.md#run-records-of-the-processing-rules)).
+  STARfinder records no memory figure of a FOV.
+- At the sample level, the fusion, labels, segmentation and SpatialData parts of
+  `Dataset.export`, and `Dataset.report`, record `wall_s`, `cpu_s` and
+  `peak_rss_kib` (the process's peak RSS) in `export.json` and `report.json`; the
+  assembly part records no time. The report reads the parts' `wall_s` and the
+  `run.json` steps into its step table.
+- No handler is attached to the `"starfinder"` logger, so its INFO lines (each
+  step's start and its seconds) are not printed.
+- `log/<fov>_rsf.txt`, `log/<fov>_gr.txt` and `log/<fov>_nr.txt`
+  (`FOV.save_processing_log`) hold the registration attempts and the detection and
+  filtering counts, not times.
+
+The two work together in two places today. Each rule script calls a runner of
+`starfinder._snakemake` with its `snakemake` object, from which the runner reads the
+configuration, inputs, outputs and wildcards. `common.smk` calls
+`from_workflow_config` and the block translators when the rule files are parsed, so
+a configuration error stops the run before any job starts.

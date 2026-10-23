@@ -18,7 +18,8 @@ from pandas.testing import assert_frame_equal
 
 from starfinder.assignment import AssignmentConfig, CorrespondenceConfig
 from starfinder.dataset import FOV, CheckpointConfig
-from starfinder.dataset.workflow import _assignment_block, _reads_assignment, _run_reads_assignment, _write_raw_h5ad
+from starfinder.dataset.workflow import _assignment_block, _reads_assignment
+from starfinder._snakemake import _run_reads_assignment, _write_raw_h5ad
 from starfinder.segmentation import ExpandLabelsConfig
 
 from .test_assignment import assign_boxes

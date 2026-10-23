@@ -26,6 +26,7 @@ import pytest
 import yaml
 
 import starfinder.dataset.workflow as workflow
+from starfinder import _snakemake
 from starfinder.dataset import Dataset
 from starfinder.report import MarkerGroup, ReportConfig, ReportLimits, RuleLimit, read_report
 
@@ -228,17 +229,17 @@ def test_wf1_report_sample_declares_the_last_per_sample_output(tmp_path):
     assembly = dataset_config(tmp_path, stitching=MULTIVIEW, assembly={"assignment": "default"}, report={})
     stitching = dataset_config(tmp_path, stitching=MULTIVIEW, report={})
     processing = dataset_config(tmp_path, report={})
-    assert workflow._report_sample_files(assembly, root, fovs, SAMPLE) == (
+    assert _snakemake._report_sample_files(assembly, root, fovs, SAMPLE) == (
         ["/out/export/sample1/export.json"], "/out/report/sample1/report.json")
     # An export block configures export_sample, which an assembly block already runs: the same input.
     exported = dict(assembly, export={"route": "per_fov"})
-    assert workflow._report_sample_files(exported, root, fovs, SAMPLE)[0] == ["/out/export/sample1/export.json"]
-    assert workflow._report_sample_files(stitching, root, fovs, SAMPLE)[0] == ["/out/stitching/sample1/placement.json"]
-    assert workflow._report_sample_files(processing, root, fovs, SAMPLE)[0] == [
+    assert _snakemake._report_sample_files(exported, root, fovs, SAMPLE)[0] == ["/out/export/sample1/export.json"]
+    assert _snakemake._report_sample_files(stitching, root, fovs, SAMPLE)[0] == ["/out/stitching/sample1/placement.json"]
+    assert _snakemake._report_sample_files(processing, root, fovs, SAMPLE)[0] == [
         "/out/log/sf_scores/Position001.txt", "/out/log/sf_scores/Position002.txt"]
     for config in (assembly, stitching, processing):
-        assert workflow._report_sample_files(config, root, [])[1] == "/out/report/{sample}/report.json"
-    assert workflow._report_dataset_files(root, ["s2", "s1"]) == (
+        assert _snakemake._report_sample_files(config, root, [])[1] == "/out/report/{sample}/report.json"
+    assert _snakemake._report_dataset_files(root, ["s2", "s1"]) == (
         ["/out/report/s2/report.json", "/out/report/s1/report.json"], "/out/report/samples.csv")
 
 
@@ -281,7 +282,7 @@ def test_wf1_report_sample_calls_dataset_report(tmp_path, monkeypatch, blocks, a
     config = dataset_config(tmp_path, report=report, **copy.deepcopy(blocks))
     output_root = tmp_path / "data" / "output"
     annotation(output_root, [("sample0", 1, 2), (SAMPLE, 3, 5), ("sample2", 6, 6)])
-    inputs, output = workflow._report_sample_files(config, output_root, ["Position003", "Position004", "Position005"],
+    inputs, output = _snakemake._report_sample_files(config, output_root, ["Position003", "Position004", "Position005"],
                                                    SAMPLE)
     run_script("report_sample.py", SimpleNamespace(config=config, input=inputs, output=[output],
                                                    wildcards=Wildcards(sample=SAMPLE)))
@@ -296,7 +297,7 @@ def test_wf1_report_dataset_calls_compare_samples_on_every_sample(tmp_path, monk
     calls = spy(monkeypatch, "compare_samples")
     config = dataset_config(tmp_path, report={})
     output_root = tmp_path / "data" / "output"
-    inputs, output = workflow._report_dataset_files(output_root, ["sample0", SAMPLE, "sample2"])
+    inputs, output = _snakemake._report_dataset_files(output_root, ["sample0", SAMPLE, "sample2"])
     run_script("report_dataset.py", SimpleNamespace(config=config, input=inputs, output=[output],
                                                     wildcards=Wildcards()))
     (dataset, args, kwargs), = calls
@@ -329,14 +330,14 @@ def test_wf1_the_rules_write_the_report_and_the_comparison_page(tmp_path):
     case = report_records(output_root)
     assert list(case.fov_ids) == list(FOVS)
     annotation(output_root, [(REPORT_SAMPLE, 1, 4)])
-    inputs, output = workflow._report_sample_files(config, output_root, list(FOVS), REPORT_SAMPLE)
+    inputs, output = _snakemake._report_sample_files(config, output_root, list(FOVS), REPORT_SAMPLE)
     assert inputs == [str(output_root / "stitching" / REPORT_SAMPLE / "placement.json")] and Path(inputs[0]).is_file()
     run_script("report_sample.py", SimpleNamespace(config=config, input=inputs, output=[output],
                                                    wildcards=Wildcards(sample=REPORT_SAMPLE)))
     record = read_report(Path(output).parent)
     assert Path(output).is_file() and (Path(output).parent / "report.html").is_file()
     assert record["sample"] == REPORT_SAMPLE and record["fov_ids"] == list(FOVS)
-    inputs, output = workflow._report_dataset_files(output_root, [REPORT_SAMPLE])
+    inputs, output = _snakemake._report_dataset_files(output_root, [REPORT_SAMPLE])
     run_script("report_dataset.py", SimpleNamespace(config=config, input=inputs, output=[output],
                                                     wildcards=Wildcards()))
     samples = pd.read_csv(output)

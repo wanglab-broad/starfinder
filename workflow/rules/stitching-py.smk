@@ -6,7 +6,7 @@
     Uses variables from common.smk; the block is validated there (_stitching_block).
 """
 
-from starfinder.dataset.workflow import _reference_image_inputs, _stitching_position_inputs
+from starfinder._snakemake import _reference_image_inputs, _stitching_position_inputs
 
 STITCHING_METHOD = config['stitching'].get('method', 'bigstitcher')
 

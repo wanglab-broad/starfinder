@@ -16,7 +16,8 @@ import tifffile
 import yaml
 
 from starfinder._registry import names
-from starfinder.dataset.workflow import _run_stardist_segmentation, _segmentation, _segmentation_block
+from starfinder.dataset.workflow import _segmentation, _segmentation_block
+from starfinder._snakemake import _run_stardist_segmentation
 from starfinder.preprocessing import ProjectionConfig
 from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, CompositeConfig, ExpandLabelsConfig,
                                      InputChannel, LabelImportConfig, SeededWatershedConfig, SegmentationPlan,

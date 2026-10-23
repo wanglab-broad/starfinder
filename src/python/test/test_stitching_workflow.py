@@ -2,8 +2,8 @@
 
 The Python-only ``stitching``, ``assembly`` and ``export`` blocks of
 ``workflow/schemas/config.schema.yaml``, the adapter functions of
-``starfinder.dataset.workflow`` that the rules of ``stitching-py.smk``, ``export.smk``
-and ``reads-assignment.smk`` call, and the legacy translation. Fixtures, all written in
+``starfinder.dataset.workflow`` and ``starfinder._snakemake`` that the rules of ``stitching-py.smk``,
+``export.smk`` and ``reads-assignment.smk`` call, and the legacy translation. Fixtures, all written in
 the test: ``wf_configs`` (the repository's example configurations, and copies with the
 blocks); ``assembly_golden`` written as a dataset (``fusion_fixtures.export_folder``);
 ``xml_links``, ``golden_stitching_setups`` and ``hand_records_setups`` of
@@ -31,6 +31,7 @@ import tifffile
 import yaml
 
 import starfinder.dataset.workflow as workflow
+from starfinder import _snakemake
 from starfinder.assembly import AssemblyConfig
 from starfinder.assignment._persist import read_assignment
 from starfinder.dataset import Dataset
@@ -288,7 +289,7 @@ def test_wf3_run_stitching_calls_dataset_stitch_with_the_configured_values(tmp_p
     monkeypatch.setattr(Dataset, "stitch", lambda self, *args, **kwargs: calls.append((self, args, kwargs)))
     config = dataset_config(tmp_path, stitching=MULTIVIEW)
     placement = tmp_path / "data/output/stitching" / SAMPLE / "placement.json"
-    workflow._run_stitching(stub(config, inputs=[annotation(tmp_path, 1, 4)], outputs=[placement], sample=SAMPLE))
+    _snakemake._run_stitching(stub(config, inputs=[annotation(tmp_path, 1, 4)], outputs=[placement], sample=SAMPLE))
     (dataset, args, kwargs), = calls
     assert dataset.output_root == tmp_path / "data" / "output" and dataset.fov_pattern == "Position{i:03d}"
     assert args == (SAMPLE, ["Position001", "Position002", "Position003", "Position004"])
@@ -323,7 +324,7 @@ def test_wf3_a_stage_file_without_stage_axes_raises_in_the_rule(tmp_path, monkey
     monkeypatch.setattr(Dataset, "stitch", lambda *a, **k: pytest.fail("Dataset.stitch must not be called"))
     config = dataset_config(tmp_path, stitching=dict(MULTIVIEW, positions={"source": "stage_file"}))
     with pytest.raises(ValueError, match=r"stitching\.positions\.stage_axes"):
-        workflow._run_stitching(stub(config, inputs=[annotation(tmp_path, 1, 4)],
+        _snakemake._run_stitching(stub(config, inputs=[annotation(tmp_path, 1, 4)],
                                      outputs=[tmp_path / "placement.json"], sample=SAMPLE))
 
 
@@ -359,7 +360,7 @@ def test_wf3_placement_rules_declare_the_position_file(tmp_path, case):
     config = dataset_config(tmp_path, stitching=dict(MULTIVIEW, positions=positions))
     workflow._stitching_block(config)
     root = tmp_path / "data" / "output"
-    assert workflow._stitching_position_inputs(config, root, SAMPLE) == [p.replace("OUT", str(root)) for p in expected]
+    assert _snakemake._stitching_position_inputs(config, root, SAMPLE) == [p.replace("OUT", str(root)) for p in expected]
 
 
 @pytest.mark.parametrize("case", ["stage_file_default", "stage_file_path", "table"])
@@ -380,7 +381,7 @@ def test_wf3_the_declared_position_file_is_the_file_dataset_stitch_reads(tmp_pat
     with pytest.raises(StopIteration):
         positions_module.table_from_positions(positions, ["Position001"], {}, sample=SAMPLE, output_root=root,
                                               fov_pattern="Position{i:03d}")
-    assert opened == workflow._stitching_position_inputs(config, root, SAMPLE)
+    assert opened == _snakemake._stitching_position_inputs(config, root, SAMPLE)
 
 
 def test_wf3_the_placement_rules_use_the_position_input_function():
@@ -401,16 +402,16 @@ def test_wf3_export_sample_inputs_and_declared_output(tmp_path):
     """The inputs of the route per FOV; those of the route after fusion are WF1 of test_sample_segmentation_workflow.py."""
     config = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=ASSEMBLY, export={"route": "per_fov"})
     root = Path("/out")
-    inputs, output = workflow._export_sample_files(config, root, ["Position001", "Position002"], SAMPLE)
+    inputs, output = _snakemake._export_sample_files(config, root, ["Position001", "Position002"], SAMPLE)
     assert inputs == ["/out/stitching/sample1/placement.json",
                       "/out/expr/Position001/raw.h5ad", "/out/expr/Position002/raw.h5ad",
                       "/out/expr/Position001/reads_assignment.csv", "/out/expr/Position002/reads_assignment.csv",
                       "/out/checkpoints/Position001/assignment/default/assignment.json",
                       "/out/checkpoints/Position002/assignment/default/assignment.json"]
     assert output == "/out/export/sample1/export.json"
-    assert workflow._export_sample_files(config, root, [])[1] == "/out/export/{sample}/export.json"
+    assert _snakemake._export_sample_files(config, root, [])[1] == "/out/export/{sample}/export.json"
     molecules = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=dict(ASSEMBLY, assignment=None))
-    assert workflow._export_sample_files(molecules, root, ["Position001"], SAMPLE)[0] == [
+    assert _snakemake._export_sample_files(molecules, root, ["Position001"], SAMPLE)[0] == [
         "/out/stitching/sample1/placement.json", "/out/signal/Position001_goodSpots.csv"]
     # export.smk declares exactly these: its input function and its one output.
     text = (ROOT / "workflow/rules/export.smk").read_text()
@@ -430,7 +431,7 @@ def synchronous():
 def run_export(tmp_path, config):
     folder = export_folder(tmp_path / "data")
     output = folder.export_dir / "export.json"
-    workflow._run_export(stub(config, inputs=[folder.placement_dir / "placement.json"], outputs=[output],
+    _snakemake._run_export(stub(config, inputs=[folder.placement_dir / "placement.json"], outputs=[output],
                               sample=SAMPLE))
     return folder, json.loads(output.read_text())
 
@@ -483,7 +484,7 @@ def test_wf3_run_export_passes_the_duplicate_threshold(tmp_path, monkeypatch, sy
                             export={"route": "per_fov", "fuse": False})
     folder = export_folder(tmp_path / "workflow" / "data", dimensions="plane")
     output = folder.export_dir / "export.json"
-    workflow._run_export(stub(config, inputs=[folder.placement_dir / "placement.json"], outputs=[output],
+    _snakemake._run_export(stub(config, inputs=[folder.placement_dir / "placement.json"], outputs=[output],
                               sample=SAMPLE))
     record = json.loads(output.read_text())
     expected = ExportConfig(route="per_fov", fuse=False, assembly=AssemblyConfig(duplicate_threshold=threshold))
@@ -519,7 +520,7 @@ def test_wf3_run_export_molecules_only_loads_the_codebook(tmp_path, synchronous)
 def test_wf3_with_an_assembly_block_the_per_fov_files_have_no_filter_and_no_global(tmp_path, monkeypatch):
     """Option W1: no tile configuration is read, every kept cell and every molecule is written, no global_*, and
     the FOV's assignment folder is saved on the grid of images/ref_merged, for export_sample."""
-    monkeypatch.setattr(workflow, "_tile_record", lambda *a: pytest.fail("the tile configuration must not be read"))
+    monkeypatch.setattr(_snakemake, "_tile_record", lambda *a: pytest.fail("the tile configuration must not be read"))
     labels = label_fixture()
     metadata = grid(SHAPE_ZYX, (0.35, 0.1, 0.1)).metadata
     reference = tmp_path / "output/data/out/images/ref_merged/Position001.tif"
@@ -577,7 +578,7 @@ def engine(tmp_path, monkeypatch, *, text, returncode, config=None):
 
     monkeypatch.setattr(subprocess, "run", fiji)
     config = {"fiji_path": "/opt/Fiji.app/ImageJ-linux64"} if config is None else config
-    workflow._run_bigstitcher_engine(stub(config, inputs=[macro, view_map], outputs=[xml], sample=SAMPLE))
+    _snakemake._run_bigstitcher_engine(stub(config, inputs=[macro, view_map], outputs=[xml], sample=SAMPLE))
     return commands, xml
 
 
@@ -640,14 +641,14 @@ def test_wf3_the_bigstitcher_path_end_to_end(tmp_path, monkeypatch):
     folder = save / SAMPLE
     macro, view_map = folder / "BigStitcher_macro.ijm", folder / "view_map.csv"
     folder.mkdir(parents=True)
-    workflow._run_bigstitcher_macro(stub(config, inputs=[sheet], outputs=[macro, view_map], sample=SAMPLE))
+    _snakemake._run_bigstitcher_macro(stub(config, inputs=[sheet], outputs=[macro, view_map], sample=SAMPLE))
     assert f"dataset_save_path={folder} " in macro.read_text() and f"path={folder}/tiles/*.tif" in macro.read_text()
     assert sorted(p.name for p in (folder / "tiles").iterdir()) == [f"tile_{j}.tif" for j in range(4)]
     assert [int(tifffile.imread(folder / "tiles" / f"tile_{j}.tif").max()) for j in range(4)] == [1, 2, 3, 4]
     assert pd.read_csv(view_map, keep_default_na=False).equals(links_view_map())
     commands, xml = engine(tmp_path, monkeypatch, text=links_xml(), returncode=0)
     placement, tile_config = root / "stitching" / SAMPLE / "placement.json", root / "output/tile_config_sample1.csv"
-    workflow._run_stitching(stub(config, inputs=[sheet, xml, view_map, macro], outputs=[placement, tile_config],
+    _snakemake._run_stitching(stub(config, inputs=[sheet, xml, view_map, macro], outputs=[placement, tile_config],
                                  sample=SAMPLE))
     saved = load_placement(placement.parent)
     expected = import_bigstitcher(xml, table=links_table(), view_map=links_view_map(),
@@ -669,7 +670,7 @@ def test_wf3_legacy_writer_golden(tmp_path, golden_stitching_setups, fallback): 
     result = import_bigstitcher(setups, table=table, view_map=view_map, grids=grids, config=BigStitcherConfig(),
                                 fallback=fallback)
     path = tmp_path / "output" / "tile_config_sample1.csv"
-    workflow._write_tile_config(result, path, {"img_col": TILE_COL, "img_row": TILE_ROW})
+    _snakemake._write_tile_config(result, path, {"img_col": TILE_COL, "img_row": TILE_ROW})
     frame, _ = legacy_tile_config(plain, grid_csv, TILE_COL, TILE_ROW)
     assert path.read_bytes() == frame.to_csv().encode()
     written = pd.read_csv(path, index_col=0)
@@ -685,7 +686,7 @@ def test_wf3_legacy_writer_hand_records(tmp_path, hand_records_setups, name, fal
     result = import_bigstitcher(setups, table=table, view_map=view_map, grids=grids, config=BigStitcherConfig(),
                                 fallback=fallback)
     path = tmp_path / f"tile_config_{name}.csv"
-    workflow._write_tile_config(result, path, {"img_col": 100, "img_row": 100})
+    _snakemake._write_tile_config(result, path, {"img_col": 100, "img_row": 100})
     frame, _ = legacy_tile_config(plain, grid_csv, 100, 100)
     assert path.read_bytes() == frame.to_csv().encode()
 
@@ -722,7 +723,7 @@ def test_wf3_stage_file_names_in_process(tmp_path, monkeypatch, pattern):
     monkeypatch.setattr(stitching, "stitch", lambda inputs, table, **kw: calls.append((inputs, table, kw)) or "result")
     monkeypatch.setattr(stitching, "save_placement", lambda result, folder: None)
     placement = root / "stitching" / SAMPLE / "placement.json"
-    workflow._run_stitching(stub(config, inputs=[sheet], outputs=[placement], sample=SAMPLE))
+    _snakemake._run_stitching(stub(config, inputs=[sheet], outputs=[placement], sample=SAMPLE))
     (inputs, table, kwargs), = calls
     names = [pattern.format(i=p) for p, *_ in STAGE_POINTS]
     assert table.fov_ids == names                                      # stage-file order
@@ -742,7 +743,7 @@ def test_wf3_stage_file_names_bigstitcher(tmp_path, monkeypatch, pattern):
     folder = save / SAMPLE
     folder.mkdir(parents=True)
     macro, view_map = folder / "BigStitcher_macro.ijm", folder / "view_map.csv"
-    workflow._run_bigstitcher_macro(stub(config, inputs=[sheet], outputs=[macro, view_map], sample=SAMPLE))
+    _snakemake._run_bigstitcher_macro(stub(config, inputs=[sheet], outputs=[macro, view_map], sample=SAMPLE))
     views = pd.read_csv(view_map, keep_default_na=False)
     expected = [pattern.format(i=i) for i in (9, 10, 11, 12)]          # column-major cells: 9, 10 | 11, 12
     assert views["fov_id"].tolist() == expected and views["kind"].tolist() == ["fov"] * 4
@@ -755,7 +756,7 @@ def test_wf3_stage_file_names_bigstitcher(tmp_path, monkeypatch, pattern):
 
     monkeypatch.setattr(stitching, "import_bigstitcher", spy)
     with pytest.raises(StopIteration):
-        workflow._run_stitching(stub(config, inputs=[sheet, folder / "dataset.xml", view_map, macro],
+        _snakemake._run_stitching(stub(config, inputs=[sheet, folder / "dataset.xml", view_map, macro],
                                      outputs=[root / "stitching" / SAMPLE / "placement.json",
                                               root / "output" / "tile_config_sample1.csv"], sample=SAMPLE))
     assert tables[0].fov_ids == [pattern.format(i=p) for p, *_ in STAGE_POINTS]
@@ -770,5 +771,5 @@ def test_wf3_a_stage_file_that_does_not_match_the_sample_raises(tmp_path, points
     config, sheet, root = stage_dataset(tmp_path, "tile_{i}", points=points,
                                         stitching=dict(MULTIVIEW, positions=STAGE_POSITIONS))
     with pytest.raises(ValueError, match=match):
-        workflow._run_stitching(stub(config, inputs=[sheet], outputs=[root / "stitching/sample1/placement.json"],
+        _snakemake._run_stitching(stub(config, inputs=[sheet], outputs=[root / "stitching/sample1/placement.json"],
                                      sample=SAMPLE))

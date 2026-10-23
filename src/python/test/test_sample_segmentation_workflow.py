@@ -31,6 +31,7 @@ import pytest
 import yaml
 
 import starfinder.dataset.workflow as workflow
+from starfinder import _snakemake
 from starfinder._registry import names
 from starfinder.sample_output import (
     ROUTES,
@@ -314,7 +315,7 @@ def test_wf1_the_rule_s_inputs_by_route(combination):
             workflow._check_export_route(config)
         return
     workflow._check_export_route(config)
-    inputs, output = workflow._export_sample_files(config, OUT, FOVS, SAMPLE)
+    inputs, output = _snakemake._export_sample_files(config, OUT, FOVS, SAMPLE)
     assert output == f"{OUT}/export/{SAMPLE}/export.json"
     if assignment is None:
         assert inputs == molecule_inputs()
@@ -331,12 +332,12 @@ def test_wf1_the_inputs_follow_reference_image_and_the_named_images():
     config = route_workflow_config("after_fusion", "projection", True, True, True, "default")
     config["reference_image"] = "images/flamingo/DAPI/{fov_id}.tif"
     reference = "images/flamingo/DAPI/{fov_id}.tif"
-    assert workflow._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == after_fusion_inputs(True,
+    assert _snakemake._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == after_fusion_inputs(True,
                                                                                               reference=reference)
     config["export"]["images"] = ["reference_stain"]
     config["export"]["segmentation"]["runs"][1]["inputs"] = [{"role": "cytoplasm", "image": "reference_stain"}]
     workflow._check_export_route(config)
-    assert workflow._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == after_fusion_inputs(False,
+    assert _snakemake._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == after_fusion_inputs(False,
                                                                                               reference=reference)
 
 
@@ -371,7 +372,7 @@ def test_wf1_existing_configurations_without_the_new_keys(name):
             expected = "per_fov"
             VALIDATOR.validate(copied)
         workflow._check_export_route(copied)
-        inputs = workflow._export_sample_files(copied, OUT, FOVS, SAMPLE)[0]
+        inputs = _snakemake._export_sample_files(copied, OUT, FOVS, SAMPLE)[0]
         assert inputs == (per_fov_inputs() if expected == "per_fov" else molecule_inputs())
 
 
@@ -394,7 +395,7 @@ def test_wf1_a_configuration_rd1_refuses_plans_its_earlier_jobs_with_route_per_f
     config["export"]["route"] = "per_fov"
     VALIDATOR.validate(config)
     workflow._check_export_route(config)
-    assert workflow._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == per_fov_inputs()
+    assert _snakemake._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == per_fov_inputs()
 
 
 # --- WF2: the assignment figures --------------------------------------------------------------------------------
@@ -428,12 +429,12 @@ def scene_config(tmp_path, export):
 def run_rule(folder, config, monkeypatch, extra_inputs=()):
     """export_sample through a stub with the inputs export.smk gives it; returns (record, figure calls)."""
     calls = []
-    real = workflow._write_assignment_figures
-    monkeypatch.setattr(workflow, "_write_assignment_figures",
+    real = _snakemake._write_assignment_figures
+    monkeypatch.setattr(_snakemake, "_write_assignment_figures",
                         lambda result, image, out, **kwargs: calls.append((Path(out).name, kwargs)) or
                         real(result, image, out, **kwargs))
-    inputs, output = workflow._export_sample_files(config, folder.root, list(folder.scene.ids), SAMPLE)
-    workflow._run_export(SimpleNamespace(config=config, input=[*inputs, *map(str, extra_inputs)], output=[output],
+    inputs, output = _snakemake._export_sample_files(config, folder.root, list(folder.scene.ids), SAMPLE)
+    _snakemake._run_export(SimpleNamespace(config=config, input=[*inputs, *map(str, extra_inputs)], output=[output],
                                          wildcards=SimpleNamespace(sample=SAMPLE)))
     monkeypatch.undo()
     return json.loads(Path(output).read_text()), calls, inputs

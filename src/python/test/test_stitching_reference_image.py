@@ -32,6 +32,7 @@ import tifffile
 from pandas.testing import assert_frame_equal
 
 import starfinder.dataset.workflow as workflow
+from starfinder import _snakemake
 from starfinder._layout import REFERENCE_IMAGE, reference_image_path
 from starfinder.assembly import load_assembly
 from starfinder.dataset import Dataset
@@ -128,9 +129,9 @@ def test_the_setting_defaults_to_the_present_location(tmp_path):
     assert workflow._workflow_dataset(config).reference_image == REFERENCE_IMAGE
     assert workflow._workflow_dataset(dict(config, reference_image=None)).reference_image == REFERENCE_IMAGE
     assert workflow._workflow_dataset(dict(config, reference_image=MOVED)).reference_image == MOVED
-    assert workflow._reference_image_inputs(config, tmp_path / "d" / "o", ["{fovID}"]) == [
+    assert _snakemake._reference_image_inputs(config, tmp_path / "d" / "o", ["{fovID}"]) == [
         str(tmp_path / "d" / "o" / "images" / "ref_merged" / "{fovID}.tif")]
-    assert workflow._reference_image_inputs(dict(config, reference_image=MOVED), tmp_path, ["P1"]) == [
+    assert _snakemake._reference_image_inputs(dict(config, reference_image=MOVED), tmp_path, ["P1"]) == [
         str(tmp_path / "images/flamingo/DAPI/P1_reference.tif")]
 
 
@@ -145,7 +146,7 @@ def test_a_pattern_without_fov_id_raises_naming_the_setting(tmp_path, value):
         with pytest.raises(ValueError, match="reference_image"):
             workflow._workflow_dataset(config)
         with pytest.raises(ValueError, match="reference_image"):
-            workflow._reference_image_inputs(config, tmp_path, ["P1"])
+            _snakemake._reference_image_inputs(config, tmp_path, ["P1"])
 
 
 def test_without_the_setting_the_default_path_is_read(scene_layouts, monkeypatch):
@@ -248,7 +249,7 @@ def run_workflow_stitching(dataset, scene_layouts, tmp_path):
     sheet.parent.mkdir(parents=True, exist_ok=True)
     sheet.write_text(f"sample_id,fov_start,fov_end\n{SAMPLE},1,4\n")
     placement = tmp_path / "stitching" / SAMPLE / "placement.json"
-    workflow._run_stitching(stub(config, inputs=[sheet], outputs=[placement], sample=SAMPLE))
+    _snakemake._run_stitching(stub(config, inputs=[sheet], outputs=[placement], sample=SAMPLE))
     return load_placement(placement.parent)
 
 
@@ -342,7 +343,7 @@ def run_import(config, sheet, folder, out, fallback=None):
     config = copy.deepcopy(config)
     config["stitching"]["fallback"] = fallback
     placement, tile_config = out / "stitching" / SAMPLE / "placement.json", out / "output" / "tile_config.csv"
-    workflow._run_stitching(stub(config, inputs=[sheet, folder / "dataset.xml", folder / "view_map.csv",
+    _snakemake._run_stitching(stub(config, inputs=[sheet, folder / "dataset.xml", folder / "view_map.csv",
                                                  folder / "BigStitcher_macro.ijm"],
                                  outputs=[placement, tile_config], sample=SAMPLE))
     return load_placement(placement.parent), tile_config.read_text()
@@ -361,7 +362,7 @@ def test_the_bigstitcher_adapters_on_the_golden_fixture_without_metadata(tmp_pat
         (macro_dir / SAMPLE).mkdir(parents=True)
         macro_config = copy.deepcopy(config)
         macro_config["stitching"]["bigstitcher_save_dir"] = str(macro_dir)
-        workflow._run_bigstitcher_macro(stub(macro_config, inputs=[sheet], outputs=[macro_dir / SAMPLE / "m.ijm",
+        _snakemake._run_bigstitcher_macro(stub(macro_config, inputs=[sheet], outputs=[macro_dir / SAMPLE / "m.ijm",
                                                                                      macro_dir / SAMPLE / "v.csv"],
                                              sample=SAMPLE))
         results[form].append(macro_dir / SAMPLE)
@@ -382,7 +383,7 @@ def test_the_bigstitcher_adapters_on_the_golden_fixture_without_metadata(tmp_pat
     with pytest.raises(ValueError, match="lacks voxel_size_xy and voxel_size_z"):
         run_import(config, sheet, folder, out)
     with pytest.raises(ValueError, match="lacks voxel_size_xy and voxel_size_z"):
-        workflow._run_bigstitcher_macro(stub(config, inputs=[sheet], outputs=[tmp_path / "m", tmp_path / "v"],
+        _snakemake._run_bigstitcher_macro(stub(config, inputs=[sheet], outputs=[tmp_path / "m", tmp_path / "v"],
                                              sample=SAMPLE))
 
 
@@ -442,5 +443,5 @@ def test_the_import_adapter_reads_the_configured_reference_image(tmp_path, golde
         (out / "images" / "ref_merged" / f"{fov}.tif").rename(target)
     got, _ = run_import(config, sheet, folder, out)
     assert_same_placement(expected, got)
-    assert workflow._reference_image_inputs(config, out, ["Position1"]) == [
+    assert _snakemake._reference_image_inputs(config, out, ["Position1"]) == [
         str(out / "images" / "flamingo" / "DAPI" / "Position1_reference.tif")]

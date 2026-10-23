@@ -418,7 +418,7 @@ rsf_single_fov:
 
 The rules `enhance_dapi_with_flamingo`, `create_nuclei_amplicon_overlay`,
 `stardist_segmentation` and `reads_assignment` call the Starfinder package under both
-backends (`dataset/workflow.py`), keeping their names, inputs and outputs. The
+backends (`_snakemake.py`), keeping their names, inputs and outputs. The
 environment that runs Snakemake therefore needs the package, with the `stardist` extra
 for `stardist_segmentation` and the `anndata` extra for `reads_assignment`; no rule reads
 `envs_path` any more. The legacy keys are translated as the

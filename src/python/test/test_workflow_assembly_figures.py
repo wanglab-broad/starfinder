@@ -19,6 +19,7 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
 import starfinder.dataset.workflow as workflow  # noqa: E402
+from starfinder import _snakemake  # noqa: E402
 from starfinder.assembly import fov_ownership, load_assembly  # noqa: E402
 from starfinder.assignment._persist import read_assignment  # noqa: E402
 from starfinder.io import save_volume  # noqa: E402
@@ -69,7 +70,7 @@ def reads_assignment(root, out, fov, config):
     name = config["assembly"]["assignment"]
     if name is not None:
         outputs.append(out / "checkpoints" / fov / "assignment" / name / "assignment.json")
-    workflow._run_reads_assignment(SimpleNamespace(input=[str(p) for p in inputs], output=[str(p) for p in outputs],
+    _snakemake._run_reads_assignment(SimpleNamespace(input=[str(p) for p in inputs], output=[str(p) for p in outputs],
                                                    config=config, wildcards=SimpleNamespace(fovID=fov)))
     return {p.name: p.read_bytes() for p in sorted((out / "expr" / fov).glob("*.png"))}
 
@@ -86,8 +87,8 @@ def export_sample(out, config, monkeypatch=None):
 
         monkeypatch.setattr(matplotlib.figure.Figure, "savefig", spy)
     # The rule's inputs (export.smk): the placement, then the per-FOV outputs of reads_assignment.
-    inputs, output = workflow._export_sample_files(config, out, GOLDEN_IDS, "sample1")
-    workflow._run_export(SimpleNamespace(config=config, input=inputs, output=[output],
+    inputs, output = _snakemake._export_sample_files(config, out, GOLDEN_IDS, "sample1")
+    _snakemake._run_export(SimpleNamespace(config=config, input=inputs, output=[output],
                                          wildcards=SimpleNamespace(sample="sample1")))
     if monkeypatch is not None:
         monkeypatch.undo()
@@ -148,7 +149,7 @@ def test_export_sample_draws_the_figures_with_ownership(tmp_path, monkeypatch, d
     before = {fov: reads_assignment(tmp_path, out, fov, config) for fov in GOLDEN_IDS}
     assert all(list(figures) == sorted(FIGURES[dimensions]) for figures in before.values())
     # The export without the figures (the code before this change), then with them, into the same folder.
-    monkeypatch.setattr(workflow, "_write_ownership_figures", lambda *args: None)
+    monkeypatch.setattr(_snakemake, "_write_ownership_figures", lambda *args: None)
     export_sample(out, config)
     monkeypatch.undo()
     plain = snapshot(out / "export" / "sample1")

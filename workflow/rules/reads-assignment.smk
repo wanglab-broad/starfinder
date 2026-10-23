@@ -12,7 +12,7 @@
 # images/ref_merged/{fovID}.tif), which the adapter reads (_assembly_cells).
 # READS_ASSIGNMENT_GEOMETRY is the one input that places the FOV: the tile configuration, or that grid.
 if ASSEMBLY_BLOCK:
-    from starfinder.dataset.workflow import _reference_image_inputs
+    from starfinder._snakemake import _reference_image_inputs
     READS_ASSIGNMENT_GEOMETRY = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])
     READS_ASSIGNMENT_NAME = (config['assembly'] or {}).get('assignment', 'default')
     READS_ASSIGNMENT_FOLDER = ([] if READS_ASSIGNMENT_NAME is None else
