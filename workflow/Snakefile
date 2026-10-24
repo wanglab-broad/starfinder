@@ -32,10 +32,12 @@ elif BACKEND == "matlab":
 
 include: "rules/segmentation.smk"
 # The Python-only stitching block replaces the four legacy stitching rules (stitching-py.smk);
-# the assembly block adds the one per-sample rule export_sample (export.smk).
+# the assembly block adds the one per-sample rule export_sample (export.smk). The legacy sample
+# rules, which read MATLAB's sample annotation, run with backend matlab only (common.smk refuses
+# them for the Python backend, naming the blocks to add).
 if STITCHING_BLOCK:
     include: "rules/stitching-py.smk"
-else:
+elif BACKEND == "matlab":
     include: "rules/stitching.smk"
 include: "rules/reads-assignment.smk"
 if ASSEMBLY_BLOCK:
@@ -43,7 +45,8 @@ if ASSEMBLY_BLOCK:
 # The Python-only report block adds report_sample and report_dataset (report.smk).
 if REPORT_BLOCK:
     include: "rules/report.smk"
-include: "rules/utils.smk"
+if BACKEND == "matlab":
+    include: "rules/utils.smk"
 
 ### ==================== [ Dynamic Rule Order ] =========================
 
@@ -66,7 +69,9 @@ else:
 
 ### ==================== [ Local Rules ] =========================
 
-localrules: rsf_preparation, create_sample_maf
+localrules: rsf_preparation
+if BACKEND == "matlab":
+    localrules: create_sample_maf
 
 ### ==================== [ Main Target Rule ] =========================
 

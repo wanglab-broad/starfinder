@@ -63,7 +63,7 @@ def build(root, dimensions):
 
 def reads_assignment(root, out, fov, config):
     """reads_assignment with the assembly block for one FOV; returns the bytes of each figure it wrote."""
-    inputs = [out / "documents" / "sample-annotation.csv", out / "images" / "DAPI" / f"{fov}.tif",
+    inputs = [root / "input" / "data" / "sample" / "fovs.csv", out / "images" / "DAPI" / f"{fov}.tif",
               out / "images" / "stardist_segmentation" / f"{fov}.tif", out / "fovs" / fov / "molecules.csv",
               out / "documents" / "genes.csv", out / "fovs" / fov / "reference.tif"]
     outputs = [out / "expr" / fov / "raw.h5ad", out / "expr" / fov / "reads_assignment.csv"]

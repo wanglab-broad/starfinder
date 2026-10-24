@@ -18,8 +18,10 @@ An em dash in the default column means the schema defines no default.
 | `fiji_path` | string | No | —; **needed at parse time**, because the included Fiji rule indexes it even if disabled |
 | `envs_path` | string | No | —; no rule reads it: `stardist_segmentation` runs in the environment that runs Snakemake (see [segmentation and assignment](#segmentation-and-assignment)); kept in the schema until §2.13 |
 | `dataset_id`, `sample_id`, `output_id` | strings | Yes | —; directory identifiers |
-| `fov_id_pattern` | string | Yes | —; Python format string with `{i}`, e.g. `tile_{i}`, `Position{i:03}` |
-| `n_fovs`, `n_rounds` | integers >=1 | Yes | —; FOV indices start at 1, round names are exactly `round1` … `roundN` |
+| `fov_id_pattern` | string | MATLAB backend | —; MATLAB backend only (the Python backend refuses it, see [FOV membership](#fov-membership)): Python format string with `{i}`, e.g. `tile_{i}`, `Position{i:03}` |
+| `n_fovs` | integer >=1 | MATLAB backend | —; MATLAB backend only (refused by the Python backend): FOV indices start at 1 |
+| `n_rounds` | integer >=1 | Yes | —; round names are exactly `round1` … `roundN` |
+| `selected_fovs` | nonempty array of unique FOV IDs, or null | No | null (every FOV); Python only: the FOV IDs of `fovs.csv` to run; it restricts every rule, per-sample rules included, see [FOV membership](#fov-membership) |
 | `ref_round` | string | Yes | —; must identify an existing sequencing round; membership is not schema-checked |
 | `ref_channel`, `dapi_round` | strings | No | —; nuclei registration / DAPI input selection, not Python sequencing-channel selection. In Python, `dapi_round` with `ref_channel` gives `Dataset.reference_stains` (`ChannelInfo("ch04", ref_channel)`); `dapi_round` must equal `ref_round`, else every rule raises `ValueError` |
 | `rotate_angle` | number | Yes | —; degrees, 0 for no rotation |
@@ -38,12 +40,34 @@ An em dash in the default column means the schema defines no default.
 | `matlab_launcher` | `path` or `broad` | No | `path`; how MATLAB rules start MATLAB, see [MATLAB launcher](#matlab-launcher) |
 | `matlab_single_thread` | boolean | No | `false`; `true` adds `-singleCompThread` to every MATLAB call |
 | `workflow_mode` | `free`, `direct`, `subtile`, `deep` | No | `free`; preset selection described in [workflows](workflows.md#modes-and-backend-selection) |
-| `subset_list` | array of integers >=1 | No | —; supply `[]` when unused; code indexes it directly |
-| `subset_range` | boolean | No | `false` |
-| `subset_start`, `subset_end` | integers >=1 | Conditional | —; see caveat below |
-| `subset_random` | boolean | No | `false` |
-| `n_random_tests` | integer >=1 | Conditional | —; see caveat below |
+| `subset_list` | array of integers >=1 | No | —; MATLAB backend only; supply `[]` when unused; code indexes it directly |
+| `subset_range` | boolean | No | `false`; MATLAB backend only |
+| `subset_start`, `subset_end` | integers >=1 | Conditional | —; MATLAB backend only; see caveat below |
+| `subset_random` | boolean | No | `false`; MATLAB backend only |
+| `n_random_tests` | integer >=1 | Conditional | —; MATLAB backend only; see caveat below |
 | `rules` | object of recognized rule names | Yes | —; each provided section requires boolean `run` |
+
+### FOV membership
+
+The Python backend reads its FOVs from `fovs.csv` in the input root
+(`<root_input_path>/<dataset_id>/<sample_id>/fovs.csv`): the columns
+`sample,fov_id`, and an optional `position_id` (the stage file's integer
+`PositionID` of the FOV, required when the stitching block reads a stage file),
+read in row order. `FOVS` is the FOVs in row order; `SAMPLE` the samples in the
+order of their first row; each sample's FOVs keep their row order. A repeated
+row, a FOV in two rows (another sample or another `position_id`), a
+`position_id` of two FOVs, an empty value or another column raises
+`ValueError` when the rule files are parsed. The `sample` column groups FOVs for
+the per-sample rules; it is not the acquisition `sample_id`, which stays part of
+every path and namespace. The optional `selected_fovs` list restricts a run to
+those FOV IDs of the file, for every rule (the per-FOV rules and the per-sample
+stitching, export and report rules alike); a sample with none of them is left
+out. Python has no random selection. The Python backend refuses
+`fov_id_pattern`, `n_fovs` and the six subset keys, and needs no sample
+annotation.
+
+The MATLAB backend keeps its membership: `documents/sample-annotation.csv`
+under the output root, `fov_id_pattern`, `n_fovs` and the subset keys below.
 
 The schema's `dependentRequired` checks **presence**, not truth: if
 `subset_range` is present (even false), `subset_start` and `subset_end` must be
@@ -52,7 +76,7 @@ also lack an explicit presence test. Supply all five fields as in the examples
 rather than relying on omission/defaults. The original minimal template fails
 these conditional requirements.
 
-Subsetting precedence is nonempty `subset_list`, then true `subset_range`
+For the MATLAB backend, subsetting precedence is nonempty `subset_list`, then true `subset_range`
 (inclusive), then true `subset_random`, else all `1..n_fovs`. The list path
 updates the sample list through annotation lookup; range/random paths do not.
 Random selection calls Python's unseeded `random.sample`; use explicit indices
@@ -151,7 +175,7 @@ GR/subtile creation and per-subtile RSF rules multiply configured runtime by
 attempt number. Direct RSF, stitch_subtile, StarDist, sequential RSF and
 BigStitcher use fixed configured runtime. Several auxiliary rules declare only
 memory, so adding a YAML runtime to those sections has no effect;
-`create_sample_maf` fixes memory/runtime to 8000 MB / 2 minutes in code.
+`create_sample_maf` (MATLAB backend only) fixes memory/runtime to 8000 MB / 2 minutes in code.
 
 The following keys sit under `rules.<rule>.parameters`. Unless stated otherwise,
 there is no schema default. Optional blocks are not a promise that every script
@@ -499,7 +523,15 @@ sample-level rules for a configuration that has them. The specification is the
   `bigstitcher_engine` when it runs, not when the rules are parsed, and the rule fails
   unless `dataset.xml` holds a `Stitching Transform` for every view, whatever Fiji's exit
   status. `positions` is the positions mapping of `Dataset.stitch`; `stage_axes` is
-  required with `source: stage_file` and is never inferred from `rotate_angle`. `config`
+  required with `source: stage_file` and is never inferred from `rotate_angle`, and so is
+  `stage_file`, the stage file's path (no default; no rule writes a per-sample copy). The
+  file may hold every sample's positions: each FOV's `PositionID` is the `position_id`
+  column of `fovs.csv`, required then, and the sample's positions are selected before the
+  conversion. The four legacy stitching rules, `create_sample_maf`, `create_sample_h5ad`
+  and `create_sample_reads_assignment` run with `backend: matlab` only: a Python
+  configuration that enables one without the block that replaces it (`stitching`, or
+  `assembly` for the two sample rules), or `reads_assignment` without either block, raises
+  when the rule files are parsed, naming the blocks to add. `config`
   holds the fields of `MultiviewStitcherConfig` or `BigStitcherConfig`, `review` the
   `ReviewPolicy` fields, and `fallback` is null or `nominal`. With `multiview_stitcher`
   no `tile_config_{sample}.csv` is written, so the legacy `reads_assignment` rule needs an
@@ -583,6 +615,7 @@ stitching:
     source: stage_file           # stage_file | regular_grid | table
     stage_axes: {x: "+x", y: "+y"}
     snap_to_grid: {overlap: 0.1}
+    stage_file: /data/acquisition/positions.maf   # required; fovs.csv gives each FOV's position_id
   review: {max_correction_fraction: 0.5, max_residual_um: 1.0}
   fallback: null
   bigstitcher_save_dir: /local/scratch/bigstitcher

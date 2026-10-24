@@ -8,8 +8,8 @@
 
 from starfinder._snakemake import _report_dataset_files, _report_sample_files
 
-# Every sample of the run, in the order of the sample annotation.
-REPORT_SAMPLES = [sample for sample in SAMPLE_ANNOT['sample_id'].unique() if sample in SAMPLE]
+# Every sample of the run, in the order of fovs.csv (the report block is Python-only).
+REPORT_SAMPLES = list(SAMPLE)
 
 ### ==================== [ Helper Functions ] =========================
 

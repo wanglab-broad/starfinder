@@ -571,7 +571,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     if rule not in _RULES:
         raise ValueError(f'unsupported Python workflow rule {rule}')
     if set(config) & {'channel_order', 'fov_pattern'}:
-        raise ValueError('direct Python field names belong to Dataset; use shared seq_channel_order/fov_id_pattern here')
+        raise ValueError('direct Python field names belong to Dataset; use seq_channel_order here (the FOVs are those '
+                         'of fovs.csv)')
     params = config.get('rules', {}).get(rule, {}).get('parameters', {})
     mode = _readout_mode(config, params)
     dataset = _workflow_dataset(config, readout_mode=mode)
@@ -755,8 +756,7 @@ def _workflow_dataset(config, **fields):
     return Dataset(Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'],
         Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
         config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
-        channel_order=tuple(channels), fov_pattern=config.get('fov_id_pattern', 'Position%03d'),
-        other_channel_order=orders, reference_stains=_reference_stains(config),
+        channel_order=tuple(channels), other_channel_order=orders, reference_stains=_reference_stains(config),
         voxel_size_xy=config.get('voxel_size_xy'), voxel_size_z=config.get('voxel_size_z'),
         reference_image=reference['reference_image'], reference_image_import=reference['reference_image_import'],
         **fields)
@@ -1232,6 +1232,11 @@ def _stitching_block(config) -> _StitchingBlock:
     if positions.get('source') == 'stage_file' and positions.get('stage_axes') is None:
         raise ValueError('stitching.positions.stage_axes ({x, y}) is required with source stage_file; it has no '
                          'default and is never inferred from rotate_angle')
+    if positions.get('source') == 'stage_file' and not positions.get('stage_file'):
+        raise ValueError("stitching.positions.stage_file (the stage file's path) is required with source stage_file; "
+                         'it has no default')
+    if positions.get('source') == 'table' and not positions.get('table'):
+        raise ValueError('stitching.positions.table (a CSV path) is required with source table')
     review = _typed(ReviewPolicy, values.get('review') or {}, 'stitching.review')
     fallback = values.get('fallback')
     if fallback not in (None, 'nominal'):
@@ -1265,45 +1270,163 @@ def _legacy_stitching(config) -> dict:
             'voxel_size_xy': config.get('voxel_size_xy'), 'voxel_size_z': config.get('voxel_size_z')}
 
 
-def _sample_fovs(annotation, config, sample):
-    """The FOV IDs of a sample: fov_id_pattern of fov_start..fov_end of its sample-annotation row (common.smk)."""
-    import pandas as pd
-    table = pd.read_csv(annotation)
-    rows = table[table['sample_id'] == sample]
-    if rows.empty:
-        raise ValueError(f'{annotation} has no sample {sample!r}')
-    start, end = int(rows['fov_start'].values[0]), int(rows['fov_end'].values[0])
-    return [config['fov_id_pattern'].format(i=i) for i in range(start, end + 1)]
+@dataclass(frozen=True)
+class _Membership:
+    """The Python workflow's FOV membership (_membership): every FOV of the run and each sample's FOV IDs, in the
+    order of fovs.csv, and each FOV's PositionID (None without the position_id column)."""
+    fovs: tuple
+    samples: dict
+    position_ids: dict | None
 
 
-def _output_root(config):
-    return Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
+_MEMBERSHIP_COLUMNS = ('sample', 'fov_id')
 
 
-def _workflow_fov_name(config):
-    """PositionID → FOV ID by the workflow's own rule, fov_id_pattern.format(i=p) (common.smk, _sample_fovs).
+def _membership(config, path=None) -> _Membership:
+    """The FOVs of a Python run: <input_root>/fovs.csv (or path), restricted by the top-level selected_fovs.
 
-    The workflow's fov_id_pattern is a brace pattern; Dataset.fov_pattern is a
-    percent pattern for Python callers, so the placement rules give the package
-    this rule instead of letting it format the brace pattern with %. A sample's
-    stage file keeps the raw PositionIDs, which are the FOV numbers i of
-    fov_start..fov_end (create_sample_maf.py).
+    fovs.csv has the columns sample and fov_id and an optional position_id
+    (the stage file's PositionID of the FOV, an integer), read in row order:
+    the samples in the order of their first row, each sample's FOVs in row
+    order. A repeated row, a FOV in two rows (two samples or two
+    PositionIDs), a PositionID of two FOVs, an empty value or another column
+    raises ValueError naming them. selected_fovs (absent or null: every FOV) is
+    a nonempty list of FOV IDs of the file; it restricts every rule, and a
+    sample with none of them is left out. The sample column groups FOVs; it is
+    not the acquisition sample_id. The MATLAB backend reads its sample
+    annotation instead (common.smk).
     """
-    pattern = config['fov_id_pattern']
-    return lambda pid: pattern.format(i=pid)
+    import csv
+    from collections import Counter
+    path = _layout.fovs_file(_input_root(config)) if path is None else Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f'the FOV membership file {path} (columns sample,fov_id and optionally position_id) '
+                                'does not exist')
+    with open(path, newline='', encoding='utf-8-sig') as handle:
+        rows = list(csv.reader(handle))
+    header = [v.strip() for v in rows[0]] if rows else []
+    if header[:2] != list(_MEMBERSHIP_COLUMNS) or header[2:] not in ([], ['position_id']):
+        raise ValueError(f'{path} must have the columns sample,fov_id and optionally position_id; got {header}')
+    body = [[v.strip() for v in row] for row in rows[1:] if any(v.strip() for v in row)]
+    if not body:
+        raise ValueError(f'{path} lists no FOV')
+    bad = [n for n, row in enumerate(body, start=2) if len(row) != len(header) or not all(row)]
+    if bad:
+        raise ValueError(f'{path}: rows {bad} do not give a value for each of {header}')
+    with_ids = len(header) == 3
+    if with_ids:
+        unparsed = [row[2] for row in body if not _is_integer(row[2])]
+        if unparsed:
+            raise ValueError(f'{path}: position_id must be an integer PositionID; got {unparsed}')
+    seen, repeated, conflicting = {}, [], []
+    for row in body:
+        key = tuple(row)
+        if row[1] in seen:
+            (repeated if seen[row[1]] == key else conflicting).append(row[1])
+        seen.setdefault(row[1], key)
+    if repeated:
+        raise ValueError(f'{path} repeats the rows of the FOVs {sorted(set(repeated))}')
+    if conflicting:
+        raise ValueError(f'{path} gives the FOVs {sorted(set(conflicting))} conflicting rows (another sample or '
+                         'position_id); a FOV has one row')
+    positions = {row[1]: int(row[2]) for row in body} if with_ids else None
+    if positions is not None:
+        shared = sorted(p for p, n in Counter(positions.values()).items() if n > 1)
+        if shared:
+            raise ValueError(f'{path} gives the position_id {shared} to more than one FOV')
+    selected = config.get('selected_fovs')
+    if selected is not None:
+        if (not isinstance(selected, list) or not selected or
+                any(not isinstance(f, str) or not f for f in selected)):
+            raise ValueError('selected_fovs must be a nonempty list of FOV IDs of fovs.csv (omit it to run every FOV)')
+        unknown = [f for f in selected if f not in seen]
+        twice = sorted(f for f, n in Counter(selected).items() if n > 1)
+        if unknown or twice:
+            raise ValueError(f'selected_fovs must name FOVs of {path} once each; unknown {unknown}, repeated {twice}')
+    rows = [row[:2] for row in body if selected is None or row[1] in selected]
+    samples = {}
+    for sample, fov in rows:
+        samples.setdefault(sample, []).append(fov)
+    return _Membership(tuple(fov for _, fov in rows), {sample: tuple(fovs) for sample, fovs in samples.items()},
+                       None if positions is None else {fov: positions[fov] for _, fov in rows})
 
 
-def _sample_table(block, dataset, sample, fov_ids, grids, config):
+def _is_integer(text):
+    try:
+        int(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _sample_fovs(config, sample, path=None):
+    """The FOV IDs of a sample, in the order of fovs.csv (_membership, restricted by selected_fovs)."""
+    membership = _membership(config, path)
+    if sample not in membership.samples:
+        raise ValueError(f'sample {sample!r} has no FOV of the run; its samples are {list(membership.samples)}')
+    return list(membership.samples[sample])
+
+
+def _stage_position_ids(config, membership):
+    """The PositionID of each FOV (fovs.csv's position_id) with a stitching block whose positions come from a stage
+    file, else None. The column is then required: the workflow names no FOV by a pattern."""
+    positions = (config.get('stitching') or {}).get('positions') or {}
+    if positions.get('source') != 'stage_file':
+        return None
+    if membership.position_ids is None:
+        raise ValueError('stitching.positions.source stage_file needs the position_id column of fovs.csv (the stage '
+                         "file's PositionID of each FOV)")
+    return membership.position_ids
+
+
+def _check_sample_rules(config):
+    """Refuse, for the Python backend, the legacy sample rules, which run with backend matlab only.
+
+    They read MATLAB's sample annotation: the four legacy stitching rules
+    (and the per-sample stage file create_sample_maf writes) are replaced by
+    the stitching block, create_sample_h5ad and create_sample_reads_assignment
+    by the assembly block, and reads_assignment without an assembly block reads
+    the tile configuration of the stitching block's bigstitcher import.
+    Raises ValueError naming the rules and the blocks to add.
+    """
+    rules = config.get('rules') or {}
+    enabled = [rule for rule, values in rules.items() if isinstance(values, dict) and values.get('run', False)]
+    needs = []
+    stitching = [r for r in enabled if r in _LEGACY_STITCHING_RULES]
+    if stitching and 'stitching' not in config:
+        needs.append(f'{stitching} need a stitching block')
+    sample = [r for r in enabled if r in _LEGACY_SAMPLE_RULES]
+    if sample and 'assembly' not in config:
+        needs.append(f'{sample} need a stitching block and an assembly block')
+    if 'reads_assignment' in enabled and 'assembly' not in config and 'stitching' not in config:
+        needs.append("['reads_assignment'] needs an assembly block, or a stitching block with method bigstitcher, "
+                     'which writes the tile configuration it reads')
+    if needs:
+        raise ValueError('the legacy sample rules run with backend matlab only; for the Python backend '
+                         + '; '.join(needs))
+
+
+_LEGACY_STITCHING_RULES = ('stitching_preparation', 'create_BigStitcher_macro', 'run_BigStitcher_macro',
+                           'create_tile_config')
+_LEGACY_SAMPLE_RULES = ('create_sample_h5ad', 'create_sample_reads_assignment')
+
+
+def _input_root(config):
+    return Path(config['root_input_path']) / config['dataset_id'] / config['sample_id']
+
+
+def _sample_table(block, dataset, sample, fov_ids, grids, position_ids):
     """The tile position table of the block's positions mapping, holding exactly fov_ids (as Dataset.stitch builds it).
 
-    A stage file's PositionIDs are named by the workflow's rule
-    (_workflow_fov_name). A FOV of the sample that the positions do not list, or
-    a listed FOV that is not one of the sample, raises ValueError naming both
-    lists, as Dataset.stitch does for a table that does not match its FOVs.
+    A stage file's positions are those of position_ids (_stage_position_ids),
+    selected before the conversion. A FOV of the sample that the positions do
+    not list, or a listed FOV that is not one of the sample, raises ValueError
+    naming both lists, as Dataset.stitch does for a table that does not match
+    its FOVs.
     """
     from ._stitching import table_from_positions
-    table = table_from_positions(block.positions, fov_ids, grids, sample=sample, output_root=dataset.output_root,
-                                 fov_pattern=dataset.fov_pattern, fov_name=_workflow_fov_name(config))
+    table = table_from_positions(block.positions, fov_ids, grids, fov_pattern=dataset.fov_pattern,
+                                 position_ids=position_ids)
     if set(table.fov_ids) != set(fov_ids):
         missing = [f for f in fov_ids if f not in table.fov_ids]
         extra = [f for f in table.fov_ids if f not in fov_ids]

@@ -175,6 +175,10 @@ def test_schema_validates_spot_finding_blocks(block, valid):
 
 
 EXAMPLE = yaml.safe_load((ROOT / "docs/examples/workflow-recipe-2.yaml").read_text())
+# The keys that name and select the FOVs of a MATLAB configuration (the Python backend reads fovs.csv and refuses
+# them).
+MATLAB_FOVS = {"fov_id_pattern": "tile_{i}", "n_fovs": 1, "subset_list": [], "subset_range": False, "subset_start": 1,
+               "subset_end": 1, "subset_random": False, "n_random_tests": 1}
 
 
 @pytest.mark.parametrize("parameters", [
@@ -187,9 +191,10 @@ def test_python_only_keys_validate_on_the_python_backend_only(parameters):
     config["rules"]["rsf_single_fov"]["parameters"]["spot_finding"] = {
         "run": True, "ref_round": "round1", "intensity_estimation": "adaptive", "intensity_threshold": 0.2}
     for backend in ("python", "matlab"):
-        jsonschema.validate(dict(config, backend=backend), SCHEMA)  # the shared keys validate on both
+        # the shared keys validate on both
+        jsonschema.validate(dict(config, backend=backend, **(MATLAB_FOVS if backend == "matlab" else {})), SCHEMA)
     config["rules"]["rsf_single_fov"]["parameters"].update(parameters)
     jsonschema.validate(config, SCHEMA)
     from_workflow_config(config)
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(dict(config, backend="matlab"), SCHEMA)
+        jsonschema.validate(dict(config, backend="matlab", **MATLAB_FOVS), SCHEMA)

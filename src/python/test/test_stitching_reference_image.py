@@ -229,7 +229,7 @@ def workflow_config(dataset, **extra):
     """The workflow configuration whose output root is the dataset's (<root>/data/output)."""
     root = dataset.output_root.parent.parent
     config = {"backend": "python", "dataset_id": "data", "sample_id": "sample", "output_id": "output",
-              "root_input_path": str(root / "input"), "root_output_path": str(root), "fov_id_pattern": "FOV_{i:03d}",
+              "root_input_path": str(root / "input"), "root_output_path": str(root),
               "n_rounds": 3, "ref_round": "round1", "rotate_angle": 0, "img_col": 36, "img_row": 36, "rules": {}}
     if dataset.voxel_size_xy is not None:
         config.update(voxel_size_xy=dataset.voxel_size_xy, voxel_size_z=dataset.voxel_size_z)
@@ -244,9 +244,9 @@ def run_workflow_stitching(dataset, scene_layouts, tmp_path):
     block = {"method": "multiview_stitcher", "input": "reference_merged", "positions": positions,
              "config": {"binning_zyx": [1, 2, 2], "quality_threshold": -1.0}}
     config = workflow_config(dataset, stitching=block)
-    sheet = tmp_path / "sheet.csv"
+    sheet = tmp_path / "fovs.csv"
     sheet.parent.mkdir(parents=True, exist_ok=True)
-    sheet.write_text(f"sample_id,fov_start,fov_end\n{SAMPLE},1,4\n")
+    sheet.write_text("sample,fov_id\n" + "".join(f"{SAMPLE},FOV_{i:03d}\n" for i in range(1, 5)))
     placement = tmp_path / "stitching" / SAMPLE / "placement.json"
     _snakemake._run_stitching(stub(config, inputs=[sheet], outputs=[placement], sample=SAMPLE))
     return load_placement(placement.parent)
@@ -308,7 +308,8 @@ def test_the_workflow_stitching_adapter_on_files_without_metadata(scene_layouts,
 
 def golden_dataset(root, form, setups):
     """The golden fixture as a workflow dataset: one-plane reference images Position1 to Position8, its stage file
-    and sample annotation, and the BigStitcher folder with the hand-built dataset.xml, view map and macro."""
+    and fovs.csv (position_id 1 to 8), and the BigStitcher folder with the hand-built dataset.xml, view map and
+    macro."""
     xml, _, _, table, view_map, _ = setups
     out = root / "data" / "output"
     for k, fov in enumerate(table.fov_ids):
@@ -318,18 +319,21 @@ def golden_dataset(root, form, setups):
             save_volume(image, path, metadata=grid(GOLDEN_SHAPE, GOLDEN_SPACING).metadata)
         else:
             plain_pages(path, image)
-    (out / "documents" / "maf").mkdir(parents=True)
-    (out / "documents" / "maf" / f"{SAMPLE}.maf").write_text(stage_file())
-    sheet = out / "documents" / "sample-annotation.csv"
-    sheet.write_text(f"sample_id,fov_start,fov_end\n{SAMPLE},1,8\n")
+    stage = root / "stage" / f"{SAMPLE}.maf"
+    stage.parent.mkdir(parents=True)
+    stage.write_text(stage_file())
+    sheet = root / "input" / "data" / "sample" / "fovs.csv"
+    sheet.parent.mkdir(parents=True)
+    sheet.write_text("sample,fov_id,position_id\n" + "".join(f"{SAMPLE},Position{i},{i}\n" for i in range(1, 9)))
     folder = root / "bigstitcher" / SAMPLE
     folder.mkdir(parents=True)
     shutil.copy(xml, folder / "dataset.xml")
     view_map.to_csv(folder / "view_map.csv", index=False)
     (folder / "BigStitcher_macro.ijm").write_text("// macro\n")
-    positions = {"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}, "snap_to_grid": {"overlap": 0.1}}
+    positions = {"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}, "snap_to_grid": {"overlap": 0.1},
+                 "stage_file": str(stage)}
     config = {"backend": "python", "dataset_id": "data", "sample_id": "sample", "output_id": "output",
-              "root_input_path": str(root / "input"), "root_output_path": str(root), "fov_id_pattern": "Position{i}",
+              "root_input_path": str(root / "input"), "root_output_path": str(root),
               "n_rounds": 3, "ref_round": "round1", "rotate_angle": 0, "img_col": GOLDEN_SHAPE[2],
               "img_row": GOLDEN_SHAPE[1], "rules": {},
               "stitching": {"positions": positions, "bigstitcher_save_dir": str(root / "bigstitcher")}}
@@ -397,9 +401,9 @@ def links_dataset(root, form):
             save_volume(image, path, metadata=grid(LINK_SHAPE, LN_SPACING).metadata)
         else:
             plain_pages(path, image)
-    sheet = out / "documents" / "sample-annotation.csv"
+    sheet = root / "input" / "data" / "sample" / "fovs.csv"
     sheet.parent.mkdir(parents=True, exist_ok=True)
-    sheet.write_text(f"sample_id,fov_start,fov_end\n{SAMPLE},0,3\n")
+    sheet.write_text("sample,fov_id\n" + "".join(f"{SAMPLE},L{i}\n" for i in range(4)))
     folder = root / "bigstitcher" / SAMPLE
     folder.mkdir(parents=True)
     (folder / "dataset.xml").write_text(links_xml())
@@ -408,7 +412,7 @@ def links_dataset(root, form):
     positions = {"source": "regular_grid", "regular_grid": {"columns": 2, "rows": 2,
                                                             "order": "column_major_down_right", "overlap": 0.25}}
     config = {"backend": "python", "dataset_id": "data", "sample_id": "sample", "output_id": "output",
-              "root_input_path": str(root / "input"), "root_output_path": str(root), "fov_id_pattern": "L{i}",
+              "root_input_path": str(root / "input"), "root_output_path": str(root),
               "n_rounds": 3, "ref_round": "round1", "rotate_angle": 0, "img_col": LINK_SHAPE[2],
               "img_row": LINK_SHAPE[1], "rules": {},
               "stitching": {"positions": positions, "bigstitcher_save_dir": str(root / "bigstitcher")}}

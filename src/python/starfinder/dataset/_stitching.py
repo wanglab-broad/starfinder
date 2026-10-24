@@ -5,6 +5,7 @@ configuration").
 """
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -118,13 +119,41 @@ def _section(positions, key, required):
     return section
 
 
-def table_from_positions(positions, fov_ids, grids, *, sample, output_root, fov_pattern,
-                         fov_name=None) -> TilePositionTable:
+def _selected_positions(path, fov_ids, fov_pattern, position_ids):
+    """``PositionID`` → FOV ID of the FOVs of fov_ids: by position_ids, or else the stage file's PositionIDs whose
+    ``fov_pattern.format(i=p)`` is one of them (in file order; none when the file is absent, which the converter
+    reports)."""
+    wanted = list(fov_ids)
+    if position_ids is None:
+        if not path.is_file():
+            return {}
+        named = {pid: fov_pattern.format(i=pid) for pid, *_ in _stage_points(path)}
+        selected = {pid: fov for pid, fov in named.items() if fov in wanted}
+        if not selected:
+            raise ValueError(f"no PositionID p of {path} names one of the FOVs {_names(wanted)} as "
+                             f"{fov_pattern!r}.format(i=p); give each FOV's PositionID (position_ids)")
+        return selected
+    if not isinstance(position_ids, Mapping):
+        raise TypeError("position_ids must map each FOV ID to its PositionID")
+    absent = [fov for fov in wanted if fov not in position_ids]
+    if absent:
+        raise ValueError(f"position_ids gives no PositionID for the FOVs {_names(absent)}")
+    shared = sorted(str(p) for p, n in Counter(position_ids[fov] for fov in wanted).items() if n > 1)
+    if shared:
+        raise ValueError(f"position_ids gives two FOVs one PositionID: {_names(shared)}")
+    return {position_ids[fov]: fov for fov in wanted}
+
+
+def table_from_positions(positions, fov_ids, grids, *, fov_pattern, position_ids=None) -> TilePositionTable:
     """The tile position table of the workflow's ``positions`` mapping, with the geometry the converter used.
 
-    A stage file's ``PositionID`` ``p`` is the FOV ``fov_name(p)``; without
-    ``fov_name`` (``Dataset.stitch``) it is ``fov_pattern % p``. The workflow
-    adapter passes its own rule, ``fov_id_pattern.format(i=p)``.
+    A stage file (``stage_file``, required with source ``stage_file``) may hold
+    other FOVs' positions: the positions of fov_ids are selected before
+    :func:`~starfinder.stitching.positions_from_leica` maps, shifts and snaps
+    them. ``position_ids`` gives each FOV's ``PositionID`` (the workflow's
+    ``fovs.csv``); without it ``PositionID`` ``p`` is the FOV
+    ``fov_pattern.format(i=p)`` and the positions that name a FOV of fov_ids
+    are selected.
     """
     if not isinstance(positions, Mapping):
         raise TypeError("table must be a TilePositionTable or the workflow's positions mapping")
@@ -142,16 +171,18 @@ def table_from_positions(positions, fov_ids, grids, *, sample, output_root, fov_
         axes = positions.get("stage_axes")
         if not isinstance(axes, Mapping) or set(axes) != {"x", "y"}:
             raise ValueError("positions.stage_axes ({x, y}) is required with source stage_file; it has no default")
-        path = positions.get("stage_file") or Path(output_root) / "documents" / "maf" / f"{sample}.maf"
+        if not positions.get("stage_file"):
+            raise ValueError("positions.stage_file (the stage file's path) is required with source stage_file; it "
+                             "has no default")
+        path = Path(positions["stage_file"])
         snap = None
         if positions.get("snap_to_grid") is not None:
             section = _section(positions, "snap_to_grid", ("overlap",))
             tile, spacing, geometry = _geometry(positions, grids)
             snap = GridSnap(overlap=section["overlap"], tile_shape_yx=tile, spacing_yx=spacing)
-        name = fov_name if fov_name is not None else (lambda pid: fov_pattern % pid)
-        ids = {pid: name(pid) for pid, *_ in _stage_points(Path(path))} if Path(path).is_file() else {}
+        ids = _selected_positions(path, fov_ids, fov_pattern, position_ids)
         table = positions_from_leica(path, stage_axes=StageAxisMapping(x=axes["x"], y=axes["y"]), fov_ids=ids,
-                                     snap_to_grid=snap)
+                                     position_ids=list(ids), snap_to_grid=snap)
     elif source == "table":
         if not positions.get("table"):
             raise ValueError("positions.table (a CSV path) is required with source table")

@@ -13,8 +13,6 @@ required:
   - dataset_id
   - sample_id
   - output_id
-  - fov_id_pattern
-  - n_fovs
   - n_rounds
   - ref_round
   - rotate_angle
@@ -61,14 +59,27 @@ properties:
     type: string
     description: "Output folder identifier"
 
+  # The FOVs: MATLAB backend only (required there). The Python backend reads <input>/fovs.csv
+  # (sample,fov_id and an optional position_id) and selected_fovs, and refuses these eight keys.
   fov_id_pattern:
     type: string
-    description: "Pattern for FOV naming (e.g., 'tile_{i}' or 'Position{i:03}')"
+    description: "MATLAB backend only: pattern for FOV naming (e.g., 'tile_{i}' or 'Position{i:03}')"
 
   n_fovs:
     type: integer
     minimum: 1
-    description: "Total number of FOVs in the dataset"
+    description: "MATLAB backend only: total number of FOVs in the dataset"
+
+  selected_fovs:
+    type: [array, "null"]
+    items:
+      type: string
+      minLength: 1
+    minItems: 1
+    uniqueItems: true
+    description: >-
+      Python only: the FOV IDs of fovs.csv to run (absent or null: every FOV); restricts every
+      rule, per-sample rules included
 
   n_rounds:
     type: integer
@@ -231,7 +242,7 @@ properties:
       - 'subtile': Subtile-based workflow (gr → lrsf → stitch)
       - 'deep': Deep-tissue optimized workflow
 
-  # ==================== Subsetting Options ====================
+  # ==================== Subsetting Options (MATLAB backend only) ====================
   subset_list:
     type: array
     items:
@@ -342,8 +353,36 @@ dependentRequired:
     - assembly
 
 allOf:
-  # If subset_range is true, require subset_start and subset_end
+  # The MATLAB backend (the default) names its FOVs by fov_id_pattern and n_fovs and selects them with
+  # the subset keys; the Python backend reads fovs.csv and selected_fovs and refuses those keys.
   - if:
+      required: [backend]
+      properties:
+        backend:
+          const: python
+    then:
+      not:
+        anyOf:
+          - required: [fov_id_pattern]
+          - required: [n_fovs]
+          - required: [subset_list]
+          - required: [subset_range]
+          - required: [subset_start]
+          - required: [subset_end]
+          - required: [subset_random]
+          - required: [n_random_tests]
+    else:
+      required:
+        - fov_id_pattern
+        - n_fovs
+
+  # If subset_range is true, require subset_start and subset_end (MATLAB backend)
+  - if:
+      not:
+        required: [backend]
+        properties:
+          backend:
+            const: python
       properties:
         subset_range:
           const: true
@@ -352,8 +391,13 @@ allOf:
         - subset_start
         - subset_end
 
-  # If subset_random is true, require n_random_tests
+  # If subset_random is true, require n_random_tests (MATLAB backend)
   - if:
+      not:
+        required: [backend]
+        properties:
+          backend:
+            const: python
       properties:
         subset_random:
           const: true
@@ -376,6 +420,7 @@ allOf:
     then:
       not:
         anyOf:
+          - required: [selected_fovs]
           - required: [segmentation]
           - required: [assignment]
           - required: [stitching]
@@ -1748,9 +1793,24 @@ $defs:
     additionalProperties: false
 
   stitching_positions:
-    description: "The positions mapping of Dataset.stitch; stage_axes is required with source stage_file"
+    description: >-
+      The positions mapping of Dataset.stitch; stage_axes and stage_file are required with source
+      stage_file (with the position_id column of fovs.csv), table with source table
     type: object
     required: [source]
+    allOf:
+      - if:
+          properties:
+            source:
+              const: stage_file
+        then:
+          required: [stage_axes, stage_file]
+      - if:
+          properties:
+            source:
+              const: table
+        then:
+          required: [table]
     properties:
       source:
         enum: ["stage_file", "regular_grid", "table"]
@@ -1806,7 +1866,7 @@ $defs:
         description: "The unit of the table (µm, um, nm or mm)"
         type: string
       stage_file:
-        description: "The stage file; default documents/maf/<sample>.maf under the output root"
+        description: "The stage file's path, required with source stage_file (no default); it may hold other samples' positions"
         type: [string, "null"]
     additionalProperties: false
 

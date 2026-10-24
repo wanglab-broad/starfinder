@@ -22,7 +22,7 @@ from starfinder.readout import summarize_reads
 from .test_registration_other_rounds import TRANSLATION, external, other_round_fov
 from .test_report_records_golden import ALL_STAGES, pipeline
 from .test_report_run_record_additions import golden_dataset, jsonable, run
-from .test_report_workflow import common_preamble, repository_config
+from .test_report_workflow import SAMPLE, annotation, common_preamble, repository_config
 
 pytestmark = [pytest.mark.dataset, pytest.mark.contract]
 
@@ -139,6 +139,11 @@ def declared_outputs(backend, rule, names, fovs, subtiles):
 def test_the_final_targets_branch_on_the_backend(tmp_path, monkeypatch, backend, rule):
     config, output_root = repository_config("docs/examples/workflow-minimal.yaml", tmp_path)
     config.update(backend=backend, workflow_mode="free", rules={rule: {"run": True}})
+    if backend == "matlab":
+        # The MATLAB backend's membership: the sample annotation, fov_id_pattern, n_fovs and the subset keys, for the
+        # FOVs of the example's fovs.csv (tile_1 of sample1, tile_2 of sample2).
+        config.update(fov_id_pattern="tile_{i}", n_fovs=2, subset_list=[], subset_range=False, subset_random=False)
+        annotation(output_root, [(SAMPLE, 1, 1), ("sample2", 2, 2)])
     config.pop("assembly", None)
     config.pop("stitching", None)
     names = common_preamble(config, output_root, monkeypatch)

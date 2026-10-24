@@ -348,8 +348,24 @@ def _snap_step(values):
     return float(steps[np.argmax(counts)])
 
 
+def _select_points(points, position_ids, path):
+    """The points of position_ids, in file order: each an integer PositionID the file holds, none repeated."""
+    wanted = list(position_ids)
+    if not wanted or any(isinstance(p, (bool, np.bool_)) or not isinstance(p, Integral) for p in wanted):
+        raise ValueError(f"position_ids must be a nonempty list of integer PositionIDs; got {wanted!r}")
+    repeated = sorted(k for k, n in Counter(wanted).items() if n > 1)
+    if repeated:
+        raise ValueError(f"position_ids repeats PositionID {_names(repeated)}")
+    held = {p[0] for p in points}
+    absent = [p for p in wanted if p not in held]
+    if absent:
+        raise ValueError(f"PositionID {_names(absent)} is not in stage file {path}")
+    keep = set(wanted)
+    return [p for p in points if p[0] in keep]
+
+
 def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping[int, str],
-                         snap_to_grid: GridSnap | None = None) -> TilePositionTable:
+                         snap_to_grid: GridSnap | None = None, position_ids=None) -> TilePositionTable:
     """Tile position table of a Leica LAS X stage file (docs/stitching-algorithms.md, "Leica stage file").
 
     Reads every ``XYZStagePointDefinition`` (``PositionID``, ``StageXPos`` and
@@ -358,6 +374,12 @@ def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping
     0 (the stage file gives no z offset between tiles). Rows keep the file's
     order. Other attributes (``Sections``, ``StackBegin``, ``StageZPos``, ...) are
     kept in the record, not used.
+
+    With ``position_ids`` only those positions are read (a whole-acquisition
+    file and a sample's): they are selected first, and the axis mapping, the
+    shift, the snap step, the cells and the clash check see only them, so a
+    file that holds other samples' positions gives the table of a file that
+    holds only these.
 
     With ``snap_to_grid`` the positions are replaced by a regular grid: the step
     for the cells is the most frequent absolute difference of consecutive y
@@ -374,9 +396,13 @@ def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping
     stage_axes : StageAxisMapping
         Required; no default.
     fov_ids : Mapping[int, str]
-        ``PositionID`` → FOV ID; every ``PositionID`` of the file must be a key.
+        ``PositionID`` → FOV ID; every ``PositionID`` read (of the file, or of
+        ``position_ids``) must be a key.
     snap_to_grid : GridSnap or None
         The grid to snap to, or None (default) to keep the stage positions.
+    position_ids : Sequence[int] or None
+        The ``PositionID`` values to read, each in the file once; None
+        (default) reads every position of the file.
 
     Returns
     -------
@@ -384,14 +410,16 @@ def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping
         ``source`` ``leica:<path>``; ``position_id`` holds the ``PositionID``;
         rows ``stage`` (cells missing) or, snapped, ``grid`` with their cells.
         The record holds the path, the file's SHA-256, the mapping, the FOV IDs,
-        the stage values and attributes, and the snap with its step.
+        the stage values and attributes of the positions read, and the snap
+        with its step.
 
     Raises
     ------
     TypeError
         stage_axes is not a StageAxisMapping or snap_to_grid not a GridSnap.
     ValueError
-        An unreadable file, a repeated ``PositionID``, a ``PositionID`` without
+        An unreadable file, a repeated ``PositionID``, an empty or repeated
+        ``position_ids`` or one the file does not hold, a ``PositionID`` without
         a FOV ID, a non-finite position, or (snapped) two positions in one cell,
         each naming them.
     FileNotFoundError
@@ -410,6 +438,8 @@ def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping
     repeated = sorted(k for k, n in Counter(p[0] for p in points).items() if n > 1)
     if repeated:
         raise ValueError(f"stage file {path} repeats PositionID {_names(repeated)}")
+    if position_ids is not None:
+        points = _select_points(points, position_ids, path)
     unmapped = [p[0] for p in points if p[0] not in fov_ids]
     if unmapped:
         raise ValueError(f"PositionID {_names(unmapped)} of {path} has no FOV ID in fov_ids")

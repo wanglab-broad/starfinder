@@ -1,6 +1,8 @@
 """
     Reads assignment rules: Reads assignment, sample h5ad creation
-    Uses variables from common.smk
+    Uses variables from common.smk. reads_assignment reads the run's FOV membership (MEMBERSHIP: fovs.csv
+    for the Python backend, MATLAB's sample annotation); the two legacy sample rules run with backend
+    matlab only (the Python backend's assembly block replaces them).
 """
 
 ### ==================== [ Reads Assignment ] =========================
@@ -25,7 +27,7 @@ else:
 
 rule reads_assignment:
     input:
-        expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+        MEMBERSHIP,
         expand("{dapi_dir}/{{fovID}}.tif", dapi_dir=DAPI_DIR, fovID=FOVS),
         expand("{output_dir}/images/stardist_segmentation/{{fovID}}.tif", output_dir=OUTPUT_DIR, fovID=FOVS),
         MOLECULE_TABLE,
@@ -40,34 +42,36 @@ rule reads_assignment:
     script:
         "../scripts/reads_assignment.py"
 
-### ==================== [ Create Sample H5AD ] =========================
+if BACKEND == "matlab":
 
-def get_h5ad_input(wildcards):
-    return expand("{output_dir}/expr/{fovID}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=SAMPLE_TO_FOV[wildcards.sample])
+    ### ==================== [ Create Sample H5AD ] =========================
 
-rule create_sample_h5ad:
-    input:
-        expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
-        get_h5ad_input
-    output:
-        expand("{output_dir}/expr/{{sample}}_raw.h5ad", output_dir=OUTPUT_DIR, sample=SAMPLE)
-    resources:
-        mem_mb=get_rule_config('create_sample_h5ad', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
-    script:
-        "../scripts/create_sample_h5ad.py"
+    def get_h5ad_input(wildcards):
+        return expand("{output_dir}/expr/{fovID}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=SAMPLE_TO_FOV[wildcards.sample])
 
-### ==================== [ Create Sample Reads Assignment ] =========================
+    rule create_sample_h5ad:
+        input:
+            expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+            get_h5ad_input
+        output:
+            expand("{output_dir}/expr/{{sample}}_raw.h5ad", output_dir=OUTPUT_DIR, sample=SAMPLE)
+        resources:
+            mem_mb=get_rule_config('create_sample_h5ad', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
+        script:
+            "../scripts/create_sample_h5ad.py"
 
-def get_reads_input(wildcards):
-    return expand("{output_dir}/expr/{fovID}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=SAMPLE_TO_FOV[wildcards.sample])
+    ### ==================== [ Create Sample Reads Assignment ] =========================
 
-rule create_sample_reads_assignment:
-    input:
-        expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
-        get_reads_input
-    output:
-        expand("{output_dir}/expr/{{sample}}_reads_assignment.csv", output_dir=OUTPUT_DIR, sample=SAMPLE)
-    resources:
-        mem_mb=get_rule_config('create_sample_reads_assignment', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
-    script:
-        "../scripts/create_sample_reads_assignment.py"
+    def get_reads_input(wildcards):
+        return expand("{output_dir}/expr/{fovID}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=SAMPLE_TO_FOV[wildcards.sample])
+
+    rule create_sample_reads_assignment:
+        input:
+            expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+            get_reads_input
+        output:
+            expand("{output_dir}/expr/{{sample}}_reads_assignment.csv", output_dir=OUTPUT_DIR, sample=SAMPLE)
+        resources:
+            mem_mb=get_rule_config('create_sample_reads_assignment', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
+        script:
+            "../scripts/create_sample_reads_assignment.py"

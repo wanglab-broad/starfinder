@@ -47,9 +47,12 @@ NAMESPACE = '["data","sample","Position001",null]'
 
 
 def workflow(tmp_path, *, expand=False, seg_expand=False, backend="python", **extra):
+    """The configuration of run_rule; the MATLAB backend names its FOVs by fov_id_pattern (the Python one by
+    fovs.csv)."""
     return {"backend": backend, "dataset_id": "data", "sample_id": "sample", "output_id": "out",
             "root_input_path": str(tmp_path / "input"), "root_output_path": str(tmp_path / "output"),
-            "fov_id_pattern": "Position{i:03d}", "img_z": SHAPE_ZYX[0], "voxel_size_z": 0.35, "voxel_size_xy": 0.1,
+            **({"fov_id_pattern": "Position{i:03d}"} if backend == "matlab" else {}),
+            "img_z": SHAPE_ZYX[0], "voxel_size_z": 0.35, "voxel_size_xy": 0.1,
             "rules": {"stardist_segmentation": {"parameters": {"segmentation_input_folder": "overlay",
                                                                "expand_labels": seg_expand, "distance": 4}},
                       "reads_assignment": {"parameters": {"expand_labels": expand, "dilation_distance": DISTANCE}}},
@@ -69,6 +72,9 @@ def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=GENES, 
              **options):
     """reads_assignment through a stub snakemake object: one FOV, tile offsets 0, a box covering the FOV.
 
+    Its membership input is the one the backend reads: fovs.csv under the input root (Python), or the sample
+    annotation (MATLAB).
+
     The molecule table is fovs/Position001/molecules.csv of the Python rsf_single_fov, or with ``legacy`` the
     one-based goodSpots CSV of the legacy route: MATLAB's rsf_single_fov writes integers, stitch_subtile (the
     subtile mode, ``floats``) the floats of the resident subtile tables.
@@ -80,11 +86,16 @@ def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=GENES, 
     out = tmp_path / "output" / "data" / "out"
     for folder in ("documents", "output", "signal", "images/DAPI", "images/stardist_segmentation"):
         (out / folder).mkdir(parents=True, exist_ok=True)
-    (out / "documents" / "sample-annotation.csv").write_text("sample_id,fov_start,fov_end\nsample1,1,1\n")
     (out / "documents" / "genes.csv").write_text("".join(f"{g},{b}\n" for g, b in GENES))
     codebook_path = tmp_path / "input" / "data" / "sample" / "genes.csv"
     codebook_path.parent.mkdir(parents=True)
     codebook_path.write_text("".join(f"{g},{b}\n" for g, b in codebook))
+    if config["backend"] == "python":
+        membership = codebook_path.parent / "fovs.csv"
+        membership.write_text("sample,fov_id\nsample1,Position001\n")
+    else:
+        membership = out / "documents" / "sample-annotation.csv"
+        membership.write_text("sample_id,fov_start,fov_end\nsample1,1,1\n")
     ny, nx = labels.shape[-2:]
     pd.DataFrame([{"id": 1, "x": 0, "y": 0, "z": 0, "start_x_norm": 0, "end_x_norm": nx, "start_y_norm": 0,
                    "end_y_norm": ny}]).to_csv(out / "output" / "tile_config_sample1.csv")
@@ -95,7 +106,7 @@ def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=GENES, 
     else:
         reads = write_molecules_csv(out / "fovs" / "Position001" / "molecules.csv", NAMESPACE,
                                     [p for p, _ in molecules], [g for _, g in molecules], spot_ids)
-    inputs = [out / "documents" / "sample-annotation.csv", out / "images" / "DAPI" / "Position001.tif",
+    inputs = [membership, out / "images" / "DAPI" / "Position001.tif",
               out / "images" / "stardist_segmentation" / "Position001.tif", reads, out / "documents" / "genes.csv",
               out / "output" / "tile_config_sample1.csv"]
     outputs = [out / "expr" / "Position001" / "raw.h5ad", out / "expr" / "Position001" / "reads_assignment.csv"]

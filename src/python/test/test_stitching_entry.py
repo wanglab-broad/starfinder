@@ -418,6 +418,10 @@ def test_dataset_stitch_errors(stub, tmp_path):
         dataset.stitch("sample1", IDS, table=dict(POSITIONS, guess=1), config=StubConfig(zero(4)))
     with pytest.raises(ValueError, match="stage_axes"):
         dataset.stitch("sample1", IDS, table={"source": "stage_file"}, config=StubConfig(zero(4)))
+    with pytest.raises(ValueError, match=r"positions\.stage_file .* is required with source stage_file; it has no "
+                                         "default"):
+        dataset.stitch("sample1", IDS, table={"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}},
+                       config=StubConfig(zero(4)))
     (tmp_path / "output" / "fovs" / IDS[0] / "reference.tif").unlink()
     with pytest.raises(FileNotFoundError, match="Position001"):
         dataset.stitch("sample1", IDS, table=POSITIONS, config=StubConfig(zero(4)))
@@ -426,10 +430,11 @@ def test_dataset_stitch_errors(stub, tmp_path):
 def test_dataset_stitch_reads_the_sample_stage_file(stub, no_fov_stage, tmp_path):
     dataset, _ = dataset_folder(tmp_path)
     points = ((1, "0.05", "0.02"), (2, "0.05", "0.020003"), (3, "0.050003", "0.02"), (4, "0.050003", "0.020003"))
-    path = tmp_path / "output" / "documents" / "maf" / "sample1.maf"
+    path = tmp_path / "stage" / "sample1.maf"
     path.parent.mkdir(parents=True)
     path.write_text(maf_text(points))
-    positions = {"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}, "snap_to_grid": {"overlap": 0.25}}
+    positions = {"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}, "snap_to_grid": {"overlap": 0.25},
+                 "stage_file": str(path)}
     result = dataset.stitch("sample1", IDS, table=positions, config=StubConfig(zero(4)))
     check_components(result)
     record = result.record["table"]

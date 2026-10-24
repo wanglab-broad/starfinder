@@ -1,6 +1,7 @@
 from starfinder.dataset import from_workflow_config
 """Tests for Dataset class."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,6 @@ def sample_config():
         "output_id": "output-01",
         "n_rounds": 4,
         "ref_round": "round1",
-        "fov_id_pattern": "FOV_%03d",
         "rotate_angle": -90.0,
         "maximum_projection": False,
     }
@@ -47,9 +47,18 @@ class TestSTARMapDataset:
         assert fov.rounds is ds.rounds
 
     def test_fov_ids(self, sample_config):
+        """A workflow-built dataset holds the default {i} pattern; fov_ids formats it from start (default 0)."""
         ds = from_workflow_config(sample_config).dataset
-        ids = ds.fov_ids(3, start=1)
-        assert ids == ["FOV_001", "FOV_002", "FOV_003"]
+        assert ds.fov_pattern == "Position{i:03d}"
+        assert ds.fov_ids(3, start=1) == ["Position001", "Position002", "Position003"]
+        assert ds.fov_ids(2) == ["Position000", "Position001"]
+        assert replace(ds, fov_pattern="FOV_{i:03d}").fov_ids(3, start=1) == ["FOV_001", "FOV_002", "FOV_003"]
+
+    @pytest.mark.parametrize("pattern", ["FOV_%03d", "FOV", "FOV_{j}", "FOV_{i:q}", 3])
+    def test_fov_pattern_must_be_an_i_pattern(self, sample_config, pattern):
+        ds = from_workflow_config(sample_config).dataset
+        with pytest.raises(ValueError, match=r"fov_pattern must be a \{i\} pattern"):
+            replace(ds, fov_pattern=pattern)
 
     def test_load_codebook(self, sample_config, small_dataset):
         sample_config["seq_channel_order"] = ["ch00", "ch01", "ch02", "ch03"]

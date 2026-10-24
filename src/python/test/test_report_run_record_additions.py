@@ -260,6 +260,12 @@ def test_an_older_record_and_the_format_version(tmp_path):
 # R4 and R5. The workflow writes run.json and records its configuration file.
 
 
+# The keys that name and select the FOVs of a MATLAB configuration (the Python backend reads fovs.csv and refuses
+# them).
+MATLAB_FOVS = {"fov_id_pattern": "%s", "n_fovs": 1, "subset_range": False, "subset_start": 1, "subset_end": 1,
+               "subset_random": False, "n_random_tests": 1}
+
+
 def workflow_config(root: Path, out: str, **parameters) -> dict:
     """The rsf_single_fov configuration of the golden scene (legacy keys, translation global registration)."""
     rule = {"global_registration": {"run": True},
@@ -268,9 +274,8 @@ def workflow_config(root: Path, out: str, **parameters) -> dict:
             **parameters}
     return dict(config_path=str(root / "config.yaml"), starfinder_path=str(ROOT), root_input_path=str(root),
                 root_output_path=str(root / out), dataset_id="data", sample_id="in", output_id="run",
-                fov_id_pattern="%s", n_fovs=1, n_rounds=2, ref_round="round1", rotate_angle=0, img_col=24,
-                img_row=24, subset_range=False, subset_start=1, subset_end=1, subset_random=False,
-                n_random_tests=1, seq_channel_order=list(CHANNELS), backend="python",
+                n_rounds=2, ref_round="round1", rotate_angle=0, img_col=24,
+                img_row=24, seq_channel_order=list(CHANNELS), backend="python",
                 rules={"rsf_single_fov": {"run": True, "parameters": rule}})
 
 
@@ -360,14 +365,15 @@ def test_r5_the_schema_allows_the_checkpoints_key_with_the_python_backend_only(t
     # The workflow validates its configuration with this schema (workflow/Snakefile) before any rule runs; a
     # MATLAB run never reaches the adapter's own check, so the schema must refuse the key there.
     base = workflow_config(tmp_path, "out")
-    without = {k: v for k, v in base.items() if k != "backend"}
+    matlab = dict(base, **MATLAB_FOVS)
+    without = {k: v for k, v in matlab.items() if k != "backend"}
     keyed = {"rules": {rule: {"run": True, "parameters": {"checkpoints": {"stages": ["pre_qc"]}}}}}
     plain = {"rules": {rule: {"run": True, "parameters": {}}}}
     jsonschema.validate(dict(base, **keyed), SCHEMA)
     # backend: matlab refuses it; without the key the same configuration is valid.
-    jsonschema.validate(dict(base, backend="matlab", **plain), SCHEMA)
+    jsonschema.validate(dict(matlab, backend="matlab", **plain), SCHEMA)
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(dict(base, backend="matlab", **keyed), SCHEMA)
+        jsonschema.validate(dict(matlab, backend="matlab", **keyed), SCHEMA)
     # The backend omitted is the schema's default, matlab: refused as well.
     assert SCHEMA["properties"]["backend"]["default"] == "matlab"
     jsonschema.validate(dict(without, **plain), SCHEMA)

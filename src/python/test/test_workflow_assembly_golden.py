@@ -247,10 +247,12 @@ class _Wildcards(dict):
 
 def _config(root, *, legacy=True):
     """The workflow configuration of the sample; ``legacy`` names the legacy route (backend matlab), whose
-    rsf_single_fov writes the one-based goodSpots CSVs, else the Python backend and fovs/<fov>/molecules.csv."""
+    rsf_single_fov writes the one-based goodSpots CSVs and whose FOVs fov_id_pattern names, else the Python backend
+    (its FOVs those of fovs.csv) and fovs/<fov>/molecules.csv."""
     return {"backend": "matlab" if legacy else "python", "dataset_id": "data", "sample_id": "sample", "output_id": "out",
             "root_input_path": str(root / "input"), "root_output_path": str(root / "output"),
-            "fov_id_pattern": FOV_ID_PATTERN, "img_z": TILE_ZYX[0], "img_row": IMG_ROW, "img_col": IMG_COL,
+            **({"fov_id_pattern": FOV_ID_PATTERN} if legacy else {}),
+            "img_z": TILE_ZYX[0], "img_row": IMG_ROW, "img_col": IMG_COL,
             "voxel_size_z": 0.35, "voxel_size_xy": 0.2,
             "rules": {"stardist_segmentation": {"parameters": {"segmentation_input_folder": "overlay",
                                                                "expand_labels": False}},
@@ -258,8 +260,9 @@ def _config(root, *, legacy=True):
 
 
 def build_sample(root, dimensions, *, cells=CELLS, placement=STITCHING, molecules=None, legacy=True):
-    """The sample's output folder: annotation, genes, codebook, tile_config and per FOV labels and molecules: the
-    legacy route's goodSpots CSV, or with ``legacy`` False fovs/<fov>/molecules.csv (row ``i`` the spot ``m<i>``).
+    """The sample's output folder: membership, genes, codebook, tile_config and per FOV labels and molecules: the
+    legacy route's sample annotation and goodSpots CSV, or with ``legacy`` False the input root's fovs.csv and
+    fovs/<fov>/molecules.csv (row ``i`` the spot ``m<i>``).
 
     The FOVs are always cut at the offsets of STITCHING; placement gives the dataset.xml from
     which tile_config is computed, so a changed placement moves the rectangles and global
@@ -269,11 +272,15 @@ def build_sample(root, dimensions, *, cells=CELLS, placement=STITCHING, molecule
     out = root / "output" / "data" / "out"
     for folder in ("documents", "output", "signal", "images/DAPI", "images/stardist_segmentation"):
         (out / folder).mkdir(parents=True, exist_ok=True)
-    (out / "documents" / "sample-annotation.csv").write_text("sample_id,fov_start,fov_end\nsample1,1,3\n")
     write_genes(out / "documents" / "genes.csv")
     codebook = root / "input" / "data" / "sample" / "genes.csv"
     codebook.parent.mkdir(parents=True, exist_ok=True)
     write_genes(codebook)
+    if legacy:
+        (out / "documents" / "sample-annotation.csv").write_text("sample_id,fov_start,fov_end\nsample1,1,3\n")
+    else:
+        (codebook.parent / "fovs.csv").write_text("sample,fov_id\n" + "".join(f"sample1,{FOVS[k]}\n"
+                                                                             for k in sorted(FOVS)))
     frame = tile_frame(root / "placement", placement)
     frame.to_csv(out / "output" / "tile_config_sample1.csv")
     inputs = fov_inputs(tile_frame(root / "cut"), cells)

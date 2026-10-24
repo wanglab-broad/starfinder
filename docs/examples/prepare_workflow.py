@@ -49,9 +49,8 @@ def main():
     (input_dir / "genes.csv").write_text("ExampleGene,ACGTCC\n")
     for r in range(1, config["n_rounds"] + 1):
         (input_dir / f"round{r}" / "tile_1").mkdir(parents=True)
-    doc_dir = output / "output" / config["dataset_id"] / config["output_id"] / "documents"
-    doc_dir.mkdir(parents=True)
-    (doc_dir / "sample-annotation.csv").write_text("sample_id,fov_start,fov_end\nsample,1,1\n")
+    # The Python FOV membership: one sample of one FOV.
+    (input_dir / "fovs.csv").write_text("sample,fov_id\nsample,tile_1\n")
     (output / "DRY_RUN_ONLY.txt").write_text(
         "Empty round/FOV directories satisfy DAG existence checks only.\n"
         "No TIFF, MATLAB, segmentation, assignment or scientific validation.\n"

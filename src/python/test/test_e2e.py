@@ -218,7 +218,7 @@ class TestE2EStreamingMode:
                 reference_round="round1",
             ),
             channel_order=["ch00", "ch01", "ch02", "ch03"],
-            fov_pattern="FOV_%03d",
+            fov_pattern="FOV_{i:03d}",
         )
         ds.load_codebook(small_dataset / "codebook.csv")
 
@@ -289,7 +289,7 @@ class TestE2EStreamingMode:
                 reference_round="round1",
             ),
             channel_order=["ch00", "ch01", "ch02", "ch03"],
-            fov_pattern="FOV_%03d",
+            fov_pattern="FOV_{i:03d}",
         )
         ds.load_codebook(small_dataset / "codebook.csv")
 

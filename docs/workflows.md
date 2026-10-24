@@ -29,28 +29,43 @@ INPUT  = root_input_path / dataset_id / sample_id
 OUTPUT = root_output_path / dataset_id / output_id
 
 INPUT/genes.csv                      # headerless gene,barcode rows
+INPUT/fovs.csv                       # Python backend: the FOV membership
 INPUT/round1/tile_1/*ch00.tif          # per-channel Z stacks
 INPUT/round1/tile_1/*ch02.tif
 INPUT/round1/tile_1/*ch01.tif
 INPUT/round1/tile_1/*ch03.tif
 INPUT/round2/tile_1/...               # through round<n_rounds>
-OUTPUT/documents/sample-annotation.csv
+OUTPUT/documents/sample-annotation.csv  # MATLAB backend: the FOV membership
 ```
 
-The annotation CSV must exist **before parsing the workflow**, even for a dry
-run or sequencing-only job. Its minimum columns are `sample_id,fov_start,fov_end`;
-start/end are inclusive integer FOV indices. For one FOV:
+The membership file must exist **before parsing the workflow**, even for a dry
+run or sequencing-only job; the workflow reads it during startup and cannot
+produce it as an upstream job. The Python backend reads `INPUT/fovs.csv`, with
+the columns `sample,fov_id` and an optional `position_id` (the stage file's
+`PositionID`, required when the stitching block reads a stage file), in row
+order; the optional `selected_fovs` list restricts every rule to those FOVs
+([configuration](workflow-configuration.md#fov-membership)). For one FOV:
+
+```text
+sample,fov_id
+sample,tile_1
+```
+
+The MATLAB backend reads `OUTPUT/documents/sample-annotation.csv`, whose
+minimum columns are `sample_id,fov_start,fov_end` (inclusive integer FOV
+indices, named by `fov_id_pattern`), and selects with the subset keys:
 
 ```text
 sample_id,fov_start,fov_end
 sample,1,1
 ```
 
-Annotation sample names group FOVs for stitching and aggregation; they need not
-be the input directory's `sample_id`. Keep groups non-overlapping and cover each
-selected FOV. The workflow reads this CSV directly during startup; it cannot
-produce it as an upstream job. Prepare the codebook and acquisition metadata
-from the actual experiment before real execution.
+Sample names group FOVs for stitching and aggregation; they need not be the
+input directory's `sample_id`, which stays part of every path and namespace. A
+`fovs.csv` that repeats a row or puts a FOV in two rows raises; for the MATLAB
+annotation, keep groups non-overlapping and cover each selected FOV. Prepare the
+codebook and acquisition metadata from the actual experiment before real
+execution.
 
 ## Stages and files
 
@@ -203,8 +218,13 @@ Preparation, nuclei/rotation, overlay, StarDist, stitching/BigStitcher,
 assignment and sample aggregation use their individual flags in all modes.
 `enhance_dapi_with_flamingo` and the MATLAB-only `rsf_single_fov_seq` are outside
 that always-available list: their flags select aggregate targets only in `free`.
-`create_sample_maf` and `rsf_preparation` are dependency-driven utilities and
-are not accepted keys under `rules` by the schema.
+`create_sample_maf` (MATLAB backend only) and `rsf_preparation` are
+dependency-driven utilities and are not accepted keys under `rules` by the schema.
+The legacy sample rules (the four stitching rules, `create_sample_maf`,
+`create_sample_h5ad` and `create_sample_reads_assignment`) read the MATLAB sample
+annotation and run with `backend: matlab` only; a Python configuration uses the
+stitching and assembly blocks instead, and enabling one of them without its block
+raises when the rule files are parsed, naming the block to add.
 
 Flags control the aggregate target list, not whether a rule definition exists.
 Use the explicit target **`all`** in commands: the preparation rule is included
@@ -240,7 +260,7 @@ from saved CSVs alone.
 The downloadable [minimal YAML](#minimal-configuration) and
 [full YAML](workflow-configuration.md#full-configuration-example) provide
 portable examples. The preparation helper validates a template, rewrites paths
-to a new external directory, and creates one annotation row, one illustrative
+to a new external directory, and creates a one-FOV `fovs.csv`, one illustrative
 codebook row and empty round/FOV directories. **It creates no TIFFs. Keep `-n`
 on every command using these placeholder inputs.** This checks configuration
 and DAG construction; use the [Python quickstart](getting-started.md) for actual
@@ -270,7 +290,8 @@ use `python -m snakemake` directly instead of the transient `--with` dependency.
 Snakemake is separate from the `docs` dependency group.
 
 For real inputs, copy/edit the YAML, point `config_path` at that exact `.yaml`
-file, supply real images and the annotation CSV, then dry-run `all` before
+file, supply real images and the membership file (`fovs.csv` for the Python backend, the annotation CSV for
+MATLAB), then dry-run `all` before
 removing `-n`. Inspect the job list: a direct one-FOV example schedules config
 preparation, `rsf_single_fov`, and `all`; a 2×2 subtile grid schedules one
 creation job, four processing jobs, a stitch job, preparation and `all`.
@@ -325,7 +346,7 @@ The [profile](https://github.com/wanglab-broad/starfinder/tree/dev/profile/broad
 sets `executor: cluster-generic`, conda deployment, `jobs: 1000`, one local core,
 60-second latency wait, three retries, keep-going, rerun-incomplete and retention
 of temporary files. Choose a smaller `--jobs` limit appropriate to your account.
-`rsf_preparation` and `create_sample_maf` always run locally.
+`rsf_preparation` and, for the MATLAB backend, `create_sample_maf` always run locally.
 
 `broad-submit.py` reads job properties, submits via `qsub -P broad`, uses an SMP
 parallel environment for multithreaded jobs, divides total `mem_mb` by threads
@@ -356,7 +377,8 @@ the tests import, holds:
   `tile_config_<sample>.csv`).
 
 §2.13 also replaces the input enumeration spread over the rule files (`SAMPLE_TO_FOV`
-and the `get_*_input` functions, from `documents/sample-annotation.csv`) and the
+and the `get_*_input` functions, from `INPUT/fovs.csv` for the Python backend, read by
+`_membership`, and `documents/sample-annotation.csv` for the MATLAB backend) and the
 start-up validation in `workflow/rules/common.smk`: the backend and workflow-mode
 checks and the translation of each enabled Python rule and block when Snakemake
 parses the rule files.

@@ -2078,6 +2078,70 @@ No field of version 1 is dropped: each value appears in version 2 equal, with it
 mapped, or (the stage file lists) in the stage record it names. A saved base-versus-result
 comparison of the quickstart's records checks this key by key.
 
+### FOV membership in `fovs.csv`, `{i}` FOV patterns and explicit stage files
+
+W-566 (OM-07, OM-03, OM-14) makes the Python workflow's FOVs explicit, gives FOV names one
+pattern syntax and reads stage positions from a named file. The MATLAB backend keeps its
+sample annotation, its keys and its scripts; where the two backends share a rule or a
+target, the change is a `BACKEND` branch. Existing output trees are not rewritten. Each
+change has no alias, no dual read and no dual search.
+
+* **Membership: `INPUT/fovs.csv`** (`<root_input_path>/<dataset_id>/<sample_id>/fovs.csv`),
+  for the Python backend, replaces `OUTPUT/documents/sample-annotation.csv` and its
+  `sample_id,fov_start,fov_end` ranges. Columns `sample,fov_id` and an optional
+  `position_id` (the stage file's integer `PositionID`), read in row order. A repeated row,
+  a FOV in two rows, a `position_id` of two FOVs, an empty value or another column raises
+  `ValueError` when the rule files are parsed. The `sample` column groups FOVs; the
+  acquisition `sample_id` and every namespace are unchanged.
+* **`FOVS`, `SAMPLE` and `SAMPLE_TO_FOV`** of `common.smk` come, for the Python backend,
+  from `fovs.csv` in row order (`FOVS` was the sorted names of `1..n_fovs`, `SAMPLE` a set
+  under `subset_list`); for the MATLAB backend they are computed as before.
+* **Configuration keys refused for the Python backend:** `fov_id_pattern`, `n_fovs`,
+  `subset_list`, `subset_range`, `subset_start`, `subset_end`, `subset_random` and
+  `n_random_tests`. They are MATLAB-only; the schema requires `fov_id_pattern` and `n_fovs`
+  for the MATLAB backend only and refuses all eight with `backend: python`. Python has no
+  random FOV selection.
+* **New key `selected_fovs`** (Python only; absent or null: every FOV): a nonempty list of
+  unique FOV IDs of `fovs.csv`. It restricts every rule, the per-sample stitching, export
+  and report rules included (the subset keys did not restrict the per-sample rules). An
+  unknown or repeated ID raises.
+* **The legacy sample rules run with `backend: matlab` only:** `create_sample_maf`, the
+  four rules of `stitching.smk`, `create_sample_h5ad` and `create_sample_reads_assignment`.
+  A Python configuration that enables one of them without the block that replaces it
+  (`stitching`; `assembly` for the two sample rules), or `reads_assignment` without either
+  block, raises `ValueError` when the rule files are parsed, naming the blocks to add.
+* **`reads_assignment`'s first input** is the run's membership file (`INPUT/fovs.csv` for
+  the Python backend, the annotation for MATLAB). For the Python backend without an
+  assembly block, the FOV's row of `tile_config_<sample>.csv` is the one whose `id` is its
+  `position_id`, or without that column its 1-based place among the sample's FOVs.
+* **`report_dataset`'s samples** are in the order of `fovs.csv` (was the annotation's).
+* **`Dataset.fov_pattern` is a `{i}` pattern:** `str.format` with the field `i`, default
+  `"Position{i:03d}"` (was the percent pattern `"Position%03d"`). `Dataset.fov_ids(n_fovs,
+  start=0)` keeps its name and its starting index (direct calls default to 0; the workflow
+  numbers FOVs from 1) and formats `fov_pattern.format(i=i)`. A pattern that is not a `{i}`
+  pattern, a percent pattern included, raises `ValueError` when the `Dataset` is built.
+  A workflow-built `Dataset` holds the default pattern: the Python workflow names its FOVs
+  by `fovs.csv` and no longer reads `fov_id_pattern`.
+* **Stage files are named explicitly.** `stitching.positions.stage_file` (and the
+  `stage_file` key of `Dataset.stitch`'s positions mapping) is required with
+  `source: stage_file`; the default `documents/maf/<sample>.maf` is removed, and the Python
+  route writes no per-sample copy. `stitching.positions.table` is required with
+  `source: table`, now when the rule files are parsed. With a stage file, `fovs.csv` must
+  have `position_id`.
+* **Selection before conversion.** `positions_from_leica` gains `position_ids` (the
+  `PositionID` values to read; None reads every position): the positions are selected
+  before the axis mapping, the shift to the smallest y and x, the snap step, the cells and
+  the clash check, and the record's `fov_ids` and `stage_positions` list the positions
+  read. `Dataset.stitch` gains `position_ids` (each FOV's `PositionID`; None: `PositionID`
+  `p` names the FOV `fov_pattern.format(i=p)`) and selects the positions of its `fov_ids`,
+  so a whole-acquisition stage file gives the placement its per-sample copy gave. A FOV
+  whose `PositionID` the file does not hold raises `ValueError`; a position of another FOV
+  is no longer an error. For a file that holds only the sample's positions the placement
+  values, links and units are unchanged.
+* **Examples.** `workflow-minimal.yaml`, `workflow-full.yaml` and `workflow-recipe-2.yaml`
+  drop the eight keys; `prepare_workflow.py` writes `INPUT/fovs.csv` instead of the
+  annotation; `quickstart.py` uses `fov_pattern="FOV_{i:03d}"` and writes `input/fovs.csv`.
+
 ### The processing report
 
 * **New: the processing report.** `Dataset.report(sample, fov_ids, …)` writes

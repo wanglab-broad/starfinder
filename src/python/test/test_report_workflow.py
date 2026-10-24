@@ -88,18 +88,28 @@ def init_names(cls):
     return {f.name for f in fields(cls) if f.init}
 
 
-def dataset_config(tmp_path, *, dataset_id="data", sample_id="sample", pattern="Position{i:03d}", **blocks):
+def dataset_config(tmp_path, *, dataset_id="data", sample_id="sample", **blocks):
     """A Python configuration whose output root is tmp_path/<dataset_id>/output."""
     return {"backend": "python", "dataset_id": dataset_id, "sample_id": sample_id, "output_id": "output",
-            "root_input_path": str(tmp_path / "input"), "root_output_path": str(tmp_path), "fov_id_pattern": pattern,
+            "root_input_path": str(tmp_path / "input"), "root_output_path": str(tmp_path),
             "n_rounds": 3, "ref_round": "round1", "rotate_angle": 0, "img_col": 64, "img_row": 48,
             "voxel_size_xy": 1.0, "voxel_size_z": 1.0, "rules": {}, **blocks}
 
 
 def annotation(output_root, rows):
+    """MATLAB's sample annotation (the MATLAB configurations of WF_CONFIGS)."""
     path = Path(output_root) / "documents" / "sample-annotation.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("sample_id,fov_start,fov_end\n" + "".join(f"{s},{a},{b}\n" for s, a, b in rows))
+    return path
+
+
+def membership(config, rows, pattern="Position{i:03d}"):
+    """fovs.csv under the configuration's input root: the FOVs pattern.format(i=i) of each (sample, start, end)."""
+    path = Path(config["root_input_path"]) / config["dataset_id"] / config["sample_id"] / "fovs.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("sample,fov_id\n" + "".join(f"{s},{pattern.format(i=i)}\n" for s, a, b in rows
+                                                for i in range(a, b + 1)))
     return path
 
 
@@ -141,14 +151,18 @@ def test_wf1_the_block_is_python_only_in_the_schema():
     MATLAB run, which never reaches the adapter, must be refused there: backend matlab and an omitted backend
     (the schema's default, matlab) refuse the block, while the same configuration without it is valid."""
     base = wf_config("docs/examples/workflow-minimal.yaml")
-    without = {k: v for k, v in base.items() if k != "backend"}
+    # The MATLAB backend names and selects its FOVs by fov_id_pattern, n_fovs and the subset keys (the Python one
+    # by fovs.csv).
+    without = {**{k: v for k, v in base.items() if k != "backend"}, "fov_id_pattern": "tile_{i}", "n_fovs": 1,
+               "subset_list": [], "subset_range": False, "subset_start": 1, "subset_end": 1, "subset_random": False,
+               "n_random_tests": 1}
     assert SCHEMA["properties"]["backend"]["default"] == "matlab"
     for block in (REPORT, {}):
         VALIDATOR.validate(dict(base, report=copy.deepcopy(block)))
-        VALIDATOR.validate(dict(base, backend="matlab"))
+        VALIDATOR.validate(dict(without, backend="matlab"))
         VALIDATOR.validate(without)
         with pytest.raises(jsonschema.ValidationError):
-            VALIDATOR.validate(dict(base, backend="matlab", report=copy.deepcopy(block)))
+            VALIDATOR.validate(dict(without, backend="matlab", report=copy.deepcopy(block)))
         with pytest.raises(jsonschema.ValidationError):
             VALIDATOR.validate(dict(without, report=copy.deepcopy(block)))
 
@@ -256,7 +270,7 @@ def test_wf1_report_smk_declares_exactly_these():
     assert re.search(r"input:\s+_report_dataset_files\(OUTPUT_DIR, REPORT_SAMPLES\)\[0\]\s+output:\s+"
                      r"_report_dataset_files\(OUTPUT_DIR, REPORT_SAMPLES\)\[1\]", dataset_rule)
     assert 'script:\n        "../scripts/report_dataset.py"' in dataset_rule
-    assert "REPORT_SAMPLES = [sample for sample in SAMPLE_ANNOT['sample_id'].unique() if sample in SAMPLE]" in text
+    assert "REPORT_SAMPLES = list(SAMPLE)" in text
 
 
 def spy(monkeypatch, name):
@@ -275,13 +289,13 @@ def spy(monkeypatch, name):
 ])
 @pytest.mark.parametrize("block", ["contract", "empty"])
 def test_wf1_report_sample_calls_dataset_report(tmp_path, monkeypatch, blocks, assignment, block):
-    """The sample's FOVs from the annotation, the assembly block's assignment (none without the block, where no
+    """The sample's FOVs from fovs.csv, the assembly block's assignment (none without the block, where no
     rule saves an assignment) and the report block's configuration."""
     calls = spy(monkeypatch, "report")
     report = copy.deepcopy(REPORT) if block == "contract" else {}
     config = dataset_config(tmp_path, report=report, **copy.deepcopy(blocks))
     output_root = tmp_path / "data" / "output"
-    annotation(output_root, [("sample0", 1, 2), (SAMPLE, 3, 5), ("sample2", 6, 6)])
+    membership(config, [("sample0", 1, 2), (SAMPLE, 3, 5), ("sample2", 6, 6)])
     inputs, output = _snakemake._report_sample_files(config, output_root, ["Position003", "Position004", "Position005"],
                                                    SAMPLE)
     run_script("report_sample.py", SimpleNamespace(config=config, input=inputs, output=[output],
@@ -308,7 +322,7 @@ def test_wf1_report_dataset_calls_compare_samples_on_every_sample(tmp_path, monk
 def test_wf1_the_rules_raise_before_calling_the_entries(tmp_path, monkeypatch):
     calls = (spy(monkeypatch, "report"), spy(monkeypatch, "compare_samples"))
     output_root = tmp_path / "data" / "output"
-    annotation(output_root, [(SAMPLE, 1, 2)])
+    membership(dataset_config(tmp_path), [(SAMPLE, 1, 2)])
     for script, bad in (("report_sample.py", {"title": "LN"}), ("report_dataset.py", {"title": "LN"})):
         config = dataset_config(tmp_path, report=bad)
         stub = SimpleNamespace(config=config, input=[str(output_root / "report" / SAMPLE / "report.json")],
@@ -324,12 +338,12 @@ def test_wf1_the_rules_write_the_report_and_the_comparison_page(tmp_path):
     s1, FOVs F1 to F4): report_sample writes report/s1/ with its report.json, report_dataset report/samples.csv."""
     from .report_fixtures import DATASET, FOVS, SAMPLE_ID, report_records
     from .report_fixtures import SAMPLE as REPORT_SAMPLE
-    config = dataset_config(tmp_path, dataset_id=DATASET, sample_id=SAMPLE_ID, pattern="F{i}",
+    config = dataset_config(tmp_path, dataset_id=DATASET, sample_id=SAMPLE_ID,
                             stitching=MULTIVIEW, report={"marker_pairs": [["G1", "G2"]]})
     output_root = tmp_path / DATASET / "output"
     case = report_records(output_root)
     assert list(case.fov_ids) == list(FOVS)
-    annotation(output_root, [(REPORT_SAMPLE, 1, 4)])
+    membership(config, [(REPORT_SAMPLE, 1, 4)], pattern="F{i}")
     inputs, output = _snakemake._report_sample_files(config, output_root, list(FOVS), REPORT_SAMPLE)
     assert inputs == [str(output_root / "stitching" / REPORT_SAMPLE / "placement.json")] and Path(inputs[0]).is_file()
     run_script("report_sample.py", SimpleNamespace(config=config, input=inputs, output=[output],
@@ -348,8 +362,8 @@ def test_wf1_the_rules_write_the_report_and_the_comparison_page(tmp_path):
 # --- WF1: configurations without the block -------------------------------------------------------------------
 
 def common_preamble(config, output_root, monkeypatch):
-    """The names common.smk defines before its first rule, executed with ``config`` (its sample annotation is
-    written under ``output_root`` first)."""
+    """The names common.smk defines before its first rule, executed with ``config`` (its membership, fovs.csv or the
+    sample annotation, is written first)."""
     text = (ROOT / "workflow/rules/common.smk").read_text()
     source = text[:text.index("### ==================== [ Preparation Rule ]")]
     monkeypatch.setattr(sys, "path", list(sys.path))
@@ -360,8 +374,14 @@ def common_preamble(config, output_root, monkeypatch):
 
 
 def repository_config(name, tmp_path):
+    """The configuration with two samples: the Python examples' fovs.csv under the input root, the MATLAB
+    configurations' sample annotation (and n_fovs) under the output root."""
     config = wf_config(name)
     config["root_output_path"] = str(tmp_path)
+    if config.get("backend") == "python":
+        config["root_input_path"] = str(tmp_path / "input")
+        membership(config, [(SAMPLE, 1, 1), ("sample2", 2, 2)], pattern="tile_{i}")
+        return config, tmp_path / config["dataset_id"] / config["output_id"]
     for key in ("subset_list", "subset_range", "subset_random"):
         config.setdefault(key, False if key != "subset_list" else [])
     output_root = tmp_path / config["dataset_id"] / config["output_id"]

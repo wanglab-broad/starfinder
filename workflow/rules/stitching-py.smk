@@ -18,9 +18,9 @@ def get_stitching_images(wildcards):
     return _reference_image_inputs(config, OUTPUT_DIR, SAMPLE_TO_FOV[wildcards.sample])
 
 def get_stitching_positions(wildcards):
-    """The position file the placement reads (a stage file or a supplied table; none for a regular grid), as
+    """The position file the placement reads (the explicit stage file or supplied table; none for a regular grid), as
     _stitching_position_inputs gives it from the same expression as Dataset.stitch."""
-    return _stitching_position_inputs(config, OUTPUT_DIR, wildcards.sample)
+    return _stitching_position_inputs(config)
 
 if STITCHING_METHOD != 'bigstitcher' and not ASSEMBLY_BLOCK and is_rule_enabled('reads_assignment'):
     raise ValueError(f"stitching.method {STITCHING_METHOD} writes no tile_config_{{sample}}.csv, which the legacy "
@@ -33,7 +33,7 @@ if STITCHING_METHOD == 'bigstitcher':
 
     rule bigstitcher_macro_sample:
         input:
-            expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+            MEMBERSHIP,
             get_stitching_images,
             get_stitching_positions
         output:
@@ -67,7 +67,7 @@ if STITCHING_METHOD == 'bigstitcher':
 
     rule stitch_sample:
         input:
-            expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+            MEMBERSHIP,
             f"{BIGSTITCHER_DIR}/{{sample}}/dataset.xml",
             f"{BIGSTITCHER_DIR}/{{sample}}/view_map.csv",
             f"{BIGSTITCHER_DIR}/{{sample}}/BigStitcher_macro.ijm",
@@ -87,7 +87,7 @@ else:
 
     rule stitch_sample:
         input:
-            expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+            MEMBERSHIP,
             get_stitching_images,
             get_stitching_positions
         output:

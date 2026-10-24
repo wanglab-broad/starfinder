@@ -411,11 +411,15 @@ def test_summaries_name_the_encoding_and_the_segment_layout(tmp_path):
 # --- workflow configuration -----------------------------------------------------------------------
 
 def workflow(load_codebook, backend="python"):
+    """The configuration; a MATLAB one (backend matlab or omitted) names and selects its FOVs by fov_id_pattern,
+    n_fovs and the subset keys, which the Python backend refuses (it reads fovs.csv)."""
     config = {"config_path": "config.yaml", "starfinder_path": str(ROOT), "root_input_path": "in",
               "root_output_path": "out", "dataset_id": "d", "sample_id": "s", "output_id": "o",
-              "fov_id_pattern": "%s", "n_fovs": 1, "n_rounds": 4, "ref_round": "round1", "rotate_angle": 0,
-              "img_col": 48, "img_row": 48, "subset_range": False, "subset_start": 1, "subset_end": 1,
-              "subset_random": False, "n_random_tests": 1, "seq_channel_order": list(CHANNELS),
+              **({} if backend == "python" else {"fov_id_pattern": "%s", "n_fovs": 1, "subset_range": False,
+                                                 "subset_start": 1, "subset_end": 1, "subset_random": False,
+                                                 "n_random_tests": 1}),
+              "n_rounds": 4, "ref_round": "round1", "rotate_angle": 0,
+              "img_col": 48, "img_row": 48, "seq_channel_order": list(CHANNELS),
               "rules": {"rsf_single_fov": {"run": True, "parameters": {
                   "load_raw_images": {"run": False},
                   "load_codebook": {"run": True, **load_codebook},

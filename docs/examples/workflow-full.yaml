@@ -10,8 +10,8 @@ fiji_path: /absolute/Fiji.app/ImageJ-linux64
 dataset_id: example
 sample_id: sample
 output_id: full
-fov_id_pattern: tile_{i}
-n_fovs: 1
+# The FOVs are the rows of <root_input_path>/<dataset_id>/<sample_id>/fovs.csv
+# (sample,fov_id); the optional selected_fovs list restricts a run.
 n_rounds: 4
 ref_round: round1
 ref_channel: DAPI
@@ -31,12 +31,6 @@ backend: python
 matlab_launcher: path
 matlab_single_thread: false
 workflow_mode: direct
-subset_list: []
-subset_range: false
-subset_start: 1
-subset_end: 1
-subset_random: false
-n_random_tests: 1
 rules:
   rsf_single_fov:
     run: true
@@ -115,6 +109,8 @@ rules:
       rescale: false
       expand_labels: false
       distance: 0
+  # The legacy sample rules below run with backend matlab only; the Python backend uses the
+  # stitching and assembly blocks.
   stitching_preparation:
     run: false
   create_BigStitcher_macro:

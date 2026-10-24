@@ -44,9 +44,13 @@ def main(output: Path) -> None:
         output_id="quickstart",
         rounds=RoundState(sequencing_rounds=rounds, reference_round="round1"),
         channel_order=channels,
-        fov_pattern="FOV_%03d",
+        fov_pattern="FOV_{i:03d}",
     )
     dataset.rounds.validate()
+    # The {i} pattern names the FOVs from 1, as the workflow numbers them. fovs.csv, the FOV membership the Python
+    # workflow reads from the input root, lists them as one sample.
+    fov_ids = dataset.fov_ids(len(truth["fovs"]), start=1)
+    pd.DataFrame({"sample": "synthetic", "fov_id": fov_ids}).to_csv(output / "input" / "fovs.csv", index=False)
     dataset.load_codebook(output / "input" / "codebook.csv")
     # Load, register, detect, extract, decode and filter in one run.
     pipeline = PipelineConfig(
@@ -58,7 +62,7 @@ def main(output: Path) -> None:
         filtering=ReadFilterConfig(),
     )
     summary = {"preset": "tiny", "seed": truth["seed"], "fovs": {}}
-    for fov_id in dataset.fov_ids(len(truth["fovs"]), start=1):
+    for fov_id in fov_ids:
         fov = dataset.fov(fov_id)
         # stages=() writes the run record fovs/<fov>/run.json and no stage files.
         fov.run(pipeline, checkpoints=CheckpointConfig(stages=()))

@@ -168,14 +168,9 @@ def tile_config(output_root, sample) -> Path:
     return Path(output_root) / "output" / f"tile_config_{sample}.csv"
 
 
-def stage_file(output_root, sample) -> Path:
-    """``documents/maf/<sample>.maf``, the default stage file of a sample."""
-    return Path(output_root) / "documents" / "maf" / f"{sample}.maf"
-
-
-def sample_annotation(output_root) -> Path:
-    """``documents/sample-annotation.csv``, the FOV list of each sample."""
-    return Path(output_root) / "documents" / "sample-annotation.csv"
+def fovs_file(input_root) -> Path:
+    """``fovs.csv`` under the input root, the Python workflow's FOV membership (``sample,fov_id``)."""
+    return Path(input_root) / "fovs.csv"
 
 
 @dataclass(frozen=True)

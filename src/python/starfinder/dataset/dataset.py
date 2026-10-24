@@ -27,6 +27,18 @@ if TYPE_CHECKING:
     from starfinder.dataset.fov import FOV
 
 
+def _check_fov_pattern(pattern):
+    """The ``{i}`` pattern of FOV names: ``str.format`` with the one field ``i``, such as ``Position{i:03d}``."""
+    try:
+        names = {pattern.format(i=0), pattern.format(i=1)} if isinstance(pattern, str) else set()
+    except (KeyError, IndexError, ValueError, TypeError, AttributeError):
+        names = set()
+    if len(names) != 2:
+        raise ValueError(f"fov_pattern must be a {{i}} pattern such as 'Position{{i:03d}}' (str.format with the field "
+                         f"i; percent patterns are not read); got {pattern!r}")
+    return pattern
+
+
 @dataclass
 class Dataset:
     """Sample paths, ordered rounds/channels, codebook and FOV factory.
@@ -65,6 +77,9 @@ class Dataset:
     produced, a pattern of the same form: every reader reads it, and
     ``FOV.save_reference_image`` refuses to write it. It excludes a
     reference_image other than the default.
+    fov_pattern is the ``{i}`` pattern (``str.format`` with the field ``i``,
+    default ``Position{i:03d}``) of :meth:`fov_ids` and of the FOV a stage
+    file's ``PositionID`` names in :meth:`stitch`.
     The repr summarizes IDs, round and channel labels, the reference (codebook
     with its encoding method and segment layout, or the panel in direct mode)
     and roots.
@@ -77,7 +92,8 @@ class Dataset:
         round or with no channel, reference stains without a reference round or
         sharing a pattern with channel_order, a voxel size that is not a
         finite positive number or None, a reference_image or
-        reference_image_import that is not a pattern with ``{fov_id}``, both
+        reference_image_import that is not a pattern with ``{fov_id}``, a
+        fov_pattern that is not a ``{i}`` pattern, both
         reference settings given, a channel pattern that is not a safe
         single path component (``[A-Za-z0-9][A-Za-z0-9_.-]*``; the Python
         workflow names channel folders by it), or the field errors of
@@ -101,8 +117,8 @@ class Dataset:
     codebook: Codebook | None = None
     subtile: SubtileConfig | None = None
 
-    # Processing parameters
-    fov_pattern: str = "Position%03d"
+    # The {i} pattern of fov_ids (str.format with the field i)
+    fov_pattern: str = "Position{i:03d}"
 
     # Channels of other rounds that have their own channels
     other_channel_order: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -146,6 +162,7 @@ class Dataset:
         self.voxel_size_z = check_voxel_size("voxel_size_z", self.voxel_size_z)
         self.reference_image = check_reference_image(self.reference_image)
         self.reference_image_import = check_reference_import(self.reference_image, self.reference_image_import)
+        self.fov_pattern = _check_fov_pattern(self.fov_pattern)
         self.rounds.validate()
         if REFERENCE_STAIN in self.rounds.all_rounds:
             raise ValueError(f"{REFERENCE_STAIN!r} is the reserved image name of the reference stains; "
@@ -391,9 +408,11 @@ class Dataset:
         Returns
         -------
         list[str]
-            fov_pattern percent-formatted with start through start+n_fovs-1.
+            ``fov_pattern.format(i=i)`` for i from start through
+            start+n_fovs-1 (the workflow numbers FOVs from 1, so its callers
+            pass ``start=1``).
         """
-        return [self.fov_pattern % i for i in range(start, start + n_fovs)]
+        return [self.fov_pattern.format(i=i) for i in range(start, start + n_fovs)]
 
     def load_codebook(
         self,
@@ -466,7 +485,7 @@ class Dataset:
         self._reference_files = {**self._reference_files, kind: (loaded, str(path), sha256)}
 
     def stitch(self, sample: str, fov_ids, *, table, config, input: str = "reference_merged", review=None,
-               fallback: str | None = None, output_dir: Path | str | None = None):
+               fallback: str | None = None, output_dir: Path | str | None = None, position_ids=None):
         """Place one sample's FOVs from their saved stitching images (docs/stitching-contract.md).
 
         A sample-level computation, not a multi-FOV runner: it calls no per-FOV
@@ -495,9 +514,11 @@ class Dataset:
             (``{overlap}`` or null), ``regular_grid`` (``{columns, rows, order,
             overlap}``), ``tile_shape_yx`` and ``spacing_yx`` (null: from the
             reference grids, which must then share them), ``table`` (a CSV path),
-            ``unit`` (of the table, default ``µm``) and ``stage_file`` (default
-            ``documents/maf/<sample>.maf`` under the output root). A stage file
-            maps ``PositionID`` ``p`` to ``fov_pattern % p``.
+            ``unit`` (of the table, default ``µm``) and ``stage_file`` (the
+            stage file's path, required with ``stage_file``; no default). The
+            stage file may hold other samples' positions: the FOVs' positions
+            are selected before the converter maps, shifts or snaps them
+            (:func:`~starfinder.stitching.positions_from_leica`).
         config
             A config registered in ``STITCHING_METHODS``.
         input : str
@@ -514,6 +535,12 @@ class Dataset:
         output_dir : str, Path or None
             The sample's placement folder (the workflow passes
             ``<OUTPUT>/stitching/<sample>/``); None saves nothing.
+        position_ids : Mapping[str, int] or None
+            The stage file's ``PositionID`` of each FOV of fov_ids (the
+            workflow passes the ``position_id`` column of ``fovs.csv``); None
+            (default) names ``PositionID`` ``p`` the FOV
+            ``fov_pattern.format(i=p)``, for a file that numbers its positions
+            by FOV.
 
         Returns
         -------
@@ -526,8 +553,9 @@ class Dataset:
             setting, ``reference_image`` or ``reference_image_import``, and the
             path).
         ValueError
-            An unknown input or positions key, a table whose FOVs are not
-            fov_ids, or a reference image without stored metadata while
+            An unknown input or positions key, a stage file source without
+            ``stage_file``, a FOV's ``PositionID`` that the stage file does not
+            hold, a table whose FOVs are not fov_ids, or a reference image without stored metadata while
             ``voxel_size_xy`` or ``voxel_size_z`` is None (naming them).
         IncompatibleGeometryError
             Tile sizes or spacings taken from the grids differ between FOVs, an
@@ -544,8 +572,7 @@ class Dataset:
         loaded = read_inputs(self.output_root, ids, input, reference=reference_settings(self))
         grids = {fov: item.grid for fov, item in loaded.items()}
         if not isinstance(table, TilePositionTable):
-            table = table_from_positions(table, ids, grids, sample=sample, output_root=self.output_root,
-                                         fov_pattern=self.fov_pattern)
+            table = table_from_positions(table, ids, grids, fov_pattern=self.fov_pattern, position_ids=position_ids)
         if set(table.fov_ids) != set(ids):
             missing = [f for f in ids if f not in table.fov_ids]
             extra = [f for f in table.fov_ids if f not in ids]

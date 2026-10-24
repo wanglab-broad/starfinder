@@ -338,15 +338,20 @@ def test_r16_a_checkpoint_without_the_key_loads_as_multiplexed(tmp_path, seed):
 
 # --- The YAML route --------------------------------------------------------------------------
 
+# The keys that name and select the FOVs of a MATLAB configuration (the Python backend reads fovs.csv and refuses
+# them).
+MATLAB_FOVS = {"fov_id_pattern": "%s", "n_fovs": 1, "subset_range": False, "subset_start": 1, "subset_end": 1,
+               "subset_random": False, "n_random_tests": 1}
+
+
 def yaml_config(tmp_path, **top):
     parameters = {"spot_finding": {"run": True, "intensity_estimation": "noise", "intensity_threshold": 10.0,
                                    "rounds": list(ROUNDS)},
                   "reads_extraction": {"run": True}, "reads_filtration": {"run": True}}
     config = dict(config_path="config.yaml", starfinder_path=str(ROOT), root_input_path=str(tmp_path),
                   root_output_path=str(tmp_path / "out"), dataset_id="data", sample_id="sample", output_id="run",
-                  fov_id_pattern="%s", n_fovs=1, n_rounds=2, ref_round="round1", rotate_angle=0, img_col=24,
-                  img_row=24, subset_range=False, subset_start=1, subset_end=1, subset_random=False,
-                  n_random_tests=1, seq_channel_order=list(CHANNELS),
+                  n_rounds=2, ref_round="round1", rotate_angle=0, img_col=24,
+                  img_row=24, seq_channel_order=list(CHANNELS),
                   backend="python", readout_mode="direct",
                   rules={"rsf_single_fov": {"run": True, "parameters": parameters}})
     config.update(top)
@@ -378,9 +383,11 @@ def test_yaml_readout_mode_keys(tmp_path):
     config = yaml_config(tmp_path)
     shared = dict(config, rules={"rsf_single_fov": {"run": True, "parameters": {"reads_filtration": {"run": True}}}})
     for backend in ("matlab", "python"):
-        jsonschema.validate(dict(shared, readout_mode="multiplexed", backend=backend), SCHEMA)
+        jsonschema.validate(dict(shared, readout_mode="multiplexed", backend=backend,
+                                 **(MATLAB_FOVS if backend == "matlab" else {})), SCHEMA)
     jsonschema.validate(config, SCHEMA)
-    for invalid in (dict(config, backend="matlab"), {k: v for k, v in config.items() if k != "backend"},
+    for invalid in (dict(config, backend="matlab", **MATLAB_FOVS),
+                    {**{k: v for k, v in config.items() if k != "backend"}, **MATLAB_FOVS},
                     dict(config, readout_mode="sequential")):
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(invalid, SCHEMA)

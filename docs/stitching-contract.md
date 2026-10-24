@@ -69,8 +69,9 @@ default change.
 
 ## Terms
 
-* A **sample** is a set of FOVs placed into one frame: today a row of
-  `documents/sample-annotation.csv` (a FOV range). It is not `Dataset.sample_id`, which
+* A **sample** is a set of FOVs placed into one frame: for the Python workflow the rows of
+  `fovs.csv` in the input root with that `sample` (for the MATLAB backend a row of
+  `documents/sample-annotation.csv`, a FOV range). It is not `Dataset.sample_id`, which
   names an input folder.
 * The **sample frame** is the physical ZYX frame, in micrometres, in which every FOV of a
   sample is placed. Its `frame_id` is `sample:<sample>`, its direction is the identity and
@@ -195,7 +196,7 @@ class TilePositionTable:
 
 | Column | Type | Meaning |
 | --- | --- | --- |
-| `fov_id` | str | The FOV identity, as `Dataset.fov_ids` names it (`fov_id_pattern`); unique |
+| `fov_id` | str | The FOV identity, as the workflow's `fovs.csv` lists it or `Dataset.fov_ids` names it (`fov_pattern`, a `{i}` pattern); unique |
 | `position_id` | int or missing | The acquisition's own identifier (Leica `PositionID`), when there is one |
 | `nominal_z`, `nominal_y`, `nominal_x` | float64 | The nominal origin in the sample frame, µm |
 | `source` | str | `stage`, `grid` or `supplied` |
@@ -215,7 +216,8 @@ class GridSnap:
     spacing_yx: tuple[float, float]        # µm per px; finite and > 0; the reference grids' Y and X spacing
 
 def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping[int, str],
-                         snap_to_grid: GridSnap | None = None) -> TilePositionTable: ...
+                         snap_to_grid: GridSnap | None = None,
+                         position_ids: Sequence[int] | None = None) -> TilePositionTable: ...
 def positions_from_grid(*, columns: int, rows: int, order: str, tile_shape_yx: tuple[int, int],
                         spacing_yx: tuple[float, float], overlap: float | tuple[float, float],
                         fov_ids: Sequence[str]) -> TilePositionTable: ...
@@ -225,7 +227,11 @@ def positions_from_table(path_or_frame, *, unit: str = "µm") -> TilePositionTab
 * **Leica stage file** (`.maf`, LAS X): `StageXPos`, `StageYPos` in metres, mapped through
   `stage_axes` into image x and y, in µm, shifted so that the smallest y and x are 0; z is
   0 for every FOV, because the stage file gives no z offset between tiles (W-323
-  `positions.md`). `fov_ids` maps `PositionID` to the FOV id. `snap_to_grid` optionally
+  `positions.md`). `fov_ids` maps `PositionID` to the FOV id. `position_ids` selects the
+  positions to read (each in the file once; None reads them all) before the axis mapping,
+  the shift, the snap step, the cells and the clash check, so that a file that holds every
+  sample's positions gives the table of a file that holds only the selected ones
+  (`Dataset.stitch` selects the FOVs of `fov_ids`, W-566). `snap_to_grid` optionally
   replaces the positions by a regular grid derived from them, as today's grid derivation
   does ({doc}`stitching-algorithms`, "Leica stage file"): the stage positions decide each
   FOV's cell, and `GridSnap`'s `overlap`, `tile_shape_yx` and `spacing_yx` give the step,
@@ -605,7 +611,7 @@ From the W-324 parity outputs (`parity/` in the W-324 run directory) and the 202
 | Pixels, XYZ, z in xy-pixel units | µm, ZYX, z through the slice spacing | One physical sample frame; the z unit of `dataset.xml` is not a slice |
 | Shifted so each axis' minimum is 0 (a positive minimum moves further) | Gauge G1 | A stated frame that does not depend on the extreme FOV |
 | One row per grid cell, blanks included with offsets | One row per acquired FOV; padding views only in the method record | Placeholders stay inside the BigStitcher path |
-| FOV identity = the grid's `id` (Leica `PositionID`) | `fov_id` from the tile position table | `fov_id_pattern` names FOVs |
+| FOV identity = the grid's `id` (Leica `PositionID`) | `fov_id` from the tile position table | `fovs.csv` names FOVs (`fov_id_pattern` for the MATLAB backend) |
 | Non-overlap rectangles from `img_col` and `img_row` | none | Ownership is assemble's (W-326), from each grid's shape |
 | Calibration from `voxel_size_xy`, `voxel_size_z` | From each FOV's reference grid | The files carry no calibration; the YAML values are rounded for LN |
 | No status, no links, no method record | Statuses, links with quality, provenance, review | The failure policy needs them |
@@ -821,15 +827,23 @@ stitching:
     tile_shape_yx: null          # px; null: from the FOVs' ReferenceGrid (shape_zyx[1:])
     spacing_yx: null             # µm; null: from the FOVs' ReferenceGrid (metadata.spacing_zyx[1:])
     table: null                  # a CSV path with source: table
+    stage_file: /data/acquisition/positions.maf   # required with source: stage_file; no default
   config: {}                     # fields of MultiviewStitcherConfig or BigStitcherConfig
   review: {max_correction_fraction: 0.5, max_residual_um: 1.0}
   fallback: null                 # or nominal; for multiview_stitcher and the BigStitcher import alike
   bigstitcher_save_dir: null     # a local folder; required with method: bigstitcher
 ```
 
-* Without the block the four legacy rules run unchanged, and the adapter's legacy
-  translation (`StageAxisMapping(x="+x", y="+y", source="legacy")`, the YAML voxel sizes)
-  applies only to the legacy writer.
+* Without the block the four legacy rules run unchanged with `backend: matlab`, and the
+  adapter's legacy translation (`StageAxisMapping(x="+x", y="+y", source="legacy")`, the
+  YAML voxel sizes) applies only to the legacy writer. They run with the MATLAB backend
+  only: a Python configuration that enables one without the block raises when the rule
+  files are parsed, naming the block.
+* The sample's FOVs are its rows of `fovs.csv` in the input root, restricted by
+  `selected_fovs`. With `source: stage_file`, `stage_file` is required (no default: the
+  Python route writes no `documents/maf/<sample>.maf` copy) and `fovs.csv` must have the
+  `position_id` column; the file may hold every sample's positions, and the sample's are
+  selected by `position_id` before the conversion.
 * `fiji_path` is read by the BigStitcher engine rule when it runs, not when the rule file
   is parsed; the key stays required for that rule only.
 * The static schema lists the method names and is kept equal to `STITCHING_METHODS` plus

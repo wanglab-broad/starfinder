@@ -34,16 +34,22 @@ FOVs; it was not measured and is negligible beside registration.
 
 ### Leica stage file
 
-`positions_from_leica(path, *, stage_axes, fov_ids, snap_to_grid=None)`
+`positions_from_leica(path, *, stage_axes, fov_ids, snap_to_grid=None, position_ids=None)`
 
 1. Read every `XYZStagePointDefinition` of the LAS X file: `PositionID` (int),
    `StageXPos`, `StageYPos` (metres, float64). Other attributes (`Sections`, `StackBegin`,
    `StageZPos`) are kept in the record, not used.
-2. Convert to µm (× 1e6) and apply `stage_axes`: stage +X goes to the image axis and sign
+2. With `position_ids`, keep only those positions, in file order. Every later step (the
+   axis mapping, the shift, the snap step, the cells and the clash check) sees only them,
+   so a whole-acquisition file gives the table of the sample's subset (W-566).
+   `Dataset.stitch` selects the positions of its `fov_ids`: by its `position_ids` argument
+   (the workflow passes `fovs.csv`'s `position_id`), or else the `PositionID` values `p`
+   whose `fov_pattern.format(i=p)` is one of them.
+3. Convert to µm (× 1e6) and apply `stage_axes`: stage +X goes to the image axis and sign
    it names, likewise stage +Y. For LN, `x="+x"`, `y="+y"` (W-323 `positions.md`; fit
    residual RMS 0.29 µm in x and 0.34 µm in y).
-3. Shift so that the smallest y and x are 0; z is 0 for every FOV.
-4. Map `PositionID` to `fov_id` through `fov_ids`.
+4. Shift so that the smallest y and x are 0; z is 0 for every FOV.
+5. Map `PositionID` to `fov_id` through `fov_ids`.
 
 With `snap_to_grid=GridSnap(overlap=…, tile_shape_yx=…, spacing_yx=…)`, the positions are
 replaced by a regular grid, which reproduces the start of today's BigStitcher macro and of
@@ -69,14 +75,16 @@ the dataset").
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
 | `stage_axes` | | none (required) | `StageAxisMapping`; the two entries name different image axes |
-| `fov_ids` | | none (required) | every `PositionID` of the file must be a key |
+| `fov_ids` | | none (required) | every `PositionID` read (of the file, or of `position_ids`) must be a key |
 | `snap_to_grid` | | `None` | a `GridSnap` with the three fields below, or `None` to keep the stage positions |
+| `position_ids` | | `None` | the `PositionID` values to read, each in the file once; `None` reads every position |
 | `GridSnap.overlap` | fraction | none (required) | `0 ≤ overlap < 1`; one value or `(y, x)` |
 | `GridSnap.tile_shape_yx` | px | none (required) | integers ≥ 1; the reference grids' Y and X sizes, as for `positions_from_grid` |
 | `GridSnap.spacing_yx` | µm per px | none (required) | finite, > 0; the reference grids' Y and X spacing, as for `positions_from_grid` |
 
-Failure: a repeated `PositionID`, a `PositionID` without a FOV id, a non-finite position,
-or (with snapping) two positions in one cell raise `ValueError` naming them. The legacy
+Failure: a repeated `PositionID`, an empty or repeated `position_ids` or one the file
+does not hold, a `PositionID` without a FOV id, a non-finite position, or (with snapping)
+two positions in one cell raise `ValueError` naming them. The legacy
 script summed two such ids into one cell.
 
 ### Regular grid

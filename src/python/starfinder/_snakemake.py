@@ -16,9 +16,9 @@ from starfinder.dataset._declared import reference_settings
 from starfinder.dataset.types import ChannelInfo
 from starfinder.dataset.workflow import (_BIGSTITCHER, _LEGACY_SEGMENTATION_RUN, _NUCLEI_REFERENCE_CHANNEL,
     _after_fusion, _assembly_block, _declared_metadata, _export_config, _export_dataset, _flag, _label_namespace,
-    _legacy_molecules, _molecule_table, _nuclei_checkpoints, _nuclei_registration, _output_root, _reads_assignment, _report_assignment, _report_block,
-    _rule_checkpoints, _rule_parameters, _sample_fovs, _sample_table, _segmentation, _stitching_block,
-    _workflow_dataset, from_workflow_config)
+    _legacy_molecules, _membership, _molecule_table, _nuclei_checkpoints, _nuclei_registration, _reads_assignment,
+    _report_assignment, _report_block, _rule_checkpoints, _rule_parameters, _sample_fovs, _sample_table, _segmentation,
+    _stage_position_ids, _stitching_block, _workflow_dataset, from_workflow_config)
 from starfinder.preprocessing import ProjectionConfig
 from starfinder.registration import (ExternalReference, RegistrationRecipe, RegistrationSignalConfig,
     RegistrationStep, TranslationConfig)
@@ -227,9 +227,25 @@ def _run_stardist_segmentation(snakemake):
     output.with_suffix('.json').write_text(json.dumps(jsonable(record), indent=2, default=str))
 
 
-def _fov_sample(annotation, config, fov_id):
-    """(sample, FOV number) of fov_id: the sample-annotation row whose fov_start..fov_end holds it."""
+def _fov_sample(membership, config, fov_id):
+    """(sample, tile-configuration id) of fov_id, from the rule's membership input.
+
+    The Python backend reads fovs.csv (_membership, restricted by
+    selected_fovs): the FOV's sample, and its position_id, or without that
+    column its 1-based place among the sample's FOVs (the id
+    legacy_tile_config_view gives a FOV of a table without PositionIDs). The
+    MATLAB backend reads its sample annotation: the row whose
+    fov_start..fov_end holds the FOV, the id its FOV number.
+    """
     import pandas as pd
+    if config.get('backend', 'matlab') == 'python':
+        members = _membership(config, membership)
+        for sample, fovs in members.samples.items():
+            if fov_id in fovs:
+                return sample, (fovs.index(fov_id) + 1 if members.position_ids is None
+                                else members.position_ids[fov_id])
+        raise ValueError(f'{fov_id} is in no sample of {membership}')
+    annotation = membership
     table = pd.read_csv(annotation)
     for row in table.itertuples():
         for i in range(int(row.fov_start), int(row.fov_end) + 1):
@@ -503,7 +519,8 @@ def _write_assignment_figures(result, image_path, folder, *, ownership=None):
 def _run_reads_assignment(snakemake):
     """reads_assignment: assign_molecules on the legacy label file, written as raw.h5ad and reads_assignment.csv.
 
-    Inputs (as the rule declares them): the sample annotation, the DAPI image
+    Inputs (as the rule declares them): the FOV membership (fovs.csv for the
+    Python backend, MATLAB's sample annotation; _fov_sample), the DAPI image
     (diagnostic plot only), images/stardist_segmentation/{fovID}.tif (imported
     with the inferred target on the declared grid, _legacy_cells), the FOV's
     molecule table, which the configuration's producer names (_molecule_table:
@@ -565,20 +582,18 @@ def _run_reads_assignment(snakemake):
         f"{_assignment_ratio(counts)}\n")
 
 
-def _stitching_position_inputs(config, output_root, sample):
+def _stitching_position_inputs(config):
     """The position file the placement rules read, as a list of rule inputs (stitching-py.smk).
 
-    With source stage_file, positions.stage_file or else the sample's
-    <OUTPUT>/documents/maf/<sample>.maf, the expression Dataset.stitch's
-    table_from_positions uses, so that create_sample_maf is scheduled when the
-    file is absent; with source table, the supplied CSV; a regular grid reads no
+    With source stage_file, positions.stage_file (required: no rule writes a
+    stage file); with source table, the supplied CSV; a regular grid reads no
     file and adds none. A path is passed as the configuration gives it, as the
     package opens it.
     """
     positions = (config.get('stitching') or {}).get('positions') or {}
     source = positions.get('source')
-    if source == 'stage_file':
-        return [str(positions.get('stage_file') or _layout.stage_file(output_root, sample))]
+    if source == 'stage_file' and positions.get('stage_file'):
+        return [str(positions['stage_file'])]
     if source == 'table' and positions.get('table'):
         return [str(positions['table'])]
     return []
@@ -684,11 +699,11 @@ def _read_view_map(path):
 def _run_stitching(snakemake):
     """stitch_sample: one sample's placement in <OUTPUT>/stitching/{sample}/ (its placement.json is output 0).
 
-    Input 0 is the sample annotation, which gives the sample's FOVs. With an
-    in-process method, Dataset.stitch with the block's positions, config,
-    input, review and fallback, saved to the output's folder; with a stage
-    file the adapter builds the table itself (_sample_table), so that its
-    PositionIDs are named by fov_id_pattern.format(i=p). With bigstitcher,
+    Input 0 is fovs.csv, which gives the sample's FOVs (restricted by
+    selected_fovs) and, with a stage file, their PositionIDs
+    (_stage_position_ids). With an in-process method, Dataset.stitch with the
+    block's positions, config, input, review and fallback and those
+    PositionIDs, saved to the output's folder. With bigstitcher,
     the import of the engine rule's dataset.xml (input 1) with the view map
     (input 2) and the macro (input 3) of the macro rule, on the table of the
     positions and the FOVs' reference grids (of the file reference_image_import
@@ -703,19 +718,16 @@ def _run_stitching(snakemake):
     config, sample = snakemake.config, snakemake.wildcards.sample
     block = _stitching_block(config)
     dataset = _workflow_dataset(config)
-    fov_ids = _sample_fovs(snakemake.input[0], config, sample)
+    membership = _membership(config, snakemake.input[0])
+    fov_ids = _sample_fovs(config, sample, snakemake.input[0])
+    position_ids = _stage_position_ids(config, membership)
     folder = Path(snakemake.output[0]).parent
     if block.method != _BIGSTITCHER:
-        table = block.positions
-        if table.get('source') == 'stage_file':
-            # Named by the workflow's rule here: Dataset.stitch would format the brace pattern with %.
-            grids = {fov: reference_grid(dataset.output_root, fov, **reference_settings(config)) for fov in fov_ids}
-            table = _sample_table(block, dataset, sample, fov_ids, grids, config)
-        dataset.stitch(sample, fov_ids, table=table, config=block.config, input=block.input,
-                       review=block.review, fallback=block.fallback, output_dir=folder)
+        dataset.stitch(sample, fov_ids, table=block.positions, config=block.config, input=block.input,
+                       review=block.review, fallback=block.fallback, output_dir=folder, position_ids=position_ids)
         return
     grids = {fov: reference_grid(dataset.output_root, fov, **reference_settings(config)) for fov in fov_ids}
-    table = _sample_table(block, dataset, sample, fov_ids, grids, config)
+    table = _sample_table(block, dataset, sample, fov_ids, grids, position_ids)
     result = import_bigstitcher(snakemake.input[1], table=table, view_map=_read_view_map(snakemake.input[2]),
                                 grids=grids, config=block.config, review=block.review, fallback=block.fallback,
                                 sample=sample, macro=Path(snakemake.input[3]).read_text())
@@ -726,8 +738,8 @@ def _run_stitching(snakemake):
 def _run_bigstitcher_macro(snakemake):
     """bigstitcher_macro_sample: the tiles, the macro (output 0) and the view map (output 1) of one sample.
 
-    export_bigstitcher on the block's input images of the sample's FOVs (read
-    as Dataset.stitch reads them) and its positions table, with the tiles in
+    export_bigstitcher on the block's input images of the sample's FOVs (fovs.csv, input 0, restricted by
+    selected_fovs; read as Dataset.stitch reads them) and its positions table, with the tiles in
     <bigstitcher_save_dir>/<sample>/tiles/ and that folder as BigStitcher's save
     folder.
     """
@@ -737,9 +749,11 @@ def _run_bigstitcher_macro(snakemake):
     block = _stitching_block(config)
     folder = _bigstitcher_folder(block, sample)
     dataset = _workflow_dataset(config)
-    fov_ids = _sample_fovs(snakemake.input[0], config, sample)
+    fov_ids = _sample_fovs(config, sample, snakemake.input[0])
+    position_ids = _stage_position_ids(config, _membership(config, snakemake.input[0]))
     loaded = read_inputs(dataset.output_root, fov_ids, block.input, reference=reference_settings(config))
-    table = _sample_table(block, dataset, sample, fov_ids, {fov: item.grid for fov, item in loaded.items()}, config)
+    table = _sample_table(block, dataset, sample, fov_ids, {fov: item.grid for fov, item in loaded.items()},
+                          position_ids)
     text, view_map = export_bigstitcher(table, [loaded[fov] for fov in table.fov_ids], config=block.config,
                                         tile_dir=folder / 'tiles', save_dir=folder)
     Path(snakemake.output[0]).write_text(text)
@@ -933,15 +947,14 @@ def _report_dataset_files(output_root, samples):
 def _run_report_sample(snakemake):
     """report_sample: Dataset.report of one sample into <OUTPUT>/report/{sample}/ (its report.json is output 0).
 
-    The FOVs are the sample's of the sample annotation
-    (<OUTPUT>/documents/sample-annotation.csv, as common.smk reads them), the
-    assignment name that of the assembly block (_report_assignment) and the
+    The FOVs are the sample's of <INPUT>/fovs.csv, restricted by selected_fovs
+    (_membership, as common.smk reads them), the assignment name that of the assembly block (_report_assignment) and the
     configuration the report block's (_report_block).
     """
     config, sample = snakemake.config, snakemake.wildcards.sample
     report = _report_block(config)
     dataset = _workflow_dataset(config)
-    fov_ids = _sample_fovs(_layout.sample_annotation(_output_root(config)), config, sample)
+    fov_ids = _sample_fovs(config, sample)
     dataset.report(sample, fov_ids, assignment=_report_assignment(config), config=report,
                    output_dir=Path(snakemake.output[0]).parent)
 

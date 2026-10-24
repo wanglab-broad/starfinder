@@ -78,6 +78,7 @@ positions:
   tile_shape_yx: null
   spacing_yx: null
   table: null
+  stage_file: /data/stage/acquisition.maf
 config: {}
 review: {max_correction_fraction: 0.5, max_residual_um: 1.0}
 fallback: null
@@ -138,18 +139,21 @@ def stub(config, *, inputs, outputs, **wildcards):
                            wildcards=Wildcards(wildcards))
 
 
-def dataset_config(tmp_path, *, pattern="Position{i:03d}", **blocks):
-    """A Python configuration whose output root is tmp_path/data/output (dataset_id data, output_id output)."""
+def dataset_config(tmp_path, **blocks):
+    """A Python configuration whose input root is tmp_path/input/data/sample and output root tmp_path/data/output
+    (dataset_id data, sample_id sample, output_id output)."""
     return {"backend": "python", "dataset_id": "data", "sample_id": "sample", "output_id": "output",
-            "root_input_path": str(tmp_path / "input"), "root_output_path": str(tmp_path), "fov_id_pattern": pattern,
+            "root_input_path": str(tmp_path / "input"), "root_output_path": str(tmp_path),
             "n_rounds": 3, "ref_round": "round1", "rotate_angle": 0, "img_col": 64, "img_row": 48,
             "voxel_size_xy": 1.0, "voxel_size_z": 1.0, "rules": {}, **blocks}
 
 
-def annotation(tmp_path, start, end, sample=SAMPLE):
-    path = tmp_path / "data" / "output" / "documents" / "sample-annotation.csv"
+def membership(tmp_path, start, end, sample=SAMPLE, pattern="Position{i:03d}", position_ids=False):
+    """fovs.csv under the input root: the FOVs pattern.format(i=i) of start..end, with position_id i on request."""
+    path = tmp_path / "input" / "data" / "sample" / "fovs.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"sample_id,fov_start,fov_end\n{sample},{start},{end}\n")
+    rows = [f"{sample},{pattern.format(i=i)}" + (f",{i}" if position_ids else "") for i in range(start, end + 1)]
+    path.write_text("sample,fov_id" + (",position_id" if position_ids else "") + "\n" + "\n".join(rows) + "\n")
     return path
 
 
@@ -265,11 +269,11 @@ def rule_names(text):
 
 
 def test_wf2_legacy_configurations_include_the_legacy_rules_only():
-    """Without the blocks the Snakefile includes stitching.smk (the four legacy rules) and no export rule; the
-    legacy outputs of reads_assignment and the sample rules stay in reads-assignment.smk."""
+    """Without the blocks the Snakefile includes stitching.smk (the four legacy rules, backend matlab only) and no
+    export rule; the legacy outputs of reads_assignment and the sample rules stay in reads-assignment.smk."""
     snakefile = (ROOT / "workflow/Snakefile").read_text()
-    assert re.search(r'if STITCHING_BLOCK:\n\s+include: "rules/stitching-py.smk"\nelse:\n\s+include: '
-                     r'"rules/stitching.smk"', snakefile)
+    assert re.search(r'if STITCHING_BLOCK:\n\s+include: "rules/stitching-py.smk"\nelif BACKEND == "matlab":\n\s+'
+                     r'include: "rules/stitching.smk"', snakefile)
     assert re.search(r'if ASSEMBLY_BLOCK:\n\s+include: "rules/export.smk"', snakefile)
     assert rule_names((ROOT / "workflow/rules/stitching.smk").read_text()) == [
         "stitching_preparation", "create_BigStitcher_macro", "run_BigStitcher_macro", "create_tile_config"]
@@ -289,7 +293,7 @@ def test_wf3_run_stitching_calls_dataset_stitch_with_the_configured_values(tmp_p
     monkeypatch.setattr(Dataset, "stitch", lambda self, *args, **kwargs: calls.append((self, args, kwargs)))
     config = dataset_config(tmp_path, stitching=MULTIVIEW)
     placement = tmp_path / "data/output/stitching" / SAMPLE / "placement.json"
-    _snakemake._run_stitching(stub(config, inputs=[annotation(tmp_path, 1, 4)], outputs=[placement], sample=SAMPLE))
+    _snakemake._run_stitching(stub(config, inputs=[membership(tmp_path, 1, 4)], outputs=[placement], sample=SAMPLE))
     (dataset, args, kwargs), = calls
     assert dataset.output_root == tmp_path / "data" / "output" and dataset.fov_pattern == "Position{i:03d}"
     assert args == (SAMPLE, ["Position001", "Position002", "Position003", "Position004"])
@@ -298,7 +302,7 @@ def test_wf3_run_stitching_calls_dataset_stitch_with_the_configured_values(tmp_p
                                                  "overlap": 0.25}},
                       "config": MultiviewStitcherConfig(binning_zyx=(1, 2, 2), quality_threshold=-1.0),
                       "input": "reference_stain", "review": ReviewPolicy(max_residual_um=2.0), "fallback": "nominal",
-                      "output_dir": placement.parent}
+                      "output_dir": placement.parent, "position_ids": None}
 
 
 BIGSTITCHER_DEFAULT = {k: v for k, v in STITCHING.items() if k != "method"}   # bigstitcher is the default method
@@ -307,6 +311,9 @@ BIGSTITCHER_DEFAULT = {k: v for k, v in STITCHING.items() if k != "method"}   # 
 @pytest.mark.parametrize("block, match", [
     (dict(MULTIVIEW, positions={"source": "stage_file"}), r"stitching\.positions\.stage_axes"),
     (dict(STITCHING, positions={"source": "stage_file", "stage_axes": None}), r"stitching\.positions\.stage_axes"),
+    (dict(MULTIVIEW, positions={"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}}),
+     r"stitching\.positions\.stage_file .* is required with source stage_file; it has no default"),
+    (dict(MULTIVIEW, positions={"source": "table"}), r"stitching\.positions\.table .* is required with source table"),
     (dict(BIGSTITCHER_DEFAULT, bigstitcher_save_dir=None), r"stitching\.bigstitcher_save_dir"),
     ({k: v for k, v in STITCHING.items() if k != "bigstitcher_save_dir"}, r"stitching\.bigstitcher_save_dir"),
     (dict(MULTIVIEW, bigstitcher_save_dir="/local"), r"bigstitcher_save_dir is read with method bigstitcher only"),
@@ -324,7 +331,7 @@ def test_wf3_a_stage_file_without_stage_axes_raises_in_the_rule(tmp_path, monkey
     monkeypatch.setattr(Dataset, "stitch", lambda *a, **k: pytest.fail("Dataset.stitch must not be called"))
     config = dataset_config(tmp_path, stitching=dict(MULTIVIEW, positions={"source": "stage_file"}))
     with pytest.raises(ValueError, match=r"stitching\.positions\.stage_axes"):
-        _snakemake._run_stitching(stub(config, inputs=[annotation(tmp_path, 1, 4)],
+        _snakemake._run_stitching(stub(config, inputs=[membership(tmp_path, 1, 4)],
                                      outputs=[tmp_path / "placement.json"], sample=SAMPLE))
 
 
@@ -343,8 +350,7 @@ def test_wf3_the_blocks_are_python_only_and_ordered(tmp_path):
 
 
 STAGE_AXES = {"x": "+x", "y": "+y"}
-POSITION_CASES = {   # positions -> the position file the placement rules declare (OUT is the output root)
-    "stage_file_default": ({"source": "stage_file", "stage_axes": STAGE_AXES}, ["OUT/documents/maf/sample1.maf"]),
+POSITION_CASES = {   # positions -> the position file the placement rules declare
     "stage_file_path": ({"source": "stage_file", "stage_axes": STAGE_AXES, "stage_file": "/data/stage/LN.maf"},
                         ["/data/stage/LN.maf"]),
     "table": ({"source": "table", "table": "/data/positions.csv", "unit": "um"}, ["/data/positions.csv"]),
@@ -354,16 +360,15 @@ POSITION_CASES = {   # positions -> the position file the placement rules declar
 
 @pytest.mark.parametrize("case", sorted(POSITION_CASES))
 def test_wf3_placement_rules_declare_the_position_file(tmp_path, case):
-    """The input function of the placement rules gives the stage file (default or given) or the supplied table,
-    and nothing for a regular grid."""
+    """The input function of the placement rules gives the stage file or the supplied table the block names, and
+    nothing for a regular grid."""
     positions, expected = POSITION_CASES[case]
     config = dataset_config(tmp_path, stitching=dict(MULTIVIEW, positions=positions))
     workflow._stitching_block(config)
-    root = tmp_path / "data" / "output"
-    assert _snakemake._stitching_position_inputs(config, root, SAMPLE) == [p.replace("OUT", str(root)) for p in expected]
+    assert _snakemake._stitching_position_inputs(config) == expected
 
 
-@pytest.mark.parametrize("case", ["stage_file_default", "stage_file_path", "table"])
+@pytest.mark.parametrize("case", ["stage_file_path", "table"])
 def test_wf3_the_declared_position_file_is_the_file_dataset_stitch_reads(tmp_path, monkeypatch, case):
     """table_from_positions (what Dataset.stitch and the BigStitcher rules call) opens the declared file."""
     import starfinder.dataset._stitching as positions_module
@@ -377,17 +382,16 @@ def test_wf3_the_declared_position_file_is_the_file_dataset_stitch_reads(tmp_pat
     monkeypatch.setattr(positions_module, "positions_from_leica", spy)
     monkeypatch.setattr(positions_module, "positions_from_table", spy)
     config = dataset_config(tmp_path, stitching=dict(MULTIVIEW, positions=positions))
-    root = tmp_path / "data" / "output"
     with pytest.raises(StopIteration):
-        positions_module.table_from_positions(positions, ["Position001"], {}, sample=SAMPLE, output_root=root,
-                                              fov_pattern="Position{i:03d}")
-    assert opened == _snakemake._stitching_position_inputs(config, root, SAMPLE)
+        positions_module.table_from_positions(positions, ["Position001"], {}, fov_pattern="Position{i:03d}",
+                                              position_ids={"Position001": 1})
+    assert opened == _snakemake._stitching_position_inputs(config)
 
 
 def test_wf3_the_placement_rules_use_the_position_input_function():
     text = (ROOT / "workflow/rules/stitching-py.smk").read_text()
     assert re.search(r"def get_stitching_positions\(wildcards\):\n(?:    .*\n)+?    return _stitching_position_inputs"
-                     r"\(config, OUTPUT_DIR, wildcards\.sample\)", text)
+                     r"\(config\)", text)
     rules = re.split(r"\n\s*rule ", text)[1:]
     placing = [r for r in rules if r.startswith(("bigstitcher_macro_sample", "stitch_sample"))]
     assert len(placing) == 3 and all("get_stitching_positions" in r.split("output:")[0] for r in placing)
@@ -634,10 +638,9 @@ def test_wf3_the_bigstitcher_path_end_to_end(tmp_path, monkeypatch):
                     metadata=grid(LINK_SHAPE, LN_SPACING).metadata)
     positions = {"source": "regular_grid", "regular_grid": {"columns": 2, "rows": 2,
                                                             "order": "column_major_down_right", "overlap": 0.25}}
-    config = dataset_config(tmp_path, pattern="L{i}", stitching={"positions": positions,
-                                                                  "bigstitcher_save_dir": str(save)},
+    config = dataset_config(tmp_path, stitching={"positions": positions, "bigstitcher_save_dir": str(save)},
                             img_col=LINK_SHAPE[2], img_row=LINK_SHAPE[1])
-    sheet = annotation(tmp_path, 0, 3)
+    sheet = membership(tmp_path, 0, 3, pattern="L{i}")
     folder = save / SAMPLE
     macro, view_map = folder / "BigStitcher_macro.ijm", folder / "view_map.csv"
     folder.mkdir(parents=True)
@@ -693,7 +696,7 @@ def test_wf3_legacy_writer_hand_records(tmp_path, hand_records_setups, name, fal
 
 # --- WF3: FOV names of a stage file at the workflow boundary ----------------------------------------------------
 # A sample of FOVs 9 to 12 on a 2 × 2 stage grid (step 261 µm, tiles of 16 × 24 px at 18 × 12 µm, so 288 µm), the
-# stage file in the order 9, 10, 12, 11. Its PositionIDs are the FOV numbers i, as create_sample_maf.py keeps them.
+# stage file in the order 9, 10, 12, 11. fovs.csv gives each FOV its PositionID (position_id i).
 STAGE_POINTS = ((9, "0.076", "0.048"), (10, "0.076", "0.048261"), (12, "0.076261", "0.048261"),
                 (11, "0.076261", "0.048"))
 STAGE_SHAPE = (2, 16, 24)
@@ -701,12 +704,16 @@ STAGE_POSITIONS = {"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"},
 
 
 def stage_dataset(tmp_path, pattern, points=STAGE_POINTS, start=9, end=12, **blocks):
-    """A configuration, the sample annotation, the default stage file and a reference image per FOV of the sample."""
-    config = dataset_config(tmp_path, pattern=pattern, **blocks)
-    sheet = annotation(tmp_path, start, end)
+    """A configuration, fovs.csv with position_id, the stage file the block names and a reference image per FOV of
+    the sample."""
+    stage = tmp_path / "stage" / "acquisition.maf"
+    stage.parent.mkdir(parents=True, exist_ok=True)
+    stage.write_text(maf_text(points))
+    blocks["stitching"] = copy.deepcopy(blocks["stitching"])
+    blocks["stitching"]["positions"]["stage_file"] = str(stage)
+    config = dataset_config(tmp_path, **blocks)
+    sheet = membership(tmp_path, start, end, pattern=pattern, position_ids=True)
     root = tmp_path / "data" / "output"
-    (root / "documents" / "maf").mkdir(parents=True, exist_ok=True)
-    (root / "documents" / "maf" / f"{SAMPLE}.maf").write_text(maf_text(points))
     for i in range(start, end + 1):
         save_volume(np.full(STAGE_SHAPE, i, np.uint16), root / "fovs" / pattern.format(i=i) / "reference.tif",
                     metadata=grid(STAGE_SHAPE, STAGE_SPACING).metadata)
@@ -715,7 +722,7 @@ def stage_dataset(tmp_path, pattern, points=STAGE_POINTS, start=9, end=12, **blo
 
 @pytest.mark.parametrize("pattern", ["tile_{i:02d}", "tile_{i}"])
 def test_wf3_stage_file_names_in_process(tmp_path, monkeypatch, pattern):
-    """_run_stitching reaches Dataset.stitch (run for real up to stitch) with a table named by fov_id_pattern."""
+    """_run_stitching reaches Dataset.stitch (run for real up to stitch) with a table named by fovs.csv."""
     import starfinder.stitching as stitching
     config, sheet, root = stage_dataset(tmp_path, pattern, stitching=dict(MULTIVIEW, positions=STAGE_POSITIONS,
                                                                            input="reference_merged"))
@@ -729,13 +736,13 @@ def test_wf3_stage_file_names_in_process(tmp_path, monkeypatch, pattern):
     assert table.fov_ids == names                                      # stage-file order
     assert table.positions["position_id"].tolist() == [9, 10, 12, 11]
     assert [item.fov_id for item in inputs] == names and kwargs["sample"] == SAMPLE
-    assert set(names) == set(workflow._sample_fovs(sheet, config, SAMPLE))
+    assert set(names) == set(workflow._sample_fovs(config, SAMPLE, sheet))
     assert table.record["fov_ids"] == {str(p): pattern.format(i=p) for p, *_ in STAGE_POINTS}
 
 
 @pytest.mark.parametrize("pattern", ["tile_{i:02d}", "tile_{i}"])
 def test_wf3_stage_file_names_bigstitcher(tmp_path, monkeypatch, pattern):
-    """The macro rule's view map and the import rule's table carry the names of fov_id_pattern."""
+    """The macro rule's view map and the import rule's table carry the names of fovs.csv."""
     import starfinder.stitching as stitching
     save = tmp_path / "bigstitcher"
     config, sheet, root = stage_dataset(tmp_path, pattern, stitching={"positions": STAGE_POSITIONS,
@@ -747,7 +754,7 @@ def test_wf3_stage_file_names_bigstitcher(tmp_path, monkeypatch, pattern):
     views = pd.read_csv(view_map, keep_default_na=False)
     expected = [pattern.format(i=i) for i in (9, 10, 11, 12)]          # column-major cells: 9, 10 | 11, 12
     assert views["fov_id"].tolist() == expected and views["kind"].tolist() == ["fov"] * 4
-    assert expected == workflow._sample_fovs(sheet, config, SAMPLE)
+    assert expected == workflow._sample_fovs(config, SAMPLE, sheet)
     tables = []
 
     def spy(xml, *, table, **kwargs):
@@ -763,11 +770,11 @@ def test_wf3_stage_file_names_bigstitcher(tmp_path, monkeypatch, pattern):
 
 
 @pytest.mark.parametrize("points, match", [
-    (STAGE_POINTS + ((13, "0.076522", "0.048"),), r"missing \[\], extra \['tile_13'\]"),   # not a FOV of the sample
-    (STAGE_POINTS[:3], r"missing \['tile_11'\], extra \[\]"),                                # a FOV not listed
+    (STAGE_POINTS[:3], r"PositionID 11 is not in stage file"),                              # a FOV not listed
 ])
 def test_wf3_a_stage_file_that_does_not_match_the_sample_raises(tmp_path, points, match):
-    """As Dataset.stitch for a table that does not match its FOVs: ValueError naming both lists."""
+    """A FOV whose PositionID the stage file does not hold: ValueError naming it (a position of another FOV is
+    selected out, test_wf3_a_whole_acquisition_stage_file_places_as_its_sample_subset)."""
     config, sheet, root = stage_dataset(tmp_path, "tile_{i}", points=points,
                                         stitching=dict(MULTIVIEW, positions=STAGE_POSITIONS))
     with pytest.raises(ValueError, match=match):

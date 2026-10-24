@@ -211,24 +211,39 @@ DOC_DIR = Path(OUTPUT_DIR, 'documents')
 
 ROUND = [f"round{i}" for i in range(1, config['n_rounds']+1)]
 
-SAMPLE_ANNOT = pd.read_csv(f"{OUTPUT_DIR}/documents/sample-annotation.csv")
-SAMPLE_TO_FOV = {}
-FOV_TO_SAMPLE = {}
-for current_sample in SAMPLE_ANNOT['sample_id'].unique():
-    fov_list = []
+# FOV membership. The Python backend reads <INPUT>/fovs.csv (sample,fov_id and an optional position_id) in row
+# order, restricted by selected_fovs, for every rule (_membership); the MATLAB backend keeps its sample annotation,
+# fov_id_pattern, n_fovs and subset keys. MEMBERSHIP is the file the rules that read it declare.
+if BACKEND == "python":
+    sys.path.insert(0, str(Path(config["starfinder_path"]) / "src" / "python"))
+    from starfinder import _layout
+    from starfinder.dataset.workflow import _membership
+    MEMBERSHIP = str(_layout.fovs_file(INPUT_DIR))
+    _MEMBERS = _membership(config, MEMBERSHIP)
+    SAMPLE_TO_FOV = {sample: list(fovs) for sample, fovs in _MEMBERS.samples.items()}
+    FOV_TO_SAMPLE = {fov: sample for sample, fovs in SAMPLE_TO_FOV.items() for fov in fovs}
+    SAMPLE = list(SAMPLE_TO_FOV)
+    FOVS = list(_MEMBERS.fovs)
+else:
+    MEMBERSHIP = f"{OUTPUT_DIR}/documents/sample-annotation.csv"
+    SAMPLE_ANNOT = pd.read_csv(MEMBERSHIP)
+    SAMPLE_TO_FOV = {}
+    FOV_TO_SAMPLE = {}
+    for current_sample in SAMPLE_ANNOT['sample_id'].unique():
+        fov_list = []
 
-    current_start = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_start'].values[0]
-    current_end = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_end'].values[0]
+        current_start = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_start'].values[0]
+        current_end = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_end'].values[0]
 
-    for i in range(current_start, current_end+1):
-        current_fov = config['fov_id_pattern'].format(i=i)
-        fov_list.append(current_fov)
-        FOV_TO_SAMPLE[current_fov] = current_sample
+        for i in range(current_start, current_end+1):
+            current_fov = config['fov_id_pattern'].format(i=i)
+            fov_list.append(current_fov)
+            FOV_TO_SAMPLE[current_fov] = current_sample
 
-    SAMPLE_TO_FOV[current_sample] = fov_list
+        SAMPLE_TO_FOV[current_sample] = fov_list
 
-SAMPLE = list(SAMPLE_TO_FOV.keys())
-FOVS = sorted([config['fov_id_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)])
+    SAMPLE = list(SAMPLE_TO_FOV.keys())
+    FOVS = sorted([config['fov_id_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)])
 
 # Determine N_SUBTILE based on enabled rules
 # Only gr_single_fov_subtile and deep_create_subtile have sqrt_pieces parameter
@@ -239,14 +254,16 @@ elif is_rule_enabled('deep_create_subtile'):
 else:
     N_SUBTILE = [1]
 
-## Define specific list of positions to run the pipeline for testing/re-runs
-if config['subset_list']:
-    FOVS = [config['fov_id_pattern'].format(i=j) for j in config['subset_list']]
-    SAMPLE = list(set([FOV_TO_SAMPLE[fov] for fov in FOVS]))
-elif config['subset_range']:
-    FOVS = [config['fov_id_pattern'].format(i=j) for j in range(config['subset_start'], config['subset_end']+1)]
-elif config['subset_random']:
-    FOVS = random.sample(FOVS, config['n_random_tests'])
+## Define specific list of positions to run the pipeline for testing/re-runs (MATLAB backend; the Python backend's
+## selected_fovs is applied by _membership above)
+if BACKEND == "matlab":
+    if config['subset_list']:
+        FOVS = [config['fov_id_pattern'].format(i=j) for j in config['subset_list']]
+        SAMPLE = list(set([FOV_TO_SAMPLE[fov] for fov in FOVS]))
+    elif config['subset_range']:
+        FOVS = [config['fov_id_pattern'].format(i=j) for j in range(config['subset_start'], config['subset_end']+1)]
+    elif config['subset_random']:
+        FOVS = random.sample(FOVS, config['n_random_tests'])
 
 ### ==================== [ Dynamic Output Function ] =========================
 
@@ -370,7 +387,6 @@ SHARED_IMAGE_INPUTS = {"amplicon_img": f"{OUTPUT_DIR}/images/ref_merged/{{fovID}
 
 # Validate only active Python adapters; shared MATLAB configuration stays intact.
 if BACKEND == "python":
-    sys.path.insert(0, str(Path(config["starfinder_path"]) / "src" / "python"))
     from starfinder.dataset import from_workflow_config
     for python_rule in ("rsf_single_fov", "gr_single_fov_subtile",
                         "lrsf_single_fov_subtile", "deep_create_subtile", "deep_rsf_subtile"):
@@ -378,8 +394,10 @@ if BACKEND == "python":
             from_workflow_config(config, python_rule)
     # The §2.10 blocks raise here, naming the key, rather than when their rules run; so does the route
     # (check 7 of docs/sample-segmentation-contract.md, without the reuse conditions and the models).
-    from starfinder.dataset.workflow import (_check_export_route, _export_config, _molecule_table, _report_block,
-                                             _stitching_block)
+    from starfinder.dataset.workflow import (_check_export_route, _check_sample_rules, _export_config, _membership,
+                                             _molecule_table, _report_block, _stage_position_ids, _stitching_block)
+    # The annotation-driven legacy sample rules run with backend matlab only; the blocks replace them.
+    _check_sample_rules(config)
     MOLECULE_TABLE = str(_molecule_table(config, OUTPUT_DIR, "{fovID}"))
     # The FOV folder's run record of the processing rules (fovs/{fovID}/run.json, a subtile's
     # fovs/{fovID}/subtile_{n_subtile}/run.json), the reference image they write (the file reference_image
@@ -394,6 +412,7 @@ if BACKEND == "python":
     SHARED_IMAGE_INPUTS = _shared_image_inputs(config, OUTPUT_DIR)
     if STITCHING_BLOCK:
         _stitching_block(config)
+        _stage_position_ids(config, _membership(config, MEMBERSHIP))
     if ASSEMBLY_BLOCK:
         _export_config(config)
         _check_export_route(config)

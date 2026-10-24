@@ -88,7 +88,9 @@ truth to `input/ground_truth.json` (historical truth keys, version 2.0).
 The writer saves each channel as `input/round1/FOV_001/ch00.tif`, the round/FOV
 layout that the dataset loader reads, beside the codebook and the truth files. The direct
 constructor takes resolved sample input/output roots; this example does not use
-a Snakemake YAML or `from_workflow_config` path expansion.
+a Snakemake YAML or `from_workflow_config` path expansion. `fov_pattern="FOV_{i:03d}"` is a
+`{i}` pattern: `dataset.fov_ids(2, start=1)` names `FOV_001` and `FOV_002`, which the
+quickstart also writes to `input/fovs.csv`, the FOV membership the Python workflow reads.
 
 The synthetic channel order above differs from the wavelength-sorted order
 `ch00, ch02, ch01, ch03` used for the real datasets. Do not transfer it to real
@@ -120,6 +122,7 @@ All paths below are relative to `QUICKSTART_OUTPUT`:
 | `input/<round>/FOV_*/ch*.tif` | Generated channel images, one ZYX `uint16` TIFF per round, FOV and channel |
 | `input/generation.json` | Generator and preset versions, seed, dtype, requested/effective configuration and per-FOV provenance |
 | `input/codebook.csv` | `entry_id,gene_id,color_sequence`; the entry ID is the nucleotide barcode, and the color sequence its four colors |
+| `input/fovs.csv` | `sample,fov_id`: the two FOVs as one sample `synthetic`, the membership file of the Python workflow |
 | `input/ground_truth.json` | Shape, seed, rounds, genes and FOV records; each spot has gene/barcode/color sequence and 0-based continuous `(z,y,x)` reference position; shifts are `(dz,dy,dx)` |
 | `input/formed.csv`, `input/round_truth.csv`, `input/scene_truth.csv` | Formed amplicons (`gene_id`, `color_sequence`), their per-round positions and visibility, and the per-round view of the channel each color sequence selects (MATLAB-compatible `gene` and `color_seq` columns) |
 | `results/fovs/FOV_*/reads.csv` | Every detected candidate with its read, as the quickstart requests it: `spot_namespace,spot_id,z,y,x,gene_id,observed_color_sequence,call_status` (`gene_id` is `<NA>` for an unassigned read) |

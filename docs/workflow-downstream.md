@@ -74,6 +74,11 @@ Behavior to check on real inputs:
 
 ## Tile geometry and sample aggregation
 
+The rules of this table other than `reads_assignment` read MATLAB's sample annotation and
+run with `backend: matlab` only; a Python configuration uses the stitching and assembly
+blocks instead, and its `reads_assignment` reads the FOV membership `INPUT/fovs.csv`
+({doc}`workflow-configuration`, "FOV membership").
+
 | Rule | Inputs | Outputs relative to OUTPUT |
 | --- | --- | --- |
 | `create_sample_maf` | `documents/sample-annotation.csv`, `documents/raw.maf` | `documents/maf/{sample}.maf`; acquisition metadata must be supplied, not inferred from molecule coordinates |
@@ -81,7 +86,7 @@ Behavior to check on real inputs:
 | `create_BigStitcher_macro` | Fused sample `grid.csv` | `images/fused/{sample}/BigStitcher_macro.ijm`; actual script is `create_BigStitcher_macro_1.py` |
 | `run_BigStitcher_macro` | Macro and grid | `images/fused/{sample}/DAPI/dataset.xml`, through configured Fiji executable |
 | `create_tile_config` | Sample's dataset XML and grid | `output/tile_config_{sample}.csv` and `.html` |
-| `reads_assignment` | Annotation, DAPI, segmentation labels, the molecule table, `documents/genes.csv`, sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written |
+| `reads_assignment` | The FOV membership (`INPUT/fovs.csv` for the Python backend, the annotation for MATLAB), DAPI, segmentation labels, the molecule table, `documents/genes.csv`, sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written |
 | `create_sample_h5ad` | Annotation and all per-FOV H5ADs in its sample range | `expr/{sample}_raw.h5ad` |
 | `create_sample_reads_assignment` | Annotation and all per-FOV assignment CSVs in its sample range | `expr/{sample}_reads_assignment.csv` |
 

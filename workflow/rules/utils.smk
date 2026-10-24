@@ -1,5 +1,6 @@
 """
-    Utility rules: MAF creation, etc.
+    Utility rules: MAF creation, etc. Included with backend matlab only: the Python stitching block reads
+    its explicit stage file (stitching.positions.stage_file) and writes no per-sample copy.
     Uses variables from common.smk
 """
 

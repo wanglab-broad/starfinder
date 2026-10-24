@@ -43,6 +43,8 @@ script, Fiji, or a MATLAB example:
 
 ## Files each rule reads and writes
 
+Note (W-566): these rules, `create_sample_maf` included, now run with `backend: matlab` only; the Python stitching block reads an explicit `stitching.positions.stage_file` and `INPUT/fovs.csv`, and writes no `documents/maf/` copy.
+
 All paths are relative to `OUTPUT = {root_output_path}/{dataset_id}/{output_id}`.
 
 | Rule | Reads | Writes (declared) | Writes besides |

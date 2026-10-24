@@ -204,7 +204,7 @@ version-2 run record's relative source paths resolve against ("The replay").
 | Parameter | Meaning |
 | --- | --- |
 | `sample` | The sample, as `Dataset.stitch` and `Dataset.export` name it: the folders `stitching/<sample>/`, `export/<sample>/` and `report/<sample>/`. |
-| `fov_ids` | The FOV list: nonempty, unique, in the order the report shows them. The workflow passes the sample's FOVs from the sample annotation (`dataset/workflow.py`: `_sample_fovs`), as `stitch_sample` does. |
+| `fov_ids` | The FOV list: nonempty, unique, in the order the report shows them. The workflow passes the sample's FOVs from `INPUT/fovs.csv`, restricted by `selected_fovs` (`dataset/workflow.py`: `_sample_fovs`), as `stitch_sample` does. |
 | `assignment` | The §2.9 assignment name of the route per FOV, read at `fovs/<fov>/assignment/<assignment>/` (written by `assignment/_persist.py`: `write_assignment`); the default of `Dataset.export`. `None`: a sample without cells. |
 | `segmentation` | The segmentation run whose outlines the examples show. On the route per FOV, the name of a run under `fovs/<fov>/segmentation/<run>/` (written by `segmentation/_persist.py`: `write_run`); `None` is the cell run the assignment read (`assignment.json` `inputs.cells`), with the nucleus run when `inputs.nuclei` names one. On the route after fusion, a run of the export's `segmentation` section (written by `export/_segment.py`: `segment_fused`); `None` is its `cells` run, with its `nuclei` run. |
 | `config` | A `ReportConfig`; `None` is `ReportConfig()`. |
