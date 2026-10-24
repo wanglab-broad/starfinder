@@ -81,7 +81,7 @@ def main(output: Path) -> None:
     fov.decoding_result = decoded
     fov.filtering_result = filter_reads(decoded)
     csv = pd.read_csv(fov.export_spots())
-    assert csv[["x", "y", "z"]].values.tolist() == [[11, 11, 6]]
+    assert csv[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]
     assert fov.spot_result.spots[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]
 
     if importlib.util.find_spec("SimpleITK") is None:

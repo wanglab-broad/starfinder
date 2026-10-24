@@ -221,7 +221,7 @@ def test_assemble_part_input_files(folder):
 
 
 def test_assemble_part_from_molecule_tables(folder):
-    """assignment=None: the molecule tables of signal/<fov>_goodSpots.csv, a molecules_only sample."""
+    """assignment=None: the molecule tables of fovs/<fov>/molecules.csv, a molecules_only sample."""
     record = export(folder, ExportConfig(fuse=False), assignment=None)
     placement = load_placement(folder.placement_dir)
     direct = assemble(placement, assembly_inputs(folder.dataset, placement, None))
@@ -233,19 +233,19 @@ def test_assemble_part_from_molecule_tables(folder):
     check_export(folder.export_dir)
 
 
-def test_molecule_tables_are_the_goodspots_rows(folder):
-    """assignment=None: the assembled molecules are exactly the rows of each FOV's goodSpots CSV.
+def test_molecule_tables_are_the_molecules_csv_rows(folder):
+    """assignment=None: the assembled molecules are exactly the rows of each FOV's molecules.csv, by key.
 
-    The CSV ``signal/<fov_id>_goodSpots.csv`` is read here with pandas, not with
-    ``import_legacy_molecules_csv`` or anything built on it. The rule is that of
-    docs/assignment-contract.md ("The assign entry", "Inputs", ``import_legacy_molecules_csv``): a
-    legacy one-based ``x, y, z, gene`` CSV, 1 subtracted from each coordinate, row ``i`` (zero-based)
-    with the identity ``spot_id = "csv:<i>"``; the namespace is the FOV's
+    The file ``fovs/<fov_id>/molecules.csv`` is read here with pandas, not with
+    ``load_molecules`` or anything built on it: the typed, zero-based table of
+    ``FOV.export_spots``, whose rows keep their identities ``(spot_namespace,
+    spot_id)``, here those of the FOV's saved assignment, and no ``csv:<i>``
+    identity is made up; the namespace is the FOV's
     ``[dataset_id, sample_id, fov_id, null]``. Assignments made by the §2.9 workflow route from the
-    same files (``import_legacy_molecules_csv``, then ``assign_molecules``, saved as ``from_csv``)
+    same files (``load_molecules``, then ``assign_molecules``, saved as ``from_csv``)
     give a sample with the same molecule keys.
     """
-    from starfinder.assignment import assign_molecules, import_legacy_molecules_csv
+    from starfinder.assignment import assign_molecules, load_molecules
     from starfinder.assignment._persist import write_assignment
 
     from .assembly_fixtures import GOLDEN_GENES, GOLDEN_IDS, label_run, unit_grid, with_record
@@ -254,21 +254,22 @@ def test_molecule_tables_are_the_goodspots_rows(folder):
     molecules = load_assembly(folder.export_dir).molecules
     assert set(molecules.fov_id) == set(GOLDEN_IDS)
     for fov in GOLDEN_IDS:
-        rows = pd.read_csv(folder.root / "signal" / f"{fov}_goodSpots.csv", dtype={"gene": str})
+        rows = pd.read_csv(folder.root / "fovs" / fov / "molecules.csv", dtype={"spot_id": str, "gene_id": str})
         got = molecules[molecules.fov_id == fov].set_index("spot_id")
         assert len(got) == len(rows) > 0
-        assert set(got.index) == {f"csv:{i}" for i in range(len(rows))}
+        assert set(got.index) == set(rows.spot_id) == set(folder.results[fov].molecules.spot_id)
+        assert not any(i.startswith("csv:") for i in got.index)
         namespace = json.dumps(["data", "sample", fov, None], separators=(",", ":"))
-        assert set(got.spot_namespace) == {namespace}
-        for i, row in rows.iterrows():
-            molecule = got.loc[f"csv:{i}"]
-            assert molecule.gene_id == row.gene
-            assert (molecule.z, molecule.y, molecule.x) == (row.z - 1, row.y - 1, row.x - 1)
+        assert set(got.spot_namespace) == set(rows.spot_namespace) == {namespace}
+        for _, row in rows.iterrows():
+            molecule = got.loc[row.spot_id]
+            assert molecule.gene_id == row.gene_id
+            assert (molecule.z, molecule.y, molecule.x) == (row.z, row.y, row.x)
     grid = unit_grid(TILE_ZYX)
     for fov in GOLDEN_IDS:
         namespace = json.dumps(["data", "sample", fov, None], separators=(",", ":"))
-        table = import_legacy_molecules_csv(folder.root / "signal" / f"{fov}_goodSpots.csv", spot_namespace=namespace,
-                                        genes=GOLDEN_GENES)
+        table = load_molecules(folder.root / "fovs" / fov / "molecules.csv", spot_namespace=namespace,
+                               genes=GOLDEN_GENES)
         result = assign_molecules(table, label_run(folder.results[fov].cell_labels, fov, grid), grid=grid)
         write_assignment(folder.assignment_dir(fov, "from_csv"), with_record(result, name="from_csv"),
                          metadata=grid.metadata)

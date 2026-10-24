@@ -10,6 +10,7 @@ from .types import ChannelInfo, RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
     ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type)
+from starfinder import _layout
 from starfinder._registry import config_type_for
 from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig,
     InsufficientLandmarksError, RecoveryConfig, RegistrationEstimationError, RegistrationQcConfig, RegistrationRecipe,
@@ -857,6 +858,32 @@ def _legacy_target(config):
     return ('cell' if folder == 'overlay' else 'nucleus'), 'legacy_default'
 
 
+def _legacy_molecules(config):
+    """Whether the workflow's molecule table of a FOV is the legacy one-based ``signal/{fovID}_goodSpots.csv``.
+
+    The configuration names the producer: the backend's ``rsf_single_fov``, or
+    ``stitch_subtile``, which the ruleorder of workflow/Snakefile puts first in
+    the subtile and deep modes and in free mode with ``gr_single_fov_subtile``
+    or ``deep_create_subtile`` on. MATLAB's ``rsf_single_fov`` and
+    ``stitch_subtile`` (either backend) write the legacy file; the Python
+    backend's ``rsf_single_fov`` writes ``fovs/{fovID}/molecules.csv``.
+    """
+    if config.get('backend', 'matlab') != 'python':
+        return True
+    mode = config.get('workflow_mode', 'free')
+    if mode in ('subtile', 'deep'):
+        return True
+    rules = config.get('rules') or {}
+    return mode == 'free' and any((rules.get(rule) or {}).get('run', False)
+                                  for rule in ('gr_single_fov_subtile', 'deep_create_subtile'))
+
+
+def _molecule_table(config, output_root, fov_id):
+    """The molecule table the workflow's consumers read for a FOV, by producer (_legacy_molecules)."""
+    paths = _layout._FovPaths(Path(output_root), fov_id)
+    return paths.signal_csv('goodSpots') if _legacy_molecules(config) else paths.spot_table('molecules')
+
+
 def _label_namespace(config, fov_id, run=None):
     """The JSON identity list of a FOV ([dataset_id, sample_id, fov_id, subtile_id]), with a run name for labels."""
     ids = [config['dataset_id'], config['sample_id'], fov_id, None]
@@ -1429,6 +1456,8 @@ def _export_dataset(config, block, export=None):
     rule = next((r for r in _RULES if r in config.get('rules', {})), 'rsf_single_fov')
     adapted = from_workflow_config(config, rule)
     dataset = adapted.dataset
+    # The molecule tables of the legacy route are read with the legacy reader (_legacy_molecules).
+    dataset._legacy_molecules = _legacy_molecules(config)
     codebook = Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'] / 'genes.csv'
     if dataset.readout_mode == 'direct':
         dataset.load_direct_panel(codebook)

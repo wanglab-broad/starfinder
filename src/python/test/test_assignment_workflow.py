@@ -22,6 +22,7 @@ from starfinder.dataset.workflow import _assignment_block, _reads_assignment
 from starfinder._snakemake import _run_reads_assignment, _write_raw_h5ad
 from starfinder.segmentation import ExpandLabelsConfig
 
+from .coordination_helpers import write_molecules_csv
 from .test_assignment import assign_boxes
 from .test_assignment_golden import DISTANCE, GENES, MOLECULES, SHAPE_ZYX, label_fixture, legacy_assignment
 
@@ -38,6 +39,11 @@ NEW_OBS = ["size_voxels", "expanded_size_voxels", "size_physical", "centroid_z",
 LEGACY_READS = ["x", "y", "z", "gene", "global_x", "global_y", "global_z", "seg_label"]
 NEW_READS = ["spot_id", "assignment_status", "cell_id", "in_expansion", "original_cell_id", "nucleus_id",
              "compartment"]
+# reads_assignment.csv on the Python route: the molecules.csv columns, the legacy added ones and the assignment's.
+MOLECULE_READS = ["spot_namespace", "spot_id", "z", "y", "x", "gene_id", "entry_id", "qc_score", "global_x",
+                  "global_y", "global_z", "seg_label"]
+ASSIGNMENT_READS = NEW_READS[1:]
+NAMESPACE = '["data","sample","Position001",null]'
 
 
 def workflow(tmp_path, *, expand=False, seg_expand=False, backend="python", **extra):
@@ -59,9 +65,17 @@ def write_reads(path, molecules, *, floats=False):
     return path
 
 
-def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=GENES, **options):
-    """reads_assignment through a stub snakemake object: one FOV, tile offsets 0, a box covering the FOV."""
+def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=GENES, legacy=False, spot_ids=None,
+             **options):
+    """reads_assignment through a stub snakemake object: one FOV, tile offsets 0, a box covering the FOV.
+
+    The molecule table is fovs/Position001/molecules.csv of the Python rsf_single_fov, or with ``legacy`` the
+    one-based goodSpots CSV of the legacy route: MATLAB's rsf_single_fov writes integers, stitch_subtile (the
+    subtile mode, ``floats``) the floats of the resident subtile tables.
+    """
     anndata = pytest.importorskip("anndata")
+    if legacy:
+        options = dict(options, **({"workflow_mode": "subtile"} if floats else {"backend": "matlab"}))
     config = workflow(tmp_path, **options)
     out = tmp_path / "output" / "data" / "out"
     for folder in ("documents", "output", "signal", "images/DAPI", "images/stardist_segmentation"):
@@ -76,7 +90,11 @@ def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=GENES, 
                    "end_y_norm": ny}]).to_csv(out / "output" / "tile_config_sample1.csv")
     tifffile.imwrite(out / "images" / "DAPI" / "Position001.tif", np.zeros(labels.shape, np.uint8))
     tifffile.imwrite(out / "images" / "stardist_segmentation" / "Position001.tif", labels)
-    reads = write_reads(out / "signal" / "Position001_goodSpots.csv", molecules, floats=floats)
+    if legacy:
+        reads = write_reads(out / "signal" / "Position001_goodSpots.csv", molecules, floats=floats)
+    else:
+        reads = write_molecules_csv(out / "fovs" / "Position001" / "molecules.csv", NAMESPACE,
+                                    [p for p, _ in molecules], [g for _, g in molecules], spot_ids)
     inputs = [out / "documents" / "sample-annotation.csv", out / "images" / "DAPI" / "Position001.tif",
               out / "images" / "stardist_segmentation" / "Position001.tif", reads, out / "documents" / "genes.csv",
               out / "output" / "tile_config_sample1.csv"]
@@ -158,7 +176,7 @@ def test_a18_a_gene_mismatch_with_the_codebook_raises(tmp_path):
 def test_a18_the_legacy_outputs_equal_the_frozen_helper(tmp_path, dimensions, expand, floats):
     """X, the legacy obs columns and reads_assignment.csv's legacy columns equal the legacy values."""
     labels = label_fixture() if dimensions == "3d" else label_fixture().max(axis=0)
-    adata, reads, reads_csv = run_rule(tmp_path, labels, floats=floats, expand=expand)
+    adata, reads, reads_csv = run_rule(tmp_path, labels, floats=floats, expand=expand, legacy=True)
     legacy_csv = write_reads(tmp_path / "legacy.csv", KEEP)  # the legacy script raises on float coordinates
     expected, counts, meta = legacy_reads_assignment(labels, legacy_csv,
                                                      tmp_path / "output/data/out/documents/genes.csv", expand=expand)
@@ -194,6 +212,29 @@ def test_a18_the_legacy_outputs_equal_the_frozen_helper(tmp_path, dimensions, ex
         f"assignment ratio: {100 * assigned / total:.2f}% ({assigned} of {total} molecules assigned)"
 
 
+@pytest.mark.parametrize("dimensions", ["3d", "2d"])
+def test_the_python_route_reads_molecules_csv_by_key(tmp_path, dimensions):
+    """The Python route: the adapter reads fovs/<fov>/molecules.csv with load_molecules, so reads_assignment.csv
+    keeps the molecules' spot_ids (no csv:<i>) and zero-based coordinates; the counts, the cells and the rows equal
+    those of the same molecules on the legacy route."""
+    labels = label_fixture() if dimensions == "3d" else label_fixture().max(axis=0)
+    ids = [f"spot-{9 - i}" for i in range(len(KEEP))]  # identities that are neither row numbers nor in row order
+    adata, reads, path = run_rule(tmp_path, labels, spot_ids=ids)
+    legacy_adata, legacy_reads, _ = run_rule(tmp_path / "legacy", labels, legacy=True)
+    assert path.name == "molecules.csv" and path.parent.name == "Position001"
+    assert list(reads.columns) == MOLECULE_READS + ASSIGNMENT_READS
+    assert not reads.spot_id.str.startswith("csv:").any()
+    assert reads.spot_id.tolist() == [ids[int(s[len("csv:"):])] for s in legacy_reads.spot_id]
+    assert set(reads.spot_namespace) == {NAMESPACE} and reads.gene_id.tolist() == legacy_reads.gene.tolist()
+    assert_frame_equal(reads[["x", "y", "z", "global_x", "global_y", "global_z", "seg_label"] + ASSIGNMENT_READS],
+                       legacy_reads[["x", "y", "z", "global_x", "global_y", "global_z", "seg_label"]
+                                    + ASSIGNMENT_READS], check_dtype=False, check_exact=True)
+    assert np.array_equal(adata.X, legacy_adata.X)
+    assert_frame_equal(adata.obs.reset_index(drop=True), legacy_adata.obs.reset_index(drop=True))
+    record = json.loads(adata.uns["assignment"])
+    assert record["inputs"]["molecules"]["source"]["path"] == str(path)
+
+
 def test_the_log_of_a_run_without_molecules_has_no_ratio(tmp_path):
     adata, reads, _ = run_rule(tmp_path, label_fixture(), ())
     assert json.loads(adata.uns["assignment"])["counts"]["molecules"] == 0 and len(reads) == 0
@@ -225,7 +266,7 @@ def test_molecules_off_the_grid_are_outside_grid(tmp_path):
     # Neither wraps to the far edge nor raises: both are rows of the CSV with status outside_grid.
     assert len(reads) == len(KEEP) + 2
     rows = reads[reads.assignment_status == "outside_grid"]
-    assert rows.spot_id.tolist() == [f"csv:{len(KEEP)}", f"csv:{len(KEEP) + 1}"]
+    assert rows.spot_id.tolist() == [f"m{len(KEEP)}", f"m{len(KEEP) + 1}"]
     assert rows.seg_label.tolist() == [0, 0] and rows.cell_id.isna().all()
     assert rows.x.tolist() == [-1, SHAPE_ZYX[2]] and rows.global_x.tolist() == [-1, SHAPE_ZYX[2]]
     # The rows of the other molecules are those of the run without the two.

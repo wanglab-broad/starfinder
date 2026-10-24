@@ -7,7 +7,7 @@ operation-specific details. Corresponding APIs do not imply numerical parity.
 
 ## Axes and coordinates
 
-| Quantity | Python | MATLAB / exported signal CSV |
+| Quantity | Python (and `molecules.csv`, `reads.csv`) | MATLAB / legacy `goodSpots` CSV |
 | --- | --- | --- |
 | Image | `(Z,Y,X,C)`; single channel `(Z,Y,X)` | MATLAB `(Y,X,Z,C)`, single channel `(Y,X,Z)` |
 | Spot table | Named `z,y,x`, **0-based** voxel indices | Named `x,y,z`, **1-based**; x is column, y is row |
@@ -21,10 +21,13 @@ These are axis permutations, not coordinate-origin conversions. Confirm file
 metadata first; do not use `reshape` to exchange axes. For a single channel,
 the analogous permutations are `(1,2,0)` and `(2,0,1)`.
 
-{py:meth}`~starfinder.dataset.FOV.export_spots` adds one to selected x/y/z columns
-in a copy. In-memory `(z,y,x)=(5,10,10)` becomes CSV `(x,y,z)=(11,11,6)`.
-To index a NumPy image from that CSV, select columns by name in ZYX order and
-subtract one **once**, as in the [output recipe](recipes.md#inspect-molecule-outputs).
+{py:meth}`~starfinder.dataset.FOV.export_spots` writes the in-memory zero-based
+coordinates unchanged: `(z,y,x)=(5,10,10)` is `z,y,x = 5,10,10` in `molecules.csv` and
+`reads.csv` (since W-562; {doc}`migration`). To index a NumPy image from those tables,
+select columns by name in ZYX order, as in the
+[output recipe](recipes.md#inspect-molecule-outputs). The one-based `x,y,z` CSVs of the
+legacy route (MATLAB's `goodSpots`, and those of the subtile and deep modes) need one
+subtracted **once**; {py:func}`~starfinder.assignment.import_legacy_molecules_csv` does it.
 Do not subtract one from shift vectors, color labels or already internal
 coordinates. Exports carry no physical calibration; distances are voxel indices.
 

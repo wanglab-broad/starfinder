@@ -154,6 +154,9 @@ class FOV:
     segmentation_results: dict[str, SegmentationResult] = field(default_factory=dict)
     assignment_results: dict[str, AssignmentResult] = field(default_factory=dict)
     _run_record: object | None = field(default=None, init=False, repr=False, compare=False)
+    # run.json of the FOV's latest run, when that run had checkpoints and succeeded; export_spots records its
+    # tables there (outputs.<slot>).
+    _record_path: Path | None = field(default=None, init=False, repr=False, compare=False)
     # The saved reference merged image restored by load_reference_image: (ZYX image, its grid, path).
     _reference_file: tuple | None = field(default=None, init=False, repr=False, compare=False)
 
@@ -1298,6 +1301,7 @@ class FOV:
         record = self._start_run_record(checkpoints, config, execution) if checkpoints is not None else None
         current = None
         self._run_record = record
+        self._record_path = None
         recipe = config.preprocessing
         steps = recipe.steps if recipe is not None else ()
         post = recipe.post_registration if recipe is not None else ()
@@ -1417,6 +1421,7 @@ class FOV:
                 self.filter_reads(config=config.filtering)
             if record is not None:
                 record.finish('succeeded')
+                self._record_path = record.path
         except BaseException as error:
             if record is not None and record.data['status'] == 'running':
                 record.finish('failed' if isinstance(error, Exception) else 'interrupted', error, current)
@@ -2367,14 +2372,37 @@ class FOV:
                          metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)})
         return path
 
-    def export_spots(self, slot='goodSpots', columns=None, *, path=None):
-        """Export identities and coordinates once; shared slot filenames retained."""
-        from starfinder.readout import export_spots
-        if slot not in ('goodSpots', 'allSpots'):
-            raise ValueError('slot must be goodSpots or allSpots')
-        reads = self.filtering_result if slot == 'goodSpots' else self.decoding_result
-        return export_spots(self.spot_result, reads, path or self.paths.signal_csv(slot),
-                            accepted_only=slot == 'goodSpots', columns=columns)
+    def export_spots(self, slot='molecules', columns=None, *, path=None):
+        """Write the FOV's molecule or read table as a typed, zero-based CSV; return its path.
+
+        ``slot="molecules"`` writes the accepted reads of the filtering result
+        (``spot_namespace, spot_id, z, y, x, gene_id, entry_id, qc_score``);
+        ``slot="reads"``, on request, every read of the decoding result joined
+        to its detection (:func:`starfinder.readout.export_spots`). The default
+        path is ``<output_root>/fovs/<fov_id>/molecules.csv`` or ``reads.csv``;
+        ``columns`` selects columns. When the FOV's latest ``run`` had
+        checkpoints and succeeded, its ``run.json`` gains
+        ``outputs.<slot>``, rewritten atomically: the path relative to the
+        record's folder, the file's SHA-256, the keyed ``molecules_sha256`` of
+        the molecule columns (null for reads, or when the file leaves one
+        out), the column dtypes and the row count.
+        """
+        import os
+        from starfinder.readout.spots import _spot_table, _write_spot_table
+        if slot not in ('molecules', 'reads'):
+            raise ValueError(f"slot must be molecules or reads; got {slot!r}")
+        reads = self.filtering_result if slot == 'molecules' else self.decoding_result
+        table = _spot_table(self.spot_result, reads, accepted_only=slot == 'molecules', columns=columns)
+        path = Path(path) if path is not None else self.paths.spot_table(slot)
+        dtypes = _write_spot_table(table, path)
+        if self._record_path is not None and self._record_path.is_file():
+            from starfinder.assignment._molecules import COLUMNS, molecules_sha256
+            from starfinder.dataset._run_record import add_output
+            keyed = (molecules_sha256(table) if slot == 'molecules' and set(COLUMNS) <= set(table) else None)
+            add_output(self._record_path, slot, {
+                'path': Path(os.path.relpath(Path(path).resolve(), self._record_path.parent.resolve())).as_posix(),
+                'sha256': file_sha256(path), 'molecules_sha256': keyed, 'dtypes': dtypes, 'rows': len(table)})
+        return path
 
     def save_processing_log(self, log_type='rsf'):
         """Persist ordered registration attempts and stage counts.

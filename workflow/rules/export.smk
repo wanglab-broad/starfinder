@@ -14,7 +14,7 @@ from starfinder._snakemake import _export_sample_files
 ### ==================== [ Helper Functions ] =========================
 
 def get_export_input(wildcards):
-    """The sample's placement.json, then by route its per-FOV assignment outputs (route per FOV), or its goodSpots
+    """The sample's placement.json, then by route its per-FOV assignment outputs (route per FOV), or its molecule
     tables (molecules only) with the reference and source images (route after fusion)."""
     return _export_sample_files(config, OUTPUT_DIR, SAMPLE_TO_FOV[wildcards.sample], wildcards.sample)[0]
 

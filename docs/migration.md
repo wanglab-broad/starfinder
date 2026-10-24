@@ -80,7 +80,7 @@ are not examples of the current API.
 | `stitching.bigstitcher_macro` | `stitching.export_bigstitcher` (no alias; the method ID `bigstitcher`, the macro text and the Snakemake rule `bigstitcher_macro_sample` stay) |
 | `export.fuse` | `export.fuse_images` (no alias; the export part `fuse` keeps its name: `ExportConfig.fuse`, the YAML key `export.fuse` and the `parts` of `export.json`) |
 | `FOV.assign` | `FOV.assign_molecules` (no alias) |
-| `FOV.save_spots` | `FOV.export_spots` (no alias; the slots `goodSpots` and `allSpots` and their file names stay) |
+| `FOV.save_spots` | `FOV.export_spots` (no alias; the slots `goodSpots` and `allSpots` and their file names stay; W-562 later replaced them: "Molecule and read tables") |
 | `FOV.create_subtiles` | `FOV.save_subtiles` (no alias; the workflow key `create_subtiles` stays) |
 | `Dataset.channel_record` | private `Dataset._channel_record`, which only the run record calls (no public replacement; the `channels` key of `run.json` stays, and `Dataset.channel_info` and `Dataset.channel_labels` stay public) |
 | `FOV.register_rounds(recipe, *, rounds, reference=None, checkpoints=None)` | `FOV.register(recipe, *, rounds, reference=None, checkpoints=None)`, which routes other rounds to the former `register_rounds` (no alias; see the routing below) |
@@ -1729,6 +1729,82 @@ run.json"):
   rules write do not change.
 * **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256**,
   which `run.json` records as `codebook`.
+
+### Molecule and read tables: `molecules.csv`, `reads.csv` and zero-based coordinates
+
+W-562 (OM-04, OM-18) replaces the one-based, identity-free `goodSpots` and `allSpots`
+exports of the Python route with typed, zero-based tables that keep each read's identity.
+This is a breaking change of the files, their columns and their coordinate origin, with no
+alias, no dual write and no dual search.
+
+* **`FOV.export_spots` slots and files.** `FOV.export_spots(slot="molecules", columns=None, *,
+  path=None)` takes the slots `molecules` (the accepted reads of the filtering result) and
+  `reads` (on request, every read of the decoding result joined to its detection) in place of
+  `goodSpots` and `allSpots`; there is no `export_molecules` or `export_reads` (NM-09). The
+  default paths are `<output_root>/fovs/<fov_id>/molecules.csv` and
+  `<output_root>/fovs/<fov_id>/reads.csv`, in place of `signal/<fov_id>_goodSpots.csv` and
+  `signal/<fov_id>_allSpots.csv`; `FOV.paths.spot_table(slot)` names them.
+* **`readout.export_spots(detection, reads, path, *, accepted_only=False, columns=None)`**
+  writes the new formats: with `accepted_only` the molecule table, otherwise the read table
+  (without reads, the detection table). `columns` takes the new column names (`gene_id`,
+  `observed_color_sequence`); the renames to `gene` and `color_seq` are gone. The file is a
+  typed CSV written atomically by `_records._write_table` (`<NA>` for a missing value, floats
+  with 17 significant digits); the path must end in `.csv`.
+* **Coordinates are zero-based ZYX**, equal to the in-memory detection coordinates: a new
+  `x`, `y` or `z` is the old value minus 1.
+* **New: `assignment.load_molecules(path, *, genes, spot_namespace=None)`** reads a
+  `molecules.csv` with its identities as a `MoleculeTable` of population `final`; its source
+  records the namespace, the path and the file's SHA-256. The ordered gene list is a
+  keyword, as for `import_legacy_molecules_csv`, which stays for the one-based legacy files.
+* **`run.json` gains `outputs.<slot>`** when the FOV's latest `FOV.run` had checkpoints and
+  succeeded: `export_spots` adds `{path, sha256, molecules_sha256, dtypes, rows}` (the path
+  relative to the record's folder; `molecules_sha256` the keyed hash of the six molecule
+  columns, null for `reads`) and rewrites the record atomically. `format_version` stays 1,
+  and a `run.json` without `outputs` still loads.
+* **Removed: `FOV.paths.signal_png`**, the unused helper of `signal/<fov_id>_<slot>.png`
+  (OM-18; no replacement).
+
+`molecules.csv` against the old `goodSpots` (same rows, in the same order):
+
+| Old column (`goodSpots`) | New column (`molecules.csv`) | dtype | Origin |
+| --- | --- | --- | --- |
+| — | `spot_namespace` | string | the FOV's identity list |
+| — | `spot_id` | string | the detection's spot ID (the legacy reader made up `csv:<row>`) |
+| `z` | `z` | float64 | zero-based: old `z` − 1 |
+| `y` | `y` | float64 | zero-based: old `y` − 1 |
+| `x` | `x` | float64 | zero-based: old `x` − 1 |
+| `gene` | `gene_id` | string | the same gene |
+| — | `entry_id` | string | the codebook entry (`<NA>` where none) |
+| — | `qc_score` | float64 | the shared read score; `<NA>` for unscored reads |
+
+`reads.csv` against the old `allSpots` (same rows, in the same order): the columns are
+`spot_namespace, spot_id, z, y, x`, then the other detection columns, then the decoding
+columns, each name once; the old default `x, y, z, gene` is gone (`columns` selects).
+
+| Old column (`allSpots`) | New column (`reads.csv`) | Origin |
+| --- | --- | --- |
+| `x`, `y`, `z` | `x`, `y`, `z` | zero-based: old value − 1 |
+| `gene` | `gene_id` | unchanged values |
+| `color_seq` | `observed_color_sequence` | unchanged values |
+| `round_x`, `round_y`; `channel_x`, `channel_y` (direct readout) | `round`; `channel` | one copy, the reads' (the channel label), after a check that the detection agrees (its channel index read through the channel labels); a disagreement raises |
+| every other column | the same name | unchanged values |
+
+Consumers on the Python processing route read `molecules.csv` by key with
+`load_molecules`, and their outputs keep the molecules' `spot_id`s: the `reads_assignment`
+adapter, `Dataset.export(assignment=None)`, the inputs of `export_sample` and of
+`reads_assignment`, and the Python `rsf_single_fov`'s declared output
+`fovs/{fovID}/molecules.csv`. On this route `expr/{fovID}/reads_assignment.csv` has the
+`molecules.csv` columns, then `global_x, global_y, global_z` (without an assembly block)
+and `seg_label`, then the assignment columns, joined by `(spot_namespace, spot_id)` rather
+than by row position.
+
+The legacy route keeps its files and reader: MATLAB's `rsf_single_fov` and `stitch_subtile`
+(the subtile and deep modes, either backend) write the one-based
+`signal/{fovID}_goodSpots.csv`, the resident subtile rules write
+`output/subtile/{fovID}/subtile_goodSpots_<n>.csv` through a private legacy writer, and
+the consumers read them with `import_legacy_molecules_csv`. Each consumer chooses its file
+from the configuration ({doc}`workflows`, "Molecule tables"): the backend and the producer
+the `Snakefile`'s `ruleorder` selects; it never looks for whichever file exists.
 
 ### The processing report
 

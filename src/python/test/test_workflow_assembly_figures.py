@@ -43,7 +43,7 @@ FIGURES = {"3d": ["assignment.png", "assignment_single_layer.png"], "2d": ["assi
 
 
 def assembly_config(root, assignment="default"):
-    return {**_config(root), "n_rounds": 3, "ref_round": "round1", "seq_channel_order": ["ch00", "ch01", "ch02",
+    return {**_config(root, legacy=False), "n_rounds": 3, "ref_round": "round1", "seq_channel_order": ["ch00", "ch01", "ch02",
                                                                                           "ch03"],
             "stitching": MULTIVIEW, "assembly": {"assignment": assignment},
             "export": {"route": "per_fov", "fuse": False}}
@@ -51,7 +51,7 @@ def assembly_config(root, assignment="default"):
 
 def build(root, dimensions):
     """build_sample with the reference grids, the codebook of the molecule path and the saved placement."""
-    _, _, out = build_sample(root, dimensions)
+    _, _, out = build_sample(root, dimensions, legacy=False)
     codebook = root / "input" / "data" / "sample" / "genes.csv"
     golden_codebook().table[["entry_id", "gene_id", "color_sequence"]].to_csv(codebook, index=False)
     for fov in GOLDEN_IDS:
@@ -64,7 +64,7 @@ def build(root, dimensions):
 def reads_assignment(root, out, fov, config):
     """reads_assignment with the assembly block for one FOV; returns the bytes of each figure it wrote."""
     inputs = [out / "documents" / "sample-annotation.csv", out / "images" / "DAPI" / f"{fov}.tif",
-              out / "images" / "stardist_segmentation" / f"{fov}.tif", out / "signal" / f"{fov}_goodSpots.csv",
+              out / "images" / "stardist_segmentation" / f"{fov}.tif", out / "fovs" / fov / "molecules.csv",
               out / "documents" / "genes.csv", out / "images" / "ref_merged" / f"{fov}.tif"]
     outputs = [out / "expr" / fov / "raw.h5ad", out / "expr" / fov / "reads_assignment.csv"]
     name = config["assembly"]["assignment"]

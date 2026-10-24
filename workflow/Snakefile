@@ -48,7 +48,8 @@ include: "rules/utils.smk"
 ### ==================== [ Dynamic Rule Order ] =========================
 
 # Build ruleorder based on workflow_mode to avoid ambiguous rule selection
-# Rules that produce the same output (e.g., _goodSpots.csv) need ordering
+# Rules that produce the same output (e.g., _goodSpots.csv) need ordering. The same choice names the
+# producer of each FOV's molecule table that the consumers read (MOLECULE_TABLE, common.smk; _legacy_molecules).
 
 if WORKFLOW_MODE == 'subtile' or (WORKFLOW_MODE == 'free' and is_rule_enabled('gr_single_fov_subtile')):
     # Subtile workflow: subtile rules (gr/lrsf) take priority over deep rules

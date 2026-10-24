@@ -11,6 +11,7 @@
 # is then that of the FOV's reference image (the file reference_image names, default
 # images/ref_merged/{fovID}.tif), which the adapter reads (_assembly_cells).
 # READS_ASSIGNMENT_GEOMETRY is the one input that places the FOV: the tile configuration, or that grid.
+# The molecule input is MOLECULE_TABLE (common.smk), the file of the configured producer.
 if ASSEMBLY_BLOCK:
     from starfinder._snakemake import _reference_image_inputs
     READS_ASSIGNMENT_GEOMETRY = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])
@@ -27,7 +28,7 @@ rule reads_assignment:
         expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
         expand("{dapi_dir}/{{fovID}}.tif", dapi_dir=DAPI_DIR, fovID=FOVS),
         expand("{output_dir}/images/stardist_segmentation/{{fovID}}.tif", output_dir=OUTPUT_DIR, fovID=FOVS),
-        expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR, fovID=FOVS),
+        MOLECULE_TABLE,
         expand("{output_dir}/documents/genes.csv", output_dir=OUTPUT_DIR),
         READS_ASSIGNMENT_GEOMETRY,
     output:

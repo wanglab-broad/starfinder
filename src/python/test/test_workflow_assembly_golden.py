@@ -46,6 +46,7 @@ import tifffile
 
 from starfinder._snakemake import _run_reads_assignment
 
+from .coordination_helpers import write_molecules_csv
 from .test_assignment_golden import GENES, legacy_assignment, write_genes
 from .test_workflow_stitching_golden import _affine, legacy_tile_config
 
@@ -244,8 +245,10 @@ class _Wildcards(dict):
     __getattr__ = dict.__getitem__
 
 
-def _config(root):
-    return {"backend": "python", "dataset_id": "data", "sample_id": "sample", "output_id": "out",
+def _config(root, *, legacy=True):
+    """The workflow configuration of the sample; ``legacy`` names the legacy route (backend matlab), whose
+    rsf_single_fov writes the one-based goodSpots CSVs, else the Python backend and fovs/<fov>/molecules.csv."""
+    return {"backend": "matlab" if legacy else "python", "dataset_id": "data", "sample_id": "sample", "output_id": "out",
             "root_input_path": str(root / "input"), "root_output_path": str(root / "output"),
             "fov_id_pattern": FOV_ID_PATTERN, "img_z": TILE_ZYX[0], "img_row": IMG_ROW, "img_col": IMG_COL,
             "voxel_size_z": 0.35, "voxel_size_xy": 0.2,
@@ -254,8 +257,9 @@ def _config(root):
                       "reads_assignment": {"parameters": {"expand_labels": False, "dilation_distance": 0}}}}
 
 
-def build_sample(root, dimensions, *, cells=CELLS, placement=STITCHING, molecules=None):
-    """The sample's output folder: annotation, genes, codebook, tile_config and per FOV labels and goodSpots.
+def build_sample(root, dimensions, *, cells=CELLS, placement=STITCHING, molecules=None, legacy=True):
+    """The sample's output folder: annotation, genes, codebook, tile_config and per FOV labels and molecules: the
+    legacy route's goodSpots CSV, or with ``legacy`` False fovs/<fov>/molecules.csv (row ``i`` the spot ``m<i>``).
 
     The FOVs are always cut at the offsets of STITCHING; placement gives the dataset.xml from
     which tile_config is computed, so a changed placement moves the rectangles and global
@@ -278,7 +282,12 @@ def build_sample(root, dimensions, *, cells=CELLS, placement=STITCHING, molecule
         image = labels if dimensions == "3d" else labels.max(axis=0)
         tifffile.imwrite(out / "images" / "stardist_segmentation" / f"{fov_id}.tif", image)
         tifffile.imwrite(out / "images" / "DAPI" / f"{fov_id}.tif", np.zeros(image.shape, np.uint8))
-        write_reads(out / "signal" / f"{fov_id}_goodSpots.csv", (molecules or {}).get(number, local))
+        rows = (molecules or {}).get(number, local)
+        if legacy:
+            write_reads(out / "signal" / f"{fov_id}_goodSpots.csv", rows)
+        else:
+            write_molecules_csv(out / "fovs" / fov_id / "molecules.csv", f'["data","sample","{fov_id}",null]',
+                                [p for p, _ in rows], [g for _, g in rows])
     return frame, inputs, out
 
 

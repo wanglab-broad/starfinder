@@ -139,19 +139,19 @@ class TestFOVPipeline:
 
         # Only save if there are good spots
         if len(spot_table(fov, accepted=True)) > 0:
-            path = fov.export_spots(slot="goodSpots")
+            path = fov.export_spots(slot="molecules")
             assert path.exists()
 
             df = pd.read_csv(path)
             assert "x" in df.columns
             assert "y" in df.columns
             assert "z" in df.columns
-            assert "gene" in df.columns
+            assert "gene_id" in df.columns
 
-            # Coordinates should be 1-based (minimum >= 1)
-            assert df["x"].min() >= 1
-            assert df["y"].min() >= 1
-            assert df["z"].min() >= 1
+            # Coordinates should be 0-based (minimum >= 0)
+            assert df["x"].min() >= 0
+            assert df["y"].min() >= 0
+            assert df["z"].min() >= 0
 
     def test_save_ref_merged(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
@@ -234,9 +234,10 @@ class TestFOVPaths:
 
     def test_paths_keep_the_attributes_of_the_base_revision(self, tmp_path):
         """FOV.paths keeps its class name and every public attribute it had before the path object moved to
-        starfinder._layout (W-548; the list recorded at 81fead1), signal_png included."""
+        starfinder._layout (W-548; the list recorded at 81fead1), except the unused signal PNG path helper, which
+        W-562 deleted (docs/migration.md), and with spot_table, which W-562 added."""
         fov = Dataset(tmp_path / "in", tmp_path / "out", "d", "s", "o").fov("FOV_001")
         assert type(fov.paths).__name__ == "_FovPaths"
         assert sorted(name for name in dir(fov.paths) if not name.startswith("_")) == [
             "checkpoint_dir", "fov_id", "gr_log", "nr_log", "output_root", "ref_merged_tif", "rsf_log", "score_log",
-            "shift_log", "signal_csv", "signal_png", "subtile_dir"]
+            "shift_log", "signal_csv", "spot_table", "subtile_dir"]

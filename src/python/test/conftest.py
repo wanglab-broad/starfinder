@@ -102,7 +102,7 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
         .extract_intensities()
         .decode_reads().filter_reads()
     )
-    fov.export_spots(slot="goodSpots")
+    fov.export_spots(slot="molecules")
     fov.save_processing_log()
 
     return fov, ds, small_ground_truth

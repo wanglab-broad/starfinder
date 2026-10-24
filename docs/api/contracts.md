@@ -13,7 +13,7 @@ units unless a function explicitly says otherwise. Unknown calibration stays unk
 | Spot coordinates | `(N, 3)` or DataFrame `z, y, x` | Zero-based voxel indices |
 | Raw extracted intensities | `(N, C, R)` | Float64 neighborhood sums, rounds in caller-supplied order |
 | Dense displacement field | `(Z, Y, X, 3)` | Last axis `(dz, dy, dx)`, backward sampling |
-| Signal CSV | `x, y, z[, gene]` by default | One-based coordinates, written by `FOV.export_spots` |
+| Molecule table | `molecules.csv`: `spot_namespace, spot_id, z, y, x, gene_id, entry_id, qc_score`; `reads.csv` on request | Zero-based coordinates and the spot identities, a typed CSV written by `FOV.export_spots`; the legacy route's `goodSpots` CSV is one-based `x, y, z, gene` |
 
 ## Registration transforms
 
@@ -439,14 +439,16 @@ accepted = filtered.accepted
 ```
 
 FOV exposes the same three operations and stores `intensity_result`,
-`decoding_result` and `filtering_result`. Its current output adapters preserve
-shared MATLAB-facing columns/filenames. Historical saved-tensor diagnostic
+`decoding_result` and `filtering_result`. Its output tables follow the Python
+package's design (W-562): zero-based, identity-preserving `molecules.csv` and `reads.csv`. Historical saved-tensor diagnostic
 scripts explicitly declare positional channel/round axes; missing historical
 physical geometry remains unverified. No historical notebook outputs are rerun.
 
-{meth}`starfinder.dataset.FOV.export_spots` copies selected columns, increments
-`x`, `y`, and `z` by one, and leaves the in-memory table unchanged. Subtile tables
+{meth}`starfinder.dataset.FOV.export_spots` writes the joined columns with the
+in-memory zero-based `z`, `y`, `x` and leaves the in-memory table unchanged;
+{func}`starfinder.assignment.load_molecules` reads `molecules.csv` back with its
+identities. Subtile tables
 use one-based inclusive start/end coordinates and one-based tile IDs;
 {class}`starfinder.dataset.CropWindow` uses zero-based, end-exclusive slices.
-Evaluation functions expect zero-based `z, y, x`; convert exported
-signal CSVs before using them.
+Evaluation functions expect zero-based `z, y, x`, as the exported tables hold them;
+convert the one-based `goodSpots` CSVs of the legacy route before using them.

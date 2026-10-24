@@ -64,7 +64,9 @@ class MoleculeTable:
     shares. ``sha256``, set at construction, is the SHA-256 of the six columns in
     canonical form: rows sorted by ``(spot_namespace, spot_id)``, then each column's
     name, dtype and values, so it does not depend on row order. Build it with
-    :func:`molecule_table` or :func:`import_legacy_molecules_csv`.
+    :func:`molecule_table`, read it from ``molecules.csv`` with
+    :func:`load_molecules`, or from a legacy one-based CSV with
+    :func:`import_legacy_molecules_csv`.
 
     Raises
     ------
@@ -157,7 +159,7 @@ def molecule_table(detection, reads, *, genes, population: str = "final") -> Mol
 
     The join and its checks are those of :func:`starfinder.readout.export_spots`.
     ``population="final"`` takes the accepted reads of a
-    :class:`~starfinder.readout.ReadFilteringResult` (the goodSpots population);
+    :class:`~starfinder.readout.ReadFilteringResult` (the molecules.csv population);
     ``"called"`` takes the reads whose ``call_status`` is ``assigned`` from a
     :class:`~starfinder.readout.ReadDecodingResult` or a filtering result,
     before filtering. Positions are the detection's zero-based ``z, y, x``.
@@ -200,13 +202,64 @@ def molecule_table(detection, reads, *, genes, population: str = "final") -> Mol
     return MoleculeTable(table, _genes(genes), population, source)
 
 
+def load_molecules(path: Path | str, *, genes, spot_namespace: str | None = None) -> MoleculeTable:
+    """The molecules of a ``molecules.csv`` that ``FOV.export_spots`` wrote, with their identities.
+
+    The file is the typed, zero-based CSV of the columns ``spot_namespace,
+    spot_id, z, y, x, gene_id, entry_id, qc_score``; the table keeps the six
+    molecule columns, rows in file order, and its population is ``final``.
+    ``spot_namespace`` is the FOV's namespace: given, every row must have it;
+    None takes the rows' one namespace (an empty file then needs it). The
+    source records the namespace, the path and the file's SHA-256. For a
+    legacy one-based ``x, y, z, gene`` file use :func:`import_legacy_molecules_csv`.
+
+    Parameters
+    ----------
+    path : str or Path
+        The ``molecules.csv`` file.
+    genes : sequence of str
+        The ordered gene list (``Codebook.genes``).
+    spot_namespace : str or None
+        The FOV's spot namespace, or None to read it from the rows.
+
+    Raises
+    ------
+    FileNotFoundError
+        The file does not exist.
+    ValueError
+        Other columns than those of ``molecules.csv``, an empty file without
+        ``spot_namespace``, and every check of :class:`MoleculeTable`.
+    """
+    from starfinder._records import _read_table, file_sha256
+    from starfinder.readout.spots import MOLECULE_DTYPES
+
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"molecule table not found: {path}")
+    header = list(pd.read_csv(path, nrows=0).columns)
+    if header != list(MOLECULE_DTYPES):
+        raise ValueError(f"{path} is not a molecules.csv: it needs exactly the columns {list(MOLECULE_DTYPES)}; "
+                         f"got {header}")
+    frame = _read_table(path, MOLECULE_DTYPES)
+    if spot_namespace is None:
+        found = frame.spot_namespace.dropna().unique().tolist()
+        if len(found) != 1:
+            raise ValueError(f"{path}: pass spot_namespace; the rows hold {len(found)} namespaces")
+        spot_namespace = found[0]
+    table = frame[list(COLUMNS)].reset_index(drop=True)
+    source = {"spot_namespace": spot_namespace, "path": str(path), "sha256": file_sha256(path)}
+    return MoleculeTable(table, _genes(genes), "final", source)
+
+
 def import_legacy_molecules_csv(path: Path | str, *, spot_namespace: str, genes) -> MoleculeTable:
-    """The molecules of a legacy one-based ``x, y, z, gene`` CSV (MATLAB or ``export_spots``).
+    """The molecules of a legacy one-based ``x, y, z, gene`` CSV (``goodSpots``).
 
     Integer and float coordinates are both read; 1 is subtracted from each, and
     the row with zero-based index ``i`` gets the identity ``spot_id = "csv:<i>"``.
     The population is ``final`` (a goodSpots file); the source records the file
-    and its SHA-256. It exists for the workflow adapter.
+    and its SHA-256. It exists for the legacy route: the files of MATLAB's
+    ``rsf_single_fov`` and of ``stitch_subtile`` (the subtile and deep
+    modes); ``molecules.csv`` is read with :func:`load_molecules`.
 
     Raises
     ------

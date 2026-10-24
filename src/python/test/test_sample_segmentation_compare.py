@@ -364,7 +364,7 @@ def cr3(cr, tmp_path_factory):
     """``cr3(scene)``: the fixture's two folders of ``cr`` (built once for the module) and folders with one difference
     each, built once per fixture beside them: another placement (the last FOV 0.5 µm further in x, the route per
     FOV), another gene list (the codebook with one more gene, the route per FOV) and another molecule key set (the
-    last FOV's last goodSpots row removed, the route after fusion; the table is restored afterwards, so the fixture's
+    last FOV's last molecules.csv row removed, the route after fusion; the table is restored afterwards, so the fixture's
     files are as ``cr`` built them)."""
     cache = {}
 
@@ -387,12 +387,12 @@ def cr3(cr, tmp_path_factory):
         genes.dataset.export(SAMPLE, placement=folder.placement_dir, assignment="genes",
                              config=route_config(route="per_fov"), output_dir=out["genes"])
         # Another molecule key set.
-        csv = folder.root / "signal" / f"{folder.scene.ids[-1]}_goodSpots.csv"
+        csv = folder.root / "fovs" / folder.scene.ids[-1] / "molecules.csv"
         original = csv.read_bytes()
-        table = pd.read_csv(csv)
-        assert len(table) >= 1
+        lines = original.decode().splitlines(keepends=True)
+        assert len(lines) >= 2  # the header and at least one molecule
         try:
-            table.iloc[:-1].to_csv(csv, index=False)
+            csv.write_text("".join(lines[:-1]))
             out["molecules"] = folder.root / "export_molecules" / SAMPLE
             export(folder, route_config(segmentation=case.segmentation), output_dir=out["molecules"])
         finally:

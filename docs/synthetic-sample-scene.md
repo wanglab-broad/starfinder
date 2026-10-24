@@ -808,7 +808,9 @@ assembly can be compared with sample-level truth without running a segmenter:
    float precision), in `molecule_fovs` order. `import_legacy_molecules_csv(path,
    spot_namespace=["<dataset>", "<sample>", "<f>", null], genes=codebook.genes)` reads it
    unchanged; its `spot_id` `csv:<row>` maps to `amplicon_id` through `csv_row`. The
-   synthetic package writes the CSV and never imports `starfinder.assignment`.
+   synthetic package writes the CSV and never imports `starfinder.assignment`. This is
+   a different, one-based file from the zero-based `fovs/<fov_id>/molecules.csv` that
+   `FOV.export_spots` writes under an output root (W-562; {doc}`migration`).
 3. **Assign and assemble.** `assign_molecules` per FOV, then `assemble(placement,
    inputs)`: with the placement from `stitch` on the stain images (the full chain), or with
    one built from the placement truth by `placement_from_table` (assembly alone; see
@@ -979,6 +981,9 @@ schema per table, and versions the addition independently of generator version 6
   fovs/<fov_id>/labels/nuclei.tif, fovs/<fov_id>/labels/cells.tif
   fovs/<fov_id>/molecules.csv   # legacy one-based x, y, z, gene (the no-segmenter path)
 ```
+
+This scene file is one-based and differs from the zero-based `molecules.csv` that
+`FOV.export_spots` writes (W-562).
 
 Units are in the column names' tables above: µm in the sample frame, voxel indices in
 the FOV frame, radians for angles; IDs are strings except the uint32 label values

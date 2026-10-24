@@ -33,9 +33,11 @@ from .assembly_fixtures import (
     golden_placement,
     golden_results,
     placement,
+    spot_namespace,
     unit_grid,
     with_record,
 )
+from .coordination_helpers import write_molecules_csv
 
 IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 LN_Z, LN_XY = 0.346255, 0.194398
@@ -256,7 +258,8 @@ def export_folder(tmp_path, *, dimensions="3d", placement_result=None, conflicts
     The saved placement under ``stitching/sample1/``, each FOV's §2.9 assignment folder
     ``checkpoints/<fov>/assignment/default/``, ``images/ref_merged/<fov>.tif`` (the grid, uint8
     values ``(3z + y + 2x) mod 200 + 1``), the ``reference_stain`` (uint8 ``(z + y + x) mod
-    251``) and each FOV's ``signal/<fov>_goodSpots.csv`` (one-based x, y, z, gene).
+    251``) and each FOV's ``fovs/<fov>/molecules.csv`` (the assignment's molecules, their identities and zero-based
+    z, y, x, as ``FOV.export_spots`` writes them).
     """
     shape = TILE_ZYX if dimensions == "3d" else (1,) + TILE_ZYX[1:]
     grids = {fov: unit_grid(shape) for fov in GOLDEN_IDS}
@@ -276,10 +279,9 @@ def export_folder(tmp_path, *, dimensions="3d", placement_result=None, conflicts
         write_assignment(assignment_directory(root / "checkpoints" / fov, conflicts_name),
                          with_record(results[fov], name=conflicts_name), metadata=metadata)
         molecules = results[fov].molecules
-        csv = root / "signal" / f"{fov}_goodSpots.csv"
-        csv.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame({"x": molecules.x + 1, "y": molecules.y + 1, "z": molecules.z + 1,
-                      "gene": molecules.gene_id.astype(str)}).to_csv(csv, index=False)
+        write_molecules_csv(root / "fovs" / fov / "molecules.csv", spot_namespace(fov),
+                            molecules[["z", "y", "x"]].to_numpy(), molecules.gene_id.astype(str),
+                            molecules.spot_id.astype(str))
     return ExportFolder(dataset, result, results, grids)
 
 

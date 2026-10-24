@@ -3,6 +3,7 @@
 Run from src/python with a new external output directory; see getting-started.md.
 """
 
+from starfinder.assignment import load_molecules
 from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig
 from starfinder.spot_finding import LocalMaximaConfig
 import argparse
@@ -68,31 +69,36 @@ def main(output: Path) -> None:
             np.testing.assert_allclose(shift, expected, atol=1, rtol=0)
             detected_shifts[round_name] = [float(value) for value in shift]
 
-        # Keep diagnostic columns in allSpots; the standard goodSpots CSV is x,y,z,gene.
-        all_path = fov.export_spots("allSpots", columns=["spot_namespace", "spot_id", "x", "y", "z", "gene", "color_seq", "call_status"])
-        good_path = fov.export_spots("goodSpots")
+        # The reads table, on request, keeps diagnostic columns; molecules.csv holds the accepted molecules.
+        reads_path = fov.export_spots("reads", columns=["spot_namespace", "spot_id", "z", "y", "x", "gene_id",
+                                                        "observed_color_sequence", "call_status"])
+        molecules_path = fov.export_spots()
         fov.save_processing_log()
-        all_saved = pd.read_csv(all_path, dtype={"color_seq": str})
-        good_saved = pd.read_csv(good_path)
-        assert list(good_saved.columns) == ["x", "y", "z", "gene"]
-        assert len(all_saved) == len(fov.spot_result.spots)
-        assert len(good_saved) == len(fov.filtering_result.accepted)
-        np.testing.assert_array_equal(
-            good_saved[["x", "y", "z"]], fov.spot_result.spots.merge(fov.filtering_result.accepted[["spot_id"]], on="spot_id", validate="one_to_one")[["x", "y", "z"]] + 1,
-        )
+        reads_saved = pd.read_csv(reads_path, dtype={"observed_color_sequence": str}, na_values=["<NA>"],
+                                  keep_default_na=False)
+        molecules = load_molecules(molecules_path, genes=dataset.codebook.genes)
+        assert list(pd.read_csv(molecules_path, nrows=0).columns) == [
+            "spot_namespace", "spot_id", "z", "y", "x", "gene_id", "entry_id", "qc_score"]
+        assert len(reads_saved) == len(fov.spot_result.spots)
+        assert len(molecules) == len(fov.filtering_result.accepted)
+        # Zero-based coordinates, equal to the detection's, with the spot identities kept.
+        accepted = fov.spot_result.spots.merge(fov.filtering_result.accepted[["spot_id"]], on="spot_id",
+                                               validate="one_to_one")
+        assert molecules.table.spot_id.tolist() == accepted.spot_id.tolist()
+        np.testing.assert_array_equal(molecules.table[["z", "y", "x"]], accepted[["z", "y", "x"]])
         for axis, size in zip(("z", "y", "x"), (8, 128, 128)):
-            assert all_saved[axis].between(1, size).all()
+            assert reads_saved[axis].between(0, size - 1).all()
         record = {
             "generated_spots": len(truth["fovs"][fov_id]["spots"]),
             "detected_spots": len(fov.spot_result.spots),
             "retained_reads": len(fov.filtering_result.accepted),
             "detected_shifts_zyx": detected_shifts,
-            "gene_counts": {gene: int(n) for gene, n in good_saved["gene"].value_counts().items()},
-            "molecules_csv": str(good_path.relative_to(output)),
+            "gene_counts": {gene: int(n) for gene, n in molecules.table["gene_id"].value_counts().items()},
+            "molecules_csv": str(molecules_path.relative_to(output)),
         }
         summary["fovs"][fov_id] = record
         print(f"{fov_id}: {record['detected_spots']} detected, {record['retained_reads']} retained")
-        print(good_saved.head().to_string(index=False))
+        print(molecules.table.head().to_string(index=False))
         del fov  # Process FOVs sequentially without retaining their image arrays.
 
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")

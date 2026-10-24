@@ -23,9 +23,10 @@ from ._config import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, CELL_STATUSES, C
                       AssignmentConfig, CorrespondenceConfig)
 from ._correspondence import match_nuclei
 from ._diagnostics import FOVOwnership, plot_assignment, summarize_assignment
-from ._molecules import MoleculeTable, molecule_table, import_legacy_molecules_csv
+from ._molecules import MoleculeTable, molecule_table, load_molecules, import_legacy_molecules_csv
 
 __all__ = ["assign_molecules", "AssignmentResult", "AssignmentConfig", "CorrespondenceConfig",
-           "MoleculeTable", "molecule_table", "import_legacy_molecules_csv", "labels_at_positions", "match_nuclei",
+           "MoleculeTable", "molecule_table", "load_molecules", "import_legacy_molecules_csv", "labels_at_positions",
+           "match_nuclei",
            "ASSIGNMENT_STATUSES", "CELL_STATUSES", "CELL_CORRESPONDENCE", "NUCLEUS_STATUSES",
            "COMPARTMENT_STATES", "summarize_assignment", "plot_assignment", "FOVOwnership", "write_h5ad"]

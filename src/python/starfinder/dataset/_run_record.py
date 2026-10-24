@@ -65,6 +65,18 @@ def _transforms(fov, written):
     return transforms
 
 
+def add_output(path, slot, entry):
+    """Set ``outputs.<slot>`` of a written run.json to ``entry`` and rewrite the record atomically.
+
+    ``FOV.export_spots`` calls it after its latest checkpointed run; the other
+    keys and ``format_version`` are kept.
+    """
+    import json
+    data = json.loads(Path(path).read_text())
+    data.setdefault("outputs", {})[slot] = entry
+    _records.write_json(data, path)
+
+
 class _RunRecord:
     """Mutable run.json content; rewritten atomically at step boundaries."""
 

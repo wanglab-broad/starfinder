@@ -716,7 +716,7 @@ def test_sa5_assigned_where_it_lies(routes, scene):
     retained = molecules[molecules["assembly_status"].eq("retained").to_numpy(dtype=bool)]
     same = 0
     for row in retained.itertuples(index=False):
-        truth = true_cell[rows.loc[(row.fov_id, int(row.spot_id.split(":")[1])), "amplicon_id"]]
+        truth = true_cell[rows.loc[(row.fov_id, int(row.spot_id.removeprefix("m"))), "amplicon_id"]]
         truth = 0 if pd.isna(truth) else int(truth)   # an ambient molecule has no true cell
         cell = 0 if pd.isna(row.cell_id) else int(row.cell_id)
         if cell == truth:

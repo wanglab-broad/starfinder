@@ -122,22 +122,21 @@ All paths below are relative to `QUICKSTART_OUTPUT`:
 | `input/codebook.csv` | `entry_id,gene_id,color_sequence`; the entry ID is the nucleotide barcode, and the color sequence its four colors |
 | `input/ground_truth.json` | Shape, seed, rounds, genes and FOV records; each spot has gene/barcode/color sequence and 0-based continuous `(z,y,x)` reference position; shifts are `(dz,dy,dx)` |
 | `input/formed.csv`, `input/round_truth.csv`, `input/scene_truth.csv` | Formed amplicons (`gene_id`, `color_sequence`), their per-round positions and visibility, and the per-round view of the channel each color sequence selects (MATLAB-compatible `gene` and `color_seq` columns) |
-| `results/signal/FOV_*_allSpots.csv` | All detected candidates, including coordinates, reference `intensity`, 0-based `channel`, per-round colors/scores, and `color_seq` |
-| `results/signal/FOV_*_goodSpots.csv` | Filtered molecule candidates: exactly `x,y,z,gene`; one row per retained read, not per cell |
+| `results/fovs/FOV_*/reads.csv` | Every detected candidate with its read, as the quickstart requests it: `spot_namespace,spot_id,z,y,x,gene_id,observed_color_sequence,call_status` (`gene_id` is `<NA>` for an unassigned read) |
+| `results/fovs/FOV_*/molecules.csv` | Filtered molecule candidates: `spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score`; one row per retained read, not per cell (`qc_score` is `<NA>`: the quickstart does not score reads) |
 | `results/log/gr_shifts/FOV_*.txt` | CSV despite `.txt` suffix: `fov_id,round,row,col,z`; row/col/z are detected `(dy,dx,dz)` displacements |
 | `results/log/FOV_*_rsf.txt` | Processing summary: backend, timestamp, rounds/reference, global shifts, local-registration state and spot counts |
 | `summary.json` | Per-FOV generated/detected/retained counts, detected shifts, gene counts and molecule CSV paths |
 
 In memory, image axes are `(Z,Y,X,C)` and spot coordinates are **0-based**.
-Both exported signal CSVs use **1-based** `x,y,z` voxel coordinates for MATLAB
-compatibility. Column order in `allSpots` starts with `z,y,x`; select coordinates
-by name. Saving does not change the in-memory coordinates. There is no physical
-calibration, cell ID, or cross-FOV stitching in these files.
+Both exported tables keep those **0-based** `z,y,x` voxel coordinates and each
+read's identity `(spot_namespace, spot_id)`; select coordinates by name. They are
+typed CSVs: a missing value is written `<NA>`. There is no physical calibration,
+cell ID, or cross-FOV stitching in these files.
 
-A `{round}_color` is a string `1`–`4` for the winning channel, `M` for a tie, or
-`N` for a NaN maximum. A `{round}_score` is `-log(maximum L2-normalized channel
-intensity)`, with infinity for ties/NaNs. `color_seq` concatenates colors in
-`round1`–`round4` order. Read it as a string. Filtration here uses exact codebook
+`observed_color_sequence` concatenates the winning color of each round in
+`round1`–`round4` order: a string `1`–`4` for the winning channel, `M` for a tie, or
+`N` for a NaN maximum. Read it as a string. Filtration here uses exact codebook
 membership; scores are diagnostics, not an additional filtering threshold.
 
 Shift logs contain the **detected displacement**, the same value as the
@@ -148,8 +147,9 @@ sampling it at `p + (-2,3,2)`. See the
 
 The script asserts input shape/dtype, nonempty filtered outputs, valid codebook
 labels, four-color sequence format, agreement of detected versus generated
-shifts within one voxel per axis, CSV row counts, coordinate bounds and the
-1-based export conversion. To inspect both output tables yourself:
+shifts within one voxel per axis, CSV row counts, coordinate bounds and that the
+molecule table read back with `load_molecules` holds the in-memory identities and
+coordinates. To inspect the molecule tables yourself:
 
 ```bash
 uv run python - <<'PY'
@@ -158,11 +158,11 @@ from pathlib import Path
 import pandas as pd
 
 root = Path(os.environ["QUICKSTART_OUTPUT"])
-for path in sorted((root / "results" / "signal").glob("*_goodSpots.csv")):
-    molecules = pd.read_csv(path)
-    print(path.name, molecules.shape)
+for path in sorted((root / "results" / "fovs").glob("*/molecules.csv")):
+    molecules = pd.read_csv(path, na_values=["<NA>"], keep_default_na=False)
+    print(path.parent.name, molecules.shape)
     print(molecules.head().to_string(index=False))
-    print(molecules.groupby("gene").size().to_string())
+    print(molecules.groupby("gene_id").size().to_string())
 PY
 ```
 

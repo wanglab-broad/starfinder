@@ -302,7 +302,8 @@ channel. The schema accepts `direct` only with `backend: python`. In `direct` mo
   `reads_filtration.end_base`, `split_index`, `n_barcode_segments` and
   `exclude_invalid_endpoints` have no meaning and raise.
 
-`goodSpots` keeps the columns `x, y, z, gene`.
+The Python `rsf_single_fov` writes the same molecule table as in multiplexed mode,
+`fovs/{fovID}/molecules.csv`; its `entry_id` is `<round>/<channel>`.
 
 ```yaml
 backend: python
@@ -513,7 +514,8 @@ sample-level rules for a configuration that has them. The specification is the
   `create_sample_reads_assignment` do not run. One rule per sample, `export_sample`, runs
   every part of `Dataset.export` after the placement and, on the route per FOV, every
   FOV's `reads_assignment`; on the route after fusion it needs no output of
-  `reads_assignment`, but the FOVs' molecule tables `signal/{fovID}_goodSpots.csv`, their
+  `reads_assignment`, but the FOVs' molecule tables (`fovs/{fovID}/molecules.csv`, or on the
+  legacy route of {doc}`workflows`, "Molecule tables", `signal/{fovID}_goodSpots.csv`), their
   reference images (the files `reference_image` names) and, with `fuse` on, the source
   images of `images` that are files of the workflow (`reference_merged` and each
   `<name>=file:<pattern>`; the saved form of `reference_stain` is read but is no declared

@@ -21,7 +21,7 @@ config = PipelineConfig(
     filtering=ReadFilterConfig(),
 )
 fov = dataset.fov("FOV_001").run(config, execution=ExecutionConfig("streaming"))
-fov.export_spots()  # unchanged goodSpots filename, 1-based XYZ
+fov.export_spots()  # fovs/FOV_001/molecules.csv: identities, zero-based ZYX
 ```
 
 Load the dataset codebook before decoding. None disables a stage. The sequence is
@@ -364,11 +364,17 @@ errors propagate. A recovered result is labeled with its actual method.
 
 `readout.export_spots(detection, reads, path, accepted_only=True)` joins complete
 filtering results to detections one-to-one on `(spot_namespace, spot_id)`, then
-selects accepted rows. Decoding results also work with `accepted_only=False`.
+selects accepted rows: the molecule table `molecules.csv`
+(`spot_namespace, spot_id, z, y, x, gene_id, entry_id, qc_score`). With
+`accepted_only=False` a decoding or filtering result gives the read table
+`reads.csv`, every read with its detection, each column name once (in direct
+readout `round` and `channel` are checked to agree and kept from the reads).
 Duplicate, missing or foreign keys fail; row order never defines identity.
-Coordinates convert from zero-based ZYX to one-based XYZ exactly at export.
-Empty detections and all-rejected results produce header-only CSVs. The default
-columns and shared filenames remain compatible with downstream consumers.
+Coordinates stay zero-based ZYX, and the file is a typed CSV (`<NA>` for missing
+values). Empty detections and all-rejected results produce header-only CSVs.
+`FOV.export_spots(slot)` writes them to `fovs/<fov_id>/molecules.csv` or `reads.csv`
+and records them in the FOV's `run.json` (`outputs`). The one-based `goodSpots` CSV
+remains the file of the legacy route only ({doc}`workflows`, "Molecule tables").
 
 `run(config, checkpoints=CheckpointConfig())` also saves registered images,
 candidates with signals and pre-QC decoding per FOV, plus a `run.json` record.

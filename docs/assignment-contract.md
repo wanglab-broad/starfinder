@@ -112,7 +112,7 @@ New names under N1:
 | --- | --- | --- |
 | Entry | `assign_molecules(molecules, cells, *, grid, nuclei=None, correspondence=None, config=AssignmentConfig())` | function |
 | Result | `AssignmentResult` | frozen dataclass |
-| Molecule input | `MoleculeTable`; `molecule_table(detection, reads, *, genes, population="final")`; `import_legacy_molecules_csv(path, *, spot_namespace, genes)` (legacy one-based CSV) | frozen dataclass, functions |
+| Molecule input | `MoleculeTable`; `molecule_table(detection, reads, *, genes, population="final")`; `load_molecules(path, *, genes, spot_namespace=None)` (`molecules.csv`); `import_legacy_molecules_csv(path, *, spot_namespace, genes)` (legacy one-based CSV) | frozen dataclass, functions |
 | Config | `AssignmentConfig`, `CorrespondenceConfig` | frozen dataclasses |
 | Expansion | `ExpandLabelsConfig` and `expand_labels` of {doc}`segmentation-contract`, unchanged | reused |
 | Statuses | `ASSIGNMENT_STATUSES = ("assigned", "unassigned", "excluded_cell", "outside_grid")`; `CELL_STATUSES = ("kept", "excluded_no_nucleus")`; `CELL_CORRESPONDENCE = ("matched", "ambiguous", "no_nucleus", "unavailable")`; `NUCLEUS_STATUSES = ("matched", "ambiguous", "no_cell")`; `COMPARTMENT_STATES = ("available", "withheld", "no_nucleus", "unavailable")` | tuples |
@@ -165,13 +165,20 @@ with `expansion`. The record says how the territories were obtained
   * `molecule_table(detection, reads, *, genes, population="final")` joins a
     `SpotFindingResult` with a read result by `(spot_namespace, spot_id)`, as
     `export_spots` does. `population="final"` takes the accepted reads of a
-    `ReadFilteringResult` (the goodSpots population); `"called"` takes the reads whose
+    `ReadFilteringResult` (the population of `molecules.csv`); `"called"` takes the reads whose
     `call_status` is `assigned` from any read result, before filtering. The source record
     names the result types, the filter config and the population.
+  * `load_molecules(path, *, genes, spot_namespace=None)` reads the `molecules.csv` that
+    `FOV.export_spots` writes (the typed, zero-based columns `spot_namespace, spot_id, z,
+    y, x, gene_id, entry_id, qc_score`; since W-562), keeps the six molecule columns with
+    their identities, in file order, as population `final`; `spot_namespace`, when given,
+    must be every row's (an empty file needs it); its source record names the namespace,
+    the path and the file's SHA-256.
   * `import_legacy_molecules_csv(path, *, spot_namespace, genes)` reads a legacy one-based
-    `x, y, z, gene` CSV (MATLAB or `export_spots`, integer or float), subtracts 1, and
-    gives each row the identity `spot_id = "csv:<row>"`; its source record names the file
-    and its SHA-256. It exists for the workflow adapter.
+    `x, y, z, gene` CSV (MATLAB's, or the subtile and deep route's goodSpots; integer or
+    float), subtracts 1, and gives each row the identity `spot_id = "csv:<row>"`; its
+    source record names the file and its SHA-256. It exists for the legacy route of the
+    workflow adapter.
   * Validation, in both constructors: unique, non-null keys; one FOV identity (the
     `spot_namespace` list `[dataset_id, sample_id, fov_id, subtile_id]`, or the sample
     identity `[dataset_id, sample_id, null, null]` with null `fov_id` and `subtile_id`,
@@ -893,7 +900,7 @@ name, inputs and outputs.
 | Legacy input or key | Translation |
 | --- | --- |
 | `images/stardist_segmentation/{fovID}.tif` | `import_labels` with the target the segmentation adapter infers (W-307: `cell` for the `overlay` input, else `nucleus`); its grid is declared from the file's shape and the configured `voxel_size_z`, `voxel_size_xy`, recorded as declared. When `rules.stardist_segmentation.parameters.expand_labels` is true, the file was expanded in segmentation and no original mask exists: the adapter raises `ValueError` naming that key and the replacement (set it to false and give the distance as `reads_assignment.parameters.dilation_distance` with `expand_labels: true`, so assign expands once and keeps both masks). |
-| `signal/{fovID}_goodSpots.csv` | `import_legacy_molecules_csv` with the FOV's `spot_namespace` and the codebook's genes; integer and float coordinates are both accepted. |
+| The FOV's molecule table ({doc}`workflows`, "Molecule tables") | `fovs/{fovID}/molecules.csv` of the Python `rsf_single_fov`: `load_molecules` with the FOV's `spot_namespace` and the codebook's genes, the identities kept (since W-562). The legacy route's `signal/{fovID}_goodSpots.csv` (MATLAB's `rsf_single_fov`, `stitch_subtile`): `import_legacy_molecules_csv` with the same arguments; integer and float coordinates are both accepted. |
 | `documents/genes.csv` | Checked against the codebook's genes; a gene of the CSV absent from the codebook, or the reverse, raises `ValueError` naming them. |
 | `parameters.expand_labels: false` | `expansion: null`; `dilation_distance` is ignored and recorded. |
 | `parameters.expand_labels: true`, `dilation_distance: d` | `expansion: {distance: d, unit: pixel, mode: planar}` with `legacy_pixel_expansion=True` (the declared grid is calibrated), when `rules.stardist_segmentation.parameters.expand_labels` is false. |

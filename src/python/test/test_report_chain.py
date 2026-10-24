@@ -558,7 +558,7 @@ def test_z1_one_plane(scene_chain_plane, plane_pages):  # noqa: F811
 @pytest.fixture(scope="module")
 def scene_no_run_json(scene_chain, tmp_path_factory):  # noqa: F811
     """``scene_chain``'s output root with every ``checkpoints/<fov>/run.json`` removed (``cells``), and a second root
-    with no checkpoint folder, exported with ``assignment=None`` from the rule outputs ``signal/<fov>_goodSpots.csv``
+    with no checkpoint folder, exported with ``assignment=None`` from the rule outputs ``fovs/<fov>/molecules.csv``
     alone (``molecules_only``; the reference images ``images/ref_merged`` fused, since the stains live under the
     checkpoint folder)."""
     from starfinder.dataset import Dataset, RoundState

@@ -438,7 +438,8 @@ stage directly and returns a dict keyed by the FOV attributes it restores.
 ## run.json
 
 `run.json` is replaced atomically (a temporary file, then `os.replace`) when the
-run starts, after each completed step and when the run ends. It contains:
+run starts, after each completed step and when the run ends, and again when
+`FOV.export_spots` records a table in `outputs`. It contains:
 
 | Field | Content |
 | --- | --- |
@@ -459,6 +460,7 @@ run starts, after each completed step and when the run ends. It contains:
 | `transforms` | Per moving round that `run` registered, in processing order: `reference` (the reference round), `results` (the round's results in order, each `{step, transform, diagnostics}` as in `registered/transforms.json`) and `application_config` (the round's `WarpConfig`, as `applications.<round>` holds it). A dense field's `field` or a B-spline's `coefficients` is `<round>_field.npz` when the stage `registered` wrote that file, else `null`; the arrays are never in `run.json`. `{}` without registration; the reference round and a round whose registration failed have no entry (since W-451). |
 | `counts` | Spots, intensities, decoding call statuses, scoring counts (`scoring`: total, scored, `no_assignment` and `background_unavailable`, since W-294, when the reads were scored), deduplication counts (`deduplication`: total, groups, `merged_reads` and `conflicting_groups`, since W-295, when the reads were deduplicated) and filtering counts (`filtering`: total, accepted and rejected; when the filter checked endpoints, with `end_bases` or a codebook layout's segment ends, also `endpoint_valid`, the reads of the correct form, and with segment ends `endpoint_valid_segments`, that count per segment; since W-451). When the reads were scored or deduplicated, `summary` holds the population summary of {py:func}`~starfinder.readout.summarize_reads` (since W-295). |
 | `checkpoint_directory`, `checkpoints` | The FOV directory and the files written for each stage. |
+| `outputs` | Present once {py:meth}`~starfinder.dataset.FOV.export_spots` has written a table after the run: per slot (`molecules`, `reads`), `path` (the file relative to the record's folder, POSIX), `sha256` (of the file's bytes), `molecules_sha256` (the keyed hash of the six molecule columns, `MoleculeTable.sha256`; `null` for `reads` or a file without those columns), `dtypes` (the column dtypes) and `rows`. `export_spots` adds the entry only when the FOV's latest `run` had checkpoints and succeeded, and rewrites the record atomically; a later `run` writes a new record without it (since W-562). |
 
 If a step raises, `run` records `failed` (or `interrupted` for
 `KeyboardInterrupt` and other non-`Exception` errors), with the innermost failing
@@ -467,7 +469,7 @@ fails, the failure is logged and the original exception still propagates.
 Stages written before the failure stay usable. The codebook file is not recorded
 in `inputs`, which lists the loaded images; `codebook` names it.
 
-`transforms`, `codebook`, `workflow_config` and the endpoint counts are additive keys:
+`transforms`, `codebook`, `workflow_config`, the endpoint counts and `outputs` are additive keys:
 `format_version` stays 1, and a `run.json` written without them still loads. The
 workflow's processing rules write `run.json` ({doc}`workflow-configuration`, "Run records
 of the processing rules").

@@ -1,6 +1,9 @@
 # Downstream segmentation and assignment
 
-The sequencing endpoint is `signal/{fovID}_goodSpots.csv`. Producing a cell
+The sequencing endpoint is the FOV's molecule table: `fovs/{fovID}/molecules.csv` of the
+Python `rsf_single_fov`, or on the legacy route (MATLAB's `rsf_single_fov`, and
+`stitch_subtile` in the subtile and deep modes) `signal/{fovID}_goodSpots.csv`
+({doc}`workflows`, "Molecule tables"). Producing a cell
 expression matrix additionally requires aligned morphology images, segmentation
 labels, codebook metadata and tile geometry. The rules below are included for
 both backends. The segmentation and assignment scripts call the Starfinder package
@@ -78,7 +81,7 @@ Behavior to check on real inputs:
 | `create_BigStitcher_macro` | Fused sample `grid.csv` | `images/fused/{sample}/BigStitcher_macro.ijm`; actual script is `create_BigStitcher_macro_1.py` |
 | `run_BigStitcher_macro` | Macro and grid | `images/fused/{sample}/DAPI/dataset.xml`, through configured Fiji executable |
 | `create_tile_config` | Sample's dataset XML and grid | `output/tile_config_{sample}.csv` and `.html` |
-| `reads_assignment` | Annotation, DAPI, segmentation labels, goodSpots CSV, `documents/genes.csv`, sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written |
+| `reads_assignment` | Annotation, DAPI, segmentation labels, the molecule table, `documents/genes.csv`, sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written |
 | `create_sample_h5ad` | Annotation and all per-FOV H5ADs in its sample range | `expr/{sample}_raw.h5ad` |
 | `create_sample_reads_assignment` | Annotation and all per-FOV assignment CSVs in its sample range | `expr/{sample}_reads_assignment.csv` |
 
@@ -92,12 +95,15 @@ arbitrary Fiji XML is not a guaranteed compatible input.
 file, imported with the target the segmentation translation infers (`cell` for the
 `overlay` folder, `nucleus` otherwise) on a grid declared from the file's shape and
 `voxel_size_z`, `voxel_size_xy` (a YX label file is a plane of an `img_z` × Y × X
-grid). The goodSpots CSV's one-based `x,y,z`, integer or float, become zero-based
-positions sampled at `floor(c + 0.5)`; a molecule outside the label grid is
+grid). The molecules of `molecules.csv` keep their identities and zero-based
+positions (`load_molecules`); a legacy goodSpots CSV's one-based `x,y,z`, integer or float,
+become zero-based positions and the row `i` the spot `csv:<i>`
+(`import_legacy_molecules_csv`). Positions are sampled at `floor(c + 0.5)`; a molecule
+outside the label grid is
 `outside_grid`. `documents/genes.csv`, a headerless gene/barcode table not copied from
 INPUT by these rules, gives the matrix columns and must list the same genes as the
 codebook the sequencing rules read (`INPUT/genes.csv`, or the panel with
-`readout_mode: direct`); a goodSpots gene outside it raises before assignment. The
+`readout_mode: direct`); a molecule gene outside it raises before assignment. The
 tile config supplies integer `id,x,y,z` and
 `start_x_norm,end_x_norm,start_y_norm,end_y_norm` columns; the adapter applies the
 global offsets and the non-overlap filter to the package result as the script did,
@@ -110,10 +116,12 @@ assign expands) and gains `size_voxels`, `expanded_size_voxels`, `size_physical`
 `compartments` and the record as JSON text in `uns["assignment"]`; `X` holds the
 float64 whole-cell counts of the kept cells, also of cells without molecules. With
 nuclei, the `nucleus` and `cytoplasm` layers hold 0.0 for a measured zero and NaN
-where compartments are not available. `reads_assignment.csv` keeps its columns and
-gains `spot_id`, `assignment_status`, `cell_id`, `in_expansion`, `original_cell_id`,
-`nucleus_id` and `compartment`; after the rows the overlap filter keeps, it holds every
-`outside_grid` molecule, with `seg_label` 0. The rule also writes, beside them,
+where compartments are not available. `reads_assignment.csv` holds the molecule
+table's columns (on the Python route those of `molecules.csv`, joined to the assignment by
+`(spot_namespace, spot_id)`; on the legacy route the goodSpots columns, joined by row, with
+`spot_id`), then `global_x/y/z` and `seg_label`, and gains `assignment_status`, `cell_id`,
+`in_expansion`, `original_cell_id`, `nucleus_id` and `compartment`; after the rows the
+overlap filter keeps, it holds every `outside_grid` molecule, with `seg_label` 0. The rule also writes, beside them,
 `assignment.png` (`plot_assignment`, the Z-maximum view over the DAPI image) for every
 FOV, `assignment_single_layer.png` (the middle plane `Z // 2`) when the label image is
 ZYX, not for a YX one, and `log.txt`: one line of totals, then the assignment ratio,

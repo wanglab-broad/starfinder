@@ -262,9 +262,12 @@ alone, see {py:func}`~starfinder.readout.bases_to_colors` and
 
 ## Inspect molecule outputs
 
-{py:meth}`~starfinder.dataset.FOV.export_spots` adds one to coordinate columns
-without mutating the in-memory table. Save all diagnostic columns explicitly
-for candidates; the default filtered CSV contains `x,y,z,gene`.
+{py:meth}`~starfinder.dataset.FOV.export_spots` writes the in-memory zero-based
+coordinates and the spot identities without mutating the in-memory table. Request the
+read table (`slot="reads"`) for candidates and select its diagnostic columns
+explicitly; the default molecule table `molecules.csv` holds
+`spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score`, which
+{py:func}`~starfinder.assignment.load_molecules` reads back.
 {py:meth}`~starfinder.dataset.FOV.save_processing_log` writes a processing summary.
 
 ```{literalinclude} examples/recipes.py
@@ -272,15 +275,15 @@ for candidates; the default filtered CSV contains `x,y,z,gene`.
 :pyobject: inspect_outputs
 ```
 
-Expected: 10 candidate rows, 7 molecule-candidate rows; converting exported
-ZYX coordinates back to zero-based indices reproduces the in-memory table.
+Expected: 10 candidate rows, 7 molecule-candidate rows; the exported ZYX
+coordinates are the zero-based indices of the in-memory table.
 The script checks bounds before indexing the reference image. `summary.json`
-contains counts by gene and the molecule CSV path. `results/signal/` contains
+contains counts by gene and the molecule CSV path. `results/fovs/FOV_001/` contains
 both CSVs, and `results/log/` contains the FOV summary and detected shift log.
 
 These are per-FOV voxel coordinates and gene labels, with no cell IDs or
 cross-FOV stitching. Codebook membership alone does not establish true molecules.
-Read `color_seq` as a string to preserve sequence semantics; `M`/`N` mark
+Read `observed_color_sequence` as a string to preserve sequence semantics; `M`/`N` mark
 ambiguous/NaN extraction. See the [quickstart output schema](getting-started.md#inspect-outputs-and-check-completion),
 [workflow output map](workflows.md) and
 [downstream input requirements](workflow-downstream.md) before cell assignment.

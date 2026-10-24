@@ -121,6 +121,9 @@ class Dataset:
     # translated. run.json records them (docs/checkpoints.md, "run.json").
     _reference_files: dict = field(default_factory=dict, repr=False, compare=False, kw_only=True)
     _workflow_config: Path | None = field(default=None, repr=False, compare=False, kw_only=True)
+    # True on the workflow's legacy route (MATLAB's rsf_single_fov, or stitch_subtile in the subtile and deep
+    # modes): export with assignment=None then reads the one-based signal/{fov_id}_goodSpots.csv.
+    _legacy_molecules: bool = field(default=False, repr=False, compare=False, kw_only=True)
 
     def __post_init__(self):
         if self.readout_mode not in READOUT_MODES:
@@ -589,7 +592,7 @@ class Dataset:
         projection, with the dataset's ``(dataset_id, sample_id)``; with
         ``segment`` off the saved sample segmentation is ``reused`` under the
         reuse rule, checked before anything is written); ``assemble`` on each
-        FOV's molecule table ``signal/{fovID}_goodSpots.csv`` with the sample
+        FOV's molecule table ``fovs/{fovID}/molecules.csv`` with the sample
         segmentation (the ``molecules_only`` assembly when ``segment`` could
         not run); then ``fuse_labels`` (the sample's territories as its one
         view) and ``export_spatialdata``, as on the route per FOV.
@@ -602,9 +605,10 @@ class Dataset:
             The placement, or its saved folder ``stitching/<sample>/``.
         assignment : str or None
             The §2.9 assignment name read per FOV, or None for a sample without
-            segmentation: each FOV's ``signal/{fovID}_goodSpots.csv`` is read with
-            :func:`~starfinder.assignment.import_legacy_molecules_csv` and the
-            dataset's gene list.
+            segmentation: each FOV's ``fovs/{fovID}/molecules.csv``
+            (``FOV.export_spots``) is read with
+            :func:`~starfinder.assignment.load_molecules`, its identities kept,
+            and the dataset's gene list.
         config : ExportConfig or None
             None is ``ExportConfig()``.
         output_dir : str or Path

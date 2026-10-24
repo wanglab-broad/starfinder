@@ -68,6 +68,7 @@ import tifffile
 from scipy import ndimage
 
 from .cellular_measures import object_shapes, touching_share, volume_fraction
+from .coordination_helpers import write_molecules_csv
 from .test_segmentation_validation import l12_agreement
 
 pytestmark = [pytest.mark.integration, pytest.mark.validation]
@@ -249,9 +250,11 @@ def _step_generate(a):
         if a["context"] == "tissue2d":
             composite, _ = composite_nuclei_amplicon(scene.context.stains[fov]["PI"], merged)
             _write_zyx(root / "images" / "composite" / f"{fov}.tif", np.asarray(composite, dtype=np.float32))
-        target = root / "signal" / f"{fov}_goodSpots.csv"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(base / "scene" / "fovs" / fov / "molecules.csv", target)
+        # The scene's one-based truth-position CSV as the FOV's molecules.csv: zero-based, row i the spot m<i>.
+        legacy = pd.read_csv(base / "scene" / "fovs" / fov / "molecules.csv", dtype={"gene": str})
+        write_molecules_csv(root / "fovs" / fov / "molecules.csv", _ns(summary["dataset_id"], summary["sample"], fov,
+                                                                       None),
+                            legacy[["z", "y", "x"]].to_numpy(np.float64) - 1, legacy.gene)
     _write_json(a["summary"], summary)
 
 
@@ -456,19 +459,19 @@ def _step_truth_grid(a):
 def _copy_shared(base, summary, variant):
     """The variant's output root: the shared images, molecule tables and the placement used, copied."""
     work, root = _work_root(base, summary), _variant_root(base, summary, variant)
-    for part in ("images", "signal", Path("stitching") / summary["sample"]):
+    for part in ("images", "fovs", Path("stitching") / summary["sample"]):
         shutil.copytree(work / part, root / part, dirs_exist_ok=True)
     return root
 
 
 def _step_assign_export(a):
-    """The assignment and the export of one chain. Route per FOV: per FOV the molecules (``import_legacy_molecules_csv``
-    of the truth-position CSV), the labels (the method's, or the FOV's truth labels, imported ``relabel=False``),
+    """The assignment and the export of one chain. Route per FOV: per FOV the molecules (``load_molecules`` of the
+    FOV's molecules.csv, the truth positions), the labels (the method's, or the FOV's truth labels, imported ``relabel=False``),
     ``assign_molecules`` (dense 3D method: the 0.7776-µm planar expansion; otherwise the default) saved as the §2.9
     folder ``default``, then ``Dataset.export`` (``route: per_fov``, ``dimensionality: stack``). Route after fusion:
     ``Dataset.export`` (``dimensionality: projection``, Z maximum, ``scale_yx`` 1) with the method's segmentation
     block or the truth runs."""
-    from starfinder.assignment import AssignmentConfig, assign_molecules, import_legacy_molecules_csv
+    from starfinder.assignment import AssignmentConfig, assign_molecules, load_molecules
     from starfinder.assignment._persist import assignment_directory, write_assignment
     from starfinder.dataset import Dataset
     from starfinder.export import ExportConfig, FusionConfig, SampleSegmentationConfig, SampleSegmentationRun
@@ -485,8 +488,8 @@ def _step_assign_export(a):
     if CONTEXTS[context]["route"] == "per_fov":
         for fov in fovs:
             grid = _grid(root, fov)
-            molecules = import_legacy_molecules_csv(root / "signal" / f"{fov}_goodSpots.csv",
-                                                spot_namespace=_ns(ds, sample, fov, None), genes=tuple(book.genes))
+            molecules = load_molecules(root / "fovs" / fov / "molecules.csv", spot_namespace=_ns(ds, sample, fov, None),
+                                       genes=tuple(book.genes))
             if variant == "truth":
                 labels = {target: import_labels(base / "scene" / "fovs" / fov / "labels" / file, grid=grid,
                                                 target=target, relabel=False,
@@ -1097,7 +1100,7 @@ def per_fov_molecules(chain, maps):
     for fov in scene.fovs:
         result = assignment(chain, fov)
         molecules = result.molecules.copy()
-        molecules["csv_row"] = molecules.spot_id.str.slice(4).astype(int)
+        molecules["csv_row"] = molecules.spot_id.str.removeprefix("m").astype(int)
         view = views[views.fov_id == fov].set_index("csv_row")
         molecules = molecules.join(view[["amplicon_id", "in_footprint"]], on="csv_row")
         molecules = molecules[molecules.in_footprint.astype(bool)].copy()
@@ -1126,7 +1129,7 @@ def fused_molecules(chain, matches):
     n2c = dict(zip(scene.table("nuclei").nucleus_id.astype(np.int64), scene.table("nuclei").cell_id.astype(np.int64)))
     molecules = export_table(chain, "molecules")
     molecules = molecules[molecules.assembly_status.eq("retained").to_numpy(bool)].copy()
-    molecules["csv_row"] = molecules.spot_id.str.slice(4).astype(int)
+    molecules["csv_row"] = molecules.spot_id.str.removeprefix("m").astype(int)
     views = scene.table("molecule_fovs").set_index(["fov_id", "csv_row"]).amplicon_id
     molecules["amplicon_id"] = [views.get((f, r)) for f, r in zip(molecules.fov_id, molecules.csv_row)]
     molecules["assigned"] = _assigned(molecules)
@@ -1259,7 +1262,7 @@ def check_ee1(chain):
     disagree = {}
     for fov in chain.fov_ids:
         result = assignment(chain, fov).molecules
-        rows = {int(s.split(":")[1]): r for s, r in zip(result.spot_id, result.itertuples(index=False))}
+        rows = {int(s.removeprefix("m")): r for s, r in zip(result.spot_id, result.itertuples(index=False))}
         for r in views[views.fov_id == fov].itertuples(index=False):
             got = rows.pop(int(r.csv_row))
             if r.in_footprint:
@@ -1343,7 +1346,7 @@ def mixing_cells(chain, pair):
         key = (r.cell_namespace, int(r.cell_id))
         if key not in keys:
             continue
-        view = views.loc[(r.fov_id, int(r.spot_id.split(":")[1]))]
+        view = views.loc[(r.fov_id, int(r.spot_id.removeprefix("m")))]
         out.setdefault(key, []).append((r.gene_id, int(true_cell[view.amplicon_id]), bool(view.label_agrees)
                                         if CONTEXTS[scene.context]["route"] == "per_fov" else None, int(r.cell_id)))
     return {k: v for k, v in out.items() if {g for g, *_ in v} == set(pair)}

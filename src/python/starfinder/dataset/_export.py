@@ -39,7 +39,6 @@ from starfinder.stitching import PlacementResult
 from starfinder.stitching._placement import OWNING
 
 REFERENCE_STAIN_FILE = Path("other_rounds") / "reference_stain" / "image.ome.tif"
-MOLECULE_CSV = "signal/{fov_id}_goodSpots.csv"
 
 
 def _paths(dataset, fov):
@@ -79,8 +78,12 @@ def assembly_inputs(dataset, placement, assignment) -> list:
     """One AssemblyInput per FOV of the placement that has a saved assignment folder (or molecule table).
 
     The folder is ``checkpoints/<fov_id>/assignment/<assignment>/``; with
-    ``assignment=None`` the FOV's ``signal/<fov_id>_goodSpots.csv`` is read
-    with ``import_legacy_molecules_csv``. The grid is that of the FOV's reference
+    ``assignment=None`` the FOV's ``fovs/<fov_id>/molecules.csv`` is read
+    with ``load_molecules``, which keeps the molecules' identities, and the
+    namespace ``[dataset_id, sample_id, fov_id, null]``. On the workflow's
+    legacy route (the dataset's ``_legacy_molecules``, set from the
+    configuration) the one-based ``signal/<fov_id>_goodSpots.csv`` is read with
+    ``import_legacy_molecules_csv`` instead. The grid is that of the FOV's reference
     image, the file the dataset's ``reference_image`` names (default
     ``images/ref_merged/<fov_id>.tif``): its stored metadata, or the grid the
     dataset's ``voxel_size_xy`` and ``voxel_size_z`` declare for a file that
@@ -88,7 +91,7 @@ def assembly_inputs(dataset, placement, assignment) -> list:
     ``assemble`` then refuses an owning FOV without one.
     """
     from starfinder.assembly import AssemblyInput
-    from starfinder.assignment import import_legacy_molecules_csv
+    from starfinder.assignment import import_legacy_molecules_csv, load_molecules
     from starfinder.assignment._persist import RECORD_FILE, assignment_directory
     inputs = []
     genes = _genes(dataset) if assignment is None else None
@@ -100,12 +103,14 @@ def assembly_inputs(dataset, placement, assignment) -> list:
                 continue
             inputs.append(AssemblyInput(fov, _reference_grid(dataset, fov), assignment=folder))
             continue
-        path = Path(dataset.output_root) / MOLECULE_CSV.format(fov_id=fov)
+        legacy = dataset._legacy_molecules
+        path = paths.signal_csv("goodSpots") if legacy else paths.spot_table("molecules")
         if not path.is_file():
             continue
         namespace = json.dumps([dataset.dataset_id, dataset.sample_id, fov, None], separators=(",", ":"))
+        reader = import_legacy_molecules_csv if legacy else load_molecules
         inputs.append(AssemblyInput(fov, _reference_grid(dataset, fov),
-                                    molecules=import_legacy_molecules_csv(path, spot_namespace=namespace, genes=genes)))
+                                    molecules=reader(path, spot_namespace=namespace, genes=genes)))
     return inputs
 
 

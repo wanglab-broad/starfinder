@@ -139,6 +139,8 @@ rules from the workflow side.
 So the package's own goodSpots CSV cannot be read by `reads_assignment.py` (float
 indices raise; golden test `test_float_coordinates_raise`), and the CSV drops the
 identity, which the package tables keep.
+W-562 later replaced this export on the Python route: `FOV.export_spots()` writes the zero-based,
+identity-preserving `fovs/{fovID}/molecules.csv` ({doc}`migration`).
 
 ## Discrepancies with the agreed §2.9 scope
 

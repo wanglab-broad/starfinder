@@ -14,8 +14,10 @@ gene list (``ValueError`` naming them). :py:func:`~starfinder.assignment.molecul
 joins a :py:class:`~starfinder.spot_finding.SpotFindingResult` with a read result by
 ``(spot_namespace, spot_id)``, as :py:func:`~starfinder.readout.export_spots` does (``final``:
 the accepted reads; ``called``: the reads called ``assigned``);
+:py:func:`~starfinder.assignment.load_molecules` reads the ``molecules.csv`` that
+``FOV.export_spots`` writes, with its identities and zero-based coordinates; and
 :py:func:`~starfinder.assignment.import_legacy_molecules_csv` reads a legacy one-based
-``x, y, z, gene`` CSV with integer or float coordinates.
+``x, y, z, gene`` CSV (the legacy route's ``goodSpots``) with integer or float coordinates.
 
 :py:func:`~starfinder.assignment.assign_molecules` takes the molecules, a cell
 :py:class:`~starfinder.segmentation.SegmentationResult` (a ``cell`` run, or a ``nucleus``
@@ -110,6 +112,7 @@ the ``anndata`` extra.
    FOVOwnership
    import_legacy_molecules_csv
    labels_at_positions
+   load_molecules
    match_nuclei
    molecule_table
    MoleculeTable

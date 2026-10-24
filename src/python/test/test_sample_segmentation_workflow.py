@@ -148,7 +148,7 @@ def per_fov_inputs(fovs=FOVS, root=OUT, name="default"):
 
 
 def molecule_inputs(fovs=FOVS, root=OUT):
-    return [f"{root}/stitching/{SAMPLE}/placement.json"] + [f"{root}/signal/{f}_goodSpots.csv" for f in fovs]
+    return [f"{root}/stitching/{SAMPLE}/placement.json"] + [f"{root}/fovs/{f}/molecules.csv" for f in fovs]
 
 
 def after_fusion_inputs(fuse, fovs=FOVS, root=OUT, reference="images/ref_merged/{fov_id}.tif"):
@@ -305,7 +305,7 @@ def test_rs5_the_example_configuration_of_each_route():
 def test_wf1_the_rule_s_inputs_by_route(combination):
     """route_configs: on the route per FOV the outputs of reads_assignment of every FOV, as before; on the route
     after fusion the molecule tables and the source images and no reads_assignment output; molecules only on
-    either route the goodSpots tables, as before. A configuration that check 7 refuses by itself is refused when
+    either route the molecule tables (fovs/<fov>/molecules.csv). A configuration that check 7 refuses by itself is refused when
     the rule files are parsed, naming the key."""
     route, dimensionality, segment, fuse, segmentation, assignment = combination
     config = route_workflow_config(*combination)

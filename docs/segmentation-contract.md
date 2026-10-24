@@ -245,7 +245,7 @@ process or in separate ones:
   ({doc}`assignment-contract`, "The grid rule"), so its labels and assignment tables equal
   those of the same calls in one process. `fov.assign_molecules(…)` there takes the molecules of
   process 1 from its `candidates` and `pre_qc` checkpoints, with the filter re-applied by
-  `FOV.run`; `assign_molecules` with `import_legacy_molecules_csv` of the exported table is the
+  `FOV.run`; `assign_molecules` with `load_molecules` of the exported `molecules.csv` is the
   other route. An input that reads a channel of the reference round other than its merged
   image still needs that round resident, and `FOV.segment` says so. A reference image saved
   with a projection (YX) gives a Z=1 grid, on which a run's inputs must also have Z=1, and

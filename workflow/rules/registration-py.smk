@@ -15,7 +15,7 @@ rule rsf_single_fov:
         expand("{output_dir}/log/{{fovID}}_rsf.txt", output_dir=OUTPUT_DIR),
         expand("{output_dir}/log/sf_scores/{{fovID}}.txt", output_dir=OUTPUT_DIR),
         expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/fovs/{{fovID}}/molecules.csv", output_dir=OUTPUT_DIR),
     threads: 4
     resources:
         mem_mb=get_rule_config('rsf_single_fov', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),

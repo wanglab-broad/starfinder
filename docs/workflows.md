@@ -73,12 +73,34 @@ The direct rule declares these outputs, relative to OUTPUT:
 
 - `log/{fovID}_rsf.txt` and `log/sf_scores/{fovID}.txt`;
 - `images/ref_merged/{fovID}.tif`;
-- `signal/{fovID}_goodSpots.csv`, containing 1-based `x,y,z` and `gene`.
+- the FOV's molecule table: on the Python backend `fovs/{fovID}/molecules.csv`, the
+  typed, zero-based table of the accepted reads with their identities
+  (`spot_namespace, spot_id, z, y, x, gene_id, entry_id, qc_score`); on the MATLAB
+  backend `signal/{fovID}_goodSpots.csv`, containing 1-based `x,y,z` and `gene`.
 
 The Python script writes them using `save_reference_image`, `export_spots`, `save_processing_log`
-and `save_diagnostics`. MATLAB also writes preview images. Benchmarked rules write
+and `save_diagnostics`; `export_spots` also records the table as `outputs.molecules` of the
+FOV's `checkpoints/{fovID}/run.json`. MATLAB also writes preview images. Benchmarked rules write
 `log/benchmark/{rule}/{fovID}[_{n_subtile}].txt`. A reference projection is not a
-segmentation label image, and a goodSpots CSV is not a cell-by-gene matrix.
+segmentation label image, and a molecule table is not a cell-by-gene matrix.
+
+### Molecule tables
+
+Each FOV has one molecule table that the downstream rules read (`reads_assignment`, and
+`export_sample` with `assembly.assignment: null` or on the route after fusion). Its file
+follows from the configuration, the backend and the producer the `ruleorder` of the
+`Snakefile` selects, never from whichever file exists (`MOLECULE_TABLE` in `common.smk`,
+`_molecule_table` in the package):
+
+| Producer | Backend | File | Reader |
+| --- | --- | --- | --- |
+| `rsf_single_fov` | Python | `fovs/{fovID}/molecules.csv` (zero-based, identities kept) | `assignment.load_molecules` |
+| `rsf_single_fov` | MATLAB | `signal/{fovID}_goodSpots.csv` (one-based `x,y,z,gene`) | `assignment.import_legacy_molecules_csv` |
+| `stitch_subtile` (the `subtile` and `deep` modes, or free mode with `gr_single_fov_subtile` or `deep_create_subtile` on) | either | `signal/{fovID}_goodSpots.csv` (one-based) | `assignment.import_legacy_molecules_csv` |
+
+The subtile and deep route stays legacy: subtile spot IDs repeat across subtiles and their
+namespaces hold the subtile, so the resident rules write the one-based
+`subtile_goodSpots_{n}.csv` without identities, and `stitch_subtile` merges them.
 
 ### Projection views and the reference merged image
 

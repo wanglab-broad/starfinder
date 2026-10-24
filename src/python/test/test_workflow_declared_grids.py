@@ -1,7 +1,7 @@
 """W-390, criterion 5 (and the saved-folder case of criterion 2): the workflow on files without stored metadata.
 
 The sample of ``test_workflow_assembly_golden.py`` (three FOVs of 8×48×64, ZYX or YX label
-images, one-based goodSpots tables) with an ``assembly`` block, as
+images, zero-based molecules.csv tables) with an ``assembly`` block, as
 ``test_workflow_assembly_figures.py`` builds it, written twice: once with
 ``images/ref_merged/{fovID}.tif`` storing its metadata (unit spacing, µm, identity) and
 the placement of ``assembly_golden`` on those grids, and once with the same pixels as
@@ -68,7 +68,7 @@ def declared(config, fov):
 
 def build(root, dimensions, *, stored):
     """build_sample with the reference images (stored metadata or plain pages), the codebook and the placement."""
-    _, _, out = build_sample(root, dimensions)
+    _, _, out = build_sample(root, dimensions, legacy=False)
     config = config_of(root)
     codebook = root / "input" / "data" / "sample" / "genes.csv"
     golden_codebook().table[["entry_id", "gene_id", "color_sequence"]].to_csv(codebook, index=False)

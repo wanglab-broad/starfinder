@@ -16,7 +16,7 @@ from starfinder.dataset._declared import reference_settings
 from starfinder.dataset.types import ChannelInfo
 from starfinder.dataset.workflow import (_BIGSTITCHER, _LEGACY_SEGMENTATION_RUN, _NUCLEI_REFERENCE_CHANNEL,
     _after_fusion, _assembly_block, _declared_metadata, _export_config, _export_dataset, _flag, _label_namespace,
-    _nuclei_checkpoints, _nuclei_registration, _output_root, _reads_assignment, _report_assignment, _report_block,
+    _legacy_molecules, _molecule_table, _nuclei_checkpoints, _nuclei_registration, _output_root, _reads_assignment, _report_assignment, _report_block,
     _rule_checkpoints, _rule_parameters, _sample_fovs, _sample_table, _segmentation, _stitching_block,
     _workflow_dataset, from_workflow_config)
 from starfinder.preprocessing import ProjectionConfig
@@ -39,8 +39,11 @@ def _run_workflow(snakemake, rule):
     fov = FOV.from_subtile(Path(snakemake.input[2]), dataset, fov_id) if resident else dataset.fov(fov_id)
     fov.run(adapted.pipeline, execution=adapted.execution, checkpoints=_rule_checkpoints(snakemake.config, rule))
     if resident:
+        from starfinder.readout.spots import _export_legacy_spots
         number = snakemake.wildcards.n_subtile
-        fov.export_spots(path=Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
+        # The legacy route: stitch_subtile reads the one-based subtile tables.
+        _export_legacy_spots(fov.spot_result, fov.filtering_result,
+                             Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
         fov.save_diagnostics(suffix=f'_{number}')
     else:
         fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
@@ -392,14 +395,19 @@ def _write_raw_h5ad(result, path, *, sample, fov_id, tile):
     return obs.seg_label.to_numpy()
 
 
-def _write_reads_assignment(result, reads_csv, path, *, tile, cells):
-    """expr/{fovID}/reads_assignment.csv: the goodSpots rows with the legacy and the assignment columns.
+def _write_reads_assignment(result, reads_csv, path, *, tile, cells, legacy):
+    """expr/{fovID}/reads_assignment.csv: the molecule table's rows with the assignment columns.
 
-    The legacy columns are those of reads_assignment.py (the CSV's columns with
-    zero-based x, y, z, global_x/y/z and seg_label, the cell at the sampled
-    voxel or 0); the new ones are spot_id, assignment_status, cell_id,
-    in_expansion, original_cell_id, nucleus_id and compartment. The legacy
-    overlap filter keeps the molecules assigned to the written cells, then the
+    The columns are the molecule table's, then global_x/y/z and seg_label (the
+    cell at the sampled voxel or 0), then the assignment columns
+    assignment_status, cell_id, in_expansion, original_cell_id, nucleus_id
+    and compartment. A molecules.csv (``legacy`` False) is zero-based and holds
+    the identities: its rows get their assignment by
+    ``(spot_namespace, spot_id)``. The legacy goodSpots CSV (``legacy`` True)
+    keeps the columns of reads_assignment.py (zero-based x, y, z after the
+    subtraction of one), its row i is the molecule ``csv:<i>``, and spot_id is
+    added before the assignment columns. The legacy overlap filter keeps the
+    molecules assigned to the written cells, then the
     unassigned and excluded_cell molecules whose sampled voxel lies in the tile
     box. Every outside_grid molecule follows them, in input order, unfiltered
     (it has no sampled voxel, and the script wrapped or raised on it): seg_label
@@ -409,15 +417,28 @@ def _write_reads_assignment(result, reads_csv, path, *, tile, cells):
     """
     import numpy as np
     import pandas as pd
-    reads = pd.read_csv(reads_csv)
-    for axis in ('x', 'y', 'z'):
-        reads[axis] = reads[axis] - 1
-        if tile is not None:
+    columns = ('assignment_status', 'cell_id', 'in_expansion', 'original_cell_id', 'nucleus_id', 'compartment')
+    if legacy:
+        reads = pd.read_csv(reads_csv)
+        for axis in ('x', 'y', 'z'):
+            reads[axis] = reads[axis] - 1
+        molecules = result.molecules
+        columns = ('spot_id',) + columns
+    else:
+        from starfinder._records import _read_table
+        from starfinder.readout.spots import MOLECULE_DTYPES
+        reads = _read_table(reads_csv, MOLECULE_DTYPES)
+        keys = ['spot_namespace', 'spot_id']
+        order = pd.DataFrame({k: result.molecules[k].astype(object) for k in keys}).reset_index(names='row')
+        rows = reads[keys].astype(object).merge(order, on=keys, how='left', validate='one_to_one')['row']
+        if rows.isna().any():
+            raise ValueError(f'{reads_csv}: molecules without an assignment')
+        molecules = result.molecules.iloc[rows.to_numpy(np.int64)].reset_index(drop=True)
+    if tile is not None:
+        for axis in ('x', 'y', 'z'):
             reads[f'global_{axis}'] = reads[axis] + tile[axis]
-    molecules = result.molecules
     reads['seg_label'] = molecules.cell_id.astype('Int64').fillna(0).to_numpy(np.int64)
-    for column in ('spot_id', 'assignment_status', 'cell_id', 'in_expansion', 'original_cell_id', 'nucleus_id',
-                   'compartment'):
+    for column in columns:
         reads[column] = molecules[column].to_numpy(dtype=object, na_value=None)
     if tile is None:
         reads.to_csv(path, index=False)
@@ -469,8 +490,12 @@ def _run_reads_assignment(snakemake):
 
     Inputs (as the rule declares them): the sample annotation, the DAPI image
     (diagnostic plot only), images/stardist_segmentation/{fovID}.tif (imported
-    with the inferred target on the declared grid, _legacy_cells), the
-    goodSpots CSV (import_legacy_molecules_csv; integer and float coordinates),
+    with the inferred target on the declared grid, _legacy_cells), the FOV's
+    molecule table, which the configuration's producer names (_molecule_table:
+    fovs/{fovID}/molecules.csv of the Python rsf_single_fov, read with
+    load_molecules and its identities kept; on the legacy route, MATLAB's
+    rsf_single_fov and stitch_subtile, the one-based goodSpots CSV read with
+    import_legacy_molecules_csv, integer and float coordinates),
     documents/genes.csv (checked against the codebook, _assignment_genes) and
     the tile configuration, read for the sample of the FOV and applied outside
     the package: global coordinates and the overlap filter, as the script does
@@ -487,7 +512,7 @@ def _run_reads_assignment(snakemake):
     assignment folder checkpoints/{fovID}/assignment/<assembly.assignment>/
     (its record named so), which the export_sample rule assembles.
     """
-    from starfinder.assignment import assign_molecules, import_legacy_molecules_csv
+    from starfinder.assignment import assign_molecules, import_legacy_molecules_csv, load_molecules
     config, fov_id = snakemake.config, snakemake.wildcards.fovID
     assignment, target, translation = _reads_assignment(config)
     block = _assembly_block(config) if 'assembly' in config else None
@@ -499,8 +524,9 @@ def _run_reads_assignment(snakemake):
         grid, cells = _legacy_cells(Path(snakemake.input[2]), config, fov_id, target)
     else:
         grid, cells = _assembly_cells(Path(snakemake.input[2]), output_root, config, fov_id, target)
-    molecules = import_legacy_molecules_csv(snakemake.input[3], spot_namespace=_label_namespace(config, fov_id),
-                                        genes=genes)
+    legacy = _legacy_molecules(config)
+    reader = import_legacy_molecules_csv if legacy else load_molecules
+    molecules = reader(snakemake.input[3], spot_namespace=_label_namespace(config, fov_id), genes=genes)
     result = assign_molecules(molecules, cells, grid=grid, config=assignment)
     name = 'reads_assignment' if block is None or block.assignment is None else block.assignment
     result = replace(result, record=dict(result.record, name=name, workflow=translation))
@@ -512,7 +538,7 @@ def _run_reads_assignment(snakemake):
                                   metadata=cells.grid.metadata)
     h5ad, csv_path = Path(snakemake.output[0]), Path(snakemake.output[1])
     written = _write_raw_h5ad(result, h5ad, sample=sample, fov_id=fov_id, tile=tile)
-    _write_reads_assignment(result, snakemake.input[3], csv_path, tile=tile, cells=written)
+    _write_reads_assignment(result, snakemake.input[3], csv_path, tile=tile, cells=written, legacy=legacy)
     _write_assignment_figures(result, snakemake.input[1], h5ad.parent)
     counts = result.record['counts']
     kept = (f'{len(written)} cells inside the tile box' if block is None else
@@ -706,9 +732,10 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
     then by route (docs/sample-segmentation-contract.md, "The entry"). On the
     route per FOV, the per-FOV assignment outputs of reads_assignment
     (raw.h5ad, reads_assignment.csv and the saved folder's assignment.json),
-    or with assembly.assignment null the goodSpots tables (on either route).
-    On the route after fusion, no reads_assignment output: the goodSpots
-    tables, the reference images (the files reference_image names, whose
+    or with assembly.assignment null the molecule tables (on either route;
+    _molecule_table: fovs/{fovID}/molecules.csv, or the legacy goodSpots CSV
+    of stitch_subtile). On the route after fusion, no reads_assignment output:
+    the molecule tables, the reference images (the files reference_image names, whose
     grids place the molecules) and, with fuse on, the source images of
     export.images that are files of the workflow (reference_merged, the
     reference image, and each <name>=file:<pattern>); the saved form of
@@ -721,10 +748,10 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
     root = Path(output_root)
     inputs = [str(_layout.stitching_dir(root, sample) / 'placement.json')]
     if block.assignment is None:
-        inputs += [str(_layout._FovPaths(root, fov).signal_csv('goodSpots')) for fov in fov_ids]
+        inputs += [str(_molecule_table(config, root, fov)) for fov in fov_ids]
     elif _after_fusion(export, block):
         from .dataset._export import source_path
-        inputs += [str(_layout._FovPaths(root, fov).signal_csv('goodSpots')) for fov in fov_ids]
+        inputs += [str(_molecule_table(config, root, fov)) for fov in fov_ids]
         inputs += _reference_image_inputs(config, root, fov_ids)
         # The files Dataset.export's fuse part reads, by the same expression (source_path).
         files = SimpleNamespace(output_root=root, reference_image=reference_settings(config)['reference_image'])
@@ -745,7 +772,7 @@ def _run_export(snakemake):
     Input 0 is the sample's saved placement, stitching/{sample}/placement.json;
     the other inputs are the per-FOV files export reads, by route
     (_export_sample_files: the assignment outputs of reads_assignment on the
-    route per FOV; the goodSpots tables for molecules only and, with the
+    route per FOV; the molecule tables for molecules only and, with the
     reference and source images, on the route after fusion, where the
     codebook gives the genes, as for molecules only). The parts and their
     settings are those of the export block and the assembly block

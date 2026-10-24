@@ -728,7 +728,7 @@ records on the share and are run by the real-example issue (W-376), not by a tes
 | AS12 | `test_stitching_assembly_outputs.py`, `test_as12_*` | default |
 | AS13 | `test_stitching_assembly_outputs.py`, `test_as13_*`, `test_as11_and_as13_without_anndata` | default |
 | AS14 | `test_stitching_assembly_outputs.py`, `test_as14_permuted_molecule_rows_give_the_same_per_key_results`, `test_as14_three_single_thread_processes_give_identical_tables` | default; the three processes `slow` |
-| AS15 | `test_stitching_export_entry.py`, `test_assemble_part`, `test_assemble_off_without_a_saved_assembly`, `test_assemble_part_input_files`, `test_assemble_part_from_molecule_tables`, `test_molecule_tables_are_the_goodspots_rows` | default |
+| AS15 | `test_stitching_export_entry.py`, `test_assemble_part`, `test_assemble_off_without_a_saved_assembly`, `test_assemble_part_input_files`, `test_assemble_part_from_molecule_tables`, `test_molecule_tables_are_the_molecules_csv_rows` | default |
 | AS16 | `test_stitching_assembly_ownership.py`, `test_as16_*` | default |
 | AS17 | `test_stitching_assembly_ownership.py`, `test_as17_*` | default |
 | SC1 | `test_synthetic_sample_scene.py`, `test_single_plane_scene_sc1` | default |

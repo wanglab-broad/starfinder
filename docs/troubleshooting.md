@@ -62,9 +62,10 @@ unchanged. Select diagnostic columns explicitly, as in the recipe. Extraction
 requires matching frame/grid metadata for every round; register moving images
 or supply verified common metadata when they are already aligned.
 
-A one-voxel overlay offset often warrants checking origins: signal CSVs are
-1-based XYZ, Python indexing is 0-based ZYX. Verify that conversion exactly
-once and check bounds against the loaded image. A subtile coordinate also needs
+A one-voxel overlay offset often warrants checking origins: `molecules.csv` and
+`reads.csv` hold the 0-based ZYX of Python indexing, while the legacy `goodSpots`
+CSVs (MATLAB, and the subtile and deep modes) are 1-based XYZ. Convert a legacy file
+exactly once and check bounds against the loaded image. A subtile coordinate also needs
 its crop offset before full-FOV comparison; a FOV coordinate is not a stitched
 sample coordinate. See [conventions](conventions.md#axes-and-coordinates).
 These are diagnostic possibilities, not a diagnosis of every shifted overlay.

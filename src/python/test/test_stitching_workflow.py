@@ -49,7 +49,7 @@ from .assembly_fixtures import SAMPLE
 from .fusion_fixtures import export_folder, golden_codebook
 from .stitching_fixtures import LN_SPACING, STAGE_SPACING, grid, maf_text
 from .test_assignment_golden import SHAPE_ZYX, label_fixture
-from .test_assignment_workflow import KEEP, LEGACY_OBS, LEGACY_READS, NEW_OBS, NEW_READS, run_rule
+from .test_assignment_workflow import ASSIGNMENT_READS, KEEP, LEGACY_OBS, MOLECULE_READS, NEW_OBS, run_rule
 from .test_stitching_bigstitcher import (HAND_RECORDS, LINK_IDS, LINK_SHAPE, golden_stitching_setups,  # noqa: F401
                                          hand_records_setups, links_table, links_view_map, links_xml)
 from .test_workflow_stitching_golden import TILE_COL, TILE_CONFIG, TILE_ROW, legacy_tile_config
@@ -412,7 +412,7 @@ def test_wf3_export_sample_inputs_and_declared_output(tmp_path):
     assert _snakemake._export_sample_files(config, root, [])[1] == "/out/export/{sample}/export.json"
     molecules = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=dict(ASSEMBLY, assignment=None))
     assert _snakemake._export_sample_files(molecules, root, ["Position001"], SAMPLE)[0] == [
-        "/out/stitching/sample1/placement.json", "/out/signal/Position001_goodSpots.csv"]
+        "/out/stitching/sample1/placement.json", "/out/fovs/Position001/molecules.csv"]
     # export.smk declares exactly these: its input function and its one output.
     text = (ROOT / "workflow/rules/export.smk").read_text()
     rule = text[text.index("rule export_sample:"):]
@@ -503,7 +503,7 @@ def test_wf3_run_export_passes_the_duplicate_threshold(tmp_path, monkeypatch, sy
 
 @needs_anndata
 def test_wf3_run_export_molecules_only_loads_the_codebook(tmp_path, synchronous):
-    """assembly.assignment null: the goodSpots tables are assembled, with the genes of the configured codebook."""
+    """assembly.assignment null: the molecule tables are assembled, with the genes of the configured codebook."""
     config = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=dict(ASSEMBLY, assignment=None),
                             export={"fuse": False}, seq_channel_order=["ch00", "ch01", "ch02", "ch03"])
     codebook = tmp_path / "input" / "data" / "sample" / "genes.csv"
@@ -530,9 +530,9 @@ def test_wf3_with_an_assembly_block_the_per_fov_files_have_no_filter_and_no_glob
     counts = record["counts"]
     assert list(adata.obs.columns) == [c for c in LEGACY_OBS["3d"] if not c.startswith("global_")] + NEW_OBS
     assert len(adata.obs) == counts["cells_kept"]
-    assert list(reads.columns) == [c for c in LEGACY_READS if not c.startswith("global_")] + NEW_READS
+    assert list(reads.columns) == [c for c in MOLECULE_READS if not c.startswith("global_")] + ASSIGNMENT_READS
     assert len(reads) == counts["molecules"] == len(KEEP)
-    assert reads.spot_id.tolist() == [f"csv:{i}" for i in range(len(KEEP))]       # input order, unfiltered
+    assert reads.spot_id.tolist() == [f"m{i}" for i in range(len(KEEP))]       # input order, unfiltered
     folder = tmp_path / "output/data/out/checkpoints/Position001/assignment/default"
     saved = read_assignment(folder, "default")
     assert saved.record["name"] == record["name"] == "default"
@@ -547,7 +547,7 @@ def test_wf3_with_an_assembly_block_the_per_fov_files_have_no_filter_and_no_glob
 def test_wf3_without_an_assembly_block_reads_assignment_is_the_legacy_rule(tmp_path):
     """The same run without the blocks reads the tile configuration and writes the legacy global_* columns."""
     adata, reads, _ = run_rule(tmp_path, label_fixture(), KEEP)
-    assert list(adata.obs.columns) == LEGACY_OBS["3d"] + NEW_OBS and list(reads.columns) == LEGACY_READS + NEW_READS
+    assert list(adata.obs.columns) == LEGACY_OBS["3d"] + NEW_OBS and list(reads.columns) == MOLECULE_READS + ASSIGNMENT_READS
     assert not (tmp_path / "output/data/out/checkpoints").exists()
 
 

@@ -23,7 +23,7 @@ from skimage.segmentation import expand_labels as skimage_expand_labels
 import starfinder.assignment._assign as assign_module
 from starfinder.assignment import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, CELL_STATUSES, COMPARTMENT_STATES,
                                    NUCLEUS_STATUSES, AssignmentConfig, AssignmentResult, CorrespondenceConfig,
-                                   MoleculeTable, assign_molecules, import_legacy_molecules_csv,
+                                   MoleculeTable, assign_molecules, import_legacy_molecules_csv, load_molecules,
                                    labels_at_positions, match_nuclei, molecule_table, plot_assignment,
                                    summarize_assignment)
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
@@ -1042,13 +1042,16 @@ def test_fov_assign_runs_the_entry_on_the_fov_results(decoded_fov, tmp_path):
 def test_molecule_table_agrees_with_export_spots(decoded_fov, tmp_path):
     from starfinder.readout import export_spots
     fov, _ = decoded_fov
-    path = export_spots(fov.spot_result, fov.filtering_result, tmp_path / "goodSpots.csv", accepted_only=True)
-    from_csv = import_legacy_molecules_csv(path, spot_namespace=fov.spot_result.spot_namespace, genes=fov.codebook.genes)
+    path = export_spots(fov.spot_result, fov.filtering_result, tmp_path / "molecules.csv", accepted_only=True)
+    from_csv = load_molecules(path, genes=fov.codebook.genes)
     joined = molecule_table(fov.spot_result, fov.filtering_result, genes=fov.codebook.genes)
     assert len(joined.table) == len(from_csv.table) > 0
+    # A keyed round trip: the identities, the zero-based coordinates and the genes, and so the keyed hash.
+    assert from_csv.spot_namespace == fov.spot_result.spot_namespace and from_csv.sha256 == joined.sha256
+    for column in ("spot_namespace", "spot_id", "gene_id"):
+        assert from_csv.table[column].tolist() == joined.table[column].tolist()
     for column in ("z", "y", "x"):
         assert np.allclose(joined.table[column], from_csv.table[column], rtol=0, atol=1e-9)
-    assert joined.table.gene_id.tolist() == from_csv.table.gene_id.tolist()
     assert joined.source["reads"] == "ReadFilteringResult" and joined.source["population"] == "final"
     with pytest.raises(ValueError, match="ReadFilteringResult"):
         molecule_table(fov.spot_result, fov.decoding_result, genes=fov.codebook.genes)

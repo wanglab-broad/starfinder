@@ -178,18 +178,18 @@ def test_export_reordered_subset_empty_and_bad_keys(tmp_path):
     before = fov.spot_result.spots.copy()
     out = pd.read_csv(export_spots(fov.spot_result, filtered, tmp_path/'subset.csv', accepted_only=True))
     selected = before.merge(filtered.accepted[['spot_id']], on='spot_id', validate='one_to_one')
-    np.testing.assert_array_equal(out[['x', 'y', 'z']], selected[['x', 'y', 'z']] + 1)
+    np.testing.assert_array_equal(out[['x', 'y', 'z']], selected[['x', 'y', 'z']] + 0)
     pd.testing.assert_frame_equal(before, fov.spot_result.spots)
     for bad in [pd.concat([filtered.table, filtered.table.iloc[:1]]), filtered.table.iloc[:1],
                 filtered.table.assign(spot_namespace='foreign')]:
         with pytest.raises(ValueError):
             export_spots(fov.spot_result, replace(filtered, table=bad), tmp_path/'bad.csv')
     all_rejected = replace(filtered, table=filtered.table.assign(accepted=False))
-    assert (export_spots(fov.spot_result, all_rejected, tmp_path/'rejected.csv', accepted_only=True)).read_text() == 'x,y,z,gene\n'
+    assert (export_spots(fov.spot_result, all_rejected, tmp_path/'rejected.csv', accepted_only=True)).read_text() == 'spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score\n'
     empty = resident(dataset(tmp_path))
     empty.images = {k: np.zeros_like(v) for k, v in empty.images.items()}
     empty.run(complete())
-    assert empty.export_spots().read_text() == 'x,y,z,gene\n'
+    assert empty.export_spots().read_text() == 'spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score\n'
     assert empty.filtering_result.fractions
 
 
@@ -291,8 +291,9 @@ def test_five_workflow_adapters_and_shared_filenames(tmp_path, streaming):
                                    wildcards=SimpleNamespace(fovID='FOV', n_subtile='1'))
         runpy.run_path(str(root/f'workflow/scripts/{rule}.py'), init_globals={'snakemake': snakemake})
         if rule == 'rsf_single_fov':
-            assert fov.paths.signal_csv('goodSpots').name == 'FOV_goodSpots.csv'
-            assert list(pd.read_csv(fov.paths.signal_csv('goodSpots'))) == ['x', 'y', 'z', 'gene']
+            assert fov.paths.spot_table('molecules') == tmp_path/'out'/'data'/'run'/'fovs'/'FOV'/'molecules.csv'
+            assert list(pd.read_csv(fov.paths.spot_table('molecules'))) == ['spot_namespace', 'spot_id', 'z', 'y', 'x',
+                                                                            'gene_id', 'entry_id', 'qc_score']
             assert fov.paths.ref_merged_tif.is_file()
         elif 'rsf_subtile' in rule or rule == 'lrsf_single_fov_subtile':
             assert list(pd.read_csv(subtile.parent/'subtile_goodSpots_1.csv')) == ['x', 'y', 'z', 'gene']

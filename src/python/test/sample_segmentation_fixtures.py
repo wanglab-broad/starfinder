@@ -18,7 +18,7 @@ the two seam cases of the comparison on ``fused_pair``'s two FOVs, with the mole
 the change of ``scene_plane`` applied to ``sample-small-v1``.
 
 :func:`write_scene` writes a scene as a dataset (the saved placement, ``images/<stain>/``
-ZYX TIFFs with their axes, ``images/ref_merged/`` with the grid, ``signal/`` goodSpots
+ZYX TIFFs with their axes, ``images/ref_merged/`` with the grid, ``fovs/<fov>/molecules.csv``
 tables, the codebook); :func:`fuse_scene` calls ``fuse_images`` alone on it at a factor ``k``;
 :func:`quad_grid_placement` (W-446) saves ``fused_quad``'s placement with grid cells.
 :func:`truth_import`, :func:`seeded_runs`, :func:`truth_runs`, :func:`length_configs` and
@@ -44,7 +44,14 @@ from starfinder.segmentation import (CellposeConfig, LabelImportConfig, Referenc
 from starfinder.stitching import (approve_placement, placement_from_table, positions_from_grid, positions_from_table,
                                   save_placement)
 
+from .coordination_helpers import write_molecules_csv
+
 DS, SAMPLE = "data", "s1"
+
+
+def _spot_namespace(fov):
+    """The spot namespace of a FOV of the fixtures' dataset, ``[DS, SAMPLE, fov, null]``."""
+    return json.dumps([DS, SAMPLE, fov, None], separators=(",", ":"))
 GENES = ("A", "B")
 SPACING = (1.0, 0.5, 0.5)
 IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
@@ -202,11 +209,11 @@ SEAM_ORIGINS = {"FOV1": (0.0, 0.0, 0.0), "FOV2": (0.0, 0.0, 8.0)}
 
 
 def seam_spot_ids() -> dict:
-    """``{(fov_id, molecule name): spot_id}``: the row of each molecule in its FOV's goodSpots table, ``csv:<row>``."""
+    """``{(fov_id, molecule name): spot_id}``: the row of each molecule in its FOV's molecules.csv, ``m<row>``."""
     out = {}
     for fov, origin in SEAM_ORIGINS.items():
         names = [n for n, ((y, x), _) in SEAM_MOLECULES.items() if -0.5 <= (x - origin[2]) / SPACING[2] < 23.5]
-        out.update({(fov, name): f"csv:{row}" for row, name in enumerate(names)})
+        out.update({(fov, name): f"m{row}" for row, name in enumerate(names)})
     return out
 
 
@@ -310,10 +317,8 @@ def write_scene(tmp_path, scene) -> SceneFolder:
             tifffile.imwrite(path, scene.cut(scene.stain(name), fov), photometric="minisblack",
                              metadata={"axes": "ZYX"})
         rows = scene.molecules[fov]
-        csv = root / "signal" / f"{fov}_goodSpots.csv"
-        csv.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame({"x": [p[2] + 1 for p, _ in rows], "y": [p[1] + 1 for p, _ in rows],
-                      "z": [p[0] + 1 for p, _ in rows], "gene": [g for _, g in rows]}).to_csv(csv, index=False)
+        write_molecules_csv(root / "fovs" / fov / "molecules.csv", _spot_namespace(fov), [p for p, _ in rows],
+                            [g for _, g in rows])
     return SceneFolder(scene, dataset, placement, grids)
 
 
@@ -443,7 +448,8 @@ def scene_plane_small_config():
 def write_scene_plane(tmp_path, name="scene_plane") -> SceneFolder:
     """``scene_plane`` (or ``scene_plane_small``) generated and written as a dataset: its truth placement
     (approved), its stain as both ``dapi`` and ``flamingo`` (float32 ZYX TIFFs), the reference images with each
-    FOV's grid, the molecule tables of the saved scene as ``signal/`` goodSpots tables and the codebook.
+    FOV's grid, the molecule tables of the saved scene as ``fovs/<fov>/molecules.csv`` (the scene's one-based
+    tables, 1 subtracted, row ``i`` the spot ``m<i>``) and the codebook.
     ``extra["scene"]`` is the generated scene."""
     from starfinder.synthetic import generate_sample_scene, save_sample_scene
     book, config = scene_plane_small_config() if name == "scene_plane_small" else scene_plane_config()
@@ -468,9 +474,9 @@ def write_scene_plane(tmp_path, name="scene_plane") -> SceneFolder:
             path.parent.mkdir(parents=True, exist_ok=True)
             tifffile.imwrite(path, np.asarray(generated.stains[fov], np.float32), photometric="minisblack",
                              metadata={"axes": "ZYX"})
-        csv = root / "signal" / f"{fov}_goodSpots.csv"
-        csv.parent.mkdir(parents=True, exist_ok=True)
-        csv.write_bytes((Path(saved) / "fovs" / fov / "molecules.csv").read_bytes())
+        legacy = pd.read_csv(Path(saved) / "fovs" / fov / "molecules.csv", dtype={"gene": str})
+        write_molecules_csv(root / "fovs" / fov / "molecules.csv", _spot_namespace(fov),
+                            legacy[["z", "y", "x"]].to_numpy(np.float64) - 1, legacy.gene)
     plane = PlaneScene(name, tuple(config.acquisition.fov_shape_zyx), origins, generated)
     return SceneFolder(plane, dataset, placement, grids, extra={"scene": generated, "book": book})
 
@@ -534,7 +540,7 @@ def per_fov_routes(folder, *, assignment=None, name="default"):
     assignment folder ``checkpoints/<fov>/assignment/<name>/``. Returns the AssignmentResults by FOV."""
     import json as json_module
 
-    from starfinder.assignment import AssignmentConfig, assign_molecules, import_legacy_molecules_csv
+    from starfinder.assignment import AssignmentConfig, assign_molecules, load_molecules
     from starfinder.assignment._persist import assignment_directory, write_assignment
     from starfinder.segmentation import import_labels
     assignment = AssignmentConfig() if assignment is None else assignment
@@ -551,9 +557,8 @@ def per_fov_routes(folder, *, assignment=None, name="default"):
                              metadata={"axes": "ZYX"})
             namespace = json_module.dumps([DS, SAMPLE, fov, None, target], separators=(",", ":"))
             labels[target] = import_labels(path, grid=grid, target=target, relabel=False, label_namespace=namespace)
-        molecules = import_legacy_molecules_csv(root / "signal" / f"{fov}_goodSpots.csv",
-                                            spot_namespace=json_module.dumps([DS, SAMPLE, fov, None],
-                                                                             separators=(",", ":")), genes=genes)
+        molecules = load_molecules(root / "fovs" / fov / "molecules.csv", spot_namespace=_spot_namespace(fov),
+                                   genes=genes)
         result = assign_molecules(molecules, labels["cell"], grid=grid, nuclei=labels["nucleus"], config=assignment)
         from dataclasses import replace
         result = replace(result, record=dict(result.record, name=name))

@@ -8,7 +8,7 @@ the FOV's metadata), so that ``FOV.run`` loads them and ``run.json`` records its
 min–max normalization to uint8 (``rounding="truncate"``) and a white top-hat of radius 3,
 one translation step on the channel maximum, local maxima, extraction, WTA decoding,
 scoring, deduplication and a filter with ``end_bases``, with the checkpoint stages
-``candidates`` and ``pre_qc``; then the rule outputs (reference image, goodSpots, score
+``candidates`` and ``pre_qc``; then the rule outputs (reference image, molecules.csv, score
 log, processing log), the truth labels imported with ``import_labels(…, relabel=False)``
 and ``FOV.assign_molecules`` with checkpoints, the stain saved as ``reference_stain``; the truth
 placement (``placement_from_table`` on ``positions.csv`` with the origins of

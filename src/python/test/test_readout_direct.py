@@ -367,10 +367,10 @@ def test_yaml_direct_route_writes_the_four_genes(tmp_path):
     runpy.run_path(str(ROOT / "workflow" / "scripts" / "rsf_single_fov.py"), init_globals={"snakemake": snakemake})
     adapted = from_workflow_config(config)
     assert adapted.dataset.readout_mode == "direct" and adapted.pipeline.decoding == DirectDecoderConfig()
-    good = pd.read_csv(adapted.dataset.fov("FOV").paths.signal_csv("goodSpots"))
-    assert list(good.columns) == ["x", "y", "z", "gene"]
-    assert good.gene.tolist() == GENES
-    assert list(zip(good.x, good.y, good.z)) == [(x + 1, y + 1, z + 1) for _, _, z, y, x in DIRECT_SPOTS]
+    good = pd.read_csv(adapted.dataset.fov("FOV").paths.spot_table("molecules"))
+    assert list(good.columns) == ["spot_namespace", "spot_id", "z", "y", "x", "gene_id", "entry_id", "qc_score"]
+    assert good.gene_id.tolist() == GENES
+    assert list(zip(good.x, good.y, good.z)) == [(x + 0, y + 0, z + 0) for _, _, z, y, x in DIRECT_SPOTS]
 
 
 @pytest.mark.contract

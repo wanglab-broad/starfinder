@@ -270,7 +270,11 @@ def get_overall_output(wildcards):
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
+                # The Python rsf_single_fov writes the zero-based molecules.csv, MATLAB's the legacy goodSpots.
+                if BACKEND == "python":
+                    output_list += [f"{OUTPUT_DIR}/fovs/{fovID}/molecules.csv" for fovID in FOVS]
+                else:
+                    output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
             elif current_rule == 'rsf_single_fov_seq':
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_allSpots.csv" for fovID in FOVS]
             elif current_rule == 'gr_single_fov_subtile':
@@ -333,6 +337,12 @@ rule rsf_preparation:
     run:
         json_path = yaml_to_json(config['config_path'])
 
+# The FOV molecule table that reads_assignment and export_sample read, chosen by its producer
+# (docs/workflows.md, "Molecule tables"): fovs/{fovID}/molecules.csv of the Python rsf_single_fov, or the
+# legacy one-based signal/{fovID}_goodSpots.csv of MATLAB's rsf_single_fov and of stitch_subtile (the
+# subtile and deep modes, the ruleorder of the Snakefile). The Python backend asks the package (_molecule_table).
+MOLECULE_TABLE = f"{OUTPUT_DIR}/signal/{{fovID}}_goodSpots.csv"
+
 # Validate only active Python adapters; shared MATLAB configuration stays intact.
 if BACKEND == "python":
     sys.path.insert(0, str(Path(config["starfinder_path"]) / "src" / "python"))
@@ -343,7 +353,9 @@ if BACKEND == "python":
             from_workflow_config(config, python_rule)
     # The §2.10 blocks raise here, naming the key, rather than when their rules run; so does the route
     # (check 7 of docs/sample-segmentation-contract.md, without the reuse conditions and the models).
-    from starfinder.dataset.workflow import _check_export_route, _export_config, _report_block, _stitching_block
+    from starfinder.dataset.workflow import (_check_export_route, _export_config, _molecule_table, _report_block,
+                                             _stitching_block)
+    MOLECULE_TABLE = str(_molecule_table(config, OUTPUT_DIR, "{fovID}"))
     if STITCHING_BLOCK:
         _stitching_block(config)
     if ASSEMBLY_BLOCK:

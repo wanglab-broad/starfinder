@@ -1,5 +1,6 @@
 """Small development recipes; reuse quickstart inputs and write new outputs."""
 
+from starfinder.assignment import load_molecules
 from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig
 from starfinder.io import ImageLoadConfig
 
@@ -83,17 +84,18 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
 
 
 def inspect_outputs(fov: FOV) -> dict:
-    all_path = fov.export_spots("allSpots", columns=["spot_namespace", "spot_id", "x", "y", "z", "gene", "color_seq", "call_status"])
-    good_path = fov.export_spots("goodSpots")
+    reads_path = fov.export_spots("reads", columns=["spot_namespace", "spot_id", "z", "y", "x", "gene_id",
+                                                    "observed_color_sequence", "call_status"])
+    molecules_path = fov.export_spots()
     log_path = fov.save_processing_log()
-    candidates = pd.read_csv(all_path, dtype={"color_seq": str})
-    molecules = pd.read_csv(good_path)
-    assert list(molecules.columns) == ["x", "y", "z", "gene"]
-    assert candidates["color_seq"].str.fullmatch(r"[1-4MN]{4}").all()
+    candidates = pd.read_csv(reads_path, dtype={"observed_color_sequence": str}, na_values=["<NA>"],
+                             keep_default_na=False)
+    molecules = load_molecules(molecules_path, genes=fov.dataset.codebook.genes).table
+    assert candidates["observed_color_sequence"].str.fullmatch(r"[1-4MN]{4}").all()
     assert len(candidates) == len(fov.spot_result.spots)
     assert len(molecules) == len(fov.filtering_result.accepted)
-    # CSV columns are Cartesian XYZ, but NumPy indexing requires zero-based ZYX.
-    coordinates = molecules[["z", "y", "x"]].to_numpy(dtype=int) - 1
+    # The table's z, y, x are zero-based, so they index the ZYX arrays directly.
+    coordinates = molecules[["z", "y", "x"]].to_numpy(dtype=int)
     np.testing.assert_array_equal(coordinates, fov.spot_result.spots.merge(fov.filtering_result.accepted[["spot_id"]], on="spot_id", validate="one_to_one")[["z", "y", "x"]])
     assert (coordinates >= 0).all() and (coordinates < (8, 128, 128)).all()
     reference = fov.images[fov.rounds.reference_round]
@@ -103,8 +105,8 @@ def inspect_outputs(fov: FOV) -> dict:
     print("Logs:", log_path, "and", fov.dataset.output_root / "log" / "gr_shifts")
     return {
         "detected": len(candidates), "retained": len(molecules),
-        "gene_counts": molecules.groupby("gene").size().to_dict(),
-        "molecules_csv": str(good_path),
+        "gene_counts": molecules.groupby("gene_id").size().to_dict(),
+        "molecules_csv": str(molecules_path),
     }
 
 
