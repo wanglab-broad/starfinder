@@ -90,10 +90,13 @@ Note (W-563): the Python backend no longer writes the three workflow logs above;
 `run.json` ({doc}`migration`, "Sequencing logs and the morphology record").
 
 Figures the stages already draw: the assignment figures `expr/<fov>/assignment.png` and
-`assignment_single_layer.png` (`dataset/workflow.py`: `_write_assignment_figures`), drawn by
+`assignment_single_layer.png` (`_snakemake.py`: `_write_assignment_figures`), drawn by
 `reads_assignment` and again by `export_sample` with the FOV's ownership region on the route
 per FOV; the benchmark's inspection images (below). None is a per-sample view of the
 processing.
+
+Note (W-568): with an `assembly` block that names an assignment, the two figures are opt-in
+(`assembly.previews`), in `fovs/<fov>/previews/` and `export/<sample>/previews/<fov>/`.
 
 Diagnostics that exist but that `FOV.run` does not save: the read filter's
 `diagnostics["endpoint_valid_count"]` and `endpoint_valid_segment_counts`

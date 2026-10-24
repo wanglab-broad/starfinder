@@ -380,12 +380,16 @@ the tests import, holds:
 
 - the runners that take a rule script's `snakemake` object: `_run_workflow` for the
   five processing rules and one `_run_*` function for each other Python rule;
-- the rule input lists that the rule files call (`_stitching_position_inputs`,
-  `_reference_image_inputs`, `_export_sample_files`, `_report_sample_files` and
-  `_report_dataset_files`), which plan the files the engine schedules;
+- the rule input and output lists that the rule files call (`_stitching_position_inputs`,
+  `_reference_image_inputs`, `_export_sample_files`, `_export_preview_outputs`,
+  `_reads_assignment_outputs`, `_report_sample_files` and `_report_dataset_files`), which
+  plan the files the engine schedules;
 - the writers of the MATLAB-shaped files of `reads_assignment` and `stitch_sample`
   (`raw.h5ad`, `reads_assignment.csv`, `log.txt`, the assignment figures and
-  `tile_config_<sample>.csv`).
+  `tile_config_<sample>.csv`). Since W-568 the per-FOV files are written without an
+  `assembly` block or with molecules only, and the tile configuration without the block;
+  the route of a saved assignment writes the assignment folder alone, and the figures
+  only with `assembly.previews`.
 
 §2.13 also replaces the input enumeration spread over the rule files (`SAMPLE_TO_FOV`
 and the `get_*_input` functions, from `INPUT/fovs.csv` for the Python backend, read by

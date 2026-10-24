@@ -106,14 +106,16 @@ def test_reads_assignment_and_export_sample_on_declared_grids(tmp_path, dimensio
     plain_out, config = run(tmp_path / "plain", dimensions, stored=False)
     with tifffile.TiffFile(plain_out / "fovs" / "Position001" / "reference.tif") as tif:
         assert tif.series[0].axes == "IYX" and not tif.is_shaped
-    # reads_assignment: the saved folder declares its grid as the §2.9 workflow does; its per-FOV files equal.
+    # reads_assignment: the saved folder declares its grid as the §2.9 workflow does; its molecule tables equal
+    # (W-568: the saved folder is the route's one per-FOV output; it holds the rows reads_assignment.csv held).
     for fov in GOLDEN_IDS:
         record = json.loads((plain_out / "fovs" / fov / "assignment" / "default" / "assignment.json")
                             .read_text())
         assert record["grid"]["metadata"] == json.loads(json.dumps(asdict(declared(config, fov))))
         assert record["grid"]["source"] == "declared"
-        for name in ("reads_assignment.csv",):
-            assert (plain_out / "expr" / fov / name).read_bytes() == (stored_out / "expr" / fov / name).read_bytes()
+        for name in ("molecules.csv",):
+            saved = ("fovs", fov, "assignment", "default", name)
+            assert plain_out.joinpath(*saved).read_bytes() == stored_out.joinpath(*saved).read_bytes()
     # export_sample: complete, checked, the same tables and fused images; the plain copy's grids declared.
     folders = {key: out / "export" / "sample1" for key, out in (("stored", stored_out), ("plain", plain_out))}
     records = {key: json.loads((folder / "export.json").read_text()) for key, folder in folders.items()}

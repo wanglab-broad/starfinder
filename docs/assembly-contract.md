@@ -710,11 +710,13 @@ shape `(0, len(genes))` (and layers of the same shape with `layers=True`).
 It has two callers, and each prepares its own `obs`:
 
 * **The workflow adapter**, for `expr/{fovID}/raw.h5ad`. `_cell_obs`
-  (`workflow.py:1361-1392`) prepares the legacy and cell-table columns of the kept cells;
+  (`starfinder/_snakemake.py`) prepares the legacy and cell-table columns of the kept cells;
   the adapter applies its tile-box filter to them as today and calls `write_h5ad` with the
   FOV result's counts, `layers` when the result has nuclei, and `uns["assignment"]`.
   `raw.h5ad` keeps the content it has today: the same rows, `obs` columns, `X`, layers and
-  `uns`, which A18 of {doc}`assignment-algorithms` compares with the frozen helper.
+  `uns`, which A18 of {doc}`assignment-algorithms` compares with the frozen helper. (W-568:
+  the adapter writes `raw.h5ad` without an `assembly` block, or with molecules only; on the
+  route of a saved assignment it writes the saved folder alone.)
 * **`write_sample_h5ad`**, for `sample.h5ad`. It prepares the sample's `obs` from the sample
   cell table (the rows and columns below), and its `keys`, `obsm["spatial"]`, `uns` and,
   in `molecules_only` mode, `var["n_molecules_retained"]`, and calls `write_h5ad` with the
@@ -821,6 +823,11 @@ equal to them, as for the other blocks.
 populations one home, and follows the stitching block's pattern ({doc}`stitching-contract`,
 "Workflow configuration").
 
+Note (W-568): with an assignment name, `reads_assignment` now writes the saved folder alone
+(no per-FOV `raw.h5ad`, `reads_assignment.csv` or `log.txt`), and with an `assembly`
+block `stitch_sample` neither writes nor declares `tile_config_{sample}.csv`; molecules
+only keeps the per-FOV files.
+
 **The label grid with an `assembly` block.** `reads_assignment` imports a legacy label file
 on the grid of the FOV's reference image, the file `reference_image` names (default
 `fovs/{fov_id}/reference.tif`; its stored metadata, or for a file that stores none the
@@ -838,18 +845,20 @@ the files of "Persistence" and of the other parts it runs. It runs once per samp
 ({doc}`sample-segmentation-contract`, "The route setting") and after the placement exists; unlike
 `reads_assignment` today, no rule reads another sample's placement.
 
-**The assignment figures with ownership** (W-330, added after the implementation). With an
-assignment name (`assembly.assignment` not null) and an assembly in the folder (the
-assemble part written or reused), `export_sample` then draws `expr/{fovID}/assignment.png`,
-and `assignment_single_layer.png` for a ZYX label image, again for each FOV of the sample
-whose saved assignment is an input of the rule, with the FOV's ownership region and the
+**The assignment figures with ownership** (W-330, added after the implementation; opt-in
+since W-568). With an assignment name (`assembly.assignment` not null), `assembly.previews:
+true` and an assembly in the folder (the assemble part written or reused), `export_sample`
+then draws `export/<sample>/previews/{fovID}/assignment.png`, and
+`assignment_single_layer.png` for a ZYX label image, for each FOV of the sample whose
+saved assignment is an input of the rule, with the FOV's ownership region and the
 observations the assembly excluded (`plot_assignment` with the record of `fov_ownership`,
 {doc}`assignment-contract`, "Diagnostics"), through the helper `reads_assignment` uses
-for the image and the views. The two files are declared outputs of neither rule:
-`reads_assignment` still writes them first, without ownership, because it runs before the
-placement is needed. `export/<sample>/` and `export.json` do not change. Without an
-`assembly` block the figures stay as `reads_assignment` draws them: the tile configuration
-is not an ownership source.
+for the image and the views. `reads_assignment` draws its own figures, without ownership,
+into `fovs/{fovID}/previews/`: each kind has one writer and its own folder, and each rule
+declares its folder as a directory output. `export.json` does not list `previews/`, and
+`check_export` skips it (R2). By default (`previews: false`) neither rule draws a figure.
+Without an `assembly` block the figures stay as `reads_assignment` draws them, in
+`expr/{fovID}/`: the tile configuration is not an ownership source.
 
 ## Tests the implementation keeps and adds
 

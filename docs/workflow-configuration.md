@@ -559,8 +559,10 @@ sample-level rules for a configuration that has them. The specification is the
   `bigstitcher_macro_sample` writes the tiles, the macro and the view map into
   `<bigstitcher_save_dir>/<sample>/` (a local folder, required with `bigstitcher`),
   `bigstitcher_engine` runs Fiji on the macro, and `stitch_sample` imports BigStitcher's
-  `dataset.xml`, saves the placement and writes `output/tile_config_{sample}.csv` with the
-  legacy writer from the record's raw translations and view map. `fiji_path` is read by
+  `dataset.xml`, saves the placement and, without an `assembly` block, writes
+  `output/tile_config_{sample}.csv` with the legacy writer from the record's raw
+  translations and view map (with the block nothing reads that file, so it is neither
+  written nor declared). `fiji_path` is read by
   `bigstitcher_engine` when it runs, not when the rules are parsed, and the rule fails
   unless `dataset.xml` holds a `Stitching Transform` for every view, whatever Fiji's exit
   status. `positions` is the positions mapping of `Dataset.stitch`; `stage_axes` is
@@ -579,18 +581,22 @@ sample-level rules for a configuration that has them. The specification is the
   `assembly` block there.
 * **`assembly`** (needs `stitching`). The keys are the `AssemblyConfig` fields,
   `assignment` (the assignment name read per FOV, default `default`; null for molecules
-  only) and `table_format` (`csv` or `parquet`). `duplicate_threshold` (default 0.5; null
+  only), `table_format` (`csv` or `parquet`) and `previews` (default `false`; below).
+  `duplicate_threshold` (default 0.5; null
   turns it off) is the duplicate rule of the route per FOV: two retained cells of different
   FOVs whose territories share at least that share of the smaller one are one cell, the
   larger observation stays and the other is excluded `duplicate_observation` with its
   molecules; it removes a second observation and does not complete a cell cut by a FOV
-  edge ({doc}`assembly-contract`, "Retention", rule 8). With the block, `reads_assignment` writes
-  the per-FOV `raw.h5ad` and `reads_assignment.csv` without the tile filter and without
-  `global_*` columns, on the grid of the FOV's reference image (`reference_image`, default
+  edge ({doc}`assembly-contract`, "Retention", rule 8). With the block, `reads_assignment`
+  assigns on the grid of the FOV's reference image (`reference_image`, default
   `fovs/{fov_id}/reference.tif`; its stored metadata, or for a file that stores none the
-  grid `voxel_size_xy` and `voxel_size_z` declare, as `export_sample` reads it), reads no
-  `tile_config_{sample}.csv`, and saves the FOV's assignment folder
-  `fovs/{fovID}/assignment/<assignment>/`; `create_sample_h5ad` and
+  grid `voxel_size_xy` and `voxel_size_z` declare, as `export_sample` reads it) and reads no
+  `tile_config_{sample}.csv`. With an `assignment` name it writes and declares the FOV's
+  assignment folder `fovs/{fovID}/assignment/<assignment>/` alone, whose record holds the
+  counts: no `expr/{fovID}/raw.h5ad`, `reads_assignment.csv` or `log.txt` (W-568). With
+  `assignment: null` (molecules only) it writes the per-FOV `raw.h5ad` and
+  `reads_assignment.csv` without the tile filter and without `global_*` columns, and
+  `log.txt` and the figures beside them, as before. `create_sample_h5ad` and
   `create_sample_reads_assignment` do not run. One rule per sample, `export_sample`, runs
   every part of `Dataset.export` after the placement and, on the route per FOV, every
   FOV's `reads_assignment`; on the route after fusion it needs no output of
@@ -603,11 +609,16 @@ sample-level rules for a configuration that has them. The specification is the
   still runs while its `run` flag is on, and can be turned off on that route. Its declared output
   is `export/<sample>/export.json`, which lists every other file of the folder, so a part
   that cannot run (an extra not installed) is recorded `not_run` and does not fail the
-  rule. On the route per FOV, with an `assignment` name, it then draws
-  `expr/{fovID}/assignment.png` (and `assignment_single_layer.png` for a ZYX label image)
-  again for each FOV with a saved assignment, with the FOV's ownership region; the two
-  files are not declared outputs. On the route after fusion it draws no figure: the
-  sample's cells come from no per-FOV assignment.
+  rule. **Previews** (opt-in, W-568). With an `assignment` name, `previews: true` turns on
+  the two assignment figures, `assignment.png` (and `assignment_single_layer.png` for a
+  ZYX label image), each kind with one writer and its own folder, declared as a directory
+  output: `reads_assignment` draws each FOV's figures into `fovs/{fovID}/previews/`, and
+  on the route per FOV `export_sample` draws them with the FOV's ownership region into
+  `export/<sample>/previews/{fovID}/`, which `export.json` does not list. Neither rule
+  overwrites the other's files. With `previews: false`, the default, no figure is drawn on
+  the route of a saved assignment. On the route after fusion `export_sample` draws no
+  figure: the sample's cells come from no per-FOV assignment. `previews` does not change
+  molecules only (`assignment: null`), whose figures stay in `expr/{fovID}/`.
 * **`export`** (needs `assembly`). The parts of `Dataset.export` and their settings: the
   flags `assemble`, `fuse`, `fuse_labels` and `export_spatialdata`, the `FusionConfig`
   fields (`images`, `dimensionality`, `projection`, `scale_yx`, `ome_zarr`,

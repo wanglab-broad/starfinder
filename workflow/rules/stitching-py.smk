@@ -2,7 +2,8 @@
     Stitching rules of the Python-only stitching block (docs/stitching-contract.md, "Workflow configuration"),
     included instead of stitching.smk when the configuration has the block. One stitch rule per sample writes
     stitching/{sample}/; with method bigstitcher the macro rule, the Fiji engine rule and the import come first,
-    and the import also writes output/tile_config_{sample}.csv with the legacy writer.
+    and without an assembly block the import also writes output/tile_config_{sample}.csv with the legacy writer
+    (with one nothing reads it, so it is neither written nor declared).
     Uses variables from common.smk; the block is validated there (_stitching_block).
 """
 
@@ -28,6 +29,8 @@ if STITCHING_METHOD != 'bigstitcher' and not ASSEMBLY_BLOCK and is_rule_enabled(
 
 if STITCHING_METHOD == 'bigstitcher':
     BIGSTITCHER_DIR = Path(config['stitching']['bigstitcher_save_dir'])
+    # The legacy reads_assignment rule reads the tile configuration; with an assembly block no rule does.
+    STITCH_SAMPLE_TILE_CONFIG = [] if ASSEMBLY_BLOCK else [f"{OUTPUT_DIR}/output/tile_config_{{sample}}.csv"]
 
     ### ==================== [ BigStitcher Macro ] =========================
 
@@ -75,7 +78,7 @@ if STITCHING_METHOD == 'bigstitcher':
             get_stitching_positions
         output:
             f"{OUTPUT_DIR}/stitching/{{sample}}/placement.json",
-            f"{OUTPUT_DIR}/output/tile_config_{{sample}}.csv",
+            STITCH_SAMPLE_TILE_CONFIG,
         resources:
             mem_mb=get_rule_config('create_tile_config', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
         script:

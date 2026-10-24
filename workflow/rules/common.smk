@@ -373,8 +373,16 @@ def get_overall_output(wildcards):
                 output_list += [f"{OUTPUT_DIR}/output/tile_config_{sample}.csv" for sample in SAMPLE]
                 output_list += [f"{OUTPUT_DIR}/output/tile_config_{sample}.html" for sample in SAMPLE]
             elif current_rule == 'reads_assignment':
-                output_list += [f"{OUTPUT_DIR}/expr/{fovID}/raw.h5ad" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/expr/{fovID}/reads_assignment.csv" for fovID in FOVS]
+                # With an assembly block the rule's outputs follow the route (_reads_assignment_outputs): the
+                # saved assignment folder alone (and its previews, on request), or the molecules-only files.
+                if ASSEMBLY_BLOCK:
+                    from starfinder._snakemake import _reads_assignment_outputs
+                    for fovID in FOVS:
+                        files, previews = _reads_assignment_outputs(config, OUTPUT_DIR, fovID)
+                        output_list += files + previews
+                else:
+                    output_list += [f"{OUTPUT_DIR}/expr/{fovID}/raw.h5ad" for fovID in FOVS]
+                    output_list += [f"{OUTPUT_DIR}/expr/{fovID}/reads_assignment.csv" for fovID in FOVS]
             elif current_rule == 'create_sample_h5ad':
                 output_list += [f"{OUTPUT_DIR}/expr/{sample}_raw.h5ad" for sample in SAMPLE]
             elif current_rule == 'create_sample_reads_assignment':

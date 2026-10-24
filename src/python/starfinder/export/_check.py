@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from starfinder._layout import EXPORT_FILE
+from starfinder._layout import EXPORT_FILE, PREVIEWS
 
 from ._record import (
     FORMAT_VERSION,
@@ -112,6 +112,9 @@ def _r2(folder, record):
             _fail("R2", f"the listed file {relative} has SHA-256 {actual}, the record {digest}")
     for path in sorted(folder.rglob("*")):
         relative = path.relative_to(folder).as_posix()
+        # The workflow's opt-in ownership previews (assembly.previews) are drawn after the export, unlisted.
+        if relative.startswith(f"{PREVIEWS}/"):
+            continue
         if path.is_file() and relative != EXPORT_FILE and relative not in listed:
             _fail("R2", f"the file {relative} is not listed in {EXPORT_FILE}")
 
@@ -1131,8 +1134,9 @@ def check_export(folder) -> None:
     is ``not_run`` or ``failed``, and the ``fusion``
     section's recorded SHA-256 of the ``assembly`` section is that section's
     canonical SHA-256. R2: every listed file exists with its SHA-256, every
-    file of the folder is listed, and a part ``off``, ``not_run`` or ``empty``
-    lists none. R3: a written or reused assembly passes ``load_assembly``; with
+    file of the folder is listed (but those under ``previews/``, the
+    workflow's ownership previews), and a part ``off``, ``not_run`` or
+    ``empty`` lists none. R3: a written or reused assembly passes ``load_assembly``; with
     the part off no table or ``sample.h5ad`` exists. For each fused file: the
     OME-TIFF layout checks 1 to 3 or the OME-Zarr layout checks 1 to 3 (a
     region inside one chunk touches that chunk only, chunk keys counted), and

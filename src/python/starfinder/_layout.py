@@ -9,7 +9,9 @@ on their own. A FOV's own folder ``fovs/<fov_id>/`` (a subtile's
 tables ``FOV.export_spots`` writes, the registration record of its other
 rounds, its reference image and the folders ``other_rounds/``,
 ``segmentation/`` and ``assignment/``; the restart material of ``FOV.run``
-goes in its ``checkpoints/`` folder (docs/checkpoints.md, "Layout").
+goes in its ``checkpoints/`` folder (docs/checkpoints.md, "Layout"). The
+workflow's opt-in assignment previews (``assembly.previews``) go in the FOV
+folder's ``previews/`` and the export folder's ``previews/<fov_id>/``.
 """
 
 from __future__ import annotations
@@ -40,6 +42,10 @@ ASSIGNMENT_RECORD = "assignment.json"
 SPOT_TABLES = {"molecules": "molecules.csv", "reads": "reads.csv"}
 #: The registration record of a FOV's other rounds, which FOV.save_registration_record writes in the FOV's folder.
 NUCLEI_REGISTRATION = "nuclei_registration.json"
+#: The workflow's opt-in assignment previews (``assembly.previews``): the folder of a FOV's local figures in its
+#: folder, and of the ownership figures in a sample's export folder (``previews/<fov_id>``), which export.json
+#: does not list.
+PREVIEWS = "previews"
 #: The settings naming a FOV's reference image (workflow YAML keys and ``Dataset`` fields), each a file pattern
 #: with ``{fov_id}``, absolute or relative to the output root: ``reference_image``, the file the processing
 #: writes (default the FOV folder's ``reference.tif``), or ``reference_image_import``, a file another tool or
@@ -141,6 +147,17 @@ def stitching_dir(output_root, sample) -> Path:
 def export_dir(output_root, sample) -> Path:
     """``export/<sample>``, the export folder of a sample."""
     return Path(output_root) / EXPORT / sample
+
+
+def fov_previews_dir(output_root, fov_id) -> Path:
+    """``fovs/<fov_id>/previews``, the folder of a FOV's local assignment previews."""
+    return fov_dir(output_root, fov_id) / PREVIEWS
+
+
+def export_previews_dir(output_root, sample, fov_id=None) -> Path:
+    """``export/<sample>/previews`` (a FOV's: ``export/<sample>/previews/<fov_id>``), the ownership previews."""
+    folder = export_dir(output_root, sample) / PREVIEWS
+    return folder if fov_id is None else folder / fov_id
 
 
 def report_root(output_root) -> Path:

@@ -1245,8 +1245,9 @@ def _reads_assignment(config):
 _STITCHING_KEYS = ('method', 'input', 'positions', 'config', 'review', 'fallback', 'bigstitcher_save_dir')
 # BigStitcher runs in Fiji as an engine task, so it is a method of the block but not of STITCHING_METHODS.
 _BIGSTITCHER = 'bigstitcher'
-# Keys of the assembly block besides the AssemblyConfig fields: the Dataset.export argument and the table format.
-_ASSEMBLY_CALL_KEYS = ('assignment', 'table_format')
+# Keys of the assembly block besides the AssemblyConfig fields: the Dataset.export argument, the table format and the
+# workflow's opt-in assignment previews.
+_ASSEMBLY_CALL_KEYS = ('assignment', 'table_format', 'previews')
 # ExportConfig fields the export block does not name: the assembly block gives them, or they are its parts.
 _EXPORT_PARTS = ('assembly', 'table_format', 'fusion', 'labels', 'spatialdata')
 
@@ -1269,6 +1270,7 @@ class _AssemblyBlock:
     config: object
     assignment: str | None
     table_format: str
+    previews: bool = False
 
 
 def _stitching_methods():
@@ -1526,9 +1528,12 @@ def _assembly_block(config) -> _AssemblyBlock:
     """The Python-only assembly block (docs/assembly-contract.md, "Workflow configuration").
 
     Its keys are the AssemblyConfig fields, assignment (the assignment name
-    read per FOV, default ``default``; null for molecules only) and
-    table_format (csv or parquet). It needs backend: python and a stitching
-    block, whose placement it reads.
+    read per FOV, default ``default``; null for molecules only),
+    table_format (csv or parquet) and previews (default false: on the route
+    of a saved assignment, reads_assignment draws the local assignment
+    figures into fovs/<fov>/previews/ and export_sample the ownership figures
+    into export/<sample>/previews/<fov>/). It needs backend: python and a
+    stitching block, whose placement it reads.
     """
     from starfinder._registry import check_name
     from starfinder.assembly import AssemblyConfig
@@ -1549,7 +1554,9 @@ def _assembly_block(config) -> _AssemblyBlock:
     table_format = values.get('table_format', 'csv')
     if table_format not in TABLE_FORMATS:
         raise ValueError(f'assembly.table_format must be one of {list(TABLE_FORMATS)}; got {table_format!r}')
-    return _AssemblyBlock(AssemblyConfig(**{k: values[k] for k in names if k in values}), assignment, table_format)
+    previews = _flag(values, 'previews', 'assembly')
+    return _AssemblyBlock(AssemblyConfig(**{k: values[k] for k in names if k in values}), assignment, table_format,
+                          previews)
 
 
 def _export_keys():

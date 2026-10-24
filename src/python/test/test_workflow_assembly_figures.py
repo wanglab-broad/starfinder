@@ -4,7 +4,9 @@ The sample of ``test_workflow_assembly_golden.py`` (three FOVs of 8×48×64 voxe
 images) with an assembly block: the reference grids ``fovs/{fovID}/reference.tif`` (unit spacing)
 and the placement of ``assembly_golden`` saved in ``stitching/sample1/``. ``reads_assignment`` and
 ``export_sample`` run through stub ``snakemake`` objects, as that test runs the adapter; the figures
-``export_sample`` saves are inspected before saving, by their artists.
+``export_sample`` saves are inspected before saving, by their artists. On the route of a saved
+assignment the figures are opt-in (W-568, ``assembly.previews``): reads_assignment draws them into
+``fovs/{fovID}/previews/`` and export_sample into ``export/sample1/previews/{fovID}/``.
 """
 import importlib.util
 import json
@@ -42,10 +44,12 @@ MULTIVIEW = {"method": "multiview_stitcher", "input": "reference_stain",
 FIGURES = {"3d": ["assignment.png", "assignment_single_layer.png"], "2d": ["assignment.png"]}
 
 
-def assembly_config(root, assignment="default"):
+def assembly_config(root, assignment="default", previews=None):
+    """The sample's configuration; ``previews`` None leaves the key out (its default, false)."""
+    assembly = {"assignment": assignment, **({} if previews is None else {"previews": previews})}
     return {**_config(root, legacy=False), "n_rounds": 3, "ref_round": "round1", "seq_channel_order": ["ch00", "ch01", "ch02",
                                                                                           "ch03"],
-            "stitching": MULTIVIEW, "assembly": {"assignment": assignment},
+            "stitching": MULTIVIEW, "assembly": assembly,
             "export": {"route": "per_fov", "fuse": False}}
 
 
@@ -61,18 +65,24 @@ def build(root, dimensions):
     return out
 
 
+def figure_folder(out, fov, config):
+    """Where reads_assignment draws a FOV's figures: fovs/{fovID}/previews/ on the route of a saved assignment (with
+    assembly.previews on), expr/{fovID}/ with assignment null."""
+    if config["assembly"]["assignment"] is None:
+        return out / "expr" / fov
+    return out / "fovs" / fov / "previews"
+
+
 def reads_assignment(root, out, fov, config):
-    """reads_assignment with the assembly block for one FOV; returns the bytes of each figure it wrote."""
+    """reads_assignment with the assembly block for one FOV, with the outputs the rule declares; returns the bytes of
+    each figure it wrote."""
     inputs = [root / "input" / "data" / "sample" / "fovs.csv", out / "images" / "DAPI" / f"{fov}.tif",
               out / "images" / "stardist_segmentation" / f"{fov}.tif", out / "fovs" / fov / "molecules.csv",
               root / "input" / "data" / "sample" / "genes.csv", out / "fovs" / fov / "reference.tif"]
-    outputs = [out / "expr" / fov / "raw.h5ad", out / "expr" / fov / "reads_assignment.csv"]
-    name = config["assembly"]["assignment"]
-    if name is not None:
-        outputs.append(out / "fovs" / fov / "assignment" / name / "assignment.json")
-    _snakemake._run_reads_assignment(SimpleNamespace(input=[str(p) for p in inputs], output=[str(p) for p in outputs],
+    files, previews = _snakemake._reads_assignment_outputs(config, out, fov)
+    _snakemake._run_reads_assignment(SimpleNamespace(input=[str(p) for p in inputs], output=[*files, *previews],
                                                    config=config, wildcards=SimpleNamespace(fovID=fov)))
-    return {p.name: p.read_bytes() for p in sorted((out / "expr" / fov).glob("*.png"))}
+    return {p.name: p.read_bytes() for p in sorted(figure_folder(out, fov, config).glob("*.png"))}
 
 
 def export_sample(out, config, monkeypatch=None):
@@ -109,8 +119,11 @@ def stable(value):
 
 
 def snapshot(folder):
+    """The export folder's files but the ownership previews (previews/, which export.json does not list), its record
+    and the SHA-256 of its tables."""
     from starfinder._records import file_sha256
-    files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
+    files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*")
+                   if p.is_file() and not p.relative_to(folder).as_posix().startswith("previews/"))
     record = stable(json.loads((folder / "export.json").read_text()))
     return files, record, {f: file_sha256(folder / f) for f in files if f.startswith("tables/")}
 
@@ -144,25 +157,30 @@ def check_figure(figure, result, record, single_layer):
 @needs_anndata
 @pytest.mark.parametrize("dimensions", [pytest.param("3d", marks=pytest.mark.slow), "2d"])
 def test_export_sample_draws_the_figures_with_ownership(tmp_path, monkeypatch, dimensions):
+    """With assembly.previews on: reads_assignment's figures in fovs/{fovID}/previews/, export_sample's (with the
+    ownership) in export/sample1/previews/{fovID}/; one writer each, and neither file is overwritten."""
     out = build(tmp_path, dimensions)
-    config = assembly_config(tmp_path)
+    config = assembly_config(tmp_path, previews=True)
     before = {fov: reads_assignment(tmp_path, out, fov, config) for fov in GOLDEN_IDS}
     assert all(list(figures) == sorted(FIGURES[dimensions]) for figures in before.values())
+    assert not (out / "expr").exists()
     # The export without the figures (the code before this change), then with them, into the same folder.
     monkeypatch.setattr(_snakemake, "_write_ownership_figures", lambda *args: None)
     export_sample(out, config)
     monkeypatch.undo()
     plain = snapshot(out / "export" / "sample1")
-    assert {fov: {p.name: p.read_bytes() for p in (out / "expr" / fov).glob("*.png")} for fov in GOLDEN_IDS} \
-        == before
+    assert {fov: {p.name: p.read_bytes() for p in (out / "fovs" / fov / "previews").glob("*.png")}
+            for fov in GOLDEN_IDS} == before
     saved = export_sample(out, config, monkeypatch)
     folder = out / "export" / "sample1"
     assert snapshot(folder) == plain
     check_export(folder)
     assert "assignment.png" not in json.dumps(json.loads((folder / "export.json").read_text()))
-    # Every assembled FOV's figures, saved into expr/{fovID}/, each with the FOV's region and excluded observations.
+    # Every assembled FOV's figures, saved into export/sample1/previews/{fovID}/, the folder export.smk declares,
+    # each with the FOV's region and excluded observations.
+    assert _snakemake._export_preview_outputs(config, out, "sample1") == [str(folder / "previews")]
     assembly, placement = load_assembly(folder), load_placement(out / "stitching" / "sample1")
-    expected = [str(out / "expr" / fov / name) for fov in GOLDEN_IDS for name in FIGURES[dimensions]]
+    expected = [str(folder / "previews" / fov / name) for fov in GOLDEN_IDS for name in FIGURES[dimensions]]
     assert [path for path, _ in saved] == expected
     for path, figure in saved:
         fov = path.split("/")[-2]
@@ -171,15 +189,39 @@ def test_export_sample_draws_the_figures_with_ownership(tmp_path, monkeypatch, d
         assert record.region.any() and not record.region.all()
         assert check_figure(figure, result, record, path.endswith("single_layer.png")) > 0
     for fov in GOLDEN_IDS:
-        after = {p.name: p.read_bytes() for p in sorted((out / "expr" / fov).glob("*.png"))}
+        local = {p.name: p.read_bytes() for p in sorted((out / "fovs" / fov / "previews").glob("*.png"))}
+        assert local == before[fov]                                            # not overwritten by export_sample
+        after = {p.name: p.read_bytes() for p in sorted((folder / "previews" / fov).glob("*.png"))}
         assert list(after) == list(before[fov])
         assert all(after[name] != before[fov][name] for name in after), fov   # every FOV has an excluded cell
+    assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*.png")) == sorted(
+        [f"fovs/{fov}/previews/{name}" for fov in GOLDEN_IDS for name in FIGURES[dimensions]]
+        + [f"export/sample1/previews/{fov}/{name}" for fov in GOLDEN_IDS for name in FIGURES[dimensions]])
+
+
+@needs_anndata
+def test_by_default_the_saved_assignment_route_writes_no_preview(tmp_path, monkeypatch):
+    """Without assembly.previews (default false), neither reads_assignment nor export_sample draws a figure; the
+    route writes the saved folders and the export, and no expr/ file."""
+    out = build(tmp_path, "3d")
+    config = assembly_config(tmp_path)
+    assert workflow._assembly_block(config).previews is False
+    assert {fov: reads_assignment(tmp_path, out, fov, config) for fov in GOLDEN_IDS} == {f: {} for f in GOLDEN_IDS}
+    assert _snakemake._export_preview_outputs(config, out, "sample1") == []
+    saved = export_sample(out, config, monkeypatch)
+    assert saved == []
+    assert json.loads((out / "export" / "sample1" / "export.json").read_text())["parts"]["assemble"] == "written"
+    assert list(out.rglob("*.png")) == [] and not (out / "expr").exists()
+    assert not (out / "export" / "sample1" / "previews").exists()
 
 
 @needs_anndata
 def test_with_assignment_null_no_figure_is_written_or_changed(tmp_path, monkeypatch):
+    """Molecules only (unchanged by W-568): reads_assignment draws into expr/{fovID}/, also with previews on, and
+    export_sample draws nothing."""
     out = build(tmp_path, "3d")
-    config = assembly_config(tmp_path, assignment=None)
+    config = assembly_config(tmp_path, assignment=None, previews=True)
+    assert _snakemake._export_preview_outputs(config, out, "sample1") == []
     before = {fov: reads_assignment(tmp_path, out, fov, config) for fov in GOLDEN_IDS}
     saved = export_sample(out, config, monkeypatch)
     assert json.loads((out / "export" / "sample1" / "export.json").read_text())["assembly"]["mode"] == "molecules_only"

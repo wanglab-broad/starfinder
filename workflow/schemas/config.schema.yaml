@@ -1896,14 +1896,21 @@ $defs:
     description: >-
       Python only, with a stitching block. The assemble part of Dataset.export, run by the
       export_sample rule: the AssemblyConfig fields, the assignment name of Dataset.export and its
-      table_format (keys kept equal to them by a test). With the block, reads_assignment writes the
-      per-FOV files without the legacy filter and create_sample_h5ad and
-      create_sample_reads_assignment do not run.
+      table_format (keys kept equal to them by a test), and previews. With the block, reads_assignment
+      saves each FOV's assignment folder alone (with assignment null, it writes the per-FOV files
+      without the legacy filter), stitch_sample writes no tile_config_{sample}.csv, and
+      create_sample_h5ad and create_sample_reads_assignment do not run.
     type: object
     properties:
       assignment:
         description: "The assignment name read per FOV (default default); null: molecules only"
         type: [string, "null"]
+      previews:
+        description: >-
+          The assignment previews (default false): with an assignment name, reads_assignment draws each
+          FOV's figures into fovs/<fov>/previews/ and export_sample its ownership figures into
+          export/<sample>/previews/<fov>/
+        type: boolean
       ownership:
         enum: ["nearest_center", "midpoint_box"]
       centroid:

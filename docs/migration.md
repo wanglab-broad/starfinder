@@ -1658,6 +1658,8 @@ unchanged; its outputs, including `images/fused/{sample}/`, do not change.
 
 Since W-564 the reference grid is that of `fovs/{fovID}/reference.tif` by default and the folder is `fovs/{fovID}/assignment/<assignment>/`; see "The FOV folder, the reference image and channel folders by label".
 
+Since W-568 the route of a saved assignment writes that folder alone and no tile configuration; see "The route of a saved assignment writes the saved folder alone; opt-in assignment previews".
+
 The adapter's translation of a legacy configuration is `StageAxisMapping(x="+x", y="+y",
 source="legacy")` with the `rotate_angle` it ran with; a configuration with a
 `stitching` block and a stage file names `stage_axes` itself.
@@ -1676,6 +1678,8 @@ regions instead of the tile configuration; no tile box is drawn. Without
 `export_sample` rewrites `expr/{fovID}/assignment.png` and `assignment_single_layer.png`
 with ownership after the sample is assembled; `reads_assignment` writes them first, as
 before. No table, record, count or `export/<sample>/` file changes.
+
+Since W-568 these figures are opt-in (`assembly.previews`) and the two kinds have their own folders; see "The route of a saved assignment writes the saved folder alone; opt-in assignment previews".
 
 ### A deterministic UUID in the package's OME-TIFF files
 
@@ -2200,6 +2204,46 @@ renamed, and each change has no alias, no dual read and no dual search.
 * **Tests.** The tests that linked the FOV-first synthetic e2e data into the round-first
   layout (`conftest.py`'s `e2e_result`, `test_fov.py`'s `small_pipeline_dataset`, the two
   streaming tests of `test_e2e.py`) read it in place with `image_dir_template="{fov}/{round}"`.
+
+### The route of a saved assignment writes the saved folder alone; opt-in assignment previews
+
+W-568 (OM-10, OM-16 choice A) removes the per-FOV files that nothing reads on the route of
+a saved assignment (an `assembly` block whose `assignment` names a folder) and makes the
+assignment figures opt-in. Existing output trees are not rewritten, and nothing is written
+twice. Configurations without an `assembly` block (the legacy route, both backends) and
+with `assignment: null` (molecules only) write the same files as before.
+
+| Output | Before | After |
+| --- | --- | --- |
+| `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv` | written by `reads_assignment` on every route; inputs of `export_sample` on the route per FOV | not written on the route of a saved assignment; `export_sample`'s per-FOV inputs are the saved folders' `assignment.json` alone, and the final targets list the saved folders |
+| `expr/{fovID}/log.txt` | written on every route | not written on the route of a saved assignment: `assignment.json`'s `counts` holds the same numbers |
+| `fovs/{fovID}/assignment/<name>/` | written and declared beside the files above | the only output `reads_assignment` writes and declares on that route |
+| `output/tile_config_{sample}.csv` | written and declared by the BigStitcher `stitch_sample`, also with an `assembly` block, where nothing reads it | written and declared only without an `assembly` block |
+| `expr/{fovID}/assignment.png`, `assignment_single_layer.png` | written by `reads_assignment` by default, then overwritten with the ownership region by `export_sample`, declared by neither | on the route of a saved assignment, written only with `previews: true`: the local figures in `fovs/{fovID}/previews/` (by `reads_assignment`), the ownership figures in `export/<sample>/previews/{fovID}/` (by `export_sample`); each folder a declared directory output of its one writer |
+
+* **New key `assembly.previews`** (Boolean, default `false`; Python only, in the schema and
+  `_assembly_block`): turns on both preview kinds on the route of a saved assignment. It does
+  not change molecules only, whose figures stay in `expr/{fovID}/`, or the legacy route.
+* **`check_export` skips `previews/`** in its R2 listing check: the ownership previews are
+  drawn after the export and `export.json` does not list them. No export file, record or
+  table changes.
+* **Removed: `workflow/scripts/sample_preview.py`**, a stale notebook export that no rule,
+  test or doc referenced and that could not run as written: it imports nothing it uses,
+  reads `expr/sample4_raw.h5ad` with a hard-coded sample and parses the percent and coverage
+  lines of the legacy `log.txt`, a format that no longer exists.
+* **New private helpers** in `starfinder._snakemake`: `_reads_assignment_outputs` (the
+  outputs `reads_assignment` declares with an `assembly` block, and the final targets) and
+  `_export_preview_outputs` (the preview folder `export_sample` declares); and in
+  `starfinder._layout`: `PREVIEWS`, `fov_previews_dir` and `export_previews_dir`.
+* **Tests.** The tests that listed the route's files follow: the export inputs
+  (`test_stitching_workflow.py`, `test_sample_segmentation_workflow.py`'s
+  `per_fov_inputs`), the figures (`test_workflow_assembly_figures.py`,
+  `test_sample_segmentation_workflow.py`'s `test_wf2_the_assignment_figures`, now with
+  `previews: true`, and `test_declared_grid_header.py`, which turns the previews on to keep
+  comparing the figures), the declared-grid workflow comparison
+  (`test_workflow_declared_grids.py` compares the saved `molecules.csv` instead of
+  `reads_assignment.csv`), the assembly schema keys, and the BigStitcher end-to-end test,
+  which runs with and without an `assembly` block.
 
 ### The processing report
 

@@ -455,12 +455,15 @@ def _assignment_ratio(counts):
 
 
 def _write_assignment_figures(result, image_path, folder, *, ownership=None):
-    """expr/{fovID}/assignment.png and, for a ZYX label image, assignment_single_layer.png of an assignment.
+    """<folder>/assignment.png and, for a ZYX label image, assignment_single_layer.png of an assignment.
 
     plot_assignment over the DAPI image ``image_path`` (left out when it is
     None or its Y, X are not those of the labels): the Z-maximum view and the
-    middle plane. reads_assignment draws them without ``ownership``;
-    export_sample draws them again with each FOV's FOVOwnership.
+    middle plane. reads_assignment draws them without ``ownership``, into
+    expr/{fovID}/ without a saved assignment, or into fovs/{fovID}/previews/
+    with assembly.previews on; export_sample draws them with each FOV's
+    FOVOwnership into export/{sample}/previews/{fovID}/, with assembly.previews
+    on.
     """
     import matplotlib.pyplot as plt
     import tifffile
@@ -504,10 +507,14 @@ def _run_reads_assignment(snakemake):
     With an assembly block (option W1 of docs/assembly-contract.md, "Workflow
     configuration") no tile configuration is read: the molecule grid is that
     of the FOV's reference image (reference_image), as Dataset.export reads it
-    (_assembly_cells), the per-FOV files are written without the overlap
-    filter and without global_* columns, and the result is saved as the FOV's
-    assignment folder fovs/{fovID}/assignment/<assembly.assignment>/
-    (its record named so), which the export_sample rule assembles.
+    (_assembly_cells). With assembly.assignment null (molecules only) the
+    per-FOV files above are written without the overlap filter and without
+    global_* columns. With an assignment name the result is saved as the FOV's
+    assignment folder fovs/{fovID}/assignment/<assembly.assignment>/ (its
+    record named so), which the export_sample rule assembles, and nothing else
+    is written: no raw.h5ad, reads_assignment.csv or log.txt (the record
+    holds the counts), and the two figures only with assembly.previews on,
+    into fovs/{fovID}/previews/ (_reads_assignment_outputs).
     """
     from starfinder.assignment import assign_molecules, import_legacy_molecules_csv, load_molecules
     config, fov_id = snakemake.config, snakemake.wildcards.fovID
@@ -533,6 +540,9 @@ def _run_reads_assignment(snakemake):
         result = replace(result, record=dict(result.record, counts=summarize_assignment(result)))
         result = write_assignment(assignment_directory(_layout.fov_dir(output_root, fov_id), name), result,
                                   metadata=cells.grid.metadata)
+        if block.previews:
+            _write_assignment_figures(result, snakemake.input[1], _layout.fov_previews_dir(output_root, fov_id))
+        return
     h5ad, csv_path = Path(snakemake.output[0]), Path(snakemake.output[1])
     written = _write_raw_h5ad(result, h5ad, sample=sample, fov_id=fov_id, tile=tile)
     _write_reads_assignment(result, snakemake.input[3], csv_path, tile=tile, cells=written, legacy=legacy)
@@ -545,6 +555,26 @@ def _run_reads_assignment(snakemake):
         f"{counts['unassigned']} unassigned, {counts['excluded_cell']} in excluded cells, "
         f"{counts['outside_grid']} outside the grid; {kept}\n"
         f"{_assignment_ratio(counts)}\n")
+
+
+def _reads_assignment_outputs(config, output_root, fov_id='{fovID}'):
+    """(files, folders) the reads_assignment rule declares with an assembly block; '{fovID}' for the pattern.
+
+    With an assignment name (the route of a saved assignment), the files are
+    the saved folder's record fovs/<fov>/assignment/<name>/assignment.json
+    alone, and the folders fovs/<fov>/previews/ with assembly.previews on
+    (declared as directories: a YX label image has one figure, a ZYX one
+    two); else []. With assembly.assignment null (molecules only), the files
+    are expr/<fov>/raw.h5ad and reads_assignment.csv, and no folder. Without
+    an assembly block reads-assignment.smk declares the legacy files itself.
+    """
+    block = _assembly_block(config)
+    root = Path(output_root)
+    if block.assignment is None:
+        return [str(_layout.expr_dir(root, fov_id) / 'raw.h5ad'),
+                str(_layout.expr_dir(root, fov_id) / 'reads_assignment.csv')], []
+    previews = [str(_layout.fov_previews_dir(root, fov_id))] if block.previews else []
+    return _assignment_record_outputs(root, [fov_id], block.assignment), previews
 
 
 def _stitching_position_inputs(config):
@@ -689,8 +719,10 @@ def _run_stitching(snakemake):
     or reference_image names, default fovs/{fovID}/reference.tif, as Dataset.stitch reads
     them: the stored metadata, or the grid voxel_size_xy and voxel_size_z
     declare for a file that stores none); the placement is saved there and
-    the legacy writer writes output/tile_config_{sample}.csv (output 1) from
-    the record.
+    without an assembly block the legacy writer writes
+    output/tile_config_{sample}.csv (output 1) from the record. With an
+    assembly block nothing reads that file, so it is neither written nor
+    declared (stitching-py.smk).
     """
     from starfinder.stitching import import_bigstitcher, save_placement
     from .dataset._declared import reference_grid
@@ -716,7 +748,8 @@ def _run_stitching(snakemake):
                                 grids=grids, config=block.config, review=block.review, fallback=block.fallback,
                                 sample=sample, macro=Path(snakemake.input[3]).read_text())
     save_placement(result, folder)
-    _write_tile_config(result, snakemake.output[1], config)
+    if 'assembly' not in config:
+        _write_tile_config(result, snakemake.output[1], config)
 
 
 def _run_bigstitcher_macro(snakemake):
@@ -802,10 +835,9 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
 
     The inputs are the sample's placement stitching/<sample>/placement.json,
     then by route (docs/sample-segmentation-contract.md, "The entry"). On the
-    route per FOV, the per-FOV assignment outputs of reads_assignment
-    (raw.h5ad, reads_assignment.csv and the saved folder's assignment.json),
-    or with assembly.assignment null the molecule tables (on either route;
-    _molecule_table: fovs/{fovID}/molecules.csv, or the legacy goodSpots CSV
+    route per FOV, the one output of reads_assignment per FOV, the saved
+    folder's assignment.json, or with assembly.assignment null the molecule
+    tables (on either route; _molecule_table: fovs/{fovID}/molecules.csv, or the legacy goodSpots CSV
     of stitch_subtile). On the route after fusion, no reads_assignment output:
     the molecule tables, the reference images (_reference_image_inputs, whose
     grids place the molecules) and, with fuse on, the source images of
@@ -833,10 +865,21 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
             if entry != 'reference_stain':
                 inputs += [p for p in (str(source_path(files, fov, entry)) for fov in fov_ids) if p not in inputs]
     else:
-        inputs += [str(_layout.expr_dir(root, fov) / 'raw.h5ad') for fov in fov_ids]
-        inputs += [str(_layout.expr_dir(root, fov) / 'reads_assignment.csv') for fov in fov_ids]
         inputs += _assignment_record_outputs(root, fov_ids, block.assignment)
     return inputs, str(_layout.export_dir(root, sample) / _layout.EXPORT_FILE)
+
+
+def _export_preview_outputs(config, output_root, sample='{sample}'):
+    """The folder export_sample declares beside export.json: export/<sample>/previews/ with assembly.previews on and
+    an assignment name, else none ([]).
+
+    It holds the ownership figures of each FOV, previews/<fov>/ (_write_ownership_figures), drawn on the route per
+    FOV only; export.json does not list it. A directory: a FOV's figure count follows its label image.
+    """
+    block = _assembly_block(config)
+    if not block.previews or block.assignment is None:
+        return []
+    return [str(_layout.export_previews_dir(Path(output_root), sample))]
 
 
 def _run_export(snakemake):
@@ -853,15 +896,17 @@ def _run_export(snakemake):
     that cannot run (an extra not installed, an input missing) is recorded
     not_run in export.json and does not fail the rule.
 
-    After the export on the route per FOV, with an assignment name and an
-    assembly in the folder (assemble written or reused), it draws
-    expr/{fovID}/assignment.png and, for a ZYX label image,
-    assignment_single_layer.png again for each FOV of the sample that has a
-    saved assignment (its folder's assignment.json, an input of the rule, and
-    an input of the assembly), with the FOV's ownership
-    (_write_ownership_figures). They are not declared outputs: reads_assignment
-    writes them first, without ownership. On the route after fusion no figure
-    is drawn: the sample's cells come from no per-FOV assignment.
+    With assembly.previews on, after the export on the route per FOV, with an
+    assignment name and an assembly in the folder (assemble written or
+    reused), it draws export/{sample}/previews/{fovID}/assignment.png and, for
+    a ZYX label image, assignment_single_layer.png for each FOV of the sample
+    that has a saved assignment (its folder's assignment.json, an input of the
+    rule, and an input of the assembly), with the FOV's ownership
+    (_write_ownership_figures); the folder previews/ is a declared output
+    (_export_preview_outputs). reads_assignment's local figures are in
+    fovs/{fovID}/previews/, which this rule never writes. By default no
+    figure is drawn. On the route after fusion no figure is drawn: the
+    sample's cells come from no per-FOV assignment.
     """
     config, sample = snakemake.config, snakemake.wildcards.sample
     export, block = _export_config(config)
@@ -869,14 +914,15 @@ def _run_export(snakemake):
     placement = Path(snakemake.input[0]).parent
     record = dataset.export(sample, placement=placement, assignment=block.assignment, config=export,
                             output_dir=Path(snakemake.output[0]).parent)
-    if block.assignment is not None and not _after_fusion(export, block) \
+    if block.previews and block.assignment is not None and not _after_fusion(export, block) \
             and record.parts.get('assemble') in ('written', 'reused'):
         output_root = Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
         _write_ownership_figures(output_root, block.assignment, placement, record.folder, snakemake.input)
 
 
 def _write_ownership_figures(output_root, name, placement_dir, export_dir, inputs):
-    """The two assignment figures of every assembled FOV whose saved assignment ``name`` is one of ``inputs``.
+    """The two assignment figures of every assembled FOV whose saved assignment ``name`` is one of ``inputs``,
+    into <export_dir>/previews/<fovID>/.
 
     The assembly is read from export/<sample>/ (load_assembly), the placement
     from stitching/<sample>/, each FOV's assignment from
@@ -897,7 +943,8 @@ def _write_ownership_figures(output_root, name, placement_dir, export_dir, input
             continue
         result = read_assignment(folder, name)
         image = _layout.image_file(output_root, fov_id, 'DAPI')
-        _write_assignment_figures(result, image if image.is_file() else None, _layout.expr_dir(output_root, fov_id),
+        _write_assignment_figures(result, image if image.is_file() else None,
+                                  Path(export_dir) / _layout.PREVIEWS / fov_id,
                                   ownership=fov_ownership(assembly, fov_id, placement=placement))
 
 

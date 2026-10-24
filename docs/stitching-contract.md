@@ -619,7 +619,8 @@ From the W-324 parity outputs (`parity/` in the W-324 run directory) and the 202
 The legacy writer of `tile_config_{sample}.csv` stays for the rule chain that reads it
 (`reads_assignment` through the workflow adapter) until assemble replaces it; it takes
 its values from the record's raw translations and the view map, so its output is
-unchanged.
+unchanged. (W-568: with an `assembly` block, where assemble has replaced that chain, the
+BigStitcher `stitch_sample` neither writes nor declares the file.)
 
 ## Supplied placement
 
@@ -849,6 +850,9 @@ stitching:
   selection keeps each FOV's cell.
 * `fiji_path` is read by the BigStitcher engine rule when it runs, not when the rule file
   is parsed; the key stays required for that rule only.
+* With `method: bigstitcher`, `stitch_sample` writes and declares
+  `output/tile_config_{sample}.csv` only without an `assembly` block (W-568): with one,
+  nothing reads it.
 * The static schema lists the method names and is kept equal to `STITCHING_METHODS` plus
   `bigstitcher` by a default-tier test, as for the other registries.
 

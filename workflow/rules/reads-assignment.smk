@@ -7,24 +7,29 @@
 
 ### ==================== [ Reads Assignment ] =========================
 
-# Without an assembly block the legacy filter reads every sample's tile configuration. With one
-# (option W1) the per-FOV files are written without the filter, so no tile configuration is read,
-# and the FOV's assignment folder fovs/{fovID}/assignment/<name>/, which export_sample assembles, is saved
-# as well; the molecule grid is then that of the FOV's reference image (the file reference_image_import or
-# reference_image names, default fovs/{fovID}/reference.tif), which the adapter reads (_assembly_cells).
+# Without an assembly block the legacy filter reads every sample's tile configuration and the rule writes
+# expr/{fovID}/raw.h5ad and reads_assignment.csv (and, undeclared, its figures and log.txt). With one
+# (option W1) no tile configuration is read; the molecule grid is then that of the FOV's reference image (the
+# file reference_image_import or reference_image names, default fovs/{fovID}/reference.tif), which the adapter
+# reads (_assembly_cells). With an assignment name the rule writes and declares the FOV's assignment folder
+# fovs/{fovID}/assignment/<name>/ alone, which export_sample assembles, and with assembly.previews on the folder
+# of its figures fovs/{fovID}/previews/ (a directory); with assignment null (molecules only) the per-FOV files
+# without the filter (_reads_assignment_outputs).
 # READS_ASSIGNMENT_GEOMETRY is the one input that places the FOV: the tile configuration, or that grid.
 # The molecule input is MOLECULE_TABLE (common.smk), the file of the configured producer. The count matrix's genes,
 # in their order, are those of the codebook the sequencing rules read (CODEBOOK, common.smk; _reference_genes).
 if ASSEMBLY_BLOCK:
-    from starfinder._snakemake import _assignment_record_outputs, _reference_image_inputs
+    from starfinder._snakemake import _reads_assignment_outputs, _reference_image_inputs
     READS_ASSIGNMENT_GEOMETRY = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])
-    READS_ASSIGNMENT_NAME = (config['assembly'] or {}).get('assignment', 'default')
-    READS_ASSIGNMENT_FOLDER = ([] if READS_ASSIGNMENT_NAME is None else
-                               _assignment_record_outputs(OUTPUT_DIR, ["{fovID}"], READS_ASSIGNMENT_NAME))
+    READS_ASSIGNMENT_OUTPUTS, READS_ASSIGNMENT_PREVIEWS = _reads_assignment_outputs(config, OUTPUT_DIR)
 else:
     READS_ASSIGNMENT_GEOMETRY = expand("{output_dir}/output/tile_config_{sample}.csv", output_dir=OUTPUT_DIR,
                                           sample=SAMPLE)
-    READS_ASSIGNMENT_FOLDER = []
+    READS_ASSIGNMENT_OUTPUTS = [
+        expand("{output_dir}/expr/{{fovID}}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=FOVS),
+        expand("{output_dir}/expr/{{fovID}}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=FOVS),
+    ]
+    READS_ASSIGNMENT_PREVIEWS = []
 
 rule reads_assignment:
     input:
@@ -35,9 +40,8 @@ rule reads_assignment:
         CODEBOOK,
         READS_ASSIGNMENT_GEOMETRY,
     output:
-        expand("{output_dir}/expr/{{fovID}}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=FOVS),
-        expand("{output_dir}/expr/{{fovID}}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=FOVS),
-        READS_ASSIGNMENT_FOLDER,
+        READS_ASSIGNMENT_OUTPUTS,
+        [directory(folder) for folder in READS_ASSIGNMENT_PREVIEWS],
     resources:
         mem_mb=get_rule_config('reads_assignment', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:

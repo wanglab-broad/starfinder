@@ -3,30 +3,33 @@
     docs/assembly-contract.md, "Workflow configuration"; option W1), included when the configuration has an
     assembly block: export_sample runs every part of Dataset.export and writes export/{sample}/. It replaces
     create_sample_h5ad and create_sample_reads_assignment, which do not run with the block. Its inputs follow
-    the route (docs/sample-segmentation-contract.md, "The entry"): on the route per FOV the per-FOV outputs of
-    reads_assignment; on the route after fusion the molecule tables and the reference and source images.
+    the route (docs/sample-segmentation-contract.md, "The entry"): on the route per FOV the saved assignment
+    folders reads_assignment writes; on the route after fusion the molecule tables and the reference and source
+    images. With assembly.previews on it also declares export/{sample}/previews/, the FOVs' ownership figures.
     Uses variables from common.smk; the blocks and the route are validated there (_export_config,
     _check_export_route).
 """
 
-from starfinder._snakemake import _export_sample_files
+from starfinder._snakemake import _export_preview_outputs, _export_sample_files
 
 ### ==================== [ Helper Functions ] =========================
 
 def get_export_input(wildcards):
-    """The sample's placement.json, then by route its per-FOV assignment outputs (route per FOV), or its molecule
+    """The sample's placement.json, then by route its saved assignment records (route per FOV), or its molecule
     tables (molecules only) with the reference and source images (route after fusion)."""
     return _export_sample_files(config, OUTPUT_DIR, SAMPLE_TO_FOV[wildcards.sample], wildcards.sample)[0]
 
 ### ==================== [ Export Sample ] =========================
 
 # Its declared output is export.json, which lists every other file, so a part that cannot run
-# (an extra not installed) is recorded not_run and does not fail the rule.
+# (an extra not installed) is recorded not_run and does not fail the rule; with assembly.previews on,
+# also the folder of the ownership figures, export/{sample}/previews/, which export.json does not list.
 rule export_sample:
     input:
         get_export_input
     output:
-        _export_sample_files(config, OUTPUT_DIR, [])[1]
+        _export_sample_files(config, OUTPUT_DIR, [])[1],
+        [directory(folder) for folder in _export_preview_outputs(config, OUTPUT_DIR)],
     resources:
         mem_mb=get_rule_config('create_sample_h5ad', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:

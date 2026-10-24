@@ -86,7 +86,7 @@ blocks instead, and its `reads_assignment` reads the FOV membership `INPUT/fovs.
 | `create_BigStitcher_macro` | Fused sample `grid.csv` | `images/fused/{sample}/BigStitcher_macro.ijm`; actual script is `create_BigStitcher_macro_1.py` |
 | `run_BigStitcher_macro` | Macro and grid | `images/fused/{sample}/DAPI/dataset.xml`, through configured Fiji executable |
 | `create_tile_config` | Sample's dataset XML and grid | `output/tile_config_{sample}.csv` and `.html` |
-| `reads_assignment` | The FOV membership (`INPUT/fovs.csv` for the Python backend, the annotation for MATLAB), DAPI, segmentation labels, the molecule table, the codebook of the sequencing rules (`INPUT/genes.csv`, or the file `codebook` or `direct_panel` names), sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written |
+| `reads_assignment` | The FOV membership (`INPUT/fovs.csv` for the Python backend, the annotation for MATLAB), DAPI, segmentation labels, the molecule table, the codebook of the sequencing rules (`INPUT/genes.csv`, or the file `codebook` or `direct_panel` names), sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written. With an `assembly` block that names an assignment: `fovs/{fovID}/assignment/<name>/` alone, and `fovs/{fovID}/previews/` with `previews: true` ({doc}`workflow-configuration`, "`assembly`") |
 | `create_sample_h5ad` | Annotation and all per-FOV H5ADs in its sample range | `expr/{sample}_raw.h5ad` |
 | `create_sample_reads_assignment` | Annotation and all per-FOV assignment CSVs in its sample range | `expr/{sample}_reads_assignment.csv` |
 
@@ -134,11 +134,14 @@ FOV, `assignment_single_layer.png` (the middle plane `Z // 2`) when the label im
 ZYX, not for a YX one, and `log.txt`: one line of totals, then the assignment ratio,
 assigned molecules over all molecules of the table with both counts
 (`assignment ratio: 61.11% (11 of 18 molecules assigned)`), or
-`assignment ratio: none (no molecule)` when the FOV has none. With an `assembly` block,
-on the route per FOV (below), the sample's `export_sample` rule draws the two figures
-again once the sample is assembled, with the FOV's ownership region as a yellow line, the cells and molecules the
-assembly excluded in grey and, as each panel's x-axis label, how many of those drawn it retained
-({doc}`assignment-contract`, "Diagnostics"); `log.txt` is not rewritten, and without the
+`assignment ratio: none (no molecule)` when the FOV has none. With an `assembly` block
+that names an assignment (the route of a saved assignment, W-568), the rule writes the
+saved folder alone, and the figures only with `previews: true`, into
+`fovs/{fovID}/previews/`; then, on the route per FOV (below), the sample's `export_sample`
+rule draws the two figures once the sample is assembled into
+`export/<sample>/previews/{fovID}/`, with the FOV's ownership region as a yellow line, the
+cells and molecules the assembly excluded in grey and, as each panel's x-axis label, how
+many of those drawn it retained ({doc}`assignment-contract`, "Diagnostics"). Without the
 block the figures stay as `reads_assignment` draws them.
 
 Assignment needs the `anndata` extra for `raw.h5ad`; sample H5AD aggregation uses

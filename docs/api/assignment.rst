@@ -92,7 +92,8 @@ recorded SHA-256 (see :doc:`../checkpoints`).
 it: ``X`` the float64 whole-cell counts in ``genes`` order, optional ``nucleus`` and
 ``cytoplasm`` layers (NaN for a row whose ``compartments`` is not ``available``), strings
 as anndata expects; with no row, ``X`` has shape ``(0, len(genes))``. The workflow
-adapter writes ``expr/{fovID}/raw.h5ad`` with it, and
+adapter writes ``expr/{fovID}/raw.h5ad`` with it (without an ``assembly`` block, or with
+molecules only), and
 :py:func:`~starfinder.assembly.write_sample_h5ad` the sample-level ``sample.h5ad``. It needs
 the ``anndata`` extra.
 

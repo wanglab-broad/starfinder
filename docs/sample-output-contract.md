@@ -1477,8 +1477,9 @@ accepts.
   SHA-256 of its canonical JSON: sorted keys, no spaces, UTF-8). The parts include
   `segment` of the route after fusion ({doc}`sample-segmentation-contract`, "The entry").
 * R2. Every file the record lists exists with its SHA-256; every file under
-  `export/<sample>/` (the store's files included) is listed. A part with status `off`,
-  `not_run` or `empty` lists no file.
+  `export/<sample>/` (the store's files included) is listed, but those under `previews/`,
+  the workflow's opt-in ownership previews (W-568). A part with status `off`, `not_run` or
+  `empty` lists no file.
 * R3. When the `assembly` section is `written` or `reused`, it and the files of `tables/`
   and `sample.h5ad` pass `load_assembly` ({doc}`assembly-contract`, "Persistence"); when
   it is `off`, no such file exists.
@@ -1746,13 +1747,14 @@ export:
   `export/{sample}/export.json`, which lists every other file; a part that cannot run
   therefore does not fail the rule, and the warning and the record say so ("When a part
   cannot run").
-* After `Dataset.export`, with `assembly.assignment` set and the assembly written or
-  reused, the rule also draws each FOV's assignment figures `expr/{fovID}/assignment.png`
-  and `assignment_single_layer.png` again, with the FOV's ownership region
-  ({doc}`assembly-contract`, "Workflow configuration"; W-330). They lie outside
-  `export/<sample>/`, are not declared outputs and are not listed in `export.json`;
-  `Dataset.export` itself writes no figure. On the route after fusion the assignment
-  figures are not redrawn.
+* After `Dataset.export`, with `assembly.assignment` set, `assembly.previews: true` (W-568;
+  default false) and the assembly written or reused, the rule also draws each FOV's
+  assignment figures `export/{sample}/previews/{fovID}/assignment.png` and
+  `assignment_single_layer.png`, with the FOV's ownership region
+  ({doc}`assembly-contract`, "Workflow configuration"; W-330). The folder `previews/` is a
+  declared directory output of the rule and is not listed in `export.json`;
+  `Dataset.export` itself writes no figure. On the route after fusion no assignment
+  figure is drawn.
 * A default-tier test keeps the static schema equal to the fields of `ExportConfig`,
   `FusionConfig`, `LabelConfig` and `SpatialDataExportConfig`, as for the other blocks.
 

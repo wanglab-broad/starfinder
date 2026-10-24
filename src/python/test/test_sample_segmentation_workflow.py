@@ -41,6 +41,7 @@ from starfinder.export import (
     SampleSegmentationConfig,
     SampleSegmentationRun,
     SpatialDataExportConfig,
+    check_export,
 )
 from starfinder.segmentation import SEGMENTATION_METHODS, LabelImportConfig
 from starfinder.segmentation._methods import ROLES
@@ -141,9 +142,9 @@ def refused(route, dimensionality, segment, fuse, segmentation, assignment):
 
 
 def per_fov_inputs(fovs=FOVS, root=OUT, name="default"):
-    """The inputs of export_sample before this issue: the placement and the outputs of reads_assignment."""
-    return ([f"{root}/stitching/{SAMPLE}/placement.json"] + [f"{root}/expr/{f}/raw.h5ad" for f in fovs]
-            + [f"{root}/expr/{f}/reads_assignment.csv" for f in fovs]
+    """The inputs of export_sample on the route per FOV: the placement and the one output of reads_assignment, the
+    saved folder's record (W-568: no raw.h5ad or reads_assignment.csv)."""
+    return ([f"{root}/stitching/{SAMPLE}/placement.json"]
             + [f"{root}/fovs/{f}/assignment/{name}/assignment.json" for f in fovs])
 
 
@@ -417,13 +418,15 @@ def scene_workflow(tmp_path):
     return folder, block
 
 
-def scene_config(tmp_path, export):
+def scene_config(tmp_path, export, previews=None):
+    """The scene's configuration; ``previews`` None leaves assembly.previews out (its default, false)."""
+    assembly = {"assignment": "default", "table_format": "csv", **({} if previews is None else {"previews": previews})}
     return {"backend": "python", "dataset_id": DS, "sample_id": SAMPLE, "output_id": "output",
             "root_input_path": str(tmp_path / "in"), "root_output_path": str(tmp_path),
             "fov_id_pattern": "FOV{i}", "n_rounds": 3, "ref_round": "round1", "rotate_angle": 0, "img_col": 24,
             "img_row": 24, "voxel_size_xy": 0.5, "voxel_size_z": 1.0, "rules": {},
             "seq_channel_order": ["ch00", "ch01", "ch02", "ch03"], "stitching": copy.deepcopy(MULTIVIEW),
-            "assembly": {"assignment": "default", "table_format": "csv"}, "export": export}
+            "assembly": assembly, "export": export}
 
 
 def run_rule(folder, config, monkeypatch, extra_inputs=()):
@@ -441,22 +444,22 @@ def run_rule(folder, config, monkeypatch, extra_inputs=()):
 
 
 def figure_paths(folder):
-    return {p.relative_to(folder.root).as_posix(): p.read_bytes()
-            for p in sorted((folder.root / "expr").rglob("*.png"))}
+    return {p.relative_to(folder.root).as_posix(): p.read_bytes() for p in sorted(folder.root.rglob("*.png"))}
 
 
 @needs_anndata
 @needs_library
 def test_wf2_the_assignment_figures(tmp_path, monkeypatch):
-    """On the route after fusion export_sample draws no expr/{fovID}/assignment.png again, also with the FOVs' saved
-    assignments present and passed as inputs; on the route per FOV it draws them for every FOV with its ownership,
-    as W-330 specifies."""
+    """With assembly.previews on (W-568): on the route after fusion export_sample draws no assignment figure, also
+    with the FOVs' saved assignments present and passed as inputs; on the route per FOV it draws them for every FOV
+    with its ownership, as W-330 specifies, into export/<sample>/previews/<fov>/, and leaves the local figures of
+    reads_assignment in fovs/<fov>/previews/ as they are."""
     folder, block = scene_workflow(tmp_path)
     for fov in folder.scene.ids:  # the figures reads_assignment wrote first
-        (folder.root / "expr" / fov).mkdir(parents=True)
-        (folder.root / "expr" / fov / "assignment.png").write_bytes(b"written by reads_assignment")
+        (folder.root / "fovs" / fov / "previews").mkdir(parents=True)
+        (folder.root / "fovs" / fov / "previews" / "assignment.png").write_bytes(b"written by reads_assignment")
     before = figure_paths(folder)
-    config = scene_config(tmp_path, block)
+    config = scene_config(tmp_path, block, previews=True)
     workflow._check_export_route(config)
     saved = [folder.root / "fovs" / f / "assignment" / "default" / "assignment.json" for f in folder.scene.ids]
     assert all(p.is_file() for p in saved)
@@ -468,12 +471,18 @@ def test_wf2_the_assignment_figures(tmp_path, monkeypatch):
     assert calls == [] and figure_paths(folder) == before
     assert not [p for p in inputs if "/expr/" in p or "/assignment/" in p]
     # The route per FOV of the same sample, into the same folder: the figures are drawn again with ownership.
-    config = scene_config(tmp_path, {"route": "per_fov", "fuse": False})
+    config = scene_config(tmp_path, {"route": "per_fov", "fuse": False}, previews=True)
     exported = listing(folder.export_dir)
     record, calls, _ = run_rule(folder, config, monkeypatch)
     assert record["assembly"]["route"] == "per_fov" and record["parts"]["segment"] == "off"
     assert sorted(fov for fov, _ in calls) == sorted(folder.scene.ids)
     assert all(kwargs["ownership"] is not None for _, kwargs in calls)
     after = figure_paths(folder)
-    assert all(after[f"expr/{fov}/assignment.png"] != before[f"expr/{fov}/assignment.png"] for fov in folder.scene.ids)
+    assert {k: v for k, v in after.items() if k.startswith("fovs/")} == before
+    previews = f"export/{SAMPLE}/previews"
+    assert {k.rsplit("/", 1)[0] for k in after if not k.startswith("fovs/")} == {f"{previews}/{fov}"
+                                                                                 for fov in folder.scene.ids}
+    assert all(after[f"{previews}/{fov}/assignment.png"] != before[f"fovs/{fov}/previews/assignment.png"]
+               for fov in folder.scene.ids)
     assert listing(folder.export_dir) != exported
+    check_export(folder.export_dir)

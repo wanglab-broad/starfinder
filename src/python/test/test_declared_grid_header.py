@@ -414,6 +414,8 @@ def test_the_export_reads_no_reference_image_whole_for_its_grid(tmp_path, monkey
     from .test_workflow_assembly_figures import export_sample, reads_assignment
     root = tmp_path
     out, config, images = golden_sample(root)
+    # The figures reads_assignment draws on request (W-568, assembly.previews), compared with the saved folders.
+    config = {**config, "assembly": {**config["assembly"], "previews": True}}
     for name in ("result", "base"):
         with counted(monkeypatch) as reads:
             if name == "base":

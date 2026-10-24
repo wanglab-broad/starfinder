@@ -780,7 +780,8 @@ reload raise `ValueError` naming the path and both hashes.
 * The only AnnData file §2.9 writes is the existing per-FOV `expr/{fovID}/raw.h5ad` of
   the `reads_assignment` rule, written by the workflow adapter from `AssignmentResult`
   (`anndata` is imported there, in the workflow environment). `create_sample_h5ad.py`
-  keeps aggregating it unchanged.
+  keeps aggregating it unchanged. (W-568: with an `assembly` block that names an
+  assignment, the rule writes the saved assignment folder alone and no `raw.h5ad`.)
 * The §2.4 sample export is the W-168 contract `starfinder.sample_export/1`. Its
   partial exporter (W-169/W-170) is on commit `4748a7d`, which is not on this branch, so
   the connection below is a mapping of vocabularies, not code that runs here. The saved
@@ -855,7 +856,8 @@ On demand, never by `FOV.assign_molecules`:
   molecules whose sampled voxel has that Z index and the centres of the cells present in
   it. A plane or Z=1 result has the `z_max` view only, and asking it for the other raises
   `ValueError`. The figure replaces the four legacy PNGs and their hard-coded plane; the
-  workflow adapter writes both views of a ZYX label image ({doc}`workflow-downstream`).
+  workflow adapter writes both views of a ZYX label image ({doc}`workflow-downstream`),
+  on the route of a saved assignment only with `assembly.previews` (W-568).
 
   `plot_assignment` also takes the keyword `ownership=None` (W-330, added after §2.10): a
   `FOVOwnership` of `starfinder.assignment`, plain data that
@@ -923,6 +925,13 @@ float64 whole-cell counts of the kept cells, one column per gene of the codebook
 order (W-567). `reads_assignment.csv` keeps its columns and
 gains `spot_id`, `assignment_status`, `cell_id`, `in_expansion`, `original_cell_id`,
 `nucleus_id` and `compartment`.
+
+These are the outputs without an `assembly` block, and with one in molecules only. With an
+`assembly` block that names an assignment (the route of a saved assignment, W-568), the
+rule writes and declares the FOV's assignment folder `fovs/{fovID}/assignment/<name>/`
+alone: no `raw.h5ad`, `reads_assignment.csv` or `log.txt` (the record holds the counts),
+and the two figures only with `assembly.previews: true`, in `fovs/{fovID}/previews/`
+({doc}`workflow-configuration`, "`assembly`").
 
 ## Tests the implementation changes
 
