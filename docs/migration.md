@@ -2104,9 +2104,10 @@ change has no alias, no dual read and no dual search.
 * **The defaults of `subset_range` and `subset_random` (`false`)** moved from the schema to
   `common.smk`'s MATLAB branch (`config.setdefault`), because the Snakefile's
   `snakemake.utils.validate` inserts schema defaults into every configuration, the Python
-  ones included. A MATLAB configuration gets the same values; one that omits a switch no
-  longer needs its companion keys (`subset_start`, `subset_end`; `n_random_tests`) to
-  validate.
+  ones included. A MATLAB configuration gets the same values. Omitting a switch does not
+  remove its companion keys: the schema's conditional clauses still require `subset_start`
+  and `subset_end`, and `n_random_tests`, so `tests/minimal_config.yaml`, which sets no
+  subset key, still fails validation, as it already did before this change.
 * **New key `selected_fovs`** (Python only; absent or null: every FOV): a nonempty list of
   unique FOV IDs of `fovs.csv`. It restricts every rule, the per-sample stitching, export
   and report rules included (the subset keys did not restrict the per-sample rules). An

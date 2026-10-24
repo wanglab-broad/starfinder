@@ -80,8 +80,10 @@ also lack an explicit presence test. The schema gives no subset key a default,
 because the Snakefile's `snakemake.utils.validate` inserts schema defaults into
 every configuration and the Python backend refuses these keys; an omitted
 `subset_range` or `subset_random` is set to `false` by `common.smk`'s MATLAB
-branch, after validation. Supply all five fields as in the examples rather than
-relying on omission.
+branch, after validation. An omitted switch still needs its companion keys,
+because the `if` clauses then hold vacuously. Supply all five fields as in the
+examples rather than relying on omission. The original minimal template fails
+these conditional requirements.
 
 For the MATLAB backend, subsetting precedence is nonempty `subset_list`, then true `subset_range`
 (inclusive), then true `subset_random`, else all `1..n_fovs`. The list path

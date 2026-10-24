@@ -7,7 +7,6 @@ refuses would therefore make every Python configuration invalid; the schema give
 """
 
 import copy
-import itertools
 from pathlib import Path
 
 import jsonschema
@@ -74,7 +73,7 @@ def python_test_configs(tmp_path):
         "report_run_record": golden_workflow_config(tmp_path, "out"),
         "full+python": dict(full, backend="python"),
     })
-    for i, combination in enumerate(itertools.islice(COMBINATIONS, 0, None, 12)):
+    for i, combination in enumerate(COMBINATIONS):
         configs[f"route_configs[{i}]"] = route_workflow_config(*combination)
     return configs
 
@@ -161,12 +160,15 @@ def test_a_matlab_configuration_passes_and_holds_the_base_subset_values(tmp_path
     assert set(BASE_DEFAULTS) <= set(subset)
 
 
-def test_the_validator_is_snakemakes():
-    """With Snakemake installed (it is not a test dependency), its own validate agrees with the validator above."""
+def test_the_validator_is_snakemakes(tmp_path):
+    """With Snakemake installed (it is not a test dependency; the run's saved comparison uses the real one), its own
+    validate agrees with the validator above on the examples, the Python test configurations and the refused keys."""
     utils = pytest.importorskip("snakemake.utils", reason="snakemake is not installed in the test environment")
-    for name in EXAMPLES:
-        config, ours = example(name), example(name)
+    configs = dict(python_test_configs(tmp_path), **{name: example(name) for name in EXAMPLES})
+    for name, config in configs.items():
+        ours = copy.deepcopy(config)
         utils.validate(config, schema=str(SCHEMA_PATH))
-        assert snakefile_errors(ours) == [] and config == ours
-    with pytest.raises(Exception, match="subset_range"):
-        utils.validate(dict(example("workflow-minimal"), subset_range=False), schema=str(SCHEMA_PATH))
+        assert snakefile_errors(ours) == [] and config == ours, name
+    for key, value in ((k, v) for group in REFUSED.values() for k, v in group.items()):
+        with pytest.raises(Exception, match=key):
+            utils.validate(dict(example("workflow-minimal"), **{key: value}), schema=str(SCHEMA_PATH))
