@@ -870,14 +870,16 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
 
 
 def _export_preview_outputs(config, output_root, sample='{sample}'):
-    """The folder export_sample declares beside export.json: export/<sample>/previews/ with assembly.previews on and
-    an assignment name, else none ([]).
+    """The folder export_sample declares beside export.json: export/<sample>/previews/ when the configuration lets
+    the ownership figures be drawn, else none ([]).
 
-    It holds the ownership figures of each FOV, previews/<fov>/ (_write_ownership_figures), drawn on the route per
-    FOV only; export.json does not list it. A directory: a FOV's figure count follows its label image.
+    That is with assembly.previews on, an assignment name, the route per FOV (not _after_fusion) and the export
+    block's assemble on. It holds the ownership figures of each FOV, previews/<fov>/ (_write_ownership_figures);
+    export.json does not list it. A directory: a FOV's figure count follows its label image. _run_export creates
+    it whenever it is declared, empty when the assemble part was neither written nor reused (an extra missing).
     """
-    block = _assembly_block(config)
-    if not block.previews or block.assignment is None:
+    export, block = _export_config(config)
+    if not block.previews or block.assignment is None or _after_fusion(export, block) or not export.assemble:
         return []
     return [str(_layout.export_previews_dir(Path(output_root), sample))]
 
@@ -906,7 +908,9 @@ def _run_export(snakemake):
     (_export_preview_outputs). reads_assignment's local figures are in
     fovs/{fovID}/previews/, which this rule never writes. By default no
     figure is drawn. On the route after fusion no figure is drawn: the
-    sample's cells come from no per-FOV assignment.
+    sample's cells come from no per-FOV assignment. The folder is drawn into
+    exactly when it is declared, and it is created whenever it is declared:
+    empty when the assemble part was neither written nor reused.
     """
     config, sample = snakemake.config, snakemake.wildcards.sample
     export, block = _export_config(config)
@@ -914,9 +918,12 @@ def _run_export(snakemake):
     placement = Path(snakemake.input[0]).parent
     record = dataset.export(sample, placement=placement, assignment=block.assignment, config=export,
                             output_dir=Path(snakemake.output[0]).parent)
-    if block.previews and block.assignment is not None and not _after_fusion(export, block) \
-            and record.parts.get('assemble') in ('written', 'reused'):
-        output_root = Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
+    output_root = Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
+    if not _export_preview_outputs(config, output_root, sample):
+        return
+    # The declared folder, beside export.json (output 0), exists whenever it is declared.
+    (Path(snakemake.output[0]).parent / _layout.PREVIEWS).mkdir(parents=True, exist_ok=True)
+    if record.parts.get('assemble') in ('written', 'reused'):
         _write_ownership_figures(output_root, block.assignment, placement, record.folder, snakemake.input)
 
 

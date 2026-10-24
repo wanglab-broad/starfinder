@@ -855,8 +855,11 @@ observations the assembly excluded (`plot_assignment` with the record of `fov_ow
 {doc}`assignment-contract`, "Diagnostics"), through the helper `reads_assignment` uses
 for the image and the views. `reads_assignment` draws its own figures, without ownership,
 into `fovs/{fovID}/previews/`: each kind has one writer and its own folder, and each rule
-declares its folder as a directory output. `export.json` does not list `previews/`, and
-`check_export` skips it (R2). By default (`previews: false`) neither rule draws a figure.
+declares its folder as a directory output. `export_sample` declares
+`export/<sample>/previews/` only when the configuration lets it be drawn into (the route per
+FOV and the export block's `assemble` on), and creates it whenever it declares it, empty
+when the assemble part was neither written nor reused. `export.json` does not list
+`previews/`, and `check_export` skips it (R2). By default (`previews: false`) neither rule draws a figure.
 Without an `assembly` block the figures stay as `reads_assignment` draws them, in
 `expr/{fovID}/`: the tile configuration is not an ownership source.
 

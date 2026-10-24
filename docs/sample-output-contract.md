@@ -1752,9 +1752,11 @@ export:
   assignment figures `export/{sample}/previews/{fovID}/assignment.png` and
   `assignment_single_layer.png`, with the FOV's ownership region
   ({doc}`assembly-contract`, "Workflow configuration"; W-330). The folder `previews/` is a
-  declared directory output of the rule and is not listed in `export.json`;
-  `Dataset.export` itself writes no figure. On the route after fusion no assignment
-  figure is drawn.
+  declared directory output of the rule on the route per FOV with `assemble` on, the
+  conditions the configuration decides; the rule creates it whenever it declares it (empty
+  when the assemble part was neither written nor reused). It is not listed in
+  `export.json`; `Dataset.export` itself writes no figure. On the route after fusion, or
+  with `assemble: false`, no assignment figure is drawn and the folder is not declared.
 * A default-tier test keeps the static schema equal to the fields of `ExportConfig`,
   `FusionConfig`, `LabelConfig` and `SpatialDataExportConfig`, as for the other blocks.
 

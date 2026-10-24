@@ -5,7 +5,8 @@
     create_sample_h5ad and create_sample_reads_assignment, which do not run with the block. Its inputs follow
     the route (docs/sample-segmentation-contract.md, "The entry"): on the route per FOV the saved assignment
     folders reads_assignment writes; on the route after fusion the molecule tables and the reference and source
-    images. With assembly.previews on it also declares export/{sample}/previews/, the FOVs' ownership figures.
+    images. With assembly.previews on, on the route per FOV with assemble on, it also declares
+    export/{sample}/previews/, the FOVs' ownership figures (_export_preview_outputs).
     Uses variables from common.smk; the blocks and the route are validated there (_export_config,
     _check_export_route).
 """
@@ -22,8 +23,9 @@ def get_export_input(wildcards):
 ### ==================== [ Export Sample ] =========================
 
 # Its declared output is export.json, which lists every other file, so a part that cannot run
-# (an extra not installed) is recorded not_run and does not fail the rule; with assembly.previews on,
-# also the folder of the ownership figures, export/{sample}/previews/, which export.json does not list.
+# (an extra not installed) is recorded not_run and does not fail the rule; with assembly.previews on (route per
+# FOV, assemble on), also the folder of the ownership figures, export/{sample}/previews/, which export.json does
+# not list and which the rule creates whenever it is declared.
 rule export_sample:
     input:
         get_export_input

@@ -614,8 +614,9 @@ sample-level rules for a configuration that has them. The specification is the
   ZYX label image), each kind with one writer and its own folder, declared as a directory
   output: `reads_assignment` draws each FOV's figures into `fovs/{fovID}/previews/`, and
   on the route per FOV `export_sample` draws them with the FOV's ownership region into
-  `export/<sample>/previews/{fovID}/`, which `export.json` does not list. Neither rule
-  overwrites the other's files. With `previews: false`, the default, no figure is drawn on
+  `export/<sample>/previews/{fovID}/`, which `export.json` does not list; that folder is
+  declared only on the route per FOV with the export block's `assemble` on, and created
+  (empty) when the assemble part could not run. Neither rule overwrites the other's files. With `previews: false`, the default, no figure is drawn on
   the route of a saved assignment. On the route after fusion `export_sample` draws no
   figure: the sample's cells come from no per-FOV assignment. `previews` does not change
   molecules only (`assignment: null`), whose figures stay in `expr/{fovID}/`.

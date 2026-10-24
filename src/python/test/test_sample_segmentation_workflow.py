@@ -486,3 +486,60 @@ def test_wf2_the_assignment_figures(tmp_path, monkeypatch):
                for fov in folder.scene.ids)
     assert listing(folder.export_dir) != exported
     check_export(folder.export_dir)
+
+
+@needs_anndata
+@needs_library
+@pytest.mark.parametrize("assemble", [True, False], ids=["assemble", "no_assemble"])
+@pytest.mark.parametrize("route", ["per_fov", "after_fusion"])
+def test_wf2_every_declared_output_of_export_sample_exists(tmp_path, route, assemble):
+    """W-568 repair: with assembly.previews on, export_sample declares export/<sample>/previews/ only on the route per
+    FOV with assemble on (_export_preview_outputs), and after the adapter runs every declared output exists, on each
+    route with the assemble part on and off; the folder holds each FOV's figures exactly when declared."""
+    folder, block = scene_workflow(tmp_path)
+    # After fusion, assemble false is accepted with segment false only (check 7), which reuses a saved segmentation.
+    export = dict(block, assemble=assemble, **({} if assemble else {"segment": False})) if route == "after_fusion" \
+        else {"route": "per_fov", "fuse": False, "assemble": assemble}
+    config = scene_config(tmp_path, export, previews=True)
+    workflow._check_export_route(config)
+    inputs, output = _snakemake._export_sample_files(config, folder.root, list(folder.scene.ids), SAMPLE)
+    if route == "after_fusion" and not assemble:   # the saved sample segmentation it reuses, from a first export
+        first = scene_config(tmp_path, block, previews=True)
+        _snakemake._run_export(SimpleNamespace(config=first, input=inputs, output=[output],
+                                             wildcards=SimpleNamespace(sample=SAMPLE)))
+    previews = _snakemake._export_preview_outputs(config, folder.root, SAMPLE)
+    assert previews == ([str(folder.export_dir / "previews")] if (route, assemble) == ("per_fov", True) else [])
+    declared = [output, *previews]       # export.smk: export.json, then the preview folder when declared
+    _snakemake._run_export(SimpleNamespace(config=config, input=inputs, output=declared,
+                                         wildcards=SimpleNamespace(sample=SAMPLE)))
+    assert [p for p in declared if not Path(p).exists()] == []
+    drawn = {p.relative_to(folder.export_dir).as_posix() for p in folder.export_dir.rglob("*.png")}
+    expected = {f"previews/{fov}/{name}" for fov in folder.scene.ids
+                for name in ("assignment.png", "assignment_single_layer.png")}
+    assert drawn == (expected if previews else set())
+    check_export(folder.export_dir)
+
+
+@needs_anndata
+@needs_library
+def test_wf2_the_declared_preview_folder_exists_when_the_assemble_part_cannot_run(tmp_path, monkeypatch):
+    """W-568 repair: when the folder is declared but the assemble part is neither written nor reused (here not_run,
+    as with an extra missing), export_sample still creates it, empty, and draws no figure."""
+    folder, _ = scene_workflow(tmp_path)
+    config = scene_config(tmp_path, {"route": "per_fov", "fuse": False}, previews=True)
+    inputs, output = _snakemake._export_sample_files(config, folder.root, list(folder.scene.ids), SAMPLE)
+    declared = [output, *_snakemake._export_preview_outputs(config, folder.root, SAMPLE)]
+    assert declared[1:] == [str(folder.export_dir / "previews")]
+
+    class NotRun:
+        def export(self, sample, *, output_dir, **kwargs):
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            (Path(output_dir) / "export.json").write_text("{}")
+            return SimpleNamespace(parts={"assemble": "not_run"}, folder=Path(output_dir))
+
+    monkeypatch.setattr(_snakemake, "_export_dataset", lambda *args: NotRun())
+    monkeypatch.setattr(_snakemake, "_write_ownership_figures", lambda *args: pytest.fail("no assembly to draw"))
+    _snakemake._run_export(SimpleNamespace(config=config, input=inputs, output=declared,
+                                         wildcards=SimpleNamespace(sample=SAMPLE)))
+    assert all(Path(p).exists() for p in declared)
+    assert list(Path(declared[1]).iterdir()) == []

@@ -442,16 +442,23 @@ def test_wf3_export_sample_inputs_and_declared_output(tmp_path):
 
 
 def test_wf3_export_sample_declares_the_ownership_previews_on_request(tmp_path):
-    """W-568: with assembly.previews on and an assignment name, export.smk declares export/{sample}/previews/ (a
-    directory) beside export.json; by default, and with assignment null, nothing more."""
+    """W-568: with assembly.previews on, an assignment name, the route per FOV and assemble on, export.smk declares
+    export/{sample}/previews/ (a directory) beside export.json; by default, with assignment null, after fusion (the
+    route set, or the default of dimensionality projection) and with assemble off, nothing more (the repair: the
+    folder is declared only where its writer runs; test_sample_segmentation_workflow.py runs each case)."""
     root = Path("/out")
     config = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=ASSEMBLY, export={"route": "per_fov"})
     assert _snakemake._export_preview_outputs(config, root) == []
-    on = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=dict(ASSEMBLY, previews=True))
+    on = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=dict(ASSEMBLY, previews=True),
+                        export={"route": "per_fov"})
     assert _snakemake._export_preview_outputs(on, root) == ["/out/export/{sample}/previews"]
     assert _snakemake._export_preview_outputs(on, root, SAMPLE) == ["/out/export/sample1/previews"]
-    molecules = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=dict(ASSEMBLY, assignment=None, previews=True))
+    molecules = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=dict(ASSEMBLY, assignment=None, previews=True),
+                               export={"route": "per_fov"})
     assert _snakemake._export_preview_outputs(molecules, root) == []
+    for export in ({"route": "per_fov", "assemble": False}, {"route": "after_fusion"}, {"dimensionality": "projection"}):
+        off = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=dict(ASSEMBLY, previews=True), export=export)
+        assert _snakemake._export_preview_outputs(off, root) == [], export
     text = (ROOT / "workflow/rules/export.smk").read_text()
     rule = text[text.index("rule export_sample:"):]
     output = rule[rule.index("output:"):rule.index("resources:")]
