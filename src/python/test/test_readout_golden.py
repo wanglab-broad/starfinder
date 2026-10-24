@@ -282,7 +282,7 @@ def run_and_reload(root, dataset, pipeline, execution=None):
     assert reloaded.decoding_result.config == fov.decoding_result.config
     pd.testing.assert_frame_equal(reloaded.scoring_result.table, fov.scoring_result.table)
     reads = reloaded.scoring_result.table
-    directory = root / "checkpoints" / "FOV_001"
+    directory = root / "checkpoints" / "FOV_001" / "checkpoints"
     # The pre_qc table without entry_id (and without the score columns), the pre_qc table without
     # the score columns and the candidates table without the background columns, written by the
     # same writer.

@@ -99,7 +99,7 @@ For workflow runs, `OUTPUT` is
 | Location | What it records |
 | --- | --- |
 | Console / Snakemake working directory `.snakemake/log/` | Scheduling and execution diagnostics; start here for the failed job and traceback |
-| `OUTPUT/checkpoints/{FOV}/run.json` (Python) | The FOV's run record (`subtile_{n}/run.json` below it for a subtile rule): `status` (`running` until the run ends, then `succeeded`, `failed` with the failing step and traceback, or `interrupted`), steps, registration attempts and transforms, counts and fractions |
+| `OUTPUT/fovs/{FOV}/run.json` (Python) | The FOV's run record (`subtile_{n}/run.json` below it for a subtile rule): `status` (`running` until the run ends, then `succeeded`, `failed` with the failing step and traceback, or `interrupted`), steps, registration attempts and transforms, counts and fractions |
 | `OUTPUT/log/{FOV}_rsf.txt`, `{FOV}_gr.txt`, `log/gr_shifts/`, `log/sf_scores/` (MATLAB) | The MATLAB backend's console logs, shift tables and score tables; may be absent on early failure |
 | `OUTPUT/log/benchmark/{rule}/...txt` | Snakemake timing/resource records; these are not the Python exception log |
 | UGER submit log | `broad-submit.py` chooses the first declared rule log with `-qsub.log`, else `params.uger_log` with timestamp/job ID, else `/home/unix/{username}/snakemake-logs/{rule}/` |

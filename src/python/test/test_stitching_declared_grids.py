@@ -9,7 +9,7 @@ Fixtures, all written in the test:
 
 * ``scene_folders``: the synthetic sample scene ``sample-tiny-v1`` (2 × 2 FOVs of 5×36×36,
   spacing (1.0, 0.5, 0.5) µm), saved with ``save_sample_scene`` and written twice as a
-  dataset that ``Dataset.export`` reads: per FOV ``images/ref_merged/<fov>.tif`` (the
+  dataset that ``Dataset.export`` reads: per FOV ``fovs/<fov>/reference.tif`` (the
   saved stain), the §2.9 assignment folder (the truth cell and nucleus labels and the
   saved molecule table, assigned in memory) and the truth placement under
   ``stitching/<sample>/``. The first copy stores the scene's metadata in its reference
@@ -102,7 +102,7 @@ def scene_dataset(root, scene, book, saved, *, stored, voxel_sizes=None):
     grids = {}
     for fov in table.fov_ids:
         stain = load_volume(saved / "fovs" / fov / "stain.ome.tif").image
-        path = out / "images" / "ref_merged" / f"{fov}.tif"
+        path = out / "fovs" / fov / "reference.tif"
         if stored:
             metadata = scene.fov_metadata[fov]
             save_volume(stain, path, metadata=metadata)
@@ -115,7 +115,7 @@ def scene_dataset(root, scene, book, saved, *, stored, voxel_sizes=None):
         mols = import_legacy_molecules_csv(saved / "fovs" / fov / "molecules.csv", spot_namespace=spot_namespace(fov),
                                        genes=book.genes)
         result = assign_molecules(mols, cells, grid=grid, nuclei=nuclei)
-        write_assignment(assignment_directory(out / "checkpoints" / fov, "default"),
+        write_assignment(assignment_directory(out / "fovs" / fov, "default"),
                          with_record(result, name="default"), metadata=metadata)
     origins = {fov: tuple(truth.loc[fov, ["true_origin_z", "true_origin_y", "true_origin_x"]]) for fov in grids}
     result = approve_placement(placement_from_table(table, grids, sample=SAMPLE, origins=origins), reviewer="test",
@@ -156,11 +156,11 @@ def scene_exports(scene_folders):
 def test_plain_reference_images_have_no_metadata(scene_folders):
     """The plain copy's reference images are pages without metadata; the stored copy's carry the scene's."""
     for fov in scene_folders["scene"].positions.fov_id:
-        plain = scene_folders["plain"].output_root / "images" / "ref_merged" / f"{fov}.tif"
+        plain = scene_folders["plain"].output_root / "fovs" / fov / "reference.tif"
         with tifffile.TiffFile(plain) as tif:
             assert tif.series[0].axes == "IYX" and not tif.is_ome and not tif.is_imagej and not tif.is_shaped
         assert load_volume(plain).diagnostics["metadata_source"] == "unknown"
-        stored = scene_folders["stored"].output_root / "images" / "ref_merged" / f"{fov}.tif"
+        stored = scene_folders["stored"].output_root / "fovs" / fov / "reference.tif"
         assert load_volume(stored).metadata == scene_folders["scene"].fov_metadata[fov]
 
 
@@ -205,7 +205,7 @@ def test_declared_grid_export_equals_the_stored_one(scene_folders, scene_exports
         assert entry["grid"]["source"] == "declared"
         assert ImageMetadata(**entry["grid"]["metadata"]) == declared(entry["fov_id"], spacing)
     for entry in scene_exports["stored"]["assembly"]["fovs"]:
-        path = stored.output_root / "images" / "ref_merged" / f"{entry['fov_id']}.tif"
+        path = stored.output_root / "fovs" / entry['fov_id'] / "reference.tif"
         assert entry["grid"]["source"] == f"file:{path.resolve()}" and entry["grid"]["calibration_source"] == "grid"
     check_export(stored.output_root / "export" / SAMPLE)
     check_export(plain.output_root / "export" / SAMPLE)
@@ -218,7 +218,7 @@ def test_a_file_with_stored_metadata_is_read_as_before(scene_folders, tmp_path):
     stored = scene_folders["stored"]
     other = replace(stored, voxel_size_xy=7.0, voxel_size_z=9.0)
     for fov in scene_folders["scene"].positions.fov_id:
-        expected = reference_grid_from_file(stored.output_root / "images" / "ref_merged" / f"{fov}.tif")
+        expected = reference_grid_from_file(stored.output_root / "fovs" / fov / "reference.tif")
         for dataset in (stored, other):
             grid = _reference_grid(dataset, fov)
             assert (grid.shape_zyx, grid.metadata, grid.source, grid.sha256) == (
@@ -300,7 +300,7 @@ def run_combination(root, metadata):
     grids = {fov: grid for fov in OWN_IDS}
     placed = approve_placement(placement_from_table(own_table(), grids, sample="s1"), reviewer="test", note="own")
     results = own_assignments(grid)
-    folders = {fov: assignment_directory(root / "checkpoints" / fov, "default") for fov in OWN_IDS}
+    folders = {fov: assignment_directory(root / "fovs" / fov, "default") for fov in OWN_IDS}
     for fov in OWN_IDS:
         # Saved with the grid as spelled, so that fuse_labels reads each territory from its folder.
         write_assignment(folders[fov], with_record(results[fov], name="default"), metadata=metadata)

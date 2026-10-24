@@ -236,7 +236,7 @@ def test_wf1_report_sample_declares_the_last_per_sample_output(tmp_path):
     assert _snakemake._report_sample_files(exported, root, fovs, SAMPLE)[0] == ["/out/export/sample1/export.json"]
     assert _snakemake._report_sample_files(stitching, root, fovs, SAMPLE)[0] == ["/out/stitching/sample1/placement.json"]
     assert _snakemake._report_sample_files(processing, root, fovs, SAMPLE)[0] == [
-        "/out/checkpoints/Position001/run.json", "/out/checkpoints/Position002/run.json"]
+        "/out/fovs/Position001/run.json", "/out/fovs/Position002/run.json"]
     for config in (assembly, stitching, processing):
         assert _snakemake._report_sample_files(config, root, [])[1] == "/out/report/{sample}/report.json"
     assert _snakemake._report_dataset_files(root, ["s2", "s1"]) == (

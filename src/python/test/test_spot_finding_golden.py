@@ -172,7 +172,7 @@ def run_and_reload(root, dataset, dims, pipeline):
     fov = fov_with_fixture(dataset, dims)
     fov.run(pipeline, checkpoints=checkpoints)
     reloaded = dataset.fov("FOV_001").load_checkpoint("candidates", checkpoints=checkpoints)
-    directory = root / "checkpoints" / "FOV_001"
+    directory = root / "checkpoints" / "FOV_001" / "checkpoints"
     assert reloaded.spot_result.config == fov.spot_result.config
     thresholds = fov.spot_result.diagnostics["thresholds"]
     assert reloaded.spot_result.diagnostics["thresholds"] == thresholds

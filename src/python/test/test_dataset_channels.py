@@ -410,8 +410,8 @@ def test_every_rule_names_the_other_rounds_with_their_channels():
         assert ds.channel_info("morph") == expected and ds.channel_labels("morph") == ("ch00", "ch01", "ch02")
         assert ds.channel_info("round1") == tuple(ChannelInfo.from_value(o) for o in OBJECTS)
         assert ds.reference_stains == (ChannelInfo("ch04", "DAPI"),)
-    # The legacy ref_channel match stays MATLAB's substring match.
-    assert stains == {"morph": "ch02"} and folders == {"morph": ("Flamingo", "RBD", "DAPI")}
+    # The legacy ref_channel match stays MATLAB's substring match; the output folders are the channel labels.
+    assert stains == {"morph": "ch02"} and folders == {"morph": ("ch00", "ch01", "ch02")}
     nuclei, stains, _ = _nuclei_registration(dict(config, ref_channel="DAP"))
     assert stains == {"morph": "ch02"}
     # An entry without channel_order takes the sequencing channels in the sequencing rule.

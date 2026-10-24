@@ -21,18 +21,20 @@ fov.run(pipeline, execution=execution, checkpoints=CheckpointConfig())
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `stages` | `("registered", "candidates", "pre_qc")` | Stages to write. |
-| `directory` | `None` | Checkpoint root; `None` means `<output_root>/checkpoints`. |
+| `directory` | `None` | The parent of the FOV folders; `None` means `<output_root>/fovs`. |
 | `table_format` | `"csv"` | `"csv"` or `"parquet"` (requires the `checkpoint` extra, `pyarrow>=15`). |
 | `hash_inputs` | `True` | Record a streamed SHA-256 of every loaded TIFF. |
-| `overwrite` | `False` | Replace the checkpoints of an existing FOV directory. |
+| `overwrite` | `False` | Replace the run's own files: the FOV folder's `run.json` and `checkpoints/`. |
 
 `run` checks everything before it loads or processes any image. It raises
-`FileExistsError` if the FOV directory exists and `overwrite` is false, and
-`ImportError` if Parquet is requested without pyarrow. With `overwrite=True`,
-`run` first removes the existing checkpoint files of that FOV (stage headers and
-tables, registered TIFFs under either name, registered snapshot TIFFs and dense
-fields; other files are left alone), so a stage the new run does not reach can never be loaded from an
-earlier run.
+`FileExistsError` if the FOV folder already holds a `run.json` or a `checkpoints/`
+folder and `overwrite` is false, and `ImportError` if Parquet is requested without
+pyarrow. The other contents of the FOV folder (the folders and files below that other
+calls and workflow rules write) never stop a run. With `overwrite=True`, `run` first
+removes the existing checkpoint files of that FOV's `checkpoints/` folder (stage headers
+and tables, registered TIFFs under either name, registered snapshot TIFFs and dense
+fields; other files are left alone), so a stage the new run does not reach can never be
+loaded from an earlier run, and then replaces `run.json`.
 
 `run` writes a stage only when it computes it. `registered` is written for each
 round inside the round loop, `candidates` after detection or extraction, and
@@ -40,18 +42,25 @@ round inside the round loop, `candidates` after detection or extraction, and
 
 ## Layout
 
+Each FOV has one folder for its durable results, the FOV folder. Its `checkpoints/`
+folder holds the restart material of `FOV.run`, the three stages.
+
 ```text
-<output_root>/checkpoints/<fov_id>/          # or <directory>/<fov_id>/
-    run.json
-    registered/
-        <round>.ome.tif                       # ZYXC OME-TIFF, dtype preserved, ImageMetadata
-        <snapshot>/<round>.ome.tif            # the recipe's extraction source, when set
-        <round>_field.npz                     # dense transforms only
-        transforms.json
-    candidates.csv | candidates.parquet
-    candidates.json
-    pre_qc.csv | pre_qc.parquet
-    pre_qc.json
+<output_root>/fovs/<fov_id>/                 # the FOV folder; or <directory>/<fov_id>/
+    run.json                                  # the run record of FOV.run
+    molecules.csv | reads.csv                 # FOV.export_spots
+    nuclei_registration.json                  # FOV.save_registration_record
+    reference.tif                             # FOV.save_reference_image (reference_image, the default)
+    checkpoints/                              # the restart material of FOV.run (CheckpointConfig.stages)
+        registered/
+            <round>.ome.tif                   # ZYXC OME-TIFF, dtype preserved, ImageMetadata
+            <snapshot>/<round>.ome.tif        # the recipe's extraction source, when set
+            <round>_field.npz                 # dense transforms only
+            transforms.json
+        candidates.csv | candidates.parquet
+        candidates.json
+        pre_qc.csv | pre_qc.parquet
+        pre_qc.json
     other_rounds/<name>/                      # FOV.prepare_morphology / FOV.register(checkpoints=…)
         image.ome.tif                         # the prepared image, ZYXC, every channel, ImageMetadata
         registration.json
@@ -71,18 +80,27 @@ round inside the round loop, `candidates` after detection or extraction, and
         assignment.json
 ```
 
-An FOV loaded from a subtile writes to `subtile_<n>/` inside its FOV directory,
-so subtiles of one FOV never share files. Round labels must be plain file names.
+An FOV loaded from a subtile writes its `run.json` and `checkpoints/` to `subtile_<n>/`
+inside its FOV folder, so subtiles of one FOV never share files. Round labels must be
+plain file names. `molecules.csv`, `reads.csv`, `nuclei_registration.json` and
+`reference.tif` are written by the calls named beside them into
+`<output_root>/fovs/<fov_id>/`; the reference image goes wherever the dataset's
+`reference_image` names (`fovs/{fov_id}/reference.tif` by default), and a dataset that
+declares `reference_image_import` reads an imported image instead and writes none
+("The reference image" below). `CheckpointConfig.directory` moves the FOV folders of
+`run.json`, `checkpoints/`, `other_rounds/`, `segmentation/` and `assignment/`;
+the readers of the sample stages (stitching, export, the report) read the default
+`<output_root>/fovs/`.
 
 The `other_rounds/`, `segmentation/` and `assignment/` folders are written by
 `FOV.prepare_morphology` (or `FOV.register`), `FOV.segment` and `FOV.assign_molecules`, not
 by `FOV.run`: they are not checkpoint stages, `CheckpointConfig.stages` does not name
 them, and they do not change the stage format version or `run.json` (see "Prepared
 morphology images", "Segmentation runs" and "Assignments" below). `FOV.run` with
-checkpoints refuses an existing FOV directory unless `overwrite=True`, so call it first,
-or, when `FOV.prepare_morphology` ran first in another process, with `overwrite=True`:
-that removes only the stage files above and leaves `other_rounds/` as it is, so the two
-calls give the same files in either order.
+checkpoints refuses only an existing `run.json` or `checkpoints/` folder unless
+`overwrite=True`, so it may run after `FOV.prepare_morphology` in another process; with
+`overwrite=True` it removes only the stage files of `checkpoints/` and leaves
+`other_rounds/` as it is, so the two calls give the same files in either order.
 
 ### registered
 
@@ -298,7 +316,7 @@ FOV and its channels against the dataset, each file's SHA-256 and the image's SH
 and, when the reference round is resident, that the metadata equals the reference
 grid's. It restores the image, its metadata, the rotation diagnostics and
 `registration_record["rounds"][name]`, with `saved` (the image file's path relative to
-the FOV directory and its SHA-256); a registered round also gets its results, chain,
+the FOV folder and its SHA-256); a registered round also gets its results, chain,
 attempts and `WarpConfig` back. `FOV.segment` links that saved file in the record of a
 run that reads the image. The Python `nuclei_registration` rule writes these folders when
 `rules.nuclei_registration.parameters.checkpoints` is set ({doc}`workflows`).
@@ -312,14 +330,30 @@ rounds' attempts, unchanged. Each estimation attempt holds its translation as
 `qc.details.transform.displacement_zyx`. The file is not a checkpoint and nothing reads it
 back; `load_registered_round` reads the folders above (since W-563).
 
-**Segmenting in another process.** These folders and the reference image
-`images/ref_merged/{fovID}.tif` (written by `FOV.save_reference_image`, not a checkpoint)
+**Segmenting in another process.** These folders and the reference image ("The reference
+image" below; written by `FOV.save_reference_image`, not a checkpoint)
 are what a process that only segments reads: `fov.load_reference_image()`, then
 `fov.load_registered_round(name)` for each image its plan names, then
 `fov.segment(plan, checkpoints=…)`, with no sequencing round resident and no partial load
 of `registered` ({doc}`segmentation-contract`, "Coordination per FOV"). `fov.assign_molecules` there
 takes the molecules from the `candidates` and `pre_qc` stages, which restore no image,
 and re-applies the filter with `FOV.run` ("Reload and continue").
+
+## The reference image
+
+`FOV.save_reference_image` writes the reference round's merged (or single-channel) image to
+the file of the dataset's `reference_image` setting (the workflow key and `Dataset` field of
+that name): a pattern with `{fov_id}`, absolute or relative to the output root, by default
+`fovs/{fov_id}/reference.tif`. `FOV.load_reference_image`, the workflow's rule declarations
+and every reader of the sample stages (`Dataset.stitch`, `Dataset.export`, the report and
+the workflow adapters) resolve the same file through one function. A reference image that
+another tool or rule produced is declared with `reference_image_import`, a pattern of the
+same form that excludes `reference_image`: every reader reads that file,
+`FOV.save_reference_image` raises instead of writing it, and the Python processing rules
+write no reference image. The TIFF content, calibration and projection metadata are as
+before. A segmentation run that reads the saved image records it by its path relative to
+the output root, or by its absolute path when it lies outside, with its SHA-256 (since
+W-564; {doc}`migration`).
 
 ## Segmentation runs
 
@@ -440,9 +474,10 @@ naming extraction, the stage to rerun.
 When no image operation is configured and no images are resident, `run` skips
 the round loop. Resuming is always an explicit call; there is no scheduler.
 {py:meth}`~starfinder.dataset.FOV.save_checkpoint` writes one stage from the
-current results outside `run`. It uses `CheckpointConfig.directory`,
-`table_format` and `overwrite`. {py:func}`~starfinder.dataset.load_checkpoint` reads a
-stage directly and returns a dict keyed by the FOV attributes it restores.
+current results outside `run` into the FOV folder's `checkpoints/` and returns that folder.
+It uses `CheckpointConfig.directory`, `table_format` and `overwrite`.
+{py:func}`~starfinder.dataset.load_checkpoint` reads a stage directly from a checkpoint folder
+(`<FOV folder>/checkpoints`) and returns a dict keyed by the FOV attributes it restores.
 
 ## run.json
 
@@ -469,7 +504,7 @@ run starts, after each completed step and when the run ends, and again when
 | `registration` | Ordered registration attempts per round: the estimation entries and one application entry per moving round (see {doc}`coordination`). |
 | `transforms` | Per moving round that `run` registered, in processing order: `reference` (the reference round), `results` (the round's results in order, each `{step, transform, diagnostics}` as in `registered/transforms.json`) and `application_config` (the round's `WarpConfig`, as `applications.<round>` holds it). A dense field's `field` or a B-spline's `coefficients` is `<round>_field.npz` when the stage `registered` wrote that file, else `null`; the arrays are never in `run.json`. `{}` without registration; the reference round and a round whose registration failed have no entry (since W-451). |
 | `counts` | Spots, intensities, decoding call statuses, scoring counts (`scoring`: total, scored, `no_assignment` and `background_unavailable`, since W-294, when the reads were scored), deduplication counts (`deduplication`: total, groups, `merged_reads` and `conflicting_groups`, since W-295, when the reads were deduplicated) and filtering counts (`filtering`: total, accepted and rejected; when the filter checked endpoints, with `end_bases` or a codebook layout's segment ends, also `endpoint_valid`, the reads of the correct form, and with segment ends `endpoint_valid_segments`, that count per segment; since W-451; and `fractions`, the filter result's `accepted` and, when it checked endpoints, `endpoint_valid` over all reads, `null` without reads; since W-563). Whenever reads were decoded, `summary` holds the population summary of {py:func}`~starfinder.readout.summarize_reads` of the latest reads (since W-295 for scored or deduplicated reads; since W-563 also without scoring or deduplication). |
-| `checkpoint_directory`, `checkpoints` | The FOV directory and the files written for each stage. |
+| `checkpoint_directory`, `checkpoints` | The FOV folder's `checkpoints/` folder (as the output root is given, absolute or relative) and the files written for each stage, relative to the FOV folder, which holds `run.json` (`checkpoints/registered/round1.ome.tif`; since W-564). |
 | `outputs` | Present once {py:meth}`~starfinder.dataset.FOV.export_spots` has written a table after the run: per slot (`molecules`, `reads`), `path` (the file relative to the record's folder, POSIX), `sha256` (of the file's bytes), `molecules_sha256` (the keyed hash of the six molecule columns, `MoleculeTable.sha256`; `null` for `reads` or a file without those columns), `dtypes` (the column dtypes) and `rows`. `export_spots` adds the entry only when the FOV's latest `run` had checkpoints and succeeded, and rewrites the record atomically; a later `run` writes a new record without it (since W-562). |
 
 If a step raises, `run` records `failed` (or `interrupted` for

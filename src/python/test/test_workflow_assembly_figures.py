@@ -1,7 +1,7 @@
 """The workflow draws the §2.9 assignment figures with the FOV ownership region (W-330): export_sample.
 
 The sample of ``test_workflow_assembly_golden.py`` (three FOVs of 8×48×64 voxels, ZYX and YX label
-images) with an assembly block: the reference grids ``images/ref_merged/{fovID}.tif`` (unit spacing)
+images) with an assembly block: the reference grids ``fovs/{fovID}/reference.tif`` (unit spacing)
 and the placement of ``assembly_golden`` saved in ``stitching/sample1/``. ``reads_assignment`` and
 ``export_sample`` run through stub ``snakemake`` objects, as that test runs the adapter; the figures
 ``export_sample`` saves are inspected before saving, by their artists.
@@ -55,7 +55,7 @@ def build(root, dimensions):
     codebook = root / "input" / "data" / "sample" / "genes.csv"
     golden_codebook().table[["entry_id", "gene_id", "color_sequence"]].to_csv(codebook, index=False)
     for fov in GOLDEN_IDS:
-        save_volume(np.zeros(TILE_ZYX, np.uint8), out / "images" / "ref_merged" / f"{fov}.tif",
+        save_volume(np.zeros(TILE_ZYX, np.uint8), out / "fovs" / fov / "reference.tif",
                     metadata=unit_grid(TILE_ZYX).metadata)
     save_placement(golden_placement(), out / "stitching" / "sample1")
     return out
@@ -65,11 +65,11 @@ def reads_assignment(root, out, fov, config):
     """reads_assignment with the assembly block for one FOV; returns the bytes of each figure it wrote."""
     inputs = [out / "documents" / "sample-annotation.csv", out / "images" / "DAPI" / f"{fov}.tif",
               out / "images" / "stardist_segmentation" / f"{fov}.tif", out / "fovs" / fov / "molecules.csv",
-              out / "documents" / "genes.csv", out / "images" / "ref_merged" / f"{fov}.tif"]
+              out / "documents" / "genes.csv", out / "fovs" / fov / "reference.tif"]
     outputs = [out / "expr" / fov / "raw.h5ad", out / "expr" / fov / "reads_assignment.csv"]
     name = config["assembly"]["assignment"]
     if name is not None:
-        outputs.append(out / "checkpoints" / fov / "assignment" / name / "assignment.json")
+        outputs.append(out / "fovs" / fov / "assignment" / name / "assignment.json")
     _snakemake._run_reads_assignment(SimpleNamespace(input=[str(p) for p in inputs], output=[str(p) for p in outputs],
                                                    config=config, wildcards=SimpleNamespace(fovID=fov)))
     return {p.name: p.read_bytes() for p in sorted((out / "expr" / fov).glob("*.png"))}
@@ -166,7 +166,7 @@ def test_export_sample_draws_the_figures_with_ownership(tmp_path, monkeypatch, d
     assert [path for path, _ in saved] == expected
     for path, figure in saved:
         fov = path.split("/")[-2]
-        result = read_assignment(out / "checkpoints" / fov / "assignment" / "default", "default")
+        result = read_assignment(out / "fovs" / fov / "assignment" / "default", "default")
         record = fov_ownership(assembly, fov, placement=placement)
         assert record.region.any() and not record.region.all()
         assert check_figure(figure, result, record, path.endswith("single_layer.png")) > 0

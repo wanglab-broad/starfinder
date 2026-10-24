@@ -24,6 +24,7 @@ from functools import cache
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import socket
 import sys
 import types
@@ -665,7 +666,7 @@ def checkpoint_through_fov_run(method, seed, table_format, root):
     fov = multiround_fov(root, multiround(seed)[0])
     fov.run(PipelineConfig(spot_finding=plan),
             checkpoints=CheckpointConfig(stages=("candidates",), directory=root / "ck", table_format=table_format))
-    header = json.loads((root / "ck" / "FOV_001" / "candidates.json").read_text())
+    header = json.loads((root / "ck" / "FOV_001" / "checkpoints" / "candidates.json").read_text())
     assert header["detection_plan"] == [{"channel": "ch01", "config": {**json.loads(json.dumps(
         _plain(override))), "method": method}}]
     assert header["execution"]["device"] == "cpu"
@@ -710,8 +711,10 @@ def test_s11_a_version_2_checkpoint_from_before_the_plan_keys_loads_unchanged(tm
     the 42f652d pins of test_spot_finding_golden.py (data/spot_finding_candidates_7a178da/README.md)."""
     header = json.loads((VERSION_2_CHECKPOINT / "FOV_001" / "candidates.json").read_text())
     assert header["format_version"] == 2 and not any(key in header for key in PLAN_KEYS)
+    # The files were written in the FOV folder of 7a178da; they are copied into a FOV folder's checkpoints/ (W-564).
+    shutil.copytree(VERSION_2_CHECKPOINT / "FOV_001", tmp_path / "ck" / "FOV_001" / "checkpoints")
     fov = golden_dataset(tmp_path).fov("FOV_001").load_checkpoint(
-        "candidates", checkpoints=CheckpointConfig(directory=VERSION_2_CHECKPOINT))
+        "candidates", checkpoints=CheckpointConfig(directory=tmp_path / "ck"))
     result = fov.spot_result
     assert table_digest(result.spots) == PINNED_FIND_SPOTS[("global", True, "z1")][1]
     assert result.plan == SpotFindingPlan(result.config) and result.plan.rounds is None

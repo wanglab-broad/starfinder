@@ -328,7 +328,7 @@ def test_reads_the_reports_only(root, monkeypatch):
         monkeypatch.setattr(owner, name, refuse(f"{owner.__name__}.{name}"))
     outside = {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*"))
                if p.is_file() and (root / "report") not in p.parents}
-    assert any(p.startswith(("checkpoints/", "stitching/", "export/")) for p in outside)
+    assert any(p.startswith(("fovs/", "stitching/", "export/")) for p in outside)
     before = sample_folders(root)
     opened, recording = [], {"on": False}
 

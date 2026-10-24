@@ -294,7 +294,7 @@ def test_five_workflow_adapters_and_shared_filenames(tmp_path, streaming):
             assert fov.paths.spot_table('molecules') == tmp_path/'out'/'data'/'run'/'fovs'/'FOV'/'molecules.csv'
             assert list(pd.read_csv(fov.paths.spot_table('molecules'))) == ['spot_namespace', 'spot_id', 'z', 'y', 'x',
                                                                             'gene_id', 'entry_id', 'qc_score']
-            assert fov.paths.ref_merged_tif.is_file()
+            assert (fov.paths.fov_dir/'reference.tif').is_file() and fov.paths.run_record.is_file()
         elif 'rsf_subtile' in rule or rule == 'lrsf_single_fov_subtile':
             assert list(pd.read_csv(subtile.parent/'subtile_goodSpots_1.csv')) == ['x', 'y', 'z', 'gene']
         else:

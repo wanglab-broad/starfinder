@@ -2,6 +2,8 @@
 
 Status: Accepted (W-309, 2026-10-05, at 3550723)
 
+Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
 This page records how segmentation and its inputs behave at revision `6b384cd`
 (branch `runner/s29-spec-20261004`, on `dev` after the §2.8 work), before the
 Chapter II §2.9 work changes them. It is the reference that the golden test

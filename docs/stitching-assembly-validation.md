@@ -2,6 +2,8 @@
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
+Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
 This page is the task-group-6 validation design for the whole of §2.10 (for the route after
 fusion, see {doc}`sample-segmentation-validation`): the engineering
 checks of placement ({doc}`stitching-contract`, {doc}`stitching-algorithms`), of assembly

@@ -780,7 +780,7 @@ def test_summary_rows(drawn, tmp_path):
                            "Generated"]
     assert "starfinder" not in found
     record = page.record
-    runs = [json.loads((page.case.root / "checkpoints" / f / "run.json").read_text()) for f in page.case.fov_ids]
+    runs = [json.loads((page.case.root / "fovs" / f / "run.json").read_text()) for f in page.case.fov_ids]
     start = min((r["started_at"] for r in runs), key=datetime.fromisoformat)
     end = max((r["ended_at"] for r in runs), key=datetime.fromisoformat)
     generated = record["generated_at"]

@@ -183,7 +183,8 @@ def test_reference_image_keeps_shared_name_with_merged_zyx_content(tmp_path):
     ds = dataset(tmp_path)
     fov = resident(ds)
     path = fov.save_reference_image()
-    assert path.name == 'FOV.tif'
+    # A plain TIFF named .tif, in the FOV folder (W-564).
+    assert path == tmp_path / 'out' / 'fovs' / 'FOV' / 'reference.tif'
     with tifffile.TiffFile(path) as tif:
         assert not tif.is_ome and tif.series[0].axes == 'ZYX'
     loaded = load_volume(path)

@@ -1,5 +1,6 @@
 """Projection views (W-235): z and channel projection, and the saved reference merged image.
 
+Python writes the reference merged image to the FOV folder's ``reference.tif`` (W-564);
 MATLAB writes ``images/ref_merged`` with SaveSingleStack, one YX page per Z of
 ``sdata.registration{ref}`` (the channel maximum, or the selected channel), or
 one page of its Z maximum when ``maximum_projection`` is true. MATLAB is not
@@ -101,7 +102,7 @@ def test_ref_merged_content_axes_and_dtype(tmp_path, dtype, mode, maximum_projec
     fov = fov_with(tmp_path, image)
     path = fov.save_reference_image(projection=ProjectionConfig() if maximum_projection else None,
                                     reference_image=mode, reference_channel=2)
-    assert path == tmp_path / 'out' / 'images' / 'ref_merged' / 'FOV.tif'
+    assert path == tmp_path / 'out' / 'fovs' / 'FOV' / 'reference.tif'
     saved, axes = read_back(path)
     np.testing.assert_array_equal(saved, expected, strict=True)
     assert axes == ('YX' if maximum_projection else 'ZYX')
@@ -183,6 +184,6 @@ def test_rsf_single_fov_script_writes_the_detection_view(tmp_path, maximum_proje
     fov.run(replace(adapted.pipeline, registration=None, spot_finding=None, extraction=None, decoding=None, filtering=None))
     expected = fov.images['round1'][..., 2]
     expected = expected.max(axis=0) if maximum_projection else expected
-    saved, axes = read_back(fov.paths.ref_merged_tif)
+    saved, axes = read_back(fov.paths.fov_dir / 'reference.tif')
     np.testing.assert_array_equal(saved, expected, strict=True)
     assert saved.dtype == np.uint8 and axes == ('YX' if maximum_projection else 'ZYX')

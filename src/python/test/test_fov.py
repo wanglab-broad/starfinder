@@ -218,17 +218,20 @@ class TestFOVPaths:
         fov = small_pipeline_dataset.fov("FOV_001")
         p = fov.paths
 
-        assert "ref_merged" in str(p.ref_merged_tif)
-        assert p.ref_merged_tif.name == "FOV_001.tif"
+        assert p.fov_dir == small_pipeline_dataset.output_root / "fovs" / "FOV_001"
+        assert p.checkpoint_dir == p.fov_dir / "checkpoints" and p.run_record == p.fov_dir / "run.json"
         assert "subtile" in str(p.subtile_dir)
         assert p.signal_csv("goodSpots").name == "FOV_001_goodSpots.csv"
 
     def test_paths_keep_the_attributes_of_the_base_revision(self, tmp_path):
         """FOV.paths keeps its class name and every public attribute it had before the path object moved to
         starfinder._layout (W-548; the list recorded at 81fead1), except the unused signal PNG path helper, which
-        W-562 deleted (docs/migration.md), with spot_table, which W-562 added, and without the log paths gr_log,
-        nr_log, rsf_log, score_log and shift_log, whose files W-563 removed (docs/migration.md)."""
+        W-562 deleted (docs/migration.md), with spot_table, which W-562 added, without the log paths gr_log,
+        nr_log, rsf_log, score_log and shift_log, whose files W-563 removed (docs/migration.md), and with fov_dir
+        and run_record in place of ref_merged_tif, which W-564 replaced by the one reference-image resolver
+        (docs/migration.md)."""
         fov = Dataset(tmp_path / "in", tmp_path / "out", "d", "s", "o").fov("FOV_001")
         assert type(fov.paths).__name__ == "_FovPaths"
         assert sorted(name for name in dir(fov.paths) if not name.startswith("_")) == [
-            "checkpoint_dir", "fov_id", "output_root", "ref_merged_tif", "signal_csv", "spot_table", "subtile_dir"]
+            "checkpoint_dir", "fov_dir", "fov_id", "output_root", "run_record", "signal_csv", "spot_table",
+            "subtile_dir"]

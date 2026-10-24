@@ -693,9 +693,9 @@ def _read_only(root, keep):
 
 
 # The places of "Where each record is looked for" under the output root, and the report's own folder.
-PLACES = [r"checkpoints/[^/]+/run\.json", r"checkpoints/[^/]+/registered/.+", r"checkpoints/[^/]+/pre_qc\.json",
-          r"checkpoints/[^/]+/segmentation/[^/]+/.+", r"checkpoints/[^/]+/assignment/[^/]+/.+",
-          r"images/ref_merged/[^/]+\.tif", rf"stitching/{SAMPLE}/.+", rf"export/{SAMPLE}/.+",
+PLACES = [r"fovs/[^/]+/run\.json", r"fovs/[^/]+/checkpoints/registered/.+", r"fovs/[^/]+/checkpoints/pre_qc\.json",
+          r"fovs/[^/]+/segmentation/[^/]+/.+", r"fovs/[^/]+/assignment/[^/]+/.+",
+          r"fovs/[^/]+/reference\.tif", rf"stitching/{SAMPLE}/.+", rf"export/{SAMPLE}/.+",
           rf"report/{SAMPLE}/.+", rf"report/\.{SAMPLE}\.[0-9a-f]+\.tmp(/.+)?"]
 
 

@@ -147,7 +147,7 @@ detection, biological interpretation.
   **comparison page** is the dataset's `<output_root>/report/index.html` with
   `samples.csv`.
 * The **FOV list** is the entry's `fov_ids`: the FOVs expected, in order.
-* A **run record** is a FOV's `<output_root>/checkpoints/<fov>/run.json`.
+* A **run record** is a FOV's `<output_root>/fovs/<fov>/run.json`.
 * A **part** is one block of the page with its tables ("Parts, their inputs and their
   reasons"); it is **unavailable** for the sample or for one FOV, with one reason of the
   closed list.
@@ -202,8 +202,8 @@ A sample-level reader, not a runner: it calls no processing stage, reads only sa
 | --- | --- |
 | `sample` | The sample, as `Dataset.stitch` and `Dataset.export` name it: the folders `stitching/<sample>/`, `export/<sample>/` and `report/<sample>/`. |
 | `fov_ids` | The FOV list: nonempty, unique, in the order the report shows them. The workflow passes the sample's FOVs from the sample annotation (`dataset/workflow.py`: `_sample_fovs`), as `stitch_sample` does. |
-| `assignment` | The §2.9 assignment name of the route per FOV, read at `checkpoints/<fov>/assignment/<assignment>/` (written by `assignment/_persist.py`: `write_assignment`); the default of `Dataset.export`. `None`: a sample without cells. |
-| `segmentation` | The segmentation run whose outlines the examples show. On the route per FOV, the name of a run under `checkpoints/<fov>/segmentation/<run>/` (written by `segmentation/_persist.py`: `write_run`); `None` is the cell run the assignment read (`assignment.json` `inputs.cells`), with the nucleus run when `inputs.nuclei` names one. On the route after fusion, a run of the export's `segmentation` section (written by `export/_segment.py`: `segment_fused`); `None` is its `cells` run, with its `nuclei` run. |
+| `assignment` | The §2.9 assignment name of the route per FOV, read at `fovs/<fov>/assignment/<assignment>/` (written by `assignment/_persist.py`: `write_assignment`); the default of `Dataset.export`. `None`: a sample without cells. |
+| `segmentation` | The segmentation run whose outlines the examples show. On the route per FOV, the name of a run under `fovs/<fov>/segmentation/<run>/` (written by `segmentation/_persist.py`: `write_run`); `None` is the cell run the assignment read (`assignment.json` `inputs.cells`), with the nucleus run when `inputs.nuclei` names one. On the route after fusion, a run of the export's `segmentation` section (written by `export/_segment.py`: `segment_fused`); `None` is its `cells` run, with its `nuclei` run. |
 | `config` | A `ReportConfig`; `None` is `ReportConfig()`. |
 | `output_dir` | `None` (the default) is `<output_root>/report/<sample>/`, the place the comparison entry reads. Another folder is allowed (for a test or a copy). |
 
@@ -374,6 +374,7 @@ with each rule a `RuleLimit`.
 Note (W-563): the last fallback input is now the FOVs' `checkpoints/{fovID}/run.json`, which the
 Python processing rules declare instead of the logs ({doc}`migration`, "Sequencing logs and the
 morphology record").
+Note (W-564): it is now `fovs/{fovID}/run.json` ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
 
 A static schema test keeps the block equal to the fields of `ReportConfig`, as for the other
 blocks.
@@ -386,14 +387,14 @@ Every place is fixed under the output root (D1); nothing is searched for.
 
 | Input | Place | Written by, at `dc5fc3c` | Needed for |
 | --- | --- | --- | --- |
-| Run record | `checkpoints/<fov>/run.json` | `dataset/_run_record.py`: `_RunRecord.write`, `_RunRecord.finish` (`FOV.run` with a `CheckpointConfig`) | Every part up to the readout; the identity, version and times |
-| Saved transforms | `checkpoints/<fov>/registered/transforms.json`, `<round>_field.npz` | `_checkpoint.py`: `write_registered_header` (stage `registered`) | The shifts of a run record without `transforms`; the dense and B-spline fields of the replay |
-| Reads before the filter | `checkpoints/<fov>/pre_qc.json` | `_checkpoint.py`: `write_pre_qc` (stage `pre_qc`) | Only the codebook layout's segment ends, for R3 of an older run record |
+| Run record | `fovs/<fov>/run.json` | `dataset/_run_record.py`: `_RunRecord.write`, `_RunRecord.finish` (`FOV.run` with a `CheckpointConfig`) | Every part up to the readout; the identity, version and times |
+| Saved transforms | `fovs/<fov>/checkpoints/registered/transforms.json`, `<round>_field.npz` | `_checkpoint.py`: `write_registered_header` (stage `registered`) | The shifts of a run record without `transforms`; the dense and B-spline fields of the replay |
+| Reads before the filter | `fovs/<fov>/checkpoints/pre_qc.json` | `_checkpoint.py`: `write_pre_qc` (stage `pre_qc`) | Only the codebook layout's segment ends, for R3 of an older run record |
 | Raw input | the files `run.json` `inputs[*].path` names | the acquisition | The replay of the main example |
 | Supplied statistics | `run.json` `preprocessing.supplied_statistics.path` | the user | The replay of a recipe with `fit="supplied"` |
 | Codebook | `run.json` `codebook.path` (R2) | the user | The gene list of the marker check |
-| Per-FOV segmentation and assignment | `checkpoints/<fov>/segmentation/<run>/`, `checkpoints/<fov>/assignment/<assignment>/` | `segmentation/_persist.py`: `write_run`; `assignment/_persist.py`: `write_assignment` | The per-FOV lane on the route per FOV; the segmentation examples on that route |
-| Reference image | `images/ref_merged/<fov>.tif`, or the `reference_image` pattern | `dataset/fov.py`: `FOV.save_reference_image` | The background of the segmentation examples on the route per FOV; the Z size when no export exists |
+| Per-FOV segmentation and assignment | `fovs/<fov>/segmentation/<run>/`, `fovs/<fov>/assignment/<assignment>/` | `segmentation/_persist.py`: `write_run`; `assignment/_persist.py`: `write_assignment` | The per-FOV lane on the route per FOV; the segmentation examples on that route |
+| Reference image | `fovs/<fov>/reference.tif`, or the `reference_image` or `reference_image_import` pattern | `dataset/fov.py`: `FOV.save_reference_image` | The background of the segmentation examples on the route per FOV; the Z size when no export exists |
 | Placement | `stitching/<sample>/placement.json`, `fovs.csv` | `stitching/_persist.py`: `save_placement` | The FOV maps, the correction from the stage position, the placement status, the owned area |
 | Export record | `export/<sample>/export.json` | `export/_record.py`: `write_export`, `update_section` (through `dataset/_export.py`: `export_sample`) | The route, the parts, the population accounting, the fused image and label files, the export's software |
 | Sample tables | `export/<sample>/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `sample.h5ad` | `assembly/_persist.py`: `save_assembly`; `assembly/_anndata.py`: `write_sample_h5ad` | Cells per FOV, reads in cells, per-cell distributions, MECR, marker patterns, reads along Z |
@@ -1212,6 +1213,7 @@ above. R4: `not_recorded`.
   stays 1, and a `run.json` without them still loads.
 * **The workflow writes `checkpoints/<fov>/run.json`** for the processing rules, alone by
   default, with `overwrite` on; `rules.<rule>.parameters.checkpoints` adds stages.
+  Note (W-564): the record is now `fovs/<fov>/run.json` ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
 * **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256.**
 * **`workflow/notebook/create_rsf_qc_report.py.ipynb` is superseded** by the report; it is
   left in place.

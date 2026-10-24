@@ -177,8 +177,10 @@ def round_transform(record, saved, fov_id, name):
     saved = saved()
     if saved is not None and saved.get("format_version") == 2 and _get(saved, "transforms", name):
         return "transforms.json", saved["transforms"][name], _get(saved, "applications", name, "application_config")
-    return Unavailable("not_recorded", f"neither checkpoints/{fov_id}/run.json transforms.{name} nor "
-                                       f"checkpoints/{fov_id}/registered/transforms.json holds the round")
+    folder = Path(_layout.FOVS, fov_id)
+    return Unavailable("not_recorded", f"neither {(folder / _layout.RUN_RECORD).as_posix()} transforms.{name} nor "
+                                       f"{(_layout.checkpoint_dir(folder) / _layout.REGISTERED / _layout.TRANSFORMS_FILE).as_posix()} "
+                                       "holds the round")
 
 
 def replay_fov(output_root, fov_id, rounds=None, *, keep_final=False) -> Replay:
@@ -191,7 +193,7 @@ def replay_fov(output_root, fov_id, rounds=None, *, keep_final=False) -> Replay:
     record = inputs.json(_layout.run_record(root, fov_id), "run_record")
     if isinstance(record, Unavailable):
         raise FileNotFoundError(f"no run record of {fov_id} under {root}")
-    path = _layout.checkpoint_dir(root, fov_id) / _layout.REGISTERED / _layout.TRANSFORMS_FILE
+    path = _layout.checkpoint_dir(_layout.fov_dir(root, fov_id)) / _layout.REGISTERED / _layout.TRANSFORMS_FILE
 
     def saved():
         data = inputs.json(path, "transforms", strict=False) if path.is_file() else None
@@ -385,7 +387,7 @@ class _Replayer:
         source, results, application = found
         if application is None:
             return Unavailable("not_recorded", f"{source} holds no application_config of {name}")
-        directory = _layout.checkpoint_dir(self.root, self.fov_id) / _layout.REGISTERED
+        directory = _layout.checkpoint_dir(_layout.fov_dir(self.root, self.fov_id)) / _layout.REGISTERED
         for entry in results:
             kind = _get(entry, "transform", "kind")
             if kind in ("dense", "bspline"):

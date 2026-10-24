@@ -155,7 +155,7 @@ def run_fov(root: Path, stages):
                                 ROUNDS, CHANNELS)
     fov = dataset.fov("FOV_001").run(pipeline(), execution=ExecutionConfig(),
                                      checkpoints=CheckpointConfig(stages=stages))
-    folder = fov.paths.checkpoint_dir
+    folder = fov.paths.fov_dir
     record = json.loads((folder / "run.json").read_text().replace(str(root), ROOT))
     record["__root__"] = str(root)
     files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
@@ -240,10 +240,11 @@ def pinned_record(stages):
                                   "displacement_physical": {"median": 0.5, "p95": 0.5, "max": 0.5},
                                   "fold_fraction": 0.0},
                     "optimizer": None}}
-    checkpoints = {"candidates": ["candidates.csv", "candidates.json"], "pre_qc": ["pre_qc.csv", "pre_qc.json"]}
+    checkpoints = {"candidates": ["checkpoints/candidates.csv", "checkpoints/candidates.json"],
+                   "pre_qc": ["checkpoints/pre_qc.csv", "checkpoints/pre_qc.json"]}
     if registered:
-        checkpoints = {"registered": ["registered/round1.ome.tif", "registered/round2.ome.tif",
-                                      "registered/transforms.json"], **checkpoints}
+        checkpoints = {"registered": ["checkpoints/registered/round1.ome.tif", "checkpoints/registered/round2.ome.tif",
+                                      "checkpoints/registered/transforms.json"], **checkpoints}
     return {
         "format_version": 1, "dataset_id": "golden", "sample_id": "sample", "fov_id": "FOV_001", "subtile_id": None,
         "status": "succeeded", "started_at": TIME, "ended_at": TIME, "error": None,
@@ -307,7 +308,7 @@ def pinned_record(stages):
                                     "clip_to_dtype": True, "fft_workers": 1},
              "failure": None, "qc": application_qc}]},
         "counts": PINNED_COUNTS,
-        "checkpoint_directory": f"{ROOT}/out/checkpoints/FOV_001",
+        "checkpoint_directory": f"{ROOT}/out/fovs/FOV_001/checkpoints",
         "checkpoints": checkpoints,
     }
 
@@ -348,9 +349,11 @@ PINNED_COUNTS = {
 
 
 def pinned_files(stages):
-    files = ["candidates.csv", "candidates.json", "pre_qc.csv", "pre_qc.json", "run.json"]
+    files = ["checkpoints/candidates.csv", "checkpoints/candidates.json", "checkpoints/pre_qc.csv",
+             "checkpoints/pre_qc.json", "run.json"]
     if "registered" in stages:
-        files += ["registered/round1.ome.tif", "registered/round2.ome.tif", "registered/transforms.json"]
+        files += ["checkpoints/registered/round1.ome.tif", "checkpoints/registered/round2.ome.tif",
+                  "checkpoints/registered/transforms.json"]
     return sorted(files)
 
 

@@ -6,7 +6,9 @@ pixel; a file with stored calibration, whose grid holds the SHA-256 of its pixel
 whose header does not settle the shape ``load_volume`` gives are read whole as before.
 
 The oracle is the base revision's function (``ec4774a``), copied below as
-``base_reference_grid``: the file loaded whole by ``load_volume``. Fixtures, all written in the
+``base_reference_grid``: the file loaded whole by ``load_volume``; its default pattern and its
+keyword ``reference_image_import`` follow W-564 (the FOV folder's ``reference.tif``, read through
+the one resolver). Fixtures, all written in the
 test: one small synthetic file per layout ``load_volume`` reads or refuses (``LAYOUTS``), and the
 plain copy of W-390's synthetic sample scene (``sample-tiny-v1``, 2 × 2 FOVs of 5×36×36, its
 reference images written as pages without metadata) for the export. Pages decoded are counted by
@@ -39,9 +41,10 @@ def pixels(shape, dtype=np.uint16):
 
 
 def base_reference_grid(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=None, voxel_size_z=None,
-                        reference_image="images/ref_merged/{fov_id}.tif"):
+                        reference_image="fovs/{fov_id}/reference.tif", reference_image_import=None):
     """The base revision's ``reference_grid`` (``reference_volume(...)[0]`` of ``ec4774a``), copied: the whole file."""
     from starfinder.segmentation._labels import grid_sha256
+    assert reference_image_import is None
     path = Path(output_root) / reference_image.replace("{fov_id}", fov_id)
     if not path.is_file():
         raise FileNotFoundError(f"the reference image of FOV {fov_id!r} is missing: {path} (the file the setting "
@@ -131,7 +134,7 @@ LAYOUTS = SETTLED + WITH_CALIBRATION + UNSETTLED
 
 
 def write_layout(root, kind):
-    path = Path(root) / "images" / "ref_merged" / f"{FOV}.tif"
+    path = Path(root) / "fovs" / FOV / "reference.tif"
     path.parent.mkdir(parents=True, exist_ok=True)
     _write(kind)(path)
     return path
@@ -360,7 +363,7 @@ def golden_sample(root):
     from .assembly_fixtures import GOLDEN_IDS
     from .test_workflow_declared_grids import build
     out, config = build(root, "2d", stored=False)
-    return out, config, {fov: (out / "images" / "ref_merged" / f"{fov}.tif").resolve() for fov in GOLDEN_IDS}
+    return out, config, {fov: (out / "fovs" / fov / "reference.tif").resolve() for fov in GOLDEN_IDS}
 
 
 @needs_extras
@@ -420,7 +423,8 @@ def test_the_export_reads_no_reference_image_whole_for_its_grid(tmp_path, monkey
                 figures = {fov: reads_assignment(root, out, fov, config) for fov in images}
         expected = {fov: 1 if name == "base" else 0 for fov in images}
         assert whole_reads(reads, images) == expected, name
-        saved = {fov: {p.name: p.read_bytes() for p in sorted((out / "checkpoints" / fov).rglob("*")) if p.is_file()}
+        saved = {fov: {p.name: p.read_bytes() for p in sorted((out / "fovs" / fov / "assignment").rglob("*"))
+                       if p.is_file()}
                  for fov in images}
         if name == "result":
             first = (figures, saved)
@@ -466,7 +470,7 @@ def test_a_float_reference_image_is_still_read_whole(monkeypatch, tmp_path):
     scene = generate_sample_scene(book, config=config)
     dataset = scene_dataset(tmp_path / "plain", scene, book, save_sample_scene(scene, tmp_path / "scene"),
                             stored=False)
-    images = {fov: (dataset.output_root / "images" / "ref_merged" / f"{fov}.tif").resolve()
+    images = {fov: (dataset.output_root / "fovs" / fov / "reference.tif").resolve()
               for fov in scene.positions.fov_id}
     assert {load_volume(path).image.dtype for path in images.values()} == {np.dtype(np.float32)}
     placement = load_placement(dataset.output_root / "stitching" / SAMPLE)
@@ -494,16 +498,15 @@ def test_read_inputs_reads_the_reference_image_whole_only_for_its_pixels(tmp_pat
     read each reference image whole for every input; now only reference_merged, whose image it is, reads it whole,
     and reference_stain, a file: input and a missing file: input read only its grid (no page of it decoded). Every
     StitchingInput (image, grid, source, file hash) equals the base's."""
-    from starfinder._layout import _FovPaths
     from starfinder.dataset._declared import reference_settings
-    from starfinder.dataset._stitching import REFERENCE_STAIN_FILE, read_inputs
+    from starfinder.dataset._export import reference_stain_path
+    from starfinder.dataset._stitching import read_inputs
     from starfinder.dataset.workflow import _assembly_block, _export_dataset
     out, config, images = golden_sample(tmp_path)
     reference = reference_settings(_export_dataset(config, _assembly_block(config)))
     for fov in images:
         grid = reference_grid(out, fov, **reference)
-        save_volume(pixels(grid.shape_zyx + (1,)), _FovPaths(out, fov).checkpoint_dir / REFERENCE_STAIN_FILE,
-                    metadata=grid.metadata)
+        save_volume(pixels(grid.shape_zyx + (1,)), reference_stain_path(out, fov), metadata=grid.metadata)
         other = out / "images" / "other" / f"{fov}.tif"
         other.parent.mkdir(parents=True, exist_ok=True)
         tifffile.imwrite(other, pixels(grid.shape_zyx), metadata=None, photometric="minisblack")

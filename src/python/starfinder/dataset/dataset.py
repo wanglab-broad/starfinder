@@ -59,8 +59,12 @@ class Dataset:
     image, or else from these sizes. reference_image (the workflow key of the
     same name) is the file pattern of that image, with ``{fov_id}``, absolute
     or relative to the output root; the default is
-    ``images/ref_merged/{fov_id}.tif``, the file ``FOV.save_reference_image``
-    writes.
+    ``fovs/{fov_id}/reference.tif``, the file ``FOV.save_reference_image``
+    writes. reference_image_import (the workflow key of the same name; None by
+    default) declares instead a reference image that another tool or rule
+    produced, a pattern of the same form: every reader reads it, and
+    ``FOV.save_reference_image`` refuses to write it. It excludes a
+    reference_image other than the default.
     The repr summarizes IDs, round and channel labels, the reference (codebook
     with its encoding method and segment layout, or the panel in direct mode)
     and roots.
@@ -72,8 +76,12 @@ class Dataset:
         within a round, other_channel_order for a round that is not an other
         round or with no channel, reference stains without a reference round or
         sharing a pattern with channel_order, a voxel size that is not a
-        finite positive number or None, a reference_image that is not a
-        pattern with ``{fov_id}``, or the field errors of ChannelInfo.
+        finite positive number or None, a reference_image or
+        reference_image_import that is not a pattern with ``{fov_id}``, both
+        reference settings given, a channel pattern that is not a safe
+        single path component (``[A-Za-z0-9][A-Za-z0-9_.-]*``; the Python
+        workflow names channel folders by it), or the field errors of
+        ChannelInfo.
     TypeError
         A channel that is not a pattern string, ChannelInfo or mapping.
     """
@@ -109,8 +117,10 @@ class Dataset:
     # The declared calibration (µm) of saved files that store none, as the workflow's voxel_size_xy and voxel_size_z
     voxel_size_xy: float | None = None
     voxel_size_z: float | None = None
-    # The file pattern of a FOV's reference image, as the workflow's reference_image
+    # The file pattern of a FOV's reference image, as the workflow's reference_image, or of an imported one, as the
+    # workflow's reference_image_import, which every reader reads and nothing writes
     reference_image: str = REFERENCE_IMAGE
+    reference_image_import: str | None = None
 
     # The patterns and ChannelInfo of the sequencing channels (key None) and of each other round with its own
     # channels. An init field so that dataclasses.replace hands it to the copy, which keeps the ChannelInfo of
@@ -130,11 +140,12 @@ class Dataset:
             raise ValueError(f"readout_mode must be one of {READOUT_MODES}; got {self.readout_mode!r}")
         if self.direct_panel is not None and not isinstance(self.direct_panel, DirectPanel):
             raise TypeError("direct_panel must be a DirectPanel or None")
-        from starfinder._layout import check_reference_image
+        from starfinder._layout import check_reference_image, check_reference_import
         from starfinder.dataset._declared import check_voxel_size
         self.voxel_size_xy = check_voxel_size("voxel_size_xy", self.voxel_size_xy)
         self.voxel_size_z = check_voxel_size("voxel_size_z", self.voxel_size_z)
         self.reference_image = check_reference_image(self.reference_image)
+        self.reference_image_import = check_reference_import(self.reference_image, self.reference_image_import)
         self.rounds.validate()
         if REFERENCE_STAIN in self.rounds.all_rounds:
             raise ValueError(f"{REFERENCE_STAIN!r} is the reserved image name of the reference stains; "
@@ -461,8 +472,9 @@ class Dataset:
         A sample-level computation, not a multi-FOV runner: it calls no per-FOV
         stage and reads only saved per-FOV files. For each FOV it reads the
         reference grid of its reference image, the file ``reference_image``
-        names (default ``images/ref_merged/{fovID}.tif``, the file
-        ``FOV.save_reference_image`` writes): its stored metadata, or for a
+        names (default ``fovs/{fovID}/reference.tif``, the file
+        ``FOV.save_reference_image`` writes) or ``reference_image_import``: its
+        stored metadata, or for a
         file that stores none the grid ``voxel_size_xy`` and ``voxel_size_z``
         declare. It reads that grid and the stitching image named by
         ``input``, one FOV at a time, builds the
@@ -491,7 +503,7 @@ class Dataset:
         input : str
             ``reference_merged`` (the reference image, default),
             ``reference_stain`` (the one-channel saved ``reference_stain`` of
-            ``FOV.prepare_morphology`` under ``checkpoints/{fovID}/other_rounds/``)
+            ``FOV.prepare_morphology`` under ``fovs/{fovID}/other_rounds/``)
             or ``file:<pattern>`` (``{fovID}`` replaced; relative to the output
             root), a file of the reference grid's shape. A missing input file
             gives the FOV an absent image (status ``missing``).
@@ -511,7 +523,8 @@ class Dataset:
         ------
         FileNotFoundError
             A FOV's reference image does not exist (the error names the
-            setting ``reference_image`` and the path).
+            setting, ``reference_image`` or ``reference_image_import``, and the
+            path).
         ValueError
             An unknown input or positions key, a table whose FOVs are not
             fov_ids, or a reference image without stored metadata while
@@ -559,9 +572,9 @@ class Dataset:
         each part that runs or is off, then calls the parts in order, writing
         ``export.json`` after each: ``assemble`` on one
         :class:`~starfinder.assembly.AssemblyInput` per FOV of the placement
-        (``checkpoints/{fovID}/assignment/<assignment>/`` and the grid of the
-        reference image ``reference_image`` names, default
-        ``images/ref_merged/{fovID}.tif``: its stored metadata, or for a file
+        (``fovs/{fovID}/assignment/<assignment>/`` and the grid of the
+        reference image ``reference_image_import`` or ``reference_image``
+        names, default ``fovs/{fovID}/reference.tif``: its stored metadata, or for a file
         that stores none the grid ``voxel_size_xy`` and ``voxel_size_z``
         declare), saved with
         :func:`~starfinder.assembly.save_assembly` (with ``assemble`` off the
@@ -569,8 +582,8 @@ class Dataset:
         :func:`~starfinder.export.fuse_images` on one
         :class:`~starfinder.export.FusionInput` per included FOV
         (``reference_stain``:
-        ``checkpoints/{fovID}/other_rounds/reference_stain/image.ome.tif``;
-        ``reference_merged``: the reference image ``reference_image`` names;
+        ``fovs/{fovID}/other_rounds/reference_stain/image.ome.tif``;
+        ``reference_merged``: the FOV's reference image;
         ``<name>=file:<pattern>`` relative to the output root); and, with
         ``fuse_labels`` on (off by default),
         :func:`~starfinder.export.fuse_labels` on the placement and the
@@ -643,7 +656,7 @@ class Dataset:
         entry"). A sample-level reader, not a runner: it calls no processing
         stage, reads only the saved records at their fixed places under the
         output root ("Where each record is looked for": the FOVs'
-        ``checkpoints/{fovID}/run.json`` and saved transforms, segmentation and
+        ``fovs/{fovID}/run.json`` and saved transforms, segmentation and
         assignment records, the reference images, ``stitching/<sample>/`` and
         ``export/<sample>/``) and the raw input of the main example for its
         replay, and writes only its output folder. The report describes the
@@ -665,7 +678,7 @@ class Dataset:
             shows them.
         assignment : str or None
             The §2.9 assignment name of the route per FOV, read at
-            ``checkpoints/{fovID}/assignment/<assignment>/``; None for a sample
+            ``fovs/{fovID}/assignment/<assignment>/``; None for a sample
             without cells.
         segmentation : str or None
             The segmentation run whose outlines the examples show; None is the

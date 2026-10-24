@@ -26,7 +26,8 @@ An em dash in the default column means the schema defines no default.
 | `img_col`, `img_row` | integers >=1 | Yes | —; width X and height Y; subtile windows use these values |
 | `img_z` | integer >=1 | No | —; downstream 3-D metadata/preview uses it; `reads_assignment` needs it for a YX label image (the Z size of the molecule grid) |
 | `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching and the declared calibration of the files the segmentation and assignment rules read, and of a FOV's reference image (`reference_image`) that stores no metadata when the stitching rules, `reads_assignment` (with an `assembly` block) and `export_sample` read its grid; **not** extraction window radii |
-| `reference_image` | string with `{fov_id}` | No | `images/ref_merged/{fov_id}.tif`; Python only: the file pattern of a FOV's reference image, absolute or relative to the output root, whose grid the stitching rules, `reads_assignment` (with an `assembly` block) and `export_sample` read and which `reference_merged` names (`Dataset.reference_image`); a pattern without `{fov_id}` raises `ValueError`, a missing file `FileNotFoundError`, each naming the key. The processing rules still write `images/ref_merged/` |
+| `reference_image` | string with `{fov_id}` | No | `fovs/{fov_id}/reference.tif`; Python only: the file pattern of a FOV's reference image, absolute or relative to the output root, whose grid the stitching rules, `reads_assignment` (with an `assembly` block) and `export_sample` read and which `reference_merged` names (`Dataset.reference_image`); a pattern without `{fov_id}` raises `ValueError`, a missing file `FileNotFoundError`, each naming the key. Absent or null is the default; the Python processing rules write the file there, and `FOV.load_reference_image` and every reader read it. Excludes `reference_image_import` |
+| `reference_image_import` | string with `{fov_id}` | No | None; Python only: the file pattern of an imported reference image, one another tool or rule produced, absolute or relative to the output root (`Dataset.reference_image_import`). The processing rules then write no reference image, and every reader reads this file; nothing writes to it. Excludes `reference_image` |
 | `maximum_projection` | boolean | No | `false`; reference-image/DAPI output projection; does not turn sequencing into a 2-D algorithm |
 | `seq_channel_order` | array of strings, or of objects with `wavelength`, `channel`, `name` | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]`, or MATLAB's `channel_order_dict` entries; see [channels](#channels) |
 | `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; supply `[]` when unused; accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
@@ -206,7 +207,7 @@ are partitioned independently with complete edge coverage.
 
 Each Python processing rule runs its FOV (or subtile) with
 `CheckpointConfig(stages=<stages>, overwrite=True)`, so every run writes
-`<output_root>/checkpoints/<fov>/run.json` (`subtile_<n>/run.json` below it for a
+`<output_root>/fovs/<fov>/run.json` (`subtile_<n>/run.json` below it for a
 subtile rule; {doc}`checkpoints`, "run.json"). The stages come from
 `rules.<rule>.parameters.checkpoints`, a mapping with the one key `stages`; absent
 or null it is `{stages: []}`, which writes `run.json` alone. For example, the
@@ -221,7 +222,7 @@ rules:
 ```
 
 `overwrite` is on because a rerun of the rule replaces its record: it removes the
-earlier stage files of the FOV directory and leaves `other_rounds/`,
+earlier stage files of the FOV folder's `checkpoints/` and leaves `other_rounds/`,
 `segmentation/` and `assignment/`. The inputs are hashed (`hash_inputs`), so each
 raw image is read once more. `run.json` records the configuration file the rule ran
 with (`workflow_config`: the top-level `config_path` and the SHA-256 of its bytes)
@@ -508,10 +509,10 @@ sample-level rules for a configuration that has them. The specification is the
   edge ({doc}`assembly-contract`, "Retention", rule 8). With the block, `reads_assignment` writes
   the per-FOV `raw.h5ad` and `reads_assignment.csv` without the tile filter and without
   `global_*` columns, on the grid of the FOV's reference image (`reference_image`, default
-  `images/ref_merged/{fov_id}.tif`; its stored metadata, or for a file that stores none the
+  `fovs/{fov_id}/reference.tif`; its stored metadata, or for a file that stores none the
   grid `voxel_size_xy` and `voxel_size_z` declare, as `export_sample` reads it), reads no
   `tile_config_{sample}.csv`, and saves the FOV's assignment folder
-  `checkpoints/{fovID}/assignment/<assignment>/`; `create_sample_h5ad` and
+  `fovs/{fovID}/assignment/<assignment>/`; `create_sample_h5ad` and
   `create_sample_reads_assignment` do not run. One rule per sample, `export_sample`, runs
   every part of `Dataset.export` after the placement and, on the route per FOV, every
   FOV's `reads_assignment`; on the route after fusion it needs no output of
@@ -657,7 +658,7 @@ configuration without the block runs as before: no report rule and no report out
   lists every other file of the folder. Its declared input is the sample's last per-sample
   output: `export/<sample>/export.json` with an `assembly` block (the `export_sample` rule,
   which an `export` block configures); else `stitching/<sample>/placement.json` with a
-  `stitching` block; else every FOV's `checkpoints/{fovID}/run.json`. Without an `assembly`
+  `stitching` block; else every FOV's `fovs/{fovID}/run.json`. Without an `assembly`
   block no rule saves a per-FOV assignment, so the report is made without cells
   (`assignment=None`).
 * **`report_dataset`** calls `Dataset.compare_samples` on every sample of the run, in the

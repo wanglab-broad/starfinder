@@ -222,7 +222,8 @@ the plan's inputs use only the reference round's own channels or its merged imag
 when every run imports an external mask.
 
 **Two dataset designs.** As in the MATLAB workflow, whose segmentation rules read saved
-reference-frame images (`images/ref_merged`, `images/DAPI`, `images/<round>/<name>`) chosen
+reference-frame images (`images/ref_merged`, `images/DAPI`, `images/<round>/<name>`; on the
+Python backend the reference image and `images/<round>/<label>`) chosen
 by `segmentation_input_folder` and never load a sequencing round, the calls can run in one
 process or in separate ones:
 
@@ -233,12 +234,12 @@ process or in separate ones:
 * *Segmenting from saved images.* Process 1 calls `fov.run(pipeline, checkpoints=…)` and
   `fov.save_reference_image()`; process 2 calls
   `fov.prepare_morphology(MorphologyConfig(rotation_degrees=…), checkpoints=…)`, which needs
-  only the raw files, so processes 1 and 2 run in either order (`FOV.run` second needs
-  `overwrite=True`, which removes only checkpoint stage files, {doc}`checkpoints`).
+  only the raw files, so processes 1 and 2 run in either order (`FOV.run`'s overwrite guard
+  covers only its `run.json` and `checkpoints/`, {doc}`checkpoints`).
   Process 3 calls, on a new `FOV` object, `fov.load_reference_image()`,
   `fov.load_registered_round(name)` for `reference_stain` and each other round its plan
   names, and `fov.segment(plan, checkpoints=…)`. It reads
-  `images/ref_merged/{fovID}.tif` and `<checkpoint dir>/<fov_id>/other_rounds/<name>/`
+  the reference image (`fovs/{fovID}/reference.tif` by default) and `fovs/<fov_id>/other_rounds/<name>/`
   (`image.ome.tif`, `registration.json`) and nothing else: no sequencing round and no
   `registered` checkpoint. Its reference grid is the grid of that file (source
   `file:<path>`), which is the reference round's grid by the grid rule
@@ -273,8 +274,10 @@ class ReferenceGrid:
   after `FOV.load_reference_image()`, it returns the grid of the saved reference image, as
   `reference_grid_from_file` reads it (below). It raises `ValueError` when neither is
   resident, or when both are and the file is not the round's channel maximum.
-* `FOV.load_reference_image()` reads `images/ref_merged/{fovID}.tif`, the file
-  `FOV.save_reference_image(reference_image="merged")` wrote (ZYX, or YX after a
+* `FOV.load_reference_image()` reads the file of the dataset's `reference_image`
+  (`fovs/{fovID}/reference.tif` by default), the file
+  `FOV.save_reference_image(reference_image="merged")` wrote, or the file of its
+  `reference_image_import` (ZYX, or YX after a
   projection), with its stored metadata, and makes it resident as the reference merged
   image: `InputChannel(reference_merged=True)` and the amplicon of a `CompositeConfig`
   read it when the reference round is not resident. A missing file raises
@@ -285,7 +288,7 @@ class ReferenceGrid:
   the shape from the array, the metadata from the file's `starfinder_metadata`
   description, or from `metadata` when the file has none (a file with neither raises).
   Its source is `"file:<path>"` and its hash the array's SHA-256. The natural file is
-  `images/ref_merged/{fovID}.tif`, which `FOV.save_reference_image` writes with the
+  the FOV's reference image (`fovs/{fovID}/reference.tif` by default), which `FOV.save_reference_image` writes with the
   reference metadata after `FOV.run` (a YX file gives a Z=1 grid).
 * A `ReferenceGrid(…, source="declared")` built by the caller serves masks imported
   without any molecule run: nothing is checked against a molecule grid then, the record
@@ -465,6 +468,8 @@ consumers simple, holds any realistic FOV (the 50×1496×1496 estimate has far f
 | **F1. TIFF and a JSON record (recommended)** | `<checkpoint dir>/segmentation/<run>/labels.tif` (ZYX, uint32, zlib, written by `save_volume` with `ImageMetadata` in the JSON description), `input.ome.tif` (the segmentation input, ZYXC OME-TIFF by `save_volume`) and `segmentation.json` (the run record). The workflow keeps writing `images/stardist_segmentation/{fovID}.tif` for the legacy rule. | None beyond the dtype of L1; `load_volume` reads the label file with its metadata. `run.json` and the existing checkpoint stages are untouched. | None (tifffile is a core dependency). | Snakemake declares TIFF outputs as today; Fiji opens the files; MATLAB reads TIFF. |
 | F2. OME-Zarr label image | A `labels/<run>` group in an OME-Zarr image with the NGFF label metadata. | New format beside the TIFF images; `reads_assignment.py` could not read it. | `ome-zarr` is in the lock only through the `spatialdata` extra; it would become a dependency of segmentation. | Snakemake must declare directories; MATLAB cannot read it without an add-on. |
 | F3. Checkpoint stage in `FOV.run`'s format | A new `segmentation` checkpoint stage beside `registered`, `candidates` and `pre_qc`. | `CheckpointConfig.stages` and `FORMAT_VERSION` change; `test_checkpoints.py`, which fixes the stage list, needs an edit. | None. | As F1. |
+
+Note (W-564): the run folder is now `fovs/<fov_id>/segmentation/<run>/` ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
 
 **Recommendation: F1.** It keeps the file type every current consumer reads, keeps
 segmentation out of `FOV.run`'s checkpoint format (D1), and writes the input image the
@@ -689,7 +694,7 @@ tell an imported run from a computed one except by its record.
 **Where the grid comes from.** In the three-call sequence, `FOV.segment` passes
 `FOV.reference_grid()` (or its projection, for a run with `projection`) for an import run.
 A caller who imports masks without running `FOV.run` in the same process gets the grid
-from `reference_grid_from_file("images/ref_merged/{fovID}.tif")`, which an earlier
+from `reference_grid_from_file("fovs/{fovID}/reference.tif")`, which an earlier
 molecule run wrote with the reference metadata, or declares it as a `ReferenceGrid(…,
 source="declared")` when no molecule run exists yet; assign then checks the declared
 grid against the molecule run.

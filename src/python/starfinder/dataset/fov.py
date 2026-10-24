@@ -22,6 +22,7 @@ from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchi
 from starfinder.preprocessing._rotation import _rotated
 from starfinder.dataset._logging import _log_step
 from starfinder import _checkpoint
+from starfinder import _layout
 from starfinder._layout import _FovPaths
 from starfinder._records import file_sha256
 from starfinder._registry import _version
@@ -624,7 +625,7 @@ class FOV:
         checkpoints : CheckpointConfig | None
             Other-round route only. None (default) writes nothing. Otherwise
             each registered round is saved to
-            ``<checkpoint dir>/<fov_id>/other_rounds/<round>/``
+            ``<FOV folder>/other_rounds/<round>/``
             (``image.ome.tif`` and ``registration.json``; see
             :doc:`/checkpoints`, "Prepared morphology images"), which
             :meth:`load_registered_round` reads. Only directory and overwrite
@@ -664,7 +665,7 @@ class FOV:
                                  'sequencing rounds and the other rounds in separate calls')
             sequencing = bool(named)
         if sequencing:
-            given = [name for name, value in (('reference', reference), ('checkpoints', checkpoints))
+            given = [name for name, value in dict(reference=reference, checkpoints=checkpoints).items()
                      if value is not None]
             if given:
                 raise ValueError(f'{" and ".join(given)} must be None for the sequencing rounds {rounds}: reference '
@@ -1215,9 +1216,9 @@ class FOV:
         filter's fractions under counts.filtering.
 
         checkpoints=None writes nothing. Otherwise the selected stages and
-        run.json are written to the FOV checkpoint directory; see
-        :doc:`/checkpoints`. The directory, overwrite policy and Parquet support
-        are checked before any processing. On an exception the record gets
+        run.json are written to the FOV folder (``fovs/<fov_id>/run.json`` and
+        its ``checkpoints/``); see :doc:`/checkpoints`. The directory, overwrite
+        policy and Parquet support are checked before any processing. On an exception the record gets
         failed (or interrupted for other BaseExceptions) with the failing step
         and round, and the original exception is re-raised.
         """
@@ -1356,7 +1357,7 @@ class FOV:
                         self._preprocess(step.config, round_name=name, index=index, phase='post_registration',
                                          stage=step_spec(step.config).name, references=references)
                 if 'registered' in stages:
-                    self._write_checkpoint(stage='registered', directory=record.directory,
+                    self._write_checkpoint(stage='registered', directory=record.checkpoint_directory,
                                            table_format=checkpoints.table_format, round_name=name)
                 if name == ref and config.spot_finding and detection_plan is None:
                     self.find_spots(config=config.spot_finding, device=execution.device)
@@ -1376,8 +1377,8 @@ class FOV:
             if execution.mode == 'streaming' and not execution.retain_images and loop_rounds:
                 self.snapshots.pop(ref, None)
             current = None
-            if 'registered' in stages and record.data['checkpoints'].get('registered'):
-                self._write_checkpoint(stage='registered', directory=record.directory,
+            if 'registered' in stages and record.data[_layout.CHECKPOINTS].get('registered'):
+                self._write_checkpoint(stage='registered', directory=record.checkpoint_directory,
                                        table_format=checkpoints.table_format, image_rounds=pipeline_rounds)
             if detection_plan is not None:
                 from starfinder.spot_finding import _combine_rounds
@@ -1392,7 +1393,7 @@ class FOV:
             if config.extraction:
                 self._assemble_intensities()
             if 'candidates' in stages and (config.spot_finding or config.extraction):
-                self._write_checkpoint(stage='candidates', directory=record.directory,
+                self._write_checkpoint(stage='candidates', directory=record.checkpoint_directory,
                                        table_format=checkpoints.table_format)
             if config.decoding:
                 self.decode_reads(config=config.decoding)
@@ -1401,7 +1402,7 @@ class FOV:
             if config.deduplication:
                 self.deduplicate_reads(config=config.deduplication)
             if 'pre_qc' in stages and (config.decoding or scoring or config.deduplication):
-                self._write_checkpoint(stage='pre_qc', directory=record.directory,
+                self._write_checkpoint(stage='pre_qc', directory=record.checkpoint_directory,
                                        table_format=checkpoints.table_format)
             if config.filtering:
                 self.filter_reads(config=config.filtering)
@@ -1466,10 +1467,10 @@ class FOV:
         return recipe, named[0]
 
     def _prepared_root(self, checkpoints, names):
-        """The FOV checkpoint directory; FileExistsError when a folder of names exists and overwrite is False."""
+        """The FOV folder; FileExistsError when a folder of names exists and overwrite is False."""
         from starfinder.dataset._prepared import check_writable, image_directory
         checkpoints.__post_init__()
-        root = self._checkpoint_dir(checkpoints)
+        root = self._fov_dir(checkpoints)
         for name in names:
             check_writable(image_directory(root, name), checkpoints.overwrite)
         return root
@@ -1514,7 +1515,7 @@ class FOV:
            the reference stain when its signal names a stain channel, else
            against the resident reference round (after FOV.run);
         3. with checkpoints, save each prepared image to
-           ``<checkpoint dir>/<fov_id>/other_rounds/<name>/`` (``image.ome.tif``
+           ``<FOV folder>/other_rounds/<name>/`` (``image.ome.tif``
            and ``registration.json``; see :doc:`/checkpoints`), which
            :meth:`load_registered_round` reads.
 
@@ -1603,10 +1604,10 @@ class FOV:
     def load_registered_round(self, name: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> FOV:
         """Restore one image saved by :meth:`prepare_morphology` or :meth:`register` with checkpoints.
 
-        Reads ``<checkpoint dir>/<fov_id>/other_rounds/<name>/`` and restores
+        Reads ``<FOV folder>/other_rounds/<name>/`` and restores
         images[name], metadata[name], the rotation diagnostics and
         registration_record["rounds"][name], with the key ``saved`` (the
-        image file's path relative to the FOV checkpoint directory and its
+        image file's path relative to the FOV folder and its
         SHA-256), which :meth:`segment` links in its records. A registered
         round also gets its registration_results, registration_chains,
         registration_attempts and application WarpConfig back; the reference
@@ -1643,7 +1644,7 @@ class FOV:
             raise ValueError(f'{name!r} is already prepared in this FOV')
         if self.registration_record.get('semantics') == 'sequential':
             raise ValueError('this FOV holds a sequential (version-1) registration; it cannot be extended by a recipe')
-        root = self._checkpoint_dir(checkpoints)
+        root = self._fov_dir(checkpoints)
         directory = image_directory(root, name)
         identity = dict(dataset_id=self.dataset.dataset_id, sample_id=self.dataset.sample_id, fov_id=self.fov_id,
                         subtile_id=self.subtile_id)
@@ -1670,9 +1671,18 @@ class FOV:
 
     # --- Checkpoints ---
 
+    def _reference_image_path(self) -> Path:
+        """The file of the FOV's reference image (_layout.reference_image_path of the dataset's settings)."""
+        return _layout.reference_image_path(self.dataset.output_root, self.fov_id, self.dataset.reference_image,
+                                            self.dataset.reference_image_import)
+
+    def _fov_dir(self, checkpoints: CheckpointConfig) -> Path:
+        """The FOV folder of the durable results: fovs/<fov_id>[/subtile_<n>], or under CheckpointConfig.directory."""
+        return _layout.fov_dir(self.dataset.output_root, self.fov_id, self.subtile_id, parent=checkpoints.directory)
+
     def _checkpoint_dir(self, checkpoints: CheckpointConfig) -> Path:
-        base = self.paths.checkpoint_dir if checkpoints.directory is None else Path(checkpoints.directory) / self.fov_id
-        return base if self.subtile_id is None else base / f'subtile_{self.subtile_id}'
+        """The restart folder of the checkpoint stages: <FOV folder>/checkpoints."""
+        return _layout.checkpoint_dir(self._fov_dir(checkpoints))
 
     def _checkpoint_header(self) -> dict:
         return dict(dataset_id=self.dataset.dataset_id, sample_id=self.dataset.sample_id,
@@ -1683,16 +1693,20 @@ class FOV:
         from starfinder.dataset._run_record import _RunRecord
         from starfinder._records import _require_parquet
         checkpoints.__post_init__()
-        directory = self._checkpoint_dir(checkpoints)
-        if directory.exists() and not checkpoints.overwrite:
-            raise FileExistsError(f'checkpoint directory {directory} exists; pass overwrite=True to replace its files')
+        # The guard covers the run's own files, run.json and checkpoints/; other writers share the FOV folder.
+        folder = self._fov_dir(checkpoints)
+        directory = _layout.checkpoint_dir(folder)
+        existing = [path for path in (folder / _layout.RUN_RECORD, directory) if path.exists()]
+        if existing and not checkpoints.overwrite:
+            raise FileExistsError(f'{" and ".join(map(str, existing))} exist{"s" if len(existing) == 1 else ""}; '
+                                  'pass overwrite=True to replace the run record and the checkpoint files')
         if checkpoints.table_format == 'parquet':
             _require_parquet()
         if directory.exists():
             # Stages this run does not rewrite must not survive from an earlier run.
             _checkpoint.clear_stages(directory)
         directory.mkdir(parents=True, exist_ok=True)
-        record = _RunRecord(self, directory, checkpoints, config, execution)
+        record = _RunRecord(self, folder, checkpoints, config, execution)
         record.write()
         return record
 
@@ -1785,7 +1799,7 @@ class FOV:
         Returns
         -------
         pathlib.Path
-            The per-FOV checkpoint directory.
+            The FOV's checkpoint folder, ``<FOV folder>/checkpoints``.
 
         Raises
         ------
@@ -1954,9 +1968,11 @@ class FOV:
     def load_reference_image(self) -> FOV:
         """Restore the reference merged image that :meth:`save_reference_image` wrote, without the reference round.
 
-        Reads ``images/ref_merged/{fov_id}.tif`` (``paths.ref_merged_tif``), the
-        file ``save_reference_image(reference_image="merged")`` writes: ZYX, or YX
-        after a projection, with its stored ``ImageMetadata``. The image becomes
+        Reads the file of the dataset's ``reference_image`` (default
+        ``fovs/{fov_id}/reference.tif``), the file
+        ``save_reference_image(reference_image="merged")`` writes, or the file
+        ``reference_image_import`` names: ZYX, or YX after a projection, with its
+        stored ``ImageMetadata``. The image becomes
         resident as the reference merged image: without the reference round,
         :meth:`reference_grid` returns the grid of that file (as
         :func:`~starfinder.segmentation.reference_grid_from_file`: source
@@ -1985,7 +2001,7 @@ class FOV:
         """
         from starfinder.io import load_volume
         from starfinder.segmentation import reference_grid_from_file
-        path = self.paths.ref_merged_tif
+        path = self._reference_image_path()
         grid = reference_grid_from_file(path)
         image = np.ascontiguousarray(load_volume(path).image)
         if self._reference_resident():
@@ -2026,7 +2042,7 @@ class FOV:
         "Coordination per FOV").
 
         With ``checkpoints``, each run is also written to
-        ``<checkpoint dir>/<fov_id>/segmentation/<run>/`` (option F1 of
+        ``<FOV folder>/segmentation/<run>/`` (option F1 of
         docs/segmentation-contract.md, "Saved format"): ``labels.tif`` (ZYX
         ``uint32``, zlib, with the grid's ImageMetadata), ``input.ome.tif`` (the
         segmentation input, ZYXC OME-TIFF; not for an import) and
@@ -2077,7 +2093,7 @@ class FOV:
             self.segmentation_results.update(segment_fov(self, plan, device=device))
             return self
         checkpoints.__post_init__()
-        root = self._checkpoint_dir(checkpoints)
+        root = self._fov_dir(checkpoints)
         if isinstance(plan, SegmentationPlan):
             for run in plan.runs:
                 check_writable(run_directory(root, run.name), checkpoints.overwrite)
@@ -2092,7 +2108,7 @@ class FOV:
     def load_segmentation(self, name: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> SegmentationResult:
         """Read a segmentation run saved by :meth:`segment` with checkpoints.
 
-        Reads ``<checkpoint dir>/<fov_id>/segmentation/<name>/``: ``segmentation.json``
+        Reads ``<FOV folder>/segmentation/<name>/``: ``segmentation.json``
         and ``labels.tif``, checking the label file's SHA-256 and its array's
         SHA-256 against the record, the stored metadata against the recorded
         grid, the input file's SHA-256 when the run has one, and the record's
@@ -2125,7 +2141,7 @@ class FOV:
         """
         from starfinder._records import jsonable
         from starfinder.segmentation._persist import read_run, run_directory
-        directory = run_directory(self._checkpoint_dir(checkpoints), name)
+        directory = run_directory(self._fov_dir(checkpoints), name)
         result = read_run(directory, name)
         expected = jsonable(self._checkpoint_header())
         for key in ('dataset_id', 'sample_id', 'fov_id', 'subtile_id'):
@@ -2183,7 +2199,7 @@ class FOV:
             Supplied ``nucleus_id``, ``cell_id`` pairs.
         checkpoints : CheckpointConfig, optional
             None (default) writes nothing. Otherwise the result is also written to
-            ``<checkpoint dir>/<fov_id>/assignment/<name>/`` (option L1 of
+            ``<FOV folder>/assignment/<name>/`` (option L1 of
             docs/assignment-contract.md, "Persistence"): ``molecules``, ``cells``,
             ``counts`` and, with nuclei, ``nuclei`` in ``table_format``,
             ``assignment.json``, ``territories.tif`` with an expansion, and
@@ -2224,7 +2240,7 @@ class FOV:
             from starfinder.assignment._persist import assignment_directory, check_writable
             from starfinder._records import _require_parquet
             checkpoints.__post_init__()
-            check_writable(assignment_directory(self._checkpoint_dir(checkpoints), name), checkpoints.overwrite)
+            check_writable(assignment_directory(self._fov_dir(checkpoints), name), checkpoints.overwrite)
             if checkpoints.table_format == 'parquet':
                 _require_parquet()
         config = AssignmentConfig() if config is None else config
@@ -2257,7 +2273,7 @@ class FOV:
         if checkpoints is not None:
             from starfinder.assignment._persist import assignment_directory, write_assignment
             from starfinder.segmentation._persist import saved_labels
-            root = self._checkpoint_dir(checkpoints)
+            root = self._fov_dir(checkpoints)
             result = write_assignment(assignment_directory(root, name), result, metadata=cell_run.grid.metadata,
                                       cells_saved=saved_labels(cell_run, root),
                                       nuclei_saved=None if nucleus_run is None else saved_labels(nucleus_run, root),
@@ -2268,7 +2284,7 @@ class FOV:
     def load_assignment(self, name: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> AssignmentResult:
         """Read an assignment saved by :meth:`assign_molecules` with checkpoints.
 
-        Reads ``<checkpoint dir>/<fov_id>/assignment/<name>/`` and the linked
+        Reads ``<FOV folder>/assignment/<name>/`` and the linked
         ``segmentation/<run>/labels.tif`` files, checks every recorded SHA-256
         (each file's, and each label array's against the record) and the
         record's FOV identity, rebuilds the tables with their recorded dtypes
@@ -2299,7 +2315,7 @@ class FOV:
         """
         from starfinder.assignment._persist import assignment_directory, read_assignment
         from starfinder._records import jsonable
-        result = read_assignment(assignment_directory(self._checkpoint_dir(checkpoints), name), name)
+        result = read_assignment(assignment_directory(self._fov_dir(checkpoints), name), name)
         expected = jsonable(self._checkpoint_header())
         for key in ('dataset_id', 'sample_id', 'fov_id', 'subtile_id'):
             if result.record.get(key) != expected[key]:
@@ -2312,9 +2328,12 @@ class FOV:
 
     def save_reference_image(self, *, projection: ProjectionConfig | None = None,
                              reference_image: str = 'merged', reference_channel: int = 0) -> Path:
-        """Save the reference merged image under the shared ``ref_merged`` name.
+        """Save the reference merged image to the file of the dataset's ``reference_image``.
 
-        Writes the reference round's current image, which after run() is its
+        The file is ``fovs/{fov_id}/reference.tif`` by default; a dataset that
+        declares ``reference_image_import`` reads its reference image from that
+        file, which is never written, so the call raises. Writes the reference
+        round's current image, which after run() is its
         detection image (the preprocessing output before registration), as
         the MATLAB workflow scripts write ``sdata.registration{ref}``:
 
@@ -2324,19 +2343,24 @@ class FOV:
 
         The dtype is kept. ZYX is a tifffile TIFF written by save_volume; YX is
         one page with the same JSON axes and metadata description, so
-        load_volume reads either. The name keeps ``.tif`` for both backends.
+        load_volume reads either.
 
         Raises
         ------
         ValueError
-            An unknown reference_image, a channel outside the image or a
-            projection that is not along z.
+            An unknown reference_image, a channel outside the image, a
+            projection that is not along z, or a dataset whose reference image
+            is imported (``reference_image_import``).
         """
         import tifffile
         from starfinder.io import save_volume
         from starfinder.preprocessing import project_image
         if reference_image not in ('merged', 'single-channel'):
             raise ValueError('reference_image must be merged or single-channel')
+        if self.dataset.reference_image_import is not None:
+            raise ValueError(f'the reference image of this dataset is imported from '
+                             f'{self.dataset.reference_image_import!r} ({_layout.REFERENCE_IMAGE_IMPORT_KEY}), which '
+                             'is read where it is and never written')
         if projection is not None and projection.axis != 'z':
             raise ValueError('the reference image projection must be along z')
         ref = self.rounds.reference_round
@@ -2347,7 +2371,7 @@ class FOV:
             if isinstance(reference_channel, bool) or not 0 <= reference_channel < image.shape[-1]:
                 raise ValueError(f'reference_channel {reference_channel} is outside the reference image')
             image = image[..., reference_channel]
-        path = self.paths.ref_merged_tif
+        path = self._reference_image_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         if projection is None:
             save_volume(image, path, metadata=metadata)

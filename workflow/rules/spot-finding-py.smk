@@ -1,7 +1,8 @@
 """
     Python backend: Spot-finding rules
     Mirrors spot-finding.smk but uses Python scripts via Snakemake script: directive.
-    The subtile rules declare the subtile's run.json instead of MATLAB's score logs.
+    The subtile rules declare the subtile's run.json (SUBTILE_RUN_RECORD, fovs/<fov>/subtile_<n>/run.json)
+    instead of MATLAB's score logs; stitch_subtile reads the FOV's reference image (REFERENCE_IMAGE_INPUT).
     Uses variables from common.smk
 """
 
@@ -13,7 +14,7 @@ rule lrsf_single_fov_subtile:
         expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
         expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{{n_subtile}}.npz", output_dir=OUTPUT_DIR),
     output:
-        expand("{output_dir}/checkpoints/{{fovID}}/subtile_{{n_subtile}}/run.json", output_dir=OUTPUT_DIR),
+        SUBTILE_RUN_RECORD,
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{{n_subtile}}.csv", output_dir=OUTPUT_DIR)),
     threads: 4
     resources:
@@ -32,7 +33,7 @@ rule deep_rsf_subtile:
         expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
         expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{{n_subtile}}.npz", output_dir=OUTPUT_DIR),
     output:
-        expand("{output_dir}/checkpoints/{{fovID}}/subtile_{{n_subtile}}/run.json", output_dir=OUTPUT_DIR),
+        SUBTILE_RUN_RECORD,
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{{n_subtile}}.csv", output_dir=OUTPUT_DIR)),
     threads: 4
     resources:
@@ -49,6 +50,7 @@ rule stitch_subtile:
     input:
         expand("{output_dir}/output/subtile/{{fovID}}/subtile_coords.csv", output_dir=OUTPUT_DIR),
         expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{n_subtile}.csv", output_dir=OUTPUT_DIR, n_subtile=N_SUBTILE),
+        reference=REFERENCE_IMAGE_INPUT,
     output:
         expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR),
         expand("{output_dir}/signal/{{fovID}}_goodSpots.png", output_dir=OUTPUT_DIR),

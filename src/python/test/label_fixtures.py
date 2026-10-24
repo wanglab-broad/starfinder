@@ -11,7 +11,7 @@ fixture rebuilt from its recipe, W-354 ``scripts/fixtures.py``, ``label_scene`` 
 Each fixture is written as a dataset that ``Dataset.export`` reads: per FOV its territory
 label file, imported with ``import_labels(…, relabel=False)``, one molecule per cell
 assigned with ``assign_molecules``, the §2.9 assignment folder saved, the reference grid
-``images/ref_merged/<fov>.tif``, and the placement (``placement_from_table`` of the
+``fovs/<fov>/reference.tif``, and the placement (``placement_from_table`` of the
 origins, ``nominal_z`` 0, approved) saved under ``stitching/<sample>/``; ``assemble`` is
 then given the assignment folders by path, so the ``assembly`` section records each
 territory file's path. Each FOV labels the cells it sees with the fixture's cell number
@@ -66,7 +66,7 @@ class LabelCase:
         return self.root / "export" / self.name
 
     def assignment_dir(self, fov, name="default"):
-        return assignment_directory(self.root / "checkpoints" / fov, name)
+        return assignment_directory(self.root / "fovs" / fov, name)
 
     def territory_path(self, fov, name="default"):
         return self.assignment_dir(fov, name) / "cell_labels.tif"
@@ -118,9 +118,9 @@ def build(tmp_path, name, territories, origins, spacing=(1.0, 1.0, 1.0), *, grid
             z, y, x = np.argwhere(labels == value)[0]
             rows.append(((0.0 if plane else float(z), float(y), float(x)), "A"))
         assigned = assign_molecules(molecules(fov, rows, GENES), seg, grid=grid)
-        folder = assignment_directory(root / "checkpoints" / fov, assignment)
+        folder = assignment_directory(root / "fovs" / fov, assignment)
         write_assignment(folder, with_record(assigned, name=assignment), metadata=grid.metadata)
-        save_volume(np.zeros(grid.shape_zyx, np.uint8), root / "images" / "ref_merged" / f"{fov}.tif",
+        save_volume(np.zeros(grid.shape_zyx, np.uint8), root / "fovs" / fov / "reference.tif",
                     metadata=grid.metadata)
         inputs.append(AssemblyInput(fov, grid, assignment=folder))
     result = assemble(placement, inputs, config=AssemblyConfig(conflicts=conflicts,

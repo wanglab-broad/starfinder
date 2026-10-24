@@ -290,10 +290,10 @@ def test_r16_direct_checkpoints_round_trip_exactly(tmp_path, seed, table_format)
     checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=tmp_path / "checkpoints",
                                    table_format=table_format, hash_inputs=False)
     fov = direct_fov(dataset, seed).run(pipeline(), checkpoints=checkpoints)
-    directory = tmp_path / "checkpoints" / "FOV_001"
+    directory = tmp_path / "checkpoints" / "FOV_001" / "checkpoints"
     for stage in ("candidates", "pre_qc"):
         assert read_header(directory, stage)["readout_mode"] == "direct"
-    assert json.loads((directory / "run.json").read_text())["config"]["readout_mode"] == "direct"
+    assert json.loads((directory.parent / "run.json").read_text())["config"]["readout_mode"] == "direct"
     reloaded = dataset.fov("FOV_001").load_checkpoint("candidates", checkpoints=checkpoints)
     pd.testing.assert_frame_equal(candidates_frame(reloaded.spot_result, reloaded.intensity_result),
                                   candidates_frame(fov.spot_result, fov.intensity_result), check_exact=True)
@@ -321,7 +321,7 @@ def test_r16_a_checkpoint_without_the_key_loads_as_multiplexed(tmp_path, seed):
                                    hash_inputs=False)
     fov = direct_fov(dataset, seed).run(pipeline(spot_finding=DETECTION, decoding=WtaDecoderConfig()),
                                   checkpoints=checkpoints)
-    directory = tmp_path / "checkpoints" / "FOV_001"
+    directory = tmp_path / "checkpoints" / "FOV_001" / "checkpoints"
     for stage in ("candidates", "pre_qc"):
         path = directory / f"{stage}.json"
         header = json.loads(path.read_text())

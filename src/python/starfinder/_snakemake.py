@@ -27,10 +27,12 @@ from starfinder.registration import (ExternalReference, RegistrationRecipe, Regi
 def _run_workflow(snakemake, rule):
     """Thin common runner used by the five Snakemake script adapters; each run writes the FOV's run.json.
 
-    The run record is checkpoints/<fov>/run.json, or
-    checkpoints/<fov>/subtile_<n>/run.json for the resident subtile rules; it
-    holds the counts, fractions, read summary, round roles, registration
-    attempts and transforms that the MATLAB-shaped logs held before.
+    The run record is fovs/<fov>/run.json, or fovs/<fov>/subtile_<n>/run.json
+    for the resident subtile rules; it holds the counts, fractions, read
+    summary, round roles, registration attempts and transforms that the
+    MATLAB-shaped logs held before. The rules that are not resident also write
+    the reference image (FOV.save_reference_image, the file reference_image
+    names), except with reference_image_import, whose file they never write.
     """
     from .dataset.fov import FOV
     adapted = from_workflow_config(snakemake.config, rule)
@@ -51,8 +53,9 @@ def _run_workflow(snakemake, rule):
         _export_legacy_spots(fov.spot_result, fov.filtering_result,
                              Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
     else:
-        fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
-                                 reference_channel=adapted.reference_channel)
+        if dataset.reference_image_import is None:
+            fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
+                                     reference_channel=adapted.reference_channel)
         if rule == 'rsf_single_fov':
             fov.export_spots()
         else:
@@ -72,8 +75,10 @@ def _run_nuclei_registration(snakemake):
     same public calls (load_images with the angle, register), in the
     configured order. Writes fovs/<fov>/nuclei_registration.json
     (FOV.save_registration_record: the registered rounds and their attempts)
-    and the MATLAB image names images/<round>/<channel name>/<fov>.tif (ZYX,
-    or the Z maximum YX with maximum_projection), keeping the dtype; with the
+    and each channel's image images/<round>/<channel label>/<fov>.tif, named
+    by the unique channel label (ChannelInfo.channel) where MATLAB uses the
+    descriptive name (ZYX, or the Z maximum YX with maximum_projection),
+    keeping the dtype; with the
     Python-only rules.nuclei_registration.parameters.checkpoints, also the
     saved form of each prepared image (other_rounds/<name>/,
     docs/checkpoints.md), which FOV.load_registered_round reads. Unlike
@@ -117,7 +122,7 @@ def _run_nuclei_registration(snakemake):
     fov.save_registration_record()
     projection = ProjectionConfig() if config.get('maximum_projection', False) else None
     for name in names:
-        # Channels that share a name write the same file, the last one winning, as in MATLAB.
+        # One folder per channel label, so channels that share a descriptive name write separate files.
         for c, folder in enumerate(folders[name]):
             path = _layout.image_file(dataset.output_root, fov.fov_id, name, folder)
             volume, metadata = fov.images[name][..., c], fov.metadata[name]
@@ -300,7 +305,8 @@ def _assembly_cells(path, output_root, config, fov_id, target):
     """(molecule grid, cell run) of a legacy label file with an assembly block: on the reference grid.
 
     The molecule grid is that of the FOV's reference image (the file
-    reference_image names, default images/ref_merged/{fovID}.tif), the grid
+    reference_image_import or reference_image names, default
+    fovs/{fovID}/reference.tif), the grid
     Dataset.export gives assemble (starfinder.dataset._declared.reference_grid:
     the file's stored metadata, or the grid voxel_size_xy and voxel_size_z
     declare for a file that stores none), so the saved assignment passes
@@ -512,7 +518,7 @@ def _run_reads_assignment(snakemake):
     of the FOV's reference image (reference_image), as Dataset.export reads it
     (_assembly_cells), the per-FOV files are written without the overlap
     filter and without global_* columns, and the result is saved as the FOV's
-    assignment folder checkpoints/{fovID}/assignment/<assembly.assignment>/
+    assignment folder fovs/{fovID}/assignment/<assembly.assignment>/
     (its record named so), which the export_sample rule assembles.
     """
     from starfinder.assignment import assign_molecules, import_legacy_molecules_csv, load_molecules
@@ -537,7 +543,7 @@ def _run_reads_assignment(snakemake):
         from starfinder.assignment import summarize_assignment
         from starfinder.assignment._persist import assignment_directory, write_assignment
         result = replace(result, record=dict(result.record, counts=summarize_assignment(result)))
-        result = write_assignment(assignment_directory(_layout._FovPaths(output_root, fov_id).checkpoint_dir, name), result,
+        result = write_assignment(assignment_directory(_layout.fov_dir(output_root, fov_id), name), result,
                                   metadata=cells.grid.metadata)
     h5ad, csv_path = Path(snakemake.output[0]), Path(snakemake.output[1])
     written = _write_raw_h5ad(result, h5ad, sample=sample, fov_id=fov_id, tile=tile)
@@ -573,14 +579,71 @@ def _stitching_position_inputs(config, output_root, sample):
 
 
 def _reference_image_inputs(config, output_root, fov_ids):
-    """The FOVs' reference images as rule inputs: the file reference_image names (default images/ref_merged/{fov_id}.tif).
+    """The FOVs' reference images as rule inputs: the file reference_image_import names, else reference_image's.
 
-    The §2.10 rules that read a FOV's reference grid (the placement rules and
-    reads_assignment with an assembly block) declare the file the adapters
+    The default is fovs/{fov_id}/reference.tif (_layout.reference_image_path).
+    The rules that read a FOV's reference image (the placement rules,
+    reads_assignment with an assembly block, create_nuclei_amplicon_overlay
+    and stitch_subtile of the Python backend) declare the file the adapters
     read; a FOV ID '{fovID}' gives the rule's wildcard pattern.
     """
-    pattern = reference_settings(config)['reference_image']
-    return [str(_layout.reference_image_path(output_root, fov, pattern)) for fov in fov_ids]
+    settings = reference_settings(config)
+    return [str(_layout.reference_image_path(output_root, fov, settings['reference_image'],
+                                             settings['reference_image_import'])) for fov in fov_ids]
+
+
+def _reference_image_outputs(config, output_root, fov_ids):
+    """The reference images the Python processing rules write: the files reference_image names, as rule outputs.
+
+    None ([]) with reference_image_import: the processing rules never write an
+    imported reference image, which every reader reads where it is.
+    """
+    settings = reference_settings(config)
+    if settings['reference_image_import'] is not None:
+        return []
+    return [str(_layout.reference_image_path(output_root, fov, settings['reference_image'])) for fov in fov_ids]
+
+
+def _run_record_outputs(output_root, fov_ids, subtiles=None):
+    """The FOVs' run records as rule outputs: fovs/<fov>/run.json, or fovs/<fov>/subtile_<n>/run.json per subtile.
+
+    A FOV ID '{fovID}' and a subtile '{n_subtile}' give the rule's wildcard
+    patterns.
+    """
+    if subtiles is None:
+        return [str(_layout.run_record(output_root, fov)) for fov in fov_ids]
+    return [str(_layout.run_record(output_root, fov, n)) for fov in fov_ids for n in subtiles]
+
+
+def _assignment_record_outputs(output_root, fov_ids, name):
+    """The FOVs' saved assignment records, fovs/<fov>/assignment/<name>/assignment.json; '{fovID}' for the pattern."""
+    return [str(_layout.assignment_dir(_layout.fov_dir(output_root, fov), name) / _layout.ASSIGNMENT_RECORD)
+            for fov in fov_ids]
+
+
+def _shared_image_inputs(config, output_root):
+    """The inputs of the shared segmentation rules for the Python backend, by input name.
+
+    ``amplicon_img`` of create_nuclei_amplicon_overlay is the FOV's reference
+    image (_reference_image_inputs); ``dapi_img`` and ``flamingo_img`` of
+    enhance_dapi_with_flamingo are the images that nuclei_registration writes
+    for the channels of the additional round ``flamingo`` named ``DAPI`` and
+    ``Flamingo``, in the folders of their channel labels. Those two are input
+    functions, so that a configuration without such a round fails only when
+    the rule is scheduled. The MATLAB backend keeps its own paths
+    (common.smk).
+    """
+    def channel_image(name):
+        def image(wildcards):
+            channels = [c for c in _workflow_dataset(config).channel_info('flamingo') if c.name == name]
+            if len(channels) != 1:
+                raise ValueError(f"enhance_dapi_with_flamingo reads the channel named {name!r} of the additional "
+                                 f"round 'flamingo'; found {len(channels)}")
+            return str(_layout.image_file(output_root, wildcards.fovID, 'flamingo', channels[0].channel))
+        return image
+
+    return {'amplicon_img': _reference_image_inputs(config, output_root, ['{fovID}'])[0],
+            'dapi_img': channel_image('DAPI'), 'flamingo_img': channel_image('Flamingo')}
 
 
 def _bigstitcher_folder(block, sample):
@@ -620,8 +683,8 @@ def _run_stitching(snakemake):
     PositionIDs are named by fov_id_pattern.format(i=p). With bigstitcher,
     the import of the engine rule's dataset.xml (input 1) with the view map
     (input 2) and the macro (input 3) of the macro rule, on the table of the
-    positions and the FOVs' reference grids (of the file reference_image
-    names, default images/ref_merged/{fovID}.tif, as Dataset.stitch reads
+    positions and the FOVs' reference grids (of the file reference_image_import
+    or reference_image names, default fovs/{fovID}/reference.tif, as Dataset.stitch reads
     them: the stored metadata, or the grid voxel_size_xy and voxel_size_z
     declare for a file that stores none); the placement is saved there and
     the legacy writer writes output/tile_config_{sample}.csv (output 1) from
@@ -738,12 +801,12 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
     or with assembly.assignment null the molecule tables (on either route;
     _molecule_table: fovs/{fovID}/molecules.csv, or the legacy goodSpots CSV
     of stitch_subtile). On the route after fusion, no reads_assignment output:
-    the molecule tables, the reference images (the files reference_image names, whose
+    the molecule tables, the reference images (_reference_image_inputs, whose
     grids place the molecules) and, with fuse on, the source images of
     export.images that are files of the workflow (reference_merged, the
     reference image, and each <name>=file:<pattern>); the saved form of
-    reference_stain under checkpoints/ is no declared output of any rule, so
-    it is read and not declared, as by stitch_sample. The output, export.json,
+    reference_stain under fovs/<fov>/other_rounds/ is no declared output of
+    any rule, so it is read and not declared, as by stitch_sample. The output, export.json,
     is the one declared file: it lists every other file of export/<sample>/.
     """
     block = _assembly_block(config)
@@ -757,15 +820,16 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
         inputs += [str(_molecule_table(config, root, fov)) for fov in fov_ids]
         inputs += _reference_image_inputs(config, root, fov_ids)
         # The files Dataset.export's fuse part reads, by the same expression (source_path).
-        files = SimpleNamespace(output_root=root, reference_image=reference_settings(config)['reference_image'])
+        settings = reference_settings(config)
+        files = SimpleNamespace(output_root=root, reference_image=settings['reference_image'],
+                                reference_image_import=settings['reference_image_import'])
         for entry in export.fusion.images if export.fuse else ():
             if entry != 'reference_stain':
                 inputs += [p for p in (str(source_path(files, fov, entry)) for fov in fov_ids) if p not in inputs]
     else:
         inputs += [str(_layout.expr_dir(root, fov) / 'raw.h5ad') for fov in fov_ids]
         inputs += [str(_layout.expr_dir(root, fov) / 'reads_assignment.csv') for fov in fov_ids]
-        inputs += [str(_layout.checkpoint_dir(root, fov) / 'assignment' / block.assignment / _layout.ASSIGNMENT_RECORD)
-                   for fov in fov_ids]
+        inputs += _assignment_record_outputs(root, fov_ids, block.assignment)
     return inputs, str(_layout.export_dir(root, sample) / _layout.EXPORT_FILE)
 
 
@@ -810,7 +874,7 @@ def _write_ownership_figures(output_root, name, placement_dir, export_dir, input
 
     The assembly is read from export/<sample>/ (load_assembly), the placement
     from stitching/<sample>/, each FOV's assignment from
-    checkpoints/{fovID}/assignment/<name>/ and its DAPI image from
+    fovs/{fovID}/assignment/<name>/ and its DAPI image from
     images/DAPI/{fovID}.tif, the reads_assignment input (not an input of
     export_sample: without the file the figures have no image).
     """
@@ -822,7 +886,7 @@ def _write_ownership_figures(output_root, name, placement_dir, export_dir, input
     assembly, placement = load_assembly(export_dir), load_placement(placement_dir)
     fovs = assembly.fovs
     for fov_id in fovs['fov_id'][fovs['kind'].eq('assignment').fillna(False).to_numpy(dtype=bool)]:
-        folder = assignment_directory(_layout._FovPaths(output_root, fov_id).checkpoint_dir, name)
+        folder = assignment_directory(_layout.fov_dir(output_root, fov_id), name)
         if os.path.abspath(folder / RECORD_FILE) not in declared:
             continue
         result = read_assignment(folder, name)
@@ -837,7 +901,7 @@ def _report_sample_files(config, output_root, fov_ids, sample='{sample}'):
     The input is the last per-sample output the configuration has (WR1): the
     sample's export/<sample>/export.json with an assembly block (export_sample,
     which an export block configures); else stitching/<sample>/placement.json
-    with a stitching block; else the FOVs' checkpoints/{fovID}/run.json. The
+    with a stitching block; else the FOVs' fovs/{fovID}/run.json. The
     output is report/<sample>/report.json, the record that lists every other
     file of the report's folder.
     """

@@ -74,8 +74,8 @@ def test_a15_fov_run_and_segmentation_files_of_boxes_are_untouched_by_assign(tmp
     folder = root / "FOV_001"
     run_files = hashes(root)
     assert {p.relative_to(folder).as_posix() for p in run_files} == {
-        "run.json", "registered/round1.ome.tif", "registered/transforms.json", f"candidates.{table_format}",
-        "candidates.json"}
+        "run.json", "checkpoints/registered/round1.ome.tif", "checkpoints/registered/transforms.json",
+        f"checkpoints/candidates.{table_format}", "checkpoints/candidates.json"}
 
     fov.segment(SegmentationPlan((import_run("nucleus", masks), import_run("cell", masks))), checkpoints=checkpoints)
     before = hashes(root)

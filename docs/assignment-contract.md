@@ -190,7 +190,7 @@ with `expansion`. The record says how the territories were obtained
 * **Labels.** `cells` and the optional `nuclei` are `SegmentationResult`s
   ({doc}`segmentation-contract`), in memory or loaded with `FOV.load_segmentation(name)`.
 * **Grid.** `grid` is the molecule run's reference grid (`ReferenceGrid`): in a FOV,
-  `FOV.reference_grid()`, or `reference_grid_from_file("images/ref_merged/{fovID}.tif")`
+  `FOV.reference_grid()`, or `reference_grid_from_file("fovs/{fovID}/reference.tif")`
   when the reference image is not resident (also `FOV.reference_grid()` after
   `FOV.load_reference_image()`). Either is the molecule run's grid by "The grid rule"
   below.
@@ -238,7 +238,7 @@ Labels and molecules are on one grid when the two `ReferenceGrid`s have the same
 That is the whole rule. A grid's `source` (`fov:<round>`, `file:<path>` or `declared`)
 and `sha256` say where it was read from; they are recorded (the run records' `grid`, the
 assignment record's `grid`) and never compared. So the grid of the saved reference image
-`images/ref_merged/{fovID}.tif` (`reference_grid_from_file`, or `FOV.reference_grid()`
+`fovs/{fovID}/reference.tif` by default (`reference_grid_from_file`, or `FOV.reference_grid()`
 after `FOV.load_reference_image()`) and the grid of the resident reference round
 (`fov:<round>`) are one grid: labels made on the file grid in a process that holds no
 sequencing round are accepted with the molecules of `FOV.run`, or of
@@ -725,6 +725,8 @@ on every fixture of the validation design. With `M` the input molecules:
 | L2. Per-FOV AnnData as the store | `assignment/<name>/assignment.h5ad`: `X` whole-cell counts, `layers` `nucleus` and `cytoplasm`, `obs` the cell table, `uns` the record; molecules and nuclei as CSV beside it. | None. | One file per FOV for cells, but `anndata` becomes a dependency of the assign entry (today it is locked only through the `spatialdata` extra), and the H5AD duplicates what `raw.h5ad` already carries. |
 | L3. Per-FOV SpatialData | A Zarr store with the territories, points and table. | None. | `spatialdata` becomes a dependency of the assign entry, and the W-168 sample-export contract rules out a per-FOV SpatialData API and export fan-out. |
 
+Note (W-564): the folder is now `fovs/<fov_id>/assignment/<name>/`, beside `segmentation/<run>/` in the FOV folder ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
 **Recommendation: L1.** It needs only the base dependencies, reuses the checkpoint table
 format and the W-307 label files, and leaves AnnData and SpatialData to the outputs that
 already own them. `FOV.load_assignment(name)` reads the folder and the linked
@@ -735,7 +737,7 @@ segmentation files, checks every recorded SHA-256 and returns the `AssignmentRes
 **saved under its run** is linked, not copied; every other label image it used is written
 into the assignment folder. A `SegmentationResult` is saved under its run when it was
 written by `FOV.segment(checkpoints=…)` or loaded by `FOV.load_segmentation` from
-`<checkpoint dir>/<fov_id>/segmentation/<run>/labels.tif` in the same checkpoint root as the
+`fovs/<fov_id>/segmentation/<run>/labels.tif` in the same FOV folder as the
 assignment, and that file's array SHA-256 equals the labels' SHA-256 when `FOV.assign_molecules` runs
 (it checks). Every other input is unsaved: a direct `segment` result, a `FOV.segment` run
 without checkpoints or under another root, a caller-made result, and an `import_labels`

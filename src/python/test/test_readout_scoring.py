@@ -284,7 +284,7 @@ def assert_reads_equal(a, b):
 @pytest.mark.parametrize("seed", fx.GOLDEN_SEEDS)
 def test_r16_background_and_score_columns_round_trip_exactly(tmp_path, seed, table_format):
     dataset, fov, checkpoints = golden_run(tmp_path, table_format, seed=seed)
-    directory = tmp_path / "checkpoints" / "FOV_001"
+    directory = tmp_path / "checkpoints" / "FOV_001" / "checkpoints"
     loaded = load_checkpoint(directory, "candidates")
     a, b = loaded["intensity_result"], fov.intensity_result
     for name in ("values", "valid", "box_voxels", "background", "noise", "background_voxels", "image_background",
@@ -329,7 +329,7 @@ def test_r16_direct_background_and_score_round_trip_exactly(tmp_path, seed, tabl
     reloaded = dataset.fov("FOV_001").load_checkpoint("pre_qc", checkpoints=checkpoints)
     pd.testing.assert_frame_equal(reloaded.scoring_result.table, fov.scoring_result.table, check_exact=True)
     assert reloaded.scoring_result.readout_mode == "direct"
-    assert json.loads((tmp_path / "ck" / "FOV_001" / "pre_qc.json").read_text())["layout"] is None
+    assert json.loads((tmp_path / "ck" / "FOV_001" / "checkpoints" / "pre_qc.json").read_text())["layout"] is None
 
 
 @pytest.mark.validation
@@ -371,7 +371,7 @@ def _as_141c093(directory):
 def test_r16_a_141c093_checkpoint_loads_without_background_or_score_and_scoring_raises(tmp_path, seed):
     no_background = NeighborhoodSumConfig(background=None)
     dataset, fov, checkpoints = golden_run(tmp_path, extraction=no_background, scoring=None, seed=seed)
-    directory = tmp_path / "checkpoints" / "FOV_001"
+    directory = tmp_path / "checkpoints" / "FOV_001" / "checkpoints"
     _as_141c093(directory)
     loaded = dataset.fov("FOV_001").load_checkpoint("candidates", checkpoints=checkpoints)
     intensity = loaded.intensity_result

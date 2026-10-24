@@ -39,11 +39,16 @@ class CheckpointConfig:
     """Opt-in per-FOV checkpoints and run record written by FOV.run.
 
     Stages are registered images, candidates with signals and pre-QC decoding.
-    Files go to ``<directory>/<fov_id>/`` (``subtile_<n>/`` below it for
-    subtiles); None uses ``<output_root>/checkpoints``. Tables are CSV or
-    Parquet (requires pyarrow). hash_inputs streams SHA-256 of loaded TIFFs.
-    Without overwrite, an existing FOV directory is an error before processing;
-    with it, run first removes that directory's earlier checkpoint files.
+    directory is the parent of the FOV folders: a FOV's folder is
+    ``<directory>/<fov_id>/`` (``subtile_<n>/`` below it for subtiles), and
+    None uses ``<output_root>/fovs``. The FOV folder holds run.json and the
+    durable results; the stage files go to its ``checkpoints/`` folder. Tables
+    are CSV or Parquet (requires pyarrow). hash_inputs streams SHA-256 of
+    loaded TIFFs. overwrite guards the run's own files: without it, an existing
+    run.json or ``checkpoints/`` folder is an error before processing; with it,
+    run first removes the earlier files of ``checkpoints/`` only. The other
+    folders of the FOV folder, which other calls and rules write, are left as
+    they are.
     """
     stages: tuple[str, ...] = ('registered', 'candidates', 'pre_qc')
     directory: Path | str | None = None

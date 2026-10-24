@@ -3,7 +3,7 @@
 The sample of ``test_workflow_assembly_golden.py`` (three FOVs of 8×48×64, ZYX or YX label
 images, zero-based molecules.csv tables) with an ``assembly`` block, as
 ``test_workflow_assembly_figures.py`` builds it, written twice: once with
-``images/ref_merged/{fovID}.tif`` storing its metadata (unit spacing, µm, identity) and
+``fovs/{fovID}/reference.tif`` storing its metadata (unit spacing, µm, identity) and
 the placement of ``assembly_golden`` on those grids, and once with the same pixels as
 plain TIFF pages without metadata, the workflow configuration's ``voxel_size_xy`` and
 ``voxel_size_z`` set to the same spacing (1.0 µm), and the placement of
@@ -74,7 +74,7 @@ def build(root, dimensions, *, stored):
     golden_codebook().table[["entry_id", "gene_id", "color_sequence"]].to_csv(codebook, index=False)
     grids = {}
     for fov in GOLDEN_IDS:
-        path = out / "images" / "ref_merged" / f"{fov}.tif"
+        path = out / "fovs" / fov / "reference.tif"
         if stored:
             grids[fov] = unit_grid(TILE_ZYX)
             save_volume(merged_image(TILE_ZYX), path, metadata=grids[fov].metadata)
@@ -94,7 +94,7 @@ def run(root, dimensions, *, stored):
 
 
 def folder_digests(out, fov):
-    folder = out / "checkpoints" / fov / "assignment" / "default"
+    folder = out / "fovs" / fov / "assignment" / "default"
     return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(folder.rglob("*")) if p.is_file()}
 
 
@@ -104,11 +104,11 @@ def folder_digests(out, fov):
 def test_reads_assignment_and_export_sample_on_declared_grids(tmp_path, dimensions):
     stored_out, _ = run(tmp_path / "stored", dimensions, stored=True)
     plain_out, config = run(tmp_path / "plain", dimensions, stored=False)
-    with tifffile.TiffFile(plain_out / "images" / "ref_merged" / "Position001.tif") as tif:
+    with tifffile.TiffFile(plain_out / "fovs" / "Position001" / "reference.tif") as tif:
         assert tif.series[0].axes == "IYX" and not tif.is_shaped
     # reads_assignment: the saved folder declares its grid as the §2.9 workflow does; its per-FOV files equal.
     for fov in GOLDEN_IDS:
-        record = json.loads((plain_out / "checkpoints" / fov / "assignment" / "default" / "assignment.json")
+        record = json.loads((plain_out / "fovs" / fov / "assignment" / "default" / "assignment.json")
                             .read_text())
         assert record["grid"]["metadata"] == json.loads(json.dumps(asdict(declared(config, fov))))
         assert record["grid"]["source"] == "declared"

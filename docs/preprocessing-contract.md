@@ -151,7 +151,7 @@ views, both with maximum projection by default:
 * **Visualization:** projection along Z for 2D figures such as registration
   overlaps and spot-finding results.
 * **Inspection:** projection along channels for each FOV's reference merged
-  image (`images/ref_merged/{fovID}.tif`): the reference round's detection
+  image (`fovs/{fovID}/reference.tif` by default, the dataset's `reference_image`): the reference round's detection
   image, merged over channels, and also projected along Z when the workflow's
   `maximum_projection` is true. It shows preprocessing before registration and
   is the stitching input.

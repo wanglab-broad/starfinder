@@ -247,7 +247,7 @@ def test_pr4_no_run_record_at_all(tmp_path):
     anndata_or_skip()
     case = report_cells(tmp_path / "root")
     for fov in FOVS:
-        (case.checkpoint(fov) / "run.json").unlink()
+        (case.fov_folder(fov) / "run.json").unlink()
     _, record, tables = collect(case)
     rows = keyed(tables["unavailable"])
     for rule in ("fov_failed", "fov_not_run", "shift_residual", "registration_rejected", "registration_fallback",

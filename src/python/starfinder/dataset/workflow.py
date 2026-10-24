@@ -506,7 +506,8 @@ class WorkflowConfig:
     """Translated dataset, scientific pipeline and execution/output policies.
 
     reference_projection, reference_image and reference_channel are passed to
-    FOV.save_reference_image for ``images/ref_merged``. split_index is the
+    FOV.save_reference_image, which writes the file of the dataset's
+    reference_image (default ``fovs/{fov_id}/reference.tif``). split_index is the
     zero-based EncodingConfig.split_index converted from the shared one-based
     load_codebook.split_index (None without a split); encoding and layout are
     the codebook's encoding config and segment layout (None: one segment), which
@@ -578,7 +579,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
         'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
         'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring', 'deduplication',
-        'create_subtiles', 'device', 'checkpoints'),
+        'create_subtiles', 'device', _layout.CHECKPOINTS),
         'Python workflow parameter')
     _rule_checkpoints(config, rule)
     if config.get('config_path') is not None:
@@ -626,7 +627,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
                     else _legacy_registration(blocks))
     if registration is not None and registration.reference_round not in (None, rounds.reference_round):
         raise ValueError('registration reference round differs from dataset reference')
-    # ref_merged is what the MATLAB script saves: the reference image of its last
+    # The reference image is what the MATLAB script saves: the reference image of its last
     # registration. Only rsf_single_fov passes ref_img, to global registration;
     # its local registration and the other scripts use the channel maximum.
     reference_view = ('merged', 0)
@@ -671,12 +672,13 @@ def _rule_checkpoints(config, rule):
     """The CheckpointConfig of a processing rule: run.json alone, or the stages of rules.<rule>.parameters.checkpoints.
 
     The Python-only key is a mapping with the one key stages (absent or null:
-    {stages: []}). overwrite is on, so a rerun of the rule replaces its record;
-    the directory is <output_root>/checkpoints and the inputs are hashed.
+    {stages: []}). overwrite is on, so a rerun of the rule replaces its record
+    and its checkpoint files; the FOV folders are under <output_root>/fovs and
+    the inputs are hashed.
     """
     from .config import CheckpointConfig
-    context = f'rules.{rule}.parameters.checkpoints'
-    values = _rule_parameters(config, rule).get('checkpoints')
+    context = f'rules.{rule}.parameters.{_layout.CHECKPOINTS}'
+    values = _rule_parameters(config, rule).get(_layout.CHECKPOINTS)
     if values is None:
         values = {}
     else:
@@ -736,7 +738,8 @@ def _workflow_dataset(config, **fields):
     channel_order gives that round its own channels. voxel_size_xy and
     voxel_size_z become the Dataset fields of the same names, the declared
     calibration of saved files that store none, and reference_image (absent
-    or null: images/ref_merged/{fov_id}.tif) the field of that name.
+    or null: fovs/{fov_id}/reference.tif) and reference_image_import (absent
+    or null: none) the fields of those names, which exclude each other.
     """
     n = config['n_rounds']
     if isinstance(n, bool) or not isinstance(n, int) or n < 1:
@@ -748,13 +751,15 @@ def _workflow_dataset(config, **fields):
     channels = config.get('seq_channel_order') or ()
     if not isinstance(channels, (list, tuple)):
         raise ValueError('seq_channel_order must be a list of channel patterns or of wavelength/channel/name entries')
+    reference = reference_settings(config)
     return Dataset(Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'],
         Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
         config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
         channel_order=tuple(channels), fov_pattern=config.get('fov_id_pattern', 'Position%03d'),
         other_channel_order=orders, reference_stains=_reference_stains(config),
         voxel_size_xy=config.get('voxel_size_xy'), voxel_size_z=config.get('voxel_size_z'),
-        reference_image=reference_settings(config)['reference_image'], **fields)
+        reference_image=reference['reference_image'], reference_image_import=reference['reference_image_import'],
+        **fields)
 
 
 def _nuclei_registration(config):
@@ -763,7 +768,8 @@ def _nuclei_registration(config):
     Reads the shared keys as workflow/scripts/nuclei_registration.m does, with
     the Dataset of every rule (_workflow_dataset). Each additional_round entry
     is an other round with its channel_order: entry ``channel`` is the filename
-    pattern and the round's channel label, entry ``name`` the output folder.
+    pattern and the round's channel label, which names the channel's output
+    folder (MATLAB names it by entry ``name``, which may repeat).
     The round's shared stain is its one channel whose name contains the
     top-level ref_channel (MATLAB single-channel matching, kept here instead of
     Dataset.channel_index); none or several is a ValueError.
@@ -788,7 +794,7 @@ def _nuclei_registration(config):
         if len(matches) != 1:
             raise ValueError(f'expected one channel of additional round {name!r} whose name contains ref_channel '
                              f'{stain!r}; found {len(matches)}')
-        stains[name], folders[name] = matches[0], tuple(c.name for c in channels)
+        stains[name], folders[name] = matches[0], tuple(c.channel for c in channels)
     return dataset, stains, folders
 
 
@@ -799,7 +805,7 @@ def _nuclei_checkpoints(config):
     form of FOV.prepare_morphology; absent or null writes none.
     """
     from .config import CheckpointConfig
-    values = _rule_parameters(config, 'nuclei_registration').get('checkpoints')
+    values = _rule_parameters(config, 'nuclei_registration').get(_layout.CHECKPOINTS)
     if values is None:
         return None
     _python_only(config, ['rules.nuclei_registration.parameters.checkpoints'])
@@ -821,7 +827,7 @@ _SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'projection', 'op
 # Keys of a run of the export block's segmentation besides its method's config fields.
 _SAMPLE_SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'method')
 # Keys of the assignment block besides the AssignmentConfig fields: the FOV.assign_molecules arguments.
-_ASSIGNMENT_CALL_KEYS = ('cells', 'nuclei', 'name', 'population', 'correspondence', 'checkpoints')
+_ASSIGNMENT_CALL_KEYS = ('cells', 'nuclei', 'name', 'population', 'correspondence', _layout.CHECKPOINTS)
 
 
 def _rule_parameters(config, rule):
@@ -1105,8 +1111,8 @@ def _assignment_block(config):
         if key in values:
             options[key] = values[key]
     call = {key: values[key] for key in ('cells', 'nuclei', 'name', 'population') if key in values}
-    if values.get('checkpoints') is not None:
-        call['checkpoints'] = _typed(CheckpointConfig, values['checkpoints'], 'assignment.checkpoints')
+    if values.get(_layout.CHECKPOINTS) is not None:
+        call[_layout.CHECKPOINTS] = _typed(CheckpointConfig, values[_layout.CHECKPOINTS], 'assignment.checkpoints')
     return AssignmentConfig(**options), call
 
 

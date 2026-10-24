@@ -175,7 +175,7 @@ multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV runner").
 * **Per FOV, one of two kinds**, the same kind for every FOV of the sample (with a
   `segmentation`, the inputs are molecule tables):
   * `assignment`: the §2.9 `AssignmentResult` of that FOV, in memory, or the path of its
-    saved folder (`<checkpoint dir>/<fov_id>/assignment/<name>/`), loaded with the §2.9
+    saved folder (`fovs/<fov_id>/assignment/<name>/`), loaded with the §2.9
     loader, which checks every recorded SHA-256. Assemble reads its molecule table, cell
     table, counts, record and, for the flags, its territories;
   * `molecules`: a `MoleculeTable` alone, for a sample without segmentation. Every
@@ -191,7 +191,7 @@ loads the saved placement (`load_placement`), builds one `AssemblyInput` per FOV
 placement from the saved assignment folders named `assignment` (or, with
 `assignment=None`, from the saved molecule tables through `molecule_table`) and the
 reference grids (the stored metadata of each FOV's reference image, the file the dataset's
-`reference_image` names, default `images/ref_merged/{fov_id}.tif`, read as
+`reference_image` names, default `fovs/{fov_id}/reference.tif`, read as
 `reference_grid_from_file` reads it, or, for a file that stores none, the grid the
 dataset's `voxel_size_xy` and `voxel_size_z` declare), calls `assemble` with `config.assembly`, and
 saves the result in `output_dir`, the sample's export folder ("Persistence"). It keeps the
@@ -823,7 +823,7 @@ populations one home, and follows the stitching block's pattern ({doc}`stitching
 
 **The label grid with an `assembly` block.** `reads_assignment` imports a legacy label file
 on the grid of the FOV's reference image, the file `reference_image` names (default
-`images/ref_merged/{fov_id}.tif`; its stored metadata, or for a file that stores none the
+`fovs/{fov_id}/reference.tif`; its stored metadata, or for a file that stores none the
 grid `voxel_size_xy` and `voxel_size_z` declare), the grid that `Dataset.export` gives
 `assemble`, so that the saved assignment
 passes assemble's grid check. A ZYX label file must have the reference image's shape, and a YX one the shape of

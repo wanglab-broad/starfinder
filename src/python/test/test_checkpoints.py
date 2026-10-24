@@ -94,7 +94,7 @@ def assert_downstream_equal(a, b):
 
 
 def record(fov, directory=None):
-    path = fov.paths.checkpoint_dir if directory is None else directory / fov.fov_id
+    path = fov.paths.fov_dir if directory is None else directory / fov.fov_id
     return json.loads((path / 'run.json').read_text())
 
 
@@ -226,8 +226,8 @@ def test_csv_and_parquet_reload_identically(tmp_path):
     csv = resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'csv'))
     resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'parquet', table_format='parquet'))
     for stage in ('candidates', 'pre_qc'):
-        a = load_checkpoint(tmp_path / 'csv' / 'FOV', stage)
-        b = load_checkpoint(tmp_path / 'parquet' / 'FOV', stage)
+        a = load_checkpoint(tmp_path / 'csv' / 'FOV' / 'checkpoints', stage)
+        b = load_checkpoint(tmp_path / 'parquet' / 'FOV' / 'checkpoints', stage)
         assert a.keys() == b.keys()
         if stage == 'candidates':
             assert_spots_equal(a['spot_result'], b['spot_result'])
@@ -236,10 +236,10 @@ def test_csv_and_parquet_reload_identically(tmp_path):
         else:
             pd.testing.assert_frame_equal(a['decoding_result'].table, b['decoding_result'].table)
             assert a['decoding_result'].diagnostics == b['decoding_result'].diagnostics
-    header = json.loads((tmp_path / 'csv' / 'FOV' / 'pre_qc.json').read_text())
+    header = json.loads((tmp_path / 'csv' / 'FOV' / 'checkpoints' / 'pre_qc.json').read_text())
     assert header['dtypes']['gene_id'] == 'string' and header['dtypes']['wta_l2_nll'] == 'float64'
     # Empty strings, missing values and infinities survive CSV text.
-    table = _read_table(tmp_path / 'csv' / 'FOV' / 'pre_qc.csv', header['dtypes'])
+    table = _read_table(tmp_path / 'csv' / 'FOV' / 'checkpoints' / 'pre_qc.csv', header['dtypes'])
     assert table.failure_reason.eq('').sum() == 1 and table.gene_id.isna().sum() == 3
 
 
@@ -288,12 +288,12 @@ def test_nul_gene_id_fails_csv_and_round_trips_through_parquet(tmp_path):
     fov = resident(ds)
     with pytest.raises(ValueError, match="column 'gene_id'.*parquet"):
         fov.run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'csv'))
-    assert not (tmp_path / 'csv' / 'FOV' / 'pre_qc.csv').exists()
+    assert not (tmp_path / 'csv' / 'FOV' / 'checkpoints' / 'pre_qc.csv').exists()
     assert record(fov, tmp_path / 'csv')['error']['step'] == 'write_checkpoint:pre_qc'
     saved = resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'parquet',
                                                                     table_format='parquet'))
     assert saved.decoding_result.table.gene_id.iloc[0] == 'a\x00b'
-    loaded = load_checkpoint(tmp_path / 'parquet' / 'FOV', 'pre_qc')['decoding_result']
+    loaded = load_checkpoint(tmp_path / 'parquet' / 'FOV' / 'checkpoints', 'pre_qc')['decoding_result']
     assert_decoding_equal(loaded, saved.decoding_result)
     assert loaded.table.gene_id.iloc[0] == 'a\x00b'
 
@@ -306,7 +306,8 @@ def test_literal_na_gene_id_round_trips_in_csv_and_parquet(tmp_path):
     resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'parquet', table_format='parquet'))
     genes = saved.decoding_result.table.gene_id
     assert genes.iloc[0] == '<NA>' and genes.isna().sum() == 3
-    loaded = {f: load_checkpoint(tmp_path / f / 'FOV', 'pre_qc')['decoding_result'] for f in ('csv', 'parquet')}
+    loaded = {f: load_checkpoint(tmp_path / f / 'FOV' / 'checkpoints', 'pre_qc')['decoding_result']
+              for f in ('csv', 'parquet')}
     assert_decoding_equal(loaded['csv'], saved.decoding_result)
     assert_decoding_equal(loaded['csv'], loaded['parquet'])
     for table_format in ('csv', 'parquet'):
@@ -328,10 +329,10 @@ def test_parquet_without_pyarrow_fails_before_image_load(tmp_path, monkeypatch):
     with pytest.raises(ImportError, match='pyarrow'):
         ds.fov('FOV').run(config, checkpoints=CheckpointConfig(table_format='parquet'))
     assert calls == []
-    assert not (tmp_path / 'out' / 'checkpoints').exists()
+    assert not (tmp_path / 'out' / 'fovs').exists()
     with pytest.raises(ImportError, match='pyarrow'):
         fov.save_checkpoint('candidates', checkpoints=CheckpointConfig(table_format='parquet'))
-    assert not (tmp_path / 'out' / 'checkpoints').exists()
+    assert not (tmp_path / 'out' / 'fovs').exists()
 
 
 def test_injected_registration_failure_is_recorded_and_propagates(tmp_path, monkeypatch):
@@ -371,7 +372,7 @@ def test_keyboard_interrupt_is_recorded_as_interrupted(tmp_path, monkeypatch):
     assert (data['error']['step'], data['error']['round'], data['error']['type']) == (
         'decode_reads', None, 'KeyboardInterrupt')
     # Earlier stages remain usable after the interruption.
-    assert data['checkpoints']['candidates'] == ['candidates.csv', 'candidates.json']
+    assert data['checkpoints']['candidates'] == ['checkpoints/candidates.csv', 'checkpoints/candidates.json']
     assert 'pre_qc' not in data['checkpoints']
 
 
@@ -490,7 +491,8 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     assert ('load_images', 'round2') in names and ('register', 'round2') in names
     assert ('write_checkpoint:registered', 'round2') in names and ('extract_round', 'round1') in names
     assert all(s['status'] == 'succeeded' and s['seconds'] >= 0 for s in data['steps'])
-    assert data['checkpoints']['registered'][:2] == ['registered/round1.ome.tif', 'registered/round2.ome.tif']
+    assert data['checkpoints']['registered'][:2] == ['checkpoints/registered/round1.ome.tif',
+                                                     'checkpoints/registered/round2.ome.tif']
     fov = ds.fov('FOV').run(config, checkpoints=CheckpointConfig(hash_inputs=False, overwrite=True))
     assert {entry['sha256'] for entry in record(fov)['inputs']} == {None}
 
@@ -517,8 +519,9 @@ def test_disabled_checkpoints_write_nothing_and_existing_directory_is_protected(
     resident(ds).run(full())
     assert not (tmp_path / 'out').exists()
     resident(ds).run(full(), checkpoints=CheckpointConfig(stages=('pre_qc',)))
-    assert sorted(p.name for p in (tmp_path / 'out' / 'checkpoints' / 'FOV').iterdir()) == [
-        'pre_qc.csv', 'pre_qc.json', 'run.json']
+    assert sorted(p.relative_to(tmp_path / 'out' / 'fovs' / 'FOV').as_posix()
+                  for p in (tmp_path / 'out' / 'fovs' / 'FOV').rglob('*') if p.is_file()) == [
+        'checkpoints/pre_qc.csv', 'checkpoints/pre_qc.json', 'run.json']
     calls = []
     monkeypatch.setattr(io, 'load_round', lambda *a, **k: calls.append(a))
     config = replace(full(), load=ImageLoadConfig(channel_labels=CHANNELS))
@@ -542,7 +545,7 @@ def test_overwrite_run_never_leaves_a_stale_stage_loadable(tmp_path, monkeypatch
     import starfinder.readout as readout
     ds = dataset(tmp_path)
     resident(ds).run(full(), checkpoints=CheckpointConfig(hash_inputs=False))
-    directory = tmp_path / 'out' / 'checkpoints' / 'FOV'
+    directory = tmp_path / 'out' / 'fovs' / 'FOV' / 'checkpoints'
     (directory / 'notes.txt').write_text('kept')
     injected = RuntimeError('injected decoding failure')
 
@@ -572,7 +575,7 @@ def test_load_checkpoint_rejects_mismatches_and_existing_results(tmp_path):
     with pytest.raises(ValueError, match='spot_result'):
         fov.load_checkpoint('registered')
     fov.load_checkpoint('pre_qc')
-    shutil.copytree(saved.paths.checkpoint_dir, tmp_path / 'out' / 'checkpoints' / 'OTHER')
+    shutil.copytree(saved.paths.checkpoint_dir, tmp_path / 'out' / 'fovs' / 'OTHER' / 'checkpoints')
     with pytest.raises(ValueError, match='FOV id'):
         ds.fov('OTHER').load_checkpoint('candidates')
     swapped = dataset(tmp_path, rounds=RoundState(list(ROUNDS), reference_round='round2'))
@@ -592,8 +595,8 @@ def test_subtile_checkpoints_use_their_own_directory(tmp_path):
     fov = resident(ds)
     fov.subtile_id = 3
     fov.run(full(), checkpoints=CheckpointConfig())
-    directory = tmp_path / 'out' / 'checkpoints' / 'FOV' / 'subtile_3'
-    assert (directory / 'run.json').is_file()
+    directory = tmp_path / 'out' / 'fovs' / 'FOV' / 'subtile_3'
+    assert (directory / 'run.json').is_file() and (directory / 'checkpoints' / 'candidates.json').is_file()
     loaded = ds.fov('FOV')
     loaded.subtile_id = 3
     loaded.load_checkpoint('candidates')
@@ -656,7 +659,7 @@ def test_checkpoint_timing_on_small_synthetic_dataset(small_dataset, tmp_path, c
     resumed = ds.fov('FOV_001').load_checkpoint('candidates').run(PipelineConfig(
         decoding=WtaDecoderConfig(diagnostics=True), filtering=ReadFilterConfig()))
     assert_downstream_equal(resumed, plain)
-    steps = json.loads((directory / 'run.json').read_text())['steps']
+    steps = json.loads((saved.paths.fov_dir / 'run.json').read_text())['steps']
     written = sum(p.stat().st_size for p in directory.rglob('*') if p.is_file())
     with capsys.disabled():
         print(f"\n[checkpoint timing] spots={len(frame)} columns={frame.shape[1]} "

@@ -79,7 +79,7 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
         decoding=WtaDecoderConfig(diagnostics=True),
         filtering=ReadFilterConfig(),
     )
-    # The run record checkpoints/FOV_001/run.json, without stage files, records the run.
+    # The run record fovs/FOV_001/run.json, without stage files, records the run.
     fov.run(pipeline, checkpoints=CheckpointConfig(stages=()))
     assert all(image.shape == (8, 128, 128, 4) for image in fov.images.values())
     assert 0 < len(fov.filtering_result.accepted) <= len(fov.spot_result.spots)
@@ -92,7 +92,7 @@ def inspect_outputs(fov: FOV) -> dict:
     reads_path = fov.export_spots("reads", columns=["spot_namespace", "spot_id", "z", "y", "x", "gene_id",
                                                     "observed_color_sequence", "call_status"])
     molecules_path = fov.export_spots()
-    record_path = fov.paths.checkpoint_dir / "run.json"
+    record_path = fov.paths.run_record
     record = json.loads(record_path.read_text())
     # The counts, the filter's fractions, the read summary, the round roles and the transforms of the run.
     assert record["counts"]["spots"] == len(fov.spot_result.spots)

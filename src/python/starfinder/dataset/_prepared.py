@@ -2,7 +2,7 @@
 
 Each image prepared by ``FOV.prepare_morphology`` or registered by
 ``FOV.register`` (other rounds) with checkpoints is a folder
-``<checkpoint dir>/<fov_id>/other_rounds/<name>/`` holding ``image.ome.tif``
+``fovs/<fov_id>/other_rounds/<name>/`` (the FOV folder) holding ``image.ome.tif``
 (ZYXC, every channel, with its ``ImageMetadata``) and ``registration.json``
 (the record); a chain with a dense or B-spline transform also has
 ``field.npz``. ``FOV.load_registered_round`` reads it back.
@@ -29,8 +29,9 @@ CHAIN_KEYS = ("transforms", "application_config", "attempts", "field")
 
 
 def image_directory(fov_directory, name) -> Path:
-    """``<fov checkpoint dir>/other_rounds/<name>``."""
-    return Path(fov_directory) / "other_rounds" / name
+    """``<fov folder>/other_rounds/<name>`` (``_layout.other_round_dir``)."""
+    from starfinder._layout import other_round_dir
+    return other_round_dir(fov_directory, name)
 
 
 def image_sha256(image) -> str:

@@ -493,7 +493,7 @@ def test_rc11_older_record(tmp_path, variant):
     assert ("files.input", None, None, "entry=codebook", "not_recorded") in rows
     assert ("files.configuration", None, None, "entry=workflow", "not_recorded") in rows
     kinds = {e["path"]: e["kind"] for e in record["inputs"]}
-    assert ("checkpoints/F1/registered/transforms.json" in kinds) == (variant == "older_transforms")
+    assert ("fovs/F1/checkpoints/registered/transforms.json" in kinds) == (variant == "older_transforms")
 
 
 # --- RC12: every null cell is n/a or named once ---------------------------------------------------------------
@@ -656,10 +656,10 @@ def test_inputs_lists_every_file_read(inputs_base):
     assert kinds["export/s1/tables/fovs.csv"] == ("export_table", True)
     assert kinds["stitching/s1/fovs.csv"] == ("placement_table", True)
     assert kinds["codebook.csv"] == ("codebook", True)
-    assert kinds["checkpoints/F1/run.json"] == ("run_record", False)
+    assert kinds["fovs/F1/run.json"] == ("run_record", False)
     # Verified against assembly.fovs[*].assignment.record_sha256 and assignment.json inputs.cells.record_sha256.
-    assert kinds["checkpoints/F1/assignment/default/assignment.json"] == ("assignment_record", True)
-    assert kinds["checkpoints/F1/segmentation/cell/segmentation.json"] == ("segmentation_record", True)
+    assert kinds["fovs/F1/assignment/default/assignment.json"] == ("assignment_record", True)
+    assert kinds["fovs/F1/segmentation/cell/segmentation.json"] == ("segmentation_record", True)
     assert kinds["export/s1/export.json"] == ("export_record", False)
     assert kinds["stitching/s1/placement.json"] == ("placement", False)
     steps = tables["steps"]
@@ -709,8 +709,8 @@ def test_inputs_export_table(tmp_path, inputs_base, reason, edit):
 
 
 @pytest.mark.parametrize("edit", [
-    lambda c: change_byte(c.checkpoint("F1") / "assignment/default/cells.csv"),
-    lambda c: (c.checkpoint("F1") / "assignment/default/cells.csv").unlink()],
+    lambda c: change_byte(c.fov_folder("F1") / "assignment/default/cells.csv"),
+    lambda c: (c.fov_folder("F1") / "assignment/default/cells.csv").unlink()],
     ids=["assignment_table_changed", "assignment_table_missing"])
 def test_inputs_files_no_collected_part_reads(tmp_path, inputs_base, edit):
     """An assignment folder's table: no collected part reads it (the segmentation examples read the label files),
@@ -756,8 +756,8 @@ def test_inputs_raw_input_of_the_replay(tmp_path, inputs_base, reason, edit):
     assert (listed["verified"], listed["equal"]) == (True, False)
 
 
-ASSIGNMENT_RECORD = "checkpoints/F1/assignment/default/assignment.json"
-SEGMENTATION_RECORD = "checkpoints/F1/segmentation/cell/segmentation.json"
+ASSIGNMENT_RECORD = "fovs/F1/assignment/default/assignment.json"
+SEGMENTATION_RECORD = "fovs/F1/segmentation/cell/segmentation.json"
 
 
 @pytest.mark.parametrize("path,reason", [(ASSIGNMENT_RECORD, "input_changed"), (ASSIGNMENT_RECORD, "input_missing"),
@@ -871,7 +871,7 @@ CHECKS = [
     (1, TypeError, "config must be a ReportConfig", None, dict(config="defaults")),
     (2, FileNotFoundError, "nothing to report", lambda c: shutil.rmtree(c.root / "export"),
      dict(fov_ids=["X1", "X2"])),
-    (3, ValueError, r"checkpoints/F2/run\.json: dataset_id is 'other'", _check3, {}),
+    (3, ValueError, r"fovs/F2/run\.json: dataset_id is 'other'", _check3, {}),
     (4, ValueError, r"export\.json: sample is 'other'", _check4, {}),
     (5, ValueError, r"marker gene 'Zz' is not in the gene list of .*codebook\.csv", None,
      dict(config=ReportConfig(markers=(MarkerGroup("m", ("Zz",)),), example_fovs=("F1", "F2", "F9")))),

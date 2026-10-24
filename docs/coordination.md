@@ -164,7 +164,7 @@ The entry needs the raw files and the angle only, not the results of
 calling them step by step gives the same images, chains and records.
 
 With checkpoints, `prepare_morphology` and `FOV.register` on other rounds write each
-prepared image to `<checkpoint dir>/<fov_id>/other_rounds/<name>/`:
+prepared image to `fovs/<fov_id>/other_rounds/<name>/`:
 `image.ome.tif` (ZYXC, every channel, with its `ImageMetadata`),
 `registration.json` and, only for a chain with a dense or B-spline transform,
 `field.npz` (its arrays; {doc}`checkpoints`, "Prepared morphology images"); an
@@ -183,11 +183,11 @@ from starfinder.dataset import CheckpointConfig, MorphologyConfig
 
 fov = dataset.fov("FOV_001").run(PipelineConfig(load=..., rotation_degrees=90, registration=...))
 fov.prepare_morphology(MorphologyConfig(rotation_degrees=90),
-                       checkpoints=CheckpointConfig(directory="checkpoints"))
+                       checkpoints=CheckpointConfig())     # fovs/FOV_001/other_rounds/
 fov.images["reference_stain"], fov.images["morph"]   # on the reference grid
 
 later = dataset.fov("FOV_001").run(...)            # another process
-later.load_registered_round("morph", checkpoints=CheckpointConfig(directory="checkpoints"))
+later.load_registered_round("morph", checkpoints=CheckpointConfig())
 ```
 
 ## Registration recipe

@@ -144,14 +144,14 @@ def per_fov_inputs(fovs=FOVS, root=OUT, name="default"):
     """The inputs of export_sample before this issue: the placement and the outputs of reads_assignment."""
     return ([f"{root}/stitching/{SAMPLE}/placement.json"] + [f"{root}/expr/{f}/raw.h5ad" for f in fovs]
             + [f"{root}/expr/{f}/reads_assignment.csv" for f in fovs]
-            + [f"{root}/checkpoints/{f}/assignment/{name}/assignment.json" for f in fovs])
+            + [f"{root}/fovs/{f}/assignment/{name}/assignment.json" for f in fovs])
 
 
 def molecule_inputs(fovs=FOVS, root=OUT):
     return [f"{root}/stitching/{SAMPLE}/placement.json"] + [f"{root}/fovs/{f}/molecules.csv" for f in fovs]
 
 
-def after_fusion_inputs(fuse, fovs=FOVS, root=OUT, reference="images/ref_merged/{fov_id}.tif"):
+def after_fusion_inputs(fuse, fovs=FOVS, root=OUT, reference="fovs/{fov_id}/reference.tif"):
     """The molecule tables, the reference images and, with fuse on, the source images that are workflow files:
     reference_merged (the reference image) and each file pattern; not the saved form of reference_stain."""
     inputs = molecule_inputs(fovs, root) + [f"{root}/{reference.format(fov_id=f)}" for f in fovs]
@@ -323,7 +323,7 @@ def test_wf1_the_rule_s_inputs_by_route(combination):
         assert inputs == per_fov_inputs()
     else:
         assert inputs == after_fusion_inputs(fuse)
-        assert not [p for p in inputs if "/expr/" in p or "/checkpoints/" in p]
+        assert not [p for p in inputs if "/expr/" in p or "/assignment/" in p]
 
 
 def test_wf1_the_inputs_follow_reference_image_and_the_named_images():
@@ -458,7 +458,7 @@ def test_wf2_the_assignment_figures(tmp_path, monkeypatch):
     before = figure_paths(folder)
     config = scene_config(tmp_path, block)
     workflow._check_export_route(config)
-    saved = [folder.root / "checkpoints" / f / "assignment" / "default" / "assignment.json" for f in folder.scene.ids]
+    saved = [folder.root / "fovs" / f / "assignment" / "default" / "assignment.json" for f in folder.scene.ids]
     assert all(p.is_file() for p in saved)
     record, calls, inputs = run_rule(folder, config, monkeypatch, extra_inputs=saved)
     assert record["parts"] == {"assemble": "written", "fuse": "written", "segment": "written", "fuse_labels": "off",
@@ -466,7 +466,7 @@ def test_wf2_the_assignment_figures(tmp_path, monkeypatch):
     assert record["assembly"]["route"] == "after_fusion" and record["complete"] is True
     assert set(record["assembly"]["fovs"][i]["kind"] for i in range(2)) == {"molecules"}
     assert calls == [] and figure_paths(folder) == before
-    assert not [p for p in inputs if "/expr/" in p or "/checkpoints/" in p]
+    assert not [p for p in inputs if "/expr/" in p or "/assignment/" in p]
     # The route per FOV of the same sample, into the same folder: the figures are drawn again with ownership.
     config = scene_config(tmp_path, {"route": "per_fov", "fuse": False})
     exported = listing(folder.export_dir)

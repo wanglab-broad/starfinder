@@ -199,7 +199,7 @@ def _variant_root(base, summary, variant):
 
 def _grid(root, fov):
     from starfinder.segmentation import reference_grid_from_file
-    return reference_grid_from_file(Path(root) / "images" / "ref_merged" / f"{fov}.tif")
+    return reference_grid_from_file(Path(root) / "fovs" / fov / "reference.tif")
 
 
 def _image(root, name, fov):
@@ -244,7 +244,7 @@ def _step_generate(a):
     for fov in fov_ids:
         metadata = sample.fov_metadata[fov]
         merged = np.asarray(sample.fovs[fov].rounds[reference], dtype=np.float32).max(axis=-1)
-        save_volume(merged, root / "images" / "ref_merged" / f"{fov}.tif", metadata=metadata)
+        save_volume(merged, root / "fovs" / fov / "reference.tif", metadata=metadata)
         for name, image in scene.context.stains[fov].items():
             _write_zyx(root / "images" / name / f"{fov}.tif", np.asarray(image, dtype=np.float32))
         if a["context"] == "tissue2d":
@@ -508,7 +508,7 @@ def _step_assign_export(a):
                 config = AssignmentConfig()
             result = assign_molecules(molecules, labels["cell"], grid=grid, nuclei=labels["nucleus"], config=config)
             result = replace(result, record=dict(result.record, name="default"))
-            write_assignment(assignment_directory(root / "checkpoints" / fov, "default"), result,
+            write_assignment(assignment_directory(root / "fovs" / fov, "default"), result,
                              metadata=grid.metadata)
         export = ExportConfig(route="per_fov", fusion=FusionConfig(images=_fusion_images(context, a["stain"]),
                                                                     dimensionality="stack", scale_yx=1.0))
@@ -1052,7 +1052,7 @@ def fused_nuclei(chain, rows):
 
 def assignment(chain, fov):
     from starfinder.assignment._persist import assignment_directory, read_assignment
-    return read_assignment(assignment_directory(chain.root / "checkpoints" / fov, "default"), "default")
+    return read_assignment(assignment_directory(chain.root / "fovs" / fov, "default"), "default")
 
 
 def agreement(frame):

@@ -279,7 +279,7 @@ def dataset_folder(tmp_path, shapes=None):
     for k, fov in enumerate(IDS):
         shape = (shapes or {}).get(fov, (4, 16, 24))
         image = (np.arange(np.prod(shape)).reshape(shape) % 200 + k).astype(np.uint8)
-        save_volume(image, tmp_path / "output" / "images" / "ref_merged" / f"{fov}.tif", metadata=REFERENCE)
+        save_volume(image, tmp_path / "output" / "fovs" / fov / "reference.tif", metadata=REFERENCE)
         images[fov] = image
     return dataset, images
 
@@ -337,7 +337,7 @@ def test_dataset_stitch_builds_the_table_from_the_grids(stub, no_fov_stage, spy,
     assert table.record["geometry_source"] == {"tile_shape_yx": "reference_grids", "spacing_yx": "reference_grids"}
     assert [item.fov_id for item in inputs] == IDS and kwargs["sample"] == "sample1"
     for item in inputs:
-        path = tmp_path / "output" / "images" / "ref_merged" / f"{item.fov_id}.tif"
+        path = tmp_path / "output" / "fovs" / item.fov_id / "reference.tif"
         assert np.array_equal(item.image, images[item.fov_id]) and item.source == "reference_merged"
         assert item.file_sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
         reference = reference_grid_from_file(path)
@@ -378,7 +378,7 @@ def test_dataset_stitch_reads_the_saved_reference_stain(stub, no_fov_stage, spy,
     dataset, images = dataset_folder(tmp_path)
     for fov, image in images.items():
         stain = (image // 2)[..., None]
-        save_volume(stain, tmp_path / "output" / "checkpoints" / fov / "other_rounds" / "reference_stain" /
+        save_volume(stain, tmp_path / "output" / "fovs" / fov / "other_rounds" / "reference_stain" /
                     "image.ome.tif", metadata=REFERENCE)
     result = dataset.stitch("sample1", IDS, table=POSITIONS, config=StubConfig(zero(4)), input="reference_stain")
     ((inputs, _, _),) = spy
@@ -418,7 +418,7 @@ def test_dataset_stitch_errors(stub, tmp_path):
         dataset.stitch("sample1", IDS, table=dict(POSITIONS, guess=1), config=StubConfig(zero(4)))
     with pytest.raises(ValueError, match="stage_axes"):
         dataset.stitch("sample1", IDS, table={"source": "stage_file"}, config=StubConfig(zero(4)))
-    (tmp_path / "output" / "images" / "ref_merged" / f"{IDS[0]}.tif").unlink()
+    (tmp_path / "output" / "fovs" / IDS[0] / "reference.tif").unlink()
     with pytest.raises(FileNotFoundError, match="Position001"):
         dataset.stitch("sample1", IDS, table=POSITIONS, config=StubConfig(zero(4)))
 

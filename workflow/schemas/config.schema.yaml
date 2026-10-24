@@ -118,10 +118,20 @@ properties:
     description: "Z step size in microns"
 
   reference_image:
-    type: string
+    type: [string, "null"]
     pattern: "\\{fov_id\\}"
-    default: "images/ref_merged/{fov_id}.tif"
-    description: "File pattern of a FOV's reference image with {fov_id}, absolute or relative to the output root; the §2.10 stitching, assembly and export read its grid there (Python only)"
+    description: >-
+      File pattern of a FOV's reference image with {fov_id}, absolute or relative to the output root
+      (Python only); absent or null is fovs/{fov_id}/reference.tif. The Python processing rules write it there,
+      and every reader reads it there. Excludes reference_image_import.
+
+  reference_image_import:
+    type: [string, "null"]
+    pattern: "\\{fov_id\\}"
+    description: >-
+      File pattern with {fov_id} of an imported reference image, one another tool or rule produced,
+      absolute or relative to the output root (Python only). The processing rules then write no reference
+      image, and every reader reads this file; nothing writes to it. Excludes reference_image.
 
   maximum_projection:
     type: boolean
@@ -837,7 +847,7 @@ $defs:
       checkpoints:
         description: >-
           Python only (backend python). The checkpoint stages the rule writes besides
-          checkpoints/<fov>/run.json, as {stages: [...]}; absent or null is {stages: []}, run.json
+          fovs/<fov>/run.json, as {stages: [...]} in fovs/<fov>/checkpoints/; absent or null is {stages: []}, run.json
           alone. A rerun replaces the FOV's earlier record (overwrite); the declared outputs do not
           change.
         type: [object, "null"]

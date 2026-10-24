@@ -514,7 +514,7 @@ def checkpoint_run(root, seed, encoding, color_sequences=False):
     fov.spot_result = candidates()
     checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=root / "ck")
     fov.run(readout_config("pipeline"), checkpoints=checkpoints)
-    return dataset, fov, checkpoints, root / "ck" / "FOV_001"
+    return dataset, fov, checkpoints, root / "ck" / "FOV_001" / "checkpoints"
 
 
 @pytest.mark.validation
@@ -528,7 +528,7 @@ def test_pre_qc_and_run_json_record_the_encoding_and_reruns_check_it(tmp_path, s
     assert header["layout"]["segments"] == [{"name": "A", "bases": 5, "ends": []}]
     assert "pair_to_color" not in header["decoding_config"]
     assert "encoding" not in json.loads((directory / "candidates.json").read_text())
-    run = json.loads((directory / "run.json").read_text())
+    run = json.loads((directory.parent / "run.json").read_text())
     assert run["config"]["encoding"] == recorded(RELABELLED) and run["config"]["readout_mode"] == "multiplexed"
     # The same encoding reloads; a different one raises naming both.
     reloaded = dataset.fov("FOV_001").load_checkpoint("pre_qc", checkpoints=checkpoints)
@@ -576,7 +576,7 @@ def test_one_base_records_its_encoding_too(tmp_path, seed):
                                                           color_sequences=True)
     expected = {"method": "one_base", "base_to_color": colors, "reverse_bases": False}
     assert json.loads((directory / "pre_qc.json").read_text())["encoding"] == expected
-    assert json.loads((directory / "run.json").read_text())["config"]["encoding"] == expected
+    assert json.loads((directory.parent / "run.json").read_text())["config"]["encoding"] == expected
     reloaded = dataset.fov("FOV_001").load_checkpoint("pre_qc", checkpoints=checkpoints)
     pd.testing.assert_frame_equal(reloaded.decoding_result.table, fov.decoding_result.table, check_exact=True)
     for encoding in (OneBaseEncodingConfig({"A": "2", "C": "1", "G": "3", "T": "4"}),
@@ -593,5 +593,5 @@ def test_direct_mode_records_no_encoding(tmp_path, seed):
     dataset = direct_dataset(tmp_path)
     checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=tmp_path / "ck")
     direct_fov(dataset, seed).run(direct_pipeline(), checkpoints=checkpoints)
-    assert json.loads((tmp_path / "ck" / "FOV_001" / "pre_qc.json").read_text())["encoding"] is None
+    assert json.loads((tmp_path / "ck" / "FOV_001" / "checkpoints" / "pre_qc.json").read_text())["encoding"] is None
     assert json.loads((tmp_path / "ck" / "FOV_001" / "run.json").read_text())["config"]["encoding"] is None

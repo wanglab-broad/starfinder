@@ -280,9 +280,10 @@ def test_registered_checkpoint_round_trips_each_downstream_snapshot(tmp_path, mo
     config = PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION, spot_finding=DETECTION, extraction=EXTRACTION)
     fov.run(config, execution=ExecutionConfig(mode, retain_images=True), checkpoints=CheckpointConfig(stages=("registered",)))
     directory = fov.paths.checkpoint_dir
-    files = json.loads((directory / "run.json").read_text())["checkpoints"]["registered"]
+    files = json.loads((fov.paths.fov_dir / "run.json").read_text())["checkpoints"]["registered"]
     for name in ("round1", "round2"):
-        assert f"registered/{name}.ome.tif" in files and f"registered/bg_corrected/{name}.ome.tif" in files
+        assert (f"checkpoints/registered/{name}.ome.tif" in files
+                and f"checkpoints/registered/bg_corrected/{name}.ome.tif" in files)
     header = json.loads((directory / "registered" / "transforms.json").read_text())
     assert header["snapshots"] == ["bg_corrected"]
     reloaded = dataset(tmp_path).fov("FOV_001").load_checkpoint("registered")
@@ -320,7 +321,7 @@ def test_run_json_lists_sources_and_transforms_per_snapshot(tmp_path):
     recipe = replace(RECIPE_2, registration_source="bg_corrected")
     fov = resident_fov(tmp_path)
     fov.run(PipelineConfig(preprocessing=recipe, registration=TRANSLATION), checkpoints=CheckpointConfig(stages=("registered",)))
-    entry = json.loads((fov.paths.checkpoint_dir / "run.json").read_text())["preprocessing"]
+    entry = json.loads((fov.paths.fov_dir / "run.json").read_text())["preprocessing"]
     assert entry["recipe"] == {"steps": ["scalar_background", "percentile_normalization"], "post_registration": [],
                                "extraction_source": "bg_corrected", "registration_source": "bg_corrected"}
     assert [r["save_as"] for r in entry["rounds"]["round2"]] == ["bg_corrected", None]

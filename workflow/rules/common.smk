@@ -253,6 +253,10 @@ elif config['subset_random']:
 def get_overall_output(wildcards):
     """Create dynamic output list for all rules based on workflow_mode and config."""
     output_list = []
+    if BACKEND == "python":
+        # The FOV folder's run record and the reference image of the Python processing rules (none with
+        # reference_image_import), as the package lays them out.
+        from starfinder._snakemake import _reference_image_outputs, _run_record_outputs
     if STITCHING_BLOCK:
         output_list += [f"{OUTPUT_DIR}/stitching/{sample}/placement.json" for sample in SAMPLE]
     if ASSEMBLY_BLOCK:
@@ -267,11 +271,12 @@ def get_overall_output(wildcards):
             continue
         if is_rule_enabled(current_rule):
             if current_rule == 'rsf_single_fov':
-                # The Python rsf_single_fov writes the FOV's run.json and the zero-based molecules.csv, MATLAB's
-                # its logs and the legacy goodSpots.
+                # The Python rsf_single_fov writes the FOV folder's run.json, reference image (none with
+                # reference_image_import) and zero-based molecules.csv, MATLAB's its logs, images/ref_merged/
+                # and the legacy goodSpots.
                 if BACKEND == "python":
-                    output_list += [f"{OUTPUT_DIR}/checkpoints/{fovID}/run.json" for fovID in FOVS]
-                    output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
+                    output_list += _run_record_outputs(OUTPUT_DIR, FOVS)
+                    output_list += _reference_image_outputs(config, OUTPUT_DIR, FOVS)
                     output_list += [f"{OUTPUT_DIR}/fovs/{fovID}/molecules.csv" for fovID in FOVS]
                 else:
                     output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
@@ -283,16 +288,17 @@ def get_overall_output(wildcards):
             elif current_rule == 'gr_single_fov_subtile':
                 subtile_ext = "npz" if BACKEND == "python" else "mat"
                 if BACKEND == "python":
-                    output_list += [f"{OUTPUT_DIR}/checkpoints/{fovID}/run.json" for fovID in FOVS]
+                    output_list += _run_record_outputs(OUTPUT_DIR, FOVS)
+                    output_list += _reference_image_outputs(config, OUTPUT_DIR, FOVS)
                 else:
                     output_list += [f"{OUTPUT_DIR}/log/{fovID}_gr.txt" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
+                    output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.{subtile_ext}" for fovID in FOVS for i in N_SUBTILE]
             elif current_rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile'):
                 # The Python subtile rules write each subtile's run.json, MATLAB's the score logs.
                 if BACKEND == "python":
-                    output_list += [f"{OUTPUT_DIR}/checkpoints/{fovID}/subtile_{i}/run.json" for fovID in FOVS for i in N_SUBTILE]
+                    output_list += _run_record_outputs(OUTPUT_DIR, FOVS, N_SUBTILE)
                 else:
                     output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_goodSpots_{i}.csv" for fovID in FOVS for i in N_SUBTILE]
@@ -301,7 +307,7 @@ def get_overall_output(wildcards):
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.{subtile_ext}" for fovID in FOVS for i in N_SUBTILE]
                 if BACKEND == "python":
-                    output_list += [f"{OUTPUT_DIR}/checkpoints/{fovID}/run.json" for fovID in FOVS]
+                    output_list += _run_record_outputs(OUTPUT_DIR, FOVS)
             elif current_rule == 'stitch_subtile':
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
             elif current_rule == 'nuclei_registration':
@@ -355,6 +361,12 @@ rule rsf_preparation:
 # legacy one-based signal/{fovID}_goodSpots.csv of MATLAB's rsf_single_fov and of stitch_subtile (the
 # subtile and deep modes, the ruleorder of the Snakefile). The Python backend asks the package (_molecule_table).
 MOLECULE_TABLE = f"{OUTPUT_DIR}/signal/{{fovID}}_goodSpots.csv"
+# The images the shared segmentation rules read (segmentation.smk): MATLAB's reference image
+# images/ref_merged/ and its channel-name folders of the additional round flamingo. The Python backend
+# reads its reference image and the channel-label folders nuclei_registration writes (_shared_image_inputs).
+SHARED_IMAGE_INPUTS = {"amplicon_img": f"{OUTPUT_DIR}/images/ref_merged/{{fovID}}.tif",
+                       "dapi_img": f"{OUTPUT_DIR}/images/flamingo/DAPI/{{fovID}}.tif",
+                       "flamingo_img": f"{OUTPUT_DIR}/images/flamingo/Flamingo/{{fovID}}.tif"}
 
 # Validate only active Python adapters; shared MATLAB configuration stays intact.
 if BACKEND == "python":
@@ -369,6 +381,16 @@ if BACKEND == "python":
     from starfinder.dataset.workflow import (_check_export_route, _export_config, _molecule_table, _report_block,
                                              _stitching_block)
     MOLECULE_TABLE = str(_molecule_table(config, OUTPUT_DIR, "{fovID}"))
+    # The FOV folder's run record of the processing rules (fovs/{fovID}/run.json, a subtile's
+    # fovs/{fovID}/subtile_{n_subtile}/run.json), the reference image they write (the file reference_image
+    # names; none with reference_image_import, which they never write) and the one its readers read.
+    from starfinder._snakemake import (_reference_image_inputs, _reference_image_outputs, _run_record_outputs,
+                                       _shared_image_inputs)
+    RUN_RECORD = _run_record_outputs(OUTPUT_DIR, ["{fovID}"])[0]
+    SUBTILE_RUN_RECORD = _run_record_outputs(OUTPUT_DIR, ["{fovID}"], ["{n_subtile}"])[0]
+    REFERENCE_IMAGE_OUTPUT = _reference_image_outputs(config, OUTPUT_DIR, ["{fovID}"])
+    REFERENCE_IMAGE_INPUT = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])
+    SHARED_IMAGE_INPUTS = _shared_image_inputs(config, OUTPUT_DIR)
     if STITCHING_BLOCK:
         _stitching_block(config)
     if ASSEMBLY_BLOCK:

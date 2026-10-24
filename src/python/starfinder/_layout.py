@@ -3,9 +3,13 @@
 Private and unexported; it imports nothing from ``starfinder``. Every helper
 returns a path without touching the filesystem. The MATLAB-era folders
 (``images``, ``signal``, ``log``, ``output``, ``expr``, ``documents``) keep
-their names, and the ``.smk`` rules spell the same paths on their own. A FOV's
-own folder ``fovs/<fov_id>/`` holds the tables ``FOV.export_spots`` writes and the
-registration record of its other rounds.
+their names, and the ``.smk`` rules of the MATLAB backend spell the same paths
+on their own. A FOV's own folder ``fovs/<fov_id>/`` (a subtile's
+``fovs/<fov_id>/subtile_<n>/``) holds its durable results: the run record, the
+tables ``FOV.export_spots`` writes, the registration record of its other
+rounds, its reference image and the folders ``other_rounds/``,
+``segmentation/`` and ``assignment/``; the restart material of ``FOV.run``
+goes in its ``checkpoints/`` folder (docs/checkpoints.md, "Layout").
 """
 
 from __future__ import annotations
@@ -13,16 +17,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-#: The folders under the output root.
-CHECKPOINTS = "checkpoints"
+#: The folders under the output root: the FOV folders and the sample-stage roots.
 FOVS = "fovs"
 STITCHING = "stitching"
 EXPORT = "export"
 REPORT = "report"
-#: The record files: a FOV's run record in its checkpoint folder, a sample's export record in its export folder.
+#: Inside a FOV's folder: the restart folder of FOV.run's checkpoint stages. It is also the key under which
+#: run.json lists the stage files and the configuration names the stages.
+CHECKPOINTS = "checkpoints"
+#: Inside a FOV's folder: the prepared images of other rounds, the saved segmentation runs and assignments.
+OTHER_ROUNDS = "other_rounds"
+SEGMENTATION = "segmentation"
+ASSIGNMENT = "assignment"
+#: The record files: a FOV's run record in its folder, a sample's export record in its export folder.
 RUN_RECORD = "run.json"
 EXPORT_FILE = "export.json"
-#: Inside a FOV's checkpoint folder: the registration folder and its header, and an assignment's record.
+#: Inside a FOV's checkpoint folder: the registration folder and its header; an assignment's record.
 REGISTERED = "registered"
 TRANSFORMS_FILE = "transforms.json"
 ASSIGNMENT_RECORD = "assignment.json"
@@ -30,39 +40,85 @@ ASSIGNMENT_RECORD = "assignment.json"
 SPOT_TABLES = {"molecules": "molecules.csv", "reads": "reads.csv"}
 #: The registration record of a FOV's other rounds, which FOV.save_registration_record writes in the FOV's folder.
 NUCLEI_REGISTRATION = "nuclei_registration.json"
-#: The setting naming a FOV's reference image (workflow YAML key and ``Dataset`` field) and its default: a file
-#: pattern with ``{fov_id}``, absolute or relative to the output root.
+#: The settings naming a FOV's reference image (workflow YAML keys and ``Dataset`` fields), each a file pattern
+#: with ``{fov_id}``, absolute or relative to the output root: ``reference_image``, the file the processing
+#: writes (default the FOV folder's ``reference.tif``), or ``reference_image_import``, a file another tool or
+#: rule produced, which the processing never writes and every reader reads instead. The two exclude each other.
 REFERENCE_IMAGE_KEY = "reference_image"
-REFERENCE_IMAGE = "images/ref_merged/{fov_id}.tif"
+REFERENCE_IMAGE_IMPORT_KEY = "reference_image_import"
+REFERENCE_IMAGE = "fovs/{fov_id}/reference.tif"
 
 
-def check_reference_image(value) -> str:
-    """The ``reference_image`` pattern; ValueError naming the setting for anything but a string with ``{fov_id}``."""
+def check_reference_image(value, key=REFERENCE_IMAGE_KEY) -> str:
+    """The pattern of setting ``key``; ValueError naming the setting for anything but a string with ``{fov_id}``."""
     if not isinstance(value, str) or "{fov_id}" not in value:
-        raise ValueError(f"{REFERENCE_IMAGE_KEY} must be a file pattern with {{fov_id}}, absolute or relative to the "
-                         f"output root (default {REFERENCE_IMAGE!r}); got {value!r}")
+        default = f" (default {REFERENCE_IMAGE!r})" if key == REFERENCE_IMAGE_KEY else ""
+        raise ValueError(f"{key} must be a file pattern with {{fov_id}}, absolute or relative to the output "
+                         f"root{default}; got {value!r}")
     return value
 
 
-def reference_image_path(output_root, fov_id, pattern=REFERENCE_IMAGE) -> Path:
-    """The file of a FOV's reference image: ``pattern`` with ``{fov_id}`` replaced, relative to ``output_root``."""
-    path = Path(check_reference_image(pattern).replace("{fov_id}", fov_id))
+def check_reference_import(reference_image, imported):
+    """The ``reference_image_import`` pattern, or None; ValueError when it is given beside another reference_image.
+
+    An imported reference image replaces the one the processing writes, so a
+    ``reference_image`` other than the default cannot be given with it.
+    """
+    if imported is None:
+        return None
+    check_reference_image(imported, REFERENCE_IMAGE_IMPORT_KEY)
+    if reference_image != REFERENCE_IMAGE:
+        raise ValueError(f"{REFERENCE_IMAGE_IMPORT_KEY} ({imported!r}) excludes {REFERENCE_IMAGE_KEY} "
+                         f"({reference_image!r}): an imported reference image is read where it is and never written")
+    return imported
+
+
+def reference_image_path(output_root, fov_id, pattern=REFERENCE_IMAGE, imported=None) -> Path:
+    """The file of a FOV's reference image, the one resolver for its writer and every reader.
+
+    ``imported`` (the ``reference_image_import`` pattern) when it is given, else
+    ``pattern`` (``reference_image``), with ``{fov_id}`` replaced; a relative
+    pattern is joined to ``output_root``.
+    """
+    if imported is not None:
+        check_reference_image(imported, REFERENCE_IMAGE_IMPORT_KEY)
+    path = Path((check_reference_image(pattern) if imported is None else imported).replace("{fov_id}", fov_id))
     return path if path.is_absolute() else Path(output_root) / path
 
 
-def checkpoint_dir(output_root, fov_id) -> Path:
-    """``checkpoints/<fov_id>``, the default checkpoint folder of a FOV."""
-    return Path(output_root) / CHECKPOINTS / fov_id
+def fov_dir(output_root, fov_id, subtile_id=None, *, parent=None) -> Path:
+    """``fovs/<fov_id>`` (a subtile: ``fovs/<fov_id>/subtile_<n>``), the folder of a FOV's durable results.
+
+    ``parent`` (``CheckpointConfig.directory``) replaces ``<output_root>/fovs``
+    as the parent of the FOV folders when given.
+    """
+    folder = (Path(output_root) / FOVS if parent is None else Path(parent)) / fov_id
+    return folder if subtile_id is None else folder / f"subtile_{subtile_id}"
 
 
-def run_record(output_root, fov_id) -> Path:
-    """``checkpoints/<fov_id>/run.json``, the run record of a FOV."""
-    return checkpoint_dir(output_root, fov_id) / RUN_RECORD
+def checkpoint_dir(fov_directory) -> Path:
+    """``<fov folder>/checkpoints``, the restart folder of a FOV's checkpoint stages."""
+    return Path(fov_directory) / CHECKPOINTS
 
 
-def fov_dir(output_root, fov_id) -> Path:
-    """``fovs/<fov_id>``, the folder of a FOV's results."""
-    return Path(output_root) / FOVS / fov_id
+def run_record(output_root, fov_id, subtile_id=None) -> Path:
+    """``fovs/<fov_id>/run.json`` (a subtile: ``fovs/<fov_id>/subtile_<n>/run.json``), the run record of a FOV."""
+    return fov_dir(output_root, fov_id, subtile_id) / RUN_RECORD
+
+
+def other_round_dir(fov_directory, name) -> Path:
+    """``<fov folder>/other_rounds/<name>``, the saved form of a prepared image."""
+    return Path(fov_directory) / OTHER_ROUNDS / name
+
+
+def segmentation_dir(fov_directory, run) -> Path:
+    """``<fov folder>/segmentation/<run>``, a saved segmentation run."""
+    return Path(fov_directory) / SEGMENTATION / run
+
+
+def assignment_dir(fov_directory, name) -> Path:
+    """``<fov folder>/assignment/<name>``, a saved assignment."""
+    return Path(fov_directory) / ASSIGNMENT / name
 
 
 def spot_table(output_root, fov_id, slot="molecules") -> Path:
@@ -139,17 +195,6 @@ class _FovPaths:
     fov_id: str
 
     @property
-    def ref_merged_tif(self) -> Path:
-        """Path to the reference TIFF under images/ref_merged.
-
-        Returns
-        -------
-        pathlib.Path
-            Path under output_root; no filesystem mutation.
-        """
-        return self.output_root / "images" / "ref_merged" / f"{self.fov_id}.tif"
-
-    @property
     def subtile_dir(self) -> Path:
         """Path to the subtile directory under output/subtile.
 
@@ -161,15 +206,37 @@ class _FovPaths:
         return self.output_root / "output" / "subtile" / self.fov_id
 
     @property
-    def checkpoint_dir(self) -> Path:
-        """Default per-FOV checkpoint directory under checkpoints/.
+    def fov_dir(self) -> Path:
+        """The FOV's folder under fovs/, which holds its durable results.
 
         Returns
         -------
         pathlib.Path
             Path under output_root; no filesystem mutation.
         """
-        return self.output_root / CHECKPOINTS / self.fov_id
+        return fov_dir(self.output_root, self.fov_id)
+
+    @property
+    def checkpoint_dir(self) -> Path:
+        """Default checkpoint folder of the FOV: fovs/<fov_id>/checkpoints.
+
+        Returns
+        -------
+        pathlib.Path
+            Path under output_root; no filesystem mutation.
+        """
+        return checkpoint_dir(self.fov_dir)
+
+    @property
+    def run_record(self) -> Path:
+        """Default run record of the FOV: fovs/<fov_id>/run.json.
+
+        Returns
+        -------
+        pathlib.Path
+            Path under output_root; no filesystem mutation.
+        """
+        return run_record(self.output_root, self.fov_id)
 
     def spot_table(self, slot: str = "molecules") -> Path:
         """Return fovs/<fov_id>/<slot>.csv, the table FOV.export_spots writes for slot molecules or reads.

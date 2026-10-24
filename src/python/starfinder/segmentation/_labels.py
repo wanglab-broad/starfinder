@@ -176,8 +176,9 @@ def reference_grid_from_file(path: Path | str, *, metadata: ImageMetadata | None
 
     The shape is the array's (a YX file gives a Z=1 grid); the metadata is the
     file's ``starfinder_metadata`` description, or ``metadata`` when the file has
-    none. The natural file is ``images/ref_merged/{fovID}.tif``, which
-    ``FOV.save_reference_image`` writes with the reference metadata. The source is
+    none. The natural file is the FOV's reference image (``fovs/{fovID}/reference.tif``
+    by default), which ``FOV.save_reference_image`` writes with the reference
+    metadata. The source is
     ``"file:<resolved path>"`` and the hash the SHA-256 of the array's C-order
     bytes.
 

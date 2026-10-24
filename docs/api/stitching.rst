@@ -98,7 +98,7 @@ for bit; for a BigStitcher import also ``view_map.csv``, with the macro's and
 ``dataset.xml``'s SHA-256 in the record) as a whole or not at all, and
 :py:func:`~starfinder.stitching.load_placement` reads it back, checking the tables'
 SHA-256. ``Dataset.stitch(sample, fov_ids,
-table=…, config=…)`` reads each FOV's reference grid from ``images/ref_merged/{fovID}.tif``
+table=…, config=…)`` reads each FOV's reference grid from its reference image (``fovs/{fovID}/reference.tif`` by default)
 and its stitching image (``reference_merged``, the saved ``reference_stain`` or a
 ``file:`` pattern) one FOV at a time, builds the table from the workflow's ``positions``
 mapping when given one, calls :py:func:`~starfinder.stitching.stitch` and, with

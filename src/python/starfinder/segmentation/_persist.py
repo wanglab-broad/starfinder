@@ -1,6 +1,6 @@
 """The saved format of a segmentation run (docs/segmentation-contract.md, "Saved format", option F1).
 
-Each run is a folder ``<checkpoint dir>/<fov_id>/segmentation/<run>/`` holding
+Each run is a folder ``fovs/<fov_id>/segmentation/<run>/`` (the FOV folder) holding
 ``labels.tif`` (ZYX ``uint32``, zlib, ``ImageMetadata`` in its description),
 ``input.ome.tif`` (the segmentation input, ZYXC OME-TIFF; computed runs only) and
 ``segmentation.json`` (the run record). ``FOV.segment`` writes it and
@@ -32,8 +32,9 @@ _SAVED = weakref.WeakKeyDictionary()
 
 
 def run_directory(fov_directory, name) -> Path:
-    """``<fov checkpoint dir>/segmentation/<run>``."""
-    return Path(fov_directory) / "segmentation" / name
+    """``<fov folder>/segmentation/<run>`` (``_layout.segmentation_dir``)."""
+    from starfinder._layout import segmentation_dir
+    return segmentation_dir(fov_directory, name)
 
 
 def read_labels(path) -> tuple[np.ndarray, ImageMetadata | None]:
@@ -133,7 +134,7 @@ def read_run(directory, name) -> SegmentationResult:
 
 
 def saved_labels(result, fov_directory) -> Path | None:
-    """The ``labels.tif`` of a result saved under its run in this per-FOV checkpoint directory, else None.
+    """The ``labels.tif`` of a result saved under its run in this FOV folder, else None.
 
     The rule of docs/assignment-contract.md ("Label images of a checkpointed
     assignment"): the result was returned by :func:`write_run` (``FOV.segment`` with

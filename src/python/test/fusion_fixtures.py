@@ -246,17 +246,17 @@ class ExportFolder:
         return self.root / "export" / SAMPLE
 
     def stain_path(self, fov):
-        return self.root / "checkpoints" / fov / "/".join(STAIN_FILE)
+        return self.root / "fovs" / fov / "/".join(STAIN_FILE)
 
     def assignment_dir(self, fov, name="default"):
-        return assignment_directory(self.root / "checkpoints" / fov, name)
+        return assignment_directory(self.root / "fovs" / fov, name)
 
 
 def export_folder(tmp_path, *, dimensions="3d", placement_result=None, conflicts_name="default"):
     """Write ``assembly_golden`` (3D, or one-plane FOVs with ``dimensions="plane"``) as a dataset.
 
     The saved placement under ``stitching/sample1/``, each FOV's §2.9 assignment folder
-    ``checkpoints/<fov>/assignment/default/``, ``images/ref_merged/<fov>.tif`` (the grid, uint8
+    ``fovs/<fov>/assignment/default/``, ``fovs/<fov>/reference.tif`` (the grid, uint8
     values ``(3z + y + 2x) mod 200 + 1``), the ``reference_stain`` (uint8 ``(z + y + x) mod
     251``) and each FOV's ``fovs/<fov>/molecules.csv`` (the assignment's molecules, their identities and zero-based
     z, y, x, as ``FOV.export_spots`` writes them).
@@ -274,9 +274,9 @@ def export_folder(tmp_path, *, dimensions="3d", placement_result=None, conflicts
     save_placement(result, root / "stitching" / SAMPLE)
     for fov in GOLDEN_IDS:
         metadata = grids[fov].metadata
-        save_volume(merged_image(shape), root / "images" / "ref_merged" / f"{fov}.tif", metadata=metadata)
-        save_volume(stain_image(shape)[..., None], root / "checkpoints" / fov / "/".join(STAIN_FILE), metadata=metadata)
-        write_assignment(assignment_directory(root / "checkpoints" / fov, conflicts_name),
+        save_volume(merged_image(shape), root / "fovs" / fov / "reference.tif", metadata=metadata)
+        save_volume(stain_image(shape)[..., None], root / "fovs" / fov / "/".join(STAIN_FILE), metadata=metadata)
+        write_assignment(assignment_directory(root / "fovs" / fov, conflicts_name),
                          with_record(results[fov], name=conflicts_name), metadata=metadata)
         molecules = results[fov].molecules
         write_molecules_csv(root / "fovs" / fov / "molecules.csv", spot_namespace(fov),

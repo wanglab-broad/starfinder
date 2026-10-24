@@ -568,7 +568,7 @@ def load_checkpoint(path: Path | str, stage: str) -> dict:
     Parameters
     ----------
     path : pathlib.Path or str
-        Per-FOV checkpoint directory, by default ``<output_root>/checkpoints/<fov_id>``.
+        Per-FOV checkpoint folder, by default ``<output_root>/fovs/<fov_id>/checkpoints``.
     stage : str
         ``registered``, ``candidates`` or ``pre_qc``.
 

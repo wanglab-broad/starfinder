@@ -7,6 +7,8 @@ changes them. It is the reference that the golden test
 described in {doc}`preprocessing-contract` and {doc}`preprocessing-algorithms`;
 neither is accepted yet.
 
+Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
 ## Operations
 
 All five operations take finite, nonempty ZYX or ZYXC arrays and never mutate

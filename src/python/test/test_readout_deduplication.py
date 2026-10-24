@@ -203,7 +203,7 @@ def test_r15_without_a_deduplication_config_every_table_equals_a_run_without_the
     pd.testing.assert_frame_equal(fov.filtering_result.table,
                                   filter_reads(fov.scoring_result, config=ReadFilterConfig(),
                                                codebook=dataset.codebook).table, check_exact=True)
-    header = json.loads((tmp_path / "checkpoints" / "FOV_001" / "pre_qc.json").read_text())
+    header = json.loads((tmp_path / "checkpoints" / "FOV_001" / "checkpoints" / "pre_qc.json").read_text())
     assert header["deduplication_config"] is None and header["stages_applied"] == ["decoding", "scoring"]
     record = json.loads((tmp_path / "checkpoints" / "FOV_001" / "run.json").read_text())
     assert record["config"]["pipeline"]["deduplication"] is None and "deduplication" not in record["counts"]
@@ -256,7 +256,7 @@ def test_r17_reruns_with_deduplication_equal_the_full_run(tmp_path, seed, table_
     full, checkpoints = crosstalk_checkpointed(tmp_path, table_format, seed)
     dataset = full.dataset
     stages = crosstalk_pipeline()
-    header = json.loads((tmp_path / "checkpoints" / "FOV_001" / "pre_qc.json").read_text())
+    header = json.loads((tmp_path / "checkpoints" / "FOV_001" / "checkpoints" / "pre_qc.json").read_text())
     assert header["deduplication_config"] == {"distance_voxels": 1.0, "compatibility": "same_sequence"}
     assert header["stages_applied"] == ["decoding", "scoring", "deduplication"]
     assert list(header["dtypes"])[-4:] == list(DEDUPLICATION_COLUMNS)

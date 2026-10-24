@@ -77,7 +77,7 @@ class AssemblyInput:
     """One FOV's input of :func:`assemble`: its reference grid and one of two kinds.
 
     ``assignment`` is the FOV's §2.9 :class:`~starfinder.assignment.AssignmentResult`
-    or the path of its saved folder (``<checkpoint dir>/<fov_id>/assignment/<name>/``,
+    or the path of its saved folder (``fovs/<fov_id>/assignment/<name>/``,
     loaded with the §2.9 loader, which checks every recorded SHA-256);
     ``molecules`` is a :class:`~starfinder.assignment.MoleculeTable` alone, for a
     sample without segmentation. :func:`assemble` checks that exactly one is

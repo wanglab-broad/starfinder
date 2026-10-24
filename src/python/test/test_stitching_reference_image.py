@@ -6,7 +6,7 @@ declared grid) of W-397. Fixtures, all written in the test:
 
 * ``scene_layouts``: the synthetic sample scene ``sample-tiny-v1`` (2 × 2 FOVs of 5×36×36) written
   as a dataset by ``test_stitching_declared_grids.scene_dataset``, with stored metadata and as plain
-  pages with the voxel sizes, each in the default layout (``images/ref_merged/<fov>.tif``) and in a
+  pages with the voxel sizes, each in the default layout (``fovs/<fov>/reference.tif``) and in a
   copy whose reference images are moved to ``images/flamingo/DAPI/<fov>_reference.tif`` (another
   folder and name), with ``reference_image`` set to that pattern. Every output root follows the
   workflow's layout ``<root>/data/output``.
@@ -90,8 +90,7 @@ def scene_layouts(tmp_path_factory):
         for fov in scene.positions.fov_id:
             target = reference_image_path(moved_root, fov, MOVED)
             target.parent.mkdir(parents=True, exist_ok=True)
-            (moved_root / "images" / "ref_merged" / f"{fov}.tif").rename(target)
-        shutil.rmtree(moved_root / "images" / "ref_merged")
+            (moved_root / "fovs" / fov / "reference.tif").rename(target)
         out[(form, "moved")] = replace(dataset, input_root=moved_root.parent / "input", output_root=moved_root,
                                        reference_image=MOVED)
     return out
@@ -118,9 +117,9 @@ def assert_same_placement(a, b):
 
 def test_the_setting_defaults_to_the_present_location(tmp_path):
     dataset = Dataset(tmp_path / "in", tmp_path / "out", "d", "s", "o")
-    assert dataset.reference_image == REFERENCE_IMAGE == "images/ref_merged/{fov_id}.tif"
-    assert source_path(dataset, "Position001", "reference_merged") == (tmp_path / "out" / "images" / "ref_merged" /
-                                                                        "Position001.tif")
+    assert dataset.reference_image == REFERENCE_IMAGE == "fovs/{fov_id}/reference.tif"
+    assert source_path(dataset, "Position001", "reference_merged") == (tmp_path / "out" / "fovs" / "Position001" /
+                                                                        "reference.tif")
     absolute = str(tmp_path / "elsewhere" / "{fov_id}.tif")
     assert reference_image_path(tmp_path / "out", "F1", absolute) == tmp_path / "elsewhere" / "F1.tif"
     assert reference_image_path(tmp_path / "out", "F1", MOVED) == tmp_path / "out" / "images/flamingo/DAPI/F1_reference.tif"
@@ -130,12 +129,12 @@ def test_the_setting_defaults_to_the_present_location(tmp_path):
     assert workflow._workflow_dataset(dict(config, reference_image=None)).reference_image == REFERENCE_IMAGE
     assert workflow._workflow_dataset(dict(config, reference_image=MOVED)).reference_image == MOVED
     assert _snakemake._reference_image_inputs(config, tmp_path / "d" / "o", ["{fovID}"]) == [
-        str(tmp_path / "d" / "o" / "images" / "ref_merged" / "{fovID}.tif")]
+        str(tmp_path / "d" / "o" / "fovs" / "{fovID}" / "reference.tif")]
     assert _snakemake._reference_image_inputs(dict(config, reference_image=MOVED), tmp_path, ["P1"]) == [
         str(tmp_path / "images/flamingo/DAPI/P1_reference.tif")]
 
 
-@pytest.mark.parametrize("value", ["images/ref_merged/{fovID}.tif", "images/x.tif", "", None, 3])
+@pytest.mark.parametrize("value", ["fovs/{fovID}/reference.tif", "images/x.tif", "", None, 3])
 def test_a_pattern_without_fov_id_raises_naming_the_setting(tmp_path, value):
     with pytest.raises(ValueError, match=r"reference_image must be a file pattern with \{fov_id\}") as error:
         Dataset(tmp_path, tmp_path, "d", "s", "o", reference_image=value)
@@ -150,13 +149,13 @@ def test_a_pattern_without_fov_id_raises_naming_the_setting(tmp_path, value):
 
 
 def test_without_the_setting_the_default_path_is_read(scene_layouts, monkeypatch):
-    """The default layout reads images/ref_merged/<fov>.tif and nothing else, as before."""
+    """The default layout reads fovs/<fov>/reference.tif and nothing else."""
     import starfinder.io as io
     real, opened = io.load_volume, []
     monkeypatch.setattr(io, "load_volume", lambda path, *a, **k: opened.append(Path(path)) or real(path, *a, **k))
     dataset = scene_layouts[("stored", "default")]
     for fov in fov_ids(scene_layouts):
-        path = dataset.output_root / "images" / "ref_merged" / f"{fov}.tif"
+        path = dataset.output_root / "fovs" / fov / "reference.tif"
         assert _reference_grid(dataset, fov).source == f"file:{path.resolve()}"
         assert opened[-1] == path
     moved = scene_layouts[("stored", "moved")]
@@ -314,7 +313,7 @@ def golden_dataset(root, form, setups):
     out = root / "data" / "output"
     for k, fov in enumerate(table.fov_ids):
         image = (np.arange(np.prod(GOLDEN_SHAPE)).reshape(GOLDEN_SHAPE) % 251 + 3 * k).astype(np.uint16)
-        path = out / "images" / "ref_merged" / f"{fov}.tif"
+        path = out / "fovs" / fov / "reference.tif"
         if form == "stored":
             save_volume(image, path, metadata=grid(GOLDEN_SHAPE, GOLDEN_SPACING).metadata)
         else:
@@ -393,7 +392,7 @@ def links_dataset(root, form):
     out = root / "data" / "output"
     for k, fov in enumerate(LINK_IDS):
         image = np.full(LINK_SHAPE, k + 1, np.uint16)
-        path = out / "images" / "ref_merged" / f"{fov}.tif"
+        path = out / "fovs" / fov / "reference.tif"
         if form == "stored":
             save_volume(image, path, metadata=grid(LINK_SHAPE, LN_SPACING).metadata)
         else:
@@ -440,7 +439,7 @@ def test_the_import_adapter_reads_the_configured_reference_image(tmp_path, golde
     for fov in [f"Position{i}" for i in range(1, 9)]:
         target = reference_image_path(out, fov, MOVED)
         target.parent.mkdir(parents=True, exist_ok=True)
-        (out / "images" / "ref_merged" / f"{fov}.tif").rename(target)
+        (out / "fovs" / fov / "reference.tif").rename(target)
     got, _ = run_import(config, sheet, folder, out)
     assert_same_placement(expected, got)
     assert _snakemake._reference_image_inputs(config, out, ["Position1"]) == [

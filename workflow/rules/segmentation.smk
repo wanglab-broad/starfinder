@@ -1,14 +1,15 @@
 """
     Segmentation rules: StarDist, DAPI enhancement
-    Uses variables from common.smk
+    Uses variables from common.smk, whose SHARED_IMAGE_INPUTS names the images these rules read: the reference
+    image and the channel folders of the flamingo round (docs/workflows.md, "Nuclei registration").
 """
 
 ### ==================== [ DAPI Enhancement with Flamingo ] =========================
 
 rule enhance_dapi_with_flamingo:
     input:
-        dapi_img=expand("{output_dir}/images/flamingo/DAPI/{{fovID}}.tif", output_dir=OUTPUT_DIR),
-        flamingo_img=expand("{output_dir}/images/flamingo/Flamingo/{{fovID}}.tif", output_dir=OUTPUT_DIR)
+        dapi_img=SHARED_IMAGE_INPUTS['dapi_img'],
+        flamingo_img=SHARED_IMAGE_INPUTS['flamingo_img']
     output:
         eh_dapi_img=expand("{output_dir}/images/flamingo/enhanced_DAPI/{{fovID}}.tif", output_dir=OUTPUT_DIR)
     resources:
@@ -37,7 +38,7 @@ rule stardist_segmentation:
 rule create_nuclei_amplicon_overlay:
     input:
         dapi_img=expand("{output_dir}/images/DAPI/{{fovID}}.tif", output_dir=OUTPUT_DIR),
-        amplicon_img=expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR)
+        amplicon_img=SHARED_IMAGE_INPUTS['amplicon_img']
     output:
         expand("{output_dir}/images/overlay/{{fovID}}.tif", output_dir=OUTPUT_DIR)
     resources:

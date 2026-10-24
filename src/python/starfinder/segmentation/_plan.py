@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass, replace
+from pathlib import Path
 
 import numpy as np
 
@@ -299,9 +300,12 @@ def _channel(fov, item):
     path = fov._merged_reference()[1] if item.reference_merged or isinstance(item.prepare, CompositeConfig) else None
     if path is not None:
         # The reference merged image (the channel, or the composite's amplicon) was read from the saved
-        # reference image of FOV.load_reference_image: its path below the output root and its file SHA-256.
-        source["reference_image"] = {"path": path.relative_to(fov.dataset.output_root).as_posix(),
-                                     "sha256": file_sha256(path)}
+        # reference image of FOV.load_reference_image: its path below the output root (an imported or configured
+        # file outside it: its absolute path) and its file SHA-256.
+        root = Path(fov.dataset.output_root).absolute()
+        absolute = Path(path).absolute()
+        recorded = (absolute.relative_to(root).as_posix() if absolute.is_relative_to(root) else str(absolute))
+        source["reference_image"] = {"path": recorded, "sha256": file_sha256(path)}
     return np.ascontiguousarray(image), source
 
 

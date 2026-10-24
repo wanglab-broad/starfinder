@@ -297,7 +297,7 @@ def stages(scene_chain, tmp_path_factory):  # noqa: F811
     holder = base / "held"
     moved = {"export": [_move(chain.root / "export" / chain.sample, holder)],
              "stitching": [_move(chain.root / "stitching" / chain.sample, holder)],
-             "assignment": [_move(chain.root / "checkpoints" / f / "assignment", holder) for f in chain.fov_ids]}
+             "assignment": [_move(chain.root / "fovs" / f / "assignment", holder) for f in chain.fov_ids]}
     pages, folders = {}, []
 
     def stage(name, restore, config):
@@ -377,7 +377,7 @@ def test_ch1_ch2_ch3_the_report_at_each_stage(stages, tmp_path):
         check_page(page, chain, tmp_path / name)
     # The Z size at every stage: without an export or a placement, the shape of the first FOV's reference image, read
     # from its header and listed in inputs; the acquisition says "3D" for the scene's 5 planes.
-    reference = f"images/ref_merged/{chain.fov_ids[0]}.tif"
+    reference = f"fovs/{chain.fov_ids[0]}/reference.tif"
     planes = tifffile.imread(chain.root / reference).shape[0]
     assert planes == 5
     for name, page in pages.items():
@@ -557,18 +557,22 @@ def test_z1_one_plane(scene_chain_plane, plane_pages):  # noqa: F811
 
 @pytest.fixture(scope="module")
 def scene_no_run_json(scene_chain, tmp_path_factory):  # noqa: F811
-    """``scene_chain``'s output root with every ``checkpoints/<fov>/run.json`` removed (``cells``), and a second root
-    with no checkpoint folder, exported with ``assignment=None`` from the rule outputs ``fovs/<fov>/molecules.csv``
-    alone (``molecules_only``; the reference images ``images/ref_merged`` fused, since the stains live under the
-    checkpoint folder)."""
+    """``scene_chain``'s output root with every ``fovs/<fov>/run.json`` removed (``cells``), and a second root whose
+    FOV folders keep only ``molecules.csv`` and ``reference.tif`` (no run record, checkpoint, segmentation, assignment
+    or prepared stain), exported with ``assignment=None`` from the molecule tables alone (``molecules_only``; the
+    reference images fused, since the stains are gone)."""
     from starfinder.dataset import Dataset, RoundState
     from starfinder.export import ExportConfig, FusionConfig
     base = tmp_path_factory.mktemp("scene_no_run_json")
     cells = scene_chain.copy(base / "cells")
     for fov in cells.fov_ids:
-        (cells.root / "checkpoints" / fov / "run.json").unlink()
+        (cells.root / "fovs" / fov / "run.json").unlink()
     molecules = scene_chain.copy(base / "molecules_only")
-    shutil.rmtree(molecules.root / "checkpoints")
+    for fov in molecules.fov_ids:
+        folder = molecules.root / "fovs" / fov
+        (folder / "run.json").unlink()
+        for name in ("checkpoints", "segmentation", "assignment", "other_rounds"):
+            shutil.rmtree(folder / name, ignore_errors=True)
     shutil.rmtree(molecules.root / "export")
     dataset = Dataset(molecules.input_root, molecules.root, molecules.dataset_id, molecules.sample, "output",
                       rounds=RoundState(sequencing_rounds=molecules.rounds, reference_round=molecules.rounds[0]),
@@ -838,12 +842,12 @@ def test_z_size_from_a_reference_image_without_a_grid(tmp_path, dtype):
     """Only F1 has a reference image (3 planes; float32 or uint16), no record holds a grid: the Z size is its shape,
     read from the header, and the file is listed in inputs. With one plane, 2D (Z = 1)."""
     case = z_size_case(tmp_path)
-    image = case.root / "images" / "ref_merged" / "F1.tif"
+    image = case.root / "fovs" / "F1" / "reference.tif"
     stack(image, 3, dtype)
     assert direct_z_size(case.root, case.fov_ids) == 3
     _, record = case.collect()
     assert z_size_rows(record) == []
-    assert reference_inputs(record, case.root) == ["images/ref_merged/F1.tif"]
+    assert reference_inputs(record, case.root) == ["fovs/F1/reference.tif"]
     assert acquisition_text(case) == "3 rounds × 4 channels, 3D"
     image.unlink()
     stack(image, 1, dtype)
@@ -856,12 +860,12 @@ def test_z_size_from_the_first_fov_with_a_reference_image(tmp_path):
     """F1 has none, F2 a uint16 image of 7 planes, F3 a float32 image of 3: F2's, the first in list order, is read and
     is the only reference image listed."""
     case = z_size_case(tmp_path)
-    images = case.root / "images" / "ref_merged"
-    stack(images / "F2.tif", 7, np.uint16)
-    stack(images / "F3.tif", 3, np.float32)
+    images = case.root / "fovs"
+    stack(images / "F2" / "reference.tif", 7, np.uint16)
+    stack(images / "F3" / "reference.tif", 3, np.float32)
     assert direct_z_size(case.root, case.fov_ids) == 7
     _, record = case.collect()
-    assert z_size_rows(record) == [] and reference_inputs(record, case.root) == ["images/ref_merged/F2.tif"]
+    assert z_size_rows(record) == [] and reference_inputs(record, case.root) == ["fovs/F2/reference.tif"]
 
 
 def test_z_size_when_no_reference_image_can_be_read(tmp_path):
@@ -869,24 +873,26 @@ def test_z_size_when_no_reference_image_can_be_read(tmp_path):
     with input_changed naming F1's file, and both files are listed. With a readable F3, F3's is read."""
     from starfinder.report._values import Unavailable
     case = z_size_case(tmp_path)
-    images = case.root / "images" / "ref_merged"
-    images.mkdir(parents=True)
-    (images / "F1.tif").write_bytes(b"not a tiff\n" * 8)
-    tifffile.imwrite(images / "F2.tif", np.zeros((2, 3, 16, 16), np.uint16), imagej=True, metadata={"axes": "ZCYX"})
+    images = case.root / "fovs"
+    for fov in ("F1", "F2"):
+        (images / fov).mkdir(parents=True, exist_ok=True)
+    (images / "F1" / "reference.tif").write_bytes(b"not a tiff\n" * 8)
+    tifffile.imwrite(images / "F2" / "reference.tif", np.zeros((2, 3, 16, 16), np.uint16), imagej=True,
+                     metadata={"axes": "ZCYX"})
     found = direct_z_size(case.root, case.fov_ids)
     assert isinstance(found, Unavailable) and found.reason == "input_changed"
     _, record = case.collect()
     (row,) = z_size_rows(record)
     assert row[:3] == ("summary.identity", "entry=z_size", "input_changed")
-    assert row[3].startswith("images/ref_merged/F1.tif cannot be read as a TIFF")
-    assert reference_inputs(record, case.root) == ["images/ref_merged/F1.tif", "images/ref_merged/F2.tif"]
-    (images / "F1.tif").unlink()
+    assert row[3].startswith("fovs/F1/reference.tif cannot be read as a TIFF")
+    assert reference_inputs(record, case.root) == ["fovs/F1/reference.tif", "fovs/F2/reference.tif"]
+    (images / "F1" / "reference.tif").unlink()
     (row,) = z_size_rows(case.collect()[1])
-    assert row[2] == "input_changed" and row[3].startswith("images/ref_merged/F2.tif is not a ZYX or YX image")
-    stack(images / "F3.tif", 5, np.uint16)
+    assert row[2] == "input_changed" and row[3].startswith("fovs/F2/reference.tif is not a ZYX or YX image")
+    stack(images / "F3" / "reference.tif", 5, np.uint16)
     _, record = case.collect()
     assert z_size_rows(record) == [] and acquisition_text(case) == "3 rounds × 4 channels, 3D"
-    assert reference_inputs(record, case.root) == ["images/ref_merged/F2.tif", "images/ref_merged/F3.tif"]
+    assert reference_inputs(record, case.root) == ["fovs/F2/reference.tif", "fovs/F3/reference.tif"]
 
 
 def test_z_size_from_a_tiff_of_several_series_or_a_file_gone_while_read(tmp_path):
@@ -895,33 +901,34 @@ def test_z_size_from_a_tiff_of_several_series_or_a_file_gone_while_read(tmp_path
     from starfinder.report._collect import _Inputs
     from starfinder.report._values import Unavailable, reference_image_z_size
     case = z_size_case(tmp_path)
-    image = case.root / "images" / "ref_merged" / "F1.tif"
-    image.parent.mkdir(parents=True)
+    image = case.root / "fovs" / "F1" / "reference.tif"
+    image.parent.mkdir(parents=True, exist_ok=True)
     with tifffile.TiffWriter(image) as writer:
         writer.write(np.zeros((2, 16, 16), np.uint16), photometric="minisblack")
         writer.write(np.zeros((8, 8), np.uint8), photometric="minisblack")
     with tifffile.TiffFile(image) as tif:
         assert len(tif.series) == 2
     (row,) = z_size_rows(case.collect()[1])
-    assert row[2] == "input_changed" and row[3].startswith("images/ref_merged/F1.tif is not a ZYX or YX image")
+    assert row[2] == "input_changed" and row[3].startswith("fovs/F1/reference.tif is not a ZYX or YX image")
 
     class Gone(_Inputs):
         def verify(self, path, kind, recorded=None):
             return Unavailable("input_missing", self.relative(path))
     found = reference_image_z_size(Gone(case.root), case.root, case.fov_ids)
-    assert found == Unavailable("input_missing", "images/ref_merged/F1.tif")
+    assert found == Unavailable("input_missing", "fovs/F1/reference.tif")
 
 
 def test_z_size_from_the_dataset_reference_image_pattern(tmp_path):
     """Through Dataset.report with ``reference_image="refs/{fov_id}_ref.tif"``: the Z size comes from F2's float32
-    image of 4 planes there, and that file is listed; a one-plane image under images/ref_merged is not read. Without
-    the pattern's files the Z size is not_recorded, although images/ref_merged holds an image."""
+    image of 4 planes there, and that file is listed; a one-plane image at the default place (fovs/F1/reference.tif)
+    is not read. Without the pattern's files the Z size is not_recorded, although the default place holds an
+    image."""
     from starfinder.dataset import Dataset
 
     from .report_fixtures import DATASET, SAMPLE_ID
     case = z_size_case(tmp_path)
     stack(case.root / "refs" / "F2_ref.tif", 4, np.float32)
-    stack(case.root / "images" / "ref_merged" / "F1.tif", 1, np.uint16)
+    stack(case.root / "fovs" / "F1" / "reference.tif", 1, np.uint16)
     dataset = Dataset(case.root / "input", case.root, DATASET, SAMPLE_ID, "output",
                       reference_image="refs/{fov_id}_ref.tif")
     result = dataset.report(case.sample, list(case.fov_ids), config=case.config)

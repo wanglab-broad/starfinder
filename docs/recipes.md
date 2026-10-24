@@ -266,7 +266,7 @@ read table (`slot="reads"`) for candidates and select its diagnostic columns
 explicitly; the default molecule table `molecules.csv` holds
 `spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score`, which
 {py:func}`~starfinder.assignment.load_molecules` reads back.
-The run record `checkpoints/FOV_001/run.json`, which `FOV.run` writes with
+The run record `fovs/FOV_001/run.json`, which `FOV.run` writes with
 `CheckpointConfig(stages=())`, holds the counts, the filter's fractions, the read
 summary, the round roles and the transforms.
 
@@ -279,7 +279,7 @@ Expected: 10 candidate rows, 7 molecule-candidate rows; the exported ZYX
 coordinates are the zero-based indices of the in-memory table.
 The script checks bounds before indexing the reference image. `summary.json`
 contains counts by gene and the molecule CSV path. `results/fovs/FOV_001/` contains
-both CSVs, and `results/checkpoints/FOV_001/run.json` is the run record with the
+both CSVs, and `results/fovs/FOV_001/run.json` is the run record with the
 counts and the detected shifts.
 
 These are per-FOV voxel coordinates and gene labels, with no cell IDs or

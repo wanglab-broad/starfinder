@@ -120,7 +120,7 @@ issue that computes it.
 
 Rows and key, as {doc}`report-contract` states them: one row per FOV of the list, in list order; key `fov_id`.
 
-Per FOV `f` of the list, with `R_f` its run record (`checkpoints/<f>/run.json`, absent for
+Per FOV `f` of the list, with `R_f` its run record (`fovs/<f>/run.json`, absent for
 a FOV without one), `P` the placement's `stitching/<sample>/fovs.csv`, and `E` the export's
 `tables/fovs.csv`:
 
@@ -752,7 +752,7 @@ same columns on both routes; only these elements differ:
 
 | Element | Route per FOV (`per_fov`) | Route after fusion (`after_fusion`) |
 | --- | --- | --- |
-| Segmentation preview of an example FOV | Labels: the assignment folder's `cell_labels.tif` and `nucleus_labels.tif` (or the linked `segmentation/<run>/labels.tif`), on the FOV's own grid. Background: the reference image `images/ref_merged/<fov>.tif` (or the `reference_image` pattern). | Labels: `segmentation_<run>.ome.tif` of the cell run (and of the nucleus run when the export has one), cut to the FOV's footprint (`fovs.csv` `footprint_*` mapped to the label grid by `floor((q − O) / S + ½)`, inclusive of the start, exclusive of the end). Background: the fused image of the marker patterns, cut to the same footprint. |
+| Segmentation preview of an example FOV | Labels: the assignment folder's `cell_labels.tif` and `nucleus_labels.tif` (or the linked `segmentation/<run>/labels.tif`), on the FOV's own grid. Background: the reference image `fovs/<fov>/reference.tif` (or the `reference_image` or `reference_image_import` pattern). | Labels: `segmentation_<run>.ome.tif` of the cell run (and of the nucleus run when the export has one), cut to the FOV's footprint (`fovs.csv` `footprint_*` mapped to the label grid by `floor((q − O) / S + ½)`, inclusive of the start, exclusive of the end). Background: the fused image of the marker patterns, cut to the same footprint. |
 | Plane of a 3D preview | The plane `z*` of the label image with the most nonzero voxels; the background is the maximum over the planes of the slab of 3 µm centred on `z*` ("Sample measurements"). | A plane (the route after fusion needs a projection sample). |
 | Cells attributed to a FOV (`n_cells`, `n_cells_retained`) | The FOV's own cells, and those it retains | The sample's cells whose ownership centroid the FOV owns (both columns equal) |
 | Population accounting | Every reason of the route per FOV, with `duplicate_observation` when the rule is on | No duplicate rows (n/a); the cells' input are the run's labels |
@@ -1110,7 +1110,7 @@ Three tables of two columns, as the mockup, without the marker row (D4):
   in the tooltip); Tile positions: `placement.json` `table`.
 * **Configuration.** Workflow: `workflow_config.path` (R4); Hash: its SHA-256; Report
   settings: `report.json` `config`, shown as its JSON in a collapsed element.
-* **Output.** Checkpoints `<output_root>/checkpoints/<fov_id>/`; Placement
+* **Output.** FOV folders `<output_root>/fovs/<fov_id>/`; Placement
   `stitching/<sample>/`; Sample export `export/<sample>/`; Report
   `report/<sample>/report.html`; Report tables `report/<sample>/tables/`. Every place
   exists or is marked "not written".
@@ -1297,7 +1297,7 @@ Rules:
 | `hand_tables` | DataFrames and dicts built in each test for the definitions: read counts; chains of results (translation `(0, 1, 2)`; affine with `A = diag(1, 1, 1.1)`, `b = (0, 0.5, −0.75)` on a 4 × 16 × 16 grid, centre (1.5, 7.5, 7.5); a dense last step); count matrices for MECR; molecule `z` values; step outputs of the dtypes uint8, uint16, float32 and bool for the bins. | none | hand-built |
 | `scene_chain` | `sample_scene_preset("sample-tiny-v1")` (2 × 2 FOVs of 5 × 36 × 36, four rounds of four channels): the FOV round images written as OME-TIFFs in the dataset layout, `FOV.run` with W-384's synthetic recipe (W-384 `scripts/synthetic_run.py`: min–max normalization to uint8 and a white top-hat of radius 3, one translation step on the channel maximum, local maxima, extraction, WTA decoding, scoring, deduplication and a filter with `end_bases`) and checkpoint stages `candidates` and `pre_qc`; the rule outputs; the truth labels imported with `import_labels(…, relabel=False)` and `FOV.assign_molecules`; the truth placement (`placement_from_table` of `placement_truth.csv`, approved) saved; `Dataset.export` on the route per FOV with `dimensionality: both`. `scene_chain_registered`: the same with the stage `registered` too. | 42 | generator addition; `anndata`; `multiview-stitcher`; `slow` |
 | `scene_chain_plane` | The same chain on `scene_plane` ({doc}`stitching-assembly-validation`, "Fixtures": one-plane FOVs of 1 × 36 × 36), exported twice: on the route per FOV, and on the route after fusion with the truth nuclei projection imported and cells by `seeded_watershed` on the fused image, as `per_fov_routes` and `seeded_runs` of {doc}`sample-segmentation-validation` build them. | 42 | as `scene_chain` |
-| `scene_no_run_json` | `scene_chain`'s output root with every `checkpoints/<fov>/run.json` removed, and a second root exported with `assignment=None` from the rule outputs `fovs/<fov>/molecules.csv` alone (no checkpoint folder), as W-398 exported LN sample1. | 42 | as `scene_chain` |
+| `scene_no_run_json` | `scene_chain`'s output root with every `fovs/<fov>/run.json` removed, and a second root exported with `assignment=None` from the rule outputs `fovs/<fov>/molecules.csv` alone (no checkpoint folder), as W-398 exported LN sample1. | 42 | as `scene_chain` |
 | `scene_two_samples` | `scene_chain` as sample `s1` with its report, and `scene_chain_plane`'s route per FOV saved as sample `s2` under the same output root, without a report. | 42 | as `scene_chain` |
 
 ### Checks
@@ -1529,7 +1529,7 @@ reads of Position048 and Position049 lie within 3 voxels of an earlier read
 | 2 | Position048 and Position049 through the workflow's processing rule, side by side; then the frame check of W-384 on their reads | two FOVs' records (kept: they are two of the 64) | Fewer than 50 % of a FOV's reads within 3 voxels of an earlier read, or a share of reads inside a W-382 nucleus label more than 0.02 from the earlier table's (0.129, 0.125; W-384 `frame_check.csv`): stop before step 3 and report |
 | 3 | The other 62 FOVs, three at a time | 64 run records and the rule outputs | A FOV that reaches a limit is `resource_stop`, not retried larger, and is a failed FOV of the report |
 | 4 | **Report after the per-FOV processing**: `Dataset.report("ln_sample1", <the 64 FOVs>, assignment=None, config=<the report block>)`, with the run records and the placement | `report/ln_sample1/` | — |
-| 5 | The block: the four FOVs' labels imported and assigned | `checkpoints/<fov>/segmentation/`, `assignment/expanded_nuclei/` | — |
+| 5 | The block: the four FOVs' labels imported and assigned | `fovs/<fov>/segmentation/`, `assignment/expanded_nuclei/` | — |
 | 6 | The DAPI images copied uncompressed with axes ZYX to local scratch (below); then the exports: `ln_sample1`, `molecules_only` (`assignment=None`), `dimensionality: stack`, `scale_yx` 0.5, the DAPI image read from the copies; `ln_sample1_block`, the block's four placement rows, `assignment="expanded_nuclei"`, route per FOV, the same image; then the copies deleted | `export/ln_sample1/`, `export/ln_sample1_block/` | Less than 10 GB free on the scratch disk before the copy: no copy is made and the fusion reads the images from the share (route B below, 5,903 s, W-398); this is not a stop |
 | 7 | **Reports after the export**: `ln_sample1` (replacing the report of step 4) and `ln_sample1_block`; then `Dataset.compare_samples(["ln_sample1", "ln_sample1_block"])` | `report/` | — |
 | 8 | The manifest, last | `results/manifest.json` | — |

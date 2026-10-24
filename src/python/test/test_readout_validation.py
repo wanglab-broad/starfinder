@@ -475,7 +475,7 @@ def test_r16_two_seg_checkpoints_round_trip_exactly(tmp_path, seed, table_format
     fov = fx.two_seg_fov(tmp_path, seed).run(PipelineConfig(
         extraction=NeighborhoodSumConfig(), decoding=CodebookAwareDecoderConfig(), scoring=ReadScoreConfig(),
         deduplication=DeduplicationConfig(), filtering=ReadFilterConfig()), checkpoints=checkpoints)
-    directory = tmp_path / "checkpoints" / "FOV_001"
+    directory = tmp_path / "checkpoints" / "FOV_001" / "checkpoints"
     loaded_candidates = load_checkpoint(directory, "candidates")
     a, b = loaded_candidates["intensity_result"], fov.intensity_result
     for name in ("values", "valid", "box_voxels", "background", "noise", "background_voxels", "image_background",
@@ -534,7 +534,7 @@ def determinism_digests():
             for name in ("decoding_result", "scoring_result", "filtering_result"):
                 out[f"{prefix}/{name}"] = table_digest(getattr(fov, name).table)
             for name in ("candidates.csv", "pre_qc.csv"):
-                out[f"{prefix}/{name}"] = golden.file_digest(directory / "checkpoints" / "FOV_001" / name)
+                out[f"{prefix}/{name}"] = golden.file_digest(directory / "checkpoints" / "FOV_001" / "checkpoints" / name)
     for condition in scenes.CAL_CONDITIONS:
         book, _ = scenes.scene(condition, 103)
         spots, intensities, _, _ = scenes.pipeline(condition, 103)

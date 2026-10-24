@@ -70,10 +70,10 @@ class Chain:
     route: str | None = None
 
     def run_record(self, fov) -> dict:
-        return json.loads((self.root / "checkpoints" / fov / "run.json").read_text())
+        return json.loads((self.root / "fovs" / fov / "run.json").read_text())
 
     def write_run_record(self, fov, record) -> None:
-        (self.root / "checkpoints" / fov / "run.json").write_text(json.dumps(record, indent=2) + "\n")
+        (self.root / "fovs" / fov / "run.json").write_text(json.dumps(record, indent=2) + "\n")
 
     def collect(self, **changes):
         from starfinder.report._collect import collect_report
@@ -89,7 +89,7 @@ class Chain:
                        input_root=destination / self.input_root.relative_to(self.base),
                        scene_dir=destination / self.scene_dir.relative_to(self.base))
         for fov in self.fov_ids:
-            path = copy.root / "checkpoints" / fov / "run.json"
+            path = copy.root / "fovs" / fov / "run.json"
             if path.is_file():
                 record = json.loads(path.read_text())
                 for entry in record["inputs"]:
@@ -162,7 +162,7 @@ def build_chain(base, *, plane=False, stages=STAGES, registration=None, preproce
     dataset = Dataset(input_root, root, dataset_id, sample, "output",
                       rounds=RoundState(sequencing_rounds=rounds, reference_round=rounds[0]), channel_order=channels)
     dataset.codebook = book
-    checkpoints = CheckpointConfig(stages=tuple(stages), directory=root / "checkpoints")
+    checkpoints = CheckpointConfig(stages=tuple(stages))
     pipeline = pipeline_config(channels, registration=registration, preprocessing=preprocessing)
     all_ids = list(scene.positions.fov_id)
     fov_ids = all_ids if fov_ids is None else list(fov_ids)
@@ -179,7 +179,7 @@ def build_chain(base, *, plane=False, stages=STAGES, registration=None, preproce
                   for target, file in (("cell", "cells.tif"), ("nucleus", "nuclei.tif"))}
         fov.assign_molecules(cells=labels["cell"], nuclei=labels["nucleus"], checkpoints=checkpoints)
         stain = scene.stains[fov_id]
-        save_volume(stain[..., None] if stain.ndim == 3 else stain, checkpoints.directory / fov_id / STAIN_FILE,
+        save_volume(stain[..., None] if stain.ndim == 3 else stain, root / "fovs" / fov_id / STAIN_FILE,
                     metadata=scene.fov_metadata[fov_id])
     chain = Chain(base, root, input_root, scene_dir, sample, dataset_id, fov_ids, rounds, channels, pipeline, scene,
                   book)

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import math
 from numbers import Real
 from pathlib import Path
+import re
 
 import numpy as np
 
@@ -16,6 +17,9 @@ from starfinder._records import UNAVAILABLE
 REFERENCE_STAIN = "reference_stain"
 
 _CHANNEL_KEYS = ("channel", "name", "wavelength")
+# A channel label names the Python workflow's channel folders (images/<round>/<label>/), so it must be a safe single
+# path component.
+_SAFE_LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 
 
 @dataclass(frozen=True)
@@ -108,11 +112,15 @@ class ChannelInfo:
 
 
 def _channel_infos(values, what) -> tuple[ChannelInfo, ...]:
-    """Accepted channel forms of one round as ChannelInfo; the patterns must be unique."""
+    """Accepted channel forms of one round as ChannelInfo; the patterns must be unique safe path components."""
     if isinstance(values, (str, Mapping, ChannelInfo)):
         raise TypeError(f"{what} must be a sequence of channels, not one channel")
     infos = tuple(ChannelInfo.from_value(value) for value in values)
     patterns = [info.channel for info in infos]
+    unsafe = [p for p in patterns if not _SAFE_LABEL.fullmatch(p)]
+    if unsafe:
+        raise ValueError(f"{what} has the channel patterns {unsafe}, which are not safe single path components "
+                         f"([A-Za-z0-9][A-Za-z0-9_.-]*); a channel label names its output folder")
     repeated = sorted({p for p in patterns if patterns.count(p) > 1})
     if repeated:
         raise ValueError(f"{what} repeats the channel patterns {repeated}; patterns must be unique")

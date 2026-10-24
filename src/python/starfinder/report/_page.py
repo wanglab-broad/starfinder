@@ -724,11 +724,11 @@ class _Page:
         def place(path, shown):
             exists = path.exists()
             return f"<code>{_e(shown)}</code>" + ("" if exists else ' <span class="muted">not written</span>')
-        checkpoints = any(_layout.checkpoint_dir(root, f).is_dir() for f in c.fov_ids)
+        folders = any(_layout.fov_dir(root, f).is_dir() for f in c.fov_ids)
         report = self.folder
         output = [("Output root", f"<code>{_e(root)}</code>"),
-                  ("Checkpoints", "<code>checkpoints/&lt;fov_id&gt;/</code>" +
-                   ("" if checkpoints else ' <span class="muted">not written</span>')),
+                  ("FOV folders", f"<code>{_layout.FOVS}/&lt;fov_id&gt;/</code>" +
+                   ("" if folders else ' <span class="muted">not written</span>')),
                   ("Placement", place(_layout.stitching_dir(root, c.sample), f"{_layout.STITCHING}/{c.sample}/")),
                   ("Sample export", place(_layout.export_dir(root, c.sample), f"{_layout.EXPORT}/{c.sample}/")),
                   ("Report", f"<code>{_e(self._shown(report / 'report.html'))}</code>"),
@@ -756,8 +756,9 @@ def identity_facts(collection) -> tuple[dict, list]:
     that is unavailable (``entry=<fact>``), and ``entry=z_size``: ``not_recorded`` when no record holds a grid and
     no FOV has a reference image, or the reason no reference image could be read (``input_changed``)."""
     c = collection
-    pattern = getattr(c, "reference_image", None)
-    planes = z_size(c.export, c.placement, lambda: reference_image_z_size(c.inputs, c.root, c.fov_ids, pattern))
+    pattern, imported = getattr(c, "reference_image", None), getattr(c, "reference_image_import", None)
+    planes = z_size(c.export, c.placement,
+                    lambda: reference_image_z_size(c.inputs, c.root, c.fov_ids, pattern, imported))
     unread = planes if isinstance(planes, Unavailable) else None
     planes = None if unread is not None else planes
     facts = {"acquisition": acquisition(c.records, planes), "z_size": planes,
@@ -772,7 +773,7 @@ def identity_facts(collection) -> tuple[dict, list]:
                 rows.append(("summary.identity", unread or Unavailable(
                     "not_recorded", "no record holds a grid (export.json fusion.fovs or assembly.fovs, "
                                     "placement.json inputs) and no FOV has a reference image "
-                                    f"({pattern or _layout.REFERENCE_IMAGE})"), "entry=z_size"))
+                                    f"({imported or pattern or _layout.REFERENCE_IMAGE})"), "entry=z_size"))
         elif isinstance(value, Unavailable):
             rows.append(("summary.identity", value, f"entry={name}"))
     return facts, rows

@@ -43,16 +43,20 @@ for i in range(subtile_coords_df.shape[0]):
 # save reads_df
 reads_df.to_csv(snakemake.output[0], index=False)
 
-# visualize reads on ref_merged
-ref_merged_img_path = os.path.join(image_path, 'ref_merged', f'{current_fov_id}.tif')
+# visualize reads on the FOV's reference image: the Python backend's rule input (the file reference_image or
+# reference_image_import names), MATLAB's images/ref_merged/<fov>.tif
+if snakemake.config.get('backend', 'matlab') == 'python':
+    reference_img_path = snakemake.input.reference
+else:
+    reference_img_path = os.path.join(image_path, 'ref_merged', f'{current_fov_id}.tif')
 # project every axis except Y and X; OME-TIFF (ZCYX), tifffile ZYXC and plain stacks differ in order
-with TiffFile(ref_merged_img_path) as tif:
+with TiffFile(reference_img_path) as tif:
     series = tif.series[0]
-    ref_merged_img = series.asarray()
-    ref_merged_img = np.max(ref_merged_img, axis=tuple(i for i, a in enumerate(series.axes) if a not in 'YX'))
+    reference_img = series.asarray()
+    reference_img = np.max(reference_img, axis=tuple(i for i, a in enumerate(series.axes) if a not in 'YX'))
 
 plt.figure(figsize=(15,15))
-plt.imshow(ref_merged_img, cmap='gray')
+plt.imshow(reference_img, cmap='gray')
 plt.plot(reads_df.x, reads_df.y, '.', color='red', markersize=1)
 plt.axis('off')
 plt.savefig(snakemake.output[1])

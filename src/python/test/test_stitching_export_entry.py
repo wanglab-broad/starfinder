@@ -343,7 +343,7 @@ def test_check_fusion_inputs(folder):
     # A grid other than the placement's: through the entry (assemble meets it first), and with assemble off.
     grid = inputs[1].grid
     other = ImageMetadata("fov", (1.0, 0.5, 0.5), (0.0, 0.0, 0.0), grid.metadata.direction_zyx, "µm")
-    save_volume(np.zeros(grid.shape_zyx, np.uint8), folder.root / "images" / "ref_merged" / "Position002.tif",
+    save_volume(np.zeros(grid.shape_zyx, np.uint8), folder.root / "fovs" / "Position002" / "reference.tif",
                 metadata=other)
     unchanged(folder, lambda: export(folder), IncompatibleGeometryError, "Position002")
     unchanged(folder, lambda: export(folder, ExportConfig(route="per_fov", assemble=False)), IncompatibleGeometryError,

@@ -237,7 +237,7 @@ def saved_assignments(tmp_path, results):
     """Write each FOV's §2.9 folder <tmp>/<fov>/assignment/default; return fov -> folder."""
     folders = {}
     for fov, result in results.items():
-        folder = tmp_path / "checkpoints" / fov / "assignment" / "default"
+        folder = tmp_path / "fovs" / fov / "assignment" / "default"
         write_assignment(folder, with_record(result, name="default"), metadata=unit_grid(TILE_ZYX).metadata)
         folders[fov] = folder
     return folders

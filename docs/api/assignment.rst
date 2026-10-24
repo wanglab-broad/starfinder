@@ -83,7 +83,7 @@ builds the molecule table from the FOV's spot and read results and the codebook'
 calls the entry on ``FOV.reference_grid()`` (also the grid of the saved reference image
 in a process that segmented from saved images) and stores the result in
 ``FOV.assignment_results[name]``. With ``checkpoints=CheckpointConfig(…)`` it also
-writes ``<checkpoint dir>/<fov_id>/assignment/<name>/``: the four tables, ``assignment.json``
+writes ``fovs/<fov_id>/assignment/<name>/``: the four tables, ``assignment.json``
 and every label image it used that is not saved under its run, linking the saved ones;
 ``FOV.load_assignment(name)`` reads the folder and the linked files back, checking every
 recorded SHA-256 (see :doc:`../checkpoints`).

@@ -256,13 +256,14 @@ def test_the_python_workflow_rule_mirrors_the_matlab_outputs(tmp_path, maximum_p
 
     output = tmp_path / "output" / "dataset" / "output"
     names = sorted(p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file())
-    assert names == ["fovs/FOV/nuclei_registration.json", "images/morph/DAPI/FOV.tif", "images/morph/GFAP/FOV.tif",
-                     "images/morph/Nissl/FOV.tif"]
+    # Each channel's folder is its unique channel label (MATLAB names it by the descriptive name).
+    assert names == ["fovs/FOV/nuclei_registration.json", "images/morph/ch00/FOV.tif", "images/morph/ch01/FOV.tif",
+                     "images/morph/ch02/FOV.tif"]
     assert all(Path(path).is_file() for path in snakemake.output)
     record = json.loads((output / "fovs" / "FOV" / "nuclei_registration.json").read_text())
     assert list(record["registration"]) == ["morph"]
     assert record["registration"]["morph"][0]["qc"]["details"]["transform"]["displacement_zyx"] == [0, 3, -2]
-    for c, folder in enumerate(("DAPI", "Nissl", "GFAP")):
+    for c, folder in enumerate(("ch00", "ch01", "ch02")):
         saved = tifffile.imread(output / "images" / "morph" / folder / "FOV.tif")
         assert saved.dtype == np.uint16
         if maximum_projection:

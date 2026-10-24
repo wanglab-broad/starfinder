@@ -136,15 +136,16 @@ def test_run_neither_loads_nor_changes_an_other_round(raw, mode, tmp_path):
     assert files(directory) == files(plain_directory)
     assert not any(name.startswith("other_rounds") for name in files(directory))
     assert sorted(name for name in files(directory) if name.endswith(".tif")) == [
-        "registered/round1.ome.tif", "registered/round2.ome.tif"]
-    header = json.loads((directory / "registered" / "transforms.json").read_text())
+        "checkpoints/registered/round1.ome.tif", "checkpoints/registered/round2.ome.tif"]
+    header = json.loads((directory / "checkpoints" / "registered" / "transforms.json").read_text())
     assert header["image_rounds"] == ["round1", "round2"] and list(header["transforms"]) == ["round2"]
     assert list(header["registration_attempts"]) == ["round2"] and list(header["channels"]) == ["round1", "round2"]
     # Every sequencing output, the OME-TIFFs included, is byte-identical to the run of the dataset without the other
     # round and the stain.
-    for name in ("registered/round1.ome.tif", "registered/round2.ome.tif", "candidates.csv", "pre_qc.csv"):
+    for name in ("checkpoints/registered/round1.ome.tif", "checkpoints/registered/round2.ome.tif",
+                 "checkpoints/candidates.csv", "checkpoints/pre_qc.csv"):
         assert (directory / name).read_bytes() == (plain_directory / name).read_bytes(), name
-    for name in ("registered/transforms.json", "candidates.json", "pre_qc.json"):
+    for name in ("checkpoints/registered/transforms.json", "checkpoints/candidates.json", "checkpoints/pre_qc.json"):
         written, expected = (json.loads((d / name).read_text()) for d in (directory, plain_directory))
         assert written["rounds"]["other_rounds"] == ["morph"] and expected["rounds"]["other_rounds"] == []
         assert without(written, "rounds") == without(expected, "rounds"), name
@@ -463,7 +464,7 @@ def test_the_registered_header_records_the_channels_and_reloads_without_them(raw
     checkpoints = CheckpointConfig(directory=tmp_path / "ck", stages=("registered",))
     fov = ds.fov("FOV").run(PipelineConfig(load=ImageLoadConfig(channel_labels=LABELS), registration=REGISTRATION),
                             checkpoints=checkpoints)
-    path = tmp_path / "ck" / "FOV" / "registered" / "transforms.json"
+    path = tmp_path / "ck" / "FOV" / "checkpoints" / "registered" / "transforms.json"
     header = json.loads(path.read_text())
     assert header["format_version"] == FORMAT_VERSION == 2
     assert header["channels"] == {name: [c.record() for c in SEQUENCING] for name in ("round1", "round2")}
@@ -487,11 +488,12 @@ def test_the_registered_header_records_the_channels_and_reloads_without_them(raw
 def test_the_registered_checkpoint_holds_no_other_round(raw, tmp_path):
     fov = make_dataset(raw).fov("FOV").load_images(rounds=["round1", "round2"]).prepare_morphology()
     fov.save_checkpoint("registered", checkpoints=CheckpointConfig(directory=tmp_path / "ck"))
-    header = json.loads((tmp_path / "ck" / "FOV" / "registered" / "transforms.json").read_text())
+    header = json.loads((tmp_path / "ck" / "FOV" / "checkpoints" / "registered" / "transforms.json").read_text())
     assert header["image_rounds"] == ["round1", "round2"] and header["transforms"] == {}
     assert header["registration_attempts"] == {} and header["applications"] == {}
-    assert files(tmp_path / "ck" / "FOV") == ["registered/round1.ome.tif", "registered/round2.ome.tif",
-                                              "registered/transforms.json"]
+    assert files(tmp_path / "ck" / "FOV") == ["checkpoints/registered/round1.ome.tif",
+                                              "checkpoints/registered/round2.ome.tif",
+                                              "checkpoints/registered/transforms.json"]
 
 
 # --- Segmentation in one process -------------------------------------------------------------------------

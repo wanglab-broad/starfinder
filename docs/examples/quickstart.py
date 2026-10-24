@@ -60,7 +60,7 @@ def main(output: Path) -> None:
     summary = {"preset": "tiny", "seed": truth["seed"], "fovs": {}}
     for fov_id in dataset.fov_ids(len(truth["fovs"]), start=1):
         fov = dataset.fov(fov_id)
-        # stages=() writes the run record checkpoints/<fov>/run.json and no stage files.
+        # stages=() writes the run record fovs/<fov>/run.json and no stage files.
         fov.run(pipeline, checkpoints=CheckpointConfig(stages=()))
         for volume in fov.images.values():
             assert volume.shape == (8, 128, 128, 4)
@@ -82,7 +82,7 @@ def main(output: Path) -> None:
         molecules_path = fov.export_spots()
         # The run record holds the round roles, the registration attempts and transforms, the counts, the
         # filter's fractions and the read summary; export_spots added the table as outputs.molecules.
-        run_record = json.loads((fov.paths.checkpoint_dir / "run.json").read_text())
+        run_record = json.loads(fov.paths.run_record.read_text())
         assert run_record["status"] == "succeeded" and run_record["rounds"]["reference_round"] == "round1"
         assert run_record["counts"]["filtering"]["accepted"] == len(fov.filtering_result.accepted)
         assert run_record["counts"]["filtering"]["fractions"]["accepted"] == fov.filtering_result.fractions["accepted"]

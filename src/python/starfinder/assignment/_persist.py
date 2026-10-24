@@ -1,6 +1,6 @@
 """The saved layout of an assignment (docs/assignment-contract.md, "Persistence", option L1).
 
-``<checkpoint dir>/<fov_id>/assignment/<name>/`` holds ``molecules``, ``cells``,
+``fovs/<fov_id>/assignment/<name>/`` (the FOV folder) holds ``molecules``, ``cells``,
 ``counts`` and (with nuclei) ``nuclei`` as CSV or Parquet through the checkpoint table
 writer, ``assignment.json`` and the label images of the table "Label images of a
 checkpointed assignment": ``territories.tif`` with an expansion, and ``cell_labels.tif``
@@ -28,8 +28,9 @@ NUCLEUS_LABELS_FILE = "nucleus_labels.tif"
 
 
 def assignment_directory(fov_directory, name) -> Path:
-    """``<fov checkpoint dir>/assignment/<name>``."""
-    return Path(fov_directory) / "assignment" / name
+    """``<fov folder>/assignment/<name>`` (``_layout.assignment_dir``)."""
+    from starfinder._layout import assignment_dir
+    return assignment_dir(fov_directory, name)
 
 
 def _files(directory):

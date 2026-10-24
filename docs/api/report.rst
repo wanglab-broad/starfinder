@@ -6,7 +6,7 @@ The processing report (§2.11): what the records of one sample's processing hold
 
 The report describes a run and judges nothing: it gives no pass or fail verdict and no
 composite score, and it filters, corrects or rewrites nothing. It reads the records at their
-fixed places under the output root (each FOV's ``checkpoints/<fov>/run.json``, with
+fixed places under the output root (each FOV's ``fovs/<fov>/run.json``, with
 ``registered/transforms.json`` for a run record written before ``transforms``; the placement
 ``stitching/<sample>/``; the per-FOV ``segmentation/<run>/`` and ``assignment/<name>/``
 records; the export ``export/<sample>/``), checks each file against the SHA-256 a record holds

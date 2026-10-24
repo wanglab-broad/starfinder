@@ -9,12 +9,14 @@ Python processing rules request their run.json and no log, and the MATLAB rules 
 FOV of test_report_records_golden.py and the 8 x 32 x 32 other-round FOV of test_registration_other_rounds.py.
 """
 from dataclasses import asdict, replace
+import itertools
 import json
 import re
 from pathlib import Path
 
 import pytest
 
+from starfinder._snakemake import _reference_image_outputs, _run_record_outputs
 from starfinder.readout import summarize_reads
 
 from .test_registration_other_rounds import TRANSLATION, external, other_round_fov
@@ -108,8 +110,12 @@ RULES = ("rsf_single_fov", "gr_single_fov_subtile", "lrsf_single_fov_subtile", "
          "deep_rsf_subtile", "nuclei_registration")
 
 
-def declared_outputs(backend, rule, output_dir, fovs, subtiles):
-    """The output files of ``rule`` in the backend's rule files, expanded over the FOVs and subtiles."""
+def declared_outputs(backend, rule, names, fovs, subtiles):
+    """The output files of ``rule`` in the backend's rule files, expanded over the FOVs and subtiles.
+
+    The output section is evaluated with the names of common.smk (``names``; the Python rules name the FOV folder's
+    run record and reference image by variables, W-564) and stand-ins for Snakemake's ``expand`` and ``temp``.
+    """
     for name in RULE_FILES[backend]:
         text = (ROOT / "workflow" / "rules" / name).read_text()
         match = re.search(rf"^rule {rule}:\n(.*?)(?=^rule |\Z)", text, flags=re.MULTILINE | re.DOTALL)
@@ -118,13 +124,13 @@ def declared_outputs(backend, rule, output_dir, fovs, subtiles):
     else:
         raise AssertionError(f"{rule} is in no {backend} rule file")
     section = re.search(r"^    output:\n(.*?)^    \w+:", match.group(1), flags=re.MULTILINE | re.DOTALL).group(1)
-    patterns = re.findall(r'expand\("([^"]+)"', section)
-    files = []
-    for pattern in patterns:
-        pattern = pattern.replace("{output_dir}", str(output_dir)).replace("{{fovID}}", "{fov}")
-        pattern = pattern.replace("{{n_subtile}}", "{i}").replace("{n_subtile}", "{i}")
-        files += [pattern.format(fov=fov, i=i) for fov in fovs for i in subtiles]
-    return set(files)
+
+    def expand(pattern, **values):
+        values = {key: value if isinstance(value, list) else [value] for key, value in values.items()}
+        return [pattern.format(**dict(zip(values, combination))) for combination in itertools.product(*values.values())]
+    entries = eval(f"[{section}]", {**names, "expand": expand, "temp": lambda value: value})
+    patterns = [str(p) for entry in entries for p in (entry if isinstance(entry, list) else [entry])]
+    return {pattern.format(fovID=fov, n_subtile=i) for pattern in patterns for fov in fovs for i in subtiles}
 
 
 @pytest.mark.workflow
@@ -141,17 +147,21 @@ def test_the_final_targets_branch_on_the_backend(tmp_path, monkeypatch, backend,
     targets = names["get_overall_output"](None)
     assert targets and len(set(targets)) == len(targets)
     # Every target is an output of the rule in the backend's own rule files.
-    assert set(targets) <= declared_outputs(backend, rule, output_root, fovs, subtiles)
+    # The names the Python block of common.smk adds after its preamble, for the Python rule files.
+    names.update(RUN_RECORD=_run_record_outputs(output_root, ["{fovID}"])[0],
+                 SUBTILE_RUN_RECORD=_run_record_outputs(output_root, ["{fovID}"], ["{n_subtile}"])[0],
+                 REFERENCE_IMAGE_OUTPUT=_reference_image_outputs(config, output_root, ["{fovID}"]))
+    assert set(targets) <= declared_outputs(backend, rule, names, fovs, subtiles)
     logs = [t for t in targets if t.startswith(f"{output_root}/log/")]
     if backend == "python":
         assert logs == []
         if rule == "nuclei_registration":
             assert targets == [f"{output_root}/fovs/{fov}/nuclei_registration.json" for fov in fovs]
         elif rule in ("lrsf_single_fov_subtile", "deep_rsf_subtile"):
-            assert {f"{output_root}/checkpoints/{fov}/subtile_{i}/run.json" for fov in fovs for i in subtiles} <= set(
+            assert {f"{output_root}/fovs/{fov}/subtile_{i}/run.json" for fov in fovs for i in subtiles} <= set(
                 targets)
         else:
-            assert {f"{output_root}/checkpoints/{fov}/run.json" for fov in fovs} <= set(targets)
+            assert {f"{output_root}/fovs/{fov}/run.json" for fov in fovs} <= set(targets)
     else:
         # MATLAB's rules keep their logs (deep_create_subtile requests none) and write no run.json.
         assert bool(logs) is (rule != "deep_create_subtile")

@@ -123,7 +123,7 @@ def test_a_shared_column_that_disagrees_raises(tmp_path, column):
 
 
 def run_record(fov):
-    return json.loads((fov.paths.checkpoint_dir / "run.json").read_text())
+    return json.loads((fov.paths.fov_dir / "run.json").read_text())
 
 
 def test_run_json_records_the_exported_tables(tmp_path):
@@ -136,8 +136,8 @@ def test_run_json_records_the_exported_tables(tmp_path):
     assert {k: v for k, v in record.items() if k != "outputs"} == before
     entry = record["outputs"]["molecules"]
     assert set(entry) == {"path", "sha256", "molecules_sha256", "dtypes", "rows"}
-    assert entry["path"] == "../../fovs/FOV/molecules.csv"
-    assert (fov.paths.checkpoint_dir / entry["path"]).resolve() == path.resolve()
+    assert entry["path"] == "molecules.csv"
+    assert (fov.paths.fov_dir / entry["path"]).resolve() == path.resolve()
     assert entry["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
     loaded = load_molecules(path, genes=("gene",))
     joined = molecule_table(fov.spot_result, fov.filtering_result, genes=("gene",))
@@ -145,20 +145,21 @@ def test_run_json_records_the_exported_tables(tmp_path):
     assert entry["dtypes"] == MOLECULE_DTYPES and entry["rows"] == len(loaded) == 2
     reads = fov.export_spots("reads")
     entry = run_record(fov)["outputs"]["reads"]
-    assert entry["path"] == "../../fovs/FOV/reads.csv" and entry["molecules_sha256"] is None
+    assert entry["path"] == "reads.csv" and entry["molecules_sha256"] is None
     assert entry["sha256"] == hashlib.sha256(reads.read_bytes()).hexdigest() and entry["rows"] == 2
     assert run_record(fov)["outputs"]["molecules"]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
     # A later run without checkpoints has no record: export_spots records nothing, the earlier run.json stays.
-    saved = (fov.paths.checkpoint_dir / "run.json").read_bytes()
+    saved = (fov.paths.fov_dir / "run.json").read_bytes()
     fov.run(complete())
     fov.export_spots()
-    assert (fov.paths.checkpoint_dir / "run.json").read_bytes() == saved
+    assert (fov.paths.fov_dir / "run.json").read_bytes() == saved
 
 
 def test_without_a_checkpointed_run_nothing_is_recorded(tmp_path):
     fov = resident(dataset(tmp_path)).run(complete())
     fov.export_spots()
-    assert not (tmp_path / "out" / "checkpoints").exists()
+    assert not (tmp_path / "out" / "fovs" / "FOV" / "run.json").exists()
+    assert not (tmp_path / "out" / "fovs" / "FOV" / "checkpoints").exists()
 
 
 def test_load_molecules_keeps_the_identities_and_checks_the_file(tmp_path):

@@ -5,7 +5,7 @@ Route per FOV (and a sample without an export whose assignment folders exist): t
 own label images, the files ``assignment.json`` ``inputs.cells.file`` and
 ``inputs.nuclei.file`` name (``cell_labels.tif``, ``nucleus_labels.tif`` or the linked
 ``segmentation/<run>/labels.tif``), each checked against its recorded SHA-256, on the FOV's
-grid, over its reference image ``images/ref_merged/<fov>.tif``. A 3D preview shows the plane
+grid, over its reference image (``fovs/<fov>/reference.tif`` by default). A 3D preview shows the plane
 ``z*`` of the cell label image with the most nonzero voxels, over the maximum of the
 reference image over the planes of the slab of 3 µm centred on ``z*``.
 
@@ -126,12 +126,12 @@ class _Previews:
         c = self.c
         if c.no_cells is not None:
             return c.no_cells
+        folder = _layout.assignment_dir(_layout.fov_dir(c.root, fov), c.assignment)
         if fov not in c.assignments:
             if fov in c.lane_missing:
                 return c.lane_missing[fov]
-            return Unavailable("input_missing", f"checkpoints/{fov}/assignment/{c.assignment}/assignment.json")
+            return Unavailable("input_missing", f"{c.inputs.relative(folder)}/{_layout.ASSIGNMENT_RECORD}")
         record, _ = c.assignments[fov]
-        folder = _layout.checkpoint_dir(c.root, fov) / "assignment" / c.assignment
         labels = {}
         for key in ("cells", "nuclei"):
             entry = _get(record, "inputs", key, "file")
@@ -146,7 +146,8 @@ class _Previews:
             if isinstance(image, Unavailable):
                 return image
             labels[key] = _zyx(image)
-        path = _layout._FovPaths(c.root, fov).ref_merged_tif
+        pattern = getattr(c, "reference_image", None) or _layout.REFERENCE_IMAGE
+        path = _layout.reference_image_path(c.root, fov, pattern, getattr(c, "reference_image_import", None))
         background = _read_image(c.inputs, path, "reference_image")
         if isinstance(background, Unavailable):
             return background

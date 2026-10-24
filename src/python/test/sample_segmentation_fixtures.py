@@ -18,7 +18,7 @@ the two seam cases of the comparison on ``fused_pair``'s two FOVs, with the mole
 the change of ``scene_plane`` applied to ``sample-small-v1``.
 
 :func:`write_scene` writes a scene as a dataset (the saved placement, ``images/<stain>/``
-ZYX TIFFs with their axes, ``images/ref_merged/`` with the grid, ``fovs/<fov>/molecules.csv``
+ZYX TIFFs with their axes, ``fovs/<fov>/reference.tif`` with the grid, ``fovs/<fov>/molecules.csv``
 tables, the codebook); :func:`fuse_scene` calls ``fuse_images`` alone on it at a factor ``k``;
 :func:`quad_grid_placement` (W-446) saves ``fused_quad``'s placement with grid cells.
 :func:`truth_import`, :func:`seeded_runs`, :func:`truth_runs`, :func:`length_configs` and
@@ -309,7 +309,7 @@ def write_scene(tmp_path, scene) -> SceneFolder:
     save_placement(placement, root / "stitching" / SAMPLE)
     grids = {f: scene.grid() for f in scene.ids}
     for fov in scene.ids:
-        save_volume(scene.cut(scene.stain("dapi"), fov), root / "images" / "ref_merged" / f"{fov}.tif",
+        save_volume(scene.cut(scene.stain("dapi"), fov), root / "fovs" / fov / "reference.tif",
                     metadata=grids[fov].metadata)
         for name in STAINS:
             path = root / "images" / name / f"{fov}.tif"
@@ -467,7 +467,7 @@ def write_scene_plane(tmp_path, name="scene_plane") -> SceneFolder:
                                   reviewer="test", note="scene_plane truth placement")
     save_placement(placement, root / "stitching" / SAMPLE)
     for fov in ids:
-        save_volume(generated.stains[fov], root / "images" / "ref_merged" / f"{fov}.tif",
+        save_volume(generated.stains[fov], root / "fovs" / fov / "reference.tif",
                     metadata=grids[fov].metadata)
         for name in STAINS:
             path = root / "images" / name / f"{fov}.tif"
@@ -537,7 +537,7 @@ def write_folder(tmp_path, name) -> SceneFolder:
 def per_fov_routes(folder, *, assignment=None, name="default"):
     """The route per FOV of the same fixture: per FOV the truth labels cut at its origin imported (``relabel``
     false), assigned with ``assignment`` (the AssignmentConfig of the route after fusion) and saved as the §2.9
-    assignment folder ``checkpoints/<fov>/assignment/<name>/``. Returns the AssignmentResults by FOV."""
+    assignment folder ``fovs/<fov>/assignment/<name>/``. Returns the AssignmentResults by FOV."""
     import json as json_module
 
     from starfinder.assignment import AssignmentConfig, assign_molecules, load_molecules
@@ -562,6 +562,6 @@ def per_fov_routes(folder, *, assignment=None, name="default"):
         result = assign_molecules(molecules, labels["cell"], grid=grid, nuclei=labels["nucleus"], config=assignment)
         from dataclasses import replace
         result = replace(result, record=dict(result.record, name=name))
-        write_assignment(assignment_directory(root / "checkpoints" / fov, name), result, metadata=grid.metadata)
+        write_assignment(assignment_directory(root / "fovs" / fov, name), result, metadata=grid.metadata)
         results[fov] = result
     return results

@@ -2,6 +2,8 @@
 
 Status: Accepted (W-246, 2026-09-30, at 47057aa)
 
+Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
 This page records how registration behaves at revision `2e48d3f` (branch
 `runner/s26-spec-20260929`, on `dev` at `1b4db5a`; the registration source is
 unchanged since `1b4db5a`), before the Chapter II §2.6 work changes it. It is

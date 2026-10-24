@@ -1,4 +1,4 @@
-"""Small per-FOV run record (run.json) written while checkpoints are active."""
+"""Small per-FOV run record (run.json) in the FOV folder, written while checkpoints are active."""
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -8,7 +8,7 @@ from pathlib import Path
 import traceback
 
 from starfinder import _records
-from starfinder._layout import RUN_RECORD
+from starfinder._layout import CHECKPOINTS, REGISTERED, RUN_RECORD, checkpoint_dir
 from starfinder._records import file_sha256, software
 
 logger = logging.getLogger("starfinder")
@@ -48,8 +48,9 @@ def _workflow_config_record(dataset):
 def _transforms(fov, written):
     """R1: per registered moving round, the entries of transforms.json (_transform_json) and its WarpConfig.
 
-    written lists the files the stage registered wrote; a dense field or B-spline
-    coefficients are named only when that stage wrote the round's field file.
+    written lists the files the stage registered wrote, relative to the FOV
+    folder; a dense field or B-spline coefficients are named only when that
+    stage wrote the round's field file.
     """
     from starfinder._checkpoint import _transform_json
     rounds = set(fov._pipeline_rounds())
@@ -59,7 +60,7 @@ def _transforms(fov, written):
         # Other rounds (prepare_morphology, register on other rounds) are not processed by FOV.run.
         if name not in rounds or not results:
             continue
-        field_name = f"{name}_field.npz" if f"registered/{name}_field.npz" in written else None
+        field_name = f"{name}_field.npz" if f"{CHECKPOINTS}/{REGISTERED}/{name}_field.npz" in written else None
         transforms[name] = {"reference": fov.rounds.reference_round,
                             "results": [_transform_json(r, i, field_name) for i, r in enumerate(results)],
                             "application_config": applications.get(name, results[-1].application_config)}
@@ -79,11 +80,16 @@ def add_output(path, slot, entry):
 
 
 class _RunRecord:
-    """Mutable run.json content; rewritten atomically at step boundaries."""
+    """Mutable run.json content; rewritten atomically at step boundaries.
+
+    directory is the FOV folder, which holds run.json; the stage files go to its
+    checkpoint folder, and the record lists them relative to the FOV folder.
+    """
 
     def __init__(self, fov, directory, checkpoints, config, execution):
         self.fov = fov
         self.directory = Path(directory)
+        self.checkpoint_directory = checkpoint_dir(self.directory)
         self.checkpoints = checkpoints
         self.failure = None
         self._methods = None
@@ -98,7 +104,7 @@ class _RunRecord:
             "status": "running", "started_at": _now(), "ended_at": None, "error": None,
             **software(),
             # The dataset's readout mode (docs/readout-contract.md) is recorded with the configs.
-            "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints,
+            "config": {"pipeline": config, "execution": execution, CHECKPOINTS: checkpoints,
                        "readout_mode": dataset.readout_mode, "encoding": encoding},
             # The workflow configuration file of a workflow rule (null outside the workflow).
             "workflow_config": _workflow_config_record(dataset),
@@ -108,7 +114,7 @@ class _RunRecord:
             "rounds": asdict(fov.rounds),
             "inputs": [], "codebook": _codebook_record(dataset), "steps": [], "preprocessing": None,
             "registration": {}, "transforms": {}, "counts": {},
-            "checkpoint_directory": str(self.directory), "checkpoints": {},
+            "checkpoint_directory": str(self.checkpoint_directory), CHECKPOINTS: {},
         }
 
     @property
@@ -122,7 +128,8 @@ class _RunRecord:
                 "sha256": file_sha256(path) if self.checkpoints.hash_inputs else None})
 
     def add_checkpoint(self, stage, files):
-        self.data["checkpoints"].setdefault(stage, []).extend(files)
+        """Record a stage's files, given relative to the checkpoint folder, relative to the FOV folder."""
+        self.data[CHECKPOINTS].setdefault(stage, []).extend(f"{CHECKPOINTS}/{name}" for name in files)
 
     def add_methods(self, entries):
         """Provenance entries of the methods the current step ran; the step's record gets them as methods."""
@@ -170,7 +177,7 @@ class _RunRecord:
             counts["summary"] = summarize_reads(fov.results)
         self.data.update(preprocessing=fov.preprocessing_record or None,
                          registration=fov.registration_attempts,
-                         transforms=_transforms(fov, self.data["checkpoints"].get("registered", [])), counts=counts)
+                         transforms=_transforms(fov, self.data[CHECKPOINTS].get("registered", [])), counts=counts)
         # Through the module, so that a test can make the write fail.
         _records.write_json(self.data, self.path)
 

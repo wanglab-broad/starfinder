@@ -62,11 +62,11 @@ def golden_dataset(root: Path) -> Dataset:
 
 
 def run(dataset: Dataset, stages, config: PipelineConfig | None = None, overwrite=False):
-    """FOV_001 run with checkpoints; (the FOV, its run.json, the files of its checkpoint folder)."""
+    """FOV_001 run with checkpoints; (the FOV, its run.json, the files of its FOV folder)."""
     fov = dataset.fov("FOV_001")
     fov.run(config or pipeline(), execution=ExecutionConfig(),
             checkpoints=CheckpointConfig(stages=stages, overwrite=overwrite))
-    folder = fov.paths.checkpoint_dir
+    folder = fov.paths.fov_dir
     files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
     return fov, json.loads((folder / "run.json").read_text()), files
 
@@ -149,7 +149,7 @@ def test_r1_transforms_are_the_entries_of_transforms_json(registered_run):
     dense = [r["transform"] for r in record["transforms"]["round2"]["results"] if r["transform"]["kind"] == "dense"]
     for transform in dense:
         assert transform["field"] == ("round2_field.npz" if registered else None)
-        assert ("registered/round2_field.npz" in files) == registered
+        assert ("checkpoints/registered/round2_field.npz" in files) == registered
     if recipe == "translation_affine":
         affine = record["transforms"]["round2"]["results"][1]["transform"]
         assert len(affine["matrix_zyx"]) == 4 and all(len(row) == 4 for row in affine["matrix_zyx"])
@@ -168,7 +168,7 @@ def test_r1_without_registration_and_with_a_failed_round(tmp_path):
     dataset = golden_dataset(tmp_path / "failed")
     with pytest.raises(RegistrationRejectedError):
         run(dataset, NO_REGISTERED, replace(pipeline(), registration=rejected))
-    record = json.loads((dataset.fov("FOV_001").paths.checkpoint_dir / "run.json").read_text())
+    record = json.loads((dataset.fov("FOV_001").paths.fov_dir / "run.json").read_text())
     assert record["status"] == "failed" and record["error"]["round"] == "round2"
     assert record["transforms"] == {}
     assert [a["outcome"] for a in record["registration"]["round2"]] == ["rejected"]
@@ -280,8 +280,10 @@ def run_rule(config: dict, codebook: Path):
                                 wildcards=SimpleNamespace(fovID="FOV_001"))
     runpy.run_path(str(ROOT / "workflow" / "scripts" / "rsf_single_fov.py"), init_globals={"snakemake": snakemake})
     paths = from_workflow_config(config).dataset.fov("FOV_001").paths
-    folder = paths.checkpoint_dir
-    files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()) if folder.exists() else []
+    folder = paths.fov_dir
+    # The run's own files: run.json and its checkpoint folder (the rule also writes the reference image and molecules).
+    files = sorted(name for name in (p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
+                   if name == "run.json" or name.startswith("checkpoints/")) if folder.exists() else []
     logs = sorted(p.relative_to(paths.output_root).as_posix() for p in (paths.output_root / "log").rglob("*"))
     record = json.loads((folder / "run.json").read_text()) if "run.json" in files else None
     return record, files, logs
@@ -320,7 +322,8 @@ def test_r5_the_checkpoints_key_adds_stages_and_a_rerun_replaces_the_record(scen
     assert files == ["run.json"]
     staged = workflow_config(root, "rerun", checkpoints={"stages": ["candidates", "pre_qc"]})
     second, files, _ = run_rule(staged, codebook)
-    assert files == ["candidates.csv", "candidates.json", "pre_qc.csv", "pre_qc.json", "run.json"]
+    assert files == ["checkpoints/candidates.csv", "checkpoints/candidates.json", "checkpoints/pre_qc.csv",
+                     "checkpoints/pre_qc.json", "run.json"]
     assert second["config"]["checkpoints"]["stages"] == ["candidates", "pre_qc"]
     assert second["started_at"] >= first["ended_at"]
     # The configuration file changed with the key, and the record names the new bytes.

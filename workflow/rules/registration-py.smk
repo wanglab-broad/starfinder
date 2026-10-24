@@ -1,8 +1,9 @@
 """
     Python backend: Registration rules
     Mirrors registration.smk but uses Python scripts via Snakemake script: directive.
-    The processing rules declare their FOV's run.json instead of MATLAB's log files, and
-    nuclei_registration its fovs/<fov>/nuclei_registration.json.
+    The processing rules declare their FOV's run.json (RUN_RECORD, in the FOV folder fovs/<fov>/) instead of
+    MATLAB's log files, and the reference image they write (REFERENCE_IMAGE_OUTPUT: the file reference_image
+    names, none with reference_image_import); nuclei_registration declares its fovs/<fov>/nuclei_registration.json.
     Uses variables from common.smk
 """
 
@@ -14,8 +15,8 @@ rule rsf_single_fov:
         expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
     output:
-        expand("{output_dir}/checkpoints/{{fovID}}/run.json", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
+        RUN_RECORD,
+        REFERENCE_IMAGE_OUTPUT,
         expand("{output_dir}/fovs/{{fovID}}/molecules.csv", output_dir=OUTPUT_DIR),
     threads: 4
     resources:
@@ -34,8 +35,8 @@ rule gr_single_fov_subtile:
         expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
     output:
-        expand("{output_dir}/checkpoints/{{fovID}}/run.json", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
+        RUN_RECORD,
+        REFERENCE_IMAGE_OUTPUT,
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_coords.csv", output_dir=OUTPUT_DIR)),
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{n_subtile}.npz",
                     output_dir=OUTPUT_DIR, n_subtile=N_SUBTILE)),
@@ -55,8 +56,8 @@ rule deep_create_subtile:
         config['config_path'].replace('.yaml', '.json'),
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
     output:
-        expand("{output_dir}/checkpoints/{{fovID}}/run.json", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
+        RUN_RECORD,
+        REFERENCE_IMAGE_OUTPUT,
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_coords.csv", output_dir=OUTPUT_DIR)),
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{n_subtile}.npz",
                     output_dir=OUTPUT_DIR, n_subtile=N_SUBTILE)),

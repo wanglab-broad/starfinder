@@ -38,22 +38,27 @@ from starfinder.export._segment import check_route, resolve_route, segment_off_s
 from starfinder.stitching import PlacementResult
 from starfinder.stitching._placement import OWNING
 
-REFERENCE_STAIN_FILE = Path("other_rounds") / "reference_stain" / "image.ome.tif"
-
 
 def _paths(dataset, fov):
     from starfinder._layout import _FovPaths
     return _FovPaths(Path(dataset.output_root), fov)
 
 
+def reference_stain_path(output_root, fov) -> Path:
+    """The saved reference stain of a FOV: ``fovs/<fov>/other_rounds/reference_stain/image.ome.tif``."""
+    from starfinder._layout import fov_dir
+    from starfinder.dataset._prepared import IMAGE_FILE, image_directory
+    from starfinder.dataset.types import REFERENCE_STAIN
+    return image_directory(fov_dir(output_root, fov), REFERENCE_STAIN) / IMAGE_FILE
+
+
 def source_path(dataset, fov, entry) -> Path:
     """The file of one source-image entry of ``images`` for a FOV."""
-    paths = _paths(dataset, fov)
     if entry == "reference_stain":
-        return paths.checkpoint_dir / REFERENCE_STAIN_FILE
+        return reference_stain_path(dataset.output_root, fov)
     if entry == "reference_merged":
         from starfinder._layout import reference_image_path
-        return reference_image_path(dataset.output_root, fov, dataset.reference_image)
+        return reference_image_path(dataset.output_root, fov, dataset.reference_image, dataset.reference_image_import)
     pattern = entry.split("=", 1)[1][len("file:"):].replace("{fov_id}", fov)
     path = Path(pattern)
     return path if path.is_absolute() else Path(dataset.output_root) / path
@@ -77,7 +82,7 @@ def _genes(dataset):
 def assembly_inputs(dataset, placement, assignment) -> list:
     """One AssemblyInput per FOV of the placement that has a saved assignment folder (or molecule table).
 
-    The folder is ``checkpoints/<fov_id>/assignment/<assignment>/``; with
+    The folder is ``fovs/<fov_id>/assignment/<assignment>/``; with
     ``assignment=None`` the FOV's ``fovs/<fov_id>/molecules.csv`` is read
     with ``load_molecules``, which keeps the molecules' identities, and the
     namespace ``[dataset_id, sample_id, fov_id, null]``. On the workflow's
@@ -85,7 +90,7 @@ def assembly_inputs(dataset, placement, assignment) -> list:
     configuration) the one-based ``signal/<fov_id>_goodSpots.csv`` is read with
     ``import_legacy_molecules_csv`` instead. The grid is that of the FOV's reference
     image, the file the dataset's ``reference_image`` names (default
-    ``images/ref_merged/<fov_id>.tif``): its stored metadata, or the grid the
+    ``fovs/<fov_id>/reference.tif``) or its ``reference_image_import``: its stored metadata, or the grid the
     dataset's ``voxel_size_xy`` and ``voxel_size_z`` declare for a file that
     stores none. A FOV without a saved input gets none;
     ``assemble`` then refuses an owning FOV without one.
@@ -98,7 +103,7 @@ def assembly_inputs(dataset, placement, assignment) -> list:
     for fov in placement.fovs["fov_id"]:
         paths = _paths(dataset, fov)
         if assignment is not None:
-            folder = assignment_directory(paths.checkpoint_dir, assignment)
+            folder = assignment_directory(paths.fov_dir, assignment)
             if not (folder / RECORD_FILE).is_file():
                 continue
             inputs.append(AssemblyInput(fov, _reference_grid(dataset, fov), assignment=folder))

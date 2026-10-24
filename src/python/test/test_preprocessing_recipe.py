@@ -184,7 +184,7 @@ def test_run_record_names_the_failing_step(tmp_path, faulty_step, fault):
     recipe = PreprocessingRecipe((PreprocessingStep(TophatConfig()), PreprocessingStep(FaultyConfig(fault))))
     with pytest.raises(ValueError, match="faulty_step"):
         fov.run(PipelineConfig(preprocessing=recipe), checkpoints=CheckpointConfig(stages=()))
-    data = json.loads((fov.paths.checkpoint_dir / "run.json").read_text())
+    data = json.loads((fov.paths.fov_dir / "run.json").read_text())
     assert data["status"] == "failed"
     assert (data["error"]["step"], data["error"]["round"]) == ("preprocess:faulty_step", "round1")
     assert [r["step"] for r in data["preprocessing"]["rounds"]["round1"]] == ["white_tophat"]
@@ -226,7 +226,7 @@ def test_run_record_and_checkpoint_store_per_round_step_records(tmp_path):
     fov.run(PipelineConfig(preprocessing=RECIPE_1), checkpoints=CheckpointConfig(stages=("registered",)))
     assert {name: digest(fov.images[name]) for name in fov.images} == PINNED_SEQUENCE
     directory = fov.paths.checkpoint_dir
-    entry = json.loads((directory / "run.json").read_text())["preprocessing"]
+    entry = json.loads((fov.paths.fov_dir / "run.json").read_text())["preprocessing"]
     assert entry["recipe"] == {"steps": ["min_max_normalization", "histogram_matching", "reconstruction"],
                                "post_registration": [], "extraction_source": None, "registration_source": None}
     assert entry["transforms"] == {"round1": {"detection": []}, "round2": {"detection": []}}

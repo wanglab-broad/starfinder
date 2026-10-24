@@ -69,6 +69,10 @@ def test_stitch_subtile_plots_4d_reference_image(tmp_path):
     assert preview_output.exists()
 
 
+class NamedInputs(list):
+    """A list whose entries may also be named, as Snakemake's rule input."""
+
+
 def ref_merged_fov(tmp_path, reference_image):
     """An FOV whose saved reference merged image has the W-235 content."""
     from starfinder.dataset import Dataset, RoundState
@@ -100,14 +104,19 @@ def test_stitch_subtile_plots_the_reference_merged_image(tmp_path, maximum_proje
     reference_image = np.zeros((2, 8, 8, 4), dtype=np.uint16)
     reference_image[1, 4, 3, 2] = 4000
     fov = ref_merged_fov(tmp_path, reference_image)
-    fov.save_reference_image(projection=ProjectionConfig() if maximum_projection else None)
+    reference = fov.save_reference_image(projection=ProjectionConfig() if maximum_projection else None)
+    assert reference == base_path / "fovs" / "FOV_001" / "reference.tif"
 
     reads_output = signal_path / "FOV_001_goodSpots.csv"
     preview_output = signal_path / "FOV_001_goodSpots.png"
+    # The Python backend's rule declares the reference image as its input named reference (Snakemake's named list).
+    inputs = NamedInputs([str(coords_path)])
+    inputs.reference = str(reference)
     snakemake = SimpleNamespace(
         wildcards=SimpleNamespace(fovID="FOV_001"),
-        config={"root_output_path": str(tmp_path), "dataset_id": "dataset", "output_id": "output"},
-        input=[str(coords_path)],
+        config={"root_output_path": str(tmp_path), "dataset_id": "dataset", "output_id": "output",
+                "backend": "python"},
+        input=inputs,
         output=[str(reads_output), str(preview_output)],
     )
     namespace = runpy.run_path(
@@ -115,7 +124,7 @@ def test_stitch_subtile_plots_the_reference_merged_image(tmp_path, maximum_proje
         init_globals={"snakemake": snakemake},
     )
 
-    np.testing.assert_array_equal(namespace["ref_merged_img"], reference_image.max(axis=(0, 3)))
+    np.testing.assert_array_equal(namespace["reference_img"], reference_image.max(axis=(0, 3)))
     assert preview_output.stat().st_size > 0
 
 

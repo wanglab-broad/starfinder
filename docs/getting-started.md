@@ -124,7 +124,7 @@ All paths below are relative to `QUICKSTART_OUTPUT`:
 | `input/formed.csv`, `input/round_truth.csv`, `input/scene_truth.csv` | Formed amplicons (`gene_id`, `color_sequence`), their per-round positions and visibility, and the per-round view of the channel each color sequence selects (MATLAB-compatible `gene` and `color_seq` columns) |
 | `results/fovs/FOV_*/reads.csv` | Every detected candidate with its read, as the quickstart requests it: `spot_namespace,spot_id,z,y,x,gene_id,observed_color_sequence,call_status` (`gene_id` is `<NA>` for an unassigned read) |
 | `results/fovs/FOV_*/molecules.csv` | Filtered molecule candidates: `spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score`; one row per retained read, not per cell (`qc_score` is `<NA>`: the quickstart does not score reads) |
-| `results/checkpoints/FOV_*/run.json` | The run record of `FOV.run` with `CheckpointConfig(stages=())` (no stage files): round roles, steps, registration attempts, transforms (detected `(dz,dy,dx)` displacements as `displacement_zyx`), counts with the filter's fractions, the read summary and `outputs.molecules` ({doc}`checkpoints`, "run.json") |
+| `results/fovs/FOV_*/run.json` | The run record of `FOV.run` with `CheckpointConfig(stages=())` (no stage files): round roles, steps, registration attempts, transforms (detected `(dz,dy,dx)` displacements as `displacement_zyx`), counts with the filter's fractions, the read summary and `outputs.molecules` ({doc}`checkpoints`, "run.json") |
 | `summary.json` | Per-FOV generated/detected/retained counts, detected shifts, gene counts and molecule CSV paths |
 
 In memory, image axes are `(Z,Y,X,C)` and spot coordinates are **0-based**.

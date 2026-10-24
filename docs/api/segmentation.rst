@@ -23,7 +23,7 @@ read from (its C-order bytes alone, without a dtype or shape prefix).
 ``FOV.run`` or after ``FOV.load_checkpoint("registered")``, or, without that round, the
 grid of the saved reference image after ``FOV.load_reference_image()``;
 :py:func:`~starfinder.segmentation.reference_grid_from_file` reads it from a TIFF such as
-``images/ref_merged/{fovID}.tif``; a caller without a molecule run declares one with
+the FOV's reference image (``fovs/{fovID}/reference.tif`` by default); a caller without a molecule run declares one with
 ``source="declared"``. ``ReferenceGrid.projected()`` is the Z=1 grid of a projection.
 Two grids are one grid when their shapes and metadata are equal; the source and hash are
 recorded, not compared (:doc:`../assignment-contract`, "The grid rule").
@@ -159,7 +159,7 @@ loaded, a morphology round without an entry in ``registration_record["rounds"]``
 other metadata raises ``ValueError``; a round of another shape, or seeds on another grid,
 raises :py:class:`~starfinder.image.IncompatibleGeometryError`. With
 ``checkpoints=CheckpointConfig(…)``, each run is also written to
-``<checkpoint dir>/<fov_id>/segmentation/<run>/`` (``labels.tif``, ``input.ome.tif`` for a
+``fovs/<fov_id>/segmentation/<run>/`` (``labels.tif``, ``input.ome.tif`` for a
 computed run, ``segmentation.json``), and ``FOV.load_segmentation(name)`` reads it back,
 checking the recorded SHA-256 values (see :doc:`../checkpoints`).
 

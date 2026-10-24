@@ -423,6 +423,7 @@ and dtype are unchanged. Python outputs written before this change hold ZYXC;
 rerun the rule to replace them. `ProjectionConfig` gains `axis`, `"z"` (the
 default and earlier behavior) or `"channel"`; see
 [projection views](workflows.md#projection-views-and-the-reference-merged-image).
+Since W-564 the Python file is `fovs/{fovID}/reference.tif` by default; see "The FOV folder, the reference image and channel folders by label".
 
 ### Generate, evaluate and report
 
@@ -530,6 +531,7 @@ Images are OME-TIFF (`<round>.ome.tif`) through `save_volume`, tables are CSV un
 requested, and the location is `<output_root>/checkpoints/<fov_id>/`. Spot
 identity, input SHA-256 hashes, atomic writes and reruns of decoding or
 filtering without images are kept. See [checkpoints](checkpoints.md).
+Since W-564 the location is `<output_root>/fovs/<fov_id>/checkpoints/` beside `run.json`; see "The FOV folder, the reference image and channel folders by label".
 
 ### Registered checkpoints version 2
 
@@ -1090,7 +1092,8 @@ labels to `uint32` and raises on a negative value or one above 2³²−1, where 
 `stardist_segmentation.py` cast to `uint16` and wrapped label 65,536 to 0.
 `FOV.reference_grid()` returns the grid of the resident reference round after
 `FOV.run`, and {py:func}`~starfinder.segmentation.reference_grid_from_file` reads one
-from a TIFF such as `images/ref_merged/{fovID}.tif`.
+from a TIFF such as `images/ref_merged/{fovID}.tif`
+(since W-564 Python's reference image is `fovs/{fovID}/reference.tif` by default; see "The FOV folder, the reference image and channel folders by label").
 
 Masks made elsewhere, such as CellProfiler outputs, the legacy
 `images/stardist_segmentation` files or the culture references, enter through
@@ -1417,7 +1420,8 @@ Additions (W-338), following the MATLAB segmentation rules, which read saved
 reference-frame images and never load a sequencing round. Nothing that worked before
 changes its result:
 
-* `FOV.load_reference_image()` restores `images/ref_merged/{fovID}.tif`, written by
+* `FOV.load_reference_image()` restores `images/ref_merged/{fovID}.tif` (since W-564 the file
+  of the dataset's `reference_image` or `reference_image_import`; see "The FOV folder, the reference image and channel folders by label"), written by
   `FOV.save_reference_image`. Without the reference round, `FOV.reference_grid()`
   returns that file's grid (source `file:<path>`) and `InputChannel(reference_merged=True)`
   (also the amplicon of a composite) reads it; the input channel's record gains
@@ -1439,7 +1443,8 @@ changes its result:
 * The Python `nuclei_registration` rule calls `FOV.prepare_morphology`; its declared files
   are byte-identical to before. A new Python-only key,
   `rules.nuclei_registration.parameters.checkpoints` (`CheckpointConfig` fields, `{}`
-  for the defaults), also writes the saved form under `checkpoints/{fovID}/other_rounds/`.
+  for the defaults), also writes the saved form under `checkpoints/{fovID}/other_rounds/`
+  (since W-564 `fovs/{fovID}/other_rounds/`; see "The FOV folder, the reference image and channel folders by label").
   `save_processing_log("nr")` lists only registered rounds, so the reference stain, which
   has no registration, is not in `log/{fovID}_nr.txt` (W-563 later replaced both files with
   `fovs/{fovID}/nuclei_registration.json`, which leaves the reference stain out the same way).
@@ -1646,6 +1651,8 @@ unchanged; its outputs, including `images/fused/{sample}/`, do not change.
 | `reads_assignment` (with an `assembly` block) | The same rule without the tile filter and without `global_*`, on the grid of `images/ref_merged/{fovID}.tif`, also saving `checkpoints/{fovID}/assignment/<assignment>/` |
 | `create_sample_h5ad`, `create_sample_reads_assignment` | `export_sample`: `Dataset.export` with the `assembly` and `export` blocks into `export/<sample>/` (declared output `export.json`) |
 
+Since W-564 the reference grid is that of `fovs/{fovID}/reference.tif` by default and the folder is `fovs/{fovID}/assignment/<assignment>/`; see "The FOV folder, the reference image and channel folders by label".
+
 The adapter's translation of a legacy configuration is `StageAxisMapping(x="+x", y="+y",
 source="legacy")` with the `rotate_angle` it ran with; a configuration with a
 `stitching` block and a stage file names `stage_axes` itself.
@@ -1729,7 +1736,8 @@ run.json"):
 * **The workflow writes `checkpoints/<fov>/run.json`** for the processing rules, alone by
   default, with `overwrite` on; `rules.<rule>.parameters.checkpoints` adds stages
   ({doc}`workflow-configuration`, "Run records of the processing rules"). The logs the
-  rules write do not change (W-563 later removed the Python logs).
+  rules write do not change (W-563 later removed the Python logs; W-564 moved the record to
+  `fovs/<fov>/run.json`, see "The FOV folder, the reference image and channel folders by label").
 * **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256**,
   which `run.json` records as `codebook`.
 
@@ -1825,7 +1833,8 @@ alias and no dual write. Existing output trees are not rewritten.
 * **Removed: `FOV.save_processing_log`, `FOV.save_diagnostics` and `FOV._save_shift_log`**,
   and the path helpers `FOV.paths.rsf_log`, `gr_log`, `nr_log`, `shift_log` and `score_log`.
   A direct caller obtains the record with `FOV.run(..., checkpoints=CheckpointConfig(stages=()))`,
-  which writes `checkpoints/<fov_id>/run.json` and no stage file.
+  which writes `checkpoints/<fov_id>/run.json` and no stage file (since W-564 `fovs/<fov_id>/run.json`; see
+  "The FOV folder, the reference image and channel folders by label").
 * **New: `FOV.save_registration_record(path=None)`** writes
   `<output_root>/fovs/<fov_id>/nuclei_registration.json`: `fov_id`, `rounds` (the round roles),
   `registered_rounds` (the `registration_record["rounds"]` entries of the other rounds with
@@ -1874,6 +1883,116 @@ Python processing rules wrote without declaring it, is no longer written. Withou
 `assembly` or `stitching` block, the declared input of `report_sample` is every FOV's
 `checkpoints/{fovID}/run.json` instead of `log/sf_scores/{fovID}.txt`, so it now has a
 producer in the subtile modes too. No new human log file is written (deferred to §2.13).
+Since W-564 the run records are `fovs/{fovID}/run.json` and `fovs/{fovID}/subtile_{n}/run.json`; see "The FOV folder, the reference image and channel folders by label".
+
+### The FOV folder, the reference image and channel folders by label
+
+W-564 (OM-08, OM-06, OM-01) collects a FOV's durable Python results in one folder,
+writes and reads the reference image through one resolver, and names the Python channel
+folders by the unique channel label. New runs write the new layout. Existing output trees
+are not moved, and no reader looks in the old places (no alias, no dual search, no
+fallback). File contents are unchanged, except the recorded paths that name a moved file.
+The sample-stage roots (`stitching/`, `export/`, `report/`), `log/benchmark/`, the shared
+`output/subtile/` files, the legacy segmentation views under `images/`, `expr/` and the
+MATLAB backend's tree do not change.
+
+* **The FOV folder.** `<output_root>/fovs/<fov_id>/` (a subtile: `fovs/<fov_id>/subtile_<n>/`)
+  holds `run.json`, `molecules.csv` and `reads.csv`, `nuclei_registration.json`,
+  `reference.tif`, `other_rounds/<name>/`, `segmentation/<run>/` and `assignment/<name>/`.
+  The restart material of `FOV.run` goes in its `checkpoints/` folder: `registered/`,
+  `candidates.*` and `pre_qc.*` ({doc}`checkpoints`, "Layout").
+* **`CheckpointConfig.directory`** names the parent of the FOV folders, default
+  `<output_root>/fovs` (was `<output_root>/checkpoints`). A FOV's folder is still
+  `<directory>/<fov_id>/`, and its stage files move into `checkpoints/` below it. A call
+  that passed `directory=<output_root>/"checkpoints"` to mean the default drops the argument.
+  `stages`, `table_format` and `hash_inputs` keep their meaning.
+* **`CheckpointConfig.overwrite`** guards the run's own files: without it, an existing
+  `run.json` or `checkpoints/` of the FOV folder raises `FileExistsError` before any
+  processing, and the folder's other contents, which other calls and rules write, no longer
+  do. With it, `FOV.run` clears only `checkpoints/` (`clear_stages`) and replaces `run.json`.
+* **Recorded paths in `run.json`** (`format_version` stays 1; path portability is unchanged):
+  `checkpoints.<stage>` lists each file relative to the FOV folder, which holds `run.json`
+  (`checkpoints/registered/round1.ome.tif`, was `registered/round1.ome.tif`);
+  `checkpoint_directory` names `<FOV folder>/checkpoints` (was the FOV directory); and
+  `outputs.<slot>.path` is relative to the FOV folder (`molecules.csv`, was
+  `../../fovs/<fov_id>/molecules.csv`). A saved assignment's link to
+  `../../segmentation/<run>/labels.tif` is unchanged: the two folders stay siblings.
+* **One reference-image resolver.** `FOV.save_reference_image`, `FOV.load_reference_image`,
+  the workflow's rule declarations and every reader (stitching, export and assembly, the
+  report, the workflow adapters and `stitch_subtile`) resolve the file through one function
+  of the dataset's settings. The default of `reference_image` (workflow key and `Dataset`
+  field) is `fovs/{fov_id}/reference.tif` (was `images/ref_merged/{fov_id}.tif`); the
+  configuration schema has no default value for it, and absent or null means the default.
+  An imported reference image, a file another tool or rule produced, is declared with the
+  new `reference_image_import` (workflow key and `Dataset` field), a pattern of the same
+  form that excludes `reference_image`: every reader reads it, `FOV.save_reference_image`
+  raises `ValueError` instead of writing it, and the Python processing rules declare and
+  write no reference image. The TIFF content, calibration, projection metadata and grid
+  identity do not change. A segmentation run that reads the saved reference image records
+  its `reference_image.path` relative to the output root, or, for a file outside it, by
+  its absolute path, with its SHA-256 (it raised `ValueError` before).
+* **`FOV.paths`** loses `ref_merged_tif` (the reference image's file depends on the
+  dataset's settings; `FOV.save_reference_image` returns it) and gains `fov_dir` and
+  `run_record`; `checkpoint_dir` is `fovs/<fov_id>/checkpoints`.
+* **Channel folders by label.** The Python `nuclei_registration` rule writes
+  `images/<round>/<channel label>/<fov>.tif`, the label being the unique
+  `ChannelInfo.channel` (the configuration's `channel`), where it wrote the descriptive
+  name's folder, which two channels of the same name shared. The Python backend's
+  `enhance_dapi_with_flamingo` reads the folders of the labels of the `flamingo` round's
+  channels named `DAPI` and `Flamingo`. A channel pattern that is not a safe single path
+  component (`[A-Za-z0-9][A-Za-z0-9_.-]*`) now raises `ValueError` when the `Dataset` is
+  built, and so in the workflow's translation. MATLAB keeps its name folders and rules.
+* **The report** names the new places: `report.json` `assignment.folders` holds
+  `fovs/<fov>/assignment/<name>` (was `checkpoints/<fov>/assignment/<name>`), the page's
+  output row "FOV folders" shows `fovs/<fov_id>/` (was "Checkpoints",
+  `checkpoints/<fov_id>/`), and the reasons of unavailable parts name `fovs/<fov>/run.json`
+  and `fovs/<fov>/checkpoints/registered/transforms.json`.
+
+Each moved path, old and new (`<fov>` is the FOV ID; the Python backend only):
+
+| Before | After |
+| --- | --- |
+| `checkpoints/<fov>/run.json` | `fovs/<fov>/run.json` |
+| `checkpoints/<fov>/subtile_<n>/run.json` | `fovs/<fov>/subtile_<n>/run.json` |
+| `checkpoints/<fov>/registered/` (`<round>.ome.tif`, `<snapshot>/<round>.ome.tif`, `<round>_field.npz`, `transforms.json`) | `fovs/<fov>/checkpoints/registered/` |
+| `checkpoints/<fov>/candidates.csv`, `.parquet`, `.json` | `fovs/<fov>/checkpoints/candidates.csv`, `.parquet`, `.json` |
+| `checkpoints/<fov>/pre_qc.csv`, `.parquet`, `.json` | `fovs/<fov>/checkpoints/pre_qc.csv`, `.parquet`, `.json` |
+| `checkpoints/<fov>/subtile_<n>/<stage files>` | `fovs/<fov>/subtile_<n>/checkpoints/<stage files>` |
+| `checkpoints/<fov>/other_rounds/<name>/` | `fovs/<fov>/other_rounds/<name>/` |
+| `checkpoints/<fov>/segmentation/<run>/` | `fovs/<fov>/segmentation/<run>/` |
+| `checkpoints/<fov>/assignment/<name>/` | `fovs/<fov>/assignment/<name>/` |
+| `<directory>/<fov>/<stage files>` (`CheckpointConfig(directory=…)`) | `<directory>/<fov>/checkpoints/<stage files>` |
+| `images/ref_merged/<fov>.tif` | `fovs/<fov>/reference.tif` (the default `reference_image`) |
+| `images/<round>/<channel name>/<fov>.tif` (`nuclei_registration`) | `images/<round>/<channel label>/<fov>.tif` |
+
+`fovs/<fov>/molecules.csv`, `reads.csv` and `nuclei_registration.json` were already in the
+FOV folder (W-562, W-563).
+
+The configuration entries:
+
+| Key or field | Before | After |
+| --- | --- | --- |
+| `CheckpointConfig.directory` | parent of the FOV checkpoint folders; `None`: `<output_root>/checkpoints` | parent of the FOV folders; `None`: `<output_root>/fovs` |
+| `CheckpointConfig.overwrite` | guarded the existing FOV directory and cleared its stage files | guards `run.json` and `checkpoints/`; clears `checkpoints/` only |
+| `reference_image` (workflow key, `Dataset` field) | default `images/ref_merged/{fov_id}.tif` (also the schema's default) | default `fovs/{fov_id}/reference.tif`; absent or null is the default; excludes `reference_image_import` |
+| `reference_image_import` (workflow key, `Dataset` field) | none | new: the pattern of an imported reference image, read and never written |
+| `rules.<rule>.parameters.checkpoints` | stage files beside `checkpoints/<fov>/run.json` | stage files in `fovs/<fov>/checkpoints/` beside `fovs/<fov>/run.json` |
+| `ChannelInfo.channel` (`channel` of a channel entry) | any nonempty string | a safe single path component, checked when the `Dataset` is built |
+
+The workflow's declarations change on the Python backend only; `registration.smk` and the
+MATLAB branch of `segmentation.smk` are unchanged:
+
+| Rule | Python before | Python now |
+| --- | --- | --- |
+| `rsf_single_fov` | `checkpoints/{fovID}/run.json`, `images/ref_merged/{fovID}.tif`, `fovs/{fovID}/molecules.csv` | `fovs/{fovID}/run.json`, the reference image (none with `reference_image_import`), `fovs/{fovID}/molecules.csv` |
+| `gr_single_fov_subtile`, `deep_create_subtile` | `checkpoints/{fovID}/run.json`, `images/ref_merged/{fovID}.tif` and the subtile files | `fovs/{fovID}/run.json`, the reference image (none with `reference_image_import`) and the subtile files |
+| `lrsf_single_fov_subtile`, `deep_rsf_subtile` | `checkpoints/{fovID}/subtile_{n}/run.json` | `fovs/{fovID}/subtile_{n}/run.json` |
+| `stitch_subtile` | read `images/ref_merged/{fovID}.tif` without declaring it | declares and reads the reference image (its input `reference`) |
+| `create_nuclei_amplicon_overlay` | input `images/ref_merged/{fovID}.tif` | input: the reference image |
+| `enhance_dapi_with_flamingo` | inputs `images/flamingo/DAPI/{fovID}.tif`, `images/flamingo/Flamingo/{fovID}.tif` | inputs `images/flamingo/<label>/{fovID}.tif` of the channels named `DAPI` and `Flamingo` |
+| `reads_assignment` with an `assembly` block | output `checkpoints/{fovID}/assignment/<name>/assignment.json` | output `fovs/{fovID}/assignment/<name>/assignment.json` |
+| `export_sample` (route per FOV) | input `checkpoints/{fovID}/assignment/<name>/assignment.json` | input `fovs/{fovID}/assignment/<name>/assignment.json` |
+| `report_sample` without `assembly` or `stitching` | input `checkpoints/{fovID}/run.json` | input `fovs/{fovID}/run.json` |
 
 ### The processing report
 
@@ -1911,6 +2030,7 @@ producer in the subtile modes too. No new human log file is written (deferred to
 | Benchmark / recipes | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |
 | Segmentation / assignment workflow | The shared rules call the package under both backends: `uint32` labels, `rescale` on the input grid, no foreground gate, cells kept without molecules, `outside_grid` molecules, unknown genes and a double expansion raise, new `raw.h5ad` and `reads_assignment.csv` columns; MATLAB-backend runs need the package and its `stardist` and `anndata` extras. |
 | Sample assembly workflow (configurations with an `assembly` block only) | Option W1 of {doc}`assembly-contract`: the per-FOV `raw.h5ad` and `reads_assignment.csv` are not box-filtered and have no `global_*` columns (every kept cell, and every molecule in input order); the label file is imported on the grid of `images/ref_merged/{fovID}.tif` instead of one declared from `voxel_size_xy` and `voxel_size_z`; the sample outputs are in `export/<sample>/` instead of `expr/{sample}_raw.h5ad` and `expr/{sample}_reads_assignment.csv`; cells and molecules are retained by the ownership regions of the placement instead of the `tile_config` rectangles, and every excluded observation is kept with its reason. Configurations without the block are unchanged. |
+| FOV folder and reference image (W-564) | A FOV's durable results move to `fovs/<fov>/` and its stage files to `fovs/<fov>/checkpoints/`; earlier output roots are not read in the old places. `overwrite=False` no longer refuses a FOV folder that holds only other calls' results, and `overwrite=True` clears only `checkpoints/`. The Python reference image moves to `fovs/<fov>/reference.tif`, and a dataset with `reference_image_import` writes none. A channel pattern that is not a safe path component now raises when the `Dataset` is built. See "The FOV folder, the reference image and channel folders by label". |
 | Sample segmentation route (configurations and calls that export a projection with an assignment) | Rule RD1 of {doc}`sample-segmentation-contract`: without `route`, a sample exported as a projection (the default `dimensionality`) takes the route after fusion. Every existing configuration with `stitching` and `assembly` blocks whose `assembly.assignment` is a name (the default `default`) and whose `export` block has no `route` and no `segmentation` while `dimensionality` is `projection` (also when the block is absent) stops at once: the workflow refuses it when the rules are parsed, before any job is planned, and `Dataset.export` with the same `ExportConfig` refuses it before anything is written, with `ValueError: the route after fusion (route: after_fusion, the default for dimensionality 'projection') segments the fused projection and needs export.segmentation, the settings of that segmentation; set export.segmentation, or route: per_fov to assemble the per-FOV assignments`. The one line `route: per_fov` in the `export` block (`ExportConfig(route="per_fov")` in Python) restores the earlier behaviour: the same jobs and the route per FOV. The route after fusion also refuses `dimensionality: stack` and `projection: sum`. Exports with `route: per_fov` or `dimensionality` `stack` or `both`, and samples without segmentation (`assignment` null), keep their route; their outputs change only by the column `cell_namespace`, the part `segment` recorded `off` with its `segmentation` section, and the keys `route` and `route_source` of the `assembly` section. |
 
 Detailed numerical policies, tolerances and edge cases remain canonical in

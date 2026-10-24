@@ -71,10 +71,12 @@ It calls `workflow/scripts/rsf_single_fov.py` or `.m` respectively.
 
 The direct rule declares these outputs, relative to OUTPUT:
 
-- the processing record: on the Python backend `checkpoints/{fovID}/run.json`, the FOV's
+- the processing record: on the Python backend `fovs/{fovID}/run.json`, the FOV's
   run record ({doc}`checkpoints`, "run.json"); on the MATLAB backend its logs
   `log/{fovID}_rsf.txt` and `log/sf_scores/{fovID}.txt`;
-- `images/ref_merged/{fovID}.tif`;
+- the reference image: on the Python backend the file `reference_image` names
+  (`fovs/{fovID}/reference.tif` by default; none with `reference_image_import`, whose file
+  the rules never write), on the MATLAB backend `images/ref_merged/{fovID}.tif`;
 - the FOV's molecule table: on the Python backend `fovs/{fovID}/molecules.csv`, the
   typed, zero-based table of the accepted reads with their identities
   (`spot_namespace, spot_id, z, y, x, gene_id, entry_id, qc_score`); on the MATLAB
@@ -82,7 +84,7 @@ The direct rule declares these outputs, relative to OUTPUT:
 
 The Python script writes them using `FOV.run` with checkpoints, `save_reference_image` and
 `export_spots`; `export_spots` also records the table as `outputs.molecules` of the
-FOV's `checkpoints/{fovID}/run.json`. MATLAB also writes preview images. Benchmarked rules write
+FOV's `fovs/{fovID}/run.json`. MATLAB also writes preview images. Benchmarked rules write
 `log/benchmark/{rule}/{fovID}[_{n_subtile}].txt`. A reference projection is not a
 segmentation label image, and a molecule table is not a cell-by-gene matrix.
 
@@ -115,8 +117,10 @@ selects one of two views, each a maximum by default:
 | Visualization | `"z"` (default) | ZYX(C) → singleton-Z (1, Y, X[, C]) | 2D figures such as registration overlaps and spot-finding results |
 | Inspection | `"channel"` | ZYXC → ZYX | Each FOV's reference merged image, below |
 
-`images/ref_merged/{fovID}.tif` holds the reference round's detection image,
-the preprocessing output before registration, reduced to one channel:
+The reference image (Python: `fovs/{fovID}/reference.tif` by default, the file the
+dataset's `reference_image` names; MATLAB: `images/ref_merged/{fovID}.tif`) holds the
+reference round's detection image, the preprocessing output before registration, reduced
+to one channel:
 
 - the channel maximum in merged-image mode, or the selected channel in
   single-channel mode, as ZYX;
@@ -162,22 +166,27 @@ image file names:
   reference stain and registers on it as an `ExternalReference` labelled
   `<ref_round>:ch04`;
 - it loads each `additional_round` entry with its `channel_order` (each
-  entry's `channel` is the filename pattern and label, its `name` the output
-  folder), rotated by `rotate_angle`; the stain is the one channel whose
+  entry's `channel` is the filename pattern and the unique label, which names
+  the output folder; MATLAB names the folder by `name`), rotated by
+  `rotate_angle`; the stain is the one channel whose
   `name` contains the top-level `ref_channel`, as MATLAB matches it;
 - it registers each round by one translation step on its stain and applies the
   transform to all of the round's channels;
 - it writes `fovs/<fov>/nuclei_registration.json` (`FOV.save_registration_record`:
   the round roles, the registered rounds and their registration attempts, whose
   estimation entries hold each translation; MATLAB writes its console log and a
-  shift table instead) and `images/<round>/<channel name>/<fov>.tif` (ZYX, or the
-  Z maximum as YX with top-level `maximum_projection`).
+  shift table instead) and `images/<round>/<channel label>/<fov>.tif` (ZYX, or the
+  Z maximum as YX with top-level `maximum_projection`), one file per channel, also for
+  channels that share a `name`. A label that is not a safe single path component
+  (`[A-Za-z0-9][A-Za-z0-9_.-]*`) is rejected. On the Python backend the shared rule
+  `enhance_dapi_with_flamingo` reads the label folders of the `flamingo` round's channels
+  named `DAPI` and `Flamingo`.
 
 Unlike MATLAB, the Python rule does not min–max stretch the other rounds before
 registering and saving them: the images keep their loaded dtype and values.
 With the Python-only `rules.nuclei_registration.parameters.checkpoints` (a mapping
 of `CheckpointConfig` fields, `{}` for the defaults) it also writes the saved form
-of each prepared image under `<checkpoint dir>/<fov>/other_rounds/<name>/`, which
+of each prepared image under `fovs/<fov>/other_rounds/<name>/`, which
 `FOV.load_registered_round` reads ({doc}`checkpoints`); the declared files do not
 change.
 
@@ -211,18 +220,20 @@ Subtile rule implementations live in `registration[-py].smk` and
 
 | Rule | Additional inputs | Declared outputs relative to OUTPUT |
 | --- | --- | --- |
-| `gr_single_fov_subtile` | Config JSON, input codebook and all round/FOV directories | `checkpoints/{fovID}/run.json` (Python) or `log/{fovID}_gr.txt` (MATLAB), `images/ref_merged/{fovID}.tif`, `output/subtile/{fovID}/subtile_coords.csv`, `subtile_data_{n}.npz` (Python) or `.mat` (MATLAB) in that subtile directory |
-| `deep_create_subtile` | Config JSON and all round/FOV directories | Same reference and subtile files, and on the Python backend `checkpoints/{fovID}/run.json`; MATLAB declares no log |
-| `lrsf_single_fov_subtile`, `deep_rsf_subtile` | Config JSON, input codebook, one subtile data file | `checkpoints/{fovID}/subtile_{n}/run.json` (Python) or `log/sf_scores/{fovID}_{n}.txt` (MATLAB), `output/subtile/{fovID}/subtile_goodSpots_{n}.csv` |
+| `gr_single_fov_subtile` | Config JSON, input codebook and all round/FOV directories | `fovs/{fovID}/run.json` and the reference image (Python; none with `reference_image_import`) or `log/{fovID}_gr.txt` and `images/ref_merged/{fovID}.tif` (MATLAB), `output/subtile/{fovID}/subtile_coords.csv`, `subtile_data_{n}.npz` (Python) or `.mat` (MATLAB) in that subtile directory |
+| `deep_create_subtile` | Config JSON and all round/FOV directories | Same reference and subtile files, and on the Python backend `fovs/{fovID}/run.json`; MATLAB declares no log |
+| `lrsf_single_fov_subtile`, `deep_rsf_subtile` | Config JSON, input codebook, one subtile data file | `fovs/{fovID}/subtile_{n}/run.json` (Python) or `log/sf_scores/{fovID}_{n}.txt` (MATLAB), `output/subtile/{fovID}/subtile_goodSpots_{n}.csv` |
 | `stitch_subtile` | Coordinates and all subtile molecule CSVs | `signal/{fovID}_goodSpots.csv` and `.png` |
 
 The grid contains `sqrt_pieces ** 2` subtiles numbered from 1. Coordinates, data
 archives and subtile molecule CSVs are marked temporary. Local execution may
 remove them after consumption; the UGER profile sets `notemp: true` to retain
-them. Stitching also reads `images/ref_merged/{fovID}.tif` internally for its
-preview (its Y and X axes, after a maximum over any other axis), although that
-file is not declared as an input to the stitch rule.
-Check it exists when rerunning stitching from saved CSVs alone.
+them. Stitching also reads the FOV's reference image for its preview (its Y and X
+axes, after a maximum over any other axis): on the Python backend the file
+`reference_image` or `reference_image_import` names, declared as the rule's input
+`reference`; on the MATLAB backend `images/ref_merged/{fovID}.tif`, which is not
+declared as an input to the stitch rule. Check it exists when rerunning stitching
+from saved CSVs alone.
 
 ## Small, reproducible dry run
 
@@ -367,7 +378,7 @@ The runner and planner signatures do not change before §2.13.
   `stardist_segmentation`, `bigstitcher_engine` and the legacy
   `run_BigStitcher_macro`. No rule has a `log:` directive. On the cluster, a job's
   standard output and error go to the file the UGER profile names (above).
-- **STARfinder** records the seconds of each FOV step in `checkpoints/<fov>/run.json`
+- **STARfinder** records the seconds of each FOV step in `fovs/<fov>/run.json`
   (`steps`, appended by the `_log_step` decorator of the `FOV` methods). The
   processing rules always write it: `_run_workflow` passes `FOV.run` the
   `CheckpointConfig` of `_rule_checkpoints`

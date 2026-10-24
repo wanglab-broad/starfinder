@@ -2,7 +2,7 @@
 
 ``report_records``: an output root of sample ``s1`` with four FOVs ``F1`` to ``F4`` on a
 2 × 2 grid, each of 4 × 16 × 16 voxels at spacing (0.5, 0.25, 0.25) µm, nominal step 3 µm.
-Each FOV's ``checkpoints/<fov>/run.json`` is written as JSON in the form
+Each FOV's ``fovs/<fov>/run.json`` is written as JSON in the form
 ``dataset/_run_record.py`` writes it, with R1 to R4: status ``succeeded``, the steps of
 loading, preprocessing (``min_max_normalization`` then ``white_tophat``), registration (one
 translation step) and detection to filtering with stated seconds, deduplication and a filter
@@ -88,14 +88,14 @@ class ReportCase:
     def folder(self) -> Path:
         return self.root / "report" / self.sample
 
-    def checkpoint(self, fov) -> Path:
-        return self.root / "checkpoints" / fov
+    def fov_folder(self, fov) -> Path:
+        return self.root / "fovs" / fov
 
     def run_record(self, fov) -> dict:
-        return json.loads((self.checkpoint(fov) / "run.json").read_text())
+        return json.loads((self.fov_folder(fov) / "run.json").read_text())
 
     def write_run_record(self, fov, record) -> None:
-        (self.checkpoint(fov) / "run.json").write_text(json.dumps(record, indent=2) + "\n")
+        (self.fov_folder(fov) / "run.json").write_text(json.dumps(record, indent=2) + "\n")
 
     def collect(self, **changes):
         arguments = dict(sample=self.sample, fov_ids=self.fov_ids, dataset_id=self.dataset_id,
@@ -292,7 +292,7 @@ def run_record(root, fov, *, source=None, deduplication=True, registration=True)
         "preprocessing": _preprocessing(),
         "registration": reg, "transforms": transforms,
         "counts": counts_record(fov, deduplication=deduplication, source=source),
-        "checkpoint_directory": str(root / "checkpoints" / fov), "checkpoints": {},
+        "checkpoint_directory": str(root / "fovs" / fov / "checkpoints"), "checkpoints": {},
     }
 
 
@@ -324,13 +324,13 @@ def placement_result(fov_ids, *, statuses=None, flags=None, supplied=False):
 
 
 def write_transforms_file(root, fov, *, source=None):
-    """``checkpoints/<fov>/registered/transforms.json`` (format version 2) through write_registered_header."""
+    """``fovs/<fov>/checkpoints/registered/transforms.json`` (format version 2) through write_registered_header."""
     from starfinder._checkpoint import write_registered_header
     source = source or fov
     results = {name: [registration_result(TRANSLATIONS[name][source])] for name in MOVING}
     record = {"semantics": "recipe", "recipe": None,
               "application": {name: results[name][0].application_config for name in MOVING}}
-    write_registered_header(Path(root) / "checkpoints" / fov, {"fov_id": fov}, results, record)
+    write_registered_header(Path(root) / "fovs" / fov / "checkpoints", {"fov_id": fov}, results, record)
 
 
 def report_records(root, variant=None, *, inputs=False) -> ReportCase:
@@ -346,7 +346,7 @@ def report_records(root, variant=None, *, inputs=False) -> ReportCase:
     for fov in fov_ids:
         record = run_record(root, fov, source="F1" if variant == "equal" else None,
                             deduplication=variant != "stage_off", registration=variant != "stage_off_registration")
-        case.checkpoint(fov).mkdir(parents=True, exist_ok=True)
+        case.fov_folder(fov).mkdir(parents=True, exist_ok=True)
         case.write_run_record(fov, record)
     if inputs:
         write_inputs(root, fov_ids)
@@ -361,10 +361,10 @@ def report_records(root, variant=None, *, inputs=False) -> ReportCase:
     if variant is not None and variant.startswith("failed"):
         _fail_f3(case, variant)
     if variant == "not_run":
-        (case.checkpoint("F4") / "run.json").unlink()
+        (case.fov_folder("F4") / "run.json").unlink()
     if variant == "only_f1":
         for fov in ("F2", "F3", "F4"):
-            (case.checkpoint(fov) / "run.json").unlink()
+            (case.fov_folder(fov) / "run.json").unlink()
     if variant == "no_spot":
         record = case.run_record("F2")
         record["counts"] = {"spots": 0, "intensities": 0, "call_status": {"assigned": 0},
@@ -588,13 +588,13 @@ def write_assignment_folder(case: ReportCase, fov) -> Path:
     of ``cells.csv``.
     """
     from starfinder._records import json_sha256 as _sha256_json
-    run = case.checkpoint(fov) / "segmentation" / "cell"
+    run = case.fov_folder(fov) / "segmentation" / "cell"
     run.mkdir(parents=True, exist_ok=True)
     segmentation = {"format_version": 1, "stage": "segmentation", "run": "cell", "target": "cell",
                     "geometry": "volume", "methods": [{"stage": "segmentation", "method": "watershed"}],
                     "import": None, "operations": [], "outcome": "ok"}
     (run / "segmentation.json").write_text(json.dumps(segmentation, indent=2) + "\n")
-    folder = case.checkpoint(fov) / "assignment" / "default"
+    folder = case.fov_folder(fov) / "assignment" / "default"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "cells.csv").write_text("cell_id,status\n1,kept\n")
     record = {"format_version": 1, "stage": "assignment", "name": "default",
@@ -612,7 +612,7 @@ def write_assignment_folder(case: ReportCase, fov) -> Path:
 def assignment_entry(case: ReportCase, fov) -> dict:
     """``assembly.fovs[*].assignment`` of a folder source, as ``assembly/_assemble.py``: ``_fov_record`` writes it."""
     from starfinder._records import file_sha256
-    folder = case.checkpoint(fov) / "assignment" / "default"
+    folder = case.fov_folder(fov) / "assignment" / "default"
     record = json.loads((folder / "assignment.json").read_text())
     return {"name": "default", "folder": str(folder), "source": "folder",
             "record_sha256": file_sha256(folder / "assignment.json"),

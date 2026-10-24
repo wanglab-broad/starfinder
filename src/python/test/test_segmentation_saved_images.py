@@ -121,8 +121,8 @@ def morph_run(level):
 def process_run(root, output):
     """Process 1: FOV.run with checkpoints and save_reference_image.
 
-    overwrite=True lets it run after process 2, which made the FOV directory: run's overwrite removes checkpoint
-    stage files only, so other_rounds/ stays (docs/checkpoints.md).
+    It may run after process 2, which made the FOV folder: run's overwrite guard covers run.json and checkpoints/
+    only, and overwrite=True removes checkpoint stage files only, so other_rounds/ stays (docs/checkpoints.md).
     """
     fov = dataset(root, output).fov("FOV").run(pipeline(rotation=ANGLE), checkpoints=CheckpointConfig(overwrite=True))
     fov.save_reference_image()
@@ -247,7 +247,7 @@ def test_load_reference_image_restores_the_grid_and_the_merged_image(raw, thresh
     result = fresh.segmentation_results["merged"]
     (entry,) = result.record["input"]["channels"]
     assert entry["sha256"] == array_sha256(saved.reshape(restored.shape_zyx))
-    assert entry["reference_image"] == {"path": "images/ref_merged/FOV.tif", "sha256": file_sha256(path)}
+    assert entry["reference_image"] == {"path": "fovs/FOV/reference.tif", "sha256": file_sha256(path)}
     assert result.grid == restored and result.record["grid"]["source"] == restored.source
     if not projected:
         # In the process that ran FOV.run the same run reads the channel maximum and gives the same labels.
@@ -328,7 +328,7 @@ def test_three_processes_segment_and_assign_as_one_process(raw, threshold, tmp_p
 
     one = one_process(root, "one")
     ds = dataset(root, "three")
-    checkpoint = ds.output_root / "checkpoints" / "FOV"
+    fov_folder = ds.output_root / "fovs" / "FOV"
     loaded = ds.fov("FOV")
     for name in ("nucleus", "cell", "morph_nucleus"):
         result, expected = loaded.load_segmentation(name), one.segmentation_results[name]
@@ -344,17 +344,17 @@ def test_three_processes_segment_and_assign_as_one_process(raw, threshold, tmp_p
             json.loads(json.dumps([without_links(c) for c in other["input"]["channels"]]))
         assert record["labels"]["sha256"] == other["labels"]["sha256"]
         # Every link resolves with its SHA-256.
-        folder = checkpoint / "segmentation" / name
+        folder = fov_folder / "segmentation" / name
         assert file_sha256(folder / record["input"]["path"]) == record["input"]["file_sha256"]
         assert file_sha256(folder / record["labels"]["path"]) == record["labels"]["file_sha256"]
         for channel in record["input"]["channels"]:
             saved = channel["registration"]["saved"]
-            assert file_sha256(checkpoint / saved["path"]) == saved["sha256"]
+            assert file_sha256(fov_folder / saved["path"]) == saved["sha256"]
             if "reference_image" in channel:
                 link = channel["reference_image"]
                 assert file_sha256(ds.output_root / link["path"]) == link["sha256"]
     assert loaded.segmentation_results["cell"].record["input"]["channels"][0]["reference_image"]["path"] == \
-        "images/ref_merged/FOV.tif"
+        "fovs/FOV/reference.tif"
     composite = loaded.segmentation_results["cell"].record["input"]["channels"][0]["prepare"]
     assert composite == json.loads(json.dumps(one.segmentation_results["cell"].record["input"]["channels"][0]["prepare"]))
 
@@ -365,7 +365,7 @@ def test_three_processes_segment_and_assign_as_one_process(raw, threshold, tmp_p
     assert (assignment.molecules.assignment_status == "assigned").sum() > 0
     assert assignment.record["counts"] == json.loads(json.dumps(expected.record["counts"]))
     assert assignment.record["grid"]["check"] == "checked" and assignment.record["grid"]["source"].startswith("file:")
-    folder = checkpoint / "assignment" / "default"
+    folder = fov_folder / "assignment" / "default"
     for entry in [*assignment.record["files"].values(), assignment.record["inputs"]["cells"]["file"],
                   assignment.record["inputs"]["nuclei"]["file"]]:
         assert file_sha256(os.path.normpath(folder / entry["path"])) == entry["sha256"]
@@ -450,8 +450,9 @@ def run_rule(config, raw):
     return Path(config["root_output_path"]) / "dataset" / "output"
 
 
-DECLARED = ["fovs/FOV/nuclei_registration.json", "images/morph/DAPI/FOV.tif", "images/morph/Flamingo/FOV.tif",
-            "images/morph/RBD/FOV.tif"]
+# The channel images are named by the channel labels ch00 (Flamingo), ch01 (RBD) and ch02 (DAPI).
+DECLARED = ["fovs/FOV/nuclei_registration.json", "images/morph/ch00/FOV.tif", "images/morph/ch01/FOV.tif",
+            "images/morph/ch02/FOV.tif"]
 
 
 @pytest.mark.parametrize("projection", [False, True])
@@ -460,7 +461,7 @@ def test_the_rule_writes_the_saved_form_only_with_checkpoints(raw, tmp_path, ang
     plain = run_rule(rule_config(tmp_path / "plain", angle, projection), raw)
     saved = run_rule(rule_config(tmp_path / "saved", angle, projection, checkpoints={}), raw)
     assert files(plain) == DECLARED
-    assert files(saved) == sorted(DECLARED + [f"checkpoints/FOV/other_rounds/{name}/{file}"
+    assert files(saved) == sorted(DECLARED + [f"fovs/FOV/other_rounds/{name}/{file}"
                                               for name in ("morph", "reference_stain")
                                               for file in ("image.ome.tif", "registration.json")])
     for name in DECLARED:
@@ -478,7 +479,7 @@ def test_the_rule_writes_the_saved_form_only_with_checkpoints(raw, tmp_path, ang
         fov.load_registered_round(name)
     assert fov.registration_chains["morph"].transforms[0].displacement_zyx == (0.0, *map(float, rotated))
     for c, channel in enumerate(MORPH):
-        written = tifffile.imread(saved / "images" / "morph" / channel.name / "FOV.tif")
+        written = tifffile.imread(saved / "images" / "morph" / channel.channel / "FOV.tif")
         image = fov.images["morph"][..., c]
         assert np.array_equal(written, image.max(axis=0) if projection else image)
     with pytest.raises(FileNotFoundError):

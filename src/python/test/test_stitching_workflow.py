@@ -406,8 +406,8 @@ def test_wf3_export_sample_inputs_and_declared_output(tmp_path):
     assert inputs == ["/out/stitching/sample1/placement.json",
                       "/out/expr/Position001/raw.h5ad", "/out/expr/Position002/raw.h5ad",
                       "/out/expr/Position001/reads_assignment.csv", "/out/expr/Position002/reads_assignment.csv",
-                      "/out/checkpoints/Position001/assignment/default/assignment.json",
-                      "/out/checkpoints/Position002/assignment/default/assignment.json"]
+                      "/out/fovs/Position001/assignment/default/assignment.json",
+                      "/out/fovs/Position002/assignment/default/assignment.json"]
     assert output == "/out/export/sample1/export.json"
     assert _snakemake._export_sample_files(config, root, [])[1] == "/out/export/{sample}/export.json"
     molecules = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=dict(ASSEMBLY, assignment=None))
@@ -519,11 +519,11 @@ def test_wf3_run_export_molecules_only_loads_the_codebook(tmp_path, synchronous)
 @needs_anndata
 def test_wf3_with_an_assembly_block_the_per_fov_files_have_no_filter_and_no_global(tmp_path, monkeypatch):
     """Option W1: no tile configuration is read, every kept cell and every molecule is written, no global_*, and
-    the FOV's assignment folder is saved on the grid of images/ref_merged, for export_sample."""
+    the FOV's assignment folder is saved on the grid of the FOV's reference image, for export_sample."""
     monkeypatch.setattr(_snakemake, "_tile_record", lambda *a: pytest.fail("the tile configuration must not be read"))
     labels = label_fixture()
     metadata = grid(SHAPE_ZYX, (0.35, 0.1, 0.1)).metadata
-    reference = tmp_path / "output/data/out/images/ref_merged/Position001.tif"
+    reference = tmp_path / "output/data/out/fovs/Position001/reference.tif"
     save_volume(np.zeros(SHAPE_ZYX, np.uint8), reference, metadata=metadata)
     adata, reads, _ = run_rule(tmp_path, labels, KEEP, stitching=MULTIVIEW, assembly=ASSEMBLY)
     record = json.loads(adata.uns["assignment"])
@@ -533,7 +533,7 @@ def test_wf3_with_an_assembly_block_the_per_fov_files_have_no_filter_and_no_glob
     assert list(reads.columns) == [c for c in MOLECULE_READS if not c.startswith("global_")] + ASSIGNMENT_READS
     assert len(reads) == counts["molecules"] == len(KEEP)
     assert reads.spot_id.tolist() == [f"m{i}" for i in range(len(KEEP))]       # input order, unfiltered
-    folder = tmp_path / "output/data/out/checkpoints/Position001/assignment/default"
+    folder = tmp_path / "output/data/out/fovs/Position001/assignment/default"
     saved = read_assignment(folder, "default")
     assert saved.record["name"] == record["name"] == "default"
     recorded = ReferenceGrid(tuple(saved.record["grid"]["shape_zyx"]), ImageMetadata(**saved.record["grid"]["metadata"]),
@@ -630,7 +630,7 @@ def test_wf3_the_bigstitcher_path_end_to_end(tmp_path, monkeypatch):
     root = tmp_path / "data" / "output"
     save = tmp_path / "bigstitcher"
     for k, fov in enumerate(LINK_IDS):
-        save_volume(np.full(LINK_SHAPE, k + 1, np.uint16), root / "images/ref_merged" / f"{fov}.tif",
+        save_volume(np.full(LINK_SHAPE, k + 1, np.uint16), root / "fovs" / fov / "reference.tif",
                     metadata=grid(LINK_SHAPE, LN_SPACING).metadata)
     positions = {"source": "regular_grid", "regular_grid": {"columns": 2, "rows": 2,
                                                             "order": "column_major_down_right", "overlap": 0.25}}
@@ -701,14 +701,14 @@ STAGE_POSITIONS = {"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"},
 
 
 def stage_dataset(tmp_path, pattern, points=STAGE_POINTS, start=9, end=12, **blocks):
-    """A configuration, the sample annotation, the default stage file and a ref_merged image per FOV of the sample."""
+    """A configuration, the sample annotation, the default stage file and a reference image per FOV of the sample."""
     config = dataset_config(tmp_path, pattern=pattern, **blocks)
     sheet = annotation(tmp_path, start, end)
     root = tmp_path / "data" / "output"
     (root / "documents" / "maf").mkdir(parents=True, exist_ok=True)
     (root / "documents" / "maf" / f"{SAMPLE}.maf").write_text(maf_text(points))
     for i in range(start, end + 1):
-        save_volume(np.full(STAGE_SHAPE, i, np.uint16), root / "images/ref_merged" / f"{pattern.format(i=i)}.tif",
+        save_volume(np.full(STAGE_SHAPE, i, np.uint16), root / "fovs" / pattern.format(i=i) / "reference.tif",
                     metadata=grid(STAGE_SHAPE, STAGE_SPACING).metadata)
     return config, sheet, root
 

@@ -424,7 +424,7 @@ def test_ef2_two_fovs(tmp_path):
     case = report_records(tmp_path / "root")
     shutil.rmtree(case.root / "stitching")
     for fov in ("F3", "F4"):
-        shutil.rmtree(case.checkpoint(fov))
+        shutil.rmtree(case.fov_folder(fov))
     case.fov_ids = ["F1", "F2"]
     _, record, tables = collect(case)
     # Median 725: F1 and F2 both at 75, F1 first in list order; F2 is the fewest left, and the most over both.

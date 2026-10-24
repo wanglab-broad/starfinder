@@ -5,7 +5,8 @@ configuration"). One rule for ``Dataset.export`` (the assembly and fusion inputs
 ``Dataset.stitch``, the workflow's stitching rules and its ``reads_assignment`` with an
 ``assembly`` block, so that a dataset analysed before §2.10, whose files store no calibration
 or keep the reference image elsewhere, is placed and exported as saved. The file is the one
-the setting ``reference_image`` names.
+``_layout.reference_image_path`` resolves: the setting ``reference_image_import`` when it is
+given, else ``reference_image``.
 """
 from __future__ import annotations
 
@@ -14,21 +15,31 @@ from collections.abc import Mapping
 from numbers import Real
 from pathlib import Path
 
-from starfinder._layout import REFERENCE_IMAGE, REFERENCE_IMAGE_KEY, reference_image_path
+from starfinder._layout import (REFERENCE_IMAGE, REFERENCE_IMAGE_IMPORT_KEY, REFERENCE_IMAGE_KEY,
+                                check_reference_import, reference_image_path)
 
 #: The configuration keys of the declared calibration (workflow YAML; ``Dataset`` fields of the same names).
 VOXEL_KEYS = ("voxel_size_xy", "voxel_size_z")
 
 
 def reference_settings(source) -> dict:
-    """The keyword arguments of :func:`reference_grid` from a ``Dataset`` or a workflow configuration mapping."""
+    """The keyword arguments of :func:`reference_grid` from a ``Dataset`` or a workflow configuration mapping.
+
+    A mapping that gives both ``reference_image`` and ``reference_image_import``
+    (neither null) raises ``ValueError``: the two exclude each other.
+    """
     if isinstance(source, Mapping):
-        pattern = source.get(REFERENCE_IMAGE_KEY)
+        pattern, imported = source.get(REFERENCE_IMAGE_KEY), source.get(REFERENCE_IMAGE_IMPORT_KEY)
+        if pattern is not None and imported is not None:
+            raise ValueError(f"{REFERENCE_IMAGE_IMPORT_KEY} ({imported!r}) excludes {REFERENCE_IMAGE_KEY} "
+                             f"({pattern!r}): give one of the two")
+        pattern = REFERENCE_IMAGE if pattern is None else pattern
         return {"dataset_id": source["dataset_id"], "output_id": source["output_id"],
                 "voxel_size_xy": source.get("voxel_size_xy"), "voxel_size_z": source.get("voxel_size_z"),
-                "reference_image": REFERENCE_IMAGE if pattern is None else pattern}
+                "reference_image": pattern, "reference_image_import": check_reference_import(pattern, imported)}
     return {"dataset_id": source.dataset_id, "output_id": source.output_id, "voxel_size_xy": source.voxel_size_xy,
-            "voxel_size_z": source.voxel_size_z, "reference_image": source.reference_image}
+            "voxel_size_z": source.voxel_size_z, "reference_image": source.reference_image,
+            "reference_image_import": source.reference_image_import}
 
 
 def check_voxel_size(name, value):
@@ -57,10 +68,10 @@ def declared_metadata(dataset_id, output_id, fov_id, *, voxel_size_xy=None, voxe
 
 
 def reference_grid(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=None, voxel_size_z=None,
-                   reference_image=REFERENCE_IMAGE):
-    """The reference grid of the FOV's reference image, the file ``reference_image`` names.
+                   reference_image=REFERENCE_IMAGE, reference_image_import=None):
+    """The reference grid of the FOV's reference image, the file ``reference_image_import`` or ``reference_image`` names.
 
-    The default is ``images/ref_merged/<fov_id>.tif``. A file with a
+    The default is ``fovs/<fov_id>/reference.tif``. A file with a
     ``starfinder_metadata`` description is read as
     :func:`starfinder.segmentation.reference_grid_from_file` reads it, and its
     metadata wins. A file without one takes the grid declared by the
@@ -80,19 +91,22 @@ def reference_grid(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=
 
     settings = {"dataset_id": dataset_id, "output_id": output_id, "voxel_size_xy": voxel_size_xy,
                 "voxel_size_z": voxel_size_z}
-    path = _existing_reference(output_root, fov_id, reference_image)
+    path = _existing_reference(output_root, fov_id, reference_image, reference_image_import)
     header = _volume_header(path)
     if header is None or header[1] or header[0] is None:
-        return reference_volume(output_root, fov_id, reference_image=reference_image, **settings)[0]
+        return reference_volume(output_root, fov_id, reference_image=reference_image,
+                                reference_image_import=reference_image_import, **settings)[0]
     return ReferenceGrid(header[0], _declared_grid_metadata(path, fov_id, **settings), "declared")
 
 
-def _existing_reference(output_root, fov_id, reference_image):
+def _existing_reference(output_root, fov_id, reference_image, reference_image_import=None):
     """The path of the FOV's reference image; FileNotFoundError naming the setting and the path if it is missing."""
-    path = reference_image_path(output_root, fov_id, reference_image)
+    path = reference_image_path(output_root, fov_id, reference_image, reference_image_import)
     if not path.is_file():
+        key, pattern = ((REFERENCE_IMAGE_KEY, reference_image) if reference_image_import is None
+                        else (REFERENCE_IMAGE_IMPORT_KEY, reference_image_import))
         raise FileNotFoundError(f"the reference image of FOV {fov_id!r} is missing: {path} (the file the setting "
-                                f"{REFERENCE_IMAGE_KEY} {reference_image!r} names)")
+                                f"{key} {pattern!r} names)")
     return path
 
 
@@ -109,7 +123,7 @@ def _declared_grid_metadata(path, fov_id, *, dataset_id, output_id, voxel_size_x
 
 
 def reference_volume(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=None, voxel_size_z=None,
-                     reference_image=REFERENCE_IMAGE):
+                     reference_image=REFERENCE_IMAGE, reference_image_import=None):
     """(grid, the loaded file, its path) of :func:`reference_grid`, for a caller that also needs the pixels.
 
     The file is loaded whole with ``load_volume``; the grid is the one
@@ -119,7 +133,7 @@ def reference_volume(output_root, fov_id, *, dataset_id, output_id, voxel_size_x
     from starfinder.segmentation import ReferenceGrid
     from starfinder.segmentation._labels import grid_sha256
 
-    path = _existing_reference(output_root, fov_id, reference_image)
+    path = _existing_reference(output_root, fov_id, reference_image, reference_image_import)
     loaded = load_volume(path)
     if loaded.diagnostics["metadata_source"] == "stored":
         return (ReferenceGrid(loaded.image.shape, loaded.metadata, f"file:{Path(path).resolve()}",

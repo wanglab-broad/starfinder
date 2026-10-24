@@ -295,11 +295,11 @@ class StitchingInput:
 
 * `Dataset.stitch(input="reference_merged")` reads the FOV's reference image, the file the
   dataset's `reference_image` names (a file pattern with `{fov_id}`, absolute or relative
-  to the output root; default `images/ref_merged/{fov_id}.tif`, which
+  to the output root; default `fovs/{fov_id}/reference.tif`, which
   `FOV.save_reference_image(reference_image="merged")` writes with the reference metadata,
   the image W-323 names for the two sample datasets); `input="reference_stain"` reads the
   saved `reference_stain` of `FOV.prepare_morphology`
-  (`<checkpoint dir>/<fov_id>/other_rounds/reference_stain/image.ome.tif`), the nuclear
+  (`fovs/<fov_id>/other_rounds/reference_stain/image.ome.tif`), the nuclear
   stain LN is stitched on. Its grid is the reference grid by the grid rule of
   {doc}`assignment-contract`: the reference image's stored metadata, or, for a reference
   image that stores none, the grid the dataset's `voxel_size_xy` and `voxel_size_z`

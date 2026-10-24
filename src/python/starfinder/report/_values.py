@@ -331,10 +331,10 @@ def z_size(export, placement, reference_images=None):
     return None if reference_images is None else reference_images()
 
 
-def reference_image_z_size(inputs, root, fov_ids, pattern=None):
-    """The Z size from a reference image: the file ``pattern`` names for a FOV (the ``Dataset``'s
-    ``reference_image``, resolved by ``_layout.reference_image_path``; None is its default
-    ``images/ref_merged/{fov_id}.tif``), of the first FOV in list order whose file exists and whose TIFF header gives
+def reference_image_z_size(inputs, root, fov_ids, pattern=None, imported=None):
+    """The Z size from a reference image: the file ``imported`` or ``pattern`` names for a FOV (the ``Dataset``'s
+    ``reference_image_import`` or ``reference_image``, resolved by ``_layout.reference_image_path``; None is the
+    default ``fovs/{fov_id}/reference.tif``), of the first FOV in list order whose file exists and whose TIFF header gives
     a ZYX or YX image (``io.tiff._volume_header`` with ``floating=True``: an integer or a floating-point file, no pixel
     decoded). Each file opened is hashed in blocks and listed in ``report.json`` ``inputs`` (kind
     ``reference_image``).
@@ -349,7 +349,7 @@ def reference_image_z_size(inputs, root, fov_ids, pattern=None):
     from starfinder.io.tiff import _volume_header
     failed = None
     for fov in fov_ids:
-        path = reference_image_path(root, fov, REFERENCE_IMAGE if pattern is None else pattern)
+        path = reference_image_path(root, fov, REFERENCE_IMAGE if pattern is None else pattern, imported)
         if not path.is_file():
             continue
         missing = inputs.verify(path, "reference_image")

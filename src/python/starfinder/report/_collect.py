@@ -418,7 +418,7 @@ class _Collection:
             if saved.get("source") == "folder" and saved.get("name") == self.assignment and saved.get("record_sha256"):
                 recorded[entry.get("fov_id")] = saved["record_sha256"]
         for fov in self.fov_ids:
-            path = _layout.checkpoint_dir(self.root, fov) / "assignment" / self.assignment / _layout.ASSIGNMENT_RECORD
+            path = _layout.assignment_dir(_layout.fov_dir(self.root, fov), self.assignment) / _layout.ASSIGNMENT_RECORD
             if not path.is_file() and fov not in recorded:
                 continue
             data = self.inputs.read(path, "assignment_record", recorded.get(fov))
@@ -432,7 +432,7 @@ class _Collection:
             run = cells.get("run")
             seg = None
             if run is not None:
-                path = _layout.checkpoint_dir(self.root, fov) / "segmentation" / run / "segmentation.json"
+                path = _layout.segmentation_dir(_layout.fov_dir(self.root, fov), run) / "segmentation.json"
                 # The run's record exists when the run was saved under it (its labels linked from there); an
                 # import or a run kept in memory has none, and the assignment's own copy of the record is read.
                 if path.is_file() or cells.get("saved_under_run"):
@@ -446,7 +446,7 @@ class _Collection:
     # fovs.csv ----------------------------------------------------------------------------------------------
 
     def _record_path(self, fov):
-        return f"{_layout.CHECKPOINTS}/{fov}/{_layout.RUN_RECORD}"
+        return _layout.run_record(self.root, fov).relative_to(self.root).as_posix()
 
     def count(self, fov, level):
         """A read level of a FOV's run record, or the reason it has none."""
@@ -660,7 +660,7 @@ class _Collection:
 
     def _transforms_file(self, fov):
         if fov not in self._transform_files:
-            path = _layout.checkpoint_dir(self.root, fov) / _layout.REGISTERED / _layout.TRANSFORMS_FILE
+            path = _layout.checkpoint_dir(_layout.fov_dir(self.root, fov)) / _layout.REGISTERED / _layout.TRANSFORMS_FILE
             record = self.inputs.json(path, "transforms", strict=False) if path.is_file() else None
             self._transform_files[fov] = record if isinstance(record, dict) else None
         return self._transform_files[fov]
@@ -1000,7 +1000,8 @@ class _Collection:
 
     def resolved_runs(self):
         assignment = {"name": self.assignment,
-                      "folders": {fov: f"{_layout.CHECKPOINTS}/{fov}/assignment/{self.assignment}"
+                      "folders": {fov: _layout.assignment_dir(_layout.fov_dir(self.root, fov), self.assignment)
+                                       .relative_to(self.root).as_posix()
                                   for fov in self.assignments}}
         if self.route == "after_fusion":
             section = (self.export or {}).get("segmentation") or {}
@@ -1070,7 +1071,7 @@ def _plain(row):
 def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
                    assignment: str | None = "default", segmentation: str | None = None,
                    config: ReportConfig | None = None, output_dir=None,
-                   reference_image: str | None = None) -> tuple[Path, dict]:
+                   reference_image: str | None = None, reference_image_import: str | None = None) -> tuple[Path, dict]:
     """Collect one sample's records into its report folder; return the folder and the ``report.json`` content.
 
     The checks 1 to 7 of docs/report-contract.md ("Checks before anything is
@@ -1099,7 +1100,9 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
         None is ``<output_root>/report/<sample>/``.
     reference_image : str or None
         The ``Dataset``'s ``reference_image`` pattern, where the Summary's Z size is read when no record holds a grid;
-        None is its default ``images/ref_merged/{fov_id}.tif``.
+        None is its default ``fovs/{fov_id}/reference.tif``.
+    reference_image_import : str or None
+        The ``Dataset``'s ``reference_image_import`` pattern, read in place of ``reference_image`` when given.
 
     Raises
     ------
@@ -1122,6 +1125,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
                                   assignment=assignment, segmentation=segmentation, config=config,
                                   output_dir=output_dir)
     collection.reference_image = reference_image
+    collection.reference_image_import = reference_image_import
     inputs, records, placement, export = collection.inputs, collection.records, collection.placement, collection.export
     fov_ids, config = collection.fov_ids, collection.config
     fovs = collection.fovs_rows()
@@ -1192,7 +1196,8 @@ def report_sample(dataset, sample: str, fov_ids: Sequence[str], *, assignment: s
     """``Dataset.report``: :func:`collect_report` on the dataset's output root and IDs, as a :class:`ReportRecord`."""
     folder, record = collect_report(dataset.output_root, sample, fov_ids, dataset_id=dataset.dataset_id,
                                     sample_id=dataset.sample_id, assignment=assignment, segmentation=segmentation,
-                                    config=config, output_dir=output_dir, reference_image=dataset.reference_image)
+                                    config=config, output_dir=output_dir, reference_image=dataset.reference_image,
+                                    reference_image_import=dataset.reference_image_import)
     return ReportRecord(Path(folder), record)
 
 
@@ -1240,7 +1245,7 @@ def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment,
     if not any(_layout.run_record(root, f).is_file() for f in fov_ids) and \
             not (export_dir / _layout.EXPORT_FILE).is_file():
         raise FileNotFoundError(f"nothing to report for sample {sample!r}: no FOV of the list has a run record "
-                                f"({root / _layout.CHECKPOINTS}/<fov>/{_layout.RUN_RECORD}) and there is no "
+                                f"({root / _layout.FOVS}/<fov>/{_layout.RUN_RECORD}) and there is no "
                                 f"{export_dir / _layout.EXPORT_FILE}")
     records = _check_run_records(inputs, root, fov_ids, dataset_id, sample_id)
     export = _check_export(inputs, export_dir, sample, fov_ids, assignment)
