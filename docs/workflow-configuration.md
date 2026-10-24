@@ -62,7 +62,11 @@ the per-sample rules; it is not the acquisition `sample_id`, which stays part of
 every path and namespace. The optional `selected_fovs` list restricts a run to
 those FOV IDs of the file, for every rule (the per-FOV rules and the per-sample
 stitching, export and report rules alike); a sample with none of them is left
-out. Python has no random selection. The Python backend refuses
+out. The Python rules' `fovID` wildcard matches the run's FOVs only, so an
+explicit target of another FOV resolves to no rule. A stage file or a supplied
+position table may hold other FOVs: the sample's selected FOVs are taken from
+it, and a regular grid is laid out over the sample's FOVs of `fovs.csv`, so a
+selected FOV keeps its cell. Python has no random selection. The Python backend refuses
 `fov_id_pattern`, `n_fovs` and the six subset keys, and needs no sample
 annotation.
 

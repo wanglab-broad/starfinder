@@ -224,6 +224,10 @@ if BACKEND == "python":
     FOV_TO_SAMPLE = {fov: sample for sample, fovs in SAMPLE_TO_FOV.items() for fov in fovs}
     SAMPLE = list(SAMPLE_TO_FOV)
     FOVS = list(_MEMBERS.fovs)
+    # The fovID wildcard of every rule matches the run's FOVs only (the Snakefile's wildcard_constraints), so that an
+    # explicit target of a FOV outside fovs.csv or selected_fovs resolves to no rule.
+    import re as _re
+    FOV_CONSTRAINT = "|".join(_re.escape(fov) for fov in FOVS)
 else:
     MEMBERSHIP = f"{OUTPUT_DIR}/documents/sample-annotation.csv"
     SAMPLE_ANNOT = pd.read_csv(MEMBERSHIP)

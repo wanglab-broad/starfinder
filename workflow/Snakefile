@@ -22,6 +22,12 @@ validate(config, schema="schemas/config.schema.yaml")
 
 include: "rules/common.smk"
 
+# The Python backend runs the FOVs of fovs.csv, restricted by selected_fovs, in every rule: its fovID wildcard
+# matches those FOV IDs only (FOV_CONSTRAINT, common.smk). The MATLAB backend keeps its unconstrained wildcard.
+if BACKEND == "python":
+    wildcard_constraints:
+        fovID=FOV_CONSTRAINT
+
 # Backend-specific rule files: only one set of core rules is active per run
 if BACKEND == "python":
     include: "rules/registration-py.smk"

@@ -518,7 +518,8 @@ class Dataset:
             stage file's path, required with ``stage_file``; no default). The
             stage file may hold other samples' positions: the FOVs' positions
             are selected before the converter maps, shifts or snaps them
-            (:func:`~starfinder.stitching.positions_from_leica`).
+            (:func:`~starfinder.stitching.positions_from_leica`). A supplied
+            table may hold other FOVs too: its rows of fov_ids are kept.
         config
             A config registered in ``STITCHING_METHODS``.
         input : str

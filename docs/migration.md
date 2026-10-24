@@ -2104,7 +2104,11 @@ change has no alias, no dual read and no dual search.
 * **New key `selected_fovs`** (Python only; absent or null: every FOV): a nonempty list of
   unique FOV IDs of `fovs.csv`. It restricts every rule, the per-sample stitching, export
   and report rules included (the subset keys did not restrict the per-sample rules). An
-  unknown or repeated ID raises.
+  unknown or repeated ID raises. The Python backend constrains the `fovID` wildcard of every
+  rule to the run's FOVs (`wildcard_constraints` in the Snakefile), so an explicit target of
+  another FOV resolves to no rule. Under a selection a supplied position table keeps its
+  rows of the selected FOVs, and a regular grid is laid out over the sample's FOVs of
+  `fovs.csv`, so each selected FOV keeps its cell.
 * **The legacy sample rules run with `backend: matlab` only:** `create_sample_maf`, the
   four rules of `stitching.smk`, `create_sample_h5ad` and `create_sample_reads_assignment`.
   A Python configuration that enables one of them without the block that replaces it

@@ -843,7 +843,10 @@ stitching:
   `selected_fovs`. With `source: stage_file`, `stage_file` is required (no default: the
   Python route writes no `documents/maf/<sample>.maf` copy) and `fovs.csv` must have the
   `position_id` column; the file may hold every sample's positions, and the sample's are
-  selected by `position_id` before the conversion.
+  selected by `position_id` before the conversion. A supplied table (`source: table`) may
+  also hold other FOVs: its rows of the sample's selected FOVs are kept. A regular grid is
+  laid out over the sample's FOVs of `fovs.csv` and its selected rows kept, so that a
+  selection keeps each FOV's cell.
 * `fiji_path` is read by the BigStitcher engine rule when it runs, not when the rule file
   is parsed; the key stays required for that rule only.
 * The static schema lists the method names and is kept equal to `STITCHING_METHODS` plus

@@ -149,3 +149,28 @@ def test_dataset_stitch_reports_a_fov_the_stage_file_does_not_name(tmp_path, mon
     with pytest.raises(ValueError, match=r"position_ids gives two FOVs one PositionID"):
         ds.stitch("sampleA", ["Position001", "Position002"], table=positions, config=None,
                   position_ids={"Position001": 1, "Position002": 1})
+
+
+def write_table(tmp_path, name, rows):
+    """A supplied position table (positions_from_table's columns, µm) of (fov_id, nominal_y, nominal_x) rows."""
+    path = tmp_path / name
+    pd.DataFrame([{"fov_id": f, "nominal_z": 0.0, "nominal_y": y, "nominal_x": x} for f, y, x in rows]).to_csv(
+        path, index=False)
+    return path
+
+
+def test_dataset_stitch_selects_its_fovs_from_a_supplied_table(tmp_path, monkeypatch):
+    """A supplied table that also holds other FOVs gives, for fov_ids, the placement of a table that holds only them;
+    a FOV of fov_ids the table does not list still raises."""
+    monkeypatch.setattr(stitching, "stitch", lambda inputs, table, *, sample, **kw: placement_from_table(
+        table, {item.fov_id: item.grid for item in inputs}, sample=sample))
+    ds = dataset(tmp_path)
+    rows = [("Position001", 0.0, 0.0), ("Position002", 259.2, 0.0), ("Position003", 0.0, 259.2)]
+    placements = [ds.stitch("sampleA", ["Position003", "Position002"], config=None,
+                            table={"source": "table", "table": str(write_table(tmp_path, name, table_rows))})
+                  for name, table_rows in (("all.csv", rows), ("selected.csv", rows[1:]))]
+    pd.testing.assert_frame_equal(placements[0].fovs, placements[1].fovs, check_exact=True)
+    assert placements[0].fovs.fov_id.tolist() == ["Position002", "Position003"]          # table order
+    with pytest.raises(ValueError, match=r"missing \['Position004'\]"):
+        ds.stitch("sampleA", ["Position002", "Position004"], config=None,
+                  table={"source": "table", "table": str(write_table(tmp_path, "all.csv", rows))})

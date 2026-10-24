@@ -17,7 +17,8 @@ from starfinder.dataset.types import ChannelInfo
 from starfinder.dataset.workflow import (_BIGSTITCHER, _LEGACY_SEGMENTATION_RUN, _NUCLEI_REFERENCE_CHANNEL,
     _after_fusion, _assembly_block, _declared_metadata, _export_config, _export_dataset, _flag, _label_namespace,
     _legacy_molecules, _membership, _molecule_table, _nuclei_checkpoints, _nuclei_registration, _reads_assignment,
-    _report_assignment, _report_block, _rule_checkpoints, _rule_parameters, _sample_fovs, _sample_table, _segmentation,
+    _report_assignment, _report_block, _rule_checkpoints, _rule_parameters, _sample_fovs, _sample_grid_fovs,
+    _sample_table, _segmentation,
     _stage_position_ids, _stitching_block, _workflow_dataset, from_workflow_config)
 from starfinder.preprocessing import ProjectionConfig
 from starfinder.registration import (ExternalReference, RegistrationRecipe, RegistrationSignalConfig,
@@ -703,7 +704,9 @@ def _run_stitching(snakemake):
     selected_fovs) and, with a stage file, their PositionIDs
     (_stage_position_ids). With an in-process method, Dataset.stitch with the
     block's positions, config, input, review and fallback and those
-    PositionIDs, saved to the output's folder. With bigstitcher,
+    PositionIDs, saved to the output's folder; a regular grid under a selection
+    is laid out over the sample's FOVs of fovs.csv and its selected rows kept
+    (_sample_table), so each FOV keeps its cell. With bigstitcher,
     the import of the engine rule's dataset.xml (input 1) with the view map
     (input 2) and the macro (input 3) of the macro rule, on the table of the
     positions and the FOVs' reference grids (of the file reference_image_import
@@ -721,13 +724,18 @@ def _run_stitching(snakemake):
     membership = _membership(config, snakemake.input[0])
     fov_ids = _sample_fovs(config, sample, snakemake.input[0])
     position_ids = _stage_position_ids(config, membership)
+    grid_fov_ids = _sample_grid_fovs(config, sample, snakemake.input[0])
     folder = Path(snakemake.output[0]).parent
     if block.method != _BIGSTITCHER:
-        dataset.stitch(sample, fov_ids, table=block.positions, config=block.config, input=block.input,
+        table = block.positions
+        if table.get('source') == 'regular_grid' and grid_fov_ids != fov_ids:
+            grids = {fov: reference_grid(dataset.output_root, fov, **reference_settings(config)) for fov in fov_ids}
+            table = _sample_table(block, dataset, sample, fov_ids, grids, position_ids, grid_fov_ids)
+        dataset.stitch(sample, fov_ids, table=table, config=block.config, input=block.input,
                        review=block.review, fallback=block.fallback, output_dir=folder, position_ids=position_ids)
         return
     grids = {fov: reference_grid(dataset.output_root, fov, **reference_settings(config)) for fov in fov_ids}
-    table = _sample_table(block, dataset, sample, fov_ids, grids, position_ids)
+    table = _sample_table(block, dataset, sample, fov_ids, grids, position_ids, grid_fov_ids)
     result = import_bigstitcher(snakemake.input[1], table=table, view_map=_read_view_map(snakemake.input[2]),
                                 grids=grids, config=block.config, review=block.review, fallback=block.fallback,
                                 sample=sample, macro=Path(snakemake.input[3]).read_text())
@@ -753,7 +761,7 @@ def _run_bigstitcher_macro(snakemake):
     position_ids = _stage_position_ids(config, _membership(config, snakemake.input[0]))
     loaded = read_inputs(dataset.output_root, fov_ids, block.input, reference=reference_settings(config))
     table = _sample_table(block, dataset, sample, fov_ids, {fov: item.grid for fov, item in loaded.items()},
-                          position_ids)
+                          position_ids, _sample_grid_fovs(config, sample, snakemake.input[0]))
     text, view_map = export_bigstitcher(table, [loaded[fov] for fov in table.fov_ids], config=block.config,
                                         tile_dir=folder / 'tiles', save_dir=folder)
     Path(snakemake.output[0]).write_text(text)

@@ -144,7 +144,13 @@ def _selected_positions(path, fov_ids, fov_pattern, position_ids):
     return {position_ids[fov]: fov for fov in wanted}
 
 
-def table_from_positions(positions, fov_ids, grids, *, fov_pattern, position_ids=None) -> TilePositionTable:
+def _rows_of(table, fov_ids):
+    """The table's rows of fov_ids, in table order."""
+    return TilePositionTable(table.positions[table.positions["fov_id"].isin(list(fov_ids))], table.source, table.record)
+
+
+def table_from_positions(positions, fov_ids, grids, *, fov_pattern, position_ids=None,
+                         grid_fov_ids=None) -> TilePositionTable:
     """The tile position table of the workflow's ``positions`` mapping, with the geometry the converter used.
 
     A stage file (``stage_file``, required with source ``stage_file``) may hold
@@ -153,7 +159,12 @@ def table_from_positions(positions, fov_ids, grids, *, fov_pattern, position_ids
     them. ``position_ids`` gives each FOV's ``PositionID`` (the workflow's
     ``fovs.csv``); without it ``PositionID`` ``p`` is the FOV
     ``fov_pattern.format(i=p)`` and the positions that name a FOV of fov_ids
-    are selected.
+    are selected. A supplied table (``table``) may also hold other FOVs: its rows
+    of fov_ids are kept, in table order (a FOV it does not list is then missing
+    from the table, which ``Dataset.stitch`` reports). A regular grid places
+    ``grid_fov_ids`` (default fov_ids) in its cells and keeps the rows of
+    fov_ids: the workflow passes the sample's FOVs of ``fovs.csv``, so that a
+    selection keeps each FOV's cell.
     """
     if not isinstance(positions, Mapping):
         raise TypeError("table must be a TilePositionTable or the workflow's positions mapping")
@@ -165,8 +176,9 @@ def table_from_positions(positions, fov_ids, grids, *, fov_pattern, position_ids
     if source == "regular_grid":
         grid = _section(positions, "regular_grid", ("columns", "rows", "order", "overlap"))
         tile, spacing, geometry = _geometry(positions, grids)
-        table = positions_from_grid(columns=grid["columns"], rows=grid["rows"], order=grid["order"],
-                                    overlap=grid["overlap"], tile_shape_yx=tile, spacing_yx=spacing, fov_ids=fov_ids)
+        table = _rows_of(positions_from_grid(columns=grid["columns"], rows=grid["rows"], order=grid["order"],
+                                             overlap=grid["overlap"], tile_shape_yx=tile, spacing_yx=spacing,
+                                             fov_ids=fov_ids if grid_fov_ids is None else grid_fov_ids), fov_ids)
     elif source == "stage_file":
         axes = positions.get("stage_axes")
         if not isinstance(axes, Mapping) or set(axes) != {"x", "y"}:
@@ -187,6 +199,8 @@ def table_from_positions(positions, fov_ids, grids, *, fov_pattern, position_ids
         if not positions.get("table"):
             raise ValueError("positions.table (a CSV path) is required with source table")
         table = positions_from_table(positions["table"], unit=positions.get("unit", "µm"))
+        # The table may hold other FOVs (other samples, unselected FOVs): only fov_ids' rows, in table order.
+        table = _rows_of(table, fov_ids)
     else:
         raise ValueError(f"positions.source must be one of {list(POSITION_SOURCES)}; got {source!r}")
     if geometry is None:

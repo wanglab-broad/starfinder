@@ -1415,18 +1415,25 @@ def _input_root(config):
     return Path(config['root_input_path']) / config['dataset_id'] / config['sample_id']
 
 
-def _sample_table(block, dataset, sample, fov_ids, grids, position_ids):
+def _sample_grid_fovs(config, sample, path=None):
+    """Every FOV of a sample in fovs.csv, selected_fovs aside: the FOVs a regular grid places in its cells, so that a
+    selection keeps each selected FOV's cell."""
+    return _sample_fovs(dict(config, selected_fovs=None), sample, path)
+
+
+def _sample_table(block, dataset, sample, fov_ids, grids, position_ids, grid_fov_ids=None):
     """The tile position table of the block's positions mapping, holding exactly fov_ids (as Dataset.stitch builds it).
 
     A stage file's positions are those of position_ids (_stage_position_ids),
-    selected before the conversion. A FOV of the sample that the positions do
+    selected before the conversion; a regular grid places grid_fov_ids
+    (_sample_grid_fovs) and keeps the rows of fov_ids. A FOV of the sample that the positions do
     not list, or a listed FOV that is not one of the sample, raises ValueError
     naming both lists, as Dataset.stitch does for a table that does not match
     its FOVs.
     """
     from ._stitching import table_from_positions
     table = table_from_positions(block.positions, fov_ids, grids, fov_pattern=dataset.fov_pattern,
-                                 position_ids=position_ids)
+                                 position_ids=position_ids, grid_fov_ids=grid_fov_ids)
     if set(table.fov_ids) != set(fov_ids):
         missing = [f for f in fov_ids if f not in table.fov_ids]
         extra = [f for f in table.fov_ids if f not in fov_ids]
