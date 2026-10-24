@@ -83,6 +83,8 @@ Paths are relative to the output directory.
 | `create_sample_h5ad` | the annotation and the `raw.h5ad` of every FOV of the sample | `expr/{sample}_raw.h5ad` |
 | `create_sample_reads_assignment` | the annotation and the `reads_assignment.csv` of every FOV of the sample | `expr/{sample}_reads_assignment.csv` |
 
+W-567 later removed `documents/genes.csv` from `reads_assignment`'s inputs: the matrix's genes and their order are the codebook's ({doc}`migration`).
+
 `create_sample_h5ad.py` reads each FOV's `raw.h5ad` with `scanpy.read_h5ad`, skips
 missing and empty ones with a message, calls `var_names_make_unique`, concatenates with
 `anndata.concat(…, index_unique="_")`, merges the annotation columns by `sample`, and sets

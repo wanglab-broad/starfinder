@@ -30,6 +30,8 @@ An em dash in the default column means the schema defines no default.
 | `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching and the declared calibration of the files the segmentation and assignment rules read, and of a FOV's reference image (`reference_image`) that stores no metadata when the stitching rules, `reads_assignment` (with an `assembly` block) and `export_sample` read its grid; **not** extraction window radii |
 | `reference_image` | string with `{fov_id}` | No | `fovs/{fov_id}/reference.tif`; Python only: the file pattern of a FOV's reference image, absolute or relative to the output root, whose grid the stitching rules, `reads_assignment` (with an `assembly` block) and `export_sample` read and which `reference_merged` names (`Dataset.reference_image`); a pattern without `{fov_id}` raises `ValueError`, a missing file `FileNotFoundError`, each naming the key. Absent or null is the default; the Python processing rules write the file there, and `FOV.load_reference_image` and every reader read it. Excludes `reference_image_import` |
 | `reference_image_import` | string with `{fov_id}` | No | None; Python only: the file pattern of an imported reference image, one another tool or rule produced, absolute or relative to the output root (`Dataset.reference_image_import`). The processing rules then write no reference image, and every reader reads this file; nothing writes to it. Excludes `reference_image` |
+| `codebook`, `direct_panel` | strings, or null | No | None (`<input root>/genes.csv`); Python only: the codebook (`codebook`, readout_mode `multiplexed`) or direct panel (`direct_panel`, readout_mode `direct`) the sequencing rules, `reads_assignment` and `export_sample` read, absolute or relative to the input root; the key of the other mode raises. See [reference file and image layout](#reference-file-and-image-layout) |
+| `image_dir_template` | `"{round}/{fov}"` or `"{fov}/{round}"`, or null | No | None (`"{round}/{fov}"`); Python only: the layout of the acquisition images under the input root (`Dataset.image_dir_template`); any other value raises. See [reference file and image layout](#reference-file-and-image-layout) |
 | `maximum_projection` | boolean | No | `false`; reference-image/DAPI output projection; does not turn sequencing into a 2-D algorithm |
 | `seq_channel_order` | array of strings, or of objects with `wavelength`, `channel`, `name` | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]`, or MATLAB's `channel_order_dict` entries; see [channels](#channels) |
 | `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; supply `[]` when unused; accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
@@ -46,6 +48,35 @@ An em dash in the default column means the schema defines no default.
 | `subset_random` | boolean | No | `false`, applied by `common.smk`'s MATLAB branch (the schema holds no default); MATLAB backend only |
 | `n_random_tests` | integer >=1 | Conditional | —; MATLAB backend only; see caveat below |
 | `rules` | object of recognized rule names | Yes | —; each provided section requires boolean `run` |
+
+### Reference file and image layout
+
+Three Python-only keys name the inputs that the Python rules read from the input root
+`INPUT = root_input_path/dataset_id/sample_id`; the MATLAB backend reads
+`INPUT/genes.csv` and the round-first layout only, and `common.smk` refuses the three
+keys for it.
+
+* `codebook` (readout_mode `multiplexed`) or `direct_panel` (readout_mode `direct`)
+  names the reference file, absolute or relative to INPUT; absent or null, it is
+  `INPUT/genes.csv`. The other mode's key raises `ValueError` naming both. The
+  sequencing rules (`rsf_single_fov`, `gr_single_fov_subtile`,
+  `lrsf_single_fov_subtile`, `deep_rsf_subtile`) declare it as their codebook input,
+  `export_sample` loads it for the genes of the molecule tables, and `reads_assignment`
+  loads it as they do: its genes, in its order (`Codebook.genes`, first appearance, or
+  `DirectPanel.genes`, table order), are the gene universe and the columns of the count
+  matrix. No input file is renamed.
+* `image_dir_template` lays out the images of one round of one FOV: `"{round}/{fov}"`
+  (the default), `INPUT/<round>/<fov>/`, or `"{fov}/{round}"`,
+  `INPUT/<fov>/<round>/`. Any other value raises. `FOV.input_dir` builds the folder
+  with it, so do the image inputs of the Python rules and the stain file of
+  `rotate_nuclei` (`get_dapi_input`); the channel files inside the folder are matched
+  as before, by substring or `source_paths`. `fovs.csv` stays the FOV membership.
+
+```yaml
+backend: python
+codebook: panels/codebook-v2.csv      # INPUT/panels/codebook-v2.csv
+image_dir_template: "{fov}/{round}"   # INPUT/<fov>/<round>/*ch00.tif ...
+```
 
 ### FOV membership
 
@@ -333,7 +364,8 @@ codebook) or `direct`: each candidate is assigned the gene of its own round and
 channel. The schema accepts `direct` only with `backend: python`. In `direct` mode:
 
 * the rule's codebook input is the panel CSV, with the header `round,channel,gene_id`
-  (one gene per (round, channel); a repeated gene or (round, channel) is an error);
+  (one gene per (round, channel); a repeated gene or (round, channel) is an error):
+  `INPUT/genes.csv`, or the file `direct_panel` names;
 * `spot_finding.rounds` must list the rounds to detect in, so that every candidate
   has its round (listing only the reference round is allowed);
 * each candidate is extracted in its own round only, and the `decoding` block

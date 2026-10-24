@@ -144,6 +144,29 @@ properties:
       absolute or relative to the output root (Python only). The processing rules then write no reference
       image, and every reader reads this file; nothing writes to it. Excludes reference_image.
 
+  image_dir_template:
+    type: [string, "null"]
+    enum: ["{round}/{fov}", "{fov}/{round}", null]
+    description: >-
+      Layout of the acquisition images under the input root (Python only; Dataset.image_dir_template):
+      "{round}/{fov}" (absent or null), a folder per round holding a folder per FOV, or "{fov}/{round}", a
+      folder per FOV holding a folder per round. The MATLAB rules read the round-first layout only.
+
+  codebook:
+    type: [string, "null"]
+    minLength: 1
+    description: >-
+      The codebook the sequencing rules read and whose genes, in its order, are the count matrix's columns
+      (Python only; readout_mode multiplexed), absolute or relative to the input root; absent or null is
+      <input root>/genes.csv, the file the MATLAB rules read.
+
+  direct_panel:
+    type: [string, "null"]
+    minLength: 1
+    description: >-
+      The direct panel (round,channel,gene_id) of readout_mode direct (Python only), absolute or relative to
+      the input root; absent or null is <input root>/genes.csv.
+
   maximum_projection:
     type: boolean
     default: false
@@ -188,7 +211,7 @@ properties:
     description: >-
       Python only (Dataset.readout_mode). multiplexed decodes color sequences with the
       codebook; direct assigns each candidate the gene of its own round and channel from
-      the panel CSV (round,channel,gene_id), which is then the rule's codebook input, and
+      the panel CSV (round,channel,gene_id; direct_panel), which is then the rule's codebook input, and
       needs spot_finding.rounds. direct requires backend python.
 
   # ==================== Segmentation and assignment (Python only) ====================

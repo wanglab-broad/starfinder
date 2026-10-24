@@ -13,7 +13,8 @@
 # as well; the molecule grid is then that of the FOV's reference image (the file reference_image_import or
 # reference_image names, default fovs/{fovID}/reference.tif), which the adapter reads (_assembly_cells).
 # READS_ASSIGNMENT_GEOMETRY is the one input that places the FOV: the tile configuration, or that grid.
-# The molecule input is MOLECULE_TABLE (common.smk), the file of the configured producer.
+# The molecule input is MOLECULE_TABLE (common.smk), the file of the configured producer. The count matrix's genes,
+# in their order, are those of the codebook the sequencing rules read (CODEBOOK, common.smk; _reference_genes).
 if ASSEMBLY_BLOCK:
     from starfinder._snakemake import _assignment_record_outputs, _reference_image_inputs
     READS_ASSIGNMENT_GEOMETRY = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])
@@ -31,7 +32,7 @@ rule reads_assignment:
         expand("{dapi_dir}/{{fovID}}.tif", dapi_dir=DAPI_DIR, fovID=FOVS),
         expand("{output_dir}/images/stardist_segmentation/{{fovID}}.tif", output_dir=OUTPUT_DIR, fovID=FOVS),
         MOLECULE_TABLE,
-        expand("{output_dir}/documents/genes.csv", output_dir=OUTPUT_DIR),
+        CODEBOOK,
         READS_ASSIGNMENT_GEOMETRY,
     output:
         expand("{output_dir}/expr/{{fovID}}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=FOVS),

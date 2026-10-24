@@ -279,14 +279,16 @@ class FOV:
         Parameters
         ----------
         round_name : str
-            Round name appended to input_root before fov_id.
+            Round name; the folder is ``<input_root>/<round>/<fov_id>``, or
+            ``<input_root>/<fov_id>/<round>`` with the dataset's
+            image_dir_template ``"{fov}/{round}"``.
 
         Returns
         -------
         pathlib.Path
             Input directory; does not create it.
         """
-        return self.dataset.input_root / round_name / self.fov_id
+        return _layout.image_dir(self.dataset.input_root, round_name, self.fov_id, self.dataset.image_dir_template)
 
     # --- Image loading ---
 

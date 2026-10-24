@@ -70,7 +70,9 @@ in its stored dtype.
 
 For workflows, check `seq_channel_order`, path identifiers and `n_rounds` in
 [top-level configuration](workflow-configuration.md#top-level-fields).
-Python expects `input_root/round/FOV/*ch*.tif`. MATLAB's corresponding entry is
+Python expects `input_root/round/FOV/*ch*.tif`, or `input_root/FOV/round/*ch*.tif` with
+`Dataset(image_dir_template="{fov}/{round}")` (the workflow key of the same name).
+MATLAB reads the round-first layout only; its corresponding entry is
 {mat:func}`LoadImageStacks`; see [channel conventions](conventions.md#channel-order).
 
 ## Register two volumes

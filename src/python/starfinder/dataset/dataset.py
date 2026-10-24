@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from starfinder._layout import REFERENCE_IMAGE
+from starfinder._layout import IMAGE_DIR_TEMPLATE, REFERENCE_IMAGE
 from starfinder._records import file_sha256
 from starfinder.readout import (BarcodeLayout, Codebook, DirectPanel, EncodingConfig, OneBaseEncodingConfig,
     load_codebook, load_direct_panel)
@@ -80,6 +80,11 @@ class Dataset:
     fov_pattern is the ``{i}`` pattern (``str.format`` with the field ``i``,
     default ``Position{i:03d}``) of :meth:`fov_ids` and of the FOV a stage
     file's ``PositionID`` names in :meth:`stitch`.
+    image_dir_template (the workflow key of the same name) lays out the
+    acquisition images under input_root: ``"{round}/{fov}"`` (default), one
+    folder per round holding a folder per FOV, or ``"{fov}/{round}"``, one
+    folder per FOV holding a folder per round. ``FOV.input_dir`` builds
+    the folder a round's channel files are read from with it.
     The repr summarizes IDs, round and channel labels, the reference (codebook
     with its encoding method and segment layout, or the panel in direct mode)
     and roots.
@@ -93,7 +98,8 @@ class Dataset:
         sharing a pattern with channel_order, a voxel size that is not a
         finite positive number or None, a reference_image or
         reference_image_import that is not a pattern with ``{fov_id}``, a
-        fov_pattern that is not a ``{i}`` pattern, both
+        fov_pattern that is not a ``{i}`` pattern, an image_dir_template other
+        than the two layouts, both
         reference settings given, a channel pattern that is not a safe
         single path component (``[A-Za-z0-9][A-Za-z0-9_.-]*``; the Python
         workflow names channel folders by it), or the field errors of
@@ -137,6 +143,9 @@ class Dataset:
     # workflow's reference_image_import, which every reader reads and nothing writes
     reference_image: str = REFERENCE_IMAGE
     reference_image_import: str | None = None
+    # The layout of the acquisition images under input_root, as the workflow's image_dir_template: round-first
+    # (default) or FOV-first
+    image_dir_template: str = IMAGE_DIR_TEMPLATE
 
     # The patterns and ChannelInfo of the sequencing channels (key None) and of each other round with its own
     # channels. An init field so that dataclasses.replace hands it to the copy, which keeps the ChannelInfo of
@@ -156,13 +165,14 @@ class Dataset:
             raise ValueError(f"readout_mode must be one of {READOUT_MODES}; got {self.readout_mode!r}")
         if self.direct_panel is not None and not isinstance(self.direct_panel, DirectPanel):
             raise TypeError("direct_panel must be a DirectPanel or None")
-        from starfinder._layout import check_reference_image, check_reference_import
+        from starfinder._layout import check_image_dir_template, check_reference_image, check_reference_import
         from starfinder.dataset._declared import check_voxel_size
         self.voxel_size_xy = check_voxel_size("voxel_size_xy", self.voxel_size_xy)
         self.voxel_size_z = check_voxel_size("voxel_size_z", self.voxel_size_z)
         self.reference_image = check_reference_image(self.reference_image)
         self.reference_image_import = check_reference_import(self.reference_image, self.reference_image_import)
         self.fov_pattern = _check_fov_pattern(self.fov_pattern)
+        self.image_dir_template = check_image_dir_template(self.image_dir_template)
         self.rounds.validate()
         if REFERENCE_STAIN in self.rounds.all_rounds:
             raise ValueError(f"{REFERENCE_STAIN!r} is the reserved image name of the reference stains; "

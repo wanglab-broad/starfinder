@@ -86,7 +86,7 @@ blocks instead, and its `reads_assignment` reads the FOV membership `INPUT/fovs.
 | `create_BigStitcher_macro` | Fused sample `grid.csv` | `images/fused/{sample}/BigStitcher_macro.ijm`; actual script is `create_BigStitcher_macro_1.py` |
 | `run_BigStitcher_macro` | Macro and grid | `images/fused/{sample}/DAPI/dataset.xml`, through configured Fiji executable |
 | `create_tile_config` | Sample's dataset XML and grid | `output/tile_config_{sample}.csv` and `.html` |
-| `reads_assignment` | The FOV membership (`INPUT/fovs.csv` for the Python backend, the annotation for MATLAB), DAPI, segmentation labels, the molecule table, `documents/genes.csv`, sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written |
+| `reads_assignment` | The FOV membership (`INPUT/fovs.csv` for the Python backend, the annotation for MATLAB), DAPI, segmentation labels, the molecule table, the codebook of the sequencing rules (`INPUT/genes.csv`, or the file `codebook` or `direct_panel` names), sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written |
 | `create_sample_h5ad` | Annotation and all per-FOV H5ADs in its sample range | `expr/{sample}_raw.h5ad` |
 | `create_sample_reads_assignment` | Annotation and all per-FOV assignment CSVs in its sample range | `expr/{sample}_reads_assignment.csv` |
 
@@ -105,10 +105,12 @@ positions (`load_molecules`); a legacy goodSpots CSV's one-based `x,y,z`, intege
 become zero-based positions and the row `i` the spot `csv:<i>`
 (`import_legacy_molecules_csv`). Positions are sampled at `floor(c + 0.5)`; a molecule
 outside the label grid is
-`outside_grid`. `documents/genes.csv`, a headerless gene/barcode table not copied from
-INPUT by these rules, gives the matrix columns and must list the same genes as the
-codebook the sequencing rules read (`INPUT/genes.csv`, or the panel with
-`readout_mode: direct`); a molecule gene outside it raises before assignment. The
+`outside_grid`. The matrix columns are the genes of the codebook the sequencing rules
+read, loaded as they load it, in its order: `Codebook.genes` (first appearance) or, with
+`readout_mode: direct`, the panel's `DirectPanel.genes` (table order). That file is
+`INPUT/genes.csv`, or the file the Python-only key `codebook` (`direct_panel`) names
+({doc}`workflow-configuration`, "Reference file"); a molecule gene outside it raises
+before assignment, and a codebook gene no molecule carries is a zero column. The
 tile config supplies integer `id,x,y,z` and
 `start_x_norm,end_x_norm,start_y_norm,end_y_norm` columns; the adapter applies the
 global offsets and the non-overlap filter to the package result as the script did,

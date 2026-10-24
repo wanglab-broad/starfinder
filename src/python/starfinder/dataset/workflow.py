@@ -740,7 +740,9 @@ def _workflow_dataset(config, **fields):
     voxel_size_z become the Dataset fields of the same names, the declared
     calibration of saved files that store none, and reference_image (absent
     or null: fovs/{fov_id}/reference.tif) and reference_image_import (absent
-    or null: none) the fields of those names, which exclude each other.
+    or null: none) the fields of those names, which exclude each other. The
+    Python-only image_dir_template is the field of that name
+    (_image_dir_template).
     """
     n = config['n_rounds']
     if isinstance(n, bool) or not isinstance(n, int) or n < 1:
@@ -753,6 +755,7 @@ def _workflow_dataset(config, **fields):
     if not isinstance(channels, (list, tuple)):
         raise ValueError('seq_channel_order must be a list of channel patterns or of wavelength/channel/name entries')
     reference = reference_settings(config)
+    fields.setdefault('image_dir_template', _image_dir_template(config))
     return Dataset(Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'],
         Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
         config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
@@ -760,6 +763,83 @@ def _workflow_dataset(config, **fields):
         voxel_size_xy=config.get('voxel_size_xy'), voxel_size_z=config.get('voxel_size_z'),
         reference_image=reference['reference_image'], reference_image_import=reference['reference_image_import'],
         **fields)
+
+
+def _image_dir_template(config):
+    """The Python-only image_dir_template: "{round}/{fov}" (absent or null) or "{fov}/{round}"; ValueError otherwise.
+
+    The MATLAB rules read the round-first layout only, so the key needs
+    backend: python.
+    """
+    value = config.get('image_dir_template')
+    if value is None:
+        return _layout.IMAGE_DIR_TEMPLATE
+    _python_only(config, ['image_dir_template'])
+    return _layout.check_image_dir_template(value)
+
+
+# The Python-only keys naming the reference file of the sequencing rules, by readout mode.
+_REFERENCE_KEYS = {'multiplexed': 'codebook', 'direct': 'direct_panel'}
+# The channel labels of a codebook loaded only for its genes when the configuration names no seq_channel_order
+# (MATLAB's default channel order): the four colours, which the genes do not depend on.
+_COLOUR_LABELS = ('1', '2', '3', '4')
+
+
+def _reference_file(config):
+    """The codebook the sequencing rules read, or the direct panel in readout_mode direct.
+
+    The Python-only key codebook (direct_panel in readout_mode direct) names
+    the file, absolute or relative to the input root; absent or null, it is
+    <input_root>/genes.csv, the file the MATLAB rules read. The key of the
+    other readout mode raises ValueError naming both keys.
+    """
+    mode = config.get('readout_mode', 'multiplexed')
+    key = _REFERENCE_KEYS.get(mode, 'codebook')
+    given = [k for k in _REFERENCE_KEYS.values() if config.get(k) is not None]
+    _python_only(config, given)
+    for other in given:
+        if other != key:
+            raise ValueError(f'{other} names the file of readout_mode '
+                             f'{next(m for m, k in _REFERENCE_KEYS.items() if k == other)}; readout_mode {mode} '
+                             f'reads {key}')
+    value = config.get(key)
+    if value is not None and (not isinstance(value, str) or not value):
+        raise ValueError(f'{key} must be a file path, absolute or relative to the input root; got {value!r}')
+    return _input_root(config) / (_layout.CODEBOOK_FILE if value is None else value)
+
+
+def _load_reference(adapted, path):
+    """adapted.dataset with path loaded: the direct panel in readout_mode direct, else the codebook with the
+    encoding and layout of the adapted rule."""
+    dataset = adapted.dataset
+    if dataset.readout_mode == 'direct':
+        dataset.load_direct_panel(path)
+    else:
+        dataset.load_codebook(path, encoding=adapted.encoding, layout=adapted.layout)
+    return dataset
+
+
+def _first_rule(config):
+    """The first Python processing rule the configuration names (rsf_single_fov when none)."""
+    return next((r for r in _RULES if r in config.get('rules', {})), 'rsf_single_fov')
+
+
+def _reference_genes(config, path=None):
+    """The genes of the count matrix in their order: the loaded codebook's (Codebook.genes, first-appearance order)
+    or direct panel's (DirectPanel.genes, table order).
+
+    path is the reference file (None: _reference_file), loaded as
+    _export_dataset loads it, with the encoding and layout of the first Python
+    rule the configuration names; for the MATLAB backend that is the file
+    MATLAB decodes with. A configuration without seq_channel_order (MATLAB's
+    default channel order) labels the codebook's channels by its four colours,
+    on which the genes do not depend.
+    """
+    adapted = from_workflow_config(config, _first_rule(config))
+    if not adapted.dataset.channel_order:
+        adapted = replace(adapted, dataset=replace(adapted.dataset, channel_order=_COLOUR_LABELS))
+    dataset = _load_reference(adapted, _reference_file(config) if path is None else path)
+    return tuple(dataset.direct_panel.genes if dataset.readout_mode == 'direct' else dataset.codebook.genes)
 
 
 def _nuclei_registration(config):
@@ -1582,24 +1662,18 @@ def _export_dataset(config, block, export=None):
     molecule tables: molecules only (assignment null), or the route after fusion (``export``, the ExportConfig;
     None reads it from the configuration).
 
-    The codebook is the sequencing rules' input genes.csv (the direct panel in
-    readout_mode direct), loaded with the encoding and layout of the first
+    The codebook is the sequencing rules' reference file (_reference_file: the
+    file codebook names, or direct_panel in readout_mode direct, else
+    <input_root>/genes.csv), loaded with the encoding and layout of the first
     Python rule the configuration names (rsf_single_fov when none).
     """
     if block.assignment is not None and not _after_fusion(_export_config(config)[0] if export is None else export,
                                                           block):
         return _workflow_dataset(config)
-    rule = next((r for r in _RULES if r in config.get('rules', {})), 'rsf_single_fov')
-    adapted = from_workflow_config(config, rule)
-    dataset = adapted.dataset
+    adapted = from_workflow_config(config, _first_rule(config))
     # The molecule tables of the legacy route are read with the legacy reader (_legacy_molecules).
-    dataset._legacy_molecules = _legacy_molecules(config)
-    codebook = Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'] / 'genes.csv'
-    if dataset.readout_mode == 'direct':
-        dataset.load_direct_panel(codebook)
-    else:
-        dataset.load_codebook(codebook, encoding=adapted.encoding, layout=adapted.layout)
-    return dataset
+    adapted.dataset._legacy_molecules = _legacy_molecules(config)
+    return _load_reference(adapted, _reference_file(config))
 
 
 # --- §2.11: the Python-only report block and the rules report_sample and report_dataset

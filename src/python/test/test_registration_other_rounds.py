@@ -270,13 +270,16 @@ def test_the_python_workflow_rule_mirrors_the_matlab_outputs(tmp_path, maximum_p
             assert saved.shape == SHAPE[1:]
         else:
             assert np.array_equal(saved[OVERLAP], truth[OVERLAP + (c,)])
-    # The Python rule declares the MATLAB rule's inputs and, instead of MATLAB's log and shift table, the
-    # registration record; it runs the Python script.
+    # The Python rule declares the MATLAB rule's inputs, its image folders laid out by image_dir_template
+    # (_image_dir_inputs; the default is MATLAB's round-first layout), and, instead of MATLAB's log and shift table,
+    # the registration record; it runs the Python script.
     python_rule, matlab_rule = (ROOT / "workflow" / "rules" / "registration-py.smk",
                                 ROOT / "workflow" / "rules" / "registration.smk")
     python_block, matlab_block = rule_block(python_rule), rule_block(matlab_rule)
     inputs, outputs = python_block.split("    output:\n")
-    assert matlab_block.split("    output:\n")[0] == inputs
+    assert matlab_block.split("    output:\n")[0] == inputs.replace(
+        "_image_dir_inputs(config, additional_round_names)",
+        'expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=additional_round_names)')
     assert outputs == '        expand("{output_dir}/fovs/{{fovID}}/nuclei_registration.json", output_dir=OUTPUT_DIR),\n'
     assert "/log/" not in outputs and "/log/" in matlab_block.split("    output:\n")[1]
     assert '"../scripts/nuclei_registration.py"' in python_rule.read_text()

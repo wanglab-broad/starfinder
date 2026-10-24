@@ -291,7 +291,7 @@ def _check_placement(inputs, stitching_dir, fov_ids):
     return record
 
 
-def _codebook_genes(data: bytes, kind) -> list[str]:
+def _reference_gene_names(data: bytes, kind) -> list[str]:
     """The gene names of a codebook or direct panel file (the gene column of the forms the loaders read)."""
     rows = [r for r in csv.reader(io.StringIO(data.decode("utf-8-sig"), newline="")) if r]
     if not rows:
@@ -316,7 +316,7 @@ def _check_markers(inputs, config, records, export, export_dir):
             path = inputs.source(record, codebook["path"])
             data = None if path is None else inputs.read(path, "codebook", codebook.get("sha256"))
             if data is not None and not isinstance(data, Unavailable):
-                source = (str(path), set(_codebook_genes(data, codebook.get("kind"))))
+                source = (str(path), set(_reference_gene_names(data, codebook.get("kind"))))
             break
     if source is None and isinstance(_get(export, "assembly", "genes"), list):
         source = (str(export_dir / _layout.EXPORT_FILE), set(export["assembly"]["genes"]))

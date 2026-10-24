@@ -217,7 +217,7 @@ ROUND = [f"round{i}" for i in range(1, config['n_rounds']+1)]
 if BACKEND == "python":
     sys.path.insert(0, str(Path(config["starfinder_path"]) / "src" / "python"))
     from starfinder import _layout
-    from starfinder.dataset.workflow import _membership
+    from starfinder.dataset.workflow import _membership, _reference_file
     MEMBERSHIP = str(_layout.fovs_file(INPUT_DIR))
     _MEMBERS = _membership(config, MEMBERSHIP)
     SAMPLE_TO_FOV = {sample: list(fovs) for sample, fovs in _MEMBERS.samples.items()}
@@ -228,7 +228,18 @@ if BACKEND == "python":
     # explicit target of a FOV outside fovs.csv or selected_fovs resolves to no rule.
     import re as _re
     FOV_CONSTRAINT = "|".join(_re.escape(fov) for fov in FOVS)
+    # The codebook of the sequencing rules and reads_assignment: the file the Python-only key codebook (direct_panel
+    # in readout_mode direct) names, absolute or relative to INPUT_DIR, else <INPUT>/genes.csv (_reference_file).
+    CODEBOOK = str(_reference_file(config))
 else:
+    # MATLAB reads <INPUT>/genes.csv and the round-first image layout <INPUT>/<round>/<fov>; the keys that name
+    # another codebook or layout are Python-only.
+    _PYTHON_INPUT_KEYS = [key for key in ('codebook', 'direct_panel', 'image_dir_template')
+                          if config.get(key) is not None]
+    if _PYTHON_INPUT_KEYS:
+        raise ValueError(f"{', '.join(_PYTHON_INPUT_KEYS)} {'is' if len(_PYTHON_INPUT_KEYS) == 1 else 'are'} "
+                         "Python-only and need backend: python")
+    CODEBOOK = f"{INPUT_DIR}/genes.csv"
     MEMBERSHIP = f"{OUTPUT_DIR}/documents/sample-annotation.csv"
     SAMPLE_ANNOT = pd.read_csv(MEMBERSHIP)
     SAMPLE_TO_FOV = {}
@@ -411,8 +422,8 @@ if BACKEND == "python":
     # fovs/{fovID}/subtile_{n_subtile}/run.json), the reference image they write (the file reference_image
     # names; none with reference_image_import, which they never write) and the one its readers read, a single
     # path pattern, so that a rule input named by it is one path (snakemake.input.<name> a string).
-    from starfinder._snakemake import (_reference_image_inputs, _reference_image_outputs, _run_record_outputs,
-                                       _shared_image_inputs)
+    from starfinder._snakemake import (_image_dir_inputs, _reference_image_inputs, _reference_image_outputs,
+                                       _run_record_outputs, _shared_image_inputs)
     RUN_RECORD = _run_record_outputs(OUTPUT_DIR, ["{fovID}"])[0]
     SUBTILE_RUN_RECORD = _run_record_outputs(OUTPUT_DIR, ["{fovID}"], ["{n_subtile}"])[0]
     REFERENCE_IMAGE_OUTPUT = _reference_image_outputs(config, OUTPUT_DIR, ["{fovID}"])

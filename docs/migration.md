@@ -1292,6 +1292,7 @@ Intentional changes of the outputs of `reads_assignment`:
 * A goodSpots gene outside the codebook raises `ValueError` naming it before
   assignment, where the script silently left it out of the counts; `documents/genes.csv`
   must list the codebook's genes.
+  (W-567 no longer reads `documents/genes.csv`: the genes and their order are the codebook's.)
 * A label file expanded by `stardist_segmentation` (`expand_labels: true` there) raises,
   naming the key: give the distance as `reads_assignment.parameters.dilation_distance`
   with `expand_labels: true`, so assign expands once and keeps both masks.
@@ -2152,6 +2153,53 @@ change has no alias, no dual read and no dual search.
 * **Examples.** `workflow-minimal.yaml`, `workflow-full.yaml` and `workflow-recipe-2.yaml`
   drop the eight keys; `prepare_workflow.py` writes `INPUT/fovs.csv` instead of the
   annotation; `quickstart.py` uses `fov_pattern="FOV_{i:03d}"` and writes `input/fovs.csv`.
+
+### One gene authority, the reference-file keys and `image_dir_template`
+
+W-567 (OM-13, NM-11) takes the count matrix's genes from the codebook alone and lets Python
+read FOV-first image folders. The MATLAB code, its codebook input `INPUT/genes.csv` and its
+round-first layout are unchanged. Existing output trees are not rewritten, no input file is
+renamed, and each change has no alias, no dual read and no dual search.
+
+* **`OUTPUT/documents/genes.csv` is no longer read.** `reads_assignment`'s fifth input is
+  the codebook the sequencing rules read (`CODEBOOK` of `common.smk`), on both backends,
+  since the rule and its adapter are shared; it was `documents/genes.csv`, checked against
+  the codebook by gene set. The adapter loads the codebook as the sequencing rules do (the
+  encoding and segment layout of the first Python rule the configuration names; a
+  configuration without `seq_channel_order` labels its four colour channels `1`–`4`, on
+  which the genes do not depend), and its genes are the gene universe and the matrix
+  columns. The private helpers `_assignment_genes` and `_codebook_genes` of
+  `starfinder._snakemake` are removed; `_reference_genes` of `starfinder.dataset.workflow`
+  replaces them. The report's private reader of the same name, which reads a recorded
+  codebook's gene names for the marker check, is renamed `_reference_gene_names` and is
+  otherwise unchanged.
+* **The column order of `raw.h5ad` may change.** The columns are the codebook's genes in
+  its order: `Codebook.genes` (first appearance) or, with `readout_mode: direct`,
+  `DirectPanel.genes` (table order). They were in the order of `documents/genes.csv`. Where
+  the two orders differed, the columns are permuted and each gene's counts are unchanged:
+  compare matrices by gene name (`adata[:, genes]`), not by column position. A codebook gene
+  that no molecule carries is a zero column, as before when both lists held it; a gene of
+  `documents/genes.csv` absent from the codebook no longer exists to raise.
+* **New keys `codebook` and `direct_panel`** (Python only; absent or null:
+  `<input root>/genes.csv`, as before): the codebook of readout_mode `multiplexed` or the
+  direct panel of readout_mode `direct`, absolute or relative to the input root. The key of
+  the other mode raises `ValueError`. The Python sequencing rules declare the file as their
+  codebook input, and `_run_workflow`, `_export_dataset` (the codebook of `export_sample`)
+  and `reads_assignment` load it. The MATLAB rules keep `INPUT/genes.csv`, and `common.smk`
+  refuses the two keys (and `image_dir_template`) with `backend: matlab`.
+* **New `image_dir_template`** (the workflow key, Python only, and the `Dataset` field;
+  default `"{round}/{fov}"`): the layout of one round of one FOV under the input root,
+  `<round>/<fov>` or `<fov>/<round>`. Any other value raises `ValueError` when the
+  `Dataset` is built, and the schema refuses it. `FOV.input_dir` follows it, and through
+  it `FOV.load_images` (the reference stains included) and the benchmark pipeline
+  adapter's input links; so do the Python rules' image inputs (`_image_dir_inputs` of
+  `starfinder._snakemake`: `rsf_single_fov`, `gr_single_fov_subtile`,
+  `deep_create_subtile`, `nuclei_registration`) and `get_dapi_input` of
+  `registration-py.smk`. Channel matching and `source_paths` are unchanged; `fovs.csv`
+  stays the membership. The MATLAB rules and loader stay round-first.
+* **Tests.** The tests that linked the FOV-first synthetic e2e data into the round-first
+  layout (`conftest.py`'s `e2e_result`, `test_fov.py`'s `small_pipeline_dataset`, the two
+  streaming tests of `test_e2e.py`) read it in place with `image_dir_template="{fov}/{round}"`.
 
 ### The processing report
 

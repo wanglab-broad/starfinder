@@ -200,15 +200,8 @@ class TestE2EStreamingMode:
         batch_fov, _, _ = e2e_result
 
         tmp_path = tmp_path_factory.mktemp("streaming")
-        fov_dir = small_dataset / "FOV_001"
-        for round_dir in fov_dir.iterdir():
-            if round_dir.is_dir():
-                target = tmp_path / round_dir.name / "FOV_001"
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.symlink_to(round_dir)
-
         ds = Dataset(
-            input_root=tmp_path,
+            input_root=small_dataset,
             output_root=tmp_path / "output",
             dataset_id="test",
             sample_id="small",
@@ -219,6 +212,7 @@ class TestE2EStreamingMode:
             ),
             channel_order=["ch00", "ch01", "ch02", "ch03"],
             fov_pattern="FOV_{i:03d}",
+            image_dir_template="{fov}/{round}",
         )
         ds.load_codebook(small_dataset / "codebook.csv")
 
@@ -271,15 +265,8 @@ class TestE2EStreamingMode:
         batch_fov, _, _ = e2e_result
 
         tmp_path = tmp_path_factory.mktemp("streaming_mem")
-        fov_dir = small_dataset / "FOV_001"
-        for round_dir in fov_dir.iterdir():
-            if round_dir.is_dir():
-                target = tmp_path / round_dir.name / "FOV_001"
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.symlink_to(round_dir)
-
         ds = Dataset(
-            input_root=tmp_path,
+            input_root=small_dataset,
             output_root=tmp_path / "output",
             dataset_id="test",
             sample_id="small",
@@ -290,6 +277,7 @@ class TestE2EStreamingMode:
             ),
             channel_order=["ch00", "ch01", "ch02", "ch03"],
             fov_pattern="FOV_{i:03d}",
+            image_dir_template="{fov}/{round}",
         )
         ds.load_codebook(small_dataset / "codebook.csv")
 

@@ -173,6 +173,28 @@ def fovs_file(input_root) -> Path:
     return Path(input_root) / "fovs.csv"
 
 
+#: The layouts of the acquisition images under the input root (``image_dir_template``, the workflow key and the
+#: ``Dataset`` field): the folder of one round of one FOV, round-first (the default, the layout MATLAB reads) or
+#: FOV-first. The channel files in that folder are found as before (``io.load_round``).
+IMAGE_DIR_TEMPLATES = ("{round}/{fov}", "{fov}/{round}")
+IMAGE_DIR_TEMPLATE = IMAGE_DIR_TEMPLATES[0]
+#: The codebook (or direct panel) under the input root when the configuration names no other file.
+CODEBOOK_FILE = "genes.csv"
+
+
+def check_image_dir_template(value) -> str:
+    """The template ``value``; ValueError naming the two layouts for anything else."""
+    if value not in IMAGE_DIR_TEMPLATES:
+        raise ValueError(f"image_dir_template must be one of {', '.join(map(repr, IMAGE_DIR_TEMPLATES))} "
+                         f"(default {IMAGE_DIR_TEMPLATE!r}); got {value!r}")
+    return value
+
+
+def image_dir(input_root, round_name, fov_id, template=IMAGE_DIR_TEMPLATE) -> Path:
+    """``<round>/<fov_id>`` or ``<fov_id>/<round>`` under the input root, as ``template`` lays out the images."""
+    return Path(input_root) / check_image_dir_template(template).format(round=round_name, fov=fov_id)
+
+
 @dataclass(frozen=True)
 class _FovPaths:
     """Immutable path helper for consistent output locations.

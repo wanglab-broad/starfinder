@@ -47,7 +47,8 @@ import tifffile
 from starfinder._snakemake import _run_reads_assignment
 
 from .coordination_helpers import write_molecules_csv
-from .test_assignment_golden import GENES, legacy_assignment, write_genes
+from .test_assignment_golden import GENES, legacy_assignment
+from .test_assignment_workflow import CODEBOOK
 from .test_workflow_stitching_golden import _affine, legacy_tile_config
 
 pytestmark = [pytest.mark.workflow, pytest.mark.dataset, pytest.mark.golden]
@@ -252,7 +253,7 @@ def _config(root, *, legacy=True):
     return {"backend": "matlab" if legacy else "python", "dataset_id": "data", "sample_id": "sample", "output_id": "out",
             "root_input_path": str(root / "input"), "root_output_path": str(root / "output"),
             **({"fov_id_pattern": FOV_ID_PATTERN} if legacy else {}),
-            "img_z": TILE_ZYX[0], "img_row": IMG_ROW, "img_col": IMG_COL,
+            "n_rounds": 3, "ref_round": "round1", "img_z": TILE_ZYX[0], "img_row": IMG_ROW, "img_col": IMG_COL,
             "voxel_size_z": 0.35, "voxel_size_xy": 0.2,
             "rules": {"stardist_segmentation": {"parameters": {"segmentation_input_folder": "overlay",
                                                                "expand_labels": False}},
@@ -260,7 +261,7 @@ def _config(root, *, legacy=True):
 
 
 def build_sample(root, dimensions, *, cells=CELLS, placement=STITCHING, molecules=None, legacy=True):
-    """The sample's output folder: membership, genes, codebook, tile_config and per FOV labels and molecules: the
+    """The sample's output folder: membership, codebook, tile_config and per FOV labels and molecules: the
     legacy route's sample annotation and goodSpots CSV, or with ``legacy`` False the input root's fovs.csv and
     fovs/<fov>/molecules.csv (row ``i`` the spot ``m<i>``).
 
@@ -272,10 +273,9 @@ def build_sample(root, dimensions, *, cells=CELLS, placement=STITCHING, molecule
     out = root / "output" / "data" / "out"
     for folder in ("documents", "output", "signal", "images/DAPI", "images/stardist_segmentation"):
         (out / folder).mkdir(parents=True, exist_ok=True)
-    write_genes(out / "documents" / "genes.csv")
     codebook = root / "input" / "data" / "sample" / "genes.csv"
     codebook.parent.mkdir(parents=True, exist_ok=True)
-    write_genes(codebook)
+    codebook.write_text("".join(f"{gene},{barcode}\n" for gene, barcode in CODEBOOK))
     if legacy:
         (out / "documents" / "sample-annotation.csv").write_text("sample_id,fov_start,fov_end\nsample1,1,3\n")
     else:
@@ -303,7 +303,7 @@ def run_adapter(root, out, fov_id):
     anndata = pytest.importorskip("anndata")
     inputs = [out / "documents" / "sample-annotation.csv", out / "images" / "DAPI" / f"{fov_id}.tif",
               out / "images" / "stardist_segmentation" / f"{fov_id}.tif", out / "signal" / f"{fov_id}_goodSpots.csv",
-              out / "documents" / "genes.csv", out / "output" / "tile_config_sample1.csv"]
+              root / "input" / "data" / "sample" / "genes.csv", out / "output" / "tile_config_sample1.csv"]
     outputs = [out / "expr" / fov_id / "raw.h5ad", out / "expr" / fov_id / "reads_assignment.csv"]
     _run_reads_assignment(SimpleNamespace(input=[str(p) for p in inputs], output=[str(p) for p in outputs],
                                           config=_config(root), wildcards=SimpleNamespace(fovID=fov_id)))
@@ -317,7 +317,8 @@ def run_legacy(out, frame, dimensions):
         labels = tifffile.imread(out / "images" / "stardist_segmentation" / f"{fov_id}.tif")
         record = frame[frame['id'] == number].iloc[0]
         results[number] = legacy_fov_assembly(labels, out / "signal" / f"{fov_id}_goodSpots.csv",
-                                               out / "documents" / "genes.csv", record, fov_id=fov_id)
+                                               out.parents[2] / "input" / "data" / "sample" / "genes.csv", record,
+                                               fov_id=fov_id)
     return results
 
 

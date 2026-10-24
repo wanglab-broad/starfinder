@@ -54,6 +54,8 @@ Paths are relative to `OUTPUT = {root_output_path}/{dataset_id}/{output_id}`.
 | `create_sample_h5ad` | the annotation and the `raw.h5ad` of every FOV of the sample (`SAMPLE_TO_FOV`, lines 26-27) | `expr/{sample}_raw.h5ad` |
 | `create_sample_reads_assignment` | the annotation and the `reads_assignment.csv` of every FOV of the sample (lines 42-43) | `expr/{sample}_reads_assignment.csv` |
 
+W-567 later removed `documents/genes.csv` from `reads_assignment`'s inputs: the matrix's genes and their order are the codebook's ({doc}`migration`).
+
 Because every FOV declares every sample's tile configuration, a change in one sample's
 placement reruns `reads_assignment` for the FOVs of all samples. No rule reads a placement
 status, a link or a review state: none exists.

@@ -4,6 +4,8 @@
     The processing rules declare their FOV's run.json (RUN_RECORD, in the FOV folder fovs/<fov>/) instead of
     MATLAB's log files, and the reference image they write (REFERENCE_IMAGE_OUTPUT: the file reference_image
     names, none with reference_image_import); nuclei_registration declares its fovs/<fov>/nuclei_registration.json.
+    The codebook input is CODEBOOK (common.smk), and the image folders are those of image_dir_template
+    (_image_dir_inputs: <INPUT>/<round>/<fov>, or <INPUT>/<fov>/<round>).
     Uses variables from common.smk
 """
 
@@ -12,8 +14,8 @@
 rule rsf_single_fov:
     input:
         config['config_path'].replace('.yaml', '.json'),
-        expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
-        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
+        CODEBOOK,
+        _image_dir_inputs(config, ROUND),
     output:
         RUN_RECORD,
         REFERENCE_IMAGE_OUTPUT,
@@ -32,8 +34,8 @@ rule rsf_single_fov:
 rule gr_single_fov_subtile:
     input:
         config['config_path'].replace('.yaml', '.json'),
-        expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
-        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
+        CODEBOOK,
+        _image_dir_inputs(config, ROUND),
     output:
         RUN_RECORD,
         REFERENCE_IMAGE_OUTPUT,
@@ -54,7 +56,7 @@ rule gr_single_fov_subtile:
 rule deep_create_subtile:
     input:
         config['config_path'].replace('.yaml', '.json'),
-        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
+        _image_dir_inputs(config, ROUND),
     output:
         RUN_RECORD,
         REFERENCE_IMAGE_OUTPUT,
@@ -77,7 +79,7 @@ additional_round_names = get_additional_round_names()
 rule nuclei_registration:
     input:
         config['config_path'].replace('.yaml', '.json'),
-        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=additional_round_names),
+        _image_dir_inputs(config, additional_round_names),
     output:
         expand("{output_dir}/fovs/{{fovID}}/nuclei_registration.json", output_dir=OUTPUT_DIR),
     resources:
@@ -88,7 +90,9 @@ rule nuclei_registration:
 ### ==================== [ Rotate Nuclei ] =========================
 
 def get_dapi_input(wildcards):
-    pattern = f"{INPUT_DIR}/{config['dapi_round']}/{wildcards.fovID}/*ch04.tif"
+    from starfinder import _layout
+    template = config.get('image_dir_template') or _layout.IMAGE_DIR_TEMPLATE
+    pattern = f"{_layout.image_dir(INPUT_DIR, config['dapi_round'], wildcards.fovID, template)}/*ch04.tif"
     ff = sorted(glob.glob(pattern))
     if len(ff) != 1:
         raise ValueError(f"rotate_nuclei needs exactly one file matching {pattern}; found {len(ff)}: {ff}")

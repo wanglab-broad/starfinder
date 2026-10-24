@@ -28,7 +28,7 @@ construct these two roots:
 INPUT  = root_input_path / dataset_id / sample_id
 OUTPUT = root_output_path / dataset_id / output_id
 
-INPUT/genes.csv                      # headerless gene,barcode rows
+INPUT/genes.csv                      # headerless gene,barcode rows (Python: or the file `codebook` names)
 INPUT/fovs.csv                       # Python backend: the FOV membership
 INPUT/round1/tile_1/*ch00.tif          # per-channel Z stacks
 INPUT/round1/tile_1/*ch02.tif
@@ -66,6 +66,17 @@ input directory's `sample_id`, which stays part of every path and namespace. A
 annotation, keep groups non-overlapping and cover each selected FOV. Prepare the
 codebook and acquisition metadata from the actual experiment before real
 execution.
+
+The Python backend reads two more input settings
+([configuration](workflow-configuration.md#reference-file-and-image-layout)). The
+codebook (the direct panel with `readout_mode: direct`) is `INPUT/genes.csv` unless
+the key `codebook` (`direct_panel`) names another file, absolute or relative to
+INPUT; the sequencing rules and `reads_assignment` read that file, and its genes, in
+its order, are the columns of the count matrix. The images are laid out round-first,
+`INPUT/<round>/<fov>/`, unless `image_dir_template: "{fov}/{round}"` reads them
+FOV-first, `INPUT/<fov>/<round>/`; the channel files inside are found as above. The
+MATLAB backend reads `INPUT/genes.csv` and the round-first layout only, and refuses
+the three keys.
 
 ## Stages and files
 

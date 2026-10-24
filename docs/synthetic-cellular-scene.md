@@ -1007,7 +1007,8 @@ acquisition as the reference round, and (2) every other round, loaded with its o
 channels (`Dataset.other_channel_order`) and registered with `FOV.register`; with
 no recipe, one translation on the shared stain, the single reference stain against the
 round's one channel of the same name (`dataset/fov.py::FOV.prepare_morphology`;
-{doc}`coordination`, "Sequencing rounds and other rounds"). A round is read from `<input_root>/<round>/<fov_id>/`,
+{doc}`coordination`, "Sequencing rounds and other rounds"). A round is read from `<input_root>/<round>/<fov_id>/`
+(the default `image_dir_template`; `<input_root>/<fov_id>/<round>/` with `"{fov}/{round}"`),
 one file per channel matched by `*<pattern>*.tif` (`dataset/fov.py::FOV.load_images`,
 `io/tiff.py::load_round`). Registration transforms are pull maps: the registered image
 at reference index `p` is the moving image at `p + d` for a translation with

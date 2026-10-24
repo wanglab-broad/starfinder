@@ -44,6 +44,9 @@ MOLECULE_READS = ["spot_namespace", "spot_id", "z", "y", "x", "gene_id", "entry_
                   "global_y", "global_z", "seg_label"]
 ASSIGNMENT_READS = NEW_READS[1:]
 NAMESPACE = '["data","sample","Position001",null]'
+# The codebook the rule's genes come from: GENES's genes in their order, with barcodes that encode to distinct colour
+# sequences of the configuration's three rounds (GENES's own barcodes repeat one, which load_codebook refuses).
+CODEBOOK = (("A", "CAAA"), ("B", "GAAA"), ("C", "TAAA"), ("D", "ACAA"), ("E", "AGAA"))
 
 
 def workflow(tmp_path, *, expand=False, seg_expand=False, backend="python", **extra):
@@ -52,7 +55,7 @@ def workflow(tmp_path, *, expand=False, seg_expand=False, backend="python", **ex
     return {"backend": backend, "dataset_id": "data", "sample_id": "sample", "output_id": "out",
             "root_input_path": str(tmp_path / "input"), "root_output_path": str(tmp_path / "output"),
             **({"fov_id_pattern": "Position{i:03d}"} if backend == "matlab" else {}),
-            "img_z": SHAPE_ZYX[0], "voxel_size_z": 0.35, "voxel_size_xy": 0.1,
+            "n_rounds": 3, "ref_round": "round1", "img_z": SHAPE_ZYX[0], "voxel_size_z": 0.35, "voxel_size_xy": 0.1,
             "rules": {"stardist_segmentation": {"parameters": {"segmentation_input_folder": "overlay",
                                                                "expand_labels": seg_expand, "distance": 4}},
                       "reads_assignment": {"parameters": {"expand_labels": expand, "dilation_distance": DISTANCE}}},
@@ -68,12 +71,13 @@ def write_reads(path, molecules, *, floats=False):
     return path
 
 
-def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=GENES, legacy=False, spot_ids=None,
+def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=CODEBOOK, legacy=False, spot_ids=None,
              **options):
     """reads_assignment through a stub snakemake object: one FOV, tile offsets 0, a box covering the FOV.
 
     Its membership input is the one the backend reads: fovs.csv under the input root (Python), or the sample
-    annotation (MATLAB).
+    annotation (MATLAB). Its codebook input is <input_root>/genes.csv (headerless gene,barcode rows of
+    ``codebook``), whose genes are the matrix's columns.
 
     The molecule table is fovs/Position001/molecules.csv of the Python rsf_single_fov, or with ``legacy`` the
     one-based goodSpots CSV of the legacy route: MATLAB's rsf_single_fov writes integers, stitch_subtile (the
@@ -86,7 +90,6 @@ def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=GENES, 
     out = tmp_path / "output" / "data" / "out"
     for folder in ("documents", "output", "signal", "images/DAPI", "images/stardist_segmentation"):
         (out / folder).mkdir(parents=True, exist_ok=True)
-    (out / "documents" / "genes.csv").write_text("".join(f"{g},{b}\n" for g, b in GENES))
     codebook_path = tmp_path / "input" / "data" / "sample" / "genes.csv"
     codebook_path.parent.mkdir(parents=True)
     codebook_path.write_text("".join(f"{g},{b}\n" for g, b in codebook))
@@ -107,7 +110,7 @@ def run_rule(tmp_path, labels, molecules=KEEP, *, floats=False, codebook=GENES, 
         reads = write_molecules_csv(out / "fovs" / "Position001" / "molecules.csv", NAMESPACE,
                                     [p for p, _ in molecules], [g for _, g in molecules], spot_ids)
     inputs = [membership, out / "images" / "DAPI" / "Position001.tif",
-              out / "images" / "stardist_segmentation" / "Position001.tif", reads, out / "documents" / "genes.csv",
+              out / "images" / "stardist_segmentation" / "Position001.tif", reads, codebook_path,
               out / "output" / "tile_config_sample1.csv"]
     outputs = [out / "expr" / "Position001" / "raw.h5ad", out / "expr" / "Position001" / "reads_assignment.csv"]
     _run_reads_assignment(SimpleNamespace(input=[str(p) for p in inputs], output=[str(p) for p in outputs],
@@ -174,9 +177,25 @@ def test_a18_unknown_keys_and_the_block_raise(tmp_path):
         _reads_assignment(dict(workflow(tmp_path), assignment={"cells": "cell"}))
 
 
-def test_a18_a_gene_mismatch_with_the_codebook_raises(tmp_path):
-    with pytest.raises(ValueError, match=r"only in genes.csv \['E'\], only in the codebook \['F'\]"):
-        run_rule(tmp_path, label_fixture(), codebook=GENES[:4] + (("F", "TTTT"),))
+@pytest.mark.parametrize("legacy", [False, True])
+def test_the_matrix_columns_are_the_codebook_s_genes_in_its_order(tmp_path, legacy):
+    """OM-13: the genes and their order come from the loaded codebook, on both backends' routes; each gene's counts
+    are those of the run whose codebook lists the genes in GENES's order."""
+    adata, reads, _ = run_rule(tmp_path / "base", label_fixture(), legacy=legacy)
+    shuffled = tuple(CODEBOOK[i] for i in (2, 0, 4, 1, 3))
+    other, other_reads, _ = run_rule(tmp_path / "shuffled", label_fixture(), codebook=shuffled, legacy=legacy)
+    assert adata.var_names.tolist() == [g for g, _ in GENES]
+    assert other.var_names.tolist() == [g for g, _ in shuffled]
+    assert np.array_equal(other[:, adata.var_names].X, adata.X) and adata.X.sum() > 0
+    assert_frame_equal(other.obs, adata.obs)
+    assert_frame_equal(other_reads, reads)
+
+
+def test_a_codebook_with_a_gene_more_gives_it_a_zero_column(tmp_path):
+    """The codebook is the gene universe: a gene of the codebook that no molecule carries has a zero column."""
+    adata, _, _ = run_rule(tmp_path, label_fixture(), codebook=CODEBOOK + (("F", "ATAA"),))
+    assert adata.var_names.tolist() == [g for g, _ in GENES] + ["F"]
+    assert not adata[:, "F"].X.any() and adata.X.sum() > 0
 
 
 # --- A18: raw.h5ad and reads_assignment.csv against the frozen legacy helper ---------------------------
@@ -189,8 +208,8 @@ def test_a18_the_legacy_outputs_equal_the_frozen_helper(tmp_path, dimensions, ex
     labels = label_fixture() if dimensions == "3d" else label_fixture().max(axis=0)
     adata, reads, reads_csv = run_rule(tmp_path, labels, floats=floats, expand=expand, legacy=True)
     legacy_csv = write_reads(tmp_path / "legacy.csv", KEEP)  # the legacy script raises on float coordinates
-    expected, counts, meta = legacy_reads_assignment(labels, legacy_csv,
-                                                     tmp_path / "output/data/out/documents/genes.csv", expand=expand)
+    expected, counts, meta = legacy_reads_assignment(labels, legacy_csv, tmp_path / "input/data/sample/genes.csv",
+                                                     expand=expand)
     assert adata.X.dtype == np.float64 and np.array_equal(adata.X, counts)
     assert adata.var_names.tolist() == [g for g, _ in GENES]
     obs = adata.obs.reset_index(drop=True)

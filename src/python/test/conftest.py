@@ -71,16 +71,9 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
 
     tmp_path = tmp_path_factory.mktemp("e2e")
 
-    # Restructure: small/{fov}/{round}/ → tmp/{round}/{fov}/
-    fov_dir = small_dataset / "FOV_001"
-    for round_dir in fov_dir.iterdir():
-        if round_dir.is_dir():
-            target = tmp_path / round_dir.name / "FOV_001"
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.symlink_to(round_dir)
-
+    # The small dataset is laid out small/{fov}/{round}/, which image_dir_template "{fov}/{round}" reads.
     ds = Dataset(
-        input_root=tmp_path,
+        input_root=small_dataset,
         output_root=tmp_path / "output",
         dataset_id="test",
         sample_id="small",
@@ -91,6 +84,7 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
         ),
         channel_order=["ch00", "ch01", "ch02", "ch03"],
         fov_pattern="FOV_{i:03d}",
+        image_dir_template="{fov}/{round}",
     )
     ds.load_codebook(small_dataset / "codebook.csv")
 

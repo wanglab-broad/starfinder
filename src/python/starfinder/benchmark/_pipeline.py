@@ -60,7 +60,7 @@ def _process_pipeline(case, root, directory, trial):
         adapted = _adapt(case, Path(scratch), directory)
         ds = adapted.dataset
         for round_name, channels in case.config['sources'].items():
-            folder = ds.input_root / round_name / case.config['fov_id']
+            folder = ds.fov(case.config['fov_id']).input_dir(round_name)
             folder.mkdir(parents=True)
             for channel, name in channels.items():
                 (folder / (channel + '.tif')).symlink_to(_verified(root, trial.artifacts[name]))

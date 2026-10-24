@@ -18,20 +18,11 @@ pytestmark = pytest.mark.dataset
 def small_pipeline_dataset(small_dataset, tmp_path):
     """Create a Dataset pointing at the small synthetic data.
 
-    The small dataset layout is {base}/{fov}/{round}/ but FOV.input_dir()
-    expects {input_root}/{round}/{fov}/. This fixture creates symlinks
-    in the expected layout.
+    The small dataset layout is {base}/{fov}/{round}/, which the dataset reads
+    with image_dir_template "{fov}/{round}".
     """
-    # Restructure: small/FOV_001/round1/ -> tmp/round1/FOV_001/
-    fov_dir = small_dataset / "FOV_001"
-    for round_dir in fov_dir.iterdir():
-        if round_dir.is_dir():
-            target = tmp_path / round_dir.name / "FOV_001"
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.symlink_to(round_dir)
-
     ds = Dataset(
-        input_root=tmp_path,
+        input_root=small_dataset,
         output_root=tmp_path / "output",
         dataset_id="test",
         sample_id="small",
@@ -42,6 +33,7 @@ def small_pipeline_dataset(small_dataset, tmp_path):
         ),
         channel_order=["ch00", "ch01", "ch02", "ch03"],
         fov_pattern="FOV_{i:03d}",
+        image_dir_template="{fov}/{round}",
     )
     ds.load_codebook(small_dataset / "codebook.csv")
     return ds

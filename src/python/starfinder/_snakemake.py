@@ -16,9 +16,9 @@ from starfinder.dataset._declared import reference_settings
 from starfinder.dataset.types import ChannelInfo
 from starfinder.dataset.workflow import (_BIGSTITCHER, _LEGACY_SEGMENTATION_RUN, _NUCLEI_REFERENCE_CHANNEL,
     _after_fusion, _assembly_block, _declared_metadata, _export_config, _export_dataset, _flag, _label_namespace,
-    _legacy_molecules, _membership, _molecule_table, _nuclei_checkpoints, _nuclei_registration, _reads_assignment,
-    _report_assignment, _report_block, _rule_checkpoints, _rule_parameters, _sample_fovs, _sample_grid_fovs,
-    _sample_table, _segmentation,
+    _image_dir_template, _input_root, _legacy_molecules, _load_reference, _membership, _molecule_table,
+    _nuclei_checkpoints, _nuclei_registration, _reads_assignment, _reference_genes, _report_assignment, _report_block,
+    _rule_checkpoints, _rule_parameters, _sample_fovs, _sample_grid_fovs, _sample_table, _segmentation,
     _stage_position_ids, _stitching_block, _workflow_dataset, from_workflow_config)
 from starfinder.preprocessing import ProjectionConfig
 from starfinder.registration import (ExternalReference, RegistrationRecipe, RegistrationSignalConfig,
@@ -45,11 +45,9 @@ def _run_workflow(snakemake, rule):
     dataset = adapted.dataset
     fov_id = snakemake.wildcards.fovID
     resident = rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile')
-    if adapted.pipeline.decoding and dataset.readout_mode == 'direct':
-        # In direct mode the rule's codebook input is the panel CSV.
-        dataset.load_direct_panel(Path(snakemake.input[1]))
-    elif adapted.pipeline.decoding:
-        dataset.load_codebook(Path(snakemake.input[1]), encoding=adapted.encoding, layout=adapted.layout)
+    if adapted.pipeline.decoding:
+        # The rule's codebook input is the reference file (_reference_file): the panel CSV in direct mode.
+        _load_reference(adapted, Path(snakemake.input[1]))
     fov = FOV.from_subtile(Path(snakemake.input[2]), dataset, fov_id) if resident else dataset.fov(fov_id)
     fov.run(adapted.pipeline, execution=adapted.execution, checkpoints=_rule_checkpoints(snakemake.config, rule))
     if resident:
@@ -263,42 +261,6 @@ def _tile_record(path, number):
     if rows.empty:
         raise ValueError(f'{path} has no row with id {number}')
     return rows.iloc[0]
-
-
-def _codebook_genes(path, mode):
-    """The codebook's genes in first-appearance order: the gene (gene_id) column, or a direct panel's gene_id."""
-    import csv
-    with open(path, newline='', encoding='utf-8-sig') as handle:
-        rows = [row for row in csv.reader(handle) if row]
-    header = [v.strip() for v in rows[0]] if rows else []
-    if mode == 'direct':
-        if header != ['round', 'channel', 'gene_id']:
-            raise ValueError(f'{path}: the direct panel header must be round,channel,gene_id')
-        column = 2
-    elif header and header[0] in ('gene', 'gene_id', 'entry_id'):
-        column = header.index('gene_id') if 'gene_id' in header else 0
-    else:
-        column, header = 0, None
-    body = rows[1:] if header else rows
-    return list(dict.fromkeys(row[column].strip() for row in body))
-
-
-def _assignment_genes(genes_csv, config):
-    """The gene list of the count matrix: documents/genes.csv, checked against the codebook's genes.
-
-    The codebook is the sequencing rules' input genes.csv (a direct panel in
-    readout_mode direct). A gene on one list only raises ValueError naming it.
-    The order is that of documents/genes.csv, the legacy matrix's columns.
-    """
-    import pandas as pd
-    codebook = Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'] / 'genes.csv'
-    listed = list(dict.fromkeys(pd.read_csv(genes_csv, header=None, dtype=str)[0].str.strip()))
-    known = _codebook_genes(codebook, config.get('readout_mode', 'multiplexed'))
-    only_listed, only_known = [g for g in listed if g not in known], [g for g in known if g not in listed]
-    if only_listed or only_known:
-        raise ValueError(f'{genes_csv} and the codebook {codebook} list different genes: only in genes.csv '
-                         f'{only_listed}, only in the codebook {only_known}')
-    return tuple(listed)
 
 
 def _legacy_cells(path, config, fov_id, target):
@@ -528,8 +490,10 @@ def _run_reads_assignment(snakemake):
     fovs/{fovID}/molecules.csv of the Python rsf_single_fov, read with
     load_molecules and its identities kept; on the legacy route, MATLAB's
     rsf_single_fov and stitch_subtile, the one-based goodSpots CSV read with
-    import_legacy_molecules_csv, integer and float coordinates),
-    documents/genes.csv (checked against the codebook, _assignment_genes) and
+    import_legacy_molecules_csv, integer and float coordinates), the codebook
+    (the direct panel in readout_mode direct) of the sequencing rules, whose
+    loaded genes, in its order, are the count matrix's columns
+    (_reference_genes: Codebook.genes or DirectPanel.genes), and
     the tile configuration, read for the sample of the FOV and applied outside
     the package: global coordinates and the overlap filter, as the script does
     (§2.10 boundary); outside_grid molecules are kept in reads_assignment.csv.
@@ -552,7 +516,7 @@ def _run_reads_assignment(snakemake):
     sample, number = _fov_sample(snakemake.input[0], config, fov_id)
     output_root = Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
     tile = None if block is not None else _tile_record(_layout.tile_config(output_root, sample), number)
-    genes = _assignment_genes(snakemake.input[4], config)
+    genes = _reference_genes(config, Path(snakemake.input[4]))
     if block is None:
         grid, cells = _legacy_cells(Path(snakemake.input[2]), config, fov_id, target)
     else:
@@ -598,6 +562,18 @@ def _stitching_position_inputs(config):
     if source == 'table' and positions.get('table'):
         return [str(positions['table'])]
     return []
+
+
+def _image_dir_inputs(config, rounds, fov_id='{fovID}'):
+    """The image folders of a FOV's rounds that a Python rule reads, as rule inputs.
+
+    Each is <input_root>/<round>/<fov_id>, or <input_root>/<fov_id>/<round>
+    with image_dir_template "{fov}/{round}" (_layout.image_dir, the folder
+    FOV.input_dir names); a FOV ID '{fovID}' gives the rule's wildcard
+    pattern.
+    """
+    template = _image_dir_template(config)
+    return [str(_layout.image_dir(_input_root(config), name, fov_id, template)) for name in rounds]
 
 
 def _reference_image_inputs(config, output_root, fov_ids):

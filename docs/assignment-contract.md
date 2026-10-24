@@ -903,7 +903,7 @@ name, inputs and outputs.
 | --- | --- |
 | `images/stardist_segmentation/{fovID}.tif` | `import_labels` with the target the segmentation adapter infers (W-307: `cell` for the `overlay` input, else `nucleus`); its grid is declared from the file's shape and the configured `voxel_size_z`, `voxel_size_xy`, recorded as declared. When `rules.stardist_segmentation.parameters.expand_labels` is true, the file was expanded in segmentation and no original mask exists: the adapter raises `ValueError` naming that key and the replacement (set it to false and give the distance as `reads_assignment.parameters.dilation_distance` with `expand_labels: true`, so assign expands once and keeps both masks). |
 | The FOV's molecule table ({doc}`workflows`, "Molecule tables") | `fovs/{fovID}/molecules.csv` of the Python `rsf_single_fov`: `load_molecules` with the FOV's `spot_namespace` and the codebook's genes, the identities kept (since W-562). The legacy route's `signal/{fovID}_goodSpots.csv` (MATLAB's `rsf_single_fov`, `stitch_subtile`): `import_legacy_molecules_csv` with the same arguments; integer and float coordinates are both accepted. |
-| `documents/genes.csv` | Checked against the codebook's genes; a gene of the CSV absent from the codebook, or the reverse, raises `ValueError` naming them. |
+| The codebook (the rule's codebook input: `INPUT/genes.csv`, or the file `codebook` or `direct_panel` names) | Loaded as the sequencing rules load it; its genes in its order (`Codebook.genes`, or `DirectPanel.genes` with `readout_mode: direct`) are the gene universe of the molecule reader and the matrix columns (W-567; before it, a second gene list in OUTPUT's `documents` folder gave the order, {doc}`migration`). |
 | `parameters.expand_labels: false` | `expansion: null`; `dilation_distance` is ignored and recorded. |
 | `parameters.expand_labels: true`, `dilation_distance: d` | `expansion: {distance: d, unit: pixel, mode: planar}` with `legacy_pixel_expansion=True` (the declared grid is calibrated), when `rules.stardist_segmentation.parameters.expand_labels` is false. |
 | both `expand_labels` keys true | `ValueError` naming both keys (the row of the label file above): the legacy pair of expansions is not one expansion (golden test), and a label image is expanded once, by assign. |
@@ -919,7 +919,8 @@ expanded, as today): `sample`, `fov_id`, `volume` = `expanded_size_voxels` (or
 `correspondence`, `correspondence_flags`, `compartments`, the layers `nucleus` and
 `cytoplasm` (float64; 0.0 for a measured zero, NaN rows for cells whose compartments are
 not available) when nuclei are given, and the record in `uns["assignment"]`. `X` stays
-float64 whole-cell counts of the kept cells. `reads_assignment.csv` keeps its columns and
+float64 whole-cell counts of the kept cells, one column per gene of the codebook in its
+order (W-567). `reads_assignment.csv` keeps its columns and
 gains `spot_id`, `assignment_status`, `cell_id`, `in_expansion`, `original_cell_id`,
 `nucleus_id` and `compartment`.
 

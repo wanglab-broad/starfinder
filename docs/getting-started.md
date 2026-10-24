@@ -86,7 +86,9 @@ truth to `input/ground_truth.json` (historical truth keys, version 2.0).
 | Codebook/filtering | `input/codebook.csv` holds each entry's color sequence, from the generator's reversed-barcode encoding (`EncodingConfig(reverse_bases=True)`); retain exact color-sequence matches |
 
 The writer saves each channel as `input/round1/FOV_001/ch00.tif`, the round/FOV
-layout that the dataset loader reads, beside the codebook and the truth files. The direct
+layout that the dataset loader reads by default (`image_dir_template="{round}/{fov}"`; a
+FOV-first tree `input/FOV_001/round1/` is read with `"{fov}/{round}"`), beside the
+codebook and the truth files. The direct
 constructor takes resolved sample input/output roots; this example does not use
 a Snakemake YAML or `from_workflow_config` path expansion. `fov_pattern="FOV_{i:03d}"` is a
 `{i}` pattern: `dataset.fov_ids(2, start=1)` names `FOV_001` and `FOV_002`, which the
