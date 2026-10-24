@@ -419,8 +419,8 @@ the number of cross-channel candidate pairs within the duplicate distance.
 `explain_read(reads, spot_id)` returns the ordered decisions of a read with their
 values and limits. `reads` is a read result or a mapping of stage names to them, such
 as `FOV.results`. `FOV.run` never calls `inspect_read`, `plot_read` or
-`explain_read`; it stores the summary in `run.json` under `counts` when it scores or
-deduplicates, and `FOV.save_diagnostics` writes it beside the filtering counts.
+`explain_read`; it stores the summary in `run.json` as `counts.summary` whenever it
+decoded reads, beside the filtering counts and their `fractions`.
 
 Before: combined extraction returned channel calls and scores; codebook loading
 returned two dictionaries, and filtering dropped rejected rows. After:

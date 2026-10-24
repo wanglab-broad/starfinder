@@ -254,8 +254,8 @@ applied once to every channel and snapshot of the round. Each estimation
 attempt records `reference` (the round name or the external label) and
 `reference_sha256` (the SHA-256 of the external image's C-order bytes, `None`
 for a round); `registration_record["rounds"][round]` keeps the recipe summary
-and the reference. `save_processing_log("nr")` writes `log/<fov>_nr.txt` and
-`log/gr_shifts/<fov>_nr.txt` for these rounds. With `checkpoints`, each round
+and the reference. `save_registration_record()` writes these rounds' entries and
+attempts to `fovs/<fov>/nuclei_registration.json`. With `checkpoints`, each round
 is also saved under `other_rounds/<round>/` (see "Sequencing rounds and other
 rounds" above). `FOV.prepare_morphology` calls it for each other round. Sequencing
 and other rounds in one call, an empty `rounds`, `source` with other rounds, and
@@ -326,7 +326,7 @@ list(fov.results)  # stages that have run, in pipeline order
 | `run_streaming(...)`, `run_streaming_gr(...)` | `run(config, execution=ExecutionConfig("streaming"))` |
 | `all_spots`, `good_spots` | `spot_result`, `intensity_result`, `decoding_result`, `filtering_result.accepted` |
 | `global_shifts`, `local_registered` | `registration_results`, `registration_chains`, `registration_attempts`, keyed by round |
-| `save_signal`, `save_ref_merged`, `save_log`, `save_score_log` | `export_spots`, `save_reference_image`, `save_processing_log`, `save_diagnostics` |
+| `save_signal`, `save_ref_merged`, `save_log`, `save_score_log` | `export_spots`, `save_reference_image`, and `run.json` of `run(..., checkpoints=CheckpointConfig(stages=()))` for both logs |
 
 FOV remains FOV. Path construction and logging helpers are private. No replaced
 Python aliases remain. Rotation and output projection are explicit operation

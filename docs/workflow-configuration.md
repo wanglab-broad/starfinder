@@ -225,9 +225,10 @@ earlier stage files of the FOV directory and leaves `other_rounds/`,
 `segmentation/` and `assignment/`. The inputs are hashed (`hash_inputs`), so each
 raw image is read once more. `run.json` records the configuration file the rule ran
 with (`workflow_config`: the top-level `config_path` and the SHA-256 of its bytes)
-and the codebook or panel file the rule loaded (`codebook`). `run.json` and the
-stage files are not declared outputs of the rules, and the logs the rules write do
-not change. The key is allowed with `backend: python` only: the schema refuses it with `backend: matlab` or without `backend` (whose default is `matlab`), and the adapter raises `ValueError`.
+and the codebook or panel file the rule loaded (`codebook`). `run.json` is a
+declared output of each Python processing rule and replaces the logs those rules
+wrote before ({doc}`migration`, "Sequencing logs and the morphology record"); the
+stage files are not declared. The key is allowed with `backend: python` only: the schema refuses it with `backend: matlab` or without `backend` (whose default is `matlab`), and the adapter raises `ValueError`.
 
 ## Codebook segment layout
 
@@ -656,7 +657,7 @@ configuration without the block runs as before: no report rule and no report out
   lists every other file of the folder. Its declared input is the sample's last per-sample
   output: `export/<sample>/export.json` with an `assembly` block (the `export_sample` rule,
   which an `export` block configures); else `stitching/<sample>/placement.json` with a
-  `stitching` block; else every FOV's `log/sf_scores/{fovID}.txt`. Without an `assembly`
+  `stitching` block; else every FOV's `checkpoints/{fovID}/run.json`. Without an `assembly`
   block no rule saves a per-FOV assignment, so the report is made without cells
   (`assignment=None`).
 * **`report_dataset`** calls `Dataset.compare_samples` on every sample of the run, in the

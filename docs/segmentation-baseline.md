@@ -154,6 +154,9 @@ does the same and also stretches the other rounds. The registered sequencing
 reference, `images/ref_merged/{fovID}.tif`, is the reference round's channel maximum
 written by `FOV.save_reference_image` (`fov.py:1534-1580`) or by MATLAB.
 
+Note (W-563): the Python rule writes `fovs/{fovID}/nuclei_registration.json` instead of the log and
+the shift table ({doc}`migration`, "Sequencing logs and the morphology record").
+
 ## Files each rule reads and writes
 
 Paths are relative to the output directory unless marked INPUT.

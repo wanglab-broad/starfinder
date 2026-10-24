@@ -78,14 +78,6 @@ class TestFOVPipeline:
             assert r in detected_shifts(fov)
             assert len(detected_shifts(fov)[r]) == 3  # (dz, dy, dx)
 
-        # Shift log should be saved
-        fov.save_processing_log()
-        shift_path = fov.paths.shift_log()
-        assert shift_path.exists()
-        shift_df = pd.read_csv(shift_path)
-        assert list(shift_df.columns) == ["fov_id", "round", "row", "col", "z"]
-        assert len(shift_df) == 3
-
     def test_spot_finding(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
         fov.load_images().normalize_min_max().register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
@@ -230,14 +222,13 @@ class TestFOVPaths:
         assert p.ref_merged_tif.name == "FOV_001.tif"
         assert "subtile" in str(p.subtile_dir)
         assert p.signal_csv("goodSpots").name == "FOV_001_goodSpots.csv"
-        assert p.shift_log().name == "FOV_001.txt"
 
     def test_paths_keep_the_attributes_of_the_base_revision(self, tmp_path):
         """FOV.paths keeps its class name and every public attribute it had before the path object moved to
         starfinder._layout (W-548; the list recorded at 81fead1), except the unused signal PNG path helper, which
-        W-562 deleted (docs/migration.md), and with spot_table, which W-562 added."""
+        W-562 deleted (docs/migration.md), with spot_table, which W-562 added, and without the log paths gr_log,
+        nr_log, rsf_log, score_log and shift_log, whose files W-563 removed (docs/migration.md)."""
         fov = Dataset(tmp_path / "in", tmp_path / "out", "d", "s", "o").fov("FOV_001")
         assert type(fov.paths).__name__ == "_FovPaths"
         assert sorted(name for name in dir(fov.paths) if not name.startswith("_")) == [
-            "checkpoint_dir", "fov_id", "gr_log", "nr_log", "output_root", "ref_merged_tif", "rsf_log", "score_log",
-            "shift_log", "signal_csv", "spot_table", "subtile_dir"]
+            "checkpoint_dir", "fov_id", "output_root", "ref_merged_tif", "signal_csv", "spot_table", "subtile_dir"]

@@ -172,8 +172,6 @@ def build_chain(base, *, plane=False, stages=STAGES, registration=None, preproce
         fov.run(pipeline, checkpoints=checkpoints)
         fov.save_reference_image()
         fov.export_spots()
-        fov.save_diagnostics()
-        fov.save_processing_log("rsf")
         grid = grids[fov_id] = fov.reference_grid()
         namespace = json.dumps([dataset_id, sample, fov_id, None, "truth"], separators=(",", ":"))
         labels = {target: import_labels(scene_dir / "fovs" / fov_id / "labels" / file, grid=grid, target=target,

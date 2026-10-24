@@ -860,21 +860,6 @@ class FOV:
         for key in ('detection', *self.snapshots.get(name, {})):
             applied.setdefault(key, []).extend(dict(entry) for entry in entries)
 
-    def _save_shift_log(self, suffix='', rounds=None):
-        """Preserve MATLAB detected-displacement row/col/z columns (rounds None: every registered round)."""
-        from starfinder.registration import TranslationTransform
-        rows = []
-        for name, results in self.registration_results.items():
-            if rounds is not None and name not in rounds:
-                continue
-            for result in results:
-                if isinstance(result.transform, TranslationTransform):
-                    dz, dy, dx = result.transform.displacement_zyx
-                    rows.append(dict(fov_id=self.fov_id, round=name, row=dy, col=dx, z=dz))
-        path = self.paths.shift_log(suffix)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(rows, columns=['fov_id', 'round', 'row', 'col', 'z']).to_csv(path, index=False)
-
     def _detection_plan(self, config):
         """(config for one round, the plan with its rounds or None) of a FOV detection.
 
@@ -1226,7 +1211,8 @@ class FOV:
         or scores again without deduplication drops an earlier deduplication.
         The pre_qc checkpoint holds the reads after scoring and deduplication.
         While checkpoints are written, run.json records the population summary
-        (summarize_reads) under counts when the run scored or deduplicated.
+        (summarize_reads) under counts whenever reads were decoded, and the
+        filter's fractions under counts.filtering.
 
         checkpoints=None writes nothing. Otherwise the selected stages and
         run.json are written to the FOV checkpoint directory; see
@@ -2404,47 +2390,29 @@ class FOV:
                 'sha256': file_sha256(path), 'molecules_sha256': keyed, 'dtypes': dtypes, 'rows': len(table)})
         return path
 
-    def save_processing_log(self, log_type='rsf'):
-        """Persist ordered registration attempts and stage counts.
+    def save_registration_record(self, path: Path | str | None = None) -> Path:
+        """Write the registration record of the other rounds as JSON; return its path.
 
-        log_type ``rsf`` or ``gr`` writes ``log/<fov>_<log_type>.txt`` and
-        ``log/gr_shifts/<fov>.txt`` for every registered round; ``nr`` (the
-        nuclei_registration names) writes ``log/<fov>_nr.txt`` and
-        ``log/gr_shifts/<fov>_nr.txt`` for the rounds registered by
-        register on other rounds (prepare_morphology's; the reference
-        stain has no registration), with their attempts.
+        The default path is ``<output_root>/fovs/<fov_id>/nuclei_registration.json``.
+        The record holds ``fov_id``; ``rounds``, the round roles
+        (RoundState); ``registered_rounds``, the entries of
+        registration_record["rounds"] of the other rounds with registration
+        attempts (registered by prepare_morphology or by register on other
+        rounds; the reference stain has no registration and is left out); and
+        ``registration``, those rounds' registration attempts, unchanged,
+        whose estimation entries hold each translation as
+        ``qc.details.transform.displacement_zyx``. The prepared images are
+        saved only through the ``checkpoints`` of prepare_morphology or
+        register.
         """
-        if log_type not in ('rsf', 'gr', 'nr'):
-            raise ValueError('invalid log_type')
-        path = {'rsf': self.paths.rsf_log, 'gr': self.paths.gr_log, 'nr': self.paths.nr_log}[log_type]()
+        from starfinder._layout import nuclei_registration_record
+        from starfinder._records import write_json
+        names = [r for r in self.registration_record.get('rounds', {}) if r in self.registration_attempts]
+        path = Path(path) if path is not None else nuclei_registration_record(self.dataset.output_root, self.fov_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        rounds = ([r for r in self.registration_record.get('rounds', {}) if r in self.registration_attempts]
-                  if log_type == 'nr' else None)
-        attempts = (self.registration_attempts if rounds is None else
-                    {name: self.registration_attempts[name] for name in rounds})
-        path.write_text(json.dumps(dict(fov_id=self.fov_id, backend='python',
-            rounds=asdict(self.rounds), registration_attempts=attempts,
-            detected=len(self.spot_result.spots) if self.spot_result is not None else None,
-            filtering=self.filtering_result.counts if self.filtering_result is not None else None), indent=2))
-        self._save_shift_log('_nr' if log_type == 'nr' else '', rounds)
-        return path
-
-    def save_diagnostics(self, suffix=''):
-        """Write counts, undefined fractions, the population summary and explicit registration attempts.
-
-        summary is :func:`starfinder.readout.summarize_reads` of the stored
-        results (None before decoding).
-        """
-        from starfinder.readout import summarize_reads
-        from starfinder._records import jsonable
-        path = self.paths.score_log(suffix)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(dict(
-            detected=len(self.spot_result.spots) if self.spot_result is not None else None,
-            counts=self.filtering_result.counts if self.filtering_result is not None else None,
-            fractions=self.filtering_result.fractions if self.filtering_result is not None else None,
-            summary=jsonable(summarize_reads(self.results)) if self.decoding_result is not None else None,
-            registration_attempts=self.registration_attempts), indent=2))
+        write_json(dict(fov_id=self.fov_id, rounds=asdict(self.rounds),
+                        registered_rounds={name: self.registration_record['rounds'][name] for name in names},
+                        registration={name: self.registration_attempts[name] for name in names}), path)
         return path
 
     # --- Subtile operations ---

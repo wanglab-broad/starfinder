@@ -267,37 +267,50 @@ def get_overall_output(wildcards):
             continue
         if is_rule_enabled(current_rule):
             if current_rule == 'rsf_single_fov':
-                output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
-                # The Python rsf_single_fov writes the zero-based molecules.csv, MATLAB's the legacy goodSpots.
+                # The Python rsf_single_fov writes the FOV's run.json and the zero-based molecules.csv, MATLAB's
+                # its logs and the legacy goodSpots.
                 if BACKEND == "python":
+                    output_list += [f"{OUTPUT_DIR}/checkpoints/{fovID}/run.json" for fovID in FOVS]
+                    output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                     output_list += [f"{OUTPUT_DIR}/fovs/{fovID}/molecules.csv" for fovID in FOVS]
                 else:
+                    output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
+                    output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]
+                    output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                     output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
             elif current_rule == 'rsf_single_fov_seq':
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_allSpots.csv" for fovID in FOVS]
             elif current_rule == 'gr_single_fov_subtile':
                 subtile_ext = "npz" if BACKEND == "python" else "mat"
-                output_list += [f"{OUTPUT_DIR}/log/{fovID}_gr.txt" for fovID in FOVS]
+                if BACKEND == "python":
+                    output_list += [f"{OUTPUT_DIR}/checkpoints/{fovID}/run.json" for fovID in FOVS]
+                else:
+                    output_list += [f"{OUTPUT_DIR}/log/{fovID}_gr.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.{subtile_ext}" for fovID in FOVS for i in N_SUBTILE]
-            elif current_rule == 'lrsf_single_fov_subtile':
-                output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
+            elif current_rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile'):
+                # The Python subtile rules write each subtile's run.json, MATLAB's the score logs.
+                if BACKEND == "python":
+                    output_list += [f"{OUTPUT_DIR}/checkpoints/{fovID}/subtile_{i}/run.json" for fovID in FOVS for i in N_SUBTILE]
+                else:
+                    output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_goodSpots_{i}.csv" for fovID in FOVS for i in N_SUBTILE]
             elif current_rule == 'deep_create_subtile':
                 subtile_ext = "npz" if BACKEND == "python" else "mat"
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.{subtile_ext}" for fovID in FOVS for i in N_SUBTILE]
-            elif current_rule == 'deep_rsf_subtile':
-                output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
-                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_goodSpots_{i}.csv" for fovID in FOVS for i in N_SUBTILE]
+                if BACKEND == "python":
+                    output_list += [f"{OUTPUT_DIR}/checkpoints/{fovID}/run.json" for fovID in FOVS]
             elif current_rule == 'stitch_subtile':
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
             elif current_rule == 'nuclei_registration':
-                output_list += [f"{OUTPUT_DIR}/log/{fovID}_nr.txt" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}_nr.txt" for fovID in FOVS]
+                # The Python rule writes one registration record per FOV, MATLAB's its log and shift table.
+                if BACKEND == "python":
+                    output_list += [f"{OUTPUT_DIR}/fovs/{fovID}/nuclei_registration.json" for fovID in FOVS]
+                else:
+                    output_list += [f"{OUTPUT_DIR}/log/{fovID}_nr.txt" for fovID in FOVS]
+                    output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}_nr.txt" for fovID in FOVS]
             elif current_rule == 'rotate_nuclei':
                 output_list += [f"{DAPI_DIR}/{fovID}.tif" for fovID in FOVS]
             elif current_rule == 'create_nuclei_amplicon_overlay':

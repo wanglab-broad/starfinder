@@ -232,13 +232,11 @@ Reuse the quickstart's prepared round/FOV layout. The direct
 {py:class}`~starfinder.dataset.Dataset` constructor takes resolved roots;
 it does not append dataset/sample IDs. Configure rounds with
 {py:class}`~starfinder.dataset.RoundState`, load a codebook with
-{py:meth}`~starfinder.dataset.Dataset.load_codebook`, then call
-{py:meth}`~starfinder.dataset.FOV.load_images`,
-{py:meth}`~starfinder.dataset.FOV.register`,
-{py:meth}`~starfinder.dataset.FOV.find_spots`,
-{py:meth}`~starfinder.dataset.FOV.extract_intensities`,
-{py:meth}`~starfinder.dataset.FOV.decode_reads` and
-{py:meth}`~starfinder.dataset.FOV.filter_reads` in order.
+{py:meth}`~starfinder.dataset.Dataset.load_codebook`, then run loading,
+registration, detection, extraction, decoding and filtering in order with one
+{py:meth}`~starfinder.dataset.FOV.run` of a
+{py:class}`~starfinder.dataset.PipelineConfig`. Its
+`CheckpointConfig(stages=())` writes the run record `run.json` and no stage file.
 
 ```{literalinclude} examples/recipes.py
 :language: python
@@ -268,7 +266,9 @@ read table (`slot="reads"`) for candidates and select its diagnostic columns
 explicitly; the default molecule table `molecules.csv` holds
 `spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score`, which
 {py:func}`~starfinder.assignment.load_molecules` reads back.
-{py:meth}`~starfinder.dataset.FOV.save_processing_log` writes a processing summary.
+The run record `checkpoints/FOV_001/run.json`, which `FOV.run` writes with
+`CheckpointConfig(stages=())`, holds the counts, the filter's fractions, the read
+summary, the round roles and the transforms.
 
 ```{literalinclude} examples/recipes.py
 :language: python
@@ -279,7 +279,8 @@ Expected: 10 candidate rows, 7 molecule-candidate rows; the exported ZYX
 coordinates are the zero-based indices of the in-memory table.
 The script checks bounds before indexing the reference image. `summary.json`
 contains counts by gene and the molecule CSV path. `results/fovs/FOV_001/` contains
-both CSVs, and `results/log/` contains the FOV summary and detected shift log.
+both CSVs, and `results/checkpoints/FOV_001/run.json` is the run record with the
+counts and the detected shifts.
 
 These are per-FOV voxel coordinates and gene labels, with no cell IDs or
 cross-FOV stitching. Codebook membership alone does not establish true molecules.

@@ -62,7 +62,7 @@ See the [backend configuration caveat](workflow-configuration.md#top-level-field
 | --- | --- |
 | Python {py:func}`~starfinder.registration.estimate_transform` | Translation `displacement_zyx`: detected `(dz,dy,dx)`, a pull map from reference to moving; apply it using {py:func}`~starfinder.registration.apply_transform` |
 | Python {py:meth}`~starfinder.dataset.FOV.register` | Estimate/apply pull transforms; results retain their typed direction (`reference_to_moving`) |
-| Python `log/gr_shifts/*.txt` | Log columns `row,col,z` contain detected `(dy,dx,dz)`, with no origin offset |
+| Python `run.json` `transforms` | Each translation's `displacement_zyx` is the detected `(dz,dy,dx)`, with no origin offset (the former `row,col,z` shift log columns were `dy,dx,dz`) |
 | MATLAB {mat:func}`DFTRegister3D` → {mat:func}`DFTApply3D` | Correction parameters in `(row,column,Z)` order; passed directly, without Python's negation |
 | Python dense local displacement field | Backward sampling: `registered[p] = moving[p + field[p]]`; pass directly to its warp function |
 

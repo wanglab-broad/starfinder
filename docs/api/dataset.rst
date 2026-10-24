@@ -21,7 +21,9 @@ reference round or a :py:class:`~starfinder.registration.ExternalReference` thro
 only. ``FOV.prepare_morphology(MorphologyConfig(...), checkpoints=...)``, an entry
 beside ``FOV.run``, loads and rotates the reference stain (the image
 ``reference_stain``) and loads, rotates and registers each other round, and can save
-each prepared image; ``FOV.load_registered_round`` restores one. ``FOV.load_images``
+each prepared image; ``FOV.load_registered_round`` restores one, and
+``FOV.save_registration_record()`` writes the registered rounds and their attempts to
+``fovs/<fov_id>/nuclei_registration.json``. ``FOV.load_images``
 takes ``rotation_degrees``. See :doc:`../coordination`, "Sequencing rounds and other
 rounds". ``FOV.load_reference_image()`` restores the reference merged image that
 ``FOV.save_reference_image`` wrote, so that a process with no sequencing round resident

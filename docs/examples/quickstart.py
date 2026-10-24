@@ -4,7 +4,8 @@ Run from src/python with a new external output directory; see getting-started.md
 """
 
 from starfinder.assignment import load_molecules
-from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig
+from starfinder.io import ImageLoadConfig
+from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
 from starfinder.spot_finding import LocalMaximaConfig
 import argparse
 import json
@@ -15,7 +16,7 @@ from starfinder.registration import TranslationConfig
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import RoundState, Dataset
+from starfinder.dataset import CheckpointConfig, PipelineConfig, RoundState, Dataset
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.synthetic import (BENCHMARK_PRESETS, benchmark_scene_preset, generate_amplicon_dataset,
                                   save_amplicon_dataset)
@@ -47,17 +48,23 @@ def main(output: Path) -> None:
     )
     dataset.rounds.validate()
     dataset.load_codebook(output / "input" / "codebook.csv")
+    # Load, register, detect, extract, decode and filter in one run.
+    pipeline = PipelineConfig(
+        load=ImageLoadConfig(channel_labels=tuple(channels)),
+        registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)),
+        spot_finding=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1),
+        extraction=NeighborhoodSumConfig((1, 2, 2)),
+        decoding=WtaDecoderConfig(diagnostics=True),
+        filtering=ReadFilterConfig(),
+    )
     summary = {"preset": "tiny", "seed": truth["seed"], "fovs": {}}
     for fov_id in dataset.fov_ids(len(truth["fovs"]), start=1):
         fov = dataset.fov(fov_id)
-        fov.load_images()
+        # stages=() writes the run record checkpoints/<fov>/run.json and no stage files.
+        fov.run(pipeline, checkpoints=CheckpointConfig(stages=()))
         for volume in fov.images.values():
             assert volume.shape == (8, 128, 128, 4)
             assert volume.dtype == np.uint16
-        fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
-        fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1))
-        fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
-        fov.decode_reads().filter_reads()
 
         # These are completion checks, not a benchmark of detection accuracy.
         assert 0 < len(fov.filtering_result.accepted) <= len(fov.spot_result.spots)
@@ -73,7 +80,15 @@ def main(output: Path) -> None:
         reads_path = fov.export_spots("reads", columns=["spot_namespace", "spot_id", "z", "y", "x", "gene_id",
                                                         "observed_color_sequence", "call_status"])
         molecules_path = fov.export_spots()
-        fov.save_processing_log()
+        # The run record holds the round roles, the registration attempts and transforms, the counts, the
+        # filter's fractions and the read summary; export_spots added the table as outputs.molecules.
+        run_record = json.loads((fov.paths.checkpoint_dir / "run.json").read_text())
+        assert run_record["status"] == "succeeded" and run_record["rounds"]["reference_round"] == "round1"
+        assert run_record["counts"]["filtering"]["accepted"] == len(fov.filtering_result.accepted)
+        assert run_record["counts"]["filtering"]["fractions"]["accepted"] == fov.filtering_result.fractions["accepted"]
+        assert run_record["outputs"]["molecules"]["rows"] == len(fov.filtering_result.accepted)
+        assert {name: entry["results"][0]["transform"]["displacement_zyx"]
+                for name, entry in run_record["transforms"].items()} == detected_shifts
         reads_saved = pd.read_csv(reads_path, dtype={"observed_color_sequence": str}, na_values=["<NA>"],
                                   keep_default_na=False)
         molecules = load_molecules(molecules_path, genes=dataset.codebook.genes)

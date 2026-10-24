@@ -191,10 +191,6 @@ def test_fov_run_records_the_summary_and_never_calls_the_on_demand_diagnostics(t
     assert summary["deduplication"] == fov.deduplication_result.counts == record["counts"]["deduplication"]
     assert summary["filtering"]["rejection_reasons"] == {"duplicate": 12}
     assert summary["cross_channel_pairs"] == {"distance_voxels": 1.0, "pairs": 19}
-    # save_diagnostics writes the summary beside the existing counts.
-    path = fov.save_diagnostics()
-    written = json.loads(path.read_text())
-    assert written["counts"] == fov.filtering_result.counts and written["summary"] == summary
 
 
 def test_direct_mode_summary_counts_cross_channel_pairs(tmp_path):

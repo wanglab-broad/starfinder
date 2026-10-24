@@ -25,7 +25,13 @@ from starfinder.registration import (ExternalReference, RegistrationRecipe, Regi
 
 
 def _run_workflow(snakemake, rule):
-    """Thin common runner used by the five Snakemake script adapters; each run writes the FOV's run.json."""
+    """Thin common runner used by the five Snakemake script adapters; each run writes the FOV's run.json.
+
+    The run record is checkpoints/<fov>/run.json, or
+    checkpoints/<fov>/subtile_<n>/run.json for the resident subtile rules; it
+    holds the counts, fractions, read summary, round roles, registration
+    attempts and transforms that the MATLAB-shaped logs held before.
+    """
     from .dataset.fov import FOV
     adapted = from_workflow_config(snakemake.config, rule)
     dataset = adapted.dataset
@@ -44,16 +50,13 @@ def _run_workflow(snakemake, rule):
         # The legacy route: stitch_subtile reads the one-based subtile tables.
         _export_legacy_spots(fov.spot_result, fov.filtering_result,
                              Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
-        fov.save_diagnostics(suffix=f'_{number}')
     else:
         fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
                                  reference_channel=adapted.reference_channel)
         if rule == 'rsf_single_fov':
             fov.export_spots()
-            fov.save_diagnostics()
         else:
             fov.save_subtiles()
-        fov.save_processing_log('rsf' if rule == 'rsf_single_fov' else 'gr')
 
 
 def _run_nuclei_registration(snakemake):
@@ -67,14 +70,14 @@ def _run_nuclei_registration(snakemake):
     transform to all its channels. A round whose shared stain has another
     pattern than the rounds before it is registered after the entry by the
     same public calls (load_images with the angle, register), in the
-    configured order. Writes the MATLAB names: log/<fov>_nr.txt (the
-    attempts), log/gr_shifts/<fov>_nr.txt and
-    images/<round>/<channel name>/<fov>.tif (ZYX, or the Z maximum YX with
-    maximum_projection), keeping the dtype; with the Python-only
-    rules.nuclei_registration.parameters.checkpoints, also the saved form of
-    each prepared image (other_rounds/<name>/, docs/checkpoints.md), which
-    FOV.load_registered_round reads. Unlike MATLAB, it does not min-max
-    stretch the other rounds.
+    configured order. Writes fovs/<fov>/nuclei_registration.json
+    (FOV.save_registration_record: the registered rounds and their attempts)
+    and the MATLAB image names images/<round>/<channel name>/<fov>.tif (ZYX,
+    or the Z maximum YX with maximum_projection), keeping the dtype; with the
+    Python-only rules.nuclei_registration.parameters.checkpoints, also the
+    saved form of each prepared image (other_rounds/<name>/,
+    docs/checkpoints.md), which FOV.load_registered_round reads. Unlike
+    MATLAB, it does not min-max stretch the other rounds.
     """
     from dataclasses import asdict
     import numpy as np
@@ -111,7 +114,7 @@ def _run_nuclei_registration(snakemake):
     for name in names[leading:]:
         fov.load_images(rounds=[name], rotation_degrees=angle)
         fov.register(recipe(name), rounds=[name], reference=reference, checkpoints=checkpoints)
-    fov.save_processing_log('nr')
+    fov.save_registration_record()
     projection = ProjectionConfig() if config.get('maximum_projection', False) else None
     for name in names:
         # Channels that share a name write the same file, the last one winning, as in MATLAB.
@@ -834,7 +837,7 @@ def _report_sample_files(config, output_root, fov_ids, sample='{sample}'):
     The input is the last per-sample output the configuration has (WR1): the
     sample's export/<sample>/export.json with an assembly block (export_sample,
     which an export block configures); else stitching/<sample>/placement.json
-    with a stitching block; else the FOVs' log/sf_scores/{fovID}.txt. The
+    with a stitching block; else the FOVs' checkpoints/{fovID}/run.json. The
     output is report/<sample>/report.json, the record that lists every other
     file of the report's folder.
     """
@@ -844,7 +847,7 @@ def _report_sample_files(config, output_root, fov_ids, sample='{sample}'):
     elif 'stitching' in config:
         inputs = [str(_layout.stitching_dir(root, sample) / 'placement.json')]
     else:
-        inputs = [str(_layout._FovPaths(root, fov).score_log()) for fov in fov_ids]
+        inputs = [str(_layout.run_record(root, fov)) for fov in fov_ids]
     return inputs, str(_layout.report_dir(root, sample) / 'report.json')
 
 

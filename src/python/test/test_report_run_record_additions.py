@@ -29,7 +29,6 @@ from starfinder.readout import BarcodeLayout, Codebook, ReadFilterConfig, Segmen
 from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState,
                                 from_workflow_config)
 from starfinder.registration import RegistrationRecipe, RegistrationStep
-from starfinder.dataset.fov import FOV
 from starfinder._records import jsonable as _jsonable
 from starfinder._checkpoint import _transform_json
 from starfinder.registration import (AffineConfig, DemonsConfig, RegistrationQcConfig, RegistrationRejectedError,
@@ -190,10 +189,11 @@ def sha256(path: Path) -> str:
 def test_r2_and_r3_the_golden_fov_with_a_codebook_set_without_a_file(tmp_path):
     fov, record, _ = run(golden_dataset(tmp_path), NO_REGISTERED)
     assert record["codebook"] == {"kind": "codebook", "path": None, "sha256": None, "entries": 4, "genes": 4}
-    # end_bases: the count of the filter's diagnostics, with no per-segment counts.
+    # end_bases: the count of the filter's diagnostics, with no per-segment counts, and the fractions (W-563).
     diagnostics = fov.filtering_result.diagnostics
     assert record["counts"]["filtering"] == {**fov.filtering_result.counts,
-                                             "endpoint_valid": diagnostics["endpoint_valid_count"]}
+                                             "endpoint_valid": diagnostics["endpoint_valid_count"],
+                                             "fractions": fov.filtering_result.fractions}
     assert "endpoint_valid_segments" not in record["counts"]["filtering"]
     assert record["workflow_config"] is None
 
@@ -215,7 +215,7 @@ def test_r2_and_r3_a_codebook_file_with_segment_ends_and_a_filter_without_endpoi
     dataset.load_codebook(path)
     fov, record, _ = run(dataset, NO_REGISTERED, replace(pipeline(), filtering=ReadFilterConfig()), overwrite=True)
     assert "endpoint_valid_count" not in fov.filtering_result.diagnostics
-    assert record["counts"]["filtering"] == fov.filtering_result.counts
+    assert record["counts"]["filtering"] == {**fov.filtering_result.counts, "fractions": fov.filtering_result.fractions}
     # A codebook set on the Dataset after the file: no file is named.
     dataset.codebook = Codebook(dataset.codebook.table, ROUNDS, CHANNELS)
     _, record, _ = run(dataset, (), PipelineConfig(), overwrite=True)
@@ -257,10 +257,6 @@ def test_an_older_record_and_the_format_version(tmp_path):
 # ---------------------------------------------------------------------------------------
 # R4 and R5. The workflow writes run.json and records its configuration file.
 
-# The time fields of the three logs the rule writes: they hold none (log/<fov>_rsf.txt, log/gr_shifts/<fov>.txt
-# and the score log are registration attempts, counts and shifts).
-LOG_TIME_FIELDS = ()
-
 
 def workflow_config(root: Path, out: str, **parameters) -> dict:
     """The rsf_single_fov configuration of the golden scene (legacy keys, translation global registration)."""
@@ -286,8 +282,7 @@ def run_rule(config: dict, codebook: Path):
     paths = from_workflow_config(config).dataset.fov("FOV_001").paths
     folder = paths.checkpoint_dir
     files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()) if folder.exists() else []
-    logs = {path.relative_to(paths.output_root).as_posix(): path.read_bytes()
-            for path in (paths.rsf_log(), paths.shift_log(""), paths.score_log(""))}
+    logs = sorted(p.relative_to(paths.output_root).as_posix() for p in (paths.output_root / "log").rglob("*"))
     record = json.loads((folder / "run.json").read_text()) if "run.json" in files else None
     return record, files, logs
 
@@ -299,7 +294,7 @@ def scene(tmp_path_factory):
     return root, write_codebook(root / "genes.csv")
 
 
-def test_r4_r5_the_rule_writes_run_json_alone_and_its_logs_are_unchanged(scene, monkeypatch):
+def test_r4_r5_the_rule_writes_run_json_alone_and_no_log(scene):
     root, codebook = scene
     record, files, logs = run_rule(workflow_config(root, "out"), codebook)
     assert files == ["run.json"]
@@ -312,14 +307,11 @@ def test_r4_r5_the_rule_writes_run_json_alone_and_its_logs_are_unchanged(scene, 
                                   "entries": 4, "genes": 4}
     assert list(record["transforms"]) == ["round2"]
     assert all(entry["sha256"] is not None for entry in record["inputs"])
-    # The three logs equal, byte for byte, those of the rule run without a checkpoint configuration.
-    original = FOV.run
-    monkeypatch.setattr(FOV, "run", lambda self, config, *, execution=ExecutionConfig(), checkpoints=None:
-                        original(self, config, execution=execution, checkpoints=None))
-    unchanged, files, before = run_rule(workflow_config(root, "before"), codebook)
-    assert unchanged is None and files == []
-    assert set(logs) == {"log/FOV_001_rsf.txt", "log/gr_shifts/FOV_001.txt", "log/sf_scores/FOV_001.txt"} == set(before)
-    assert LOG_TIME_FIELDS == () and logs == before
+    # The rule writes no log file (W-563): run.json holds what its logs held.
+    assert logs == []
+    assert set(record["counts"]["filtering"]["fractions"]) == {"accepted"}
+    assert record["counts"]["summary"]["filtering"]["accepted"] == record["counts"]["filtering"]["accepted"]
+    assert record["rounds"]["reference_round"] == "round1" and record["rounds"]["sequencing_rounds"] == list(ROUNDS)
 
 
 def test_r5_the_checkpoints_key_adds_stages_and_a_rerun_replaces_the_record(scene):

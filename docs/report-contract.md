@@ -371,6 +371,10 @@ with each rule a `RuleLimit`.
 | WR2 | Both rules always run with the Python backend. | Every existing configuration gains two rules and their outputs. |
 | WR3 | No rule; the user calls the entries. | The workflow writes no report. |
 
+Note (W-563): the last fallback input is now the FOVs' `checkpoints/{fovID}/run.json`, which the
+Python processing rules declare instead of the logs ({doc}`migration`, "Sequencing logs and the
+morphology record").
+
 A static schema test keeps the block equal to the fields of `ReportConfig`, as for the other
 blocks.
 
@@ -1171,6 +1175,8 @@ record; it removes only the stage files and leaves `other_rounds/`, `segmentatio
 can verify the raw input; it reads each input once more. The logs the rules write stay as
 they are. `run.json` is not a declared output of the rules. Options: **K1 (recommended)**;
 K2, the report reads the three logs as a second source (baseline G1, option a); K3, both.
+Note (W-563): the Python rules no longer write the logs, and `run.json` is their declared output
+({doc}`migration`, "Sequencing logs and the morphology record").
 
 ### Format version
 

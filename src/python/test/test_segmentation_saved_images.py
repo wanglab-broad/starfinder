@@ -450,8 +450,8 @@ def run_rule(config, raw):
     return Path(config["root_output_path"]) / "dataset" / "output"
 
 
-DECLARED = ["images/morph/DAPI/FOV.tif", "images/morph/Flamingo/FOV.tif", "images/morph/RBD/FOV.tif",
-            "log/FOV_nr.txt", "log/gr_shifts/FOV_nr.txt"]
+DECLARED = ["fovs/FOV/nuclei_registration.json", "images/morph/DAPI/FOV.tif", "images/morph/Flamingo/FOV.tif",
+            "images/morph/RBD/FOV.tif"]
 
 
 @pytest.mark.parametrize("projection", [False, True])
@@ -465,12 +465,11 @@ def test_the_rule_writes_the_saved_form_only_with_checkpoints(raw, tmp_path, ang
                                               for file in ("image.ome.tif", "registration.json")])
     for name in DECLARED:
         assert (plain / name).read_bytes() == (saved / name).read_bytes(), name
-    log = json.loads((plain / "log" / "FOV_nr.txt").read_text())
-    assert list(log["registration_attempts"]) == ["morph"]
-    assert log["registration_attempts"]["morph"][0]["reference"] == "round1:ch04"
-    shifts = pd.read_csv(plain / "log" / "gr_shifts" / "FOV_nr.txt")
+    record = json.loads((plain / "fovs" / "FOV" / "nuclei_registration.json").read_text())
+    assert list(record["registration"]) == list(record["registered_rounds"]) == ["morph"]
+    assert record["registration"]["morph"][0]["reference"] == "round1:ch04"
     rotated = {None: (3, -2), 90: (2, 3)}[angle]       # the displacement (0, 3, -2) rotated by 90 degrees CCW
-    assert shifts.to_dict("records") == [dict(fov_id="FOV", round="morph", row=rotated[0], col=rotated[1], z=0)]
+    assert record["registration"]["morph"][0]["qc"]["details"]["transform"]["displacement_zyx"] == [0, *rotated]
 
     # The saved form reloads, and its image is the one the rule wrote; without checkpoints there is nothing.
     rule_dataset = _nuclei_registration(rule_config(tmp_path / "saved", angle, projection))[0]

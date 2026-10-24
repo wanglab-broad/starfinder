@@ -1,6 +1,8 @@
 """
     Python backend: Registration rules
     Mirrors registration.smk but uses Python scripts via Snakemake script: directive.
+    The processing rules declare their FOV's run.json instead of MATLAB's log files, and
+    nuclei_registration its fovs/<fov>/nuclei_registration.json.
     Uses variables from common.smk
 """
 
@@ -12,8 +14,7 @@ rule rsf_single_fov:
         expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
     output:
-        expand("{output_dir}/log/{{fovID}}_rsf.txt", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/log/sf_scores/{{fovID}}.txt", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/checkpoints/{{fovID}}/run.json", output_dir=OUTPUT_DIR),
         expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
         expand("{output_dir}/fovs/{{fovID}}/molecules.csv", output_dir=OUTPUT_DIR),
     threads: 4
@@ -33,7 +34,7 @@ rule gr_single_fov_subtile:
         expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
     output:
-        expand("{output_dir}/log/{{fovID}}_gr.txt", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/checkpoints/{{fovID}}/run.json", output_dir=OUTPUT_DIR),
         expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_coords.csv", output_dir=OUTPUT_DIR)),
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{n_subtile}.npz",
@@ -54,6 +55,7 @@ rule deep_create_subtile:
         config['config_path'].replace('.yaml', '.json'),
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
     output:
+        expand("{output_dir}/checkpoints/{{fovID}}/run.json", output_dir=OUTPUT_DIR),
         expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_coords.csv", output_dir=OUTPUT_DIR)),
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{n_subtile}.npz",
@@ -76,8 +78,7 @@ rule nuclei_registration:
         config['config_path'].replace('.yaml', '.json'),
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=additional_round_names),
     output:
-        expand("{output_dir}/log/{{fovID}}_nr.txt", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/log/gr_shifts/{{fovID}}_nr.txt", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/fovs/{{fovID}}/nuclei_registration.json", output_dir=OUTPUT_DIR),
     resources:
         mem_mb=get_rule_config('nuclei_registration', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:

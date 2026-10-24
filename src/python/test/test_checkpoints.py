@@ -479,9 +479,13 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     assert len(data['inputs']) == 8
     first = data['inputs'][0]
     assert first['sha256'] == hashlib.sha256(Path(first['path']).read_bytes()).hexdigest()
+    # The read summary of every decoded run and the filter's fractions (W-563).
+    from starfinder._records import jsonable
+    from starfinder.readout import summarize_reads
+    assert data['counts'].pop('summary') == json.loads(json.dumps(jsonable(summarize_reads(fov.results))))
     assert data['counts'] == {'spots': 4, 'intensities': 4,
         'call_status': {'ambiguous': 2, 'assigned': 1, 'unmatched': 1},
-        'filtering': {'total': 4, 'accepted': 1, 'rejected': 3}}
+        'filtering': {'total': 4, 'accepted': 1, 'rejected': 3, 'fractions': {'accepted': 0.25}}}
     names = [(s['name'], s['round']) for s in data['steps']]
     assert ('load_images', 'round2') in names and ('register', 'round2') in names
     assert ('write_checkpoint:registered', 'round2') in names and ('extract_round', 'round1') in names

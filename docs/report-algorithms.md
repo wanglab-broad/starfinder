@@ -1466,7 +1466,7 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 | Z1 | `test_report_chain.py`, `test_z1_one_plane`, `test_rt1_segmentation_and_assembly_on_both_routes`; `test_report_measurements.py`, `test_rt2_z1_sample_measurements_on_both_routes` | slow | within 1e-9 (`shift_z`, `residual_z`) |
 | A2 | `test_report_chain.py`, `test_a2_an_export_and_no_run_json` | slow | exact |
 | CP1 | `test_report_chain.py`, `test_cp1_the_comparison_page`; `test_report_comparison.py`, `test_samples_csv_copies_each_report`, `test_box_plots`, `test_a_changed_report_raises_naming_the_file`, `test_reads_the_reports_only` | default and slow | within 1e-9 |
-| RR1 | `test_report_run_record_additions.py`, `test_r1_*`, `test_r2_*`, `test_r4_r5_the_rule_writes_run_json_alone_and_its_logs_are_unchanged`, `test_r5_*` | default | none compared |
+| RR1 | `test_report_run_record_additions.py`, `test_r1_*`, `test_r2_*`, `test_r4_r5_the_rule_writes_run_json_alone_and_no_log`, `test_r5_*` | default | none compared |
 | RR2 | `test_report_records_golden.py`, `test_run_record_holds_every_pinned_key_and_value`, `test_checkpoint_folder_holds_every_pinned_file`, `test_the_comparison_accepts_additions_and_finds_removals_and_changes`; `test_report_run_record_additions.py`, `test_an_older_record_and_the_format_version`; `test_report_collection.py`, `test_rc11_older_record` | default | exact |
 | WF1 | `test_report_workflow.py`, `test_wf1_*` | default | none compared |
 | DT1 | `test_report_collection.py`, `test_dt1_two_single_thread_processes`; `test_report_chain.py`, `test_dt1_the_chain_in_two_single_thread_processes` | slow | exact (bytes) |

@@ -419,9 +419,11 @@ signal, warp, QC config).
   pre-§2.6 semantics; nothing converts it silently to a recipe. Its translation entries
   store the correction `c = −d`, which the reader converts to the displacement
   `d` (see {doc}`migration`).
-* **`gr_shifts`.** `log/gr_shifts/<fov>.txt` keeps its columns
-  (`fov_id, round, row, col, z`) and its rows: the detected displacement
-  (`displacement_zyx`) of each translation result. Other kinds are not written there.
+* **Shift tables.** The Python backend writes none since W-563: the detected
+  displacement (`displacement_zyx`) of each translation result is in `run.json`
+  `transforms` and in the estimation attempt's `qc.details.transform`
+  ({doc}`migration`, "Sequencing logs and the morphology record"). The MATLAB
+  backend keeps its own.
 * **`run.json`.** Its `format_version` stays 1 (W-240 choice 3); the
   registration records gain the fields below and `config.pipeline.registration`
   becomes the recipe's fields.
@@ -482,9 +484,10 @@ other-round route.
 * **Workflow.** The Python counterpart of `nuclei_registration` reads the
   reference stain as the MATLAB script does (the reference round's `ch04`
   image, rotated by `rotate_angle`) and the `additional_round` entries with
-  their `channel_order`, and writes `log/gr_shifts/<fov>_nr.txt` and the
-  registered images under the MATLAB file names. It is added as a Python rule
-  of the Python backend; the MATLAB backend is unchanged.
+  their `channel_order`, and writes `fovs/<fov>/nuclei_registration.json`
+  (`FOV.save_registration_record`, since W-563) and the registered images under
+  the MATLAB file names. It is added as a Python rule of the Python backend; the
+  MATLAB backend is unchanged.
 * **Out of scope.** Different grids (`scale`, plane-to-volume), stitching and
   segmentation.
 

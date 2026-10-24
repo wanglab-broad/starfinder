@@ -4,7 +4,8 @@ Private and unexported; it imports nothing from ``starfinder``. Every helper
 returns a path without touching the filesystem. The MATLAB-era folders
 (``images``, ``signal``, ``log``, ``output``, ``expr``, ``documents``) keep
 their names, and the ``.smk`` rules spell the same paths on their own. A FOV's
-own folder ``fovs/<fov_id>/`` holds the tables ``FOV.export_spots`` writes.
+own folder ``fovs/<fov_id>/`` holds the tables ``FOV.export_spots`` writes and the
+registration record of its other rounds.
 """
 
 from __future__ import annotations
@@ -27,6 +28,8 @@ TRANSFORMS_FILE = "transforms.json"
 ASSIGNMENT_RECORD = "assignment.json"
 #: The tables FOV.export_spots writes in a FOV's folder, by slot: the accepted molecules and, on request, the reads.
 SPOT_TABLES = {"molecules": "molecules.csv", "reads": "reads.csv"}
+#: The registration record of a FOV's other rounds, which FOV.save_registration_record writes in the FOV's folder.
+NUCLEI_REGISTRATION = "nuclei_registration.json"
 #: The setting naming a FOV's reference image (workflow YAML key and ``Dataset`` field) and its default: a file
 #: pattern with ``{fov_id}``, absolute or relative to the output root.
 REFERENCE_IMAGE_KEY = "reference_image"
@@ -67,6 +70,11 @@ def spot_table(output_root, fov_id, slot="molecules") -> Path:
     if slot not in SPOT_TABLES:
         raise ValueError(f"slot must be one of {list(SPOT_TABLES)}; got {slot!r}")
     return fov_dir(output_root, fov_id) / SPOT_TABLES[slot]
+
+
+def nuclei_registration_record(output_root, fov_id) -> Path:
+    """``fovs/<fov_id>/nuclei_registration.json``, the registration record of a FOV's other rounds."""
+    return fov_dir(output_root, fov_id) / NUCLEI_REGISTRATION
 
 
 def stitching_dir(output_root, sample) -> Path:
@@ -163,36 +171,6 @@ class _FovPaths:
         """
         return self.output_root / CHECKPOINTS / self.fov_id
 
-    def rsf_log(self) -> Path:
-        """Return log/<fov_id>_rsf.txt without creating it.
-
-        Returns
-        -------
-        pathlib.Path
-            Path under output_root; no filesystem mutation.
-        """
-        return self.output_root / "log" / f"{self.fov_id}_rsf.txt"
-
-    def gr_log(self) -> Path:
-        """Return log/<fov_id>_gr.txt without creating it.
-
-        Returns
-        -------
-        pathlib.Path
-            Path under output_root; no filesystem mutation.
-        """
-        return self.output_root / "log" / f"{self.fov_id}_gr.txt"
-
-    def nr_log(self) -> Path:
-        """Return log/<fov_id>_nr.txt (nuclei_registration) without creating it.
-
-        Returns
-        -------
-        pathlib.Path
-            Path under output_root; no filesystem mutation.
-        """
-        return self.output_root / "log" / f"{self.fov_id}_nr.txt"
-
     def spot_table(self, slot: str = "molecules") -> Path:
         """Return fovs/<fov_id>/<slot>.csv, the table FOV.export_spots writes for slot molecules or reads.
 
@@ -223,35 +201,3 @@ class _FovPaths:
             (MATLAB's rsf_single_fov and stitch_subtile).
         """
         return self.output_root / "signal" / f"{self.fov_id}_{slot}.csv"
-
-    def shift_log(self, suffix: str = "") -> Path:
-        """Return log/gr_shifts/<fov_id><suffix>.txt; suffix defaults to empty.
-
-        Returns
-        -------
-        pathlib.Path
-            Path under output_root; no filesystem mutation.
-
-        Parameters
-        ----------
-        suffix : str
-            Optional text appended to fov_id; default empty string.
-        """
-        name = f"{self.fov_id}{suffix}.txt" if suffix else f"{self.fov_id}.txt"
-        return self.output_root / "log" / "gr_shifts" / name
-
-    def score_log(self, suffix: str = "") -> Path:
-        """Return log/sf_scores/<fov_id><suffix>.txt; suffix defaults to empty.
-
-        Returns
-        -------
-        pathlib.Path
-            Path under output_root; no filesystem mutation.
-
-        Parameters
-        ----------
-        suffix : str
-            Optional text appended to fov_id; default empty string.
-        """
-        name = f"{self.fov_id}{suffix}.txt" if suffix else f"{self.fov_id}.txt"
-        return self.output_root / "log" / "sf_scores" / name

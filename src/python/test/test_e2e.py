@@ -77,26 +77,6 @@ class TestE2EShiftRecovery:
                     f"(gt={info['gt']}, detected={info['detected']})"
                 )
 
-    def test_shift_log_csv_matches(self, e2e_result):
-        """Shift log CSV values must match detected_shifts(fov) exactly."""
-        fov, ds, gt = e2e_result
-        shift_path = fov.paths.shift_log()
-        assert shift_path.exists(), f"Shift log not found: {shift_path}"
-
-        df = pd.read_csv(shift_path)
-        for _, row in df.iterrows():
-            round_name = row["round"]
-            dz, dy, dx = detected_shifts(fov)[round_name]
-            assert row["row"] == pytest.approx(dy), (
-                f"{round_name}: CSV row={row['row']} != dy={dy}"
-            )
-            assert row["col"] == pytest.approx(dx), (
-                f"{round_name}: CSV col={row['col']} != dx={dx}"
-            )
-            assert row["z"] == pytest.approx(dz), (
-                f"{round_name}: CSV z={row['z']} != dz={dz}"
-            )
-
 
 class TestE2ESpotDetection:
     """Validate spot finding against ground truth spot positions."""

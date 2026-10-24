@@ -84,6 +84,9 @@ the comparison page (D2).
 | | `export/<sample>/<image>_projection.ome.tif`, `<image>_stack.ome.tif` | `export/_fuse.py`: `fuse_images` | the fuse part | The fused image the marker patterns are drawn on. |
 | | `export/<sample>/segmentation_<run>.ome.tif` | `export/_segment.py`: `segment_fused` | route after fusion, part `segment` | The sample's label image. |
 
+Note (W-563): the Python backend no longer writes the three workflow logs above; their fields are in
+`run.json` ({doc}`migration`, "Sequencing logs and the morphology record").
+
 Figures the stages already draw: the assignment figures `expr/<fov>/assignment.png` and
 `assignment_single_layer.png` (`dataset/workflow.py`: `_write_assignment_figures`), drawn by
 `reads_assignment` and again by `export_sample` with the FOV's ownership region on the route
@@ -353,6 +356,10 @@ Every row was looked up in the files of W-384's synthetic runs (stages `candidat
 | F06 | Checkpoints, placement, sample export, report and report tables locations | every | `checkpoints/{fov}/run.json` | `checkpoint_directory` | source | the placement and export folders are the entry's fixed places (D1); the report's own folder is its output |
 
 ## Gaps
+
+Note (W-563): G1's "The logs stay as they are" no longer holds: the Python processing rules write
+`run.json` instead of the logs, which also gained the filter's fractions, the read summary of every
+decoded run and the round roles ({doc}`migration`, "Sequencing logs and the morphology record").
 
 Each gap is a value, or part of one, that no record holds where the report looks. The
 three gaps D6 named were confirmed or refuted from W-384's run with stages `candidates` and

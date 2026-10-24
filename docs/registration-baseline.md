@@ -48,6 +48,9 @@ tuple of steps.
 | Records | `FOV.registration_attempts[round]` gets one entry per attempt: `requested_method`, `actual_method`, `config`, `outcome` (`estimating`, `failed`, `application_failed` or `succeeded`), `failure` (`type`, `message`) and, on success, `application_config` (`dataset/fov.py:418-446`). The backend is not recorded in the attempt; it is in `RegistrationDiagnostics.backend` of the result. |
 | Persistence | `transforms.json` entry `kind: "translation"` with `correction_zyx` inline; `log/gr_shifts/<fov>.txt` rows (`fov_id, round, row, col, z` = the detected displacement, `-correction`), written by `save_processing_log` for translation results only (`dataset/fov.py:463-474`). |
 
+Note (W-563): the Python backend no longer writes the shift tables; each translation is in `run.json`
+`transforms` and in its estimation attempt ({doc}`migration`, "Sequencing logs and the morphology record").
+
 ### Demons
 
 | Field | Behavior |

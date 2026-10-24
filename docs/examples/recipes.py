@@ -1,7 +1,7 @@
 """Small development recipes; reuse quickstart inputs and write new outputs."""
 
 from starfinder.assignment import load_molecules
-from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig
+from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
 from starfinder.io import ImageLoadConfig
 
 import argparse
@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import FOV, RoundState, Dataset
+from starfinder.dataset import FOV, CheckpointConfig, PipelineConfig, RoundState, Dataset
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.io import load_round, load_volume, save_volume
 from starfinder.registration import TranslationConfig, estimate_transform, apply_transform, TranslationConfig
@@ -71,12 +71,17 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
     dataset.rounds.validate()
     dataset.load_codebook(quickstart / "input" / "codebook.csv")
     fov = dataset.fov("FOV_001")
-    fov.load_images()
+    pipeline = PipelineConfig(
+        load=ImageLoadConfig(channel_labels=tuple(dataset.channel_order)),
+        registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)),
+        spot_finding=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0),
+        extraction=NeighborhoodSumConfig((1, 2, 2)),
+        decoding=WtaDecoderConfig(diagnostics=True),
+        filtering=ReadFilterConfig(),
+    )
+    # The run record checkpoints/FOV_001/run.json, without stage files, records the run.
+    fov.run(pipeline, checkpoints=CheckpointConfig(stages=()))
     assert all(image.shape == (8, 128, 128, 4) for image in fov.images.values())
-    fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
-    fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0))
-    fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
-    fov.decode_reads().filter_reads()
     assert 0 < len(fov.filtering_result.accepted) <= len(fov.spot_result.spots)
     assert set(fov.filtering_result.accepted["gene_id"]) <= set(dataset.codebook.genes)
     print(f"FOV_001: {len(fov.spot_result.spots)} detected, {len(fov.filtering_result.accepted)} retained")
@@ -87,7 +92,14 @@ def inspect_outputs(fov: FOV) -> dict:
     reads_path = fov.export_spots("reads", columns=["spot_namespace", "spot_id", "z", "y", "x", "gene_id",
                                                     "observed_color_sequence", "call_status"])
     molecules_path = fov.export_spots()
-    log_path = fov.save_processing_log()
+    record_path = fov.paths.checkpoint_dir / "run.json"
+    record = json.loads(record_path.read_text())
+    # The counts, the filter's fractions, the read summary, the round roles and the transforms of the run.
+    assert record["counts"]["spots"] == len(fov.spot_result.spots)
+    assert record["counts"]["filtering"]["fractions"] == fov.filtering_result.fractions
+    assert record["counts"]["summary"]["filtering"]["accepted"] == len(fov.filtering_result.accepted)
+    assert record["rounds"]["sequencing_rounds"] == list(fov.rounds.sequencing_rounds)
+    assert set(record["transforms"]) == {"round2", "round3", "round4"}
     candidates = pd.read_csv(reads_path, dtype={"observed_color_sequence": str}, na_values=["<NA>"],
                              keep_default_na=False)
     molecules = load_molecules(molecules_path, genes=fov.dataset.codebook.genes).table
@@ -102,7 +114,7 @@ def inspect_outputs(fov: FOV) -> dict:
     intensities = reference[coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], :]
     assert intensities.shape == (len(molecules), 4)
     print(molecules.head().to_string(index=False))
-    print("Logs:", log_path, "and", fov.dataset.output_root / "log" / "gr_shifts")
+    print("Run record:", record_path)
     return {
         "detected": len(candidates), "retained": len(molecules),
         "gene_counts": molecules.groupby("gene_id").size().to_dict(),

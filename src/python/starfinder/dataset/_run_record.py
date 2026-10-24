@@ -1,6 +1,7 @@
 """Small per-FOV run record (run.json) written while checkpoints are active."""
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
@@ -103,6 +104,8 @@ class _RunRecord:
             "workflow_config": _workflow_config_record(dataset),
             # Channel pattern, name and wavelength per round (docs/checkpoints.md, "run.json").
             "channels": dataset._channel_record(),
+            # The round roles of the run (RoundState).
+            "rounds": asdict(fov.rounds),
             "inputs": [], "codebook": _codebook_record(dataset), "steps": [], "preprocessing": None,
             "registration": {}, "transforms": {}, "counts": {},
             "checkpoint_directory": str(self.directory), "checkpoints": {},
@@ -150,7 +153,7 @@ class _RunRecord:
         if fov.deduplication_result is not None:
             counts["deduplication"] = fov.deduplication_result.counts
         if fov.filtering_result is not None:
-            # A copy: the result's counts are also written to the rule's logs.
+            # A copy, which gains the diagnostics' endpoint counts and the fractions.
             counts["filtering"] = dict(fov.filtering_result.counts)
             diagnostics = fov.filtering_result.diagnostics
             # Present exactly when the filter checked endpoints (end_bases or a layout's segment ends).
@@ -158,9 +161,11 @@ class _RunRecord:
                 counts["filtering"]["endpoint_valid"] = diagnostics["endpoint_valid_count"]
             if "endpoint_valid_segment_counts" in diagnostics:
                 counts["filtering"]["endpoint_valid_segments"] = dict(diagnostics["endpoint_valid_segment_counts"])
-        if fov.scoring_result is not None or fov.deduplication_result is not None:
-            # The §2.8 population summary (docs/readout-contract.md, "Diagnostics") of the scored or
-            # deduplicated reads; runs without those stages keep the earlier counts only.
+            # accepted and endpoint_valid over all reads, null when there are none.
+            counts["filtering"]["fractions"] = dict(fov.filtering_result.fractions)
+        if fov.decoding_result is not None:
+            # The §2.8 population summary (docs/readout-contract.md, "Diagnostics") of the latest reads,
+            # with or without scoring and deduplication.
             from starfinder.readout import summarize_reads
             counts["summary"] = summarize_reads(fov.results)
         self.data.update(preprocessing=fov.preprocessing_record or None,

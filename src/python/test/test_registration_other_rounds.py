@@ -15,7 +15,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-import pandas as pd
 import pytest
 import tifffile
 
@@ -215,12 +214,13 @@ def test_records_name_the_reference(tmp_path, use_external):
         reference_sha256=digest if use_external else None, outcome="succeeded")
     assert application["record"] == "application" and application["outcome"] == "succeeded"
     assert fov.registration_record["rounds"]["morph"]["recipe"]["steps"] == ["translation"]
-    log = fov.save_processing_log("nr")
-    assert log == tmp_path / "output" / "log" / "FOV_nr.txt"
-    assert list(json.loads(log.read_text())["registration_attempts"]) == ["morph"]
-    shifts = pd.read_csv(tmp_path / "output" / "log" / "gr_shifts" / "FOV_nr.txt")
-    assert list(shifts.columns) == ["fov_id", "round", "row", "col", "z"]
-    assert shifts.to_dict("records") == [dict(fov_id="FOV", round="morph", row=3, col=-2, z=0)]
+    path = fov.save_registration_record()
+    assert path == tmp_path / "output" / "fovs" / "FOV" / "nuclei_registration.json"
+    record = json.loads(path.read_text())
+    assert list(record["registration"]) == list(record["registered_rounds"]) == ["morph"]
+    # The estimation attempt holds the translation, (dz, dy, dx) = (z, row, col) of the former shift table.
+    assert record["registration"]["morph"][0]["qc"]["details"]["transform"] == dict(
+        kind="translation", displacement_zyx=[0, 3, -2])
 
 
 def rule_block(path):
@@ -250,17 +250,18 @@ def test_the_python_workflow_rule_mirrors_the_matlab_outputs(tmp_path, maximum_p
             save_volume(np.rot90(image[..., c], k=-1, axes=(1, 2)), source / name / "FOV" / f"FOV_{label}.tif")
     snakemake = SimpleNamespace(config=config, wildcards=SimpleNamespace(fovID="FOV"),
                                 input=[str(tmp_path / "config.json"), str(source / "morph" / "FOV")],
-                                output=[str(tmp_path / "output" / "dataset" / "output" / "log" / "FOV_nr.txt"),
-                                        str(tmp_path / "output" / "dataset" / "output" / "log" / "gr_shifts" / "FOV_nr.txt")])
+                                output=[str(tmp_path / "output" / "dataset" / "output" / "fovs" / "FOV" /
+                                            "nuclei_registration.json")])
     runpy.run_path(str(ROOT / "workflow" / "scripts" / "nuclei_registration.py"), init_globals={"snakemake": snakemake})
 
     output = tmp_path / "output" / "dataset" / "output"
     names = sorted(p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file())
-    assert names == ["images/morph/DAPI/FOV.tif", "images/morph/GFAP/FOV.tif", "images/morph/Nissl/FOV.tif",
-                     "log/FOV_nr.txt", "log/gr_shifts/FOV_nr.txt"]
+    assert names == ["fovs/FOV/nuclei_registration.json", "images/morph/DAPI/FOV.tif", "images/morph/GFAP/FOV.tif",
+                     "images/morph/Nissl/FOV.tif"]
     assert all(Path(path).is_file() for path in snakemake.output)
-    shifts = pd.read_csv(output / "log" / "gr_shifts" / "FOV_nr.txt")
-    assert shifts.to_dict("records") == [dict(fov_id="FOV", round="morph", row=3, col=-2, z=0)]
+    record = json.loads((output / "fovs" / "FOV" / "nuclei_registration.json").read_text())
+    assert list(record["registration"]) == ["morph"]
+    assert record["registration"]["morph"][0]["qc"]["details"]["transform"]["displacement_zyx"] == [0, 3, -2]
     for c, folder in enumerate(("DAPI", "Nissl", "GFAP")):
         saved = tifffile.imread(output / "images" / "morph" / folder / "FOV.tif")
         assert saved.dtype == np.uint16
@@ -268,9 +269,14 @@ def test_the_python_workflow_rule_mirrors_the_matlab_outputs(tmp_path, maximum_p
             assert saved.shape == SHAPE[1:]
         else:
             assert np.array_equal(saved[OVERLAP], truth[OVERLAP + (c,)])
-    # The Python rule declares the MATLAB rule's inputs and outputs and runs the Python script.
+    # The Python rule declares the MATLAB rule's inputs and, instead of MATLAB's log and shift table, the
+    # registration record; it runs the Python script.
     python_rule, matlab_rule = (ROOT / "workflow" / "rules" / "registration-py.smk",
                                 ROOT / "workflow" / "rules" / "registration.smk")
-    assert rule_block(python_rule) == rule_block(matlab_rule)
+    python_block, matlab_block = rule_block(python_rule), rule_block(matlab_rule)
+    inputs, outputs = python_block.split("    output:\n")
+    assert matlab_block.split("    output:\n")[0] == inputs
+    assert outputs == '        expand("{output_dir}/fovs/{{fovID}}/nuclei_registration.json", output_dir=OUTPUT_DIR),\n'
+    assert "/log/" not in outputs and "/log/" in matlab_block.split("    output:\n")[1]
     assert '"../scripts/nuclei_registration.py"' in python_rule.read_text()
     assert "matlab_script_name = 'nuclei_registration'" in matlab_rule.read_text()

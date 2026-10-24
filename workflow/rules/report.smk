@@ -15,7 +15,7 @@ REPORT_SAMPLES = [sample for sample in SAMPLE_ANNOT['sample_id'].unique() if sam
 
 def get_report_input(wildcards):
     """The sample's last per-sample output: export.json (assembly block), else placement.json (stitching block),
-    else its FOVs' sf_scores logs."""
+    else its FOVs' run.json records."""
     return _report_sample_files(config, OUTPUT_DIR, SAMPLE_TO_FOV[wildcards.sample], wildcards.sample)[0]
 
 ### ==================== [ Sample Report ] =========================

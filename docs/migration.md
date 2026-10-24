@@ -575,7 +575,8 @@ the round. A channel label in `RegistrationSignalConfig(mode="channel")` is
 looked up in the round's own labels: `Dataset.other_channel_order` (new) gives
 an other round its channels, and `FOV.load_images` checks each round against
 `Dataset.channel_labels(round)`. Estimation attempts gain `reference_sha256`
-(`None` for a round reference). `FOV.save_processing_log` accepts `"nr"`.
+(`None` for a round reference). `FOV.save_processing_log` accepts `"nr"` (W-563 later
+removed it: "Sequencing logs and the morphology record").
 
 With `backend: python`, the `nuclei_registration` rule now runs the Python
 script `workflow/scripts/nuclei_registration.py` instead of MATLAB, with the
@@ -1074,7 +1075,8 @@ background-unavailable counts, cross-channel pairs).
 their values and limits. They accept a read result or `FOV.results`. `FOV.run` never
 calls `inspect_read`, `plot_read` or `explain_read`; when it scores or deduplicates,
 `run.json` records the summary under `counts["summary"]`, and
-`FOV.save_diagnostics` now writes it as `summary` beside the filtering counts.
+`FOV.save_diagnostics` now writes it as `summary` beside the filtering counts (W-563 later
+removed `save_diagnostics` and records the summary whenever reads were decoded).
 
 ### Segmentation label contract and mask import
 
@@ -1439,7 +1441,8 @@ changes its result:
   `rules.nuclei_registration.parameters.checkpoints` (`CheckpointConfig` fields, `{}`
   for the defaults), also writes the saved form under `checkpoints/{fovID}/other_rounds/`.
   `save_processing_log("nr")` lists only registered rounds, so the reference stain, which
-  has no registration, is not in `log/{fovID}_nr.txt`.
+  has no registration, is not in `log/{fovID}_nr.txt` (W-563 later replaced both files with
+  `fovs/{fovID}/nuclei_registration.json`, which leaves the reference stain out the same way).
 
 ### Multi-FOV synthetic sample scene
 
@@ -1726,7 +1729,7 @@ run.json"):
 * **The workflow writes `checkpoints/<fov>/run.json`** for the processing rules, alone by
   default, with `overwrite` on; `rules.<rule>.parameters.checkpoints` adds stages
   ({doc}`workflow-configuration`, "Run records of the processing rules"). The logs the
-  rules write do not change.
+  rules write do not change (W-563 later removed the Python logs).
 * **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256**,
   which `run.json` records as `codebook`.
 
@@ -1805,6 +1808,72 @@ The legacy route keeps its files and reader: MATLAB's `rsf_single_fov` and `stit
 the consumers read them with `import_legacy_molecules_csv`. Each consumer chooses its file
 from the configuration ({doc}`workflows`, "Molecule tables"): the backend and the producer
 the `Snakefile`'s `ruleorder` selects; it never looks for whichever file exists.
+
+### Sequencing logs and the morphology record
+
+W-563 (OM-05, OM-17) folds the Python backend's per-FOV sequencing logs into `run.json` and
+replaces the morphology log and its shift table with one JSON record. The MATLAB backend
+writes its logs under the same names as before; only the Python files are removed, with no
+alias and no dual write. Existing output trees are not rewritten.
+
+* **`run.json` gains three fields** (`format_version` stays 1; a record without them still
+  loads): `counts.filtering.fractions` (`accepted` and, when the filter checked endpoints,
+  `endpoint_valid`, as `ReadFilteringResult.fractions` computes them: over all reads, `null`
+  without reads); `counts.summary` (`summarize_reads` of the latest reads) whenever reads were
+  decoded, also without scoring or deduplication; and `rounds`, the run's `RoundState`
+  roles (`sequencing_rounds`, `other_rounds`, `reference_round`).
+* **Removed: `FOV.save_processing_log`, `FOV.save_diagnostics` and `FOV._save_shift_log`**,
+  and the path helpers `FOV.paths.rsf_log`, `gr_log`, `nr_log`, `shift_log` and `score_log`.
+  A direct caller obtains the record with `FOV.run(..., checkpoints=CheckpointConfig(stages=()))`,
+  which writes `checkpoints/<fov_id>/run.json` and no stage file.
+* **New: `FOV.save_registration_record(path=None)`** writes
+  `<output_root>/fovs/<fov_id>/nuclei_registration.json`: `fov_id`, `rounds` (the round roles),
+  `registered_rounds` (the `registration_record["rounds"]` entries of the other rounds with
+  registration attempts; the reference stain, which has none, is left out) and
+  `registration` (those rounds' attempts, unchanged). Prepared-image persistence
+  (`other_rounds/<name>/`) stays opt-in and unchanged.
+
+Each removed file and field, and its place now:
+
+| Removed file | Field | Now |
+| --- | --- | --- |
+| `log/<fov>_rsf.txt`, `log/<fov>_gr.txt` (JSON) | `fov_id` | `run.json` `fov_id` |
+| | `backend` (always `python`) | none: only the Python package writes `run.json` (`code` names its version) |
+| | `rounds` | `run.json` `rounds` |
+| | `registration_attempts` | `run.json` `registration` |
+| | `detected` | `run.json` `counts.spots` |
+| | `filtering` (the filter counts) | `run.json` `counts.filtering` (`total`, `accepted`, `rejected`, beside the endpoint counts and `fractions`) |
+| `log/sf_scores/<fov>.txt` (JSON; `<fov>_<n>.txt` for subtile `n`, now in `checkpoints/<fov>/subtile_<n>/run.json`) | `detected` | `run.json` `counts.spots` |
+| | `counts` | `run.json` `counts.filtering` (`total`, `accepted`, `rejected`) |
+| | `fractions` | `run.json` `counts.filtering.fractions` |
+| | `summary` | `run.json` `counts.summary` |
+| | `registration_attempts` | `run.json` `registration` |
+| `log/gr_shifts/<fov>.txt` (CSV) | `fov_id` | `run.json` `fov_id` |
+| | `round` | the round's key in `run.json` `transforms` |
+| | `row`, `col`, `z` (one row per translation result) | `dy`, `dx`, `dz` of `transforms.<round>.results[i].transform.displacement_zyx`, which is `[dz, dy, dx]` |
+| `log/<fov>_nr.txt` (JSON) | `fov_id`, `rounds` | `nuclei_registration.json` `fov_id`, `rounds` |
+| | `backend` (always `python`) | none |
+| | `registration_attempts` (the registered other rounds) | `nuclei_registration.json` `registration`, unchanged; new beside it: `registered_rounds` |
+| | `detected`, `filtering` (always `null` there) | none |
+| `log/gr_shifts/<fov>_nr.txt` (CSV) | `fov_id`, `round` | `nuclei_registration.json` `fov_id` and the round's key in `registration` |
+| | `row`, `col`, `z` | `dy`, `dx`, `dz` of the translation estimation attempts' `qc.details.transform.displacement_zyx` in `registration.<round>`, one attempt per translation step |
+
+The workflow's declared outputs change on the Python backend only; the final targets of
+`common.smk` branch on `backend`, and `registration.smk` and `spot-finding.smk` are unchanged:
+
+| Rule | Python before | Python now | MATLAB |
+| --- | --- | --- | --- |
+| `rsf_single_fov` | `log/{fovID}_rsf.txt`, `log/sf_scores/{fovID}.txt` | `checkpoints/{fovID}/run.json` | unchanged |
+| `gr_single_fov_subtile` | `log/{fovID}_gr.txt` | `checkpoints/{fovID}/run.json` | unchanged |
+| `deep_create_subtile` | none (it wrote `log/{fovID}_gr.txt` and the shift table undeclared) | `checkpoints/{fovID}/run.json` | unchanged |
+| `lrsf_single_fov_subtile`, `deep_rsf_subtile` | `log/sf_scores/{fovID}_{n}.txt` | `checkpoints/{fovID}/subtile_{n}/run.json` | unchanged |
+| `nuclei_registration` | `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt` | `fovs/{fovID}/nuclei_registration.json` | unchanged |
+
+The other outputs of these rules do not change. `log/gr_shifts/{fovID}.txt`, which the
+Python processing rules wrote without declaring it, is no longer written. Without an
+`assembly` or `stitching` block, the declared input of `report_sample` is every FOV's
+`checkpoints/{fovID}/run.json` instead of `log/sf_scores/{fovID}.txt`, so it now has a
+producer in the subtile modes too. No new human log file is written (deferred to §2.13).
 
 ### The processing report
 

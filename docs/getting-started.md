@@ -124,8 +124,7 @@ All paths below are relative to `QUICKSTART_OUTPUT`:
 | `input/formed.csv`, `input/round_truth.csv`, `input/scene_truth.csv` | Formed amplicons (`gene_id`, `color_sequence`), their per-round positions and visibility, and the per-round view of the channel each color sequence selects (MATLAB-compatible `gene` and `color_seq` columns) |
 | `results/fovs/FOV_*/reads.csv` | Every detected candidate with its read, as the quickstart requests it: `spot_namespace,spot_id,z,y,x,gene_id,observed_color_sequence,call_status` (`gene_id` is `<NA>` for an unassigned read) |
 | `results/fovs/FOV_*/molecules.csv` | Filtered molecule candidates: `spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score`; one row per retained read, not per cell (`qc_score` is `<NA>`: the quickstart does not score reads) |
-| `results/log/gr_shifts/FOV_*.txt` | CSV despite `.txt` suffix: `fov_id,round,row,col,z`; row/col/z are detected `(dy,dx,dz)` displacements |
-| `results/log/FOV_*_rsf.txt` | Processing summary: backend, timestamp, rounds/reference, global shifts, local-registration state and spot counts |
+| `results/checkpoints/FOV_*/run.json` | The run record of `FOV.run` with `CheckpointConfig(stages=())` (no stage files): round roles, steps, registration attempts, transforms (detected `(dz,dy,dx)` displacements as `displacement_zyx`), counts with the filter's fractions, the read summary and `outputs.molecules` ({doc}`checkpoints`, "run.json") |
 | `summary.json` | Per-FOV generated/detected/retained counts, detected shifts, gene counts and molecule CSV paths |
 
 In memory, image axes are `(Z,Y,X,C)` and spot coordinates are **0-based**.
@@ -139,15 +138,16 @@ cell ID, or cross-FOV stitching in these files.
 `N` for a NaN maximum. Read it as a string. Filtration here uses exact codebook
 membership; scores are diagnostics, not an additional filtering threshold.
 
-Shift logs contain the **detected displacement**, the same value as the
+The run record's `transforms` hold the **detected displacement**, the
 translation transform's `displacement_zyx`: a moving round displaced by
-`(dz,dy,dx)=(-2,3,2)` is logged and stored as `(-2,3,2)` and registered by
+`(dz,dy,dx)=(-2,3,2)` is recorded as `(-2,3,2)` and registered by
 sampling it at `p + (-2,3,2)`. See the
 [API contracts](api/contracts.md) for details.
 
 The script asserts input shape/dtype, nonempty filtered outputs, valid codebook
 labels, four-color sequence format, agreement of detected versus generated
-shifts within one voxel per axis, CSV row counts, coordinate bounds and that the
+shifts within one voxel per axis, the run record's status, counts, fractions and
+transforms, CSV row counts, coordinate bounds and that the
 molecule table read back with `load_molecules` holds the in-memory identities and
 coordinates. To inspect the molecule tables yourself:
 
@@ -166,8 +166,8 @@ for path in sorted((root / "results" / "fovs").glob("*/molecules.csv")):
 PY
 ```
 
-If a check fails, inspect the traceback, `summary.json` if present, and the CSVs
-and logs already written. Check the interpreter, installed lockfile environment,
+If a check fails, inspect the traceback, `summary.json` if present, the CSVs
+already written and the FOV's `run.json` (its `status` and `error`). Check the interpreter, installed lockfile environment,
 channel order and input layout before changing processing parameters. The
 [small API examples](api/examples.md) isolate individual contracts. Real-image,
 MATLAB, local-registration, and cell-level workflows require separate validation.
