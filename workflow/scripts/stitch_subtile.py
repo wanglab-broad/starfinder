@@ -43,8 +43,8 @@ for i in range(subtile_coords_df.shape[0]):
 # save reads_df
 reads_df.to_csv(snakemake.output[0], index=False)
 
-# visualize reads on the FOV's reference image: the Python backend's rule input (the file reference_image or
-# reference_image_import names), MATLAB's images/ref_merged/<fov>.tif
+# visualize reads on the FOV's reference image: the Python backend's rule input reference, the one path of the file
+# reference_image or reference_image_import names; MATLAB's images/ref_merged/<fov>.tif
 if snakemake.config.get('backend', 'matlab') == 'python':
     reference_img_path = snakemake.input.reference
 else:

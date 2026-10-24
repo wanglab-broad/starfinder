@@ -2,7 +2,8 @@
     Python backend: Spot-finding rules
     Mirrors spot-finding.smk but uses Python scripts via Snakemake script: directive.
     The subtile rules declare the subtile's run.json (SUBTILE_RUN_RECORD, fovs/<fov>/subtile_<n>/run.json)
-    instead of MATLAB's score logs; stitch_subtile reads the FOV's reference image (REFERENCE_IMAGE_INPUT).
+    instead of MATLAB's score logs; stitch_subtile reads the FOV's reference image (REFERENCE_IMAGE_INPUT, one path,
+    its input reference).
     Uses variables from common.smk
 """
 

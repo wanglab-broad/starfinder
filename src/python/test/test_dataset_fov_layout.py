@@ -328,18 +328,51 @@ def expand(pattern, **values):
     return [pattern.format(**dict(zip(keys, combination))) for combination in itertools.product(*lists)]
 
 
-def rule_files(path, rule, section, namespace):
-    """The files of one section (input or output) of a rule, evaluated as Snakemake evaluates them at parse time:
-    (positional files flattened, named files)."""
+def rule_section(path, rule, section, namespace):
+    """One section (input or output) of a rule, evaluated as Snakemake evaluates it at parse time: (positional
+    entries, named entries), each as the rule declares it (a string, a list or an input function)."""
     text = path.read_text()
     block = text[text.index(f"rule {rule}:"):]
     end = re.search(r"\n(?=\S)", block[1:])
     block = block if end is None else block[:end.start() + 1]
     body = re.search(rf"^    {section}:\n((?:        .*\n)+)", block, re.M).group(1)
-    args, kwargs = eval(f"_collect({body.strip()})", {**namespace, "_collect": lambda *a, **k: (a, k),
-                                                     "expand": expand, "temp": lambda value: value})
+    return eval(f"_collect({body.strip()})", {**namespace, "_collect": lambda *a, **k: (a, k), "expand": expand,
+                                             "temp": lambda value: value})
+
+
+def rule_files(path, rule, section, namespace):
+    """The files of one section of a rule: (positional files flattened, named entries as declared)."""
+    args, kwargs = rule_section(path, rule, section, namespace)
     flat = [str(f) for item in args for f in (item if isinstance(item, list) else [item])]
     return flat, kwargs
+
+
+class Namedlist(list):
+    """The shape of ``snakemake.io.Namedlist``, the ``snakemake.input`` of a job (Snakemake is not installed in the
+    test environment): every file in order, and each named entry also an attribute and an item by name, a string for
+    an entry declared as one path and a ``Namedlist`` of its files for an entry declared as a list."""
+
+    def __getitem__(self, key):
+        return getattr(self, key) if isinstance(key, str) else super().__getitem__(key)
+
+
+def job_input(path, rule, namespace, **wildcards):
+    """The ``snakemake.input`` of one job of a rule: its parsed input section with the wildcards filled in, input
+    functions called with them, in the shape Snakemake gives each entry."""
+    def fill(value):
+        if callable(value):
+            value = value(SimpleNamespace(**wildcards))
+        if isinstance(value, list):
+            return Namedlist(fill(v) for v in value)
+        return str(value).format(**wildcards)
+    args, kwargs = rule_section(path, rule, "input", namespace)
+    job = Namedlist()
+    for value in [*args, *kwargs.values()]:
+        filled = fill(value)
+        job.extend(filled if isinstance(filled, list) else [filled])
+    for name, value in kwargs.items():
+        setattr(job, name, fill(value))
+    return job
 
 
 def common_value(name):
@@ -349,24 +382,29 @@ def common_value(name):
     return match.group(1)
 
 
+def common_python_names(config, output):
+    """The names the Python block of common.smk gives the Python rule files, by executing its own assignments."""
+    text = (RULES / "common.smk").read_text()
+    names = ("RUN_RECORD", "SUBTILE_RUN_RECORD", "REFERENCE_IMAGE_OUTPUT", "REFERENCE_IMAGE_INPUT",
+             "SHARED_IMAGE_INPUTS")
+    lines = re.findall(rf"^    ((?:{'|'.join(names)}) = .*)$", text, re.M)
+    assert [line.split(" = ")[0] for line in lines] == list(names)
+    namespace = dict(config=config, OUTPUT_DIR=output, _reference_image_inputs=_reference_image_inputs,
+                     _reference_image_outputs=_reference_image_outputs, _run_record_outputs=_run_record_outputs,
+                     _shared_image_inputs=_shared_image_inputs)
+    exec("\n".join(lines), namespace)
+    return {name: namespace[name] for name in names}
+
+
 def backend_namespace(tmp_path, backend, **keys):
-    output = tmp_path / "out"
+    output = tmp_path / "data" / "run"
     config = dict(dataset_id="data", output_id="run", backend=backend, n_rounds=1, ref_round="round1",
                   root_input_path=str(tmp_path), root_output_path=str(tmp_path), sample_id="sample",
                   seq_channel_order=["ch01"], additional_round=[dict(round_name="flamingo", channel_order=[
                       dict(channel="ch00", name="DAPI"), dict(channel="ch03", name="Flamingo")])], **keys)
     namespace = dict(OUTPUT_DIR=output, INPUT_DIR=tmp_path / "in", ROUND=["round1"], N_SUBTILE=[1], config=config)
     if backend == "python":
-        # The Python block of common.smk, by the calls it makes.
-        common = (RULES / "common.smk").read_text()
-        for call in ('_run_record_outputs(OUTPUT_DIR, ["{fovID}"])[0]', '_reference_image_outputs(config, OUTPUT_DIR',
-                     '_shared_image_inputs(config, OUTPUT_DIR)'):
-            assert call in common
-        namespace.update(RUN_RECORD=_run_record_outputs(output, ["{fovID}"])[0],
-                         SUBTILE_RUN_RECORD=_run_record_outputs(output, ["{fovID}"], ["{n_subtile}"])[0],
-                         REFERENCE_IMAGE_OUTPUT=_reference_image_outputs(config, output, ["{fovID}"]),
-                         REFERENCE_IMAGE_INPUT=_reference_image_inputs(config, output, ["{fovID}"]),
-                         SHARED_IMAGE_INPUTS=_shared_image_inputs(config, output))
+        namespace.update(common_python_names(config, output))
     else:
         namespace["SHARED_IMAGE_INPUTS"] = eval(common_value("SHARED_IMAGE_INPUTS"), dict(OUTPUT_DIR=output))
     return namespace, output
@@ -400,7 +438,7 @@ def test_the_matlab_backend_keeps_its_rules_and_the_python_backend_follows_the_l
     assert rule_files(RULES / "spot-finding-py.smk", "lrsf_single_fov_subtile", "output", python)[0][0] == \
         f"{out}/fovs/{{fovID}}/subtile_{{n_subtile}}/run.json"
     assert rule_files(RULES / "spot-finding-py.smk", "stitch_subtile", "input", python)[1] == {
-        "reference": [f"{out}/fovs/{{fovID}}/reference.tif"]}
+        "reference": f"{out}/fovs/{{fovID}}/reference.tif"}
     named = rule_files(segmentation, "enhance_dapi_with_flamingo", "input", python)[1]
     wildcards = SimpleNamespace(fovID="FOV")
     assert {key: function(wildcards) for key, function in named.items()} == {
@@ -413,3 +451,46 @@ def test_the_matlab_backend_keeps_its_rules_and_the_python_backend_follows_the_l
         f"{out}/fovs/{{fovID}}/run.json", f"{out}/fovs/{{fovID}}/molecules.csv"]
     assert rule_files(segmentation, "create_nuclei_amplicon_overlay", "input", imported)[1]["amplicon_img"] == \
         f"{out}/tool/{{fovID}}.tif"
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("setting", ["default", "configured", "imported"])
+def test_the_readers_of_the_reference_image_get_one_path_in_the_shape_snakemake_gives(tmp_path, setting):
+    """The Python stitch_subtile and create_nuclei_amplicon_overlay jobs, their inputs built from the parsed rules in
+    the shape of snakemake.input (one path for an entry declared as one path), read the reference image the setting
+    names: the default, a configured pattern or an imported file. stitch_subtile passes its input reference to
+    TiffFile, which refuses a list."""
+    keys = {"default": {}, "configured": {"reference_image": "refs/{fov_id}_ref.tif"},
+            "imported": {"reference_image_import": str(tmp_path / "tool" / "{fov_id}.tif")}}[setting]
+    namespace, out = backend_namespace(tmp_path, "python", **keys)
+    reference = {"default": out / "fovs" / "FOV" / "reference.tif", "configured": out / "refs" / "FOV_ref.tif",
+                 "imported": tmp_path / "tool" / "FOV.tif"}[setting]
+    image = reference_round(np.uint16, seed=4).max(axis=-1)
+    save_volume(image, reference, metadata=VIEW_METADATA)
+    subtiles = out / "output" / "subtile" / "FOV"
+    subtiles.mkdir(parents=True)
+    (subtiles / "subtile_coords.csv").write_text("t,scoords_x,scoords_y,ecoords_x,ecoords_y\n1,1,1,7,6\n")
+    (subtiles / "subtile_goodSpots_1.csv").write_text("x,y,z,gene\n4,5,1,Gene1\n")
+
+    job = job_input(RULES / "spot-finding-py.smk", "stitch_subtile", namespace, fovID="FOV")
+    assert job.reference == str(reference) and job[-1] == str(reference)
+    signal = out / "signal"
+    signal.mkdir()
+    snakemake = SimpleNamespace(wildcards=SimpleNamespace(fovID="FOV"), config=namespace["config"], input=job,
+                                output=[str(signal / "FOV_goodSpots.csv"), str(signal / "FOV_goodSpots.png")])
+    stitched = runpy.run_path(str(ROOT / "workflow" / "scripts" / "stitch_subtile.py"),
+                              init_globals={"snakemake": snakemake})
+    np.testing.assert_array_equal(stitched["reference_img"], image.max(axis=0))
+    assert (signal / "FOV_goodSpots.png").stat().st_size > 0
+
+    dapi = out / "images" / "DAPI" / "FOV.tif"
+    dapi.parent.mkdir(parents=True)
+    tifffile.imwrite(dapi, np.full(image.shape, 7, np.uint16), photometric="minisblack")
+    job = job_input(RULES / "segmentation.smk", "create_nuclei_amplicon_overlay", namespace, fovID="FOV")
+    assert job["amplicon_img"] == str(reference) and list(job["dapi_img"]) == [str(dapi)]
+    overlay = out / "images" / "overlay" / "FOV.tif"
+    overlay.parent.mkdir(parents=True)
+    runpy.run_path(str(ROOT / "workflow" / "scripts" / "create_nuclei_amplicon_overlay.py"),
+                   init_globals={"snakemake": SimpleNamespace(input=job, output=[str(overlay)],
+                                                              config=namespace["config"])})
+    assert tifffile.imread(overlay).shape == image.shape

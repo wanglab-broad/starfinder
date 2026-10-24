@@ -383,13 +383,14 @@ if BACKEND == "python":
     MOLECULE_TABLE = str(_molecule_table(config, OUTPUT_DIR, "{fovID}"))
     # The FOV folder's run record of the processing rules (fovs/{fovID}/run.json, a subtile's
     # fovs/{fovID}/subtile_{n_subtile}/run.json), the reference image they write (the file reference_image
-    # names; none with reference_image_import, which they never write) and the one its readers read.
+    # names; none with reference_image_import, which they never write) and the one its readers read, a single
+    # path pattern, so that a rule input named by it is one path (snakemake.input.<name> a string).
     from starfinder._snakemake import (_reference_image_inputs, _reference_image_outputs, _run_record_outputs,
                                        _shared_image_inputs)
     RUN_RECORD = _run_record_outputs(OUTPUT_DIR, ["{fovID}"])[0]
     SUBTILE_RUN_RECORD = _run_record_outputs(OUTPUT_DIR, ["{fovID}"], ["{n_subtile}"])[0]
     REFERENCE_IMAGE_OUTPUT = _reference_image_outputs(config, OUTPUT_DIR, ["{fovID}"])
-    REFERENCE_IMAGE_INPUT = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])
+    REFERENCE_IMAGE_INPUT = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])[0]
     SHARED_IMAGE_INPUTS = _shared_image_inputs(config, OUTPUT_DIR)
     if STITCHING_BLOCK:
         _stitching_block(config)

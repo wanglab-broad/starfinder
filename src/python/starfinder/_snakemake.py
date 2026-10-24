@@ -585,7 +585,9 @@ def _reference_image_inputs(config, output_root, fov_ids):
     The rules that read a FOV's reference image (the placement rules,
     reads_assignment with an assembly block, create_nuclei_amplicon_overlay
     and stitch_subtile of the Python backend) declare the file the adapters
-    read; a FOV ID '{fovID}' gives the rule's wildcard pattern.
+    read; a FOV ID '{fovID}' gives the rule's wildcard pattern. One path per
+    FOV ID: a rule input that names one file takes the list's element
+    (common.smk's REFERENCE_IMAGE_INPUT), so that the adapter gets one path.
     """
     settings = reference_settings(config)
     return [str(_layout.reference_image_path(output_root, fov, settings['reference_image'],
