@@ -261,6 +261,10 @@ else:
 ## Define specific list of positions to run the pipeline for testing/re-runs (MATLAB backend; the Python backend's
 ## selected_fovs is applied by _membership above)
 if BACKEND == "matlab":
+    # The schema gives the subset switches no default (the Snakefile's validate would insert it into Python
+    # configurations, which refuse them), so MATLAB's defaults are applied here.
+    config.setdefault('subset_range', False)
+    config.setdefault('subset_random', False)
     if config['subset_list']:
         FOVS = [config['fov_id_pattern'].format(i=j) for j in config['subset_list']]
         SAMPLE = list(set([FOV_TO_SAMPLE[fov] for fov in FOVS]))

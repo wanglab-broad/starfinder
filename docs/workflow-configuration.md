@@ -41,9 +41,9 @@ An em dash in the default column means the schema defines no default.
 | `matlab_single_thread` | boolean | No | `false`; `true` adds `-singleCompThread` to every MATLAB call |
 | `workflow_mode` | `free`, `direct`, `subtile`, `deep` | No | `free`; preset selection described in [workflows](workflows.md#modes-and-backend-selection) |
 | `subset_list` | array of integers >=1 | No | —; MATLAB backend only; supply `[]` when unused; code indexes it directly |
-| `subset_range` | boolean | No | `false`; MATLAB backend only |
+| `subset_range` | boolean | No | `false`, applied by `common.smk`'s MATLAB branch (the schema holds no default); MATLAB backend only |
 | `subset_start`, `subset_end` | integers >=1 | Conditional | —; MATLAB backend only; see caveat below |
-| `subset_random` | boolean | No | `false`; MATLAB backend only |
+| `subset_random` | boolean | No | `false`, applied by `common.smk`'s MATLAB branch (the schema holds no default); MATLAB backend only |
 | `n_random_tests` | integer >=1 | Conditional | —; MATLAB backend only; see caveat below |
 | `rules` | object of recognized rule names | Yes | —; each provided section requires boolean `run` |
 
@@ -76,9 +76,12 @@ under the output root, `fov_id_pattern`, `n_fovs` and the subset keys below.
 The schema's `dependentRequired` checks **presence**, not truth: if
 `subset_range` is present (even false), `subset_start` and `subset_end` must be
 present; likewise `subset_random` requires `n_random_tests`. The `if` clauses
-also lack an explicit presence test. Supply all five fields as in the examples
-rather than relying on omission/defaults. The original minimal template fails
-these conditional requirements.
+also lack an explicit presence test. The schema gives no subset key a default,
+because the Snakefile's `snakemake.utils.validate` inserts schema defaults into
+every configuration and the Python backend refuses these keys; an omitted
+`subset_range` or `subset_random` is set to `false` by `common.smk`'s MATLAB
+branch, after validation. Supply all five fields as in the examples rather than
+relying on omission.
 
 For the MATLAB backend, subsetting precedence is nonempty `subset_list`, then true `subset_range`
 (inclusive), then true `subset_random`, else all `1..n_fovs`. The list path

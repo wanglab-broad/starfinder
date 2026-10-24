@@ -2101,6 +2101,12 @@ change has no alias, no dual read and no dual search.
   `n_random_tests`. They are MATLAB-only; the schema requires `fov_id_pattern` and `n_fovs`
   for the MATLAB backend only and refuses all eight with `backend: python`. Python has no
   random FOV selection.
+* **The defaults of `subset_range` and `subset_random` (`false`)** moved from the schema to
+  `common.smk`'s MATLAB branch (`config.setdefault`), because the Snakefile's
+  `snakemake.utils.validate` inserts schema defaults into every configuration, the Python
+  ones included. A MATLAB configuration gets the same values; one that omits a switch no
+  longer needs its companion keys (`subset_start`, `subset_end`; `n_random_tests`) to
+  validate.
 * **New key `selected_fovs`** (Python only; absent or null: every FOV): a nonempty list of
   unique FOV IDs of `fovs.csv`. It restricts every rule, the per-sample stitching, export
   and report rules included (the subset keys did not restrict the per-sample rules). An

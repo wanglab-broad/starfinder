@@ -243,6 +243,7 @@ properties:
       - 'deep': Deep-tissue optimized workflow
 
   # ==================== Subsetting Options (MATLAB backend only) ====================
+  # No default here: Snakemake's validate inserts schema defaults, and the Python backend refuses these keys.
   subset_list:
     type: array
     items:
@@ -252,8 +253,7 @@ properties:
 
   subset_range:
     type: boolean
-    default: false
-    description: "Enable range-based subsetting"
+    description: "Enable range-based subsetting (absent: false, applied by common.smk's MATLAB branch)"
 
   subset_start:
     type: integer
@@ -267,8 +267,7 @@ properties:
 
   subset_random:
     type: boolean
-    default: false
-    description: "Enable random subsetting"
+    description: "Enable random subsetting (absent: false, applied by common.smk's MATLAB branch)"
 
   n_random_tests:
     type: integer
