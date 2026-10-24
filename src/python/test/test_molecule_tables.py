@@ -129,11 +129,11 @@ def run_record(fov):
 def test_run_json_records_the_exported_tables(tmp_path):
     fov = resident(dataset(tmp_path)).run(complete(), checkpoints=CheckpointConfig(stages=()))
     before = run_record(fov)
-    assert "outputs" not in before
+    assert before["outputs"] == {}
     path = fov.export_spots()
     record = run_record(fov)
-    assert record["format_version"] == 1
-    assert {k: v for k, v in record.items() if k != "outputs"} == before
+    assert record["format_version"] == 2
+    assert {k: v for k, v in record.items() if k != "outputs"} == {k: v for k, v in before.items() if k != "outputs"}
     entry = record["outputs"]["molecules"]
     assert set(entry) == {"path", "sha256", "molecules_sha256", "dtypes", "rows"}
     assert entry["path"] == "molecules.csv"

@@ -508,7 +508,7 @@ translation. `FOV.registration_chains` holds each moving round's
 `FOV.registration_attempts[round]` gains the estimation fields (`record`,
 `step`, `attempt`, `fallback`, `backend`, `backend_versions`, `reference`,
 `qc`) and one `application` entry per round. `run.json` keeps
-`format_version` 1; its `config.pipeline.registration` holds the recipe's
+`format_version` 1 (note (W-565): now 2, see "run.json version 2"); its `config.pipeline.registration` holds the recipe's
 fields. In the workflow, the Python-only `registration` key declares a recipe;
 see [workflow configuration](workflow-configuration.md).
 
@@ -534,6 +534,9 @@ filtering without images are kept. See [checkpoints](checkpoints.md).
 Since W-564 the location is `<output_root>/fovs/<fov_id>/checkpoints/` beside `run.json`; see "The FOV folder, the reference image and channel folders by label".
 
 ### Registered checkpoints version 2
+
+Note (W-565): the headers are now of version 3, which adds the payload hashes (`files`);
+see "run.json version 2".
 
 The checkpoint `FORMAT_VERSION` is 2 for the three stages. A registered
 checkpoint stores the new kinds `affine` (the 4×4 index matrix and the physical
@@ -810,7 +813,7 @@ names the new field. YAML already used the `spot_finding` block and is unchanged
 | `run.json`: `config.pipeline.detection` | `run.json`: `config.pipeline.spot_finding` |
 | `TypeError("detection requires its typed operation config")` | `TypeError("spot_finding requires its typed operation config")` |
 
-`run.json` keeps `format_version` 1. Starfinder does not read `config.pipeline`
+`run.json` keeps `format_version` 1 (note (W-565): now 2, see "run.json version 2"). Starfinder does not read `config.pipeline`
 back from `run.json`, so records written before the rename stay valid as they
 are; a script that reads them should accept either key. The `candidates.json`
 keys `detection_config`, `detection_rounds`, `detection_plan` and
@@ -1226,7 +1229,8 @@ every recorded SHA-256. The workflow rules keep writing
 `expr/{fovID}/reads_assignment.csv`; nothing reads the new folders yet.
 
 Nothing changes for `FOV.run`: its stages (`registered`, `candidates`, `pre_qc`), its
-checkpoint `FORMAT_VERSION` 2 and `run.json` (`format_version` 1) stay as they are, and
+checkpoint `FORMAT_VERSION` 2 and `run.json` (`format_version` 1) stay as they are (note (W-565):
+now 3 and 2, see "run.json version 2"), and
 `FOV.assign_molecules` never rewrites a file of `FOV.run` or of segmentation (a saved label image is
 linked by its relative path). The new records carry their own `format_version` 1.
 `checkpoints` other than `None` or a `CheckpointConfig` now raises `TypeError` in
@@ -1729,7 +1733,7 @@ run.json"):
 
 * **`run.json` gains `transforms`, `codebook`, `workflow_config` and
   `counts.filtering.endpoint_valid`** (with `endpoint_valid_segments`); `format_version`
-  stays 1, and a `run.json` without them still loads. `transforms` holds, per registered
+  stays 1 (note (W-565): now 2, see "run.json version 2"), and a `run.json` without them still loads. `transforms` holds, per registered
   moving round, the entries of `registered/transforms.json` and the round's
   `WarpConfig`; a dense field or B-spline coefficients are named only when the stage
   `registered` wrote them, and no array is written into `run.json`.
@@ -1771,7 +1775,8 @@ alias, no dual write and no dual search.
   succeeded: `export_spots` adds `{path, sha256, molecules_sha256, dtypes, rows}` (the path
   relative to the record's folder; `molecules_sha256` the keyed hash of the six molecule
   columns, null for `reads`) and rewrites the record atomically. `format_version` stays 1,
-  and a `run.json` without `outputs` still loads.
+  and a `run.json` without `outputs` still loads. Note (W-565): version 2 holds `outputs`
+  from the start and records more outputs, see "run.json version 2".
 * **Removed: `FOV.paths.signal_png`**, the unused helper of `signal/<fov_id>_<slot>.png`
   (OM-18; no replacement).
 
@@ -1824,8 +1829,8 @@ replaces the morphology log and its shift table with one JSON record. The MATLAB
 writes its logs under the same names as before; only the Python files are removed, with no
 alias and no dual write. Existing output trees are not rewritten.
 
-* **`run.json` gains three fields** (`format_version` stays 1; a record without them still
-  loads): `counts.filtering.fractions` (`accepted` and, when the filter checked endpoints,
+* **`run.json` gains three fields** (`format_version` stays 1, now 2 since W-565; a record
+  without them still loads): `counts.filtering.fractions` (`accepted` and, when the filter checked endpoints,
   `endpoint_valid`, as `ReadFilteringResult.fractions` computes them: over all reads, `null`
   without reads); `counts.summary` (`summarize_reads` of the latest reads) whenever reads were
   decoded, also without scoring or deduplication; and `rounds`, the run's `RoundState`
@@ -1910,7 +1915,8 @@ MATLAB backend's tree do not change.
   `run.json` or `checkpoints/` of the FOV folder raises `FileExistsError` before any
   processing, and the folder's other contents, which other calls and rules write, no longer
   do. With it, `FOV.run` clears only `checkpoints/` (`clear_stages`) and replaces `run.json`.
-* **Recorded paths in `run.json`** (`format_version` stays 1; path portability is unchanged):
+* **Recorded paths in `run.json`** (`format_version` stays 1; path portability is unchanged;
+  note (W-565): version 2 makes the paths portable, see "run.json version 2"):
   `checkpoints.<stage>` lists each file relative to the FOV folder, which holds `run.json`
   (`checkpoints/registered/round1.ome.tif`, was `registered/round1.ome.tif`);
   `checkpoint_directory` names `<FOV folder>/checkpoints` (was the FOV directory); and
@@ -1993,6 +1999,84 @@ MATLAB branch of `segmentation.smk` are unchanged:
 | `reads_assignment` with an `assembly` block | output `checkpoints/{fovID}/assignment/<name>/assignment.json` | output `fovs/{fovID}/assignment/<name>/assignment.json` |
 | `export_sample` (route per FOV) | input `checkpoints/{fovID}/assignment/<name>/assignment.json` | input `fovs/{fovID}/assignment/<name>/assignment.json` |
 | `report_sample` without `assembly` or `stitching` | input `checkpoints/{fovID}/run.json` | input `fovs/{fovID}/run.json` |
+
+### run.json version 2: portable paths, stage records that own their hashes, and recorded outputs
+
+W-565 (OM-09) makes `run.json` the record a later verified resume can rely on. New runs write
+`format_version` 2; existing records are not rewritten. The readers of `run.json` (the report's
+collector and replay) read versions 1 and 2. Verified resume, scheduling and job completion
+are not implemented (§2.13); version 2 provides what they need, and version 1 does not
+({doc}`checkpoints`, "Reload and continue").
+
+* **Portable paths.** Output and stage paths are relative to the FOV folder, the image inputs
+  relative to the input root. A file the run reads outside the input root (a codebook or panel
+  elsewhere, the workflow configuration, supplied statistics, pretrained weights) is recorded by
+  its absolute path and SHA-256; such a file inside the input root is recorded relative to it.
+  `input_root` and `output_root` keep the roots of the run, absolute, as provenance.
+* **Stage records.** `checkpoints.<stage>` names the stage record with that record's SHA-256
+  (`{path, sha256}`, was the list of the stage's files). The stage headers `candidates.json`,
+  `pre_qc.json` and `registered/transforms.json` are of version 3 (checkpoint `FORMAT_VERSION`
+  3, `READ_VERSIONS` 1 to 3) and gain `files`: every payload file they name (the table; the
+  round images, snapshots and field files), relative to the header's folder, with its SHA-256.
+  `load_checkpoint` (the function and `FOV.load_checkpoint`) checks them before reading and
+  raises `ValueError` naming a missing or changed file; headers of versions 1 and 2 load
+  without the check.
+* **Outputs.** `outputs` is `{}` when the processing ends (it was absent until
+  `export_spots`). Besides `molecules` and `reads`, `FOV.save_reference_image` adds
+  `reference_image`, `FOV.save_subtiles` adds `subtile_coords` and `subtile_data`, and a
+  resident subtile rule adds `subtile_spots` (`subtile_goodSpots_<n>.csv`), each with `path`
+  (relative to the FOV folder) and `sha256`, as it is written, after a checkpointed run that
+  succeeded. `status` `succeeded` keeps its meaning, that `FOV.run`'s processing succeeded;
+  `outputs` records what was written afterwards.
+* **Readers.** The report's check 3 accepts `format_version` 1 or 2. A version-1 record is
+  read as recorded (its paths opened as written), and `report.json` `stages` gains
+  `version_1_run_records`, the FOVs whose record is of version 1 and so not eligible for
+  verified resume. A version-2 record's relative input paths are resolved against the input
+  root given at read time: `Dataset.report` passes `Dataset.input_root`, and
+  `collect_report`, `report_examples`, `report_measurements` and the replay's `replay_fov`
+  take `input_root` (None: the record's `input_root`). No reader opens a version-2 relative
+  path against the current folder. The replay accepts a saved `transforms.json` of version 2
+  or 3, checks it against `checkpoints.registered.sha256`, and checks the field files against
+  its `files`.
+
+Each key of version 1 and its place in version 2 (`<IN>` and `<OUT>` are the input and
+output roots as the `Dataset` holds them, `<FOV>` the FOV folder):
+
+| Version 1 | Version 2 | Change |
+| --- | --- | --- |
+| `format_version` `1` | `format_version` `2` | the version |
+| none | `input_root`, `output_root` | new: the roots, absolute (provenance) |
+| `dataset_id`, `sample_id`, `fov_id`, `subtile_id` | the same | unchanged |
+| `status`, `started_at`, `ended_at`, `error` | the same | unchanged; `status` is the outcome of the processing |
+| `code`, `environment` | the same | unchanged |
+| `config.pipeline`, `config.execution`, `config.readout_mode`, `config.encoding` | the same | unchanged (recorded as given) |
+| `config.checkpoints.stages`, `.table_format`, `.hash_inputs`, `.overwrite` | the same | unchanged |
+| `config.checkpoints.directory` | the same | as given → relative to `<FOV>` (`..`; `../..` for a subtile); `null` stays `null` |
+| `workflow_config.path` | the same | absolute → absolute, or relative to `<IN>` when it lies there |
+| `workflow_config.sha256` | the same | unchanged |
+| `channels`, `rounds` | the same | unchanged |
+| `inputs[].path` | the same | `<IN>/<round>/<fov>/<file>` as given → `<round>/<fov>/<file>`, relative to `<IN>` |
+| `inputs[].sha256` | the same | unchanged |
+| `codebook.path` | the same | absolute → absolute, or relative to `<IN>` when it lies there |
+| `codebook.kind`, `.sha256`, `.entries`, `.genes` | the same | unchanged |
+| `steps` (with `methods[].artifacts[]`: weights by absolute path and SHA-256) | the same | unchanged |
+| `preprocessing.supplied_statistics.path` | the same | as given → absolute, or relative to `<IN>` when it lies there |
+| `preprocessing` (the other keys), `registration`, `transforms`, `counts` | the same | unchanged |
+| `checkpoint_directory` `<OUT>/fovs/<fov>/checkpoints` (as the root is given) | `checkpoint_directory` `checkpoints` | relative to `<FOV>` |
+| `checkpoints.<stage>`: the stage's files, relative to `<FOV>` | `checkpoints.<stage>`: `{path, sha256}` of the stage record | the files move to the record's `files`, each with its SHA-256 |
+| `outputs.<slot>` (`molecules`, `reads`), absent before `export_spots` | `outputs.<slot>`, `{}` from the start | adds `reference_image`, `subtile_coords`, `subtile_data`, `subtile_spots` |
+
+The stage headers:
+
+| Header key | Version 2 | Version 3 |
+| --- | --- | --- |
+| `format_version` | `2` | `3` |
+| `files` | none | `[{path, sha256}]`: the table (`candidates`, `pre_qc`); the round images, snapshots and field files (`registered`), relative to the header's folder |
+| every other key | as before | unchanged |
+
+No field of version 1 is dropped: each value appears in version 2 equal, with its path
+mapped, or (the stage file lists) in the stage record it names. A saved base-versus-result
+comparison of the quickstart's records checks this key by key.
 
 ### The processing report
 

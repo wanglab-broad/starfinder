@@ -100,8 +100,13 @@ def test_a_checkpointed_fov_writes_the_exact_tree_of_its_folder(tmp_path):
         folder, folder / "checkpoints", folder / "run.json")
     assert (molecules, reference) == (folder / "molecules.csv", folder / "reference.tif")
     record = json.loads((folder / "run.json").read_text())
-    assert record["checkpoint_directory"] == str(folder / "checkpoints")
-    listed = [name for files in record["checkpoints"].values() for name in files]
+    assert record["checkpoint_directory"] == "checkpoints"
+    # run.json names each stage record; each record names its payload files relative to its folder.
+    listed = []
+    for entry in record["checkpoints"].values():
+        listed.append(entry["path"])
+        parent = Path(entry["path"]).parent
+        listed += [(parent / f["path"]).as_posix() for f in json.loads((folder / entry["path"]).read_text())["files"]]
     assert sorted(listed) == sorted(name[len("fovs/FOV/"):] for name in FOV_TREE if "/checkpoints/" in name)
     assert record["outputs"]["molecules"]["path"] == "molecules.csv"
     saved = json.loads((folder / "assignment" / "default" / "assignment.json").read_text())

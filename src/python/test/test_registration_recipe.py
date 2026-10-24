@@ -404,7 +404,7 @@ def test_registered_checkpoint_reapplies_identically(tmp_path, kind, z1):
     fov.run(PipelineConfig(registration=RegistrationRecipe(tuple(map(RegistrationStep, configs)))),
             checkpoints=CheckpointConfig(stages=("registered",)))
     header = json.loads((fov.paths.checkpoint_dir / "registered" / "transforms.json").read_text())
-    assert header["format_version"] == 2 and header["registration_semantics"] == "recipe"
+    assert header["format_version"] == 3 and header["registration_semantics"] == "recipe"
     assert header["registration_recipe"]["steps"] == [c.method for c in configs]
     assert [entry["transform"]["kind"] for entry in header["transforms"]["round2"]] == kinds
     assert [entry["step"] for entry in header["transforms"]["round2"]] == list(range(len(configs)))
@@ -521,10 +521,10 @@ def test_version_1_candidates_and_pre_qc_headers_still_load(tmp_path):
         path = directory / f"{stage}.json"
         current = load_checkpoint(directory, stage)
         header = json.loads(path.read_text())
-        assert header["format_version"] == 2
+        assert header["format_version"] == 3
         path.write_text(json.dumps(dict(header, format_version=1)))
         again = load_checkpoint(directory, stage)
         assert set(again) == set(current)
-        path.write_text(json.dumps(dict(header, format_version=3)))
-        with pytest.raises(ValueError, match="is not a version 1 or 2"):
+        path.write_text(json.dumps(dict(header, format_version=4)))
+        with pytest.raises(ValueError, match="is not a version 1, 2 or 3"):
             load_checkpoint(directory, stage)

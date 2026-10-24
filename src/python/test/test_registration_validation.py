@@ -429,7 +429,8 @@ def test_v7_version_2_registered_checkpoint_round_trip(tmp_path, kind, z1):
     fov.run(PipelineConfig(registration=RegistrationRecipe(tuple(map(RegistrationStep, configs)))),
             checkpoints=CheckpointConfig(stages=("registered",)))
     header = json.loads((fov.paths.checkpoint_dir / "registered" / "transforms.json").read_text())
-    assert header["format_version"] == 2
+    # The version-2 registered layout, written since W-565 as header version 3 (with the payload hashes).
+    assert header["format_version"] == 3
     reloaded = fov.dataset.fov("FOV_001").load_checkpoint("registered")
     chain, original = reloaded.registration_chains["round2"], fov.registration_chains["round2"]
     assert [transform_kind(t) for t in chain.transforms] == kinds

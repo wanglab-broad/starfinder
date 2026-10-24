@@ -8,7 +8,8 @@ file named only when the stage ``registered`` wrote it), R2 ``codebook`` (the fi
 ``workflow_config`` (the configuration file of a workflow rule) and R5 (the processing
 rules write ``run.json``, alone by default). Every run is made here on the synthetic FOV of
 ``test_report_records_golden.py`` (two rounds of four channels, 4 × 24 × 24, round2 shifted
-by one voxel in X); nothing outside the test is read. ``format_version`` stays 1 (V1).
+by one voxel in X); nothing outside the test is read. ``format_version`` stayed 1 (V1) until
+run.json version 2 (W-565, docs/migration.md), which these records are.
 """
 from __future__ import annotations
 
@@ -130,7 +131,7 @@ def registered_run(request, tmp_path_factory):
 def test_r1_transforms_are_the_entries_of_transforms_json(registered_run):
     recipe, stages, fov, record, files = registered_run
     registered = "registered" in stages
-    assert record["status"] == "succeeded" and record["format_version"] == 1
+    assert record["status"] == "succeeded" and record["format_version"] == 2
     # The reference round has no entry; round2's results are whole and in order.
     assert list(record["transforms"]) == ["round2"]
     kinds = [r["transform"]["kind"] for r in record["transforms"]["round2"]["results"]]
@@ -231,7 +232,8 @@ def test_r2_a_direct_panel_file_and_no_codebook(tmp_path):
     assert record["codebook"] is None
     dataset.load_direct_panel(panel)
     _, record, _ = run(dataset, (), PipelineConfig(), overwrite=True)
-    assert record["codebook"] == {"kind": "direct_panel", "path": str(panel.absolute()), "sha256": sha256(panel),
+    # The panel lies in the input root, so version 2 records it relative to the root.
+    assert record["codebook"] == {"kind": "direct_panel", "path": "panel.csv", "sha256": sha256(panel),
                                   "entries": 3, "genes": 3}
 
 
@@ -240,14 +242,14 @@ def test_r2_a_direct_panel_file_and_no_codebook(tmp_path):
 
 def test_an_older_record_and_the_format_version(tmp_path):
     _, record, _ = run(golden_dataset(tmp_path), NO_REGISTERED)
-    assert record["format_version"] == 1
+    assert record["format_version"] == 2
     # A record written before the additions is the same record without them (each is an additive key) ...
     older = {k: v for k, v in record.items() if k not in ADDED}
     older["counts"] = dict(older["counts"], filtering={k: v for k, v in record["counts"]["filtering"].items()
                                                        if not k.startswith("endpoint_valid")})
     (tmp_path / "older.json").write_text(json.dumps(older))
     older = json.loads((tmp_path / "older.json").read_text())
-    assert older["format_version"] == 1 and not set(ADDED) & set(older)
+    assert older["format_version"] == 2 and not set(ADDED) & set(older)
     # ... and every key and value pinned at the base revision is in the older form.
     older = json.loads(json.dumps(older).replace(str(tmp_path), "<root>"))
     older["__root__"] = str(tmp_path)

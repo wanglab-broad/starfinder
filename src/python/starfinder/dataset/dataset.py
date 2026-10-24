@@ -667,7 +667,10 @@ class Dataset:
         report is written into a staging folder that replaces the earlier
         report of the sample once it is complete. A part whose input is
         missing or changed is unavailable with its reason, recorded in
-        ``tables/unavailable.csv``; the entry does not raise for it.
+        ``tables/unavailable.csv``; the entry does not raise for it. Run
+        records of versions 1 and 2 are read; the relative input paths of a
+        version-2 record resolve against this dataset's ``input_root``, so a
+        copied output and input tree reports at its new place.
 
         Parameters
         ----------

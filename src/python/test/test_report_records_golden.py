@@ -17,6 +17,9 @@ checkpoint stages of the default ``CheckpointConfig`` and with ``candidates`` an
 (b) the files the run writes in the FOV's checkpoint folder.
 
 So the record additions of §2.11 pass, and a removed key or a changed value fails. The
+pins follow run.json version 2 (W-565, docs/migration.md): the input paths relative to the
+input root, the provenance roots, the checkpoint folder relative to the FOV folder and
+each stage named by its record with that record's SHA-256. The
 pipeline is the recipe of W-384's synthetic runs on a smaller scene: min-max
 normalization and a white top-hat, one translation step, local maxima, extraction with
 the local background, WTA decoding, scoring, deduplication and a read filter with
@@ -240,13 +243,14 @@ def pinned_record(stages):
                                   "displacement_physical": {"median": 0.5, "p95": 0.5, "max": 0.5},
                                   "fold_fraction": 0.0},
                     "optimizer": None}}
-    checkpoints = {"candidates": ["checkpoints/candidates.csv", "checkpoints/candidates.json"],
-                   "pre_qc": ["checkpoints/pre_qc.csv", "checkpoints/pre_qc.json"]}
+    def stage_record(name):
+        return {"path": f"checkpoints/{name}", "sha256": file_sha256(f"out/fovs/FOV_001/checkpoints/{name}")}
+    checkpoints = {"candidates": stage_record("candidates.json"), "pre_qc": stage_record("pre_qc.json")}
     if registered:
-        checkpoints = {"registered": ["checkpoints/registered/round1.ome.tif", "checkpoints/registered/round2.ome.tif",
-                                      "checkpoints/registered/transforms.json"], **checkpoints}
+        checkpoints = {"registered": stage_record("registered/transforms.json"), **checkpoints}
     return {
-        "format_version": 1, "dataset_id": "golden", "sample_id": "sample", "fov_id": "FOV_001", "subtile_id": None,
+        "format_version": 2, "dataset_id": "golden", "sample_id": "sample", "fov_id": "FOV_001", "subtile_id": None,
+        "input_root": f"{ROOT}/in", "output_root": f"{ROOT}/out",
         "status": "succeeded", "started_at": TIME, "ended_at": TIME, "error": None,
         "code": keys("version", "git_commit", "git_dirty"),
         "environment": {"python": ANY, "platform": ANY,
@@ -286,7 +290,7 @@ def pinned_record(stages):
                 "AA": "1", "AC": "2", "AG": "3", "AT": "4", "CA": "2", "CC": "1", "CG": "4", "CT": "3",
                 "GA": "3", "GC": "4", "GG": "1", "GT": "2", "TA": "4", "TC": "3", "TG": "2", "TT": "1"}}},
         "channels": {"round1": _channels(), "round2": _channels()},
-        "inputs": [{"path": f"{ROOT}/in/{r}/FOV_001/{c}.tif", "sha256": file_sha256(f"in/{r}/FOV_001/{c}.tif")}
+        "inputs": [{"path": f"{r}/FOV_001/{c}.tif", "sha256": file_sha256(f"in/{r}/FOV_001/{c}.tif")}
                    for r in ROUNDS for c in CHANNELS],
         "steps": steps,
         "preprocessing": {
@@ -308,8 +312,9 @@ def pinned_record(stages):
                                     "clip_to_dtype": True, "fft_workers": 1},
              "failure": None, "qc": application_qc}]},
         "counts": PINNED_COUNTS,
-        "checkpoint_directory": f"{ROOT}/out/fovs/FOV_001/checkpoints",
+        "checkpoint_directory": "checkpoints",
         "checkpoints": checkpoints,
+        "outputs": {},
     }
 
 

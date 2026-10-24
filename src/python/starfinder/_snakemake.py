@@ -33,6 +33,11 @@ def _run_workflow(snakemake, rule):
     MATLAB-shaped logs held before. The rules that are not resident also write
     the reference image (FOV.save_reference_image, the file reference_image
     names), except with reference_image_import, whose file they never write.
+    run.json says ``succeeded`` when FOV.run's processing succeeded; each
+    declared output written after it (molecules, the reference image, the
+    subtile files, a resident subtile's ``subtile_goodSpots_<n>.csv`` as
+    ``outputs.subtile_spots``) is then added to its ``outputs`` with its path
+    and SHA-256.
     """
     from .dataset.fov import FOV
     adapted = from_workflow_config(snakemake.config, rule)
@@ -50,8 +55,9 @@ def _run_workflow(snakemake, rule):
         from starfinder.readout.spots import _export_legacy_spots
         number = snakemake.wildcards.n_subtile
         # The legacy route: stitch_subtile reads the one-based subtile tables.
-        _export_legacy_spots(fov.spot_result, fov.filtering_result,
-                             Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
+        path = _export_legacy_spots(fov.spot_result, fov.filtering_result,
+                                    Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
+        fov._record_output('subtile_spots', path)
     else:
         if dataset.reference_image_import is None:
             fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,

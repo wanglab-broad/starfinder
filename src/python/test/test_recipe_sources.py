@@ -280,11 +280,13 @@ def test_registered_checkpoint_round_trips_each_downstream_snapshot(tmp_path, mo
     config = PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION, spot_finding=DETECTION, extraction=EXTRACTION)
     fov.run(config, execution=ExecutionConfig(mode, retain_images=True), checkpoints=CheckpointConfig(stages=("registered",)))
     directory = fov.paths.checkpoint_dir
-    files = json.loads((fov.paths.fov_dir / "run.json").read_text())["checkpoints"]["registered"]
-    for name in ("round1", "round2"):
-        assert (f"checkpoints/registered/{name}.ome.tif" in files
-                and f"checkpoints/registered/bg_corrected/{name}.ome.tif" in files)
+    # run.json names the registered record (version 2), which names and hashes the images and snapshots.
+    entry = json.loads((fov.paths.fov_dir / "run.json").read_text())["checkpoints"]["registered"]
+    assert entry["path"] == "checkpoints/registered/transforms.json"
     header = json.loads((directory / "registered" / "transforms.json").read_text())
+    files = [f["path"] for f in header["files"]]
+    for name in ("round1", "round2"):
+        assert f"{name}.ome.tif" in files and f"bg_corrected/{name}.ome.tif" in files
     assert header["snapshots"] == ["bg_corrected"]
     reloaded = dataset(tmp_path).fov("FOV_001").load_checkpoint("registered")
     assert set(reloaded.images) == set(reloaded.snapshots) == {"round1", "round2"}

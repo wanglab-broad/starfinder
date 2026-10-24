@@ -523,7 +523,7 @@ def test_pre_qc_and_run_json_record_the_encoding_and_reruns_check_it(tmp_path, s
     dataset, fov, checkpoints, directory = checkpoint_run(tmp_path / "run", seed,
                                                           EncodingConfig(pair_to_color=RELABELLED))
     header = json.loads((directory / "pre_qc.json").read_text())
-    assert header["format_version"] == FORMAT_VERSION == 2
+    assert header["format_version"] == FORMAT_VERSION == 3
     assert header["encoding"] == recorded(RELABELLED)
     assert header["layout"]["segments"] == [{"name": "A", "bases": 5, "ends": []}]
     assert "pair_to_color" not in header["decoding_config"]

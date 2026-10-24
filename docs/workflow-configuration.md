@@ -226,10 +226,15 @@ earlier stage files of the FOV folder's `checkpoints/` and leaves `other_rounds/
 `segmentation/` and `assignment/`. The inputs are hashed (`hash_inputs`), so each
 raw image is read once more. `run.json` records the configuration file the rule ran
 with (`workflow_config`: the top-level `config_path` and the SHA-256 of its bytes)
-and the codebook or panel file the rule loaded (`codebook`). `run.json` is a
+and the codebook or panel file the rule loaded (`codebook`), each absolute (or
+relative to the input root when it lies there) with its SHA-256; the raw images are
+recorded relative to the input root (`run.json` version 2). `run.json` is a
 declared output of each Python processing rule and replaces the logs those rules
 wrote before ({doc}`migration`, "Sequencing logs and the morphology record"); the
-stage files are not declared. The key is allowed with `backend: python` only: the schema refuses it with `backend: matlab` or without `backend` (whose default is `matlab`), and the adapter raises `ValueError`.
+stage files are not declared. Its `status` `succeeded` says that the rule's
+`FOV.run` processing succeeded; each other declared output the rule writes after it
+(`molecules.csv`, the reference image, the subtile files, a resident subtile's
+`subtile_goodSpots_<n>.csv`) is then added to its `outputs` with its path and SHA-256. The key is allowed with `backend: python` only: the schema refuses it with `backend: matlab` or without `backend` (whose default is `matlab`), and the adapter raises `ValueError`.
 
 ## Codebook segment layout
 

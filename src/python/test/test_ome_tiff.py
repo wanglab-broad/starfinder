@@ -155,6 +155,10 @@ def test_checkpoint_saved_under_the_earlier_tif_name_reloads(tmp_path):
     for name in ROUNDS:
         (registered / f'{name}.ome.tif').unlink()
         old_layout(saved.images[name], registered / f'{name}.tif', saved.metadata[name])
+    # A checkpoint of the earlier layout has a header of version 2, without the payload hashes (files) of version 3.
+    header = json.loads((registered / 'transforms.json').read_text())
+    header = {k: v for k, v in header.items() if k != 'files'}
+    (registered / 'transforms.json').write_text(json.dumps(dict(header, format_version=2)))
     fov = ds.fov('FOV').load_checkpoint('registered')
     for name in ROUNDS:
         np.testing.assert_array_equal(fov.images[name], saved.images[name], strict=True)

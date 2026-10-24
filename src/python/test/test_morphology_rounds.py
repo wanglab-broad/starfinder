@@ -466,7 +466,7 @@ def test_the_registered_header_records_the_channels_and_reloads_without_them(raw
                             checkpoints=checkpoints)
     path = tmp_path / "ck" / "FOV" / "checkpoints" / "registered" / "transforms.json"
     header = json.loads(path.read_text())
-    assert header["format_version"] == FORMAT_VERSION == 2
+    assert header["format_version"] == FORMAT_VERSION == 3
     assert header["channels"] == {name: [c.record() for c in SEQUENCING] for name in ("round1", "round2")}
     assert header["channel_labels"] == list(LABELS)
     assert STAGES == ("registered", "candidates", "pre_qc") and CheckpointConfig().stages == STAGES

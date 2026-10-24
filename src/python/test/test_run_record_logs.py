@@ -56,7 +56,7 @@ def test_run_json_holds_the_fractions_the_summary_and_the_round_roles(tmp_path, 
     assert {name: [r["transform"]["displacement_zyx"] for r in entry["results"]]
             for name, entry in record["transforms"].items()} == shifts == {"round2": [[0, 0, 1]]}
     assert record["registration"] == jsonable(fov.registration_attempts)
-    assert record["format_version"] == 1
+    assert record["format_version"] == 2
 
 
 def test_run_json_has_no_summary_or_fractions_before_decoding(tmp_path):

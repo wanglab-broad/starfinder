@@ -371,8 +371,10 @@ def test_keyboard_interrupt_is_recorded_as_interrupted(tmp_path, monkeypatch):
     assert data['status'] == 'interrupted'
     assert (data['error']['step'], data['error']['round'], data['error']['type']) == (
         'decode_reads', None, 'KeyboardInterrupt')
-    # Earlier stages remain usable after the interruption.
-    assert data['checkpoints']['candidates'] == ['checkpoints/candidates.csv', 'checkpoints/candidates.json']
+    # Earlier stages remain usable after the interruption; run.json names the stage record with its SHA-256.
+    from starfinder._records import file_sha256
+    assert data['checkpoints']['candidates'] == {
+        'path': 'checkpoints/candidates.json', 'sha256': file_sha256(fov.paths.fov_dir / 'checkpoints/candidates.json')}
     assert 'pre_qc' not in data['checkpoints']
 
 
@@ -479,7 +481,9 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     assert data['config']['pipeline']['registration']['steps'][0]['config']['method'] == 'translation'
     assert len(data['inputs']) == 8
     first = data['inputs'][0]
-    assert first['sha256'] == hashlib.sha256(Path(first['path']).read_bytes()).hexdigest()
+    # Version 2: the input paths are relative to the input root, which is kept as provenance.
+    assert first['path'] == 'round1/FOV/a.tif' and data['input_root'] == str(tmp_path)
+    assert first['sha256'] == hashlib.sha256((Path(data['input_root']) / first['path']).read_bytes()).hexdigest()
     # The read summary of every decoded run and the filter's fractions (W-563).
     from starfinder._records import jsonable
     from starfinder.readout import summarize_reads
@@ -491,8 +495,10 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     assert ('load_images', 'round2') in names and ('register', 'round2') in names
     assert ('write_checkpoint:registered', 'round2') in names and ('extract_round', 'round1') in names
     assert all(s['status'] == 'succeeded' and s['seconds'] >= 0 for s in data['steps'])
-    assert data['checkpoints']['registered'][:2] == ['checkpoints/registered/round1.ome.tif',
-                                                     'checkpoints/registered/round2.ome.tif']
+    # The registered record names the round images it relies on, hashed as each was written in streaming mode.
+    assert data['checkpoints']['registered']['path'] == 'checkpoints/registered/transforms.json'
+    header = json.loads((fov.paths.fov_dir / data['checkpoints']['registered']['path']).read_text())
+    assert [e['path'] for e in header['files']][:2] == ['round1.ome.tif', 'round2.ome.tif']
     fov = ds.fov('FOV').run(config, checkpoints=CheckpointConfig(hash_inputs=False, overwrite=True))
     assert {entry['sha256'] for entry in record(fov)['inputs']} == {None}
 
@@ -508,7 +514,7 @@ def test_run_record_names_the_decoding_step_after_fov_decode_reads(tmp_path):
 def test_run_record_keeps_the_spot_finding_config_under_its_field_name(tmp_path):
     fov = resident(dataset(tmp_path)).run(PipelineConfig(**DETECT), checkpoints=CheckpointConfig(stages=()))
     data = record(fov)
-    assert data['format_version'] == 1
+    assert data['format_version'] == 2
     assert data['config']['pipeline']['spot_finding']['method'] == 'local_maxima'
     assert 'detection' not in data['config']['pipeline']
 

@@ -167,15 +167,28 @@ class Replay:
                 "fitted_equal": all(s["fitted_equal"] for s in steps) if steps else None}
 
 
+#: The versions of ``registered/transforms.json`` whose transforms the replay restores (version 1 is sequential).
+TRANSFORM_VERSIONS = (2, 3)
+
+
+def saved_transforms(inputs, root, fov_id, record):
+    """The FOV's ``registered/transforms.json``, or None when it is absent, does not parse or differs from the
+    SHA-256 that a version-2 ``run.json`` records for it (``checkpoints.registered``)."""
+    path = _layout.checkpoint_dir(_layout.fov_dir(root, fov_id)) / _layout.REGISTERED / _layout.TRANSFORMS_FILE
+    recorded = _get(record, _layout.CHECKPOINTS, "registered", "sha256") if isinstance(record, dict) else None
+    data = inputs.json(path, "transforms", strict=False, recorded=recorded) if path.is_file() else None
+    return data if isinstance(data, dict) else None
+
+
 def round_transform(record, saved, fov_id, name):
     """``(source, results, application_config)`` of a round's saved transforms: ``run.json`` ``transforms`` (R1),
-    else ``registered/transforms.json`` of format version 2 (``saved()`` reads it, or None); or Unavailable with
-    ``not_recorded``."""
+    else ``registered/transforms.json`` of format version 2 or 3 (``saved()`` reads it, or None); or Unavailable
+    with ``not_recorded``."""
     results = _get(record, "transforms", name, "results")
     if results:
         return "run.json", results, _get(record, "transforms", name, "application_config")
     saved = saved()
-    if saved is not None and saved.get("format_version") == 2 and _get(saved, "transforms", name):
+    if saved is not None and saved.get("format_version") in TRANSFORM_VERSIONS and _get(saved, "transforms", name):
         return "transforms.json", saved["transforms"][name], _get(saved, "applications", name, "application_config")
     folder = Path(_layout.FOVS, fov_id)
     return Unavailable("not_recorded", f"neither {(folder / _layout.RUN_RECORD).as_posix()} transforms.{name} nor "
@@ -183,26 +196,29 @@ def round_transform(record, saved, fov_id, name):
                                        "holds the round")
 
 
-def replay_fov(output_root, fov_id, rounds=None, *, keep_final=False) -> Replay:
+def replay_fov(output_root, fov_id, rounds=None, *, keep_final=False, input_root=None) -> Replay:
     """The replay of one FOV of an output root, outside a report: ``rounds`` None replays every round of its
     ``preprocessing.rounds`` (the reference round first). The files it reads are checked as the report checks
-    them."""
+    them; ``input_root`` is the root a version-2 record's input paths resolve against (None: the record's
+    ``input_root``)."""
     from ._collect import _Inputs
     root = Path(output_root)
-    inputs = _Inputs(root)
+    inputs = _Inputs(root, input_root)
     record = inputs.json(_layout.run_record(root, fov_id), "run_record")
     if isinstance(record, Unavailable):
         raise FileNotFoundError(f"no run record of {fov_id} under {root}")
-    path = _layout.checkpoint_dir(_layout.fov_dir(root, fov_id)) / _layout.REGISTERED / _layout.TRANSFORMS_FILE
+    found = []
 
     def saved():
-        data = inputs.json(path, "transforms", strict=False) if path.is_file() else None
-        return data if isinstance(data, dict) else None
+        if not found:
+            found.append(saved_transforms(inputs, root, fov_id, record))
+        return found[0]
     if rounds is None:
         reference = reference_round(record)
         rounds = [reference] + [r for r in _get(record, "preprocessing", "rounds") or {} if r != reference]
     return replay_example(inputs, root, fov_id, record, list(rounds),
-                          lambda name: round_transform(record, saved, fov_id, name), keep_final=keep_final)
+                          lambda name: round_transform(record, saved, fov_id, name), keep_final=keep_final,
+                          saved=saved)
 
 
 def _get(mapping, *keys):
@@ -286,9 +302,10 @@ def _round_directory(entries, load):
 
 
 class _Replayer:
-    def __init__(self, inputs, root, fov_id, record, transform_of, keep_final):
+    def __init__(self, inputs, root, fov_id, record, transform_of, keep_final, saved=None):
         self.inputs, self.root, self.fov_id, self.record = inputs, Path(root), fov_id, record
         self.transform_of, self.keep_final = transform_of, keep_final
+        self.saved = saved or (lambda: None)
         self.references = {}
         self.supplied = None
         self.steps = []
@@ -326,11 +343,15 @@ class _Replayer:
         if self.supplied is None:
             from starfinder.preprocessing import load_supplied_statistics
             entry = _get(self.record, "preprocessing", "supplied_statistics") or {}
+            path = self.inputs.source(self.record, entry.get("path")) if entry.get("path") else None
             if not entry.get("path"):
                 self.supplied = Unavailable("not_recorded", "preprocessing.supplied_statistics holds no path")
+            elif path is None:
+                self.supplied = Unavailable("input_missing", f"{entry['path']} (relative to the input root, which "
+                                                             "was neither supplied nor recorded)")
             else:
-                data = self.inputs.read(entry["path"], "supplied_statistics", entry.get("sha256"))
-                self.supplied = data if isinstance(data, Unavailable) else load_supplied_statistics(entry["path"])
+                data = self.inputs.read(path, "supplied_statistics", entry.get("sha256"))
+                self.supplied = data if isinstance(data, Unavailable) else load_supplied_statistics(path)
         return self.supplied
 
     def load(self, name, entries, load, rotation):
@@ -388,6 +409,9 @@ class _Replayer:
         if application is None:
             return Unavailable("not_recorded", f"{source} holds no application_config of {name}")
         directory = _layout.checkpoint_dir(_layout.fov_dir(self.root, self.fov_id)) / _layout.REGISTERED
+        # The SHA-256 of each field file that a version-3 transforms.json names (files).
+        hashes = {e.get("path"): e.get("sha256") for e in (self.saved() or {}).get("files") or []
+                  if isinstance(e, dict)}
         for entry in results:
             kind = _get(entry, "transform", "kind")
             if kind in ("dense", "bspline"):
@@ -396,7 +420,7 @@ class _Replayer:
                 if not file_name:
                     return Unavailable("field_not_saved", f"{source} transforms.{name}: a {kind} step whose field was "
                                                           "not saved (stage registered off)")
-                data = self.inputs.read(directory / file_name, "field")
+                data = self.inputs.read(directory / file_name, "field", hashes.get(file_name))
                 if isinstance(data, Unavailable):
                     return data
         try:
@@ -486,7 +510,7 @@ def _not_reached(record, name, where):
     return Unavailable("not_recorded", f"preprocessing.rounds.{name} does not hold the {where}")
 
 
-def replay_example(inputs, root, fov_id, record, rounds, transform_of, *, keep_final=False) -> Replay:
+def replay_example(inputs, root, fov_id, record, rounds, transform_of, *, keep_final=False, saved=None) -> Replay:
     """Replay the main example's rounds: ``rounds[0]`` is the reference round, the others are moving rounds.
 
     Parameters
@@ -506,6 +530,11 @@ def replay_example(inputs, root, fov_id, record, rounds, transform_of, *, keep_f
         else ``registered/transforms.json``), or :class:`Unavailable`.
     keep_final : bool
         Keep the image each round ends with (``RoundReplay.final``), which equals the saved registered image.
+    saved : callable or None
+        ``saved()``: the FOV's ``registered/transforms.json`` (or None), whose ``files`` hash the field files read.
+
+    The recorded input paths are resolved by ``inputs.source``: a version-1 record's as recorded, a version-2
+    record's relative paths against the input root (supplied, else recorded), never against the current folder.
     """
     reference, moving = rounds[0], [r for r in rounds[1:] if r is not None]
     pipeline = _get(record, "config", "pipeline") or {}
@@ -534,7 +563,14 @@ def replay_example(inputs, root, fov_id, record, rounds, transform_of, *, keep_f
     if absent:
         replay.missing = Unavailable("input_missing", f"run.json inputs list no file of the round {absent[0]}")
         return replay
-    replayer = _Replayer(inputs, root, fov_id, record, transform_of, keep_final)
+    for name, entries in files.items():
+        paths = [inputs.source(record, entry.get("path")) for entry in entries]
+        if None in paths:
+            replay.missing = Unavailable("input_missing", f"run.json inputs of the round {name} are relative to the "
+                                                          "input root, which was neither supplied nor recorded")
+            return replay
+        files[name] = [dict(entry, path=str(path)) for entry, path in zip(entries, paths)]
+    replayer = _Replayer(inputs, root, fov_id, record, transform_of, keep_final, saved)
     missing, replay.inputs = replayer.check_inputs(files)
     if missing is not None:
         replay.missing = missing

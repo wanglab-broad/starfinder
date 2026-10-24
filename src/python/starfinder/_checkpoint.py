@@ -1,8 +1,11 @@
 """Per-FOV pipeline checkpoints: registered images, candidates and pre-QC reads.
 
 Each stage has a small JSON header (identity, labels, typed configs and the
-column dtype map) next to its data. Tables are CSV by default or Parquet with
-the ``checkpoint`` extra. Every file is written to a temporary name in its
+column dtype map) next to its data. Since format version 3 the header's
+``files`` names every payload file it relies on (tables, images, field files),
+relative to the header's folder, with its SHA-256, and the reader checks them
+before it reads anything. Tables are CSV by default or Parquet with the
+``checkpoint`` extra. Every file is written to a temporary name in its
 directory and moved into place with ``os.replace``.
 """
 from __future__ import annotations
@@ -14,11 +17,13 @@ import numpy as np
 import pandas as pd
 
 from starfinder._layout import REGISTERED, TRANSFORMS_FILE
-from starfinder._records import TABLE_FORMATS, _read_table, _write_table, atomic_file, tuples, write_json
+from starfinder._records import (TABLE_FORMATS, _read_table, _write_table, atomic_file, check_file, file_sha256,
+                                tuples, write_json)
 
-FORMAT_VERSION = 2
-# Header versions the reader accepts: version 1 has the pre-recipe registered layout.
-READ_VERSIONS = (1, 2)
+FORMAT_VERSION = 3
+# Header versions the reader accepts: version 1 has the pre-recipe registered layout; version 2 the recipe layout
+# without payload hashes; version 3 adds them (files).
+READ_VERSIONS = (1, 2, 3)
 STAGES = ("registered", "candidates", "pre_qc")
 
 
@@ -185,6 +190,25 @@ def clear_stages(directory):
             path.rmdir()
 
 
+def payload(directory, names):
+    """The ``files`` entries of a stage header: each named file, relative to ``directory``, with its SHA-256."""
+    return [{"path": name, "sha256": file_sha256(Path(directory) / name)} for name in names]
+
+
+def verify_payload(directory, header, stage):
+    """Check every file a stage header's ``files`` names against its SHA-256; a header without ``files`` passes.
+
+    ``directory`` is the header's folder. A path outside it, a missing file or
+    another SHA-256 raises ValueError naming the file.
+    """
+    folder = Path(directory)
+    for entry in header.get("files") or []:
+        name = Path(entry["path"])
+        if name.is_absolute() or ".." in name.parts:
+            raise ValueError(f"{stage} checkpoint names {entry['path']!r}, outside its folder {folder}")
+        check_file(folder / name, entry["sha256"], f"{stage} checkpoint file")
+
+
 def readout_mode(header):
     """The readout mode of a candidates or pre_qc header; a header without the key (before §2.8) is multiplexed."""
     return header.get("readout_mode", "multiplexed")
@@ -197,7 +221,8 @@ def read_header(directory, stage):
         raise FileNotFoundError(f"no {stage} checkpoint at {path}")
     header = json.loads(path.read_text())
     if header.get("format_version") not in READ_VERSIONS or header.get("stage") != stage:
-        raise ValueError(f"{path} is not a version {' or '.join(map(str, READ_VERSIONS))} {stage} checkpoint")
+        versions = f"{', '.join(map(str, READ_VERSIONS[:-1]))} or {READ_VERSIONS[-1]}"
+        raise ValueError(f"{path} is not a version {versions} {stage} checkpoint")
     return header
 
 
@@ -262,10 +287,13 @@ def _transform_json(result, index, field_name, application_config=None):
 _BSPLINE_FIELDS = ("grid_size_xyz", "grid_origin_xyz", "grid_spacing_xyz", "grid_direction_xyz", "order", "spacing_zyx")
 
 
-def write_registered_header(directory, header, registration_results, registration_record=None):
+def write_registered_header(directory, header, registration_results, registration_record=None, images=()):
     """Write transforms.json and a <round>_field.npz per round with dense fields or B-spline coefficients.
 
-    registration_record (FOV.registration_record) gives the semantics
+    ``images`` are the ``files`` entries (payload) of the round images and
+    snapshots already written, relative to ``registered/``; the field files
+    follow them, hashed as they are written. registration_record
+    (FOV.registration_record) gives the semantics
     (``recipe``: one application entry per round with its WarpConfig;
     ``sequential``: a per-result application_config, as read from version 1)
     and the recipe summary. Without an application in the record, a round's
@@ -296,7 +324,8 @@ def write_registered_header(directory, header, registration_results, registratio
                   registration_semantics=semantics, registration_recipe=record.get("recipe"),
                   applications={} if semantics == "sequential" else
                   {name: {"application_config": applications.get(name, results[-1].application_config)}
-                   for name, results in registration_results.items() if results})
+                   for name, results in registration_results.items() if results},
+                  files=list(images) + payload(directory, files))
     write_json(header, directory / TRANSFORMS_FILE)
     return files + [TRANSFORMS_FILE]
 
@@ -419,6 +448,7 @@ def write_candidates(directory, header, spot_result, intensity_result, table_for
     table, dtypes = _write_table(frame, directory, "candidates", table_format)
     plan, diagnostics = spot_result.plan, spot_result.diagnostics
     header = dict(header, stage="candidates", format_version=FORMAT_VERSION, table=table, dtypes=dtypes,
+        files=payload(directory, [table]),
         spot_namespace=spot_result.spot_namespace, spot_columns=list(spot_result.spots.columns),
         metadata=spot_result.metadata, detection_config=spot_result.config,
         detection_rounds=None if plan.rounds is None else list(plan.rounds),
@@ -518,6 +548,7 @@ def write_pre_qc(directory, header, decoding_result, table_format, *, scoring_re
     reads = next(r for r in (deduplication_result, scoring_result, decoding_result) if r is not None)
     table, dtypes = _write_table(reads.table.reset_index(drop=True), directory, "pre_qc", table_format)
     header = dict(header, stage="pre_qc", format_version=FORMAT_VERSION, table=table, dtypes=dtypes,
+        files=payload(directory, [table]),
         spot_namespace=decoding_result.spot_namespace, channel_labels_decoded=decoding_result.channel_labels,
         round_labels=decoding_result.round_labels, decoding_config=decoding_result.config,
         decoding_diagnostics=_json_diagnostics(decoding_result.diagnostics),
@@ -602,18 +633,25 @@ def load_checkpoint(path: Path | str, stage: str) -> dict:
         table, without the pair diagnostics, or None when the checkpoint has no
         ``deduplication_config``).
 
+    A version-3 header's ``files`` are checked first (verify_payload): every
+    payload file it names must exist with its recorded SHA-256. Headers of
+    versions 1 and 2 hold no hashes and are read without the check.
+
     Raises
     ------
     FileNotFoundError
         The stage was not written in ``path``.
     ValueError
-        Unknown stage, format version or inconsistent columns.
+        Unknown stage, format version or inconsistent columns, or a payload
+        file that is missing or whose SHA-256 differs from the header (naming
+        the file).
     ImportError
         A Parquet table is read without pyarrow.
     """
     from starfinder.io.tiff import load_volume_zyxc
     directory = Path(path)
     header = read_header(directory, stage)
+    verify_payload(header_path(directory, stage).parent, header, stage)
     if stage == "candidates":
         return _read_candidates(directory, header)
     if stage == "pre_qc":

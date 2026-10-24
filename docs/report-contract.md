@@ -197,6 +197,9 @@ Dataset.report(sample: str, fov_ids: Sequence[str], *, assignment: str | None = 
 
 A sample-level reader, not a runner: it calls no processing stage, reads only saved files
 (and the raw input of the main example for the replay) and writes only its output folder.
+`Dataset.report` passes the `Dataset`'s `input_root` to `collect_report` (and
+`report_examples` and `report_measurements` take it as `input_root`): the input root a
+version-2 run record's relative source paths resolve against ("The replay").
 
 | Parameter | Meaning |
 | --- | --- |
@@ -216,10 +219,13 @@ In this order; each raises with the output folder unchanged:
 2. **Something to report.** At least one FOV of the list has a run record, or
    `export/<sample>/export.json` exists (A2). Otherwise `FileNotFoundError`, naming both
    places.
-3. **The run records.** Each run record found parses as JSON with `format_version` 1, and
+3. **The run records.** Each run record found parses as JSON with `format_version` 1 or 2
+   (`dataset/_run_record.py`: `READ_VERSIONS`), and
    its `dataset_id` and `sample_id` equal the `Dataset`'s and its `fov_id` the FOV of its
    folder (`ValueError` naming the file, the key and both values). Both are written by
-   `dataset/_run_record.py`: `_RunRecord.__init__`.
+   `dataset/_run_record.py`: `_RunRecord.__init__`. A version-1 record is read as recorded
+   ("Older files"); `report.json` `stages.version_1_run_records` lists those FOVs, whose
+   records are not eligible for verified resume ({doc}`checkpoints`, "Reload and continue").
 4. **The export.** When `export.json` exists: it passes
    `export/_record.py`: `verify_section_hashes`, its `sample` equals `sample`, the
    FOVs of its `assembly.fovs` equal the FOV list as a set, and on the route per FOV its
@@ -401,8 +407,16 @@ Every place is fixed under the output root (D1); nothing is searched for.
 | Fused image | the `fusion.outputs` of `export.json` (`<image>_projection.ome.tif`, `<image>_stack.ome.tif`) | `export/_fuse.py`: `fuse_images` | The marker patterns' image; the XZ zoom (a stack) |
 | Sample label image | `export/<sample>/segmentation_<run>.ome.tif` | `export/_segment.py`: `segment_fused` | The segmentation examples on the route after fusion |
 
+A path `run.json` records for the raw input, the supplied statistics or the codebook is read as
+recorded in a version-1 record. In a version-2 record ({doc}`checkpoints`, "run.json") an
+absolute path is read as it is and a relative one (inside the input root) is joined to the input
+root the entry is given (`input_root`), else to the record's `input_root`; it is never opened
+against the current folder (`_run_record.py`: `resolve_source`).
+
 Each file the report reads is checked against the SHA-256 a record holds for it, where one
-does (`run.json` `inputs`; `codebook.sha256`; `assignment.json` `files` and `inputs.cells.file`;
+does (`run.json` `inputs`; `codebook.sha256`; in a version-2 `run.json` `checkpoints.registered`,
+the SHA-256 of `transforms.json`; a version-3 `transforms.json` `files`, the field files;
+`assignment.json` `files` and `inputs.cells.file`;
 `export.json` `assembly.files` and the sections' file lists), and is listed with its
 SHA-256 in `report.json` `inputs`. A missing file makes its parts unavailable with
 `input_missing`, a changed one with `input_changed`.
@@ -601,7 +615,12 @@ What the examples of Preprocessing and Registration show, rebuilt from the run r
 (`results/replay/replay.csv`).
 
 1. **The raw input.** The main example's files `run.json` `inputs` lists for the rounds the
-   examples show (which rounds is an open point of the algorithms page). Each file's
+   examples show (which rounds is an open point of the algorithms page): in a version-1
+   record the recorded paths as written; in a version-2 record each path relative to the
+   input root, joined to the input root the entry is given (`Dataset.input_root`), else to
+   the record's `input_root`, and never to the current folder (with neither, the examples
+   are unavailable, `input_missing`). So a copied output tree and input tree report at
+   their new places with the new input root. Each file's
    SHA-256 is checked against the recorded one (written by `_RunRecord.add_inputs`; null
    with `hash_inputs=False`, in which case the file is read unverified and
    `report.json` `replay.verified` is false).
@@ -695,8 +714,9 @@ with `post_registration` entries, in a run with a registration, whose transforms
 cannot rebuild: the round's registration failed (`step_failed`: `FOV.run` stopped at the
 round, line 1342, and the record holds none of its `post_registration` entries); neither
 R1 nor `registered/transforms.json` holds the round, or that file is of `format_version` 1
-(`not_recorded`); a dense or B-spline step's field was not saved (`field_not_saved`); or
-the field file is missing or changed (`input_missing`, `input_changed`). When several
+(`not_recorded`; versions 2 and 3 are replayed); a dense or B-spline step's field was not saved (`field_not_saved`); or
+the field file is missing or changed (`input_missing`, `input_changed`; changed against the
+SHA-256 of a version-3 `transforms.json` `files`). When several
 apply, the first in the order of the reasons is recorded. For that round:
 
 * **Shown:** the loaded and rotated input (`step_index` 0) and the output of each `steps`
@@ -1001,7 +1021,7 @@ Strict JSON (non-finite numbers as `null`), written last.
 | `generated_at` | UTC time the report was written. |
 | `software` | `code` and `environment`, as `run.json` records them (`_records.py`: `code`, `environment`). |
 | `config` | The `ReportConfig`, as JSON. |
-| `stages` | What existed: the FOVs with a run record, `placement` (boolean), `export` (boolean) and the export's `parts`. |
+| `stages` | What existed: the FOVs with a run record (`run_records`), `version_1_run_records` (those whose run record is of `format_version` 1, read as recorded and not eligible for verified resume; since W-565), `placement` (boolean), `export` (boolean) and the export's `parts`. |
 | `inputs` | Every file read: `path` (relative to the output root, absolute outside it), `kind` (`run_record`, `transforms`, `field`, `raw_image`, `supplied_statistics`, `codebook`, `segmentation_record`, `assignment_record`, `label_image`, `reference_image`, `placement`, `placement_table`, `export_record`, `export_table`, `anndata`, `fused_image`), `sha256`, `bytes`, and `verified` (whether a record's SHA-256 was compared). |
 | `files` | Every file of the folder but `report.json`: `path` (relative to the folder), `sha256`, `bytes`, and for a table its `dtypes`. The report's own files are `report.json` and the files its `files` list names. An existing output folder is replaced only when it holds no file other than the report's own; a file that is not one of them, which includes every file of a nonempty folder without `report.json`, stops the entry with `FileExistsError` naming that file before anything is written, and an empty folder is used as it is. |
 | `unavailable` | The rows of `tables/unavailable.csv`, each an object of its columns (`part`, `table`, `column`, `row_key`, `reason`, `detail`). |
@@ -1186,6 +1206,8 @@ Note (W-563): the Python rules no longer write the logs, and `run.json` is their
 | **V1 (recommended)** | Stays `1` | The five additions are keys; the earlier additive key `channels` (W-336) kept version 1 too, and the golden test pins `format_version` 1. |
 | V2 | `2` | Tells a reader that the fields exist, but no reader checks the version, and the golden test pins 1 and must then change. |
 
+Note (W-565): `run.json` is now version 2, for its portable paths and stage-record hashes, not for these additions ({doc}`migration`, "run.json version 2").
+
 ### Older files
 
 A `run.json` without one of the keys is read as it is. R1: the report reads
@@ -1194,6 +1216,12 @@ it (written by `write_registered_header`; the same entries, `_transform_json`; c
 otherwise the shifts and the registration example are unavailable with `not_recorded`. R2:
 the codebook file and the marker check fall back to the export's gene list. R3: as stated
 above. R4: `not_recorded`.
+
+A version-1 `run.json` (written before W-565) stays report-readable as recorded: check 3
+accepts it, its `inputs`, `codebook.path` and `preprocessing.supplied_statistics.path` are
+opened as written (absolute, or as the run was given them), and `report.json`
+`stages.version_1_run_records` names its FOV, which is not eligible for verified resume.
+The report fixtures (`src/python/test/report_fixtures.py`) are of this version.
 
 | Option | Shifts of a run record without R1 | Note |
 | --- | --- | --- |
@@ -1211,6 +1239,7 @@ above. R4: `not_recorded`.
 * **`run.json` gains `transforms`, `codebook`, `workflow_config` and
   `counts.filtering.endpoint_valid`** (with `endpoint_valid_segments`); `format_version`
   stays 1, and a `run.json` without them still loads.
+  Note (W-565): `run.json` is now version 2 ({doc}`migration`, "run.json version 2").
 * **The workflow writes `checkpoints/<fov>/run.json`** for the processing rules, alone by
   default, with `overwrite` on; `rules.<rule>.parameters.checkpoints` adds stages.
   Note (W-564): the record is now `fovs/<fov>/run.json` ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").

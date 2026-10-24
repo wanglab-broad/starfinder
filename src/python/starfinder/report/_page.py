@@ -688,20 +688,30 @@ class _Page:
         def entry(key, make):
             return unavailable_box(entries[key], inline=True) if key in entries else make()
 
+        def shown(record, path):
+            # A version-2 path relative to the input root is shown resolved, as the report reads it.
+            resolved = c.inputs.source(record, path)
+            return str(path) if resolved is None else str(resolved)
+
         def images():
-            paths = list(dict.fromkeys(str(i.get("path")) for r in records for i in r.get("inputs") or []
+            paths = list(dict.fromkeys(shown(r, i.get("path")) for r in records for i in r.get("inputs") or []
                                        if isinstance(i, dict) and i.get("path")))
             if not paths:
                 return '<span class="muted">no input recorded</span>'
-            folder = os.path.commonpath(paths) if len(paths) > 1 else os.path.dirname(paths[0])
+            try:
+                folder = os.path.commonpath(paths) if len(paths) > 1 else os.path.dirname(paths[0])
+            except ValueError:  # relative paths of an unresolved input root beside absolute ones
+                return f"{len(paths)} files"
             return f"<code>{_e(folder)}/</code> ({len(paths)} files)"
 
         def codebook():
-            found = next((r["codebook"] for r in records if isinstance(r.get("codebook"), dict)), None)
-            if found is None:
+            record = next((r for r in records if isinstance(r.get("codebook"), dict)), None)
+            if record is None:
                 return '<span class="muted">no codebook recorded</span>'
+            found = record["codebook"]
             digest = found.get("sha256") or ""
-            return (f'<code>{_e(found.get("path"))}</code> · SHA-256 '
+            path = found.get("path") if found.get("path") is None else shown(record, found["path"])
+            return (f'<code>{_e(path)}</code> · SHA-256 '
                     f'<code data-t="{_tip(["SHA-256", digest])}">{_e(digest[:12])}</code>')
 
         def positions():

@@ -40,7 +40,7 @@ from starfinder import _layout
 from ._config import ReportConfig, marker_genes
 from ._measurements import _Measurements
 from ._previews import _Previews
-from ._replay import reference_round, replay_example, round_transform
+from ._replay import reference_round, replay_example, round_transform, saved_transforms
 from ._rules import RuleInputs, evaluate_rules
 from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS, REPORT_FILE, REPORT_PARTS,
                       REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, ReportRecord, row_key)
@@ -114,11 +114,23 @@ def _get(mapping, *keys):
 
 
 class _Inputs:
-    """Reads the files of the report, listing each in ``report.json`` ``inputs`` once, in the order first read."""
+    """Reads the files of the report, listing each in ``report.json`` ``inputs`` once, in the order first read.
 
-    def __init__(self, root: Path):
+    ``input_root`` is the input root supplied at read time (``Dataset.input_root``), against which a version-2
+    run record's relative source paths resolve (:meth:`source`).
+    """
+
+    def __init__(self, root: Path, input_root=None):
         self.root = root
+        self.input_root = None if input_root is None else Path(input_root)
         self.entries = {}
+
+    def source(self, record, path):
+        """The file a run record's source path names (``_run_record.resolve_source``), or None when it cannot be
+        resolved: a version-1 path as recorded; a version-2 relative path against the supplied input root, else the
+        record's ``input_root``, never against the current folder."""
+        from starfinder.dataset._run_record import resolve_source
+        return resolve_source(record, path, self.input_root)
 
     def relative(self, path) -> str:
         path = Path(path)
@@ -155,13 +167,14 @@ class _Inputs:
             return Unavailable("input_changed", f"{name} has SHA-256 {digest}, the record {recorded}")
         return None
 
-    def json(self, path, kind, *, strict=True):
+    def json(self, path, kind, *, strict=True, recorded=None):
         """A JSON file's content; one that does not parse raises ValueError, or is None with ``strict`` False.
 
         The entry checks read their records strictly; a record read after them that does not parse is read as
-        absent, so that the parts it feeds are unavailable instead of the entry raising.
+        absent, so that the parts it feeds are unavailable instead of the entry raising. ``recorded`` is the
+        file's SHA-256 another record holds, checked as :meth:`read` checks it.
         """
-        data = self.read(path, kind)
+        data = self.read(path, kind, recorded)
         if isinstance(data, Unavailable):
             return data
         try:
@@ -219,6 +232,10 @@ def _check_arguments(sample, fov_ids, config):
 
 
 def _check_run_records(inputs, root, fov_ids, dataset_id, sample_id):
+    """Check 3: each FOV's run record, of version 1 or 2 (``_run_record.READ_VERSIONS``), belongs to the dataset,
+    the sample and the FOV. A version-1 record is read as recorded; it is not eligible for verified resume
+    (``report.json`` ``stages.version_1_run_records``)."""
+    from starfinder.dataset._run_record import READ_VERSIONS
     records = {}
     for fov in fov_ids:
         path = _layout.run_record(root, fov)
@@ -228,8 +245,10 @@ def _check_run_records(inputs, root, fov_ids, dataset_id, sample_id):
         record = inputs.json(path, "run_record")
         if not isinstance(record, dict):
             raise ValueError(f"{path} is not a JSON object")
-        for key, expected in (("format_version", 1), ("dataset_id", dataset_id), ("sample_id", sample_id),
-                              ("fov_id", fov)):
+        if record.get("format_version") not in READ_VERSIONS:
+            raise ValueError(f"{path}: format_version is {record.get('format_version')!r}, expected one of "
+                             f"{list(READ_VERSIONS)}")
+        for key, expected in (("dataset_id", dataset_id), ("sample_id", sample_id), ("fov_id", fov)):
             if record.get(key) != expected:
                 raise ValueError(f"{path}: {key} is {record.get(key)!r}, expected {expected!r}")
         records[fov] = record
@@ -294,9 +313,10 @@ def _check_markers(inputs, config, records, export, export_dir):
     for record in records.values():
         codebook = (record or {}).get("codebook")
         if isinstance(codebook, dict) and codebook.get("path"):
-            data = inputs.read(codebook["path"], "codebook", codebook.get("sha256"))
-            if not isinstance(data, Unavailable):
-                source = (codebook["path"], set(_codebook_genes(data, codebook.get("kind"))))
+            path = inputs.source(record, codebook["path"])
+            data = None if path is None else inputs.read(path, "codebook", codebook.get("sha256"))
+            if data is not None and not isinstance(data, Unavailable):
+                source = (str(path), set(_codebook_genes(data, codebook.get("kind"))))
             break
     if source is None and isinstance(_get(export, "assembly", "genes"), list):
         source = (str(export_dir / _layout.EXPORT_FILE), set(export["assembly"]["genes"]))
@@ -660,9 +680,7 @@ class _Collection:
 
     def _transforms_file(self, fov):
         if fov not in self._transform_files:
-            path = _layout.checkpoint_dir(_layout.fov_dir(self.root, fov)) / _layout.REGISTERED / _layout.TRANSFORMS_FILE
-            record = self.inputs.json(path, "transforms", strict=False) if path.is_file() else None
-            self._transform_files[fov] = record if isinstance(record, dict) else None
+            self._transform_files[fov] = saved_transforms(self.inputs, self.root, fov, self.records.get(fov))
         return self._transform_files[fov]
 
     def _transform(self, fov, record, name):
@@ -881,7 +899,8 @@ class _Collection:
             return None, [(part, missing, key) for part in REPLAY_PARTS]
         rounds = self.replay_rounds(record)
         replay = replay_example(self.inputs, self.root, fov, record, rounds,
-                                lambda name: self._transform(fov, record, name))
+                                lambda name: self._transform(fov, record, name),
+                                saved=lambda: self._transforms_file(fov))
         if replay.missing is not None:
             return replay, [(part, replay.missing, key) for part in REPLAY_PARTS]
         rows = [("preprocessing.intensity", missing, f"{key};round={name}")
@@ -1071,7 +1090,8 @@ def _plain(row):
 def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
                    assignment: str | None = "default", segmentation: str | None = None,
                    config: ReportConfig | None = None, output_dir=None,
-                   reference_image: str | None = None, reference_image_import: str | None = None) -> tuple[Path, dict]:
+                   reference_image: str | None = None, reference_image_import: str | None = None,
+                   input_root=None) -> tuple[Path, dict]:
     """Collect one sample's records into its report folder; return the folder and the ``report.json`` content.
 
     The checks 1 to 7 of docs/report-contract.md ("Checks before anything is
@@ -1103,6 +1123,9 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
         None is its default ``fovs/{fov_id}/reference.tif``.
     reference_image_import : str or None
         The ``Dataset``'s ``reference_image_import`` pattern, read in place of ``reference_image`` when given.
+    input_root : str or Path or None
+        The input root the relative source paths of version-2 run records resolve against (the replay's raw
+        images, the codebook); None uses each record's ``input_root``. Version-1 records keep their recorded paths.
 
     Raises
     ------
@@ -1123,7 +1146,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     timer = Timer()
     folder, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                                   assignment=assignment, segmentation=segmentation, config=config,
-                                  output_dir=output_dir)
+                                  output_dir=output_dir, input_root=input_root)
     collection.reference_image = reference_image
     collection.reference_image_import = reference_image_import
     inputs, records, placement, export = collection.inputs, collection.records, collection.placement, collection.export
@@ -1175,6 +1198,9 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
             "assignment": resolved_assignment, "segmentation": resolved_segmentation, "generated_at": generated_at,
             "software": software(), "config": config_json,
             "stages": {"run_records": [f for f in fov_ids if records[f] is not None],
+                       # Read as recorded, and not eligible for verified resume (docs/checkpoints.md).
+                       "version_1_run_records": [f for f in fov_ids if records[f] is not None
+                                                 and records[f].get("format_version") == 1],
                        "placement": placement is not None, "export": export is not None,
                        "parts": dict((export or {}).get("parts") or {})},
             "inputs": list(inputs.entries.values()), "files": files,
@@ -1193,24 +1219,26 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
 def report_sample(dataset, sample: str, fov_ids: Sequence[str], *, assignment: str | None = "default",
                   segmentation: str | None = None, config: ReportConfig | None = None,
                   output_dir=None) -> ReportRecord:
-    """``Dataset.report``: :func:`collect_report` on the dataset's output root and IDs, as a :class:`ReportRecord`."""
+    """``Dataset.report``: :func:`collect_report` on the dataset's output root, input root and IDs, as a
+    :class:`ReportRecord`."""
     folder, record = collect_report(dataset.output_root, sample, fov_ids, dataset_id=dataset.dataset_id,
                                     sample_id=dataset.sample_id, assignment=assignment, segmentation=segmentation,
                                     config=config, output_dir=output_dir, reference_image=dataset.reference_image,
-                                    reference_image_import=dataset.reference_image_import)
+                                    reference_image_import=dataset.reference_image_import,
+                                    input_root=dataset.input_root)
     return ReportRecord(Path(folder), record)
 
 
 def report_examples(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
                     assignment: str | None = "default", segmentation: str | None = None,
-                    config: ReportConfig | None = None):
+                    config: ReportConfig | None = None, input_root=None):
     """The images of the examples as :func:`collect_report` makes them, without writing anything: the replay of
     the main example (:class:`._replay.Replay`, or None when there is none to replay) and the segmentation preview
     of each example role (:class:`._previews.Preview`, or :class:`._values.Unavailable`). The checks before
-    anything is written apply, as for the report."""
+    anything is written apply, as for the report; ``input_root`` as for :func:`collect_report`."""
     _, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                              assignment=assignment, segmentation=segmentation, config=config, output_dir=None,
-                             check_folder=False)
+                             check_folder=False, input_root=input_root)
     collection.fovs_rows()
     collection.registration_rows()
     collection.examples_parts()
@@ -1219,20 +1247,21 @@ def report_examples(output_root, sample: str, fov_ids: Sequence[str], *, dataset
 
 def report_measurements(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
                         assignment: str | None = "default", segmentation: str | None = None,
-                        config: ReportConfig | None = None):
+                        config: ReportConfig | None = None, input_root=None):
     """The static figures of "Sample measurements" as the report makes them, without writing anything
     (:class:`._measurements.SampleFigures`): the per-cell distributions, the marker figures with the data of the
     group selector, and the reads along Z; a part that cannot be drawn is its :class:`._values.Unavailable`, the
-    reason its row of ``unavailable.csv`` holds. The checks before anything is written apply, as for the report."""
+    reason its row of ``unavailable.csv`` holds. The checks before anything is written apply, as for the report;
+    ``input_root`` as for :func:`collect_report`."""
     _, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                              assignment=assignment, segmentation=segmentation, config=config, output_dir=None,
-                             check_folder=False)
+                             check_folder=False, input_root=input_root)
     collection.fovs_rows()
     return collection.measurements.figures()
 
 
 def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment, segmentation, config, output_dir,
-             check_folder=True):
+             check_folder=True, input_root=None):
     """The checks 1 to 7 before anything is written, in order; the report folder and the collection."""
     root = Path(output_root)
     fov_ids, config = _check_arguments(sample, fov_ids, config)
@@ -1240,7 +1269,7 @@ def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment,
         raise ValueError(f"assignment must be a saved assignment name or None; got {assignment!r}")
     if segmentation is not None and (not isinstance(segmentation, str) or not segmentation):
         raise ValueError(f"segmentation must be a run name or None; got {segmentation!r}")
-    inputs = _Inputs(root)
+    inputs = _Inputs(root, input_root)
     export_dir, stitching_dir = _layout.export_dir(root, sample), _layout.stitching_dir(root, sample)
     if not any(_layout.run_record(root, f).is_file() for f in fov_ids) and \
             not (export_dir / _layout.EXPORT_FILE).is_file():

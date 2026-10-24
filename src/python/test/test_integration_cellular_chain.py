@@ -1277,13 +1277,14 @@ def check_ee1(chain):
 
 def check_ee2(chain, loaded):
     """EE2: the assembly's cell and molecule statuses, reasons, owners and edge flags equal the oracle's."""
-    from .test_stitching_assembly_scene import molecule_rows, none, oracle
+    from .test_stitching_assembly_scene import none, oracle
     cells, molecules = oracle(ee_case(chain))
     got = {(r.fov_id, int(r.cell_id)): (r.assembly_status, none(r.assembly_reason), none(r.owner_fov_id),
                                         "fov_edge" in r.assembly_flags.split(";"),
                                         "z_edge" in r.assembly_flags.split(";")) for r in loaded.cells.itertuples()}
     assert got == cells
-    rows = molecule_rows(loaded)
+    # The chain's molecules.csv names row i of the truth-position CSV m<i> (W-562; csv:<i> before).
+    rows = {(r.fov_id, int(r.spot_id.removeprefix("m"))): r for r in loaded.molecules.itertuples()}
     assert {k: (r.assembly_status, none(r.assembly_reason), none(r.owner_fov_id)) for k, r in rows.items()} \
         == molecules
 

@@ -82,7 +82,11 @@ class Chain:
         return collect_report(self.root, **arguments)
 
     def copy(self, destination) -> Chain:
-        """A copy of the whole chain (inputs, scene and output root) whose run records name the copied inputs."""
+        """A copy of the whole chain (inputs, scene and output root) whose run records name the copied inputs.
+
+        A version-2 run record keeps its input paths, relative to the input root, and records the copy's input root
+        (``input_root``); a version-1 record's absolute input paths are rewritten to the copied files.
+        """
         destination = Path(destination)
         shutil.copytree(self.base, destination)
         copy = replace(self, base=destination, root=destination / self.root.relative_to(self.base),
@@ -92,8 +96,11 @@ class Chain:
             path = copy.root / "fovs" / fov / "run.json"
             if path.is_file():
                 record = json.loads(path.read_text())
-                for entry in record["inputs"]:
-                    entry["path"] = str(copy.input_root / Path(entry["path"]).relative_to(self.input_root))
+                if record.get("format_version", 1) == 1:
+                    for entry in record["inputs"]:
+                        entry["path"] = str(copy.input_root / Path(entry["path"]).relative_to(self.input_root))
+                else:
+                    record["input_root"] = str(copy.input_root)
                 copy.write_run_record(fov, record)
         return copy
 

@@ -426,8 +426,8 @@ def test_fov_run_and_segmentation_files_are_untouched_by_assign(tmp_path):
     assert {p.name for p in folder.iterdir()} == {"assignment.json", "molecules.csv", "cells.csv", "counts.csv",
                                                   "nuclei.csv", "territories.tif"}
     run = json.loads((root / "FOV_001" / "run.json").read_text())
-    assert run["format_version"] == 1 and run["config"]["checkpoints"]["stages"] == list(STAGES)
-    assert STAGES == CheckpointConfig().stages == ("registered", "candidates", "pre_qc") and FORMAT_VERSION == 2
+    assert run["format_version"] == 2 and run["config"]["checkpoints"]["stages"] == list(STAGES)
+    assert STAGES == CheckpointConfig().stages == ("registered", "candidates", "pre_qc") and FORMAT_VERSION == 3
     result = fov.assignment_results["default"]
     assert len(result.molecules) == fov.filtering_result.counts["accepted"]
     loaded = dataset.fov("FOV_001").load_assignment("default", checkpoints=checkpoints)

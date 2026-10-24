@@ -689,7 +689,7 @@ def test_s11_candidates_checkpoint_round_trip(method, source, seed, table_format
             result = isolated(method, "iso3d", seed)[2]
         header, reloaded = candidates_round_trip(result, tmp_path, table_format)
     assert len(result.spots)
-    assert header["format_version"] == 2 and all(key in header for key in PLAN_KEYS)
+    assert header["format_version"] == 3 and all(key in header for key in PLAN_KEYS)
     assert header["detection_rounds"] == (list(ROUNDS) if source == "multiround" else None)
     if source == "iso3d":
         assert header["detection_plan"] == []

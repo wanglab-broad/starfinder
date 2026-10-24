@@ -1216,11 +1216,15 @@ class FOV:
         filter's fractions under counts.filtering.
 
         checkpoints=None writes nothing. Otherwise the selected stages and
-        run.json are written to the FOV folder (``fovs/<fov_id>/run.json`` and
-        its ``checkpoints/``); see :doc:`/checkpoints`. The directory, overwrite
+        run.json (version 2) are written to the FOV folder
+        (``fovs/<fov_id>/run.json`` and its ``checkpoints/``); see
+        :doc:`/checkpoints`. The directory, overwrite
         policy and Parquet support are checked before any processing. On an exception the record gets
         failed (or interrupted for other BaseExceptions) with the failing step
-        and round, and the original exception is re-raised.
+        and round, and the original exception is re-raised. Its ``succeeded``
+        means that this processing succeeded; the files written afterwards
+        (export_spots, save_reference_image, save_subtiles) are added to its
+        ``outputs`` as each is written.
         """
         if not isinstance(config, PipelineConfig) or not isinstance(execution, ExecutionConfig):
             raise TypeError('run requires PipelineConfig and ExecutionConfig')
@@ -1377,7 +1381,7 @@ class FOV:
             if execution.mode == 'streaming' and not execution.retain_images and loop_rounds:
                 self.snapshots.pop(ref, None)
             current = None
-            if 'registered' in stages and record.data[_layout.CHECKPOINTS].get('registered'):
+            if 'registered' in stages and record.written.get('registered'):
                 self._write_checkpoint(stage='registered', directory=record.checkpoint_directory,
                                        table_format=checkpoints.table_format, image_rounds=pipeline_rounds)
             if detection_plan is not None:
@@ -1729,11 +1733,18 @@ class FOV:
 
     @_log_step
     def _write_checkpoint(self, stage, directory, table_format, *, round_name=None, image_rounds=None):
-        """Write one stage (or one registered round) and record its files."""
+        """Write one stage (or one registered round) and record its files.
+
+        A registered round's images are hashed as they are written; the
+        registered header names them with the field files (``files``).
+        """
         directory = Path(directory)
         header = self._checkpoint_header()
+        registered = directory / _layout.REGISTERED
         if stage == 'registered' and round_name is not None:
             files = self._write_registered_round(directory, round_name)
+            self._run_record.registered += _checkpoint.payload(
+                registered, [Path(f).relative_to(_layout.REGISTERED).as_posix() for f in files])
         elif stage == 'registered':
             if image_rounds is None:
                 image_rounds = self._pipeline_rounds()
@@ -1741,8 +1752,11 @@ class FOV:
                 if missing:
                     raise ValueError(f'registered checkpoint requires resident images for {missing}')
                 files = [f for r in image_rounds for f in self._write_registered_round(directory, r)]
+                images = _checkpoint.payload(registered, [Path(f).relative_to(_layout.REGISTERED).as_posix()
+                                                          for f in files])
             else:
-                files = []
+                # The rounds were written one by one during the run, which hashed them.
+                files, images = [], list(self._run_record.registered)
             # The checkpoint holds the reference and sequencing rounds only; an other round is saved by
             # prepare_morphology or register (other rounds) under other_rounds/.
             kept = set(image_rounds)
@@ -1756,7 +1770,7 @@ class FOV:
             files += [f'registered/{name}' for name in
                       _checkpoint.write_registered_header(directory, header,
                                                           {k: v for k, v in self.registration_results.items()
-                                                           if k in kept}, record)]
+                                                           if k in kept}, record, images)]
         elif stage == 'candidates':
             if self.spot_result is None:
                 raise ValueError('candidates checkpoint requires spot_result')
@@ -1858,7 +1872,11 @@ class FOV:
             the header has none) differs from the dataset's, or a pre_qc
             checkpoint's recorded encoding (method, reverse_bases and table)
             differs from the loaded codebook's. A checkpoint without the
-            encoding key, or a dataset without a codebook, is not checked.
+            encoding key, or a dataset without a codebook, is not checked. A
+            payload file (table, image or field file) that a version-3 stage
+            record names is missing or its SHA-256 differs from the record
+            (the message names the file); records of versions 1 and 2 hold no
+            hashes.
         FileNotFoundError
             The stage was not written.
         """
@@ -2343,7 +2361,9 @@ class FOV:
 
         The dtype is kept. ZYX is a tifffile TIFF written by save_volume; YX is
         one page with the same JSON axes and metadata description, so
-        load_volume reads either.
+        load_volume reads either. After a checkpointed run that succeeded,
+        the FOV's run.json gains ``outputs.reference_image`` (path relative to
+        the FOV folder and SHA-256).
 
         Raises
         ------
@@ -2375,11 +2395,12 @@ class FOV:
         path.parent.mkdir(parents=True, exist_ok=True)
         if projection is None:
             save_volume(image, path, metadata=metadata)
-            return path
-        image = project_image(image, config=projection)[0]
-        metadata = metadata.projected(method=projection.method)
-        tifffile.imwrite(path, image, photometric='minisblack',
-                         metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)})
+        else:
+            image = project_image(image, config=projection)[0]
+            metadata = metadata.projected(method=projection.method)
+            tifffile.imwrite(path, image, photometric='minisblack',
+                             metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)})
+        self._record_output('reference_image', path)
         return path
 
     def export_spots(self, slot='molecules', columns=None, *, path=None):
@@ -2397,7 +2418,6 @@ class FOV:
         the molecule columns (null for reads, or when the file leaves one
         out), the column dtypes and the row count.
         """
-        import os
         from starfinder.readout.spots import _spot_table, _write_spot_table
         if slot not in ('molecules', 'reads'):
             raise ValueError(f"slot must be molecules or reads; got {slot!r}")
@@ -2405,14 +2425,21 @@ class FOV:
         table = _spot_table(self.spot_result, reads, accepted_only=slot == 'molecules', columns=columns)
         path = Path(path) if path is not None else self.paths.spot_table(slot)
         dtypes = _write_spot_table(table, path)
-        if self._record_path is not None and self._record_path.is_file():
+        if self._recording():
             from starfinder.assignment._molecules import COLUMNS, molecules_sha256
-            from starfinder.dataset._run_record import add_output
             keyed = (molecules_sha256(table) if slot == 'molecules' and set(COLUMNS) <= set(table) else None)
-            add_output(self._record_path, slot, {
-                'path': Path(os.path.relpath(Path(path).resolve(), self._record_path.parent.resolve())).as_posix(),
-                'sha256': file_sha256(path), 'molecules_sha256': keyed, 'dtypes': dtypes, 'rows': len(table)})
+            self._record_output(slot, path, molecules_sha256=keyed, dtypes=dtypes, rows=len(table))
         return path
+
+    def _recording(self) -> bool:
+        """Whether the FOV's latest run had checkpoints, succeeded and left its run.json, which records the outputs."""
+        return self._record_path is not None and self._record_path.is_file()
+
+    def _record_output(self, slot, path, **extra):
+        """Add ``outputs.<slot>`` (path relative to the FOV folder, SHA-256, ``extra``) to the latest run.json."""
+        if self._recording():
+            from starfinder.dataset._run_record import add_output, output_entry
+            add_output(self._record_path, slot, output_entry(self._record_path, path, **extra))
 
     def save_registration_record(self, path: Path | str | None = None) -> Path:
         """Write the registration record of the other rounds as JSON; return its path.
@@ -2449,7 +2476,10 @@ class FOV:
         """Partition FOV into overlapping subtiles and save as NPZ.
 
         Returns subtile coordinates DataFrame with 1-based coords
-        for ``stitch_subtile.py`` compatibility.
+        for ``stitch_subtile.py`` compatibility. After a checkpointed run that
+        succeeded, the FOV's run.json gains ``outputs.subtile_coords`` (path
+        relative to the FOV folder, SHA-256, rows) and ``outputs.subtile_data``
+        (per subtile ID, path and SHA-256 of its NPZ).
 
         Parameters
         ----------
@@ -2523,6 +2553,12 @@ class FOV:
 
         coords_df = pd.DataFrame(coord_rows)
         coords_df.to_csv(out_dir / "subtile_coords.csv", index=False)
+        if self._recording():
+            from starfinder.dataset._run_record import add_output, output_entry
+            add_output(self._record_path, 'subtile_data', {
+                str(row["t"]): output_entry(self._record_path, out_dir / f"subtile_data_{row['t']}.npz")
+                for row in coord_rows})
+            self._record_output('subtile_coords', out_dir / "subtile_coords.csv", rows=len(coords_df))
         return coords_df
 
     @classmethod

@@ -995,7 +995,7 @@ def test_pg6_schema(tmp_path, maker, variant):
         if rule in ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction"):
             assert list(entry["limit"]) == ["k", "floor", "absolute"]
     assert list(strict["software"]) == ["code", "environment"]
-    assert set(strict["stages"]) == {"run_records", "placement", "export", "parts"}
+    assert set(strict["stages"]) == {"run_records", "version_1_run_records", "placement", "export", "parts"}
     assert list(strict["assignment"]) == ["name", "folders"] and list(strict["segmentation"]) == ["name", "runs"]
     for entry in strict["inputs"]:
         assert list(entry) == ["path", "kind", "sha256", "bytes", "verified"]

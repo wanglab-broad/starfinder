@@ -377,7 +377,10 @@ and records them in the FOV's `run.json` (`outputs`). The one-based `goodSpots` 
 remains the file of the legacy route only ({doc}`workflows`, "Molecule tables").
 
 `run(config, checkpoints=CheckpointConfig())` also saves registered images,
-candidates with signals and pre-QC decoding per FOV, plus a `run.json` record.
+candidates with signals and pre-QC decoding per FOV, plus a `run.json` record
+(version 2: paths relative to the FOV folder and the input root, each stage named by
+its record with that record's SHA-256, and each stage record hashing its payload
+files, which `load_checkpoint` checks).
 `load_checkpoint(stage)` restores a stage so that a later `run` can continue
 without earlier steps. See [checkpoints](checkpoints.md).
 

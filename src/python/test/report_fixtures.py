@@ -324,7 +324,7 @@ def placement_result(fov_ids, *, statuses=None, flags=None, supplied=False):
 
 
 def write_transforms_file(root, fov, *, source=None):
-    """``fovs/<fov>/checkpoints/registered/transforms.json`` (format version 2) through write_registered_header."""
+    """``fovs/<fov>/checkpoints/registered/transforms.json`` (format version 3) through write_registered_header."""
     from starfinder._checkpoint import write_registered_header
     source = source or fov
     results = {name: [registration_result(TRANSLATIONS[name][source])] for name in MOVING}

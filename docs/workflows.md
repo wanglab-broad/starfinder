@@ -384,6 +384,12 @@ The runner and planner signatures do not change before §2.13.
   `CheckpointConfig` of `_rule_checkpoints`
   ([Run records of the processing rules](workflow-configuration.md#run-records-of-the-processing-rules)).
   STARfinder records no memory figure of a FOV.
+- **Completion.** `run.json` `status` `succeeded` means that `FOV.run`'s processing
+  succeeded; `_run_workflow` then writes the rule's other declared outputs, and each
+  writer adds its file to `outputs` (path relative to the FOV folder, SHA-256). A
+  declared output missing from `outputs` was not written. Version 2 of the record
+  (since W-565) provides what verified resume and job completion need; that logic,
+  with scheduling, invalidation and retry, is left to §2.13.
 - At the sample level, the fusion, labels, segmentation and SpatialData parts of
   `Dataset.export`, and `Dataset.report`, record `wall_s`, `cpu_s` and
   `peak_rss_kib` (the process's peak RSS) in `export.json` and `report.json`; the

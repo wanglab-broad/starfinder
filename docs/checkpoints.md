@@ -161,8 +161,19 @@ images gives the registered images bit for bit.
 `channels` entry and falls back to `channel_labels` for a header without the key
 (written before W-337); the key is additive, so the stage's `format_version` stays 2.
 
-The header `format_version` is 2 for the three stages. Version-1 headers still
-load. A version-1 registered checkpoint (before the registration recipe) holds
+The header `format_version` is 3 for the three stages (since W-565). A header of
+version 3 holds `files`: every payload file it relies on, `path` relative to the
+header's folder and `sha256` of its bytes. For `candidates.json` and `pre_qc.json`
+that is the table (`candidates.csv`, `pre_qc.parquet`, ...); for
+`registered/transforms.json` the round images, their snapshots
+(`<snapshot>/<round>.ome.tif`) and the field files (`<round>_field.npz`), each
+hashed as it is written (in streaming mode, round by round). The readers
+({py:func}`~starfinder.dataset.load_checkpoint`,
+{py:meth}`~starfinder.dataset.FOV.load_checkpoint`) check every listed file before
+they read anything: a missing file or another SHA-256 raises `ValueError` naming
+the file. Headers of versions 1 and 2 hold no hashes and load without the check
+(`READ_VERSIONS` is 1 to 3); version 2 has the layout of version 3 without
+`files`. A version-1 registered checkpoint (before the registration recipe) holds
 translation and dense results, each with its own `application_config`, which
 were applied one after another; it loads with those configs, without chains,
 and with `registration_record["semantics"] == "sequential"`. Nothing converts
@@ -194,7 +205,8 @@ names are rejected. When detection ran without extraction, the table has no
 signal columns and reloads with `intensity_result=None`.
 
 `candidates.json` holds the detector and extraction configurations, the image
-metadata, the JSON-representable diagnostics and the column dtype map. Since §2.7 it
+metadata, the JSON-representable diagnostics, the column dtype map and (since
+header version 3) `files`, the table with its SHA-256. Since §2.7 it
 also records the detection plan in four keys:
 
 | Key | Content |
@@ -249,7 +261,8 @@ measurements; otherwise a reloaded result has `box_voxels=None`.
 the table holds the string column `entry_id`, the codebook entry of the decoded
 color sequence, after `gene_id`; `FORMAT_VERSION` stays 2, an older reader keeps
 it as an ordinary column, and a `pre_qc` written without it still loads.
-`pre_qc.json` holds the decoder configuration, labels and diagnostics; the reader
+`pre_qc.json` holds the decoder configuration, labels, diagnostics and (since
+header version 3) `files`, the table with its SHA-256; the reader
 rebuilds the configuration through `DECODING_METHODS` from its `method` (a `direct`
 configuration holds only its `method`). Since W-293 it also records `readout_mode`,
 which becomes `ReadDecodingResult.readout_mode` on reloading; a header without it
@@ -473,6 +486,12 @@ naming extraction, the stage to rerun.
 
 When no image operation is configured and no images are resident, `run` skips
 the round loop. Resuming is always an explicit call; there is no scheduler.
+Nothing verifies a resume against `run.json` today: verified resume, scheduling
+and job completion belong to §2.13. `run.json` version 2 provides what verified
+resume needs (each stage record with its SHA-256, each payload file hashed by
+its record, every input and source hashed, and paths that resolve in a copied
+tree); version 1, which named the stage files only and recorded paths as given,
+does not.
 {py:meth}`~starfinder.dataset.FOV.save_checkpoint` writes one stage from the
 current results outside `run` into the FOV folder's `checkpoints/` and returns that folder.
 It uses `CheckpointConfig.directory`, `table_format` and `overwrite`.
@@ -482,30 +501,48 @@ It uses `CheckpointConfig.directory`, `table_format` and `overwrite`.
 ## run.json
 
 `run.json` is replaced atomically (a temporary file, then `os.replace`) when the
-run starts, after each completed step and when the run ends, and again when
-`FOV.export_spots` records a table in `outputs`. It contains:
+run starts, after each completed step and when the run ends, and again when a
+writer records an output in `outputs`. Its `format_version` is 2 (since W-565;
+{doc}`migration`, "run.json version 2"). The record is portable: no path in it
+depends on where the output tree or the input tree lies.
+
+* **Paths.** Output and stage paths are relative to the FOV folder, which holds
+  `run.json`. A file the run reads inside the input root (the image inputs, a
+  codebook kept there) is recorded relative to the input root. A file outside it
+  (a codebook or panel elsewhere, the workflow configuration, supplied
+  statistics, pretrained weights) is recorded by its absolute path. Every file
+  the run reads has its SHA-256 (the image inputs unless `hash_inputs=False`).
+  `input_root` and `output_root` record the roots of the run as provenance.
+* **Two meanings, kept apart.** `status` is the outcome of `FOV.run`'s processing:
+  `succeeded` is written when that processing succeeded. `outputs` records the
+  files written after it (the molecule and read tables, the reference image, the
+  subtile files), each added as its writer writes it. A `succeeded` record
+  without an `outputs` entry says that the processing succeeded and that file
+  was not written.
 
 | Field | Content |
 | --- | --- |
-| `format_version` | `1`. |
+| `format_version` | `2`. |
 | `dataset_id`, `sample_id`, `fov_id`, `subtile_id` | Identity. |
-| `status`, `started_at`, `ended_at` | `running`, `succeeded`, `failed` or `interrupted`, with UTC times. |
+| `input_root`, `output_root` | The `Dataset`'s input root and output root, absolute (`null` input root for a dataset without one): provenance. The other paths do not depend on them; a reader of a version-2 record resolves the input paths against the input root it is given ({doc}`report-contract`, "The replay"), and against `input_root` only when it is given none. |
+| `status`, `started_at`, `ended_at` | `running`, `succeeded`, `failed` or `interrupted`, with UTC times: the outcome of `FOV.run`'s processing. |
 | `error` | `null`, or the failing `step` and `round`, the exception `type`, `message` and `traceback`. |
 | `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded only when the package runs from a starfinder checkout, never from an enclosing repository. |
 | `environment` | Python, platform and package versions (`null` when not installed). |
-| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, `readout_mode`, the dataset's readout mode (since W-293), and `encoding`, the codebook's encoding as in `pre_qc.json` (`null` without a codebook or in readout mode `direct`; since W-304). |
-| `workflow_config` | `{path, sha256}` of the workflow configuration file a workflow rule ran with (the top-level `config_path`, made absolute; `sha256` of its bytes, `null` when no file is there), kept on the `Dataset` by `from_workflow_config`; `null` for a run outside the workflow (since W-451). |
+| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, `readout_mode`, the dataset's readout mode (since W-293), and `encoding`, the codebook's encoding as in `pre_qc.json` (`null` without a codebook or in readout mode `direct`; since W-304). `checkpoints.directory`, the parent of the FOV folders when the configuration names one, is relative to the FOV folder (`..`; `../..` for a subtile), else `null`. The other configurations are recorded as given. |
+| `workflow_config` | `{path, sha256}` of the workflow configuration file a workflow rule ran with (the top-level `config_path`: absolute, or relative to the input root when it lies there; `sha256` of its bytes, `null` when no file is there), kept on the `Dataset` by `from_workflow_config`; `null` for a run outside the workflow (since W-451). |
 | `channels` | The channels of each configured round, and of `reference_stain` when `Dataset.reference_stains` is set: per round, in C order, one entry with `channel` (the file pattern), `name` (`null` when not given) and `wavelength` (nm, or `"unavailable"`), from `Dataset.channel_info` ({doc}`coordination`, "Channels"; since W-336). An additive key: a `run.json` without it still loads. |
 | `rounds` | The round roles of the run, as `RoundState` holds them: `sequencing_rounds`, `other_rounds` and `reference_round` (since W-563). |
-| `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
-| `codebook` | The codebook of readout mode `multiplexed` or the direct panel of readout mode `direct`: `kind` (`codebook` or `direct_panel`), `path` (the absolute path `Dataset.load_codebook` or `Dataset.load_direct_panel` read) and `sha256` (of the file's bytes), both `null` for one set on the `Dataset` without a file, `entries` and `genes` (distinct genes); `null` when the dataset has neither (since W-451). |
-| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files; empty for methods without weights) and `execution` (device, framework and thread settings). For a plan that names rounds, `run` records one `find_round_spots` step per detected round, each with its own entry, and `FOV.find_spots` called inside a recorded step lists one entry per round, each with its `round`. |
-| `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`. |
+| `inputs` | Each loaded TIFF: `path`, relative to the input root (POSIX), and its streamed `sha256` (`null` with `hash_inputs=False`). |
+| `codebook` | The codebook of readout mode `multiplexed` or the direct panel of readout mode `direct`: `kind` (`codebook` or `direct_panel`), `path` (the file `Dataset.load_codebook` or `Dataset.load_direct_panel` read: absolute, or relative to the input root when it lies there) and `sha256` (of the file's bytes), both `null` for one set on the `Dataset` without a file, `entries` and `genes` (distinct genes); `null` when the dataset has neither (since W-451). |
+| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files, each by absolute path and SHA-256; empty for methods without weights) and `execution` (device, framework and thread settings). For a plan that names rounds, `run` records one `find_round_spots` step per detected round, each with its own entry, and `FOV.find_spots` called inside a recorded step lists one entry per round, each with its `round`. |
+| `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`, `{path, sha256}` of the supplied-statistics file (absolute, or relative to the input root when it lies there; both `null` without one). |
 | `registration` | Ordered registration attempts per round: the estimation entries and one application entry per moving round (see {doc}`coordination`). |
-| `transforms` | Per moving round that `run` registered, in processing order: `reference` (the reference round), `results` (the round's results in order, each `{step, transform, diagnostics}` as in `registered/transforms.json`) and `application_config` (the round's `WarpConfig`, as `applications.<round>` holds it). A dense field's `field` or a B-spline's `coefficients` is `<round>_field.npz` when the stage `registered` wrote that file, else `null`; the arrays are never in `run.json`. `{}` without registration; the reference round and a round whose registration failed have no entry (since W-451). |
+| `transforms` | Per moving round that `run` registered, in processing order: `reference` (the reference round), `results` (the round's results in order, each `{step, transform, diagnostics}` as in `registered/transforms.json`) and `application_config` (the round's `WarpConfig`, as `applications.<round>` holds it). A dense field's `field` or a B-spline's `coefficients` is `<round>_field.npz` (a name in `checkpoints/registered/`, hashed by that record's `files`) when the stage `registered` wrote that file, else `null`; the arrays are never in `run.json`. `{}` without registration; the reference round and a round whose registration failed have no entry (since W-451). |
 | `counts` | Spots, intensities, decoding call statuses, scoring counts (`scoring`: total, scored, `no_assignment` and `background_unavailable`, since W-294, when the reads were scored), deduplication counts (`deduplication`: total, groups, `merged_reads` and `conflicting_groups`, since W-295, when the reads were deduplicated) and filtering counts (`filtering`: total, accepted and rejected; when the filter checked endpoints, with `end_bases` or a codebook layout's segment ends, also `endpoint_valid`, the reads of the correct form, and with segment ends `endpoint_valid_segments`, that count per segment; since W-451; and `fractions`, the filter result's `accepted` and, when it checked endpoints, `endpoint_valid` over all reads, `null` without reads; since W-563). Whenever reads were decoded, `summary` holds the population summary of {py:func}`~starfinder.readout.summarize_reads` of the latest reads (since W-295 for scored or deduplicated reads; since W-563 also without scoring or deduplication). |
-| `checkpoint_directory`, `checkpoints` | The FOV folder's `checkpoints/` folder (as the output root is given, absolute or relative) and the files written for each stage, relative to the FOV folder, which holds `run.json` (`checkpoints/registered/round1.ome.tif`; since W-564). |
-| `outputs` | Present once {py:meth}`~starfinder.dataset.FOV.export_spots` has written a table after the run: per slot (`molecules`, `reads`), `path` (the file relative to the record's folder, POSIX), `sha256` (of the file's bytes), `molecules_sha256` (the keyed hash of the six molecule columns, `MoleculeTable.sha256`; `null` for `reads` or a file without those columns), `dtypes` (the column dtypes) and `rows`. `export_spots` adds the entry only when the FOV's latest `run` had checkpoints and succeeded, and rewrites the record atomically; a later `run` writes a new record without it (since W-562). |
+| `checkpoint_directory` | `checkpoints`, the FOV folder's checkpoint folder, relative to the FOV folder. |
+| `checkpoints` | Per stage written, the stage record the run relies on: `path` (`checkpoints/candidates.json`, `checkpoints/pre_qc.json` or `checkpoints/registered/transforms.json`, relative to the FOV folder) and `sha256` (of the record's bytes). The record names and hashes its payload files (`files`, see "registered" under "Layout"); a stage whose record was not written (a run that failed before it) has no entry. |
+| `outputs` | `{}` when the processing ends; then, per slot, each file written after the processing, added by its writer when the FOV's latest `run` had checkpoints and succeeded, the record rewritten atomically (a later `run` writes a new record without them). Every entry has `path` (relative to the FOV folder, POSIX) and `sha256` (of the file's bytes). `molecules` and `reads` ({py:meth}`~starfinder.dataset.FOV.export_spots`, since W-562) also have `molecules_sha256` (the keyed hash of the six molecule columns, `MoleculeTable.sha256`; `null` for `reads` or a file without those columns), `dtypes` (the column dtypes) and `rows`; `reference_image` ({py:meth}`~starfinder.dataset.FOV.save_reference_image`); `subtile_coords` (with `rows`) and `subtile_data` (per subtile ID, the NPZ's entry) ({py:meth}`~starfinder.dataset.FOV.save_subtiles`); and, in a resident subtile's record, `subtile_spots` (the workflow's `subtile_goodSpots_<n>.csv`). The declared outputs of the Python processing rules are all recorded here (since W-565). |
 
 If a step raises, `run` records `failed` (or `interrupted` for
 `KeyboardInterrupt` and other non-`Exception` errors), with the innermost failing
@@ -515,8 +552,12 @@ Stages written before the failure stay usable. The codebook file is not recorded
 in `inputs`, which lists the loaded images; `codebook` names it.
 
 `transforms`, `codebook`, `workflow_config`, the endpoint counts, `outputs`, `rounds` and the
-filter's `fractions` are additive keys: `format_version` stays 1, and a `run.json` written without
-them still loads. The workflow's processing rules write `run.json` ({doc}`workflow-configuration`,
+filter's `fractions` were added to version 1 as additive keys, and a `run.json` written without
+them still loads. Version 2 changes the recorded paths and `checkpoints`, and adds `input_root`
+and `output_root` ({doc}`migration`, "run.json version 2"). The readers of `run.json` (the
+report's collector and replay) accept versions 1 and 2: a version-1 record is read as recorded,
+its paths opened as written, and it is not eligible for verified resume; a version-2 record's
+relative input paths are resolved against an input root, never against the current folder. The workflow's processing rules write `run.json` ({doc}`workflow-configuration`,
 "Run records of the processing rules"), and it replaces the Python backend's former per-FOV logs
 ({doc}`migration`, "Sequencing logs and the morphology record"). A direct caller gets the record
 without stage files with `FOV.run(..., checkpoints=CheckpointConfig(stages=()))`.
