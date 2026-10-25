@@ -1,0 +1,10 @@
+{
+ "version-2-candidates.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ }
+}

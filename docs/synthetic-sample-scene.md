@@ -139,7 +139,8 @@ value):
   `test_preprocessing_synthetic_evaluation.py`,
   `test_preprocessing_calibrated_evaluation.py`, `test_image_statistics.py`,
   `test_segmentation_labels.py`, `test_segmentation_segment.py` and
-  `test_dataset_channels.py`;
+  `test_dataset_channels.py`; (W-573 later replaced R6's `PINNED_CAL_141C093` and that
+  folder with the equal explicit expected values of `test/data/expected/test_readout_validation/`.)
 * the session fixture `small_dataset` of `conftest.py` with its recorded
   `SMALL_DATASET_GENERATOR` (`generator_version` 6, `benchmark-presets-v1`).
 

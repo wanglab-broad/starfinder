@@ -1,31 +1,40 @@
 """Golden baseline for the current local-maxima spot finding (W-267, §2.7 decision D7).
 
-Pins, with exact SHA-256 digests, on one small seeded fixture (12×48×48 voxels, four
+Pins, as explicit expected values, on one small seeded fixture (12×48×48 voxels, four
 uint16 channels, and its plane z=6 as the Z=1 variant):
 
 (a) the ``find_spots`` table and threshold diagnostics (the per-channel thresholds) for
     the four threshold modes, with ``exclude_border`` true and false, in 3D and Z=1;
-(b) the ``candidates`` table after ``FOV.run``, written as a CSV checkpoint and reloaded;
-(c) the same digests when the pipeline is translated from the legacy ``spot_finding``
+(b) the ``candidates`` table after ``FOV.run``, written as a CSV checkpoint and reloaded,
+    and the written ``candidates.csv`` read back with the dtypes of its header;
+(c) the same results when the pipeline is translated from the legacy ``spot_finding``
     YAML keys (``intensity_estimation``, ``intensity_threshold``, ``min_distance`` or
     ``min_distance_voxels``), which cannot express ``exclude_border``.
+
+The expected tables are the files under ``data/expected/test_spot_finding_golden/`` (its
+README names the revision and the command that wrote them) and the thresholds are
+``EXPECTED_THRESHOLDS``; W-573 replaced the SHA-256 digests pinned before, which these
+values reproduce exactly. Every column of a spot table holds integers (voxel coordinates,
+the channel and a uint16 peak) and compares exactly; the thresholds are computed float64
+values and compare within ``FLOAT64`` (docs/contributing.md, "Expected values and
+tolerances"). The fixture inputs stay pinned by digest (integer data).
 
 The fixture holds a saturated multi-voxel amplicon whose plateau gives tied maxima
 (W-218), a two-lobe amplicon whose lobes give split maxima, spots on and next to the
 volume faces, a channel with more than half its voxels zero (noise-mode MAD 0), and a
 dim channel whose maximum is below the image maximum (adaptive differs from
-adaptive_round). The digests were produced with the locked project environment
+adaptive_round). The first digests were produced with the locked project environment
 (NumPy 2.2.6, SciPy 1.17.0, scikit-image 0.26.0, pandas 3.0.0) and are bit-identical
 over repeated single-thread runs; see docs/spot-finding-baseline.md.
 
 Every detection configuration is built by ``detection_config``, which also holds the
 only imports of detection configuration types and the only construction of
 ``PipelineConfig(spot_finding=...)``. The §2.7 registry move and the YAML ``method`` key
-replace that helper's body only; every pinned digest stays. Learned methods and LoG are
+replace that helper's body only; every pinned value stays. Learned methods and LoG are
 not part of this test.
 """
-import hashlib
 import json
+from pathlib import Path
 import warnings
 
 import numpy as np
@@ -37,7 +46,8 @@ from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.spot_finding import find_spots
 
-from .coordination_helpers import digest, table_digest
+from .coordination_helpers import digest
+from .expected_values import FLOAT64, assert_table_matches, read_csv, read_table, table_differences
 
 pytestmark = [pytest.mark.spot_finding, pytest.mark.golden]
 
@@ -143,11 +153,6 @@ def fixture_image(dims):
     return volume if dims == "3d" else volume[Z1_PLANE:Z1_PLANE + 1].copy()
 
 
-def threshold_digest(diagnostics):
-    """SHA-256 of the per-channel thresholds as JSON (floats by repr, which round-trips)."""
-    return hashlib.sha256(json.dumps(list(diagnostics["thresholds"])).encode()).hexdigest()
-
-
 def detect(mode, dims, **options):
     return find_spots(fixture_image(dims), config=detection_config(mode, **options),
                       metadata=ImageMetadata("golden/round1"), spot_namespace=NAMESPACE)
@@ -167,7 +172,8 @@ def golden_dataset(root):
 
 
 def run_and_reload(root, dataset, dims, pipeline):
-    """FOV.run with a CSV candidates checkpoint; digests of the written and reloaded results."""
+    """FOV.run with a CSV candidates checkpoint; the reloaded spot table and the written candidates.csv read
+    back with the dtypes of its header."""
     checkpoints = CheckpointConfig(stages=("candidates",), directory=root / "checkpoints")
     fov = fov_with_fixture(dataset, dims)
     fov.run(pipeline, checkpoints=checkpoints)
@@ -178,8 +184,8 @@ def run_and_reload(root, dataset, dims, pipeline):
     assert reloaded.spot_result.diagnostics["thresholds"] == thresholds
     assert reloaded.intensity_result is None
     pd.testing.assert_frame_equal(reloaded.spot_result.spots, fov.spot_result.spots)
-    return {"table": table_digest(reloaded.spot_result.spots),
-            "csv": hashlib.sha256((directory / "candidates.csv").read_bytes()).hexdigest()}
+    dtypes = json.loads((directory / "candidates.json").read_text())["dtypes"]
+    return {"table": reloaded.spot_result.spots, "csv": read_csv(directory / "candidates.csv", dtypes)}
 
 
 CASES = [(mode, border, dims)
@@ -195,92 +201,32 @@ PINNED_INPUT = {
     "3d": "9439d1b5f102adf9d5d00c8750f5adee819cf68599fed38b6788af2eac4c5af5",
     "z1": "88cb41775c5d8aa6b528f52076d2b716423bb819f8dc93a6e0452ef957978cd1",
 }
-# (mode, exclude_border, dims) -> (rows, table digest, threshold digest) of find_spots
-PINNED_FIND_SPOTS = {
-    ("noise", True, "3d"): (
-        893, "05b64a92e096de0a449881e52d719bd3822375e326bb55495ae1086ca87d63cf",
-        "9643d3a15077196245d8a8fdf7b8b56b42c33370620e6d7a9950b2381a17b564"),
-    ("noise", False, "3d"): (
-        1342, "a3160dcff7951ffb1c2b931816114a2e489d825371612acaa65c99ecefa37933",
-        "9643d3a15077196245d8a8fdf7b8b56b42c33370620e6d7a9950b2381a17b564"),
-    ("adaptive", True, "3d"): (
-        828, "2132c5c4b598e50210aeee93ad0ab85a4fd150028bd16a673d7882da8c46327b",
-        "9bdb7bc340c96fdfd22306a26289d2c1dc9f62f2a7e0eb9568cd882efb5f6f34"),
-    ("adaptive", False, "3d"): (
-        1197, "35e58decbc4d1d27436eae4ed94454f381b9ef8c0a69076db4def4568ba3c8d2",
-        "9bdb7bc340c96fdfd22306a26289d2c1dc9f62f2a7e0eb9568cd882efb5f6f34"),
-    ("adaptive_round", True, "3d"): (
-        26, "5fa8fa4dad9a265ad81a577cc5d23606f237071a8f87339a6d29ddaa38e47b1f",
-        "d0bfc8f7a5742e183c73cd9bb828a0d34e4d6314d207e1554c460165f1852878"),
-    ("adaptive_round", False, "3d"): (
-        29, "1ba8bf6ea5daa6730157188d9470d9fc0d91d5987645cb7eb997871571779680",
-        "d0bfc8f7a5742e183c73cd9bb828a0d34e4d6314d207e1554c460165f1852878"),
-    ("global", True, "3d"): (
-        23, "534abef36f43cfbfaa04dd2f3506746e8818d6f13d3d3f51f89df4452cd0a733",
-        "8b9fab049422f6cbb941a0c67215b60082ce9847fe59327b3ef10cf142ae12d8"),
-    ("global", False, "3d"): (
-        25, "22532ce6446789f9cd05234e2ecb28f284e13d785ab767e2384e43d539049850",
-        "8b9fab049422f6cbb941a0c67215b60082ce9847fe59327b3ef10cf142ae12d8"),
-    ("noise", True, "z1"): (
-        241, "25f3d85f4e216ec8533cd9eb7ab6104a4035d7adfe420778ed80d3feb47bdec3",
-        "443d10894def3e1e7155fa524788d7581a16a1c229b5f82e11f47898c24c8bb6"),
-    ("noise", False, "z1"): (
-        275, "a62092a122054732ce43b6f3439f49a4ee6b54ac02723c15dc2f8aeb5afee493",
-        "443d10894def3e1e7155fa524788d7581a16a1c229b5f82e11f47898c24c8bb6"),
-    ("adaptive", True, "z1"): (
-        228, "9d19aa2bcc172671fec719a05e625e7af3b39ceb3ee8ba2baa3d9b61fdcc30fa",
-        "28cb8707866828523636777402c383110e91dc3549e38bdcab3dc6bdc2a61779"),
-    ("adaptive", False, "z1"): (
-        254, "41bbe5295b03bcdcbf7d4f6412649c9758cf12703d16a5f8b0e2c8abc092c4c7",
-        "28cb8707866828523636777402c383110e91dc3549e38bdcab3dc6bdc2a61779"),
-    ("adaptive_round", True, "z1"): (
-        13, "1669266806fcdf9494e3490d1fb13422a74b1b992fbb61127e9bb3c7acb36756",
-        "d0bfc8f7a5742e183c73cd9bb828a0d34e4d6314d207e1554c460165f1852878"),
-    ("adaptive_round", False, "z1"): (
-        15, "150eef1f8fc1d20610ab0dab678f83aa180f0a1885697fb13da5dc794935a66a",
-        "d0bfc8f7a5742e183c73cd9bb828a0d34e4d6314d207e1554c460165f1852878"),
-    ("global", True, "z1"): (
-        12, "31949024c2fb0461c8e36fafa77017bf904d551eacc3fcacc5118066eb661ee9",
-        "8b9fab049422f6cbb941a0c67215b60082ce9847fe59327b3ef10cf142ae12d8"),
-    ("global", False, "z1"): (
-        13, "c23f6d23051dfae4c0bf14996c773bdd31917ab023cc88dbf4f47f54f5eabfce",
-        "8b9fab049422f6cbb941a0c67215b60082ce9847fe59327b3ef10cf142ae12d8"),
+# The explicit expected values (data/expected/test_spot_finding_golden/README.md): one find_spots table per
+# case, <case_id>.csv, which is also the reloaded candidates table of FOV.run.
+EXPECTED = Path(__file__).parent / "data" / "expected" / "test_spot_finding_golden"
+# (mode, dims) -> the per-channel thresholds of find_spots, the same with exclude_border true and false
+EXPECTED_THRESHOLDS = {
+    ("noise", "3d"): (145.478, 195.478, 0.0, 165.478),
+    ("adaptive", "3d"): (600.0, 332.20000000000005, 195.0, 124.60000000000001),
+    ("adaptive_round", "3d"): (600.0, 600.0, 600.0, 600.0),
+    ("global", "3d"): (655.35, 655.35, 655.35, 655.35),
+    ("noise", "z1"): (145.478, 196.478, 0.0, 165.478),
+    ("adaptive", "z1"): (600.0, 332.20000000000005, 160.60000000000002, 124.60000000000001),
+    ("adaptive_round", "z1"): (600.0, 600.0, 600.0, 600.0),
+    ("global", "z1"): (655.35, 655.35, 655.35, 655.35),
 }
-# (mode, exclude_border, dims) -> sha256 of candidates.csv written by FOV.run
-PINNED_CANDIDATES_CSV = {
-    ("noise", True, "3d"):
-        "0a583adbb7528a709a9cb3c1267daed4baf510321af2360a1fce69d0976ec861",
-    ("noise", False, "3d"):
-        "9f81d04f8861b8deef7f2cbdac41df9e4ac4271a577560629a99f6d271d6bf2f",
-    ("adaptive", True, "3d"):
-        "6d11cac63e06ef2b37c24e97761ab9303292a738f5d44cd5ccb8f8b082dcf2e9",
-    ("adaptive", False, "3d"):
-        "b6e6184d3dadcdbba259c2b6db04141028492112137595e5d8f0a28f52c5e3ec",
-    ("adaptive_round", True, "3d"):
-        "7f2f66b17a6441dbfa1b16f57da8467907c17b0d359dc73abd420cc535aac07e",
-    ("adaptive_round", False, "3d"):
-        "f5415904476040573a21e870a00c764d1f1c09a04f58a6ba8c95bf85ea5cb34e",
-    ("global", True, "3d"):
-        "5c249e0bbecc15cfc46e18ef0cca98cfaa592674ffce615a9d7b427e430834c4",
-    ("global", False, "3d"):
-        "be4f27a5c6ad5f5b4321bca2efd76d8f3728ec69dad71065149713446d3cbab1",
-    ("noise", True, "z1"):
-        "8408f75edec8efe59ece683d3131923cfd25effd4a6edf0339ea883fde9a3ce0",
-    ("noise", False, "z1"):
-        "b6d664c910df6627edb811a2035b3204e5e1ce27cbf160e78c45493ab8c63dc8",
-    ("adaptive", True, "z1"):
-        "9f8e4f5bac9f11636e00222fc169fd2f20a45ac690630afd38d7e0a6fc97ea0f",
-    ("adaptive", False, "z1"):
-        "e4d87b3793c94726fc79944e88b4a127982eefbf9367c310386bb7872bbc2040",
-    ("adaptive_round", True, "z1"):
-        "04cb11a303b4d288833b016674f05b2d3c6ace6bdc838ef63c186690ce502582",
-    ("adaptive_round", False, "z1"):
-        "920241874d712e0a4c3f45ef37d933d120d58094e21661058bb2b667918e20d9",
-    ("global", True, "z1"):
-        "14969a9b408778db125ba962bdc50b39d9ee4e03d00a56ef1ea3e9ecce1adf88",
-    ("global", False, "z1"):
-        "3b14b680ac7536f801b06a1b01d37d737c67e2901f3c0e32feffdfbd0dc536a4",
-}
+# The spot_namespace column that FOV.run writes first in candidates.csv, before the spot table's columns.
+RUN_NAMESPACE = '["golden","sample","FOV_001",null]'
+
+
+def expected_spots(case):
+    return read_table(EXPECTED / f"{case_id(case)}.csv")
+
+
+def expected_candidates_csv(case):
+    table = expected_spots(case)
+    table.insert(0, "spot_namespace", pd.array([RUN_NAMESPACE] * len(table), dtype="string"))
+    return table
 
 
 def test_fixture_inputs_are_pinned():
@@ -298,8 +244,8 @@ def test_fixture_has_the_d7_features():
 def test_find_spots_tables_and_diagnostics_are_pinned(case):
     mode, border, dims = case
     result = detect(mode, dims, exclude_border=border)
-    assert (len(result.spots), table_digest(result.spots),
-            threshold_digest(result.diagnostics)) == PINNED_FIND_SPOTS[case]
+    assert_table_matches(result.spots, expected_spots(case), name=case_id(case))
+    np.testing.assert_allclose(result.diagnostics["thresholds"], EXPECTED_THRESHOLDS[(mode, dims)], **FLOAT64)
 
 
 @pytest.mark.parametrize("dims", ["3d", "z1"])
@@ -326,25 +272,26 @@ def test_saturated_plateau_gives_tied_maxima():
 @pytest.mark.parametrize("case", CASES, ids=case_id)
 def test_candidates_after_run_save_and_reload_are_pinned(tmp_path, case):
     mode, border, dims = case
-    digests = run_and_reload(tmp_path, golden_dataset(tmp_path), dims,
+    outputs = run_and_reload(tmp_path, golden_dataset(tmp_path), dims,
                              detection_config(mode, form="pipeline", exclude_border=border))
-    assert digests["table"] == PINNED_FIND_SPOTS[case][1]
-    assert digests["csv"] == PINNED_CANDIDATES_CSV[case]
+    assert_table_matches(outputs["table"], expected_spots(case), name="reloaded")
+    assert_table_matches(outputs["csv"], expected_candidates_csv(case), name="candidates.csv")
 
 
 @pytest.mark.parametrize("distance_key", ["min_distance", "min_distance_voxels"])
 @pytest.mark.parametrize("case", [c for c in CASES if c[1]], ids=case_id)
 def test_legacy_yaml_keys_give_the_same_digests(tmp_path, case, distance_key):
     mode, border, dims = case
-    digests = run_and_reload(tmp_path, golden_dataset(tmp_path), dims,
+    outputs = run_and_reload(tmp_path, golden_dataset(tmp_path), dims,
                              detection_config(mode, form="yaml", distance_key=distance_key))
-    assert digests["table"] == PINNED_FIND_SPOTS[case][1]
-    assert digests["csv"] == PINNED_CANDIDATES_CSV[case]
+    assert_table_matches(outputs["table"], expected_spots(case), name="reloaded")
+    assert_table_matches(outputs["csv"], expected_candidates_csv(case), name="candidates.csv")
 
 
 @pytest.mark.parametrize("dims", ["3d", "z1"])
 @pytest.mark.parametrize("change", [{"threshold_value": 4.0}, {"min_distance_voxels": 2},
                                     {"exclude_border": False}], ids=lambda c: next(iter(c)))
 def test_a_changed_setting_changes_the_table_digest(change, dims):
+    # The changed table lies outside the comparison of the expected table (every column exact).
     changed = detect("noise", dims, **change)
-    assert table_digest(changed.spots) != PINNED_FIND_SPOTS[("noise", True, dims)][1]
+    assert table_differences(changed.spots, expected_spots(("noise", True, dims)))

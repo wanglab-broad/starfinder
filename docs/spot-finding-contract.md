@@ -613,7 +613,9 @@ The implementation adds these entries:
 
 ## Tests the implementation changes
 
-* `test/test_spot_finding_golden.py`: every pinned digest stays. The diagnostics
+* `test/test_spot_finding_golden.py`: every pinned value stays (since W-573 as
+  explicit expected values with the tolerances of [contributing](contributing.md)
+  ("Expected values and tolerances"), equal to the digests pinned before). The diagnostics
   change makes one named edit: `test_noise_mode_mad_zero_passes_silently` becomes
   a test that the MAD-0 channel keeps threshold 0 and now emits one
   `SpotFindingWarning` per affected channel. If the registry move changes how a

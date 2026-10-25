@@ -50,10 +50,11 @@ from starfinder.spot_finding._starfish_log import starfish_view
 
 from . import spot_finding_fixtures as fixtures
 from .coordination_helpers import table_digest
+from .expected_values import assert_table_matches, read_table
 from .learned_detectors import THREAD_VARIABLES, W266_MATCH, evaluate, run_python, seam_scene
 from .spot_finding_scenes import FORMED16_SHAPE, SEEDS, formed16, isolated_scene
 from .test_spot_finding_diagnostics import assert_typed_empty
-from .test_spot_finding_golden import PINNED_FIND_SPOTS, golden_dataset
+from .test_spot_finding_golden import golden_dataset
 from .test_spot_finding_local_maxima import RADIUS, RECIPE1, s16
 from .spot_finding_fixtures import PLAN_KEYS, VERSION_2_CHECKPOINT, assert_reloaded, candidates_round_trip
 from .test_spot_finding_rounds import (CHANNELS as ROUND_CHANNELS, ROUNDS, SHAPE_ZYX as MULTIROUND_SHAPE, multiround,
@@ -707,8 +708,10 @@ def test_s11_candidates_checkpoint_round_trip(method, source, seed, table_format
 
 
 def test_s11_a_version_2_checkpoint_from_before_the_plan_keys_loads_unchanged(tmp_path):
-    """The golden test helper's checkpoint (global, exclude_border true, Z=1); its table and CSV digests equal
-    the 42f652d pins of test_spot_finding_golden.py (data/spot_finding_candidates_7a178da/README.md)."""
+    """The golden test helper's checkpoint (global, exclude_border true, Z=1; its table and CSV digests equal
+    the 42f652d pins of test_spot_finding_golden.py, data/spot_finding_candidates_7a178da/README.md). The
+    reloaded table equals its own expected table, data/expected/test_spot_finding_validation/
+    version-2-candidates.csv (README.md there): an old-format round trip, so every column compares exactly."""
     header = json.loads((VERSION_2_CHECKPOINT / "FOV_001" / "candidates.json").read_text())
     assert header["format_version"] == 2 and not any(key in header for key in PLAN_KEYS)
     # The files were written in the FOV folder of 7a178da; they are copied into a FOV folder's checkpoints/ (W-564).
@@ -716,7 +719,9 @@ def test_s11_a_version_2_checkpoint_from_before_the_plan_keys_loads_unchanged(tm
     fov = golden_dataset(tmp_path).fov("FOV_001").load_checkpoint(
         "candidates", checkpoints=CheckpointConfig(directory=tmp_path / "ck"))
     result = fov.spot_result
-    assert table_digest(result.spots) == PINNED_FIND_SPOTS[("global", True, "z1")][1]
+    expected = read_table(Path(__file__).parent / "data" / "expected" / "test_spot_finding_validation"
+                          / "version-2-candidates.csv")
+    assert_table_matches(result.spots, expected, name="version 2 candidates")
     assert result.plan == SpotFindingPlan(result.config) and result.plan.rounds is None
     assert result.config == LocalMaximaConfig(threshold_mode="global", threshold_value=0.01,
                                               channel_labels=("ch00", "ch01", "ch02", "ch03"))

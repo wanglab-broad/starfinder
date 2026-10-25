@@ -1,0 +1,11 @@
+spot_id,observed_color_sequence,decoded_color_sequence,gene_id,entry_id,call_status,failure_reason,wta_l2_nll,call_type,spot_namespace,qc_score,qc_ambiguity_max,qc_signal_to_background,qc_rounds,qc_reason,endpoint_valid,accepted,rejection_reasons
+0,1234,1234,GeneA,CGACC,assigned,,0.069031758969675117,exact,"[""golden"", ""sample"", ""FOV_001"", null]",0.19931158697186788,0.051082251082251083,10.011166666666666,4,,True,True,
+1,2143,2143,GeneB,CTAAC,assigned,,0.068431693546916056,exact,"[""golden"", ""sample"", ""FOV_001"", null]",0.19803599168381467,0.050701976179386522,9.7548095238095254,4,,True,True,
+2,3412,3412,GeneC,CAATC,assigned,,0.069096906066109326,exact,"[""golden"", ""sample"", ""FOV_001"", null]",0.20064394264518498,0.05202581331914044,10.011666666666667,4,,True,True,
+3,4321,4321,GeneD,CCAGC,assigned,,0.057184030069157996,exact,"[""golden"", ""sample"", ""FOV_001"", null]",0.19310668184013444,0.050720925126253383,11.144474206349207,4,,True,True,
+4,2M22,<NA>,<NA>,<NA>,ambiguous,tied_channels,inf,no_call,"[""golden"", ""sample"", ""FOV_001"", null]",<NA>,<NA>,<NA>,<NA>,no_assignment,False,False,call_status
+5,313M,<NA>,<NA>,<NA>,no_signal,zero_signal_round,inf,no_call,"[""golden"", ""sample"", ""FOV_001"", null]",<NA>,<NA>,<NA>,<NA>,no_assignment,False,False,call_status
+6,1244,<NA>,<NA>,<NA>,unmatched,not_in_codebook,0.33411429114260971,no_call,"[""golden"", ""sample"", ""FOV_001"", null]",<NA>,<NA>,<NA>,<NA>,no_assignment,False,False,call_status
+7,2424,<NA>,<NA>,<NA>,unmatched,not_in_codebook,0.06940174991940487,no_call,"[""golden"", ""sample"", ""FOV_001"", null]",<NA>,<NA>,<NA>,<NA>,no_assignment,True,False,call_status
+8,4242,4242,GeneG,CATGC,assigned,,0.069825266714736683,exact,"[""golden"", ""sample"", ""FOV_001"", null]",0.20434105501654637,0.054483767961681744,10.002333333333333,4,,True,True,
+9,1313,1313,GeneH,CTTCC,assigned,,0.06860649647002047,exact,"[""golden"", ""sample"", ""FOV_001"", null]",0.19669720666069146,0.051757486827186019,9.8857222222222223,4,,True,True,

@@ -1,0 +1,130 @@
+{
+ "noise-border-3d.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "noise-noborder-3d.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "adaptive-border-3d.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "adaptive-noborder-3d.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "adaptive_round-border-3d.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "adaptive_round-noborder-3d.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "global-border-3d.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "global-noborder-3d.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "noise-border-z1.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "noise-noborder-z1.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "adaptive-border-z1.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "adaptive-noborder-z1.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "adaptive_round-border-z1.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "adaptive_round-noborder-z1.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "global-border-z1.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ },
+ "global-noborder-z1.csv": {
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64"
+ }
+}

@@ -9,7 +9,7 @@ same_sequence, d = 1: 5 of 763); the grouping, representative and conflict rule 
 provisional there, and missed duplicates are reported, not gated. R15 checks that the
 stage is off by default and unavailable in direct mode, R17 the reruns from checkpoints
 with deduplication and R18 the filter on golden, two_seg and crosstalk. Every hand-built fixture runs
-with seeds 100 to 102 (golden also with its pinned seed, whose pins are checked there).
+with seeds 100 to 102 (golden also with its pinned seed, whose expected values are checked there).
 """
 from dataclasses import replace
 import json
@@ -34,8 +34,8 @@ from . import readout_scenes as scenes
 from .readout_cases import META, codebook, intensity, tensor
 from .test_readout_direct import HAND_SEEDS, direct_dataset, direct_fov
 from .test_readout_direct import pipeline as direct_pipeline
-from .test_readout_golden import (METADATA, PINNED_FILTERING_SCORED, PINNED_PRE_QC_SCORED, ROUNDS, SEED, candidates,
-                                  golden_codebook, golden_dataset, readout_config, table_digest)
+from .test_readout_golden import (METADATA, ROUNDS, SEED, assert_matches, candidates, expected_filtering,
+                                  expected_pre_qc, golden_codebook, golden_dataset, readout_config)
 from .test_readout_scoring import ROOT, golden_run, workflow
 
 pytestmark = [pytest.mark.readout]
@@ -192,14 +192,14 @@ def test_r15_without_a_deduplication_config_every_table_equals_a_run_without_the
     for name in ("decoding_result", "scoring_result", "filtering_result"):
         assert not set(DEDUPLICATION_COLUMNS) & set(getattr(fov, name).table)
     # The tables equal a run without the stage: the decoder, score and filter functions called
-    # directly on the same intensities, and at the pinned seed the pins of the golden run.
+    # directly on the same intensities, and at the pinned seed the expected values of the golden run.
     stages = readout_config("pipeline", decoder=decoder)
     decoded = decode_reads(fov.intensity_result, dataset.codebook, config=stages.decoding)
     scored = score_reads(decoded, fov.intensity_result, reference=dataset.codebook)
     pd.testing.assert_frame_equal(fov.scoring_result.table, scored.table, check_exact=True)
     if seed == SEED:
-        assert table_digest(fov.scoring_result.table) == PINNED_PRE_QC_SCORED[decoder][0]
-        assert table_digest(fov.filtering_result.table) == PINNED_FILTERING_SCORED[(decoder, "default")]
+        assert_matches(fov.scoring_result.table, expected_pre_qc(decoder), "scoring")
+        assert_matches(fov.filtering_result.table, expected_filtering(decoder, "default"), "filtering")
     pd.testing.assert_frame_equal(fov.filtering_result.table,
                                   filter_reads(fov.scoring_result, config=ReadFilterConfig(),
                                                codebook=dataset.codebook).table, check_exact=True)
@@ -314,8 +314,8 @@ def test_r17_golden_rerun_with_deduplication(tmp_path, seed):
     pd.testing.assert_frame_equal(full.filtering_result.table.drop(columns=list(DEDUPLICATION_COLUMNS)), plain,
                                   check_exact=True)
     if seed == SEED:
-        assert table_digest(full.filtering_result.table.drop(columns=list(DEDUPLICATION_COLUMNS))) == (
-            PINNED_FILTERING_SCORED[("codebook_aware", "default")])
+        assert_matches(full.filtering_result.table.drop(columns=list(DEDUPLICATION_COLUMNS)),
+                       expected_filtering("codebook_aware", "default"), "filtering")
     rerun = dataset.fov("FOV_001").load_checkpoint("candidates", checkpoints=checkpoints)
     rerun.load_checkpoint("pre_qc", checkpoints=checkpoints)
     rerun.run(PipelineConfig(deduplication=pipeline.deduplication, filtering=pipeline.filtering))

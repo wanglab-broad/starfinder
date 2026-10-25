@@ -10,8 +10,9 @@ This module adds:
   and the per-segment end checks of entry reads and of the planted wrong-end reads;
 * R3 on ``one_base``: the golden geometry with a one_base codebook;
 * R5 on ``dropout``: required rounds and acquisition-local failures on the golden geometry;
-* R6: the golden pins and the 141c093 output on ``cal`` seed 103, without the new columns (on
-  ``cal`` the float columns of the decoding tables within 1e-12, every other column exact);
+* R6: the golden expected values and the 141c093 output on ``cal`` seed 103, without the new
+  columns (the computed float columns of the decoding tables within the float64 tolerance of
+  docs/contributing.md, every other column exact);
 * R8 (extended tier) on ``cal_direct``: the ranking of direct calls;
 * R16 on ``two_seg``: checkpoints with background, score, deduplication and two segments;
 * R19: SHA-256 of every table of ``golden`` and ``cal`` seed 103 in three single-thread
@@ -60,6 +61,7 @@ from . import readout_fixtures as fx
 from . import readout_scenes as scenes
 from . import test_readout_golden as golden
 from .coordination_helpers import digest, table_digest
+from .expected_values import read_arrays, read_table
 
 pytestmark = [pytest.mark.readout]
 
@@ -260,64 +262,16 @@ def test_r5_required_rounds_and_acquisition_local_failures(tmp_path, seed, decod
 
 # --- R6: multiplexed regression ------------------------------------------------------------------------
 
-# Digests of the W-278 cal pipeline (readout_scenes.pipeline: LocalMaximaConfig() on round 1,
-# NeighborhoodSumConfig((1, 2, 2)), both decoders at their defaults) at seed 103, computed with
-# the 141c093 source tree (W-296 run directory, scripts/w296_r6_pins.py and
-# logs/r6-141c093-digests.json): condition -> (spots table, values, valid, WTA table,
-# codebook-aware table), with test_readout_golden's digest and table_digest. Provisional: no
-# W-278 row covers it; the bound is the 141c093 behavior.
-PINNED_CAL_141C093 = {
-    "noise": ("f9c05b5412241288578389f3088c0e85c1a8e3dbf23d7a6288a4ac4eb4cb99c0",
-              "f6b4d7b045b1e4ce9534ea7a1a7c583000cb202903842d6be9bbcd8f119dcf31",
-              "b323ab77e11846fcc8e89d8c91d5f8923ed5e6a3dbadc0bc4bed3acfd7738ab5",
-              "49396d89cb666119c2ebf17609f8115ca1ef23d90c99830f4ca26a36590fdfbc",
-              "1224da512110588d7c8b46312efea933345fc113495b00e243fa32ee009ddc2e"),
-    "mixing": ("a5694e3403ce5e601b8620643b32dac19bf68c2f02bd221cb736ff0f71f667c2",
-               "ffb315e69a267b4edd8ff28267c652cf01aee582fa74a824c904dbf4056b67fe",
-               "7bd539e41210589b64a27caf31703d8cb9d67bd2d9c924d417ba67f83b99c01b",
-               "c8ca7c77c8cc7b7d64b53c3f1655385ed5fd729442139bf4df011561b3c9b696",
-               "a9923d51d8b8762f540289a473cec6a84d848b41fa313719c6f2ec9ffad322f7"),
-    "weakening": ("bb5d7ee84439c505d1aa4a465a67636499a6d318730bb772128503741625c3aa",
-                  "351bf3c237e615f5f7b00b145af1d90b5c826a4f69c98a87cd078ae6da62cae5",
-                  "7bd539e41210589b64a27caf31703d8cb9d67bd2d9c924d417ba67f83b99c01b",
-                  "51b644fc6db9185f8bc8e1baf98ea2b7a1a8613645f59f45afd2dc6908bb6041",
-                  "1a46358adb7f510ad87e52f833d08e87d9101c5000bf1914033c1c71ebd53bf8"),
-    "gain": ("bde11b805e9f68dfc7a1bc4587f4c21ebd89a6773c31a54b4df8c0df5036e4e8",
-             "f2dda07e6899ca72b82b7fe3cd09c18139650dd9e746f0ee125b330329332553",
-             "4319753fafca708cab5a74f7daa3af9aa27b1fbfcfdf1e149c1d76f6f54da649",
-             "ad44779c5673902564b5fab47957541d65fe13b7fbc098aa34343014989acbfb",
-             "c6d1ec840ff8097b787c7b21604d753332a11506d880e035a30a65aa774978d0"),
-    "trend": ("82dc5af3b41af23f9aa05c83f3c40230ce04585737dfb1154608e02285ece004",
-              "ff424fcd5025965b463be57e8ab6491041b2da4f5ed50a400b7858422e69a245",
-              "b323ab77e11846fcc8e89d8c91d5f8923ed5e6a3dbadc0bc4bed3acfd7738ab5",
-              "2c43791617bc8178a0b4e8b4efd97af03e3c5cc4da248c364bc21545c528c305",
-              "9237fa15d051f3832805f308d16d5ab569418a783208fcd3f5fb20f92777b829"),
-    "round_effect_only": ("279d93f5f5a05739ec01d4dd5eba05e16d5ebb7a2e91e239673cb255c208fa6b",
-                          "68ef6e27aa46d177028457f78b23f34604c0686e20a6afc6647b2fa592e7c510",
-                          "b18621f4d3e148abd10f12c20836d9cb2c5de7c7dd0318f40f63b615f977fb07",
-                          "2f285f0327ea1ccde740381071603b60bfc01db27acbb89a09257e48cecb98d1",
-                          "309155f713ea16c5fd1c150fe2b58cf3c189809cc0ea273d9706d145dce5d986"),
-    "background_only": ("e722433c77efd7e694c55947cf63285a4433d009cb1155ecb11e02b9458e8586",
-                        "8123b6fccc3f17848b100c16c9122129e46b60c3299765536e329bd6f6fc4dcc",
-                        "4319753fafca708cab5a74f7daa3af9aa27b1fbfcfdf1e149c1d76f6f54da649",
-                        "376f826221406a4fe3cec1ad46bb39574d1215dc1c5ffa6ad36ecd256e4029cc",
-                        "e9fa5b67e980c7cac3052eff862c83295453471bb86d736f6dcbdf9c607a116f"),
-    "combined": ("ed7b1ec4739e118a014d24320a90668460682a4f7dda9c8bef75eaa84c7d7611",
-                 "3338a998ddff0c6df783a8ce4388182c12e2e8c1679d13a4e3bb3fb55e8b725d",
-                 "b18621f4d3e148abd10f12c20836d9cb2c5de7c7dd0318f40f63b615f977fb07",
-                 "8b74d844b0e4bfdfefb1a89ede06cb089ed2cdebf68e6a33e7b760deaed2ce51",
-                 "c0b342d1d84a81d772593e5eee4341121f8849c1f6d8a6de1763b9cea04c7ebf"),
-}
-
-
-#: R6 on ``cal`` compares the float columns of the decoding tables numerically. Provisional: no
-#: W-278 row covers it. The last bit of np.log and np.sqrt depends on the CPU, so the %.17g digest
-#: of a float column holds on the host that wrote the pins and not on every host; 1e-12 is far
-#: below any digit a decoding decision or a printed score depends on.
-R6_FLOAT_TOLERANCE = 1e-12
+#: R6 on ``cal`` seed 103: the explicit expected values of the W-278 cal pipeline
+#: (readout_scenes.pipeline: LocalMaximaConfig() on round 1, NeighborhoodSumConfig((1, 2, 2)), both decoders
+#: at their defaults), equal to the 141c093 output (data/expected/test_readout_validation/README.md):
+#: cal-<condition>-spots.csv, cal-<condition>-<decoder>.csv (without the §2.8 columns) and the sums and
+#: ``valid`` of cal-intensities.npz. The spot tables (voxel coordinates, channels, uint16 peaks) and the sums
+#: of uint16 pixels hold integers and compare exactly, as do the strings and statuses of the decoding
+#: tables; their computed float64 columns compare within FLOAT64 (test_readout_golden.COMPUTED_COLUMNS),
+#: because the last bit of np.log and np.sqrt depends on the CPU. Provisional: no W-278 row covers it.
+R6_EXPECTED = Path(__file__).parent / "data" / "expected" / "test_readout_validation"
 R6_DECODERS = ("wta", "codebook_aware")
-#: The float columns of the 141c093 decoding tables on ``cal`` seed 103 (written by write_r6_reference).
-R6_REFERENCE = Path(__file__).parent / "data" / "readout_r6_cal_141c093"
 
 
 def cal_tables(condition):
@@ -326,65 +280,33 @@ def cal_tables(condition):
     return spots, intensities, {name: without(tables[name], ["entry_id", *SCORE_COLUMNS]) for name in R6_DECODERS}
 
 
-def float_columns(table):
-    return list(table.select_dtypes(include="floating").columns)
-
-
-def r6_reference(condition, decoder):
-    """The 141c093 float columns of one decoding table; %.17g text round-trips float64 exactly."""
-    return pd.read_csv(R6_REFERENCE / f"{condition}_{decoder}.csv", dtype=np.float64, float_precision="round_trip")
-
-
-def write_r6_reference(directory=R6_REFERENCE):
-    """Write the float columns of the ``cal`` decoding tables as the R6 reference.
-
-    Run from src/python on a host where the %.17g table digests equal PINNED_CAL_141C093, which
-    this function checks first: there the tables are the 141c093 output bit for bit.
-    """
-    directory.mkdir(parents=True, exist_ok=True)
-    for condition in scenes.CAL_CONDITIONS:
-        _, _, tables = cal_tables(condition)
-        for name, pin in zip(R6_DECODERS, PINNED_CAL_141C093[condition][3:]):
-            if table_digest(tables[name]) != pin:
-                raise RuntimeError(f"{condition} {name}: this host does not reproduce the 141c093 digest")
-            tables[name][float_columns(tables[name])].to_csv(
-                directory / f"{condition}_{name}.csv", index=False, float_format="%.17g", na_rep="nan")
-
-
 @pytest.mark.validation
 @pytest.mark.parametrize("decoder", list(DECODERS))
 def test_r6_golden_tables_without_the_new_columns_equal_the_pins(tmp_path, decoder):
     intensities = golden.extract()
-    assert (digest(intensities.values), digest(intensities.valid)) == golden.PINNED_EXTRACTION[(1, 2, 2)]
+    golden.assert_extraction_matches(intensities.values, intensities.valid)
     decoded = decode_reads(intensities, golden.golden_codebook(tmp_path), config=DECODERS[decoder])
-    assert table_digest(golden.without_entry(decoded.table)) == golden.PINNED_DECODING[decoder]
+    expected = golden.without_entry(golden.expected_decoding(decoder))
+    golden.assert_matches(golden.without_entry(decoded.table), expected, "decoding")
     for name in golden.FILTERS:
         options = golden.filter_options(decoder, name)
         result = filter_reads(decoded, config=golden.readout_config("filtering", decoder=decoder, **options))
-        assert table_digest(golden.without_entry(result.table)) == golden.PINNED_FILTERING[(decoder, name)][1]
+        expected_filtering = golden.without_score(golden.expected_filtering(decoder, name))
+        golden.assert_matches(golden.without_entry(result.table), golden.without_entry(expected_filtering), name)
     scored = score_reads(decoded, intensities, reference=golden.golden_codebook(tmp_path))
-    assert table_digest(golden.without_entry(golden.without_score(scored.table))) == (
-        golden.PINNED_DECODING[decoder])
+    golden.assert_matches(golden.without_entry(golden.without_score(scored.table)), expected, "scoring")
 
 
 @pytest.mark.validation
 @pytest.mark.parametrize("condition", scenes.CAL_CONDITIONS)
 def test_r6_cal_seed_103_without_the_new_columns_equals_141c093(condition):
     spots, intensities, tables = cal_tables(condition)
-    pinned = PINNED_CAL_141C093[condition]
-    assert (table_digest(spots.spots), digest(intensities.values),
-            digest(intensities.valid)) == pinned[:3]
-    for name, pin in zip(R6_DECODERS, pinned[3:]):
-        table, reference = tables[name], r6_reference(condition, name)
-        columns = float_columns(table)
-        assert list(reference.columns) == columns and len(reference) == len(table)
-        # Every other column is exact: with the 141c093 float columns in place of the computed
-        # ones, the table has the 141c093 digest.
-        with_reference = table.copy()
-        with_reference[columns] = reference.to_numpy()
-        assert table_digest(with_reference) == pin, name
-        np.testing.assert_allclose(table[columns].to_numpy(), reference.to_numpy(), rtol=R6_FLOAT_TOLERANCE,
-                                   atol=R6_FLOAT_TOLERANCE, equal_nan=True, err_msg=name)
+    golden.assert_matches(spots.spots, read_table(R6_EXPECTED / f"cal-{condition}-spots.csv"), "spots")
+    arrays = read_arrays(R6_EXPECTED / "cal-intensities.npz")
+    np.testing.assert_array_equal(intensities.values, arrays[f"{condition}-values"], strict=True)
+    np.testing.assert_array_equal(intensities.valid, arrays[f"{condition}-valid"], strict=True)
+    for name in R6_DECODERS:
+        golden.assert_matches(tables[name], read_table(R6_EXPECTED / f"cal-{condition}-{name}.csv"), name)
 
 
 # --- R8: direct assignment on the calibrated scenes (extended tier) --------------------------------------

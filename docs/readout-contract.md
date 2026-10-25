@@ -599,7 +599,11 @@ The implementation adds these entries:
   decoding, filtering and `pre_qc` tables computed after dropping `entry_id` and the
   score columns, plus new pins for the extended tables; `candidates.csv` re-pinned,
   with an assertion that the table without the background columns, written by the
-  same writer, has today's digest. `test_valid_is_always_true_at_the_border_and_in_a_zero_round`
+  same writer, has today's digest. Since W-573 the pins of the tensor and of the
+  decoding, filtering and `pre_qc` tables and files are explicit expected values with
+  the tolerances of [contributing](contributing.md) ("Expected values and
+  tolerances"), equal to the digests pinned before; the inputs and the codebook keep
+  their digests. `test_valid_is_always_true_at_the_border_and_in_a_zero_round`
   and `test_candidates_with_a_round_column_raise_on_decoding` stay unchanged, because
   they run in `multiplexed` mode. If Jiahao changes the codebook-aware rescue default,
   its digests (b) and (d) are re-pinned with a comment naming the decision.

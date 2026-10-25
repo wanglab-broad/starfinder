@@ -236,16 +236,22 @@ segment) written as a `gene,barcode` CSV. The fixture contains:
   (`not_in_codebook`; codebook-aware `no_candidate`);
 * a spot at y = 1 whose box is clipped by the y = 0 face (spot 3), still `valid`.
 
-It pins with exact SHA-256 digests (a) the extracted tensor and `valid` for two
-radii; (b) the decoding table of both decoders at their defaults; (c) the filtering
-table with the default filter, with one upper score bound (`wta_l2_nll` ≤ 0.069,
-`probability_nll` ≤ 1.105) and with the end-base check `CC`; (d) the `pre_qc` table
-after `FOV.run`, written as a CSV checkpoint and reloaded, with the digests of
-`candidates.csv` and `pre_qc.csv`; (e) the same digests when the pipeline and
-codebook come from the legacy keys through `from_workflow_config` (WTA only, the
-only decoder those keys select). Three tests show that changing the neighborhood
-radius, a codebook-aware gate (`allow_rescue`, `max_corrected_round_margin`,
-`min_geomean_probability`) or a score bound changes a digest. Two tests document
+It pins, as explicit expected values with the tolerances of
+[contributing](contributing.md) ("Expected values and tolerances") (W-573; they replaced
+the exact SHA-256 digests pinned at first and reproduce them), (a) the extracted
+tensor and `valid` for two radii; (b) the decoding table of both decoders at their
+defaults; (c) the filtering table with the default filter, with one upper score bound
+(`wta_l2_nll` ≤ 0.069, `probability_nll` ≤ 1.105) and with the end-base check `CC`;
+(d) the `pre_qc` table after `FOV.run`, written as a CSV checkpoint and reloaded,
+with the written `candidates.csv` and `pre_qc.csv` read back; (e) the same results
+when the pipeline and codebook come from the legacy keys through
+`from_workflow_config` (WTA only, the only decoder those keys select). Integer,
+string and boolean columns, the float columns that hold integers and the tensor
+compare exactly, and the computed scores and background estimates within the
+float64 tolerance. Three tests show that changing the neighborhood radius, a
+codebook-aware gate (`allow_rescue`, `max_corrected_round_margin`,
+`min_geomean_probability`) or a score bound moves the result outside that
+comparison. Two tests document
 legacy behavior that §2.8 changes: `valid` is all true, and a candidate table with a
 `round` column raises on decoding. Every configuration is built by one helper,
 `readout_config`, which holds the only imports of extraction, decoding, filtering,

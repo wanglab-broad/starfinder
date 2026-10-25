@@ -166,22 +166,26 @@ behavior on its own seeded fixture of 12×48×48 voxels and four uint16 channels
 * channel 3 is dim (its maximum is below the image maximum, so `adaptive` and
   `adaptive_round` differ) and has spots on the x=47 face and at x=1.
 
-It pins with exact SHA-256 digests:
+It pins, as explicit expected values with the tolerances of
+[contributing](contributing.md) ("Expected values and tolerances") (W-573; they replaced
+the exact SHA-256 digests pinned at first and reproduce them; every column of a spot
+table holds integers and compares exactly, and the thresholds compare within the
+float64 tolerance):
 
 * (a) the `find_spots` table and threshold diagnostics for the four threshold
   modes (`noise` 5.0, `adaptive` 0.2, `adaptive_round` 0.2, `global` 0.01), with
   `exclude_border` true and false, in 3D and Z=1 (16 cases, 12 to 1342 rows);
 * (b) the `candidates` table after `FOV.run`, written as a CSV checkpoint and
-  reloaded: the `candidates.csv` digest, and the reloaded table, which equals the
-  table of (a);
-* (c) the same digests when the pipeline comes from the legacy YAML keys through
+  reloaded: the written `candidates.csv` read back, and the reloaded table, which
+  equals the table of (a);
+* (c) the same results when the pipeline comes from the legacy YAML keys through
   `from_workflow_config`, with `min_distance` and with `min_distance_voxels`, for
   the eight cases the legacy keys can express (`exclude_border` true).
 
 Three tests show that changing `threshold_value` (5 → 4), `min_distance_voxels`
-(1 → 2) or `exclude_border` (true → false) changes the noise-mode table digest,
-in 3D and Z=1. Two tests document legacy behavior that §2.7 changes or keeps:
-the MAD-0 channel's threshold is 0 and no warning is emitted, and the saturated
+(1 → 2) or `exclude_border` (true → false) moves the noise-mode table outside
+that comparison, in 3D and Z=1. Two tests document legacy behavior that §2.7
+changes or keeps: the MAD-0 channel's threshold is 0 and no warning is emitted, and the saturated
 plateau gives more than one candidate. Every detection configuration is built by
 one helper, `detection_config`, which holds the only imports of detection config
 types and the only `PipelineConfig(detection=...)`. Learned methods and LoG are
