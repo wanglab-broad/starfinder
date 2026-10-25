@@ -200,14 +200,15 @@ MATLAB_NAMES = {"detection_threshold": "detection_noise_sigma", "match_distance"
                 "lmbda": "regularization_weight", "cpd_w": "outlier_fraction",
                 "candidate_radius": "candidate_radius_voxels", "k_neighbors": "neighbors_per_anchor",
                 "ref_img": "the signal", "mov_img": "the signal", "ref_channel": "the signal reference_channel",
-                "boundary_mode": "registration.warp"}
+                "boundary_mode": "registration.warp", "ref_round": "registration.reference_round"}
 
 
 @pytest.mark.parametrize("key", sorted(MATLAB_NAMES))
 def test_a_matlab_block_name_inside_a_native_step_or_alternative_raises(key):
     """A MATLAB parameter or block name inside a registration step or one of its recovery alternatives raises naming
     the native form; the schema refuses both (the step definitions and the guard of the alternatives)."""
-    value = "merged-image" if key in ("ref_img", "mov_img") else "nearest" if key == "boundary_mode" else 1
+    value = ("merged-image" if key in ("ref_img", "mov_img") else "nearest" if key == "boundary_mode" else
+             "round1" if key == "ref_round" else 1)
     recovery = {"allowed_errors": ["InsufficientLandmarksError"]}
     for registration, where in (
             ({"steps": [{"method": "cpd", key: value}]}, r"steps\[0\]"),

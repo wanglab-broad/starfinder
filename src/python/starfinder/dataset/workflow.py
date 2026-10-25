@@ -47,11 +47,13 @@ _NATIVE_PARAMETERS = {'detection_threshold': 'detection_noise_sigma', 'match_dis
     'tps_smoothing': 'smoothing', 'grid_spacing': 'grid_spacing_voxels', 'beta': 'kernel_width_voxels',
     'lmbda': 'regularization_weight', 'cpd_w': 'outlier_fraction', 'candidate_radius': 'candidate_radius_voxels',
     'k_neighbors': 'neighbors_per_anchor'}
-# The keys of MATLAB's registration blocks that the native recipe states elsewhere.
+# The keys of MATLAB's registration blocks that the native recipe states elsewhere (refused in registration steps
+# and recovery alternatives; ref_round stays a shared key at the top level and in spot_finding).
 _NATIVE_BLOCK_KEYS = {'ref_img': 'the signal {mode: max | channel, reference_channel}',
                       'mov_img': 'the signal {mode: max | channel, reference_channel}',
                       'ref_channel': 'the signal reference_channel',
-                      'boundary_mode': 'registration.warp {backend: scipy, boundary_mode}'}
+                      'boundary_mode': 'registration.warp {backend: scipy, boundary_mode}',
+                      'ref_round': 'registration.reference_round'}
 # MATLAB's registration method names that are demons variants, and its image representations.
 _VARIANT_METHODS = ('diffeomorphic', 'symmetric', 'fast_symmetric')
 _MATLAB_SIGNALS = {'merged-image': 'max', 'merged': 'max', 'single-channel': 'channel'}
@@ -606,6 +608,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
 
 
 _MIGRATION = ' (docs/migration.md, "One Python configuration dialect")'
+_DAPI_ROUND = ("dapi_round names the *ch04.tif stain file of the MATLAB rules; the Python backend declares the "
+               "reference round's stain files with reference_stains: [{channel, name}]")
 
 
 def _check_python_dialect(config):
@@ -619,8 +623,11 @@ def _check_python_dialect(config):
     in the registration key, the MATLAB parameter and block names and the
     demons variant method names in each step and recovery alternative, and
     the MATLAB image representations as a signal mode; and the MATLAB radius
-    of a reconstruction or white_tophat preprocessing step.
+    of a reconstruction or white_tophat preprocessing step; and the top-level
+    dapi_round, which reference_stains replaces.
     """
+    if config.get('dapi_round') is not None:
+        raise ValueError(_DAPI_ROUND)
     for rule in _RULES:
         params = _rule_parameters(config, rule)
         context = f'rules.{rule}.parameters'
@@ -814,8 +821,7 @@ def _reference_stains(config):
         from ._legacy_config import matlab_reference_stains
         return matlab_reference_stains(config)
     if config.get('dapi_round') is not None:
-        raise ValueError('dapi_round names the *ch04.tif stain file of the MATLAB rules; the Python backend declares '
-                         "the reference round's stain files with reference_stains: [{channel, name}]")
+        raise ValueError(_DAPI_ROUND)
     values = config.get('reference_stains')
     if values is None:
         return ()

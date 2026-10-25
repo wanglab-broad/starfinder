@@ -1162,6 +1162,7 @@ $defs:
       - required: [mov_img]
       - required: [ref_channel]
       - required: [boundary_mode]
+      - required: [ref_round]
       - required: [method]
         properties:
           method: {enum: ["diffeomorphic", "symmetric", "fast_symmetric"]}
