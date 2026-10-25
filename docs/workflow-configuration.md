@@ -106,17 +106,15 @@ annotation.
 The MATLAB backend keeps its membership: `documents/sample-annotation.csv`
 under the output root, `fov_id_pattern`, `n_fovs` and the subset keys below.
 
-The schema's `dependentRequired` checks **presence**, not truth: if
-`subset_range` is present (even false), `subset_start` and `subset_end` must be
-present; likewise `subset_random` requires `n_random_tests`. The `if` clauses
-also lack an explicit presence test. The schema gives no subset key a default,
-because the Snakefile's `snakemake.utils.validate` inserts schema defaults into
-every configuration and the Python backend refuses these keys; an omitted
-`subset_range` or `subset_random` is set to `false` by `common.smk`'s MATLAB
-branch, after validation. An omitted switch still needs its companion keys,
-because the `if` clauses then hold vacuously. Supply all five fields as in the
-examples rather than relying on omission. The original minimal template fails
-these conditional requirements.
+A subset switch requires its companion keys only when it is `true`: `subset_range: true`
+requires `subset_start` and `subset_end`, and `subset_random: true` requires
+`n_random_tests`, and the validation error names each missing key. A switch that is
+absent or `false` requires nothing, so `tests/minimal_config.yaml`, which sets no subset
+key, passes. The schema gives no subset key a default, because the Snakefile's
+`snakemake.utils.validate` inserts schema defaults into every configuration and the
+Python backend refuses these keys; an omitted `subset_range` or `subset_random` is set to
+`false` by `common.smk`'s MATLAB branch, after validation, and the companion keys are read
+only when their switch is true.
 
 For the MATLAB backend, subsetting precedence is nonempty `subset_list`, then true `subset_range`
 (inclusive), then true `subset_random`, else all `1..n_fovs`. The list path

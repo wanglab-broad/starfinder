@@ -328,7 +328,7 @@ their TIFFs have the right channels, dimensions or barcode semantics.
 
 The older `tests/minimal_config.yaml` and `tests/tissue_2D_test.yaml` remain
 historical starting templates, not ready-to-run portable examples. The former
-omits fields needed by schema/startup; the latter contains site paths and
+holds placeholder paths and needs a sample annotation at startup; the latter contains site paths and
 commented variants (including a trailing space in `intensity_threshold `).
 Use the explicit examples here and check the selected backend's parameters.
 

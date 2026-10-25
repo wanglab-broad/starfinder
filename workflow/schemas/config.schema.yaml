@@ -376,11 +376,6 @@ properties:
 
 # ==================== Conditional Validation ====================
 dependentRequired:
-  subset_range:
-    - subset_start
-    - subset_end
-  subset_random:
-    - n_random_tests
   # The assembly block reads the stitching block's placement; the export block configures
   # the export_sample rule, which runs with an assembly block only.
   assembly:
@@ -527,13 +522,15 @@ allOf:
                                               items:
                                                 not: {$ref: "#/$defs/matlab_registration_names"}
 
-  # If subset_range is true, require subset_start and subset_end (MATLAB backend)
+  # If subset_range is true, require subset_start and subset_end (MATLAB backend);
+  # a switch that is absent or false requires nothing
   - if:
       not:
         required: [backend]
         properties:
           backend:
             const: python
+      required: [subset_range]
       properties:
         subset_range:
           const: true
@@ -542,13 +539,15 @@ allOf:
         - subset_start
         - subset_end
 
-  # If subset_random is true, require n_random_tests (MATLAB backend)
+  # If subset_random is true, require n_random_tests (MATLAB backend);
+  # a switch that is absent or false requires nothing
   - if:
       not:
         required: [backend]
         properties:
           backend:
             const: python
+      required: [subset_random]
       properties:
         subset_random:
           const: true

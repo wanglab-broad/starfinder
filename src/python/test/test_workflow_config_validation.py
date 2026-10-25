@@ -138,6 +138,7 @@ def matlab_configs(tmp_path):
     minimal.update(subset_list=[], subset_start=1, subset_end=1, n_random_tests=1)
     configs = {"tissue_2D_test": tissue,
                "tissue_2D_test-switches": {k: v for k, v in tissue.items() if k not in BASE_DEFAULTS},
+               "minimal_config": yaml.safe_load((ROOT / "tests" / "minimal_config.yaml").read_text()),
                "minimal_config-switches": minimal}
     for config in configs.values():
         assert config.get("backend", "matlab") == "matlab"
@@ -145,7 +146,8 @@ def matlab_configs(tmp_path):
     return configs
 
 
-@pytest.mark.parametrize("name", ["tissue_2D_test", "tissue_2D_test-switches", "minimal_config-switches"])
+@pytest.mark.parametrize("name", ["tissue_2D_test", "tissue_2D_test-switches", "minimal_config",
+                                  "minimal_config-switches"])
 def test_a_matlab_configuration_passes_and_holds_the_base_subset_values(tmp_path, monkeypatch, name):
     config = matlab_configs(tmp_path)[name]
     base = copy.deepcopy(config)
@@ -158,6 +160,36 @@ def test_a_matlab_configuration_passes_and_holds_the_base_subset_values(tmp_path
     subset = [k for k in base if k.startswith("subset_") or k == "n_random_tests"]
     assert {k: config[k] for k in subset} == {k: base[k] for k in subset}
     assert set(BASE_DEFAULTS) <= set(subset)
+
+
+@pytest.mark.parametrize("switch", ["subset_range", "subset_random"])
+def test_a_matlab_switch_set_to_false_needs_no_companions(tmp_path, switch):
+    config = dict(matlab_configs(tmp_path)["minimal_config"], **{switch: False})
+    assert not {"subset_start", "subset_end", "n_random_tests"} & set(config)
+    assert snakefile_errors(config) == []
+
+
+@pytest.mark.parametrize("switch, companions", [("subset_range", ["subset_start", "subset_end"]),
+                                                ("subset_random", ["n_random_tests"])])
+def test_a_matlab_switch_set_to_true_fails_naming_its_companions(tmp_path, switch, companions):
+    config = dict(matlab_configs(tmp_path)["minimal_config"], **{switch: True})
+    errors = snakefile_errors(config)
+    assert [e.validator for e in errors] == ["required"] * len(companions)
+    assert [e.message for e in errors] == [f"{key!r} is a required property" for key in companions]
+
+
+@pytest.mark.parametrize("name, fovs", [("tissue_2D_test", ["tile_1"]), ("minimal_config", ["tile_1"])])
+def test_common_smk_selects_the_matlab_fovs(tmp_path, monkeypatch, name, fovs):
+    """The MATLAB branch's FOVS after validation: tissue_2D_test's subset_list (as on the base revision), and every
+    one of the plain template's n_fovs FOVs."""
+    config = matlab_configs(tmp_path)[name]
+    assert snakefile_errors(config) == []
+    annotation = tmp_path / config["dataset_id"] / config["output_id"] / "documents" / "sample-annotation.csv"
+    annotation.parent.mkdir(parents=True, exist_ok=True)
+    annotation.write_text(f"sample_id,fov_start,fov_end\ns1,1,{config['n_fovs']}\n")
+    assert common_names(config, monkeypatch)["FOVS"] == fovs
+    if name == "minimal_config":
+        assert fovs == [config["fov_id_pattern"].format(i=i) for i in range(1, config["n_fovs"] + 1)]
 
 
 def test_the_validator_is_snakemakes(tmp_path):

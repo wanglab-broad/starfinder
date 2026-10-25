@@ -2112,7 +2112,8 @@ change has no alias, no dual read and no dual search.
   ones included. A MATLAB configuration gets the same values. Omitting a switch does not
   remove its companion keys: the schema's conditional clauses still require `subset_start`
   and `subset_end`, and `n_random_tests`, so `tests/minimal_config.yaml`, which sets no
-  subset key, still fails validation, as it already did before this change.
+  subset key, still fails validation, as it already did before this change. (W-572 lifts
+  this: see "MATLAB subset switches that are absent or false" below.)
 * **New key `selected_fovs`** (Python only; absent or null: every FOV): a nonempty list of
   unique FOV IDs of `fovs.csv`. It restricts every rule, the per-sample stitching, export
   and report rules included (the subset keys did not restrict the per-sample rules). An
@@ -2337,6 +2338,22 @@ copy and MATLAB's schema definitions are unchanged. Each change has no alias and
   translation, now `_legacy_config`'s, and several also assert the native form gives the same
   result. The tests of the removed `_legacy_stitching` and of the Python backend's acceptance
   of `tophat` are replaced by the refusal tests.
+
+### MATLAB subset switches that are absent or false
+
+W-572 relaxes the schema's subset requirements for the MATLAB backend; MATLAB's keys,
+scripts, rules and the JSON copy are unchanged, and `common.smk` selects the same FOVs.
+
+* **A subset switch requires its companions only when it is `true`.** `subset_range: true`
+  requires `subset_start` and `subset_end`, and `subset_random: true` requires
+  `n_random_tests`, as before, and the error names each missing key. A switch that is absent
+  or `false` now requires nothing: the two subset entries left `dependentRequired` (which
+  fired on a key's presence, whatever its value), and each conditional's `if` gained
+  `required: [subset_range]` or `required: [subset_random]` (it held when the switch was
+  absent). MATLAB configurations that failed before now pass, among them
+  `tests/minimal_config.yaml`, which sets no subset key, and one that writes
+  `subset_range: false` without `subset_start` and `subset_end`. No configuration that
+  passed before fails now.
 
 ### The processing report
 
