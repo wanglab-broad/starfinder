@@ -52,9 +52,9 @@ def test_a7_fractional_translation_boundary_and_absolute_rounds(depth):
     assert len(s.formed) == 2 and len(s.round_truth) == 6
     assert not s.round_truth.query('amplicon_id == "outside"').support_intersects.any()
     # Last round color 3 maps to channel 3. Out-of-frame center still contributes.
-    assert s.rounds['round1'][z, 2, 0, 3] == pytest.approx(7.059975220676764, abs=1e-12)
-    expected_peak = 7.059975220676764 if depth > 1 else 8
-    assert s.rounds['round10'][z, 1, 5, 1] == pytest.approx(expected_peak, abs=1e-12)
+    assert s.rounds['round1'][z, 2, 0, 3] == pytest.approx(8*np.exp(-1/8), rel=1e-9, abs=1e-12)
+    expected_peak = 8*np.exp(-1/8) if depth > 1 else 8
+    assert s.rounds['round10'][z, 1, 5, 1] == pytest.approx(expected_peak, rel=1e-9, abs=1e-12)
     for record in payload(s)['transforms'].values():
         label = record['round_label']
         assert record['source_frame'] == s.metadata.frame_id
@@ -79,8 +79,8 @@ def test_local_composition_shared_background_and_independent_inverse(depth):
     mapping = next(iter(payload(s)['transforms'].values()))
     # Evaluate displacement at q, not at q+t: two independent off-center literals.
     q = np.array([[z,2,5], [z,4,3]], float)
-    expected = q + [[0,0,.6516326649281584]]*2
-    np.testing.assert_allclose(_forward(q, mapping), expected, atol=1e-12, rtol=0)
+    expected = q + [[0,0,.5 + .25*np.exp(-1/2)]]*2
+    np.testing.assert_allclose(_forward(q, mapping), expected, rtol=1e-9, atol=1e-12)
     recovered, diag = _inverse(expected, mapping)
     np.testing.assert_allclose(recovered, q, atol=2e-10, rtol=0)
     assert diag['max_residual'] <= 2e-10

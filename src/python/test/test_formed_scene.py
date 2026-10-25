@@ -56,20 +56,20 @@ def test_empty_typed_truth(shape, population):
     assert all(v.shape == (*shape, 4) and not v.any() for v in result.rounds.values())
 
 
-@pytest.mark.parametrize('dtype,atol', [('float64', 1e-12), ('float32', 1e-6)])
+@pytest.mark.parametrize('dtype,rtol,atol', [('float64', 1e-9, 1e-12), ('float32', 1e-6, 1e-6)])
 @pytest.mark.parametrize('depth,z', [(3, 1), (1, 0)])
-def test_a2_integer_fractional_kernel(dtype, atol, depth, z):
+def test_a2_integer_fractional_kernel(dtype, rtol, atol, depth, z):
     result = literal(((z, 2, 2),), shape_zyx=(depth, 9, 9), dtype=dtype)
     image = result.rounds['round10'][..., 1]
     np.testing.assert_allclose(image[z, 2, [2, 3, 6, 7]],
-                               [8, 4.852245277701067, .002683701023220095, 0], rtol=0, atol=atol)
+                               [8, 8*np.exp(-1/2), 8*np.exp(-8), 0], rtol=rtol, atol=atol)
     np.testing.assert_array_equal(result.intended[0], [[0, 8, 0], [8, 0, 0], [0, 0, 0], [0, 0, 8]])
     np.testing.assert_array_equal(result.realized, result.intended)
     np.testing.assert_array_equal(result.pre_mix, result.intended)
     assert not np.shares_memory(result.realized, result.intended)
     fractional = literal(((z, 2, 2.5),), shape_zyx=(depth, 9, 9), dtype=dtype)
     np.testing.assert_allclose(fractional.rounds['round10'][z, 2, [2, 3], 1],
-                               [7.059975220676764]*2, rtol=0, atol=atol)
+                               [8*np.exp(-1/8)]*2, rtol=rtol, atol=atol)
     if depth == 1:
         # Z=1 samples z=0 only, so its four-sigma axial extent is always truncated.
         assert result.round_truth.support_truncated.all()
@@ -80,12 +80,12 @@ def test_a3_shape_rotated_and_boundary():
                      axial_width=scalar(2), elongation=scalar(2))
     a = result.rounds['round10'][..., 1]
     np.testing.assert_allclose([a[4, 4, 4], a[2, 6, 4], a[2, 4, 6]],
-                               [4.852245277701067, 4.852245277701067, 1.0826822658929016], atol=1e-12, rtol=0)
+                               [8*np.exp(-1/2), 8*np.exp(-1/2), 8*np.exp(-2)], rtol=1e-9, atol=1e-12)
     rotated = literal(((2, 4, 4),), shape_zyx=(5, 9, 9), dtype='float64',
                       elongation=scalar(2), angle=scalar(np.pi/2))
-    np.testing.assert_allclose(rotated.rounds['round10'][2, 4, 6, 1], 4.852245277701067, atol=1e-12, rtol=0)
+    np.testing.assert_allclose(rotated.rounds['round10'][2, 4, 6, 1], 8*np.exp(-1/2), rtol=1e-9, atol=1e-12)
     outside = literal(((1, 2, -.5), (1, 2, -10)), shape_zyx=(3, 9, 9), dtype='float64')
-    np.testing.assert_allclose(outside.rounds['round10'][1, 2, 0, 1], 7.059975220676764, atol=1e-12, rtol=0)
+    np.testing.assert_allclose(outside.rounds['round10'][1, 2, 0, 1], 8*np.exp(-1/8), rtol=1e-9, atol=1e-12)
     truth = outside.round_truth.set_index(['amplicon_id', 'round_label'])
     assert not truth.loc[('p0', 'round10'), 'center_in_bounds']
     assert truth.loc[('p0', 'round10'), 'support_intersects']
@@ -352,7 +352,7 @@ def test_pinned_independent_component_draws():
     # laws, without importing the production stream helper. Uniform draws are
     # plain IEEE arithmetic and must match exactly. Lognormal properties go
     # through exp, whose result NumPy dispatches per CPU (e.g. AVX-512 vs libm),
-    # so they may differ by one ULP between hosts and are compared to rounding.
+    # so they may differ by one ULP between hosts and are compared with the float64 tolerance.
     # These literals also detect accidentally sharing a stream across properties.
     law = ScalarDistribution('lognormal', (.2, .1))
     result = scene(count=1, brightness=law, axial_width=law, lateral_width=law,
@@ -362,6 +362,6 @@ def test_pinned_independent_component_draws():
                                   [5.52290136568776, 20.31117785750813, 18.81900376172695])
     np.testing.assert_allclose(result.formed[['A', 'sz', 'sl', 'e']].to_numpy()[0],
                                [1.438641251074506, 1.1970397659789114, 1.2626294282763126,
-                                1.2690413185721265], rtol=1e-15, atol=0)
+                                1.2690413185721265], rtol=1e-9, atol=1e-12)
     assert result.formed.theta.iloc[0] == 1.5668133208553605
     assert result.formed.gene_id.tolist() == ['b']

@@ -306,6 +306,65 @@ Rules for a new or changed test:
    import and setup from the execution.
 6. Reviewers check the markers of new and changed tests.
 
+#### Expected values and tolerances
+
+Each expectation a test states belongs to one of three classes (W-526, TM-20,
+TM-22 and TM-27; Jiahao, 2026-10-25):
+
+1. **Contract identity: exact.** Bit equality, or a digest of the computed
+   values, stays where a contract requires identity: file, record, export and
+   run-record hashes; checkpoint and old-format round trips; model and weight
+   identity; stream descriptors; OME bytes and content-derived UUIDs;
+   same-environment repeatability (two runs or two processes in one
+   environment); integer and discrete outputs; and every place these pages
+   promise bit identity. These assertions stay exact, and an integer or
+   discrete output may keep its digest.
+2. **Historical numerical pins: explicit values with tolerances.** A
+   floating-point value that a test pinned at an earlier revision, as a digest
+   or as a literal, is written as explicit expected values and compared with
+   the tolerance of its quantity below. A value that a formula gives is written
+   as that formula, an analytic expectation.
+3. **Unnecessary: removed.** A pin that only records history, such as a frozen
+   obsolete test-side implementation or a source-line lock, is removed; the
+   behaviors tested beside it stay.
+
+| Quantity | Comparison |
+| --- | --- |
+| integers, counts, labels, integer images, strings, statuses, booleans | exact |
+| floats that hold integer values (sums of integer pixels, integer-valued coordinates and peaks) | exact |
+| float64 computed values (scores, thresholds, quantiles, transforms, displacement fields, random draws through `exp` or `log`) | `rtol=1e-9`, `atol=1e-12` |
+| float32 computed values | `rtol=1e-6`, `atol=1e-6` |
+| physical coordinates and lengths with a declared grid precision | the declared precision (1e-9 µm) |
+| solver guarantees and analytic bounds that a contract states | the stated bound, unchanged |
+| analytic expectations (a formula the test evaluates) | the tolerance of the computed quantity's dtype |
+
+The dtype is that of the compared result: a float32 image uses the float32 row
+even when the test evaluates its expected value in float64. A tolerance passes
+when `|actual - expected| <= atol + rtol * |expected|`, as
+`numpy.testing.assert_allclose(actual, expected, rtol=..., atol=...)` checks it.
+With `pytest.approx`, give both `rel` and `abs`: `abs` alone turns the relative
+tolerance off. These are bounds on software precision, not scientific accuracy
+thresholds. Never widen a tolerance or change an expected value to make a
+result pass.
+
+Expected values are written in the test when it needs about 20 values or
+fewer. Larger expectations are a CSV file (tables) or an `.npz` file (arrays)
+under `src/python/test/data/expected/<test module>/`, with a `README.md` that
+names the generating revision and command. The test states the tolerances, per
+column.
+
+A digest pin is replaced only after a saved comparison on the base revision
+shows that the new expected values, encoded as the old helper encoded them,
+give the old pinned digest. Expected values are never taken from a new run of
+the changed code.
+
+A negative control, a test that a changed setting changes the result, compares
+the changed output with the explicit expectation and asserts that it lies
+outside the tolerance.
+
+The `golden` marker keeps its meaning: a comparison with pinned outputs, which
+are now explicit values.
+
 #### Test selections
 
 The tests run in the selections below, each with its cadence. "A batch" is a

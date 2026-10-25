@@ -92,8 +92,15 @@ R, slow, learned and extended together hold every collected test once
 mark new tests as [contributing](docs/contributing.md) specifies.
 
 Run affected bounded examples from [contributing](docs/contributing.md). Generated
-API stubs are ignored/disposable; edit authored lists/docstrings. Never weaken
-assertions, hide warnings/skips or claim an unexecuted backend passed. SimpleITK
+API stubs are ignored/disposable; edit authored lists/docstrings. Keep an
+assertion exact (bit equality, or a digest of computed values) only where a
+contract requires identity: file, record and export hashes; checkpoint and
+old-format round trips; model and weight identity; stream descriptors;
+same-environment repeatability; and integer or discrete outputs. State other
+numerical expectations as explicit values with the tolerances of
+[contributing](docs/contributing.md) ("Expected values and tolerances"). Never
+widen a tolerance or change an expected value to make a result pass, hide
+warnings/skips, or claim an unexecuted backend passed. SimpleITK
 must be installed for its execution coverage; MATLAB execution is excluded.
 
 Default resource limits: one CPU, one numerical thread, no GPU; 1800 s per check;

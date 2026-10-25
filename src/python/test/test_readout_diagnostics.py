@@ -71,7 +71,7 @@ def test_summarize_reads_counts_equal_the_golden_statuses(tmp_path, decoder):
                                   "background_unavailable": 0}
     exact = scored.table.qc_score[scored.table.call_type.eq("exact")]
     assert summary["qc_score"]["exact"]["n"] == len(exact)
-    assert summary["qc_score"]["exact"]["q50"] == pytest.approx(float(np.median(exact)), abs=0, rel=1e-15)
+    assert summary["qc_score"]["exact"]["q50"] == pytest.approx(float(np.median(exact)), rel=1e-9, abs=1e-12)
     assert summary["filtering"] == {"total": len(SPOTS), "accepted": expected["assigned"],
                                     "rejected": len(SPOTS) - expected["assigned"],
                                     "rejection_reasons": {"call_status": len(SPOTS) - expected["assigned"]}}
