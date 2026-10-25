@@ -359,7 +359,10 @@ These are rows `<context>/context-<context>-slow-v1/<bank>` of W-513
 `/usr/bin/time -v`, reading only the configured inputs. It writes the bank file and its
 record: the inputs with their SHA-256, the rules and their counts as in the table above,
 the plateaus, and a digest of the arrays. A rebuild is compared by that digest, because a
-zip archive's bytes carry a time. The bank holds per entry: the mask's signed distance
+zip archive's bytes carry a time. The digest is one SHA-256 over the arrays in the order
+of their sorted names: for each array, the UTF-8 text `"<name>\0<dtype>\0<shape>\0"`
+(NUL-separated; NumPy's dtype string and the shape as Python writes a tuple) followed by
+the array's C-order bytes. The bank holds per entry: the mask's signed distance
 `D_e` of "Terms" (float32, µm, negative inside); the excess per channel relative to the
 source plateau (float32); for culture entries the signed distance `D_e` of its nucleus
 mask; the box origin and spacing; the source image ID, label and plateau; the local

@@ -29,7 +29,7 @@ from starfinder.stitching import (STITCHING_METHODS, StitchingBackendUnavailable
                                   approve_placement, load_placement, placement_from_table, positions_from_grid,
                                   positions_from_table, save_placement, stitch)
 from starfinder.stitching import _persist
-from starfinder.stitching._stitch import stitch as real_stitch
+from starfinder.stitching import stitch as real_stitch
 
 from .stitching_fixtures import (FRACTIONAL, STUB_SPEC, StubConfig, determinism_hashes, grid, grids_for, inputs_for,
                                  check_components, maf_text, metadata, stub_run, stub_table, zero)

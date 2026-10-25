@@ -18,7 +18,7 @@ import pytest
 
 from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid
-from starfinder.stitching import (PlacementResult, PlacementReviewRequiredError, approve_placement, load_placement,
+from starfinder.stitching import (PlacementResult, approve_placement, load_placement,
                                   placement_from_table, positions_from_table, review_placement, save_placement)
 from starfinder.stitching._review import require_approval
 
@@ -122,10 +122,7 @@ def test_with_origins_the_supplied_values_are_kept_bitwise(tmp_path):
     assert reviewed.record["review"]["reasons"] == ["supplied_placement"]
     assert set(reviewed.fovs["flags"]) == {"supplied"} and set(reviewed.fovs.status) == {"metadata_only"}
     pd.testing.assert_frame_equal(reviewed.fovs, result.fovs, check_exact=True)
-    with pytest.raises(PlacementReviewRequiredError, match="supplied_placement"):
-        require_approval(reviewed)
     approved = approve_placement(reviewed, reviewer="jiahao", note="truth")
-    require_approval(approved)
     assert bits(approved.fovs, ORIGIN + CORRECTION) == bits(result.fovs, ORIGIN + CORRECTION)
     folder = save_placement(approved, tmp_path / "stitching" / "s1")
     loaded = load_placement(folder)

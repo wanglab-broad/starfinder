@@ -19,10 +19,10 @@ import numpy as np
 import pytest
 from scipy import ndimage as ndi
 
-from starfinder.synthetic import BankReference, build_appearance_bank, load_appearance_bank
-from starfinder.synthetic._appearance_layout import (_LAYOUT_COMPONENTS, AugmentationConfig, LayoutConfig, _Labels,
-                                                     _fov_labels, _labels_from_table, _morphology_labels,
-                                                     _place_appearance, _sample_labels)
+from starfinder.synthetic import (AugmentationConfig, BankReference, LayoutConfig, build_appearance_bank,
+                                  load_appearance_bank)
+from starfinder.synthetic._appearance_layout import (_LAYOUT_COMPONENTS, _Labels, _fov_labels, _labels_from_table,
+                                                     _morphology_labels, _place_appearance, _sample_labels)
 from starfinder.synthetic._context import _CONTEXT_COMPONENTS
 from starfinder.synthetic._formed import _COMPONENTS as _FORMED_COMPONENTS
 from starfinder.synthetic._sample import _SAMPLE_COMPONENTS

@@ -95,14 +95,13 @@ def test_rc8_fov_with_no_spot(tmp_path):
 
 def result_entry(transform, index, field_name=None):
     from starfinder._checkpoint import _transform_json
-    from starfinder.registration import TranslationConfig, WarpConfig
-    from starfinder.registration._types import RegistrationDiagnostics, RegistrationResult
+    from starfinder.registration import RegistrationDiagnostics, RegistrationResult, TranslationConfig, WarpConfig
     diagnostics = RegistrationDiagnostics("translation", "scipy_fft", TranslationConfig())
     return jsonable(_transform_json(RegistrationResult(transform, diagnostics, WarpConfig()), index, field_name))
 
 
 def translation(displacement):
-    from starfinder.registration._types import TranslationTransform
+    from starfinder.registration import TranslationTransform
     return TranslationTransform(tuple(float(v) for v in displacement), SHAPE_ZYX, SHAPE_ZYX, metadata(), metadata())
 
 

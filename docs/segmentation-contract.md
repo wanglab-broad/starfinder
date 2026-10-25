@@ -387,8 +387,13 @@ mapping in `SegmentationResult.record`:
   `"segmentation"`, plus `execution` (as in {doc}`spot-finding-contract`) and
   `effective` (the parameters the method resolved: scale, thresholds and their source,
   tiles). An imported run has `methods: []` and an `import` entry instead.
-* `input.sha256` is the SHA-256 of the segmentation input's C-order bytes (dtype and
-  shape included, as the golden tests hash arrays); each channel also has its own.
+* `input.sha256` is the SHA-256 of the segmentation input as an array; each channel also
+  has its own. The hash of an array is the SHA-256 of the UTF-8 text
+  `"<dtype>|<shape>|"`, NumPy's dtype string (`<u4`, `<f4`) and the shape as Python
+  writes a tuple (`(50, 512, 512)`), followed by the array's C-order bytes, both in native
+  byte order. The record hashes every array it names this way: `labels.sha256`,
+  `seeds.sha256`, and the `inputs` and `output` of each label operation;
+  {doc}`assignment-contract` records it as `labels_sha256`.
 * Each `input.channels` entry keeps the `InputChannel` key as given (`channel`: a
   pattern, a name or an index) and, beside it, the resolved channel's `name` and
   `wavelength` from `Dataset.channel_info` (`null` and `"unavailable"` when not

@@ -33,9 +33,9 @@ from starfinder._checkpoint import FORMAT_VERSION, STAGES
 from starfinder.registration import (RegistrationSignalConfig, TranslationConfig, WarpConfig, apply_transform)
 from starfinder.segmentation import (SEGMENTATION_METHODS, FlamingoEnhancementConfig, InputChannel, SegmentationPlan,
                                      SegmentationRun, SegmentationSpec, enhance_with_flamingo)
-from starfinder.segmentation._labels import array_sha256
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
+from . import hash_oracles
 from .test_registration_other_rounds import SHAPE, SHIFT, grid, texture
 
 pytestmark = [pytest.mark.dataset, pytest.mark.contract]
@@ -545,7 +545,7 @@ def test_segment_reads_the_prepared_images_in_one_process_and_after_a_reload(raw
         results[name] = result
         (entry,) = result.record["input"]["channels"]
         # The input is the prepared channel, or the enhancement of the two prepared channels.
-        assert entry["sha256"] == array_sha256(expected)
+        assert entry["sha256"] == hash_oracles.array_sha256(expected)
         assert np.array_equal(result.labels, label(expected > threshold_level, connectivity=1))
         assert result.labels.max() > 0
         assert (entry["round"], entry["channel"], entry["name"]) == (channel.round, "DAPI", "DAPI")

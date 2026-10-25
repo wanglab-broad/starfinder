@@ -37,10 +37,10 @@ from starfinder.export import (
     check_export,
     fuse_images,
 )
-from starfinder.export._record import section_sha256
 from starfinder.io._ome import read_ome_layout
 from starfinder.stitching import PlacementReviewRequiredError, load_placement, save_placement
 
+from . import hash_oracles
 from .assembly_fixtures import SAMPLE, golden_origins, golden_placement
 from .fusion_fixtures import canonical, export_folder, listing, make_case, quad
 
@@ -106,7 +106,7 @@ def test_default_export(folder, monkeypatch):
     assert entry["path"] == "reference_stain_projection.ome.tif" and entry["dimensionality"] == "projection"
     assert entry["projection"] == "max" and entry["factor_yx"] == 2 and entry["dtype"] == "uint8"
     assert tifffile.imread(folder.export_dir / entry["path"]).dtype == np.uint8
-    assert exported["fusion"]["assembly_sha256"] == section_sha256(exported["assembly"])
+    assert exported["fusion"]["assembly_sha256"] == hash_oracles.section_sha256(exported["assembly"])
     assert exported["fusion"]["viewer_qualification"] == "deferred"
     assert all(e["images"]["reference_stain"]["path"] == str(folder.stain_path(e["fov_id"]).resolve())
                for e in exported["fusion"]["fovs"])
@@ -138,7 +138,7 @@ def test_parts_called_alone(folder):
                 config=FusionConfig(dimensionality="stack"), output_dir=folder.export_dir)
     after = record_of(folder)
     assert canonical(after["assembly"]) == canonical(before["assembly"])
-    assert after["fusion"]["assembly_sha256"] == section_sha256(after["assembly"])
+    assert after["fusion"]["assembly_sha256"] == hash_oracles.section_sha256(after["assembly"])
     assert [o["path"] for o in after["fusion"]["outputs"]] == ["reference_stain_stack.ome.tif"]
     assert not (folder.export_dir / "reference_stain_projection.ome.tif").exists()
     check_export(folder.export_dir)

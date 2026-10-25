@@ -292,4 +292,5 @@ def listing(folder):
 
 
 def canonical(section):
-    return json.dumps(section, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    """A section's canonical JSON, the text its section hash covers (hash_oracles.section_text)."""
+    return json.dumps(section, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)

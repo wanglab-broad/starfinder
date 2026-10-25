@@ -43,9 +43,10 @@ from starfinder.preprocessing import ProjectionConfig
 from starfinder.segmentation import (SEGMENTATION_METHODS, CompositeConfig, FlamingoEnhancementConfig, InputChannel,
                                      ReferenceGrid, SeededWatershedConfig, SegmentationPlan, SegmentationResult,
                                      SegmentationRun, reference_grid_from_file)
-from starfinder.segmentation._labels import array_sha256, same_grid
+from starfinder.segmentation._labels import same_grid
 from starfinder.segmentation._plan import assemble_input
 
+from . import hash_oracles
 from .test_morphology_rounds import (LABELS, MORPH, SEQUENCING_SHIFT, STAIN, THRESHOLD, ThresholdConfig, files,
                                      make_dataset, pipeline)
 from .test_registration_other_rounds import SHIFT, grid, texture
@@ -246,7 +247,7 @@ def test_load_reference_image_restores_the_grid_and_the_merged_image(raw, thresh
     fresh.segment(SegmentationPlan((run,)))
     result = fresh.segmentation_results["merged"]
     (entry,) = result.record["input"]["channels"]
-    assert entry["sha256"] == array_sha256(saved.reshape(restored.shape_zyx))
+    assert entry["sha256"] == hash_oracles.array_sha256(saved.reshape(restored.shape_zyx))
     assert entry["reference_image"] == {"path": "fovs/FOV/reference.tif", "sha256": file_sha256(path)}
     assert result.grid == restored and result.record["grid"]["source"] == restored.source
     if not projected:

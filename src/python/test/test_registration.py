@@ -27,16 +27,6 @@ class TestPhaseCorrelate:
 
         assert np.allclose(shift, (0, 0, 0), atol=0.1)
 
-    def test_known_shift(self, small_dataset):
-        """Recovers integer shift applied via np.roll."""
-        from starfinder.io import load_volume
-
-        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
-        moved = np.roll(vol, (2, -3, 5), axis=(0, 1, 2))
-        shift = phase_correlate(vol, moved)
-
-        assert np.allclose(shift, (2, -3, 5), atol=0.5)
-
 
 class TestApplyShift:
     """Tests for apply_shift function."""

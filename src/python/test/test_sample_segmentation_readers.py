@@ -26,8 +26,7 @@ import pandas as pd
 import pytest
 import tifffile
 
-from starfinder.assembly import AssemblyConfig, load_assembly, ownership_map
-from starfinder.assembly._anndata import write_sample_h5ad
+from starfinder.assembly import AssemblyConfig, load_assembly, ownership_map, write_sample_h5ad
 from starfinder.export import LabelConfig, check_export, lookup_source, segment_fused
 from starfinder.stitching import load_placement
 

@@ -33,9 +33,9 @@ from starfinder.export import (
 )
 from starfinder.dataset._export import assembly_inputs
 from starfinder.segmentation import CellposeConfig, ExpandLabelsConfig, LabelImportConfig, ReferenceGrid
-from starfinder._records import file_sha256
 from starfinder.stitching import PlacementResult, approve_placement, save_placement
 
+from . import hash_oracles
 from .fusion_fixtures import listing
 from .sample_segmentation_fixtures import (
     BIG,
@@ -312,14 +312,14 @@ def t1(folder, record):
     grid = section["inputs"]["grid"]
     for run in section["runs"]:
         path = folder / run["path"]
-        assert path.is_file() and file_sha256(path) == run["sha256"]
+        assert path.is_file() and hash_oracles.file_sha256(path) == run["sha256"]
         labels = tifffile.imread(path)
         assert labels.dtype == np.uint32 and [1, *labels.shape] == grid["shape_zyx"]
     if record["fusion"]["status"] == "written":
         outputs = {o["image"]: o for o in record["fusion"]["outputs"]
                    if o["dimensionality"] == "projection" and o["format"] == "ome_tiff"}
         for entry in section["inputs"]["images"]:
-            assert file_sha256(folder / outputs[entry["image"]]["path"]) == entry["sha256"]
+            assert hash_oracles.file_sha256(folder / outputs[entry["image"]]["path"]) == entry["sha256"]
             assert outputs[entry["image"]]["shape_zyx"] == grid["shape_zyx"]
 
 
@@ -417,7 +417,7 @@ def test_sg4_reuse_refused_before_anything_is_written(tmp_path, case):
     assert "segment: false" in message
     if case == "label_file_edited":
         recorded = first["segmentation"]["runs"][1]["sha256"]
-        assert str(path) in message and recorded in message and file_sha256(path) in message
+        assert str(path) in message and recorded in message and hash_oracles.file_sha256(path) in message
     elif case == "another_placement":
         assert "another placement" in message
     elif case == "another_scale_yx":
@@ -943,7 +943,7 @@ def so1_column_by_column(case, adata, expansion):
     assert all(e["kind"] == "molecules" and e["assignment"] is None for e in assembly["fovs"])
     files = [{"run": r["name"], "path": r["path"], "sha256": r["sha256"]} for r in section["runs"]]
     if expansion:
-        digest = file_sha256(folder.export_dir / "territories.ome.tif")
+        digest = hash_oracles.file_sha256(folder.export_dir / "territories.ome.tif")
         files.append({"run": None, "path": "territories.ome.tif", "sha256": digest})
         assert assembly["files"]["territories"] == {"path": "territories.ome.tif", "sha256": digest}
         np.testing.assert_array_equal(label_image(folder.export_dir, "territories.ome.tif"), assigned.territories)

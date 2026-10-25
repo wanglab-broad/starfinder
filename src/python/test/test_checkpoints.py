@@ -372,9 +372,10 @@ def test_keyboard_interrupt_is_recorded_as_interrupted(tmp_path, monkeypatch):
     assert (data['error']['step'], data['error']['round'], data['error']['type']) == (
         'decode_reads', None, 'KeyboardInterrupt')
     # Earlier stages remain usable after the interruption; run.json names the stage record with its SHA-256.
-    from starfinder._records import file_sha256
+    from . import hash_oracles
     assert data['checkpoints']['candidates'] == {
-        'path': 'checkpoints/candidates.json', 'sha256': file_sha256(fov.paths.fov_dir / 'checkpoints/candidates.json')}
+        'path': 'checkpoints/candidates.json',
+        'sha256': hash_oracles.file_sha256(fov.paths.fov_dir / 'checkpoints/candidates.json')}
     assert 'pre_qc' not in data['checkpoints']
 
 

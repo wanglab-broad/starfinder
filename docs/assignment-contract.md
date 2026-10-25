@@ -318,6 +318,13 @@ In this illustration the cell run was saved under its run and is linked, while t
 run was not and is written into the assignment folder ("Persistence", "Label images of a
 checkpointed assignment"); `inputs.<run>.record` holds the run's full record, so its
 `label_namespace`, grid, target and operations resolve from `assignment.json` alone.
+`inputs.<run>.labels_sha256` is the label array's hash of {doc}`segmentation-contract`
+("Run record"). `inputs.<run>.record_sha256` is the SHA-256 of the run's record
+(`inputs.<run>.record`) as JSON text encoded as UTF-8: keys sorted, the default separators
+`, ` and `: `, characters outside ASCII escaped as `\uXXXX`, NaN and infinity written as
+`NaN`, `Infinity` and `-Infinity`, and any other object written as its `str`; in Python,
+`json.dumps(record, sort_keys=True, default=str)`. It is neither the SHA-256 of a file nor
+the section hash of `export.json` ({doc}`sample-output-contract`, "Read-back checks", R1).
 `outcome` is `ok`, or `empty` when the territory image has no object; `software` has the
 content of `run.json`'s `code` and `environment` ({doc}`checkpoints`). The numbers above
 are an illustration of the layout, not results.

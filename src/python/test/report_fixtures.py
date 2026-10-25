@@ -141,8 +141,8 @@ CODEBOOK_TEXT = "".join(f"{g},{b}\n" for g, b in zip(GENES, ("CACG", "CGCC", "CT
 
 def registration_result(displacement):
     """A RegistrationResult of one translation, the form FOV.run records."""
-    from starfinder.registration import TranslationConfig, WarpConfig
-    from starfinder.registration._types import RegistrationDiagnostics, RegistrationResult, TranslationTransform
+    from starfinder.registration import (RegistrationDiagnostics, RegistrationResult, TranslationConfig,
+                                         TranslationTransform, WarpConfig)
     transform = TranslationTransform(tuple(float(v) for v in displacement), SHAPE_ZYX, SHAPE_ZYX, metadata(),
                                      metadata())
     diagnostics = RegistrationDiagnostics("translation", "scipy_fft", TranslationConfig())
@@ -494,8 +494,9 @@ def write_export(case: ReportCase, variant=None) -> None:
     from starfinder.assignment import write_h5ad
     from starfinder._records import _write_table
     from starfinder.export._record import update_section
-    from starfinder._records import file_sha256
     from starfinder.stitching._placement import frame_record
+
+    from . import hash_oracles
     folder = case.root / "export" / case.sample
     (folder / "tables").mkdir(parents=True, exist_ok=True)
     cells = _cell_rows(nocal=variant == "nocal")
@@ -530,7 +531,7 @@ def write_export(case: ReportCase, variant=None) -> None:
     files = {}
     for name, frame in frames.items():
         file_name, dtypes = _write_table(frame, folder / "tables", name, "csv")
-        files[name] = {"path": f"tables/{file_name}", "sha256": file_sha256(folder / "tables" / file_name),
+        files[name] = {"path": f"tables/{file_name}", "sha256": hash_oracles.file_sha256(folder / "tables" / file_name),
                        "dtypes": dtypes}
     counted = frames["cells"][frames["cells"]["assembly_status"].eq("retained").to_numpy(bool)
                               & frames["cells"]["status"].eq("kept").to_numpy(bool)].reset_index(drop=True)
@@ -545,7 +546,7 @@ def write_export(case: ReportCase, variant=None) -> None:
                        index=pd.Index(counted["obs_name"].astype(str).to_numpy()))
     keys = counted[["cell_namespace", "cell_id"]]
     write_h5ad(folder / "sample.h5ad", obs, keys, long, GENES, layers=False, uns={"sample": case.sample})
-    files["anndata"] = {"path": "sample.h5ad", "sha256": file_sha256(folder / "sample.h5ad")}
+    files["anndata"] = {"path": "sample.h5ad", "sha256": hash_oracles.file_sha256(folder / "sample.h5ad")}
     cell_frame, molecule_frame = frames["cells"], frames["molecules"]
 
     def population(frame, reasons, column):
@@ -587,7 +588,7 @@ def write_assignment_folder(case: ReportCase, fov) -> Path:
     record and its record SHA-256 (``assignment/_assign.py``: ``_label_input``) and whose ``files`` the SHA-256
     of ``cells.csv``.
     """
-    from starfinder._records import json_sha256 as _sha256_json
+    from . import hash_oracles
     run = case.fov_folder(fov) / "segmentation" / "cell"
     run.mkdir(parents=True, exist_ok=True)
     segmentation = {"format_version": 1, "stage": "segmentation", "run": "cell", "target": "cell",
@@ -599,7 +600,7 @@ def write_assignment_folder(case: ReportCase, fov) -> Path:
     (folder / "cells.csv").write_text("cell_id,status\n1,kept\n")
     record = {"format_version": 1, "stage": "assignment", "name": "default",
               "inputs": {"cells": {"run": "cell", "target": "cell", "geometry": "volume",
-                                   "record_sha256": _sha256_json(segmentation), "saved_under_run": True,
+                                   "record_sha256": hash_oracles.record_sha256(segmentation), "saved_under_run": True,
                                    "file": {"path": "../../segmentation/cell/labels.tif", "sha256": None},
                                    "record": segmentation},
                          "nuclei": None},
@@ -611,11 +612,11 @@ def write_assignment_folder(case: ReportCase, fov) -> Path:
 
 def assignment_entry(case: ReportCase, fov) -> dict:
     """``assembly.fovs[*].assignment`` of a folder source, as ``assembly/_assemble.py``: ``_fov_record`` writes it."""
-    from starfinder._records import file_sha256
+    from . import hash_oracles
     folder = case.fov_folder(fov) / "assignment" / "default"
     record = json.loads((folder / "assignment.json").read_text())
     return {"name": "default", "folder": str(folder), "source": "folder",
-            "record_sha256": file_sha256(folder / "assignment.json"),
+            "record_sha256": hash_oracles.file_sha256(folder / "assignment.json"),
             "tables": {t: record["files"][t]["sha256"] for t in ("molecules", "cells", "counts")
                        if t in record["files"]}}
 

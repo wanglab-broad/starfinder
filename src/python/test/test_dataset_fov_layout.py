@@ -24,7 +24,6 @@ import pytest
 import tifffile
 
 from starfinder import _layout
-from starfinder._records import file_sha256
 from starfinder._snakemake import (_reference_image_inputs, _reference_image_outputs, _run_record_outputs,
                                    _shared_image_inputs)
 from starfinder.dataset import CheckpointConfig, Dataset, RoundState, from_workflow_config
@@ -34,6 +33,7 @@ from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
 from starfinder.segmentation import InputChannel, LabelImportConfig, SegmentationPlan, SegmentationRun
 
+from . import hash_oracles
 from .test_checkpoints import dataset, full, resident
 from .test_morphology_rounds import ThresholdConfig, threshold  # noqa: F401 (the fixture registers the method)
 from .test_projection_views import CHANNELS as VIEW_CHANNELS, METADATA as VIEW_METADATA, NATIVE_DETECTION, \
@@ -198,7 +198,7 @@ def test_the_reference_image_is_written_and_read_where_reference_image_names(tmp
     assert reference_grid(ds.output_root, "FOV", **reference_settings(ds)) == fresh.reference_grid()
     assert source_path(ds, "FOV", "reference_merged") == path
     recorded = str(path) if setting == "absolute" else path.relative_to(ds.output_root).as_posix()
-    assert linked == {"path": recorded, "sha256": file_sha256(path)}
+    assert linked == {"path": recorded, "sha256": hash_oracles.file_sha256(path)}
     config = {"dataset_id": "data", "output_id": "run", **({} if pattern is None else {"reference_image": pattern})}
     declared = str(_layout.reference_image_path(ds.output_root, "{fovID}", ds.reference_image))
     assert _reference_image_outputs(config, ds.output_root, ["{fovID}"]) == [declared]
@@ -227,7 +227,7 @@ def test_an_imported_reference_image_is_read_by_every_reader_and_never_written(t
     assert reference_grid(ds.output_root, "FOV", **reference_settings(ds)) == fresh.reference_grid()
     assert source_path(ds, "FOV", "reference_merged") == imported
     recorded = str(imported) if where == "absolute" else "imports/FOV.tif"
-    assert linked == {"path": recorded, "sha256": file_sha256(imported)}
+    assert linked == {"path": recorded, "sha256": hash_oracles.file_sha256(imported)}
     config = {"dataset_id": "data", "output_id": "run", "reference_image_import": pattern}
     assert _reference_image_outputs(config, ds.output_root, ["{fovID}"]) == []
     assert _reference_image_inputs(config, ds.output_root, ["{fovID}"]) == [

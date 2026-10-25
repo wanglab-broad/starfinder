@@ -650,7 +650,10 @@ that band (A8). The record states the measured peak RSS of every part.
   one-plane FOVs), and per output file: path, SHA-256, format, image name,
   dimensionality, projection rule, factor `k`, shape, dtype, the output level's spacing
   and origin, the projection's Z slab, the resolution levels with their shapes, spacings
-  and origins, tile or chunk shape and compression;
+  and origins, tile or chunk shape and compression; a standalone OME-Zarr output is a folder,
+  so its entry also lists `files`, the map from each file's path relative to the folder
+  (with `/` separators) to that file's SHA-256, and its `sha256` is the SHA-256 of that
+  map as the canonical JSON of a section ("Read-back checks", R1);
 * `software` as in `run.json` ({doc}`checkpoints`), wall and CPU time and peak RSS.
 
 ```json
@@ -1233,7 +1236,9 @@ element its `reason`, and for a written element its path, row count or shape, tr
 and, for tables, the `spatialdata_attrs` written and the dtype of every column after the
 round trip; the counts of "Read-back checks" (molecules by `assignment_status` and by
 `assembly_status` and reason, cells by `assembly_status`, counted cells); the column
-renames; and the SHA-256 of every file of the store.
+renames; and the SHA-256 of every file of the store (the store's entry in `outputs` lists
+`files` and `sha256` by the rule of a standalone OME-Zarr in "The fusion section of
+`export.json`").
 
 ## Assembled label export
 
@@ -1474,7 +1479,11 @@ accepts.
   before the part ended (the condition names the part);
   `complete` is true exactly when no requested part is `not_run` or `failed`; each section
   that records the SHA-256 of another section equals that section's current SHA-256 (the
-  SHA-256 of its canonical JSON: sorted keys, no spaces, UTF-8). The parts include
+  SHA-256 of its canonical JSON encoded as UTF-8: keys sorted, the separators `,` and `:`
+  with no spaces, characters outside ASCII written as themselves rather than escaped, and
+  a NaN or infinite value refused with `ValueError` rather than written; in Python,
+  `json.dumps(section, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+  allow_nan=False)`). The parts include
   `segment` of the route after fusion ({doc}`sample-segmentation-contract`, "The entry").
 * R2. Every file the record lists exists with its SHA-256; every file under
   `export/<sample>/` (the store's files included) is listed, but those under `previews/`,

@@ -27,11 +27,11 @@ from starfinder.readout import (DECODING_METHODS, Codebook, CodebookAwareDecoder
                                 DirectPanel, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig, decode_direct,
                                 decode_reads, extract_intensities, load_direct_panel)
 from starfinder.readout.decoding import ReadDecodingResult
-from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState
+from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState, load_checkpoint
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult, save_volume
-from starfinder._checkpoint import candidates_frame, load_checkpoint, read_header, readout_mode
+from starfinder._checkpoint import candidates_frame, read_header, readout_mode
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
 from .test_readout_examples import CHANNELS, DIRECT_MAPPING, DIRECT_SPOTS, direct_images, rounds

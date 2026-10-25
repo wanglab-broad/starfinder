@@ -808,7 +808,13 @@ The placement is saved at sample level, beside the FOV checkpoints:
 **Recommendation: S1.** It follows the run-record pattern of the FOV checkpoints, records
 every identity and hash next to the tables, and needs no extra. `save_placement` writes
 the three files atomically; `load_placement` checks both tables' SHA-256 against the
-record and raises `ValueError` on a mismatch. A placement from `placement_from_table` is
+record and raises `ValueError` on a mismatch. A table's SHA-256 is that of the bytes
+`save_placement` writes for it: the CSV table format of {doc}`checkpoints` ("Table
+formats": a header row and no index, floats as `%.17g`, a missing value as `<NA>`, a
+string equal to `<NA>` or starting with a backslash written with one more leading
+backslash), every line ending in `\n` on every platform, encoded as UTF-8. An approval
+and every record that names a placement's tables hold the SHA-256 of these bytes,
+computed from the tables in memory. A placement from `placement_from_table` is
 saved and loaded the same way ("Supplied placement").
 
 ## Workflow configuration

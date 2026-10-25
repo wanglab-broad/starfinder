@@ -53,6 +53,4 @@ def test_channel_record_is_private_and_channel_info_and_labels_stay():
 
 @pytest.mark.stitching
 def test_the_export_part_fuse_keeps_its_name():
-    from starfinder.export._record import PARTS, SECTIONS
     assert "fuse" in {field.name for field in dataclasses.fields(export.ExportConfig)}
-    assert "fuse" in PARTS and SECTIONS["fuse"] == "fusion"

@@ -48,14 +48,13 @@ from starfinder.export import (
     fuse_labels,
     lookup_source,
 )
-from starfinder.export._record import section_sha256
-from starfinder._records import file_sha256
 from starfinder.stitching import (
     approve_placement,
     placement_from_table,
     positions_from_table,
 )
 
+from . import hash_oracles
 from .assembly_fixtures import (
     GOLDEN_GENES,
     GOLDEN_IDS,
@@ -504,6 +503,7 @@ def test_sd4_a_table_that_already_has_spatialdata_attrs_is_refused(tmp_path):
         adata.uns["spatialdata_attrs"] = dict(ATTRS)
         adata.write_h5ad(path)
     record = record_of(f.export_dir)
+    from starfinder._records import file_sha256
     record["assembly"]["files"]["anndata"]["sha256"] = file_sha256(path)
     (f.export_dir / "export.json").write_text(json.dumps(record, indent=2))
     saved = load_assembly(f.export_dir)
@@ -820,11 +820,11 @@ def test_sd8_hashes_and_section(tmp_path):
     section = record["spatialdata"]
     assert all(key in section for key in SECTION_ITEMS)
     store = f.export_dir / "sample.zarr"
-    files = {p.relative_to(store).as_posix(): file_sha256(p) for p in sorted(store.rglob("*")) if p.is_file()}
+    files = hash_oracles.store_files(store)
     assert section["outputs"][0]["files"] == files and section["outputs"][0]["path"] == "sample.zarr"
-    assert section["assembly_sha256"] == section_sha256(record["assembly"])
-    assert section["fusion_sha256"] == section_sha256(record["fusion"])
-    assert section["labels_sha256"] == section_sha256(record["labels"])
+    assert section["assembly_sha256"] == hash_oracles.section_sha256(record["assembly"])
+    assert section["fusion_sha256"] == hash_oracles.section_sha256(record["fusion"])
+    assert section["labels_sha256"] == hash_oracles.section_sha256(record["labels"])
     assert section["library"]["spatialdata"] == importlib.metadata.version("spatialdata")
     assert section["format"]["zarr_format"] == 3 and section["format"]["raster_version"] == "0.5-dev-spatialdata"
     assert section["renames"]["molecules"] == {"z": "fov_index_z", "y": "fov_index_y", "x": "fov_index_x",
@@ -891,12 +891,12 @@ def test_sd8_lookup_source(tmp_path):
         found = lookup_source(f.export_dir, spot=(row.spot_namespace, row.spot_id))
         assert found == {"kind": "spot", "key": [row.spot_namespace, row.spot_id], "fov_id": fov,
                          "assignment_folder": str(folder), "row": i,
-                         "assignment_record_sha256": file_sha256(folder / "assignment.json")}
+                         "assignment_record_sha256": hash_oracles.file_sha256(folder / "assignment.json")}
     for j in (0, len(loaded.cells) - 1):
         cell_id = int(loaded.cells.cell_id.iloc[j])
         found = lookup_source(f.export_dir, cell=(loaded.cell_namespace, cell_id))
         assert found["fov_id"] == fov and found["row"] == j and found["assignment_folder"] == str(folder)
-        assert found["assignment_record_sha256"] == file_sha256(folder / "assignment.json")
+        assert found["assignment_record_sha256"] == hash_oracles.file_sha256(folder / "assignment.json")
     with pytest.raises(ValueError, match="exactly one"):
         lookup_source(f.export_dir)
     with pytest.raises(ValueError, match="0 rows"):
@@ -961,8 +961,8 @@ def test_sd8_lookup_source_verifies_every_recorded_section_hash(tmp_path):
         edited[name]["edited_by_the_test"] = True
         for other, other_field, other_name in RECORDED:     # every other record of the changed section matches
             if other_name == name and (other, other_field) != (recorder, field):
-                edited[other][other_field] = section_sha256(edited[name])
-        assert edited[recorder][field] == record[recorder][field] != section_sha256(edited[name])
+                edited[other][other_field] = hash_oracles.section_sha256(edited[name])
+        assert edited[recorder][field] == record[recorder][field] != hash_oracles.section_sha256(edited[name])
         path.write_text(json.dumps(edited))
         for key in ({"spot": spot}, {"cell": cell}):
             with pytest.raises(ValueError, match=f"fails its hashes: the {name} section has SHA-256 [0-9a-f]{{64}}, "
@@ -985,7 +985,7 @@ def test_sd8_lookup_source_with_the_spatialdata_part_off(tmp_path):
     folder = f.assignment_dir(fov)
     found = lookup_source(f.export_dir, cell=(saved.cells.cell_namespace.iloc[0], int(saved.cells.cell_id.iloc[0])))
     assert found["fov_id"] == fov and found["row"] == 0 and found["assignment_folder"] == str(folder)
-    assert found["assignment_record_sha256"] == file_sha256(folder / "assignment.json")
+    assert found["assignment_record_sha256"] == hash_oracles.file_sha256(folder / "assignment.json")
     found = lookup_source(f.export_dir, spot=(saved.molecules.spot_namespace.iloc[0], saved.molecules.spot_id.iloc[0]))
     assert found["fov_id"] == saved.molecules.fov_id.iloc[0] and found["row"] == 0
 
@@ -1032,8 +1032,8 @@ def test_ex1_the_part_called_alone(tmp_path):
         assert canonical(after[name]) == canonical(before[name])
     assert after["parts"]["export_spatialdata"] == "written" and after["complete"] is True
     assert after["spatialdata"]["format"]["zarr_format"] == 2
-    assert after["spatialdata"]["assembly_sha256"] == section_sha256(after["assembly"])
-    assert after["spatialdata"]["labels_sha256"] == section_sha256(after["labels"])
+    assert after["spatialdata"]["assembly_sha256"] == hash_oracles.section_sha256(after["assembly"])
+    assert after["spatialdata"]["labels_sha256"] == hash_oracles.section_sha256(after["labels"])
     check_export(f.export_dir)
     other = FusionRecord("written", dict(before["fusion"], status="empty"), ())
     listed = listing(f.export_dir)

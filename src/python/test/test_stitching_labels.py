@@ -29,10 +29,10 @@ from starfinder.assembly import AssemblyConfig, AssemblyResult, assemble, load_a
 from starfinder.io import save_volume
 from starfinder.export import ExportConfig, ExportIncompleteWarning, LabelConfig, check_export, fuse_labels
 from starfinder.export._labels import check_label_ids
-from starfinder.export._record import section_sha256
 from starfinder.io._ome import read_ome_layout
 from starfinder.stitching import load_placement
 
+from . import hash_oracles
 from . import label_fixtures as lf
 from .fusion_fixtures import canonical, export_folder, listing
 
@@ -479,15 +479,16 @@ def test_lb5_section(runs):
     by_fov = {}
     for fov, _ in retained:
         by_fov[fov] = by_fov.get(fov, 0) + 1
-    assert section["assembly_sha256"] == section_sha256(json.loads(json.dumps(load_assembly(r.folder).record)))
+    assert section["assembly_sha256"] == hash_oracles.section_sha256(
+        json.loads(json.dumps(load_assembly(r.folder).record)))
     record = json.loads((r.folder / "export.json").read_text())
-    assert section["assembly_sha256"] == section_sha256(record["assembly"])
+    assert section["assembly_sha256"] == hash_oracles.section_sha256(record["assembly"])
     assert section["rule"] == "retained_cells"
     assert [e["fov_id"] for e in section["fovs"]] == [f for f in case.ids if f in by_fov]
     for entry in section["fovs"]:
         path = case.territory_path(entry["fov_id"])
         assert entry["path"] == str(path) and entry["source"] == "assembly_record"
-        assert entry["sha256"] == assignment_persist.file_sha256(path)
+        assert entry["sha256"] == hash_oracles.file_sha256(path)
         assert entry["n_retained"] == by_fov[entry["fov_id"]]
     library = section["library"]
     assert library["multiview_stitcher"] == "0.1.62" or isinstance(library["multiview_stitcher"], str)
@@ -496,7 +497,7 @@ def test_lb5_section(runs):
     assert section["labels_scale_yx"] == 0.25 and set(section["grid"]) >= {"library", "formula"}
     output = section["outputs"][0]
     assert {"path", "sha256", "shape_zyx", "dtype"} <= set(output)
-    assert output["sha256"] == assignment_persist.file_sha256(r.folder / output["path"])
+    assert output["sha256"] == hash_oracles.file_sha256(r.folder / output["path"])
     assert {"n_ids_input", "n_ids_output", "absent_ids", "n_absent_ids", "n_conflict"} <= set(section)
     assert all(section[k] >= 0 for k in ("wall_s", "cpu_s", "peak_rss_kib"))
     # A FOV without a retained cell has no entry, and its territory is not read (LB7.9 below).
@@ -754,7 +755,7 @@ def test_lb7_11_an_assembly_made_without_conflicts(runs, name):
     for entry in without.section["fovs"]:
         path = without.case.territory_path(entry["fov_id"])
         assert entry["source"] == "assignment_folder" and entry["path"] == str(path)
-        assert entry["sha256"] == assignment_persist.file_sha256(path)
+        assert entry["sha256"] == hash_oracles.file_sha256(path)
     check_export(without.folder)
 
 
@@ -889,7 +890,7 @@ def test_ex1_the_label_part_runs_third(tmp_path, monkeypatch):
     assert record.parts == {"assemble": "written", "fuse": "written", "segment": "off", "fuse_labels": "written",
                             "export_spatialdata": "off"} and record.complete
     labels = record.record["labels"]
-    assert labels["assembly_sha256"] == section_sha256(record.record["assembly"])
+    assert labels["assembly_sha256"] == hash_oracles.section_sha256(record.record["assembly"])
     assert [o["path"] for o in labels["outputs"]] == ["cell_labels.ome.tif"]
     check_export(folder.export_dir)
     # Called alone with the saved files of the parts before it: its section only changes.
@@ -901,7 +902,7 @@ def test_ex1_the_label_part_runs_third(tmp_path, monkeypatch):
     for name in ("assembly", "fusion", "spatialdata"):
         assert canonical(after[name]) == canonical(before[name])
     assert after["labels"]["labels_scale_yx"] == 1 and after["labels"]["assembly_sha256"] == \
-        section_sha256(after["assembly"])
+        hash_oracles.section_sha256(after["assembly"])
     check_export(folder.export_dir)
 
 

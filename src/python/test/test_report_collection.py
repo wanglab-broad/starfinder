@@ -24,11 +24,11 @@ import sys
 import pandas as pd
 import pytest
 
-from starfinder._records import _read_table
 from starfinder.report import (PROBLEM_RULES, REPORT_PARTS, REPORT_TABLES, UNAVAILABLE_REASONS, MarkerGroup,
                                ReportConfig, ReportLimits, RuleLimit, load_report)
 from starfinder.report._schema import RULE_UNITS, SUMMARY_KEYS
 
+from . import hash_oracles
 from .report_fixtures import (CASES, CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOVING, NCC_AFTER, NOMINAL,
                               ORIGINS, SAMPLE, STARTED, TRANSLATIONS, raw_path, report_cells,
                               report_records, write_inputs)
@@ -60,8 +60,8 @@ def same(actual, expected):
 
 def tables_of(folder, record):
     """Every table of the record's files, read back with the dtypes it lists."""
-    return {Path(e["path"]).stem: _read_table(Path(folder) / e["path"], e["dtypes"]) for e in record["files"]
-            if "dtypes" in e}
+    return {Path(e["path"]).stem: hash_oracles.read_table(Path(folder) / e["path"], e["dtypes"])
+            for e in record["files"] if "dtypes" in e}
 
 
 def keyed(rows):

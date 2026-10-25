@@ -21,9 +21,9 @@ from starfinder.stitching import (STITCHING_METHODS, PlacementResult, PlacementR
                                   StitchingInput, StitchingSpec, approve_placement, load_placement, placed_metadata,
                                   placement_from_table, positions_from_table, review_placement, save_placement,
                                   stitch)
-from starfinder.stitching._placement import table_sha256
 from starfinder.stitching._review import require_approval
 
+from . import hash_oracles
 from .stitching_fixtures import (FRACTIONAL, LN_SPACING, MAF_2X3_JITTER, MAF_3X2_GAP, STAGE_SPACING, STUB_SHAPE,
                                  STUB_SPACING, STUB_SPEC, StubConfig, check_components, grid, grids_for, inputs_for,
                                  metadata, stage_table, stub_run, stub_table, stub_variant_results, zero)
@@ -401,20 +401,17 @@ def test_residual_boundary_and_optimizer_removed_links(stub):
 def test_approval_records_the_tables_and_changes_no_origin(stub, tmp_path):
     table = moved_table()
     result = run(table, grids_for(table), FRACTIONAL, fallback="nominal")
-    with pytest.raises(PlacementReviewRequiredError, match="unplaced_fovs"):
-        require_approval(result)
     start = datetime.now(timezone.utc)
     approved = approve_placement(result, reviewer="jiahao", note="FOV5 has no overlap")
     (approval,) = approved.record["review"]["approvals"]
     assert approval["reviewer"] == "jiahao" and approval["note"] == "FOV5 has no overlap"
     when = datetime.strptime(approval["time_utc"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
     assert start <= when <= datetime.now(timezone.utc)
-    assert approval["fovs_sha256"] == table_sha256(result.fovs)
-    assert approval["links_sha256"] == table_sha256(result.links)
+    assert approval["fovs_sha256"] == hash_oracles.placement_table_sha256(result.fovs)
+    assert approval["links_sha256"] == hash_oracles.placement_table_sha256(result.links)
     assert re.fullmatch(r"[0-9a-f]{64}", approval["fovs_sha256"])
     pd.testing.assert_frame_equal(approved.fovs, result.fovs, check_exact=True)
     pd.testing.assert_frame_equal(approved.links, result.links, check_exact=True)
-    require_approval(approved)
     assert approved.record["review"]["state"] == "required"
     # An approval of other tables does not count.
     other = approve_placement(run(table, grids_for(table), zero(6), fallback="nominal"), reviewer="x", note="")

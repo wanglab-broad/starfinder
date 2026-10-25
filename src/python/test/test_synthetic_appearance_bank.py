@@ -22,6 +22,7 @@ import tifffile
 from starfinder.synthetic import BankReference, build_appearance_bank, cellular_scene_preset, load_appearance_bank
 
 from . import cellular_appearance_oracle as oracle
+from . import hash_oracles
 from .cellular_appearance_scenes import (HELD_OUT, ROUTINE, SEEDS, bank_cases, cf_bank, cf_bank_files, cf_sources,
                                          fall_off_cases, write_case, write_config)
 
@@ -80,14 +81,14 @@ def configured_files(config):
 @pytest.mark.validation
 @pytest.mark.parametrize("preset", ROUTINE)
 def test_closed_form_bank_build_is_deterministic_and_recorded(preset):
-    from starfinder.synthetic._appearance_bank import _closed_form_bank, _digest
+    from starfinder.synthetic._appearance_bank import _closed_form_bank
     bank = cf_bank(preset)
     again = _closed_form_bank.__wrapped__(preset, 4)
     assert sorted(bank.arrays) == sorted(again.arrays)
     for key in bank.arrays:
         assert bank.arrays[key].dtype == again.arrays[key].dtype, key
         assert np.array_equal(bank.arrays[key], again.arrays[key]), key
-    assert bank.digest == again.digest == _digest(bank.arrays) == bank.record["digest"]
+    assert bank.digest == again.digest == hash_oracles.bank_digest(bank.arrays) == bank.record["digest"]
     record = bank.record
     sources = [f"{preset}/seed-{seed}" for seed in SEEDS if seed != HELD_OUT]
     assert [(i["image"], i["role"], i["preset"], i["seed"]) for i in record["inputs"]] == [

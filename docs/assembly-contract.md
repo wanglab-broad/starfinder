@@ -244,7 +244,9 @@ The record of the result (the `assembly` section of `export.json` when saved, "P
   state and approval, and the SHA-256 of its `fovs` and `links` tables as
   `placement.json` records them;
 * per FOV: `fov_id`, placement status, origin, input kind, the assignment name and the
-  SHA-256 of its `assignment.json` and of its molecule, cell and count tables, the
+  SHA-256 of its `assignment.json` (`record_sha256`; for an assignment given in memory, the
+  SHA-256 of its record by the rule of `record_sha256` in {doc}`assignment-contract`, "Run
+  record") and of its molecule, cell and count tables, the
   molecule table's `sha256` (`MoleculeTable`), the territory label file read for the flags
   as `territories`: its path (absolute, as the §2.9 loader resolved it) beside its SHA-256,
   both null when no file was read (`conflicts=False`, a `molecules_only` input, or an

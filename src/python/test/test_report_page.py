@@ -33,10 +33,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from starfinder._records import _read_table
 from starfinder.report import MarkerGroup, ReportConfig, ReportRecord, load_report
 from starfinder.report import _page as page_module
 
+from . import hash_oracles
 from .report_fixtures import CASES, DATASET, FOVS, IDS, SAMPLE, SAMPLE_ID, report_cells, report_records
 from .report_sizes import (DISTRIBUTION_HALF, DISTRIBUTION_THIRD, EXAMPLE_TILE, HEATMAP_WIDTH, INTENSITY_SIZE,
                            MAX_ROWS, READS_Z_WIDTH, ROW_PX, THIRD, TIME_WIDTH, grid_slot, preprocessing_tile,
@@ -100,7 +100,7 @@ class Page:
     def __init__(self, case, folder, record):
         self.case, self.folder, self.record = case, Path(folder), record
         self.text = (self.folder / "report.html").read_text(encoding="utf-8")
-        self.tables = {Path(e["path"]).stem: _read_table(self.folder / e["path"], e["dtypes"])
+        self.tables = {Path(e["path"]).stem: hash_oracles.read_table(self.folder / e["path"], e["dtypes"])
                        for e in record["files"] if "dtypes" in e}
         self.dtypes = {Path(e["path"]).stem: e["dtypes"] for e in record["files"] if "dtypes" in e}
 

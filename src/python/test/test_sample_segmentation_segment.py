@@ -30,8 +30,8 @@ from starfinder.io._ome import read_ome_layout
 from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, LabelImportConfig, MissingModelError,
                                      ModelHashMismatchError, SampleSegmentation, SeededWatershedConfig,
                                      SegmentationResult, StarDistConfig)
-from starfinder._records import file_sha256
 
+from . import hash_oracles
 from .assembly_fixtures import SAMPLE as GOLDEN_SAMPLE
 from .fusion_fixtures import export_folder, listing
 from .sample_segmentation_fixtures import (BIG, DS, SAMPLE, SCENES, fuse_scene, length_configs, model_files,
@@ -451,7 +451,8 @@ def test_sg1_the_input_is_the_fused_projection(tmp_path, monkeypatch, scene, k):
         assert run.label_namespace == namespace(name) and run.grid == segmentation_input.grid
         assert run.geometry == "plane"
     assert segmentation_input.sources[0]["image"] == "flamingo"
-    assert segmentation_input.sources[0]["sha256"] == file_sha256(folder.export_dir / "flamingo_projection.ome.tif")
+    assert segmentation_input.sources[0]["sha256"] == hash_oracles.file_sha256(
+        folder.export_dir / "flamingo_projection.ome.tif")
 
 
 @needs_library
@@ -496,7 +497,7 @@ def _t1(folder, section, record):
     grid = section["inputs"]["grid"]
     for run in section["runs"]:
         path = folder / run["path"]
-        assert path.is_file() and file_sha256(path) == run["sha256"]
+        assert path.is_file() and hash_oracles.file_sha256(path) == run["sha256"]
         values = tifffile.imread(path)
         assert values.dtype == np.uint32 and [1, *values.shape] == grid["shape_zyx"]
         layout = read_ome_layout(path)
@@ -510,7 +511,7 @@ def _t1(folder, section, record):
         for entry in section["inputs"]["images"]:
             fused_entry = outputs[entry["image"]]
             assert fused_entry["path"] == entry["path"]
-            assert file_sha256(folder / fused_entry["path"]) == entry["sha256"] == fused_entry["sha256"]
+            assert hash_oracles.file_sha256(folder / fused_entry["path"]) == entry["sha256"] == fused_entry["sha256"]
             assert fused_entry["shape_zyx"] == grid["shape_zyx"]
             assert np.allclose(fused_entry["spacing_zyx"], grid["spacing_zyx"], rtol=0, atol=TOLERANCE_TIFF_UM)
             assert np.allclose(fused_entry["origin_zyx"], grid["origin_zyx"], rtol=0, atol=TOLERANCE_TIFF_UM)
@@ -597,7 +598,8 @@ def test_sg3_load_sample_segmentation_checks_the_label_files(tmp_path):
     tifffile.imwrite(path, labels)
     with pytest.raises(ValueError, match="SHA-256") as caught:
         load_sample_segmentation(folder.export_dir)
-    assert str(path) in str(caught.value) and recorded in str(caught.value) and file_sha256(path) in str(caught.value)
+    assert (str(path) in str(caught.value) and recorded in str(caught.value)
+            and hash_oracles.file_sha256(path) in str(caught.value))
     path.unlink()
     with pytest.raises(ValueError, match="missing"):
         load_sample_segmentation(folder.export_dir)

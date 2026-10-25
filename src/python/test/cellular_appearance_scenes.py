@@ -17,11 +17,12 @@ import pandas as pd
 from scipy import ndimage as ndi
 import tifffile
 
-from starfinder.synthetic import (AppearanceSceneConfig, BankReference, CellTypeConfig, CompositionConfig,
-                                  CellularSceneConfig, MorphologyRoundConfig, NoiseConfig, OutputScaleConfig,
-                                  ScalarDistribution, StainChannelConfig, TerritoryConfig, generate_closed_form_bank,
-                                  generate_appearance_scene, save_cellular_scene)
-from starfinder.synthetic._appearance_layout import AugmentationConfig, LayoutConfig, _place_appearance
+from starfinder.synthetic import (AppearanceSceneConfig, AugmentationConfig, BankReference, CellTypeConfig,
+                                  CompositionConfig, CellularSceneConfig, LayoutConfig, MorphologyRoundConfig,
+                                  NoiseConfig, OutputScaleConfig, ScalarDistribution, StainChannelConfig,
+                                  TerritoryConfig, generate_closed_form_bank, generate_appearance_scene,
+                                  save_cellular_scene)
+from starfinder.synthetic._appearance_layout import _place_appearance
 
 from .cellular_scenes import float64, plane, tiny
 

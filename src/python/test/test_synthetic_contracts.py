@@ -20,10 +20,10 @@ from starfinder.synthetic import (BENCHMARK_PRESETS, BackgroundConfig, DEFORMATI
                                   GeometryConfig, NoiseConfig, SCENE_PRESETS, benchmark_scene_preset,
                                   deformation_geometry, amplicon_scene_preset, forward_displacement,
                                   generate_codebook, generate_amplicon_dataset, generate_amplicon_scene,
-                                  generate_registration_pair)
+                                  generate_registration_pair, registration_scene_preset)
 from starfinder.synthetic import _geometry, _observation
 from starfinder.synthetic._formed import _prepare
-from starfinder.synthetic._presets import _estimate_peak_bytes, registration_scene_preset
+from starfinder.synthetic._presets import _estimate_peak_bytes
 
 from .formed_oracle import generator
 

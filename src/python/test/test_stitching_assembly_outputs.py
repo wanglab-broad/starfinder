@@ -307,9 +307,9 @@ def test_as12_the_record(tmp_path):
     record = saved.record
     assert record["placement"]["method"] == "constructed" and record["placement"]["gauge"] == "G1"
     assert record["placement"]["review"] == "not_needed"
-    from starfinder.stitching._placement import table_sha256
-    assert record["placement"]["fovs_sha256"] == table_sha256(placement.fovs)
-    assert record["placement"]["links_sha256"] == table_sha256(placement.links)
+    from . import hash_oracles
+    assert record["placement"]["fovs_sha256"] == hash_oracles.placement_table_sha256(placement.fovs)
+    assert record["placement"]["links_sha256"] == hash_oracles.placement_table_sha256(placement.links)
     assert record["config"] == {"ownership": "nearest_center", "centroid": "territory", "tie": "table_order",
                                 "conflicts": True, "duplicate_threshold": 0.5}
     assert record["counts"] == by_path.record["counts"] and record["format_version"] == 1
@@ -358,9 +358,9 @@ def test_as12_an_interrupted_save_leaves_complete_or_absent_files(tmp_path, monk
         save_assembly(result, folder)
     files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
     assert files == ["tables/fovs.csv"]
-    from starfinder._records import _dtype_map, _read_table
-    assert_frame_equal(_read_table(folder / "tables/fovs.csv", _dtype_map(result.fovs)), result.fovs,
-                       check_exact=True)
+    from . import hash_oracles
+    dtypes = {column: str(dtype) for column, dtype in result.fovs.dtypes.items()}
+    assert_frame_equal(hash_oracles.read_table(folder / "tables/fovs.csv", dtypes), result.fovs, check_exact=True)
 
 
 # --- AS14: determinism ----------------------------------------------------------------------------------------

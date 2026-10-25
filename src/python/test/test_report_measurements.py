@@ -22,7 +22,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder._records import _read_table
 from starfinder.report import MarkerGroup, ReportConfig
 from starfinder.report._collect import report_measurements
 from starfinder.report._figures import (EXAMPLE_TILE, SMALL_PLOT, grid_edges, histogram_bins,
@@ -31,6 +30,7 @@ from starfinder.report._measurements import (AnnDataArrays, _Measurements, mecr,
                                              size_unit_of)
 from starfinder.report._values import Unavailable
 
+from . import hash_oracles
 from .report_fixtures import (FOVS, GENES, cells_config, report_cells, report_records, write_assignment_folder,
                               write_export)
 from .report_scene import scene_chain, scene_chain_plane  # noqa: F401 (module-scoped fixtures)
@@ -48,8 +48,8 @@ def anndata_or_skip():
 
 def collect(case, **changes):
     folder, record = case.collect(**changes)
-    tables = {Path(e["path"]).stem: _read_table(Path(folder) / e["path"], e["dtypes"]) for e in record["files"]
-              if "dtypes" in e}
+    tables = {Path(e["path"]).stem: hash_oracles.read_table(Path(folder) / e["path"], e["dtypes"])
+              for e in record["files"] if "dtypes" in e}
     return folder, record, tables
 
 
@@ -65,10 +65,10 @@ def figures(case, **changes):
 
 
 def export_table(root, sample, name):
-    """A table of the export, read with the checkpoint reader and the dtypes export.json records."""
+    """A table of the export, read with the oracle of the documented table format and the dtypes export.json records."""
     record = json.loads((Path(root) / "export" / sample / "export.json").read_text())
     entry = record["assembly"]["files"][name]
-    return _read_table(Path(root) / "export" / sample / entry["path"], entry["dtypes"])
+    return hash_oracles.read_table(Path(root) / "export" / sample / entry["path"], entry["dtypes"])
 
 
 def matrix(root, sample):
@@ -487,8 +487,8 @@ def pixel_range(low, high, origin, spacing, size):
 
 def chain_figures(chain, config):
     folder, record = chain.collect(config=config)
-    tables = {Path(e["path"]).stem: _read_table(Path(folder) / e["path"], e["dtypes"]) for e in record["files"]
-              if "dtypes" in e}
+    tables = {Path(e["path"]).stem: hash_oracles.read_table(Path(folder) / e["path"], e["dtypes"])
+              for e in record["files"] if "dtypes" in e}
     drawn = report_measurements(chain.root, chain.sample, chain.fov_ids, dataset_id=chain.dataset_id,
                                 sample_id=chain.sample, config=config)
     return record, tables, drawn

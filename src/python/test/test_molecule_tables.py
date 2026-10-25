@@ -14,13 +14,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder._records import _read_table
 from starfinder.assignment import import_legacy_molecules_csv, load_molecules, molecule_table
 from starfinder.dataset import CheckpointConfig
 from starfinder.dataset.workflow import _legacy_molecules, _molecule_table
 from starfinder.readout import ReadScoreConfig, export_spots
 from starfinder.readout.spots import MOLECULE_DTYPES
 
+from . import hash_oracles
 from .coordination_helpers import write_molecules_csv
 from .test_coordination_contract import complete, dataset, resident
 from .test_readout_direct import direct_dataset, direct_fov, pipeline
@@ -42,7 +42,7 @@ def test_molecules_csv_is_typed_zero_based_and_keyed_with_unscored_reads(tmp_pat
     assert path == tmp_path / "out" / "fovs" / "FOV" / "molecules.csv"
     text = path.read_text().splitlines()
     assert text[0] == ",".join(MOLECULE_COLUMNS)
-    table = _read_table(path, MOLECULE_DTYPES)
+    table = hash_oracles.read_table(path, MOLECULE_DTYPES)
     assert {c: str(t) for c, t in table.dtypes.items()} == MOLECULE_DTYPES
     expected = accepted_spots(fov)
     assert len(table) == len(expected) == 2
@@ -58,7 +58,7 @@ def test_molecules_csv_is_typed_zero_based_and_keyed_with_unscored_reads(tmp_pat
 
 def test_molecules_csv_holds_the_qc_score_of_scored_reads(tmp_path):
     fov = resident(dataset(tmp_path)).run(complete(scoring=ReadScoreConfig()))
-    table = _read_table(fov.export_spots(), MOLECULE_DTYPES)
+    table = hash_oracles.read_table(fov.export_spots(), MOLECULE_DTYPES)
     expected = accepted_spots(fov)
     assert expected.qc_score.notna().all()
     np.testing.assert_allclose(table.qc_score, expected.qc_score, rtol=0, atol=1e-9)
@@ -103,7 +103,7 @@ def test_direct_readout_keeps_one_round_and_one_channel(tmp_path):
     # The reads' copy: the round, and the channel label of the detection's channel index.
     assert table["round"].tolist() == spots["round"].tolist()
     assert table.channel.tolist() == [labels[i] for i in spots.channel]
-    molecules = _read_table(fov.export_spots(), MOLECULE_DTYPES)
+    molecules = hash_oracles.read_table(fov.export_spots(), MOLECULE_DTYPES)
     assert molecules.gene_id.tolist() == ["Gfap", "Gad1", "Sst", "Aqp4"]
     expected = fov.filtering_result.accepted.set_index("spot_id")
     assert molecules.entry_id.tolist() == expected.loc[molecules.spot_id, "entry_id"].tolist()

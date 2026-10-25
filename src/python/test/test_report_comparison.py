@@ -28,9 +28,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from starfinder._records import _read_table
 from starfinder.report import ComparisonRecord, load_report
 
+from . import hash_oracles
 from .report_fixtures import CELLS_RETAINED, COUNTS, DATASET, FOVS, SAMPLE_ID, report_cells, report_records
 from .test_report_collection import anndata_or_skip, snapshot
 
@@ -89,7 +89,7 @@ def sample_folders(root):
 def written(result):
     """samples.csv read back with the dtypes the record lists, and the text of index.html."""
     entry = next(e for e in result.record["files"] if e["path"] == "samples.csv")
-    frame = _read_table(result.path / "samples.csv", entry["dtypes"])
+    frame = hash_oracles.read_table(result.path / "samples.csv", entry["dtypes"])
     return frame, (result.path / "index.html").read_text(encoding="utf-8"), entry["dtypes"]
 
 
@@ -208,7 +208,7 @@ def test_box_plots(root):
     for sample in ("s1", "s4"):
         record = load_report(root / "report" / sample)
         entry = next(e for e in record["files"] if e["path"] == "tables/fovs.csv")
-        fovs = _read_table(root / "report" / sample / "tables" / "fovs.csv", entry["dtypes"])
+        fovs = hash_oracles.read_table(root / "report" / sample / "tables" / "fovs.csv", entry["dtypes"])
         rows = data["fovs"][sample]
         assert [r["fov_id"] for r in rows] == list(fovs["fov_id"]) == list(FOVS)
         for row, saved in zip(rows, fovs.to_dict("records")):

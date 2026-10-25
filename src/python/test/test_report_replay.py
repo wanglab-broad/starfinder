@@ -23,13 +23,13 @@ import pytest
 import tifffile
 
 from starfinder.dataset import load_checkpoint
-from starfinder._records import _read_table
 from starfinder.report import ReportConfig
 from starfinder.report._collect import report_examples
 from starfinder.report._figures import (EXAMPLE_TILE, intensity_figure, preprocessing_figure,
                                         registration_figure, segmentation_figure)
 from starfinder.report._replay import intensity_bins, replay_fov
 
+from . import hash_oracles
 from .report_scene import (STAGES, Chain, build_chain, scene_chain_plane,  # noqa: F401 (module-scoped fixtures)
                            scene_chain_registered)
 from .report_sizes import INTENSITY_SIZE, preprocessing_tile, tiles_width
@@ -42,8 +42,8 @@ REPLAY_PARTS = ("preprocessing.example", "preprocessing.intensity", "registratio
 
 
 def tables(folder, record):
-    return {e["path"].split("/")[-1][:-4]: _read_table(folder / e["path"], e["dtypes"]) for e in record["files"]
-            if "dtypes" in e}
+    return {e["path"].split("/")[-1][:-4]: hash_oracles.read_table(folder / e["path"], e["dtypes"])
+            for e in record["files"] if "dtypes" in e}
 
 
 def rows_of(record, parts=REPLAY_PARTS):

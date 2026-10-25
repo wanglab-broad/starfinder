@@ -365,7 +365,8 @@ def test_check_export_counts_chunk_reads(tmp_path, version, zarr_format):
     import zarr
 
     from starfinder.export._fuse import _codec
-    from starfinder.export._record import directory_files, section_sha256
+
+    from . import hash_oracles
     z, y, x = np.meshgrid(np.arange(20), np.arange(8), np.arange(8), indexing="ij")
     arrays = {f"T{f}": (1 + 64 * z + 8 * y + x + 100 * f).astype(np.uint16) for f in range(2)}
     case = make_case("tall", {"T0": (0.0, 0.0, 0.0), "T1": (0.0, 0.0, 6.25)}, arrays)
@@ -382,8 +383,8 @@ def test_check_export_counts_chunk_reads(tmp_path, version, zarr_format):
     stored = next(o for o in record["fusion"]["outputs"] if o["path"] == entry["path"])
     stored["levels"][0]["chunks"] = stored["chunks"] = [1, 1, 8, 8, 14]
     stored["levels"][0]["codec"] = stored["compression"] = _codec(zarr.open_array(str(path / "0"), mode="r"))
-    stored["files"] = directory_files(path)
-    stored["sha256"] = section_sha256(stored["files"])
+    stored["files"] = hash_oracles.store_files(path)
+    stored["sha256"] = hash_oracles.store_sha256(path)
     (tmp_path / "export.json").write_text(json.dumps(record))
     with pytest.raises(ValueError, match="OME-Zarr layout check 3 fails at level 0: .* touches 2 chunks"):
         check_export(tmp_path)
