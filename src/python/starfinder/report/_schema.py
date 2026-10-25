@@ -120,11 +120,6 @@ SAMPLES_DTYPES = {"sample": "string", "report": "string", "report_sha256": "stri
                   "cells_median_per_fov": "float64"}
 
 
-#: The values the staged delivery of the report (W-452 to W-456) left to a later issue: none, since the report is
-#: complete. Every null cell is not applicable by its column's rule or named by one row of ``unavailable.csv``.
-PENDING_VALUES = ()
-
-
 def row_key(table: str, row) -> str:
     """The row key of a row of a table: ``name=value`` for each key column, in key order, joined by ``;``.
 

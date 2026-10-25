@@ -1,0 +1,10 @@
+{
+ "stats.csv": {
+  "operation": "string",
+  "channel": "int64",
+  "zero_fraction": "float64",
+  "median": "float64",
+  "mad": "float64",
+  "noise_threshold": "float64"
+ }
+}

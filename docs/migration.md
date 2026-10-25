@@ -2245,6 +2245,8 @@ with `assignment: null` (molecules only) write the same files as before.
   (`test_workflow_declared_grids.py` compares the saved `molecules.csv` instead of
   `reads_assignment.csv`), the assembly schema keys, and the BigStitcher end-to-end test,
   which runs with and without an `assembly` block.
+  (W-574: `test_declared_grid_header.py` no longer compares the figures with a run of the
+  copied base-revision reader, which it retired; it checks that the figures are drawn.)
 
 ### One Python configuration dialect
 

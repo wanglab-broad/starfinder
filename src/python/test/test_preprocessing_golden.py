@@ -9,7 +9,13 @@ scikit-image output must be reviewed, not re-pinned silently.
 
 The per-channel statistics (zero fraction, median, MAD and the local-maxima
 ``noise`` threshold) are the values reported on the preprocessing baseline page.
+Since W-574 they are explicit expected values in full precision
+(``data/expected/test_preprocessing_golden/stats.csv``), compared with the
+float64 tolerance of docs/contributing.md; before, they were rounded to six
+decimals and compared with ``==``.
 """
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -29,9 +35,11 @@ from starfinder.preprocessing import (
 )
 
 from .coordination_helpers import digest
+from .expected_values import FLOAT64, read_table
 
 pytestmark = [pytest.mark.preprocessing, pytest.mark.golden]
 
+EXPECTED = Path(__file__).resolve().parent / "data" / "expected" / "test_preprocessing_golden"
 SHAPE_ZYX = (4, 32, 32)
 CHANNELS = 4
 SEED = 20260927
@@ -73,8 +81,7 @@ def channel_stats(volume):
         values = volume[..., c].astype(np.float64)
         median = float(np.median(values))
         mad = float(np.median(np.abs(values - median)))
-        rows.append((round(float((values == 0).mean()), 6), median, mad,
-                     round(median + NOISE_THRESHOLD * 1.4826 * mad, 6)))
+        rows.append((float((values == 0).mean()), median, mad, median + NOISE_THRESHOLD * 1.4826 * mad))
     return rows
 
 
@@ -130,44 +137,17 @@ PINNED_SEQUENCE = {
     "round1": "16d1ea3dd8f343f4bd6307ec25582eae51c2fd0b3c2615950ad765d7b3b47491",
     "round2": "df2ac1debb364bc207129b8cb2f35ea246f9f0d1ad29b9bb6949b596bc6d7ac1",
 }
-# (zero fraction, median, MAD, noise threshold) per channel, as on the baseline page.
-PINNED_STATS = {
-    "raw": [
-        (0.0, 174.0, 18.0, 307.434),
-        (0.0, 584.0, 36.0, 850.868),
-        (0.0, 850.0, 29.0, 1064.977),
-        (0.0, 2638.0, 44.0, 2964.172)],
-    "minmax": [
-        (0.000977, 13.0, 3.0, 35.239),
-        (0.000244, 8.0, 2.0, 22.826),
-        (0.003906, 6.0, 2.0, 20.826),
-        (0.000244, 11.0, 3.0, 33.239)],
-    "histogram_after_minmax": [
-        (0.005859, 6.0, 2.0, 20.826),
-        (0.006348, 6.0, 2.0, 20.826),
-        (0.003906, 6.0, 2.0, 20.826),
-        (0.003418, 6.0, 2.0, 20.826)],
-    "reconstruction_after_histogram": [
-        (0.790283, 0.0, 0.0, 0.0),
-        (0.757568, 0.0, 0.0, 0.0),
-        (0.753906, 0.0, 0.0, 0.0),
-        (0.794189, 0.0, 0.0, 0.0)],
-    "tophat_after_minmax": [
-        (0.165527, 3.0, 2.0, 17.826),
-        (0.208252, 2.0, 1.0, 9.413),
-        (0.215332, 2.0, 1.0, 9.413),
-        (0.166748, 3.0, 2.0, 17.826)],
-    "reconstruction_raw_uint16": [
-        (0.698975, 0.0, 0.0, 0.0),
-        (0.727783, 0.0, 0.0, 0.0),
-        (0.72998, 0.0, 0.0, 0.0),
-        (0.723877, 0.0, 0.0, 0.0)],
-    "tophat_raw_uint16": [
-        (0.125732, 19.0, 10.0, 93.13),
-        (0.130615, 33.0, 20.0, 181.26),
-        (0.140137, 26.0, 16.0, 144.608),
-        (0.123291, 41.0, 24.0, 218.912)],
-}
+#: The operations whose per-channel statistics the baseline page reports (expected_stats).
+STATS_OPERATIONS = ("raw", "minmax", "histogram_after_minmax", "reconstruction_after_histogram",
+                    "tophat_after_minmax", "reconstruction_raw_uint16", "tophat_raw_uint16")
+
+
+def expected_stats(name):
+    """(zero fraction, median, MAD, noise threshold) per channel of one operation, from stats.csv."""
+    table = read_table(EXPECTED / "stats.csv")
+    rows = table[table.operation == name]
+    assert rows.channel.tolist() == list(range(CHANNELS))
+    return rows[["zero_fraction", "median", "mad", "noise_threshold"]].to_numpy(np.float64)
 
 
 def test_fixture_is_bounded():
@@ -199,6 +179,7 @@ def test_golden_detects_changed_settings(tmp_path, change):
     assert digest(images["round2"]) != PINNED_SEQUENCE["round2"]
 
 
-@pytest.mark.parametrize("name", sorted(PINNED_STATS))
+@pytest.mark.parametrize("name", sorted(STATS_OPERATIONS))
 def test_baseline_page_statistics(name):
-    assert channel_stats(operation_outputs(fixture_rounds())[name]) == PINNED_STATS[name]
+    stats = np.array(channel_stats(operation_outputs(fixture_rounds())[name]), dtype=np.float64)
+    np.testing.assert_allclose(stats, expected_stats(name), **FLOAT64)

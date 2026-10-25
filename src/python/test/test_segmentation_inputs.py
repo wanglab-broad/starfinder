@@ -25,8 +25,9 @@ from starfinder.segmentation import (CompositeConfig, FlamingoEnhancementConfig,
     enhance_with_flamingo, normalize_percentile_unclipped, rescale_input)
 
 from .test_registration_other_rounds import SEQUENCING, SHIFT, TRANSLATION, grid, texture
-from .test_segmentation_golden import (COMPOSITE_DIGESTS, CONSTANT_DIGESTS, FLAMINGO_DIGEST, SHAPE_ZYX,
-    SHRUNK_IMAGE_DIGEST, digest, fixture)
+from .expected_values import FLOAT64
+from .test_segmentation_golden import (COMPOSITE_DIGESTS, CONSTANT_DIGESTS, FLAMINGO_DIGEST, SHAPE_ZYX, digest,
+    expected_shrunk_image, fixture)
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.validation]
 
@@ -146,9 +147,11 @@ def test_l7_rescaling_without_spacing_gives_no_spacing():
 
 
 def test_rescaling_is_the_legacy_shrink(images):
-    """rescale(dapi, [1, .5, .5]) of the legacy script: W-307's pinned shrunk image."""
+    """rescale(dapi, [1, .5, .5]) of the legacy script: W-307's pinned shrunk image, the expected array since W-574."""
     output, _, _ = rescale_input(images["dapi"], ImageMetadata("dapi"), scale_zyx=(1, 0.5, 0.5))
-    assert output.dtype == np.float64 and digest(output) == SHRUNK_IMAGE_DIGEST
+    expected = expected_shrunk_image()
+    assert output.dtype == expected.dtype == np.float64 and output.shape == expected.shape
+    np.testing.assert_allclose(output, expected, **FLOAT64)
 
 
 def test_rescaling_keeps_one_pixel_and_rejects_invalid_factors():

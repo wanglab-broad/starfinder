@@ -666,7 +666,9 @@ The implementation adds these entries:
   `PINNED_RUNS[("translation", "demons")]["images"]["round2"]`, with a comment
   that names Jiahao's approval. The input and translation-only digests stay.
   The translation → demons field digest stays, because step 2 still sees the
-  integer-shifted sum signal. The translation → demons image digest changes
+  integer-shifted sum signal (since W-574 the field is an explicit expected
+  array compared with the float64 tolerance of [contributing](contributing.md),
+  "Expected values and tolerances", equal to the digest pinned before). The translation → demons image digest changes
   with the one final resampling. The reviewed change must show that the new
   image equals the pinned one within one intensity unit on every voxel whose
   pull point lies at least one voxel inside the moving grid.

@@ -5,9 +5,16 @@ link a molecule to its cell by the cell key ``(cell_namespace, cell_id)``.
 Fixtures: the assemblies of docs/stitching-assembly-validation.md (``assembly_golden`` 3D, 2D and
 expanded, ``own_cases`` with the duplicate rule on and off, ``empty_cases`` and ``status_cases``),
 built by ``assembly_fixtures.py``, and ``big_ids``: ``assembly_golden`` (3D) with two label values at
-and above 2^31. ``BASE_TABLES`` holds, per case, the ``table_sha256`` (column names, dtypes and CSV
-text) of each of the four sample tables that ``assemble`` gave at the base revision 725f24a, before
-the column existed; the tables after the change, the new column dropped, must give the same values.
+and above 2^31.
+
+Until W-574, ``test_so3_the_column_on_the_route_per_fov`` also compared every other column of the four
+sample tables with the tables ``assemble`` gave at the base revision 725f24a, before the column
+existed. That comparison guarded the moment the column was added and is dropped as history. The
+values of the assembly tables are checked by the AS rows of docs/stitching-assembly-validation.md:
+``test_stitching_assembly_ownership.py`` (AS1 sample coordinates, AS2 owners),
+``test_stitching_assembly_retention.py`` (AS3 to AS9: retained cells, rows, reasons and flags,
+identities, molecules-only, empty and status cases), ``test_stitching_assembly_accounting.py`` (the
+counts) and ``test_stitching_assembly_scene.py`` (EE2, the assembly against an independent oracle).
 """
 import dataclasses
 import json
@@ -18,7 +25,6 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 from starfinder.assembly import AssemblyConfig, AssemblyResult, assemble, load_assembly, save_assembly
-from starfinder.assignment._assign import assignment_table_sha256 as table_sha256
 
 from .assembly_fixtures import (GOLDEN_IDS, TILE_ZYX, approved, golden_molecule_tables, golden_pieces,
                                 golden_placement, golden_results, inputs_of, own_placement, own_results,
@@ -104,119 +110,6 @@ CASES = ["golden_3d", "golden_2d", "golden_expanded", "big_ids", "own_cases", "o
          "status_missing", "status_failed", "status_placeholder_without_input", "status_placeholder_with_input"]
 
 
-def digests(result):
-    """table_sha256 of each sample table without the column cell_namespace of the molecule table."""
-    return {name: table_sha256(getattr(result, name).drop(columns=[KEY] if name == "molecules" else [],
-                                                         errors="ignore"))
-            for name in TABLES}
-
-
-# table_sha256 of the four tables at the base revision 725f24a (computed there with build() and digests()).
-BASE_TABLES = {
-    "golden_3d": {
-        "fovs": "2b1601cd186f6f23ca2f9329b2cbf2106673379a892670f7a8baaa941f3b951e",
-        "cells": "fe40a12f89c7590b67eca5c7417451fbe6ac413eb74cab97f4fb559331c075c3",
-        "molecules": "2abccb529e40af15438550389de8070f8d78309c68e159cdf53585bf0608e260",
-        "counts": "e2dd4489c82f6a1a0dc11821d4b7085ed807ec76b2d018a515b6147eb467df96",
-    },
-    "golden_2d": {
-        "fovs": "2b1601cd186f6f23ca2f9329b2cbf2106673379a892670f7a8baaa941f3b951e",
-        "cells": "e6d7f0afb48c3839d3bf9fe390fce6c6ae85a930bbde89e87a705a4a2843377f",
-        "molecules": "95d1af210e94df97caf0b1e6b777aa9bc5657340dd190f397d29849f1f152c3c",
-        "counts": "d07491230dcee5bfe3c72928eb430403f34ca50228d9c94a3d597c51ba765a12",
-    },
-    "golden_expanded": {
-        "fovs": "2b1601cd186f6f23ca2f9329b2cbf2106673379a892670f7a8baaa941f3b951e",
-        "cells": "83e33bb8aecd1a090c9a11d763eb301153ded5b2faa64ab3dbb60ccc4436d48a",
-        "molecules": "92e0cf229bd75eaf447ac4a84c11223cfc69ef9b9af31d504b3144c18cab0b6e",
-        "counts": "e2dd4489c82f6a1a0dc11821d4b7085ed807ec76b2d018a515b6147eb467df96",
-    },
-    "big_ids": {
-        "fovs": "2b1601cd186f6f23ca2f9329b2cbf2106673379a892670f7a8baaa941f3b951e",
-        "cells": "5de8376886cac9296971e6746204a47cb9bec4af12e43fd9fa4f6350ac4e92c6",
-        "molecules": "5ac7cb4f8102c3d79ab2aac07dafe46d91e1eda65d87451e5b1f985bc4269bad",
-        "counts": "495684a98bb3e1e47cb921c1e5ad6bef660cd434f55f499ef132b79262670f78",
-    },
-    "own_cases": {
-        "fovs": "972662080ff135f78a7399c25367f86a8250e4f9e31cb808c7e4200f99ac118d",
-        "cells": "7e527fd765b8d435b1b9751ef760375da0b6da033346c9a0f1d52a329fbf899f",
-        "molecules": "7c928b342796af9c2c8d557d9489dcd5e677143904c0de4b246ba9129dc22bdc",
-        "counts": "4543ea63f8f923c3b613b1668f114c36bdbe05b67b1188d5cdf403f9bb61891a",
-    },
-    "own_cases_rule_off": {
-        "fovs": "c1cb0da9840dd18244eebdac3d5535e7ba163263c819b153edc1b444e276a983",
-        "cells": "5ea2016229863916e81b893e1bfd9eab8f6f422088a9f053389f34eaf9b8ad32",
-        "molecules": "acfe663f787bb56b351442a45fe8b6a318398df35b35acfc872178838b791a4a",
-        "counts": "642c7a632ce81136513c810ca95ddc6671efaa0b9b24c168baf99df739cc5bbd",
-    },
-    "empty_fov_without_molecules": {
-        "fovs": "62853a24d04af8185964f2561a0a83277db2b68bf8406ad82c3d1a8cec1cc16c",
-        "cells": "2343cdfc03a7f4952767e529aba810164b6c9014ff39176dd8359fe16eadb785",
-        "molecules": "c6a919964b8bfc775357f1b0c2458efc7aae81e6a2f387d8170d028d6cced62c",
-        "counts": "6e6ae625493a82467cbf46138a66b7725c485a975c81b29085bce909c5132343",
-    },
-    "empty_fov_without_cells": {
-        "fovs": "43e2fc939d6a6bc6b408bcd1ae0f818091700adb9e97a42924619cdb88debd14",
-        "cells": "cffef9b36e93dbdf633a953a3b0799c04d69d2c28cada71ae69569cf37c1cd0a",
-        "molecules": "eff7235c4a436f1851fd4de511032cdac98c519a4498373ea32e83b85b3edf74",
-        "counts": "ba04ecca8849fcbb1faae82365e6f7e14d877a1df1aadc6cf58fc08ce3a10bb9",
-    },
-    "empty_molecules_miss_every_cell": {
-        "fovs": "6f1f2e2d15d4837e9812f037ffb620f069764568072ef100cb6e4cdbff2cefe7",
-        "cells": "3996c5e14ba6e4ecf53722b884bde0fb96de5759bb42ae0bd1bd00f019b7dc61",
-        "molecules": "5477c0c9a692610eb27a433cb3ca188fd12c8bd68569e6c6e4905fb69a1ce8a6",
-        "counts": "244e39b75c2ea061ab47dc3fa294f0c1ae752300bc4f83bd131949b97691828c",
-    },
-    "empty_no_counted_cell": {
-        "fovs": "2b1601cd186f6f23ca2f9329b2cbf2106673379a892670f7a8baaa941f3b951e",
-        "cells": "d5cc7e0c0303c715ddd32ed47868d2a26147a9a0e614383a4d3f2689d22578a5",
-        "molecules": "4abbfee69662d78e2e4815471ff7d446774a3476e4452482aeee47f39492f931",
-        "counts": "14e4b4ab220435ee57f03f44a6e2e5c4636f9b288d40149b6b5a8999ff030aa2",
-    },
-    "empty_no_cell_row": {
-        "fovs": "212abc3642e08fbeee48ca38ac3b6f123a051a92decc1a9ecf667f49ac621f0f",
-        "cells": "64c3cd5b4651f83889426329abff8aa4aeb42a95c1e30f757fe545c8ce7d5bc8",
-        "molecules": "cc9afd6be8c4595cb022808aa8d59c62cd8e2b93e69fbc14cd70804360c2d29f",
-        "counts": "14e4b4ab220435ee57f03f44a6e2e5c4636f9b288d40149b6b5a8999ff030aa2",
-    },
-    "empty_no_molecule": {
-        "fovs": "0518a9a17d56f2d9e28122e6590bc0d5b971c10cdf1d990d0e010340e65ab2c7",
-        "cells": "59d18733cd32f8f82a90b71ab6867395b9b0dde62b7001363d407df6f2407153",
-        "molecules": "557012c85576cfd5f8d72dc52a18949b5ebd75d06c5963cd403aab5a73efa480",
-        "counts": "14e4b4ab220435ee57f03f44a6e2e5c4636f9b288d40149b6b5a8999ff030aa2",
-    },
-    "empty_molecules_only": {
-        "fovs": "ed78dc1bce3ed34e1486e62f621f9d7a95da5cbe65821ad0efbf26262789b630",
-        "cells": "64c3cd5b4651f83889426329abff8aa4aeb42a95c1e30f757fe545c8ce7d5bc8",
-        "molecules": "2986c7be752def1ca06194d52c66e235c269d23bf359df6055a75852fd12aa93",
-        "counts": "14e4b4ab220435ee57f03f44a6e2e5c4636f9b288d40149b6b5a8999ff030aa2",
-    },
-    "status_missing": {
-        "fovs": "1b8887634ae3b5772232dc24e8a4b6dcd2a5428b82dae0e409a1d7aeb3d7f4c0",
-        "cells": "6cba77303286bcd1fb12dbff8651b75a75dc0a0790e4ea6fd3a383d1376e484d",
-        "molecules": "3511a89a8fa44bfd7fc3835c786b8c43856fdf6c8ef20adbd5b70786165609e1",
-        "counts": "750996bc8c9216af3d0ae4e3430f636d0ac705abe2b94cf6cec42eb41b29be86",
-    },
-    "status_failed": {
-        "fovs": "058790e798e466cd854dd4cbb268156b8b0ac11969f186ca638bd1e2f578b92e",
-        "cells": "67f733d7aa6c8672271492d621b71d5e309c518b71eec96d59e608baebe2c08c",
-        "molecules": "690694c89c721b427bbaa4164bb8efcee847f5b86513692fe3d283db51167399",
-        "counts": "750996bc8c9216af3d0ae4e3430f636d0ac705abe2b94cf6cec42eb41b29be86",
-    },
-    "status_placeholder_without_input": {
-        "fovs": "c3f6590ed33489ebf9f44381b92a55699f5ce2a681377f56bed0f67e79caf9d4",
-        "cells": "2edb1846651a1d3e84186427e484b13ea43771d5e13237c4afa0254cce95e30d",
-        "molecules": "23253ff725a6b692f7017aff821e41dfd1e9e8ad56f24aa5c4da44f0991fbd82",
-        "counts": "0a18f5637fb1670a9d7540cd6adf712cde9c8b9266205bc13990a1c5e9820860",
-    },
-    "status_placeholder_with_input": {
-        "fovs": "70eb182cb5a23f468d3459ae9fe5d6f29431aa62648f4144aa72aecd5705da09",
-        "cells": "b3210c802205662ea1c27aed8ca3a229c0894a36ec8115cd1f0a80d900b2c3ad",
-        "molecules": "ebd20ab298928846d08ee9d70c4270f64c14860ce23611f726cd69eb0fe6bef9",
-        "counts": "0a18f5637fb1670a9d7540cd6adf712cde9c8b9266205bc13990a1c5e9820860",
-    },
-}
-
 MOLECULE_COLUMNS_29 = ["spot_namespace", "spot_id", "z", "y", "x", "gene_id", "voxel_z", "voxel_y", "voxel_x",
                        "assignment_status", "cell_id", "in_expansion", "original_cell_id", "nucleus_id", "compartment"]
 MOLECULE_ONLY_COLUMNS = ["spot_namespace", "spot_id", "z", "y", "x", "gene_id", "assignment_status"]
@@ -262,8 +155,6 @@ def test_so3_the_column_on_the_route_per_fov(case):
         assert molecules[KEY].notna().sum() == molecules.cell_id.notna().sum()
         if molecules.cell_id.notna().any():
             assert molecules[KEY].notna().any()
-    # Every other column of every table equals the result before the change.
-    assert digests(result) == BASE_TABLES[case]
     if case == "big_ids":
         ids = set(result.molecules.cell_id.dropna().astype("int64")) & set(result.cells.cell_id.astype("int64"))
         assert {2 ** 32 - 1, 2 ** 31} <= ids

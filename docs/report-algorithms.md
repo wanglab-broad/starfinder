@@ -1427,7 +1427,7 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 | RC9 | `test_report_values.py`, `test_ef2_rc9_one_fov`; `test_report_rules.py`, `test_rc8_rc9_rc10` | default | exact |
 | RC10 | `test_report_values.py`, `test_rc10_equal_values`; `test_report_rules.py`, `test_rc8_rc9_rc10` | default | exact |
 | RC11 | `test_report_collection.py`, `test_rc11_older_record` | default | exact |
-| RC12 | `test_report_collection.py`, `test_rc12_null_cells_and_closed_lists`, `test_closed_lists_equal_the_contract`, `test_no_pending_value`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
+| RC12 | `test_report_collection.py`, `test_rc12_null_cells_and_closed_lists`, `test_closed_lists_equal_the_contract`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
 | RC13 | `test_report_collection.py`, `test_rc13_round_that_did_not_finish`; `test_report_values.py`, `test_rc2_rc13_round3_medians_over_the_succeeded_fovs` | default | within 1e-9 (as stated) |
 | DF1 | `test_report_values.py`, `test_df1_fraction_definition`, `test_df1_rc1_fractions_and_totals`, `test_df1_null_count_gives_its_reason` | default | within 1e-9 |
 | DF2 | `test_report_values.py`, `test_df2_shift_of_the_global_steps`, `test_df2_affine_and_dense_through_the_collection` | default | within 1e-12 (as stated) |

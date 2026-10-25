@@ -1153,7 +1153,10 @@ MATLAB-backend run, and the §2.9 changes apply to them there as well:
 
 ## Tests the implementation changes
 
-* `test/test_segmentation_golden.py`: every pinned digest stays. Named edits: tests are
+* `test/test_segmentation_golden.py`: every pinned digest stays (the float64 shrunk image is
+  an explicit expected array since W-574, compared with the float64 tolerance of
+  [contributing](contributing.md), "Expected values and tolerances", and equal to the digest
+  pinned before). Named edits: tests are
   added that compute the composite and the Flamingo enhancement with
   `composite_nuclei_amplicon` and `enhance_with_flamingo` and assert
   `COMPOSITE_DIGESTS` and `FLAMINGO_DIGEST`; that `expand_labels(mode="planar",

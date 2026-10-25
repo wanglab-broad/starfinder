@@ -10,7 +10,8 @@ that map true. This module adds:
   (the earlier tests check them on ``boxes``);
 * L7 on ``seg_golden``: ``rescale_input`` of the W-307 golden DAPI image with a spacing divides
   the spacing by the factors, records the rescale in ``frame_id`` and gives W-307's pinned
-  shrunk image (the ramp of ``test_segmentation_inputs.py`` checks the voxel centres);
+  shrunk image, the expected array since W-574, within the float64 tolerance (the ramp of
+  ``test_segmentation_inputs.py`` checks the voxel centres);
 * L12, CPU against GPU on the parity inputs P1 and P2 (``learned``, ``slow``). It runs only in a
   batch whose guidance grants the GPU: ``STARFINDER_L12_GPU_PYTHON`` names the Python of the GPU
   environment, and without it the test skips with that reason. Each device runs in a process of
@@ -38,7 +39,8 @@ from starfinder._weights import weights_directory
 
 from .coordination_helpers import digest
 from .learned_detectors import one_thread_environment
-from .test_segmentation_golden import SHAPE_ZYX, SHRUNK_IMAGE_DIGEST, fixture, stand_in_model
+from .expected_values import FLOAT64
+from .test_segmentation_golden import SHAPE_ZYX, expected_shrunk_image, fixture, stand_in_model
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.validation]
 
@@ -136,7 +138,9 @@ def test_l7_rescaling_seg_golden_divides_the_spacing_and_records_the_rescale():
     metadata = ImageMetadata("seg_golden", spacing_zyx=(0.35, 0.1, 0.1), spatial_unit="micrometer")
     output, rescaled, record = rescale_input(dapi, metadata, scale_zyx=(1, 0.5, 0.5))
     assert output.shape == (SHAPE_ZYX[0], SHAPE_ZYX[1] // 2, SHAPE_ZYX[2] // 2)
-    assert digest(output) == SHRUNK_IMAGE_DIGEST
+    expected = expected_shrunk_image()
+    assert output.dtype == expected.dtype and output.shape == expected.shape
+    np.testing.assert_allclose(output, expected, **FLOAT64)
     assert rescaled.spacing_zyx == (0.35 / 1, 0.1 / 0.5, 0.1 / 0.5) == (0.35, 0.2, 0.2)
     assert rescaled.frame_id == "seg_golden/rescale:1.0,0.5,0.5" == record["frame_id"]
     assert rescaled.spatial_unit == "micrometer" and record["config"] == {"scale_zyx": [1.0, 0.5, 0.5]}

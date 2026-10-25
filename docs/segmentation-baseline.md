@@ -232,7 +232,10 @@ current deterministic behavior on its own seeded fixture (seed 20261005): 16×64
 uint8 images of DAPI (five ellipsoidal nuclei, two of which lie 3 voxels apart, and two
 blobs under 100 voxels), the merged amplicon signal (80 bright voxels, four saturated)
 and a Flamingo stain (larger ellipsoids around the nuclei), plus a DAPI image holding
-only the small blobs. It pins with exact SHA-256 digests:
+only the small blobs. It pins, with exact SHA-256 digests for the uint8 images and the
+labels, and for the float64 shrunk image of (c) as an explicit expected array within the
+float64 tolerance of [contributing](contributing.md), "Expected values and tolerances"
+(W-574; it replaced that image's digest and reproduces it):
 
 * (a) the composite, run unchanged through a stub `snakemake` object, with and without
   `maximum_projection`, and the Flamingo enhancement, run the same way; both also on
@@ -246,6 +249,10 @@ only the small blobs. It pins with exact SHA-256 digests:
   and their equality with a 2×2 block repetition;
 * (d) the per-slice expansion (distance 4, the W-306 parity value) and the `uint16`
   cast, for every combination of `rescale` and `expand_labels`, in 3D and in 2D.
+
+W-574 deleted the pins that no test read since W-535: the digests of the area lists of
+(b), and of (d) all but the expanded label images (3D without and with the rescale, 2D
+without it).
 
 The StarDist script cannot be imported in the locked environment (StarDist is absent
 and `tifffile.imsave` was removed), so (b) to (d) run one helper,

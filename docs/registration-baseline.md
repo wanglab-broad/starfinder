@@ -193,8 +193,8 @@ bump of up to (0, 1.5, −1.0) voxels, with other channel gains. Through
 
 * translation only: correction (−1, −4, 2) (the bump adds to the Y shift near
   the centre) and the digest of the registered moving round;
-* translation → demons: the same correction, the digest of the demons field
-  and the digest of the moving round after both resamplings.
+* translation → demons: the same correction, the demons field and the digest
+  of the moving round after both resamplings.
 
 The reference round and the fixture inputs are pinned too. Every configuration
 is built by one helper, `registration_config`, which is the only part of the
@@ -204,8 +204,15 @@ changes a digest. The §2.6 refactor replaces that helper; its one other named
 edit is the translation → demons image digest, which one final resampling
 changes ({doc}`registration-contract`, "Tests the implementation changes").
 Two further tests show that a changed demons iteration count and the
-`single-channel` signal change the pinned translation → demons digests. The translation-only digests do not depend on the
-signal on this fixture, because every signal gives the same integer peak.
+`single-channel` signal change the pinned translation → demons image digest
+and move the demons field outside the float64 tolerance. The translation-only
+digests do not depend on the signal on this fixture, because every signal gives
+the same integer peak.
 
 Three single-thread runs (ITK, OpenMP, BLAS threads 1) gave bit-identical
-digests, so the test uses exact equality.
+digests. The uint16 images keep their exact digests and the correction is
+exact (whole voxels). The demons field, a computed float64 array, is an
+explicit expected array (`src/python/test/data/expected/test_registration_golden/`)
+compared with the float64 tolerance of [contributing](contributing.md),
+"Expected values and tolerances" (W-574; it replaced the field's digest and
+reproduces it).

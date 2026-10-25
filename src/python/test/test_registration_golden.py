@@ -1,12 +1,16 @@
 """Golden baseline for the current registration path through ``FOV.run`` (W-245).
 
-Pins, with exact SHA-256 digests, the registered images and the transforms of a
-translation-only run and of a translation -> demons run on one small seeded
-synthetic fixture, using the current signal behavior (``merged``: the float64
-channel sum). Any behavior change, including a changed demons iteration count
-or a changed signal mode, changes a digest. The digests were produced with the
-locked project environment (SimpleITK 2.5.3, NumPy 2.2.6, SciPy 1.17.0) and are
-bit-identical over repeated single-thread runs; see docs/registration-baseline.md.
+Pins the registered images and the transforms of a translation-only run and of
+a translation -> demons run on one small seeded synthetic fixture, using the
+current signal behavior (``merged``: the float64 channel sum). The uint16 images
+keep their exact SHA-256 digests and the translation is exact (whole voxels);
+the demons displacement field is an explicit expected array
+(``data/expected/test_registration_golden/demons.npz``, W-574) compared with the
+float64 tolerance of docs/contributing.md. Any behavior change, including a
+changed demons iteration count or a changed signal mode, changes the round2
+digest and moves the field outside that tolerance. The values were produced
+with the locked project environment (SimpleITK 2.5.3, NumPy 2.2.6, SciPy 1.17.0);
+see docs/registration-baseline.md.
 
 Every registration configuration is built by ``registration_config``, which
 also holds the only imports of registration configuration types; the pinned
@@ -14,8 +18,11 @@ runs use each config's defaults. The §2.6 refactor (``RegistrationRecipe``)
 replaces that helper. Its one other named edit is the translation -> demons
 image digest, which changes with the reviewed one final resampling described in
 docs/registration-contract.md. The fixture, the runs, and the input,
-translation-only and demons-field digests stay.
+translation-only and demons-field digests stay (the field is the expected array
+since W-574).
 """
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -23,6 +30,7 @@ from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
 
 from .coordination_helpers import digest
+from .expected_values import FLOAT64, read_arrays
 
 pytestmark = [pytest.mark.registration, pytest.mark.golden]
 
@@ -31,6 +39,7 @@ pytest.importorskip("SimpleITK")
 SHAPE_ZYX = (8, 32, 32)
 CHANNELS = 4
 SEED = 20260929
+EXPECTED = Path(__file__).resolve().parent / "data" / "expected" / "test_registration_golden"
 SHIFT_ZYX = (1.0, 3.0, -2.0)  # content displacement of the moving round, in voxels
 BUMP_ZYX = (0.0, 1.5, -1.0)  # peak of the smooth local displacement added on top
 
@@ -89,7 +98,7 @@ def fixture_rounds():
 
 
 def run(tmp_path, methods, **options):
-    """FOV.run on the resident fixture; returns image digests and transform summaries."""
+    """FOV.run on the resident fixture; returns image digests and the transforms (translation, demons field)."""
     rounds = RoundState(sequencing_rounds=["round1", "round2"], reference_round="round1")
     dataset = Dataset(tmp_path, tmp_path / "out", "golden", "sample", "out", rounds=rounds,
                       channel_order=["ch00", "ch01", "ch02", "ch03"])
@@ -101,10 +110,7 @@ def run(tmp_path, methods, **options):
     transforms = []
     for result in fov.registration_results["round2"]:
         transform = result.transform
-        if result.diagnostics.method == "translation":
-            transforms.append(("translation", transform.displacement_zyx))
-        else:
-            transforms.append((result.diagnostics.method, digest(transform.displacement_zyx)))
+        transforms.append((result.diagnostics.method, transform.displacement_zyx))
     return {"images": {name: digest(image) for name, image in fov.images.items()},
             "transforms": transforms}
 
@@ -128,12 +134,30 @@ PINNED_RUNS = {
                    # reading that both W-245 pull points lie one voxel inside their grids; the reading was
                    # confirmed by Jiahao on 2026-09-30.
                    "round2": "aee3f8c33c613371790fdf1e83e9f7431538c6c64b820a75eba735eb5c224697"},
+        # The demons field: the array of demons.npz (expected_demons_field), at the float64 tolerance.
         "transforms": [
             ("translation", (1.0, 4.0, -2.0)),
-            ("demons", "54ff31f9a458cc255f7b4a2d19b9703a6eb6ed9d22b1f3209734f4cb3dc04968"),
+            ("demons", "demons.npz"),
         ],
     },
 }
+
+
+def expected_demons_field():
+    """The demons displacement field (Z, Y, X, ZYX components) of the translation -> demons run, float64."""
+    return read_arrays(EXPECTED / "demons.npz")["displacement_zyx"]
+
+
+def assert_transforms_match(transforms, pinned):
+    """The methods in order; a translation exactly; a demons field within FLOAT64 of the expected array."""
+    assert [method for method, _ in transforms] == [method for method, _ in pinned]
+    for (method, value), (_, expected) in zip(transforms, pinned):
+        if method == "translation":
+            assert value == expected
+        else:
+            expected = expected_demons_field()
+            assert value.dtype == expected.dtype and value.shape == expected.shape
+            np.testing.assert_allclose(value, expected, **FLOAT64)
 
 
 def test_fixture_inputs_are_pinned():
@@ -142,18 +166,22 @@ def test_fixture_inputs_are_pinned():
 
 @pytest.mark.parametrize("methods", list(PINNED_RUNS), ids="-".join)
 def test_registered_images_and_transforms_are_pinned(tmp_path, methods):
-    assert run(tmp_path, methods) == PINNED_RUNS[methods]
+    result = run(tmp_path, methods)
+    assert result["images"] == PINNED_RUNS[methods]["images"]
+    assert_transforms_match(result["transforms"], PINNED_RUNS[methods]["transforms"])
 
 
 def test_a_changed_demons_iteration_count_changes_the_digests(tmp_path):
     methods = ("translation", "demons")
     changed = run(tmp_path, methods, demons_iterations=(100, 50, 24))
     assert changed["images"]["round2"] != PINNED_RUNS[methods]["images"]["round2"]
-    assert changed["transforms"][1] != PINNED_RUNS[methods]["transforms"][1]
+    assert changed["transforms"][1][0] == "demons"
+    assert not np.allclose(changed["transforms"][1][1], expected_demons_field(), **FLOAT64)
 
 
 def test_a_changed_signal_mode_changes_the_digests(tmp_path):
     methods = ("translation", "demons")
     changed = run(tmp_path, methods, signal="single-channel")
     assert changed["images"]["round2"] != PINNED_RUNS[methods]["images"]["round2"]
-    assert changed["transforms"][1] != PINNED_RUNS[methods]["transforms"][1]
+    assert changed["transforms"][1][0] == "demons"
+    assert not np.allclose(changed["transforms"][1][1], expected_demons_field(), **FLOAT64)

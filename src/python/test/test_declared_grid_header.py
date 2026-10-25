@@ -5,11 +5,11 @@
 pixel; a file with stored calibration, whose grid holds the SHA-256 of its pixels, and a file
 whose header does not settle the shape ``load_volume`` gives are read whole as before.
 
-The oracle is the base revision's function (``ec4774a``), copied below as
-``base_reference_grid``: the file loaded whole by ``load_volume``; its default pattern and its
-keyword ``reference_image_import`` follow W-564 (the FOV folder's ``reference.tif``, read through
-the one resolver). Fixtures, all written in the
-test: one small synthetic file per layout ``load_volume`` reads or refuses (``LAYOUTS``), and the
+The expected outcomes are explicit (W-574): per layout the ZYX shape or the refusal, and the pages
+decoded (``EXPECTED_GRIDS``); per voxel setting the declared metadata or the sizes it lacks
+(``DECLARED``, ``LACKS``); for the callers the declared grids of their samples. They hold what the
+copied base-revision function (``ec4774a``) these tests compared with gave. Fixtures, all written in
+the test: one small synthetic file per layout ``load_volume`` reads or refuses (``LAYOUTS``), and the
 plain copy of W-390's synthetic sample scene (``sample-tiny-v1``, 2 × 2 FOVs of 5×36×36, its
 reference images written as pages without metadata) for the export. Pages decoded are counted by
 wrapping tifffile's pixel readers (``PixelReads``).
@@ -23,8 +23,8 @@ import numpy as np
 import pytest
 import tifffile
 
-from starfinder.dataset._declared import declared_metadata, reference_grid, reference_volume
-from starfinder.image import ImageMetadata
+from starfinder.dataset._declared import reference_grid, reference_volume
+from starfinder.image import ImageMetadata, InvalidImageError
 from starfinder.io import load_volume, save_volume
 from starfinder.segmentation import ReferenceGrid
 
@@ -38,31 +38,6 @@ RNG = np.random.default_rng(433)
 
 def pixels(shape, dtype=np.uint16):
     return RNG.integers(0, 1000, size=shape).astype(dtype)
-
-
-def base_reference_grid(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=None, voxel_size_z=None,
-                        reference_image="fovs/{fov_id}/reference.tif", reference_image_import=None):
-    """The base revision's ``reference_grid`` (``reference_volume(...)[0]`` of ``ec4774a``), copied: the whole file."""
-    from starfinder.segmentation._labels import grid_sha256
-    assert reference_image_import is None
-    path = Path(output_root) / reference_image.replace("{fov_id}", fov_id)
-    if not path.is_file():
-        raise FileNotFoundError(f"the reference image of FOV {fov_id!r} is missing: {path} (the file the setting "
-                                f"reference_image {reference_image!r} names)")
-    loaded = load_volume(path)
-    if loaded.diagnostics["metadata_source"] == "stored":
-        return ReferenceGrid(loaded.image.shape, loaded.metadata, f"file:{Path(path).resolve()}",
-                             grid_sha256(loaded.image))
-    missing = [key for key, value in zip(("voxel_size_xy", "voxel_size_z"), (voxel_size_xy, voxel_size_z))
-               if value is None]
-    if missing:
-        raise ValueError(f"{path} stores no calibration (no starfinder_metadata description), so its grid is declared "
-                         f"by the dataset configuration, which lacks {' and '.join(missing)}: set "
-                         f"{' and '.join(missing)} (µm) in the workflow configuration, or the Dataset fields of the "
-                         "same names")
-    metadata = declared_metadata(dataset_id, output_id, fov_id, voxel_size_xy=voxel_size_xy,
-                                 voxel_size_z=voxel_size_z)
-    return ReferenceGrid(loaded.image.shape, metadata, "declared")
 
 
 def _two_series(path):
@@ -132,6 +107,44 @@ REFUSED = ("ImageJ CYX, three channels (refused)", "OME CZYX, two channels (refu
 UNSETTLED = FLOAT + REFUSED
 LAYOUTS = SETTLED + WITH_CALIBRATION + UNSETTLED
 
+NOT_FINITE = (InvalidImageError, "image must contain finite real numeric values")
+AMBIGUOUS_C = (ValueError, "ambiguous C; select an explicit index")
+#: Per layout: the ZYX shape of the grid, or load_volume's refusal (exception type, message) for every voxel setting;
+#: and the pages reference_grid decodes, all in one whole read of the file (0: no read).
+EXPECTED_GRIDS = {
+    "ZYX stack (axes ZYX, save_volume without metadata)": ((5, 12, 10), 0),
+    "ZYX stack (ImageJ)": ((5, 12, 10), 0),
+    "ZYX stack (OME, singleton channel)": ((5, 12, 10), 0),
+    "ZYX stack (shaped pages without axes, QYX)": ((5, 12, 10), 0),
+    "single plane (YX, no metadata)": ((1, 12, 10), 0),
+    "single plane (ZYX of one page)": ((1, 12, 10), 0),
+    "paged without axis metadata (IYX, generic)": ((5, 12, 10), 0),
+    "paged without axis metadata (IYX, uniform)": ((8, 48, 64), 0),
+    "paged without axis metadata, zlib": ((5, 32, 32), 0),
+    "paged without axis metadata, tiled": ((3, 32, 32), 0),
+    "paged without axis metadata, int16": ((5, 12, 10), 0),
+    "four axes without metadata (read as ZYX pages)": ((6, 12, 10), 0),
+    "RGB without metadata (YXS, read as ZYX)": ((12, 10, 3), 0),
+    "stored calibration, ZYX": ((5, 12, 10), 5),
+    "stored calibration, one plane": ((1, 12, 10), 1),
+    "float32 pages (finiteness needs the pixels)": ((5, 12, 10), 5),
+    "float64 pages (finiteness needs the pixels)": ((5, 12, 10), 5),
+    "float32 pages with NaN (refused)": (NOT_FINITE, 5),
+    "ImageJ CYX, three channels (refused)": (AMBIGUOUS_C, 3),
+    "OME CZYX, two channels (refused)": (AMBIGUOUS_C, 10),
+    "declared CZYX, two channels (refused)": (AMBIGUOUS_C, 10),
+    "bool pages (refused)": (NOT_FINITE, 5),
+    "two series (refused)": ((ValueError, "ambiguous series; select an explicit index"), 0),
+}
+#: The metadata a file without stored calibration declares with both voxel sizes; the sizes each setting lacks.
+DECLARED = ImageMetadata(f"declared:{DATASET_ID}/{OUTPUT_ID}/{FOV}", spacing_zyx=(1.5, 0.5, 0.5),
+                         spatial_unit="micrometer")
+LACKS = {"given": None, "missing": "voxel_size_xy and voxel_size_z", "xy only": "voxel_size_z",
+         "z only": "voxel_size_xy"}
+NO_CALIBRATION = ("{path} stores no calibration (no starfinder_metadata description), so its grid is declared by the "
+                  "dataset configuration, which lacks {lacks}: set {lacks} (µm) in the workflow configuration, or the "
+                  "Dataset fields of the same names")
+
 
 def write_layout(root, kind):
     path = Path(root) / "fovs" / FOV / "reference.tif"
@@ -199,28 +212,32 @@ def outcome(function, root, **voxels):
 
 # --- The same grid ------------------------------------------------------------------------------------------------
 
+def expected_outcome(kind, voxels, path):
+    """(shape, metadata, source, holds a hash) of the expected grid, or the expected (exception type, message)."""
+    shape = EXPECTED_GRIDS[kind][0]
+    if kind in WITH_CALIBRATION:
+        return shape, STORED, f"file:{path.resolve()}", True
+    if kind not in SETTLED + FINITE_FLOAT:
+        return shape
+    if LACKS[voxels] is not None:
+        return ValueError, NO_CALIBRATION.format(path=path, lacks=LACKS[voxels])
+    return shape, DECLARED, "declared", False
+
+
 @pytest.mark.parametrize("voxels", list(VOXELS))
 @pytest.mark.parametrize("kind", LAYOUTS)
 def test_the_grid_equals_the_base_revisions(tmp_path, kind, voxels):
-    """Every field of the grid (shape, metadata, source, hash), or the exception type and message, as on the base."""
-    write_layout(tmp_path, kind)
-    result, base = outcome(reference_grid, tmp_path, **VOXELS[voxels]), outcome(base_reference_grid, tmp_path,
-                                                                                 **VOXELS[voxels])
-    assert type(result) is type(base)
-    if isinstance(base, ReferenceGrid):
-        assert (result.shape_zyx, result.metadata, result.source, result.sha256) == (
-            base.shape_zyx, base.metadata, base.source, base.sha256)
-        assert result == base == reference_volume(tmp_path, FOV, dataset_id=DATASET_ID, output_id=OUTPUT_ID,
-                                                  **VOXELS[voxels])[0]
+    """Every field of the grid (shape, metadata, source, whether it holds a hash), or the exception type and message,
+    as stated in EXPECTED_GRIDS, DECLARED and LACKS; a grid equals reference_volume's."""
+    path = write_layout(tmp_path, kind)
+    result = outcome(reference_grid, tmp_path, **VOXELS[voxels])
+    if isinstance(result, ReferenceGrid):
+        assert (result.shape_zyx, result.metadata, result.source, result.sha256 is not None) == expected_outcome(
+            kind, voxels, path)
+        assert result == reference_volume(tmp_path, FOV, dataset_id=DATASET_ID, output_id=OUTPUT_ID,
+                                          **VOXELS[voxels])[0]
     else:
-        assert result == base
-    if kind in SETTLED:
-        assert isinstance(base, ReferenceGrid) if voxels == "given" else base[0] is ValueError
-    if kind in WITH_CALIBRATION:
-        assert isinstance(base, ReferenceGrid) and base.metadata == STORED and base.sha256 is not None
-    if kind in UNSETTLED:
-        assert isinstance(base, ReferenceGrid) == (kind in FINITE_FLOAT and voxels == "given")
-        assert kind in FINITE_FLOAT or "stores no calibration" not in base[1]
+        assert result == expected_outcome(kind, voxels, path)
 
 
 def test_the_header_shape_is_the_loaded_shape(tmp_path):
@@ -262,61 +279,63 @@ def test_the_header_reader_reads_only_the_header(tmp_path):
 
 @pytest.mark.parametrize("voxels", ["given", "missing"])
 def test_a_missing_file_raises_as_before(tmp_path, voxels):
-    result, base = outcome(reference_grid, tmp_path, **VOXELS[voxels]), outcome(base_reference_grid, tmp_path,
-                                                                                **VOXELS[voxels])
-    assert result == base and base[0] is FileNotFoundError and "reference_image" in base[1]
+    path = tmp_path / "fovs" / FOV / "reference.tif"
+    assert outcome(reference_grid, tmp_path, **VOXELS[voxels]) == (
+        FileNotFoundError, f"the reference image of FOV {FOV!r} is missing: {path} (the file the setting "
+                           "reference_image 'fovs/{fov_id}/reference.tif' names)")
 
 
 # --- No pixel is read ---------------------------------------------------------------------------------------------
 
-def page_reads(monkeypatch, root, kind, voxels):
-    """(result, base) PixelReads of reference_grid and of the base revision's on the layout's file."""
+def page_reads(monkeypatch, root, voxels):
+    """(pages decoded, paths read whole) by reference_grid on the layout's file."""
     with counted(monkeypatch) as reads:
         outcome(reference_grid, root, **VOXELS[voxels])
-    with counted(monkeypatch) as base:
-        outcome(base_reference_grid, root, **VOXELS[voxels])
-    return reads, base
+    return reads.pages, reads.whole
+
+
+def expected_reads(kind, path):
+    """The pages EXPECTED_GRIDS states, in one whole read of the file, or no read."""
+    pages = EXPECTED_GRIDS[kind][1]
+    return pages, [path.resolve()] if pages else []
 
 
 @pytest.mark.parametrize("voxels", ["given", "missing"])
 @pytest.mark.parametrize("kind", SETTLED)
 def test_no_page_is_decoded_for_an_integer_file_without_calibration(tmp_path, monkeypatch, kind, voxels):
     """0 pages decoded and no whole read for a file of an integer dtype without stored calibration whose header
-    settles the shape (also when the voxel sizes are missing and it raises); the base revision read it whole."""
+    settles the shape (also when the voxel sizes are missing and it raises)."""
     path = write_layout(tmp_path, kind)
     assert load_volume(path).image.dtype.kind in "ui"
-    reads, base = page_reads(monkeypatch, tmp_path, kind, voxels)
-    assert (reads.pages, reads.whole) == (0, []) and base.pages == n_pages(path) > 0 and base.whole == [
-        path.resolve()]
+    assert page_reads(monkeypatch, tmp_path, voxels) == expected_reads(kind, path) == (0, [])
 
 
 @pytest.mark.parametrize("voxels", ["given", "missing"])
 @pytest.mark.parametrize("kind", FLOAT)
 def test_a_floating_point_file_without_calibration_is_read_as_before(tmp_path, monkeypatch, kind, voxels):
-    """A floating-point file without stored calibration is read whole, as on the base revision: load_volume refuses
-    a file with a non-finite value, and only the pixels show that. The same pages, the same whole read."""
+    """A floating-point file without stored calibration is read whole, as before: load_volume refuses a file with a
+    non-finite value, and only the pixels show that. Every page, in one whole read."""
     path = write_layout(tmp_path, kind)
-    reads, base = page_reads(monkeypatch, tmp_path, kind, voxels)
-    assert (reads.pages, reads.whole) == (base.pages, base.whole) == (n_pages(path), [path.resolve()])
+    assert page_reads(monkeypatch, tmp_path, voxels) == expected_reads(kind, path) == (n_pages(path),
+                                                                                       [path.resolve()])
 
 
 @pytest.mark.parametrize("voxels", ["given", "missing"])
 @pytest.mark.parametrize("kind", WITH_CALIBRATION)
 def test_a_file_with_stored_calibration_is_read_as_before(tmp_path, monkeypatch, kind, voxels):
-    """A file with stored calibration is read whole, as on the base revision: its grid holds the SHA-256 of its
-    pixels. The same pages, the same whole read."""
+    """A file with stored calibration is read whole, as before: its grid holds the SHA-256 of its pixels. Every page,
+    in one whole read."""
     path = write_layout(tmp_path, kind)
-    reads, base = page_reads(monkeypatch, tmp_path, kind, voxels)
-    assert (reads.pages, reads.whole) == (base.pages, base.whole) == (n_pages(path), [path.resolve()])
+    assert page_reads(monkeypatch, tmp_path, voxels) == expected_reads(kind, path) == (n_pages(path),
+                                                                                       [path.resolve()])
 
 
 @pytest.mark.parametrize("kind", REFUSED)
 def test_a_file_load_volume_refuses_is_read_as_before(tmp_path, monkeypatch, kind):
-    """A file load_volume refuses (another axis, dtype or several series) is read as on the base revision, so that
-    it raises as before."""
-    write_layout(tmp_path, kind)
-    reads, base = page_reads(monkeypatch, tmp_path, kind, "given")
-    assert (reads.pages, reads.whole) == (base.pages, base.whole)
+    """A file load_volume refuses (another axis, dtype or several series) is read as before, so that it raises as
+    before: the pages EXPECTED_GRIDS states (none for two series, which tifffile refuses before a page)."""
+    path = write_layout(tmp_path, kind)
+    assert page_reads(monkeypatch, tmp_path, "given") == expected_reads(kind, path)
 
 
 def test_the_counter_sees_every_reader(tmp_path, monkeypatch):
@@ -347,13 +366,23 @@ def whole_reads(reads, images):
     return {fov: reads.whole.count(path) for fov, path in images.items()}
 
 
-@contextmanager
-def base_revision(monkeypatch):
-    """The callers with the base revision's reference_grid (each resolves it from the module when called)."""
-    import starfinder.dataset._declared as declared
-    with monkeypatch.context() as patch:
-        patch.setattr(declared, "reference_grid", base_reference_grid)
-        yield
+def declared_grid(shape, frame, spacing):
+    return ReferenceGrid(shape, ImageMetadata(f"declared:{frame}", spacing_zyx=spacing, spatial_unit="micrometer"),
+                         "declared")
+
+
+def golden_grid(fov):
+    """The declared grid of a reference image of golden_sample: 8×48×64, voxel sizes 1.0 µm."""
+    return declared_grid((8, 48, 64), f"data/out/{fov}", (1.0, 1.0, 1.0))
+
+
+def grid_record(fov, part):
+    """golden_grid as the export record writes it in the part's ``fovs`` entries."""
+    record = {"shape_zyx": [8, 48, 64],
+              "metadata": {"frame_id": f"declared:data/out/{fov}", "spacing_zyx": [1.0, 1.0, 1.0], "origin_zyx": None,
+                           "direction_zyx": None, "spatial_unit": "micrometer"},
+              "sha256": None, "source": "declared"}
+    return {**record, "calibration_source": "declared"} if part == "assembly" else record
 
 
 def golden_sample(root):
@@ -369,9 +398,8 @@ def golden_sample(root):
 @needs_extras
 @pytest.mark.stitching
 def test_each_export_caller_reads_the_grid_without_pixels(tmp_path, monkeypatch):
-    """assembly_inputs (from the molecule tables), fusion_inputs and the route after fusion's input grids: each read
-    each reference image whole once on the base revision, for its grid alone; now none does, and each gets the
-    base's grids."""
+    """assembly_inputs (from the molecule tables), fusion_inputs and the route after fusion's input grids read no
+    reference image whole, and each gets the declared grid of every FOV (golden_grid)."""
     from starfinder.dataset.workflow import _assembly_block, _export_dataset
     from starfinder.export import ExportConfig, FusionConfig
     from starfinder.dataset._export import _input_grids, assembly_inputs, fusion_inputs
@@ -387,12 +415,9 @@ def test_each_export_caller_reads_the_grid_without_pixels(tmp_path, monkeypatch)
     for name, call in callers.items():
         with counted(monkeypatch) as reads:
             grids = call()
-        with base_revision(monkeypatch), counted(monkeypatch) as base:
-            base_grids = call()
-        assert grids == base_grids and len(grids) == len(images), name
+        assert grids == [golden_grid(fov) for fov in images], name
         assert all(grid.source == "declared" for grid in grids), name
         assert whole_reads(reads, images) == {fov: 0 for fov in images}, name
-        assert whole_reads(base, images) == {fov: 1 for fov in images}, name
 
 
 @needs_extras
@@ -400,60 +425,36 @@ def test_each_export_caller_reads_the_grid_without_pixels(tmp_path, monkeypatch)
 @pytest.mark.stitching
 @pytest.mark.workflow
 def test_the_export_reads_no_reference_image_whole_for_its_grid(tmp_path, monkeypatch):
-    """The workflow's reads_assignment with an assembly block reads each reference image whole once on the base
-    revision, for its grid alone, and its export_sample (Dataset.export with the assembly and the fusion on) twice
-    (the assembly's grid and the fusion's grid); now neither does. The fusion reads the same pages; the saved
-    folders, records, tables and fused images are the base's."""
-    import shutil
-
+    """The workflow's reads_assignment with an assembly block, and its export_sample (Dataset.export with the
+    assembly and the fusion on), read no reference image whole for its grid; the fusion reads every page. The
+    figures are drawn (previews on, W-568), and the export record holds the declared grid of every FOV (grid_record)
+    in the assembly and the fusion. That the plain sample's saved folders, tables and fused images equal those of
+    the same sample with stored metadata is test_workflow_declared_grids.py's
+    test_reads_assignment_and_export_sample_on_declared_grids."""
     import dask
 
-    from starfinder.assembly import load_assembly
-
-    from .test_stitching_declared_grids import compare_tables
     from .test_workflow_assembly_figures import export_sample, reads_assignment
     root = tmp_path
     out, config, images = golden_sample(root)
-    # The figures reads_assignment draws on request (W-568, assembly.previews), compared with the saved folders.
+    # The figures reads_assignment draws on request (W-568, assembly.previews).
     config = {**config, "assembly": {**config["assembly"], "previews": True}}
-    for name in ("result", "base"):
-        with counted(monkeypatch) as reads:
-            if name == "base":
-                with base_revision(monkeypatch):
-                    figures = {fov: reads_assignment(root, out, fov, config) for fov in images}
-            else:
-                figures = {fov: reads_assignment(root, out, fov, config) for fov in images}
-        expected = {fov: 1 if name == "base" else 0 for fov in images}
-        assert whole_reads(reads, images) == expected, name
-        saved = {fov: {p.name: p.read_bytes() for p in sorted((out / "fovs" / fov / "assignment").rglob("*"))
-                       if p.is_file()}
-                 for fov in images}
-        if name == "result":
-            first = (figures, saved)
-        else:
-            assert (figures, saved) == first
-    folders, records, whole, pages = {}, {}, {}, {}
-    for name in ("result", "base"):
-        with dask.config.set(scheduler="synchronous"), counted(monkeypatch) as reads:
-            if name == "base":
-                with base_revision(monkeypatch):
-                    export_sample(out, config)
-            else:
-                export_sample(out, config)
-        folders[name] = shutil.move(out / "export" / "sample1", root / f"export_{name}")
-        records[name] = json.loads((folders[name] / "export.json").read_text())
-        whole[name], pages[name] = whole_reads(reads, images), reads.pages
-    assert records["result"]["parts"] == records["base"]["parts"] == PARTS
-    assert whole == {"result": {fov: 0 for fov in images}, "base": {fov: 2 for fov in images}}
-    total = sum(n_pages(path) for path in images.values())
-    assert pages["base"] - pages["result"] == 2 * total and pages["result"] >= total
+    with counted(monkeypatch) as reads:
+        figures = {fov: reads_assignment(root, out, fov, config) for fov in images}
+    assert whole_reads(reads, images) == {fov: 0 for fov in images}
+    assert {fov: list(drawn) for fov, drawn in figures.items()} == {fov: ["assignment.png"] for fov in images}
+    assert all(png for drawn in figures.values() for png in drawn.values())
+    with dask.config.set(scheduler="synchronous"), counted(monkeypatch) as reads:
+        export_sample(out, config)
+    folder = out / "export" / "sample1"
+    record = json.loads((folder / "export.json").read_text())
+    assert record["parts"] == PARTS
+    assert whole_reads(reads, images) == {fov: 0 for fov in images}
+    assert reads.pages >= sum(n_pages(path) for path in images.values())
     for part in ("assembly", "fusion"):
-        grids = {name: [e["grid"] for e in records[name][part]["fovs"]] for name in records}
-        assert grids["result"] == grids["base"], part
-    compare_tables(load_assembly(folders["result"]), load_assembly(folders["base"]))
-    for output in records["result"]["fusion"]["outputs"]:
-        a, b = (tifffile.imread(folders[name] / output["path"]) for name in ("result", "base"))
-        assert a.dtype == b.dtype == np.uint8 and np.array_equal(a, b) and a.any()
+        assert [e["grid"] for e in record[part]["fovs"]] == [grid_record(fov, part) for fov in images], part
+    for output in record["fusion"]["outputs"]:
+        fused = tifffile.imread(folder / output["path"])
+        assert fused.dtype == np.uint8 and fused.any()
 
 
 @needs_extras
@@ -461,7 +462,7 @@ def test_the_export_reads_no_reference_image_whole_for_its_grid(tmp_path, monkey
 def test_a_float_reference_image_is_still_read_whole(monkeypatch, tmp_path):
     """W-390's sample scene, whose stains are float32 and written as pages without metadata: whether a float file is
     finite only its pixels show (load_volume refuses NaN), so assembly_inputs and fusion_inputs read it whole, as
-    on the base revision, and get the base's grids."""
+    before, and get the declared grid of every FOV: 5×36×36, voxel sizes 1.0 and 0.5 µm."""
     from starfinder.export import ExportConfig, FusionConfig
     from starfinder.dataset._export import assembly_inputs, fusion_inputs
     from starfinder.stitching import load_placement
@@ -484,10 +485,9 @@ def test_a_float_reference_image_is_still_read_whole(monkeypatch, tmp_path):
 
     with counted(monkeypatch) as reads:
         result = grids()
-    with base_revision(monkeypatch), counted(monkeypatch) as base:
-        expected = grids()
-    assert result == expected and whole_reads(reads, images) == whole_reads(base, images) == {
-        fov: 2 for fov in images}
+    expected = [declared_grid((5, 36, 36), f"{DATASET_ID}/{OUTPUT_ID}/{fov}", (1.0, 0.5, 0.5)) for fov in images]
+    assert list(images) == ["FOV_001", "FOV_002", "FOV_003", "FOV_004"]
+    assert result == expected * 2 and whole_reads(reads, images) == {fov: 2 for fov in images}
 
 
 # --- The stitching's read_inputs -----------------------------------------------------------------------------------
@@ -496,38 +496,43 @@ def test_a_float_reference_image_is_still_read_whole(monkeypatch, tmp_path):
 @pytest.mark.parametrize("input_name", ["reference_merged", "reference_stain", "file:images/other/{fovID}.tif",
                                         "file:images/missing/{fovID}.tif"])
 def test_read_inputs_reads_the_reference_image_whole_only_for_its_pixels(tmp_path, monkeypatch, input_name):
-    """read_inputs on W-390's workflow sample (uint8 reference images as pages without metadata): the base revision
-    read each reference image whole for every input; now only reference_merged, whose image it is, reads it whole,
-    and reference_stain, a file: input and a missing file: input read only its grid (no page of it decoded). Every
-    StitchingInput (image, grid, source, file hash) equals the base's."""
+    """read_inputs on W-390's workflow sample (uint8 reference images as pages without metadata): only
+    reference_merged, whose image it is, reads the reference image whole, and reference_stain, a file: input and a
+    missing file: input read only its grid (no page of it decoded). Every StitchingInput holds the declared grid
+    (golden_grid), its source, the pixels of the file it names and that file's SHA-256 (none for a missing file)."""
+    import hashlib
+
     from starfinder.dataset._declared import reference_settings
     from starfinder.dataset._export import reference_stain_path
     from starfinder.dataset._stitching import read_inputs
     from starfinder.dataset.workflow import _assembly_block, _export_dataset
     out, config, images = golden_sample(tmp_path)
     reference = reference_settings(_export_dataset(config, _assembly_block(config)))
+    files = {}
     for fov in images:
         grid = reference_grid(out, fov, **reference)
-        save_volume(pixels(grid.shape_zyx + (1,)), reference_stain_path(out, fov), metadata=grid.metadata)
+        stain = pixels(grid.shape_zyx)
+        save_volume(stain[..., None], reference_stain_path(out, fov), metadata=grid.metadata)
         other = out / "images" / "other" / f"{fov}.tif"
         other.parent.mkdir(parents=True, exist_ok=True)
         tifffile.imwrite(other, pixels(grid.shape_zyx), metadata=None, photometric="minisblack")
+        files[fov] = {"reference_merged": (images[fov], tifffile.imread(images[fov])),
+                      "reference_stain": (reference_stain_path(out, fov), stain),
+                      "file:images/other/{fovID}.tif": (other, tifffile.imread(other)),
+                      "file:images/missing/{fovID}.tif": (out / "images" / "missing" / f"{fov}.tif", None)}
 
     def whole_reads_of_references(reads):
         return {fov: reads.whole.count(path) for fov, path in images.items()}
 
     with counted(monkeypatch) as reads:
         result = read_inputs(out, list(images), input_name, reference=reference)
-    with base_revision(monkeypatch), counted(monkeypatch) as base:
-        expected = read_inputs(out, list(images), input_name, reference=reference)
-    assert list(result) == list(expected) == list(images)
+    assert list(result) == list(images)
     for fov in images:
-        a, b = result[fov], expected[fov]
-        assert (a.fov_id, a.grid, a.source, a.file_sha256) == (b.fov_id, b.grid, b.source, b.file_sha256)
-        assert (a.image is None) == (b.image is None) == input_name.startswith("file:images/missing")
-        assert a.image is None or (a.image.dtype == b.image.dtype and np.array_equal(a.image, b.image))
+        a, (path, pixels_of_file) = result[fov], files[fov][input_name]
+        source = input_name if not input_name.startswith("file:") else f"file:{path}"
+        file_sha256 = None if pixels_of_file is None else hashlib.sha256(path.read_bytes()).hexdigest()
+        assert (a.fov_id, a.grid, a.source, a.file_sha256) == (fov, golden_grid(fov), source, file_sha256)
+        assert (a.image is None) == (pixels_of_file is None) == input_name.startswith("file:images/missing")
+        assert a.image is None or (a.image.dtype == pixels_of_file.dtype and np.array_equal(a.image, pixels_of_file))
         assert a.grid.source == "declared"
-    assert whole_reads_of_references(base) == {fov: 1 for fov in images}
     assert whole_reads_of_references(reads) == {fov: 1 if input_name == "reference_merged" else 0 for fov in images}
-    if input_name != "reference_merged":
-        assert base.pages - reads.pages == sum(n_pages(path) for path in images.values())

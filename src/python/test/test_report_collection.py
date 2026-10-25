@@ -8,7 +8,7 @@ schema (PG6) and the determinism of two single-thread processes (DT1). Expected 
 written here by hand from the fixtures' own numbers.
 
 Every null cell, ``summary`` key and ``rules`` key is not applicable or named by exactly one
-row of ``unavailable.csv`` (``check_null_values``); ``_schema.PENDING_VALUES`` is empty.
+row of ``unavailable.csv`` (``check_null_values``).
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ import pytest
 from starfinder._records import _read_table
 from starfinder.report import (PROBLEM_RULES, REPORT_PARTS, REPORT_TABLES, UNAVAILABLE_REASONS, MarkerGroup,
                                ReportConfig, ReportLimits, RuleLimit, load_report)
-from starfinder.report._schema import PENDING_VALUES, RULE_UNITS, SUMMARY_KEYS
+from starfinder.report._schema import RULE_UNITS, SUMMARY_KEYS
 
 from .report_fixtures import (CASES, CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOVING, NCC_AFTER, NOMINAL,
                               ORIGINS, SAMPLE, STARTED, TRANSLATIONS, raw_path, report_cells,
@@ -615,11 +615,6 @@ def test_rc12_null_cells_and_closed_lists(tmp_path, maker, variant):
                                                                             len(record["stages"]["run_records"]))
     statuses = tables["fovs"]["status"]
     assert summary["fovs_succeeded"] == (int(statuses.eq("succeeded").sum()) if statuses.notna().any() else None)
-
-
-def test_no_pending_value():
-    """The staged delivery is complete: no value is left to a later issue."""
-    assert PENDING_VALUES == ()
 
 
 # --- Inputs and their hashes ----------------------------------------------------------------------------------

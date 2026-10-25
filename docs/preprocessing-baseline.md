@@ -68,8 +68,10 @@ default `threshold_value=5.0`. The table reports it for the golden fixture:
 round 2 of two seeded uint16 rounds, 4×32×32 voxels and four channels, with
 per-channel offsets of 200–1600, Gaussian noise of standard deviation 20, twelve
 puncta of amplitude 1000–4000 and unequal channel gains. Values are
-(zero fraction, median, MAD, threshold) for channels 0–3, and the test pins them
-exactly.
+(zero fraction, median, MAD, threshold) for channels 0–3, rounded here; the test
+compares them in full precision with the float64 tolerance of
+[contributing](contributing.md), "Expected values and tolerances" (W-574; before,
+it rounded them to six decimals and compared exactly).
 
 | Output | Channel 0 | Channel 1 | Channel 2 | Channel 3 |
 | --- | --- | --- | --- | --- |

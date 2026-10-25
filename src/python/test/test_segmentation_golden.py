@@ -31,8 +31,13 @@ scikit-image 0.26.0, SciPy 1.17.0, tifffile 2026.1.28) and are bit-identical ove
 repeated single-thread runs; see docs/segmentation-baseline.md. The §2.9 work may
 replace the body of ``legacy_stardist_steps``, ``composite`` and
 ``flamingo_enhancement`` with calls to the package functions; every pinned digest
-stays, except where docs/segmentation-contract.md names an edit.
+stays, except where docs/segmentation-contract.md names an edit. The one float64
+pin, the shrunk DAPI image, is an explicit expected array since W-574
+(``expected_shrunk_image``, ``data/expected/test_segmentation_golden/``), compared
+with the float64 tolerance of docs/contributing.md; the uint8 images and the labels
+keep their digests.
 """
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -50,9 +55,11 @@ from starfinder.segmentation import composite_nuclei_amplicon, enhance_with_flam
 from starfinder.segmentation import ExpandLabelsConfig, expand_labels as package_expand_labels
 
 from .coordination_helpers import digest
+from .expected_values import read_arrays
 
 pytestmark = [pytest.mark.workflow, pytest.mark.segmentation, pytest.mark.golden]
 
+EXPECTED = Path(__file__).resolve().parent / "data" / "expected" / "test_segmentation_golden"
 SHAPE_ZYX = (16, 64, 64)
 SEED = 20261005
 DISTANCE = 4  # the expansion distance of the W-306 parity runs
@@ -220,26 +227,21 @@ GATE = {
     "dapi_2d": (22.0, 7, 131, True),
     "small_only": (21.0, 2, 21, False),
 }
-GATE_AREAS_DIGESTS = {
-    "dapi": "b9720200737505bfb34c3ab5b3f27f3ef639088b5e205e02d94e7e64d2bc41ae",
-    "dapi_2d": "228af7d8bc0715ff0603ea35cad26d16359a2e80173f10a6b37e671fe00b5997",
-    "small_only": "2b74379c7e4f296245b6b1b0aaee4c31b8f6d49804bb973c8c1b49ff483e82eb",
-}
 # (rescale, expand) -> digest of the uint16 label image, in 3D and in 2D (the DAPI Z maximum)
 LABELS_3D = {
-    (False, False): "ec97107d690a88a4844e9fb257bbb119562e3d78310630d2f43faa221409bbb4",
     (False, True): "343c4dc33550ccaa2dff16dfbaa9466a0651a45954898449030f05f77f323c48",
-    (True, False): "669c1cccf0f383c0e25c58a1c754a9f1d919dd032661ec7dee3ffe8cb300f8c2",
     (True, True): "df47e26cb841fa90b8b3ed4888d8b9b0fd153e6b2e2da012391fdd512e7544d0",
 }
 LABELS_2D = {
-    (False, False): "213dcecea9784ee9d2c36b70717839a729e522d87e424b44f74f8c2a0011c61e",
     (False, True): "00f2964c40e8f8130b4105795f55c5f14ba61bc2fee93f53272b665b36e36f6b",
-    (True, False): "15db8fd1a58211f8c9c285eb25ca46bf708bcf04783f7744d5f1d0133c073bf2",
-    (True, True): "94898d39122fc589c3719170811a86bbb5844f7f766d854d1021ea30a0f7ed6b",
 }
-# rescale(dapi, [1, .5, .5]): float64, 16×32×32
-SHRUNK_IMAGE_DIGEST = "11e543854295fe0c085cb7d40d87fc87649d07f8a17ea948ba704803eb308cb3"
+
+
+def expected_shrunk_image():
+    """rescale(dapi, [1, .5, .5]): float64, 16×32×32, compared with the float64 tolerance."""
+    return read_arrays(EXPECTED / "shrunk_image.npz")["image"]
+
+
 # the stand-in labels on the shrunk grid
 SHRUNK_LABELS_DIGEST = "9a1bd53e5353a3cbbc68f6e28e32cb5309a00a3889882c861ee0baf9bf40f8d7"
 # (dtype, digest) of the labels rescaled back to 16×64×64

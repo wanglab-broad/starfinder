@@ -547,29 +547,29 @@ def test_a_channel_axis_or_more_than_three_axes_is_refused_as_before(tmp_path, c
                                 "or YX")
 
 
-# What the base revision 2303ae6's _source_shape gave for each file (measured on that revision with these files):
-# a ZYX shape, or None for the refusal "a source image is one channel, ZYX or YX". Only a series with no axis
-# metadata whose reported axes are exactly one page axis over Y and X is read differently now (the first two).
+# What _source_shape gives for each file: a ZYX shape, or None for the refusal "a source image is one channel, ZYX
+# or YX". A series with no axis metadata whose reported axes are exactly one page axis over Y and X is read as ZYX
+# (the first three); until W-574 a column also held what the base revision 2303ae6 gave, the refusal for those.
 AXIS_CASES = {
-    "pages, no metadata (IYX)": ((2, 6, 6), {"metadata": None}, None, (2, 6, 6)),
-    "shaped pages without axes (QYX)": ((2, 6, 6), {}, None, (2, 6, 6)),
-    "uniform pages, no metadata (IYX)": ((8, 48, 64), {"metadata": None}, None, (8, 48, 64)),
-    "declared IYX": ((2, 6, 6), {"metadata": {"axes": "IYX"}}, None, None),
-    "declared QYX": ((2, 6, 6), {"metadata": {"axes": "QYX"}}, None, None),
-    "declared ICYX, singleton channel after the pages": ((2, 1, 6, 6), {"metadata": {"axes": "ICYX"}}, None, None),
-    "declared CIYX, singleton channel before the pages": ((1, 2, 6, 6), {"metadata": {"axes": "CIYX"}}, None, None),
-    "declared QIYX, singleton extra axis before": ((1, 2, 6, 6), {"metadata": {"axes": "QIYX"}}, None, None),
-    "declared IQYX, singleton extra axis after": ((2, 1, 6, 6), {"metadata": {"axes": "IQYX"}}, None, None),
-    "declared TIYX, singleton time axis": ((1, 2, 6, 6), {"metadata": {"axes": "TIYX"}}, None, None),
-    "shaped QQYX, singleton first": ((1, 2, 6, 6), {}, None, None),
-    "shaped QQYX, singleton second": ((2, 1, 6, 6), {}, None, None),
-    "declared ZYX": ((2, 6, 6), {"metadata": {"axes": "ZYX"}}, (2, 6, 6), (2, 6, 6)),
-    "declared CZYX, singleton channel": ((1, 2, 6, 6), {"metadata": {"axes": "CZYX"}}, (2, 6, 6), (2, 6, 6)),
-    "shaped QYX of one page": ((1, 6, 6), {}, (1, 6, 6), (1, 6, 6)),
-    "YX, no metadata": ((6, 6), {"metadata": None}, (1, 6, 6), (1, 6, 6)),
-    "ImageJ ZYX": ((2, 6, 6), {"imagej": True, "metadata": {"axes": "ZYX"}}, (2, 6, 6), (2, 6, 6)),
-    "ImageJ default (CYX)": ((2, 6, 6), {"imagej": True}, None, None),
-    "OME CZYX, singleton channel": ((1, 2, 6, 6), {"ome": True, "metadata": {"axes": "CZYX"}}, (2, 6, 6), (2, 6, 6)),
+    "pages, no metadata (IYX)": ((2, 6, 6), {"metadata": None}, (2, 6, 6)),
+    "shaped pages without axes (QYX)": ((2, 6, 6), {}, (2, 6, 6)),
+    "uniform pages, no metadata (IYX)": ((8, 48, 64), {"metadata": None}, (8, 48, 64)),
+    "declared IYX": ((2, 6, 6), {"metadata": {"axes": "IYX"}}, None),
+    "declared QYX": ((2, 6, 6), {"metadata": {"axes": "QYX"}}, None),
+    "declared ICYX, singleton channel after the pages": ((2, 1, 6, 6), {"metadata": {"axes": "ICYX"}}, None),
+    "declared CIYX, singleton channel before the pages": ((1, 2, 6, 6), {"metadata": {"axes": "CIYX"}}, None),
+    "declared QIYX, singleton extra axis before": ((1, 2, 6, 6), {"metadata": {"axes": "QIYX"}}, None),
+    "declared IQYX, singleton extra axis after": ((2, 1, 6, 6), {"metadata": {"axes": "IQYX"}}, None),
+    "declared TIYX, singleton time axis": ((1, 2, 6, 6), {"metadata": {"axes": "TIYX"}}, None),
+    "shaped QQYX, singleton first": ((1, 2, 6, 6), {}, None),
+    "shaped QQYX, singleton second": ((2, 1, 6, 6), {}, None),
+    "declared ZYX": ((2, 6, 6), {"metadata": {"axes": "ZYX"}}, (2, 6, 6)),
+    "declared CZYX, singleton channel": ((1, 2, 6, 6), {"metadata": {"axes": "CZYX"}}, (2, 6, 6)),
+    "shaped QYX of one page": ((1, 6, 6), {}, (1, 6, 6)),
+    "YX, no metadata": ((6, 6), {"metadata": None}, (1, 6, 6)),
+    "ImageJ ZYX": ((2, 6, 6), {"imagej": True, "metadata": {"axes": "ZYX"}}, (2, 6, 6)),
+    "ImageJ default (CYX)": ((2, 6, 6), {"imagej": True}, None),
+    "OME CZYX, singleton channel": ((1, 2, 6, 6), {"ome": True, "metadata": {"axes": "CZYX"}}, (2, 6, 6)),
 }
 
 # tifffile's series kind for a file no metadata format matched: small pages read as generic, larger as uniform.
@@ -578,11 +578,10 @@ FALLBACK_KINDS = {"pages, no metadata (IYX)": "generic", "uniform pages, no meta
 
 @pytest.mark.parametrize("case", list(AXIS_CASES))
 def test_only_metadata_free_pages_are_read_as_zyx(tmp_path, case):
-    """Every file the base revision read or refused is read or refused the same, except the two metadata-free page
-    series of the decision; a refusal keeps the base message."""
+    """Each file is read as the ZYX shape AXIS_CASES states, or refused with the message of a source image that is
+    not one channel, ZYX or YX."""
     from starfinder.export._fuse import _source_shape
-    shape, kwargs, base, expected = AXIS_CASES[case]
-    assert expected == base or case in (*FALLBACK_KINDS, "shaped pages without axes (QYX)")
+    shape, kwargs, expected = AXIS_CASES[case]
     path = tmp_path / "tile.tif"
     tifffile.imwrite(path, np.zeros(shape, np.uint16), photometric="minisblack", **kwargs)
     with tifffile.TiffFile(path) as tif:

@@ -22,7 +22,9 @@ its Z maximum as the 2D case, a molecule table of 19 rows written as a one-based
 ``legacy_assignment`` follows the script at 6b384cd line by line, with the cited lines;
 since the script became an adapter call (W-317) it is the frozen legacy reference. The pins
 were computed with it; the tests that ran only it are gone (W-535), and the package tests
-below and in test_assignment.py check the package against the pins. The tile
+below and in test_assignment.py check the package against the pins. The pins no test
+read any more (the per-molecule label digests, which ``SEG_LABELS`` states explicitly, the
+empty-branch metadata and the two expansions) were deleted in W-574. The tile
 configuration, the global coordinates, the overlap filter (lines 39-42, 78-80, 141-165),
 the plots and the H5AD and CSV writing are §2.10 or output plumbing and are not pinned;
 see docs/assignment-baseline.md.
@@ -227,19 +229,15 @@ SCRIPT_LINES = {
 }
 
 LABELS_DIGEST = "d4023267d11f4f1e238fbfa320a88e02c3ddf230667a8e8b2e724e51a796b6a7"
-# (dimensions, expand) -> digests of the per-molecule labels, the count matrix and the cell metadata
+# (dimensions, expand) -> digests of the count matrix and the cell metadata (the per-molecule labels: SEG_LABELS)
 PINS = {
-    ("3d", False): ("c78d741141b61bf3d3b4b1c1e45a3d44e90e7f99c48a0d68d06a934fb46fe9e9",
-                    "dc0804ba501126c4fe0a0eb5b1d56b1eb1371ef9a2c41bba0d11f81fe1737f13",
+    ("3d", False): ("dc0804ba501126c4fe0a0eb5b1d56b1eb1371ef9a2c41bba0d11f81fe1737f13",
                     "1fc6532b64b21d7aed9c4b7065f5a53a3725679e36e84716ed4e13ade96a389d"),
-    ("3d", True): ("fe4ae60cb6ba5afe4c773d80701c0dd4a2ceb6f2142a16b4f68fb04c10da912e",
-                   "8f25ccc3a40de3528ac0836e1d21ea3f706328e4248669054a49aede3a18c132",
+    ("3d", True): ("8f25ccc3a40de3528ac0836e1d21ea3f706328e4248669054a49aede3a18c132",
                    "fcb61757df5b9cc889316fa3d9277215d3aad715c62ffa8dee74ec222f10a805"),
-    ("2d", False): ("2e57ab8052b30e75cc3576c53c2038364a974d1f62bc3f72f2043db32f81d86e",
-                    "e187daf861c24b05aff233f6cfb0aa5079a831d2c5d4750a255a1abfa2e0b709",
+    ("2d", False): ("e187daf861c24b05aff233f6cfb0aa5079a831d2c5d4750a255a1abfa2e0b709",
                     "d4a6b07fc003f0b78ed681c0dc4b4435edc7a05b84c95857f0b2f95f485772c2"),
-    ("2d", True): ("53d0fdb95001b762f549243b77e73016895c35eff6b8326b828a10374525818f",
-                   "fa2da938c61f2515336df415fc2908ceed137ada3a18c99b7ab0aef41328a830",
+    ("2d", True): ("fa2da938c61f2515336df415fc2908ceed137ada3a18c99b7ab0aef41328a830",
                    "0605e2e234588e6c5d7bb6b6e429c675176b97f92f1a163633eed727a646a14f"),
 }
 # (dimensions, expand) -> per-molecule labels, in MOLECULES order
@@ -249,12 +247,6 @@ SEG_LABELS = {
     ("2d", False): [3, 3, 3, 7, 7, 12, 12, 12, 20, 25, 0, 0, 0, 0, 0, 7, 0, 3, 3],
     ("2d", True): [3, 3, 3, 7, 7, 12, 12, 12, 20, 25, 0, 0, 7, 20, 12, 7, 0, 3, 3],
 }
-# dimensions -> digest of the empty cell metadata
-EMPTY_META_DIGESTS = {"3d": "6255dcaada831c4983663981a5672e0e30bfaf103a32add4531bcc7aa88284ad",
-                      "2d": "633abac4ebf542373a795970e930f65c11aa2edb971ad7bededed21ca2096533"}
-# Planar expansion by 4 (segmentation) then by 2 (assignment), and by 6 once
-TWO_EXPANSIONS = {"twice": "1e683ba4caa86c83b29f8692d1be9339394aa64b33fa8c6d78ad17aad6df490b",
-                  "once": "1a84d65b8f83a686345ad1aeea70c45498167722427c106ff7a3f36ebc4713f3"}
 
 
 @pytest.fixture(scope="module")
@@ -319,8 +311,8 @@ def test_the_package_reproduces_the_pins(labels, tmp_path, dimensions, expand):
     assert [0 if pd.isna(c) else int(c) for c in result.molecules.cell_id] == pinned
     matrix, rows = result.matrix()
     assert rows.cell_id.astype(int).tolist() == [3, 7, 12, 20, 25]
-    assert digest(matrix.astype(np.float64)) == PINS[(dimensions, expand)][1]
-    assert frame_digest(legacy_meta(result, dimensions, expand)) == PINS[(dimensions, expand)][2]
+    assert digest(matrix.astype(np.float64)) == PINS[(dimensions, expand)][0]
+    assert frame_digest(legacy_meta(result, dimensions, expand)) == PINS[(dimensions, expand)][1]
     if dimensions == "3d":
         cell_3 = result.cells.iloc[0]
         assert cell_3.size_voxels == 771 and (cell_3.expanded_size_voxels == 1866 if expand else
