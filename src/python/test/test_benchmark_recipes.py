@@ -116,10 +116,9 @@ def test_pipeline_rejects_missing_sources_and_unsafe_paths(tmp_path):
 def test_pipeline_records_explicit_recovery_and_failures(tmp_path):
     case = fixture_case(tmp_path)
     params = case.config['workflow']['rules']['rsf_single_fov']['parameters']
-    params['global_registration'] = {'run': False}
-    params['local_registration'] = {'run': True, 'method': 'tps', 'recovery': {
+    params['registration'] = {'steps': [{'method': 'tps', 'recovery': {
         'allowed_errors': ['InsufficientLandmarksError'],
-        'alternatives': [{'method': 'demons'}]}}
+        'alternatives': [{'method': 'demons'}]}}]}
     def run():
         return run_benchmark([case], input_root=tmp_path/'inputs', output_root=tmp_path/'outputs', owner='test')
     root = run()
@@ -128,7 +127,7 @@ def test_pipeline_records_explicit_recovery_and_failures(tmp_path):
     assert len(trial['attempts']) == 6
     assert {a['actual_method'] for a in trial['attempts']} == {'tps', 'demons'}
     assert trial['effective_configs']['pipeline']['registration']['steps'][0]['recovery']['allowed_errors'] == ['InsufficientLandmarksError']
-    del params['local_registration']['recovery']
+    del params['registration']['steps'][0]['recovery']
     root = run()
     trial = read(root/'fixture/0000/trial.json')
     assert trial['status']['processing'] == 'failed'

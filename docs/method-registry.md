@@ -229,15 +229,17 @@ The registry changes how a method is found, not what it does or returns.
 In every stage, the YAML key `method` holds a registered `spec.name`, and the
 other keys of a method's mapping are exactly the init fields of its config
 dataclass (YAML lists become tuples). The name lookup is `config_type_for()`
-over the stage's registry. Legacy keys stay accepted and keep their meaning;
-their translation lives in the workflow adapter (`dataset/workflow.py`), not in
-the registry.
+over the stage's registry. Since W-569 the Python backend accepts the
+registry-based keys only: a legacy key raises under `backend: python`, naming
+its native form. The legacy keys stay accepted, with their meaning, for
+MATLAB-backend configurations, which the adapters of the shared rules read; their
+translation lives in `dataset/_legacy_config.py`, not in the registry.
 
 | Stage | Current YAML | Registry-based YAML | Legacy compatibility |
 | --- | --- | --- | --- |
-| Preprocessing | `preprocessing.steps[].method: <method name>` (Python only) | unchanged | `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` and `snr_threshold` keep mapping to recipe 1; the explicit key stays mutually exclusive with them |
-| Registration | `global_registration` and `local_registration` blocks; `method` in `translation`, `demons`, `diffeomorphic`, `symmetric`, `fast_symmetric`, `tps`, `cpd`; MATLAB-style setting names such as `grid_spacing` and `beta` | a Python-only `registration` key for the `RegistrationRecipe`, whose `steps` list names methods by `REGISTRATION_METHODS` names ({doc}`registration-contract`, "Workflow configuration") | the two legacy blocks map to a recipe of two steps (global, then local). The demons variant names stay legacy aliases for `method: demons` with `variant: <name>`; the MATLAB-style setting names and the legacy defaults (CPD `detection_noise_sigma=3`, `grid_spacing_voxels=32`) stay in the adapter |
-| Spot finding | `spot_finding` block with `intensity_estimation`, `intensity_threshold`, `min_distance`/`min_distance_voxels`; always `local_maxima` | an optional `method` key naming a `SPOT_FINDING_METHODS` name, default `local_maxima`, with that config's fields | the legacy keys stay valid for `local_maxima` only and are rejected with any other method |
+| Preprocessing | `preprocessing.steps[].method: <method name>` (Python only), and `post_registration` | unchanged | MATLAB backend only: `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` and `snr_threshold` keep mapping to recipe 1; the Python backend refuses them |
+| Registration | `global_registration` and `local_registration` blocks; `method` in `translation`, `demons`, `diffeomorphic`, `symmetric`, `fast_symmetric`, `tps`, `cpd`; MATLAB-style setting names such as `grid_spacing` and `beta` | a Python-only `registration` key for the `RegistrationRecipe`, whose `steps` list names methods by `REGISTRATION_METHODS` names ({doc}`registration-contract`, "Workflow configuration") | MATLAB backend only: the two legacy blocks map to a recipe of two steps (global, then local). The demons variant names stay legacy aliases for `method: demons` with `variant: <name>`; the MATLAB-style setting names and the legacy defaults (CPD `detection_noise_sigma=3`, `grid_spacing_voxels=32`) stay in `_legacy_config`, and a native `cpd` step writes them out |
+| Spot finding | `spot_finding` block with `intensity_estimation`, `intensity_threshold`, `min_distance`/`min_distance_voxels`; always `local_maxima` | an optional `method` key naming a `SPOT_FINDING_METHODS` name, default `local_maxima`, with that config's fields | MATLAB backend only: the legacy keys stay valid for `local_maxima` only and are rejected with any other method; the Python backend refuses them, naming the fields |
 | Segmentation | `rules.stardist_segmentation.parameters`; always StarDist | a Python-only `segmentation` block whose runs name a `SEGMENTATION_METHODS` name (or `import`) in `method`, with that config's fields ({doc}`segmentation-contract`, "Workflow configuration") | the legacy block translates into one `stardist` run in the workflow adapter ({doc}`segmentation-contract`, "Translation of the legacy keys") |
 
 The static schema `workflow/schemas/config.schema.yaml` cannot import the
@@ -294,6 +296,10 @@ registration with recovery. The top-level fields of `run.json` and
 implemented.
 
 ## Where method sets are hard-coded today
+
+(W-569 note: the legacy translation the tables below name in `dataset/workflow.py` has since
+moved to `dataset/_legacy_config.py`; the line numbers are those of the revision this inventory
+read.)
 
 Paths are relative to `src/python/starfinder/` unless they start with
 `workflow/` or `benchmarks/`; line numbers are at the starting revision `1b4db5a`.

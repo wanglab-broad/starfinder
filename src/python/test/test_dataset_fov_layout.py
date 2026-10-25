@@ -36,8 +36,8 @@ from starfinder.segmentation import InputChannel, LabelImportConfig, Segmentatio
 
 from .test_checkpoints import dataset, full, resident
 from .test_morphology_rounds import ThresholdConfig, threshold  # noqa: F401 (the fixture registers the method)
-from .test_projection_views import CHANNELS as VIEW_CHANNELS, METADATA as VIEW_METADATA, SINGLE, reference_round, \
-    workflow_config
+from .test_projection_views import CHANNELS as VIEW_CHANNELS, METADATA as VIEW_METADATA, NATIVE_DETECTION, \
+    reference_round, workflow_config
 from .test_registration_other_rounds import OTHER, SEQUENCING, rounds
 
 pytestmark = [pytest.mark.dataset, pytest.mark.workflow]
@@ -264,12 +264,11 @@ def test_with_reference_image_import_the_processing_rule_writes_no_reference_ima
     imported = tmp_path / "tool" / "FOV.tif"
     save_volume(raw.max(axis=-1), imported, metadata=VIEW_METADATA)
     before = imported.read_bytes()
-    config = workflow_config(tmp_path, enhance_contrast={"run": True}, global_registration=SINGLE,
-                             spot_finding={"run": True, "intensity_estimation": "adaptive", "intensity_threshold": .1},
-                             reads_extraction={"run": True, "voxel_size": [0, 0, 0]}, reads_filtration={"run": True})
-    config.update(starfinder_path=str(ROOT), fov_id_pattern="%s", reference_image_import=str(tmp_path / "tool" /
-                                                                                              "{fov_id}.tif"))
-    snakemake = SimpleNamespace(config=config, input=["unused", str(codebook)], wildcards=SimpleNamespace(fovID="FOV"))
+    parameters = {key: value for key, value in NATIVE_DETECTION.items() if key != "reference_image_view"}
+    config = workflow_config(tmp_path, backend="python", **parameters)
+    config.update(starfinder_path=str(ROOT), reference_image_import=str(tmp_path / "tool" / "{fov_id}.tif"))
+    snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook)),
+                                wildcards=SimpleNamespace(fovID="FOV"))
     runpy.run_path(str(ROOT / "workflow" / "scripts" / "rsf_single_fov.py"), init_globals={"snakemake": snakemake})
     assert tree(tmp_path / "out" / "data" / "run") == ["fovs/FOV/molecules.csv", "fovs/FOV/run.json"]
     assert imported.read_bytes() == before
@@ -280,7 +279,8 @@ def test_with_reference_image_import_the_processing_rule_writes_no_reference_ima
 def nuclei_rule_config(tmp_path, morph):
     return dict(starfinder_path=str(ROOT), root_input_path=str(tmp_path / "input"), dataset_id="dataset",
                 sample_id="sample", root_output_path=str(tmp_path / "output"), output_id="output",
-                fov_id_pattern="FOV%d", n_rounds=2, ref_round="round1", seq_channel_order=list(SEQUENCING),
+                n_rounds=2, ref_round="round1", seq_channel_order=list(SEQUENCING[:3]),
+                reference_stains=[dict(channel=SEQUENCING[3], name="DAPI")],
                 ref_channel="DAPI", rotate_angle=0, maximum_projection=False, backend="python",
                 additional_round=[dict(round_name="morph", channel_order=morph)],
                 rules=dict(nuclei_registration=dict(run=True)))

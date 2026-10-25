@@ -157,17 +157,23 @@ YX page per Z plane. MATLAB saves `sdata.registration{ref}`, which the last
 registration that ran sets. Only the direct rule's global registration follows
 its `ref_img`; its local registration, the subtile rule and the deep rule use
 the channel maximum, and so does the direct rule without registration. The
-Python adapter picks the same view. In single-channel mode Python selects the
-rule's zero-based `ref_channel`; the MATLAB script passes no channel, so
-`GlobalRegistration` selects its default channel name, `DAPI`. The file shows preprocessing before
+Python rules write the view their rule parameter `reference_image_view` names:
+`{mode: max}` (the default) or `{mode: channel, channel: <index or label>}`
+(for a MATLAB-backend configuration the adapter picks MATLAB's view, selecting
+the rule's zero-based `ref_channel` in single-channel mode); the MATLAB script
+passes no channel, so `GlobalRegistration` selects its default channel name,
+`DAPI`. The file shows preprocessing before
 registration, and is read by `create_nuclei_amplicon_overlay`, by the stitch
 preview and, later, as stitching input. MATLAB also writes per-round,
 per-channel Z-maximum preview montages; Python does not.
 
-`rsf_preparation` is a local rule that reads `config_path` and writes the same
-name with `.yaml` replaced by `.json`; core rules depend on that JSON. It reads
-the YAML file from disk, **not** Snakemake's merged config dictionary. Python
-scripts use `snakemake.config`; MATLAB scripts read this JSON. See the
+`rsf_preparation`, defined for the MATLAB backend only, is a local rule that
+reads `config_path` and writes the same name with `.yaml` replaced by `.json`;
+the MATLAB core rules depend on that JSON. It reads the YAML file from disk,
+**not** Snakemake's merged config dictionary. The Python rules take no JSON copy:
+their inputs are named (`codebook`, `images`, `subtile`), the adapters read them
+by name and read the configuration from `snakemake.config`; MATLAB scripts read
+the JSON. See the
 [override caveat](workflow-configuration.md#overrides-and-validation-boundaries).
 
 ## Modes and backend selection
@@ -188,9 +194,11 @@ runs `workflow/scripts/nuclei_registration.py`, which calls
 `FOV.prepare_morphology` ({doc}`coordination`) and keeps the MATLAB inputs and
 image file names:
 
-- it reads the reference round's `*ch04.tif`, rotated by `rotate_angle`, as the
-  reference stain and registers on it as an `ExternalReference` labelled
-  `<ref_round>:ch04`;
+- it reads the reference round's stain file that `reference_stains` declares
+  (for example `{channel: ch04, name: DAPI}`; with several entries the one whose
+  name contains `ref_channel`), rotated by `rotate_angle`, and registers on it as
+  an `ExternalReference` labelled `<ref_round>:<channel>`; the MATLAB script reads
+  the reference round's `*ch04.tif`;
 - it loads each `additional_round` entry with its `channel_order` (each
   entry's `channel` is the filename pattern and the unique label, which names
   the output folder; MATLAB names the folder by `name`), rotated by
@@ -229,7 +237,7 @@ Preparation, nuclei/rotation, overlay, StarDist, stitching/BigStitcher,
 assignment and sample aggregation use their individual flags in all modes.
 `enhance_dapi_with_flamingo` and the MATLAB-only `rsf_single_fov_seq` are outside
 that always-available list: their flags select aggregate targets only in `free`.
-`create_sample_maf` (MATLAB backend only) and `rsf_preparation` are
+`create_sample_maf` and `rsf_preparation` (MATLAB backend only) are
 dependency-driven utilities and are not accepted keys under `rules` by the schema.
 The legacy sample rules (the four stitching rules, `create_sample_maf`,
 `create_sample_h5ad` and `create_sample_reads_assignment`) read the MATLAB sample
@@ -357,7 +365,7 @@ The [profile](https://github.com/wanglab-broad/starfinder/tree/dev/profile/broad
 sets `executor: cluster-generic`, conda deployment, `jobs: 1000`, one local core,
 60-second latency wait, three retries, keep-going, rerun-incomplete and retention
 of temporary files. Choose a smaller `--jobs` limit appropriate to your account.
-`rsf_preparation` and, for the MATLAB backend, `create_sample_maf` always run locally.
+For the MATLAB backend, `rsf_preparation` and `create_sample_maf` always run locally.
 
 `broad-submit.py` reads job properties, submits via `qsub -P broad`, uses an SMP
 parallel environment for multithreaded jobs, divides total `mem_mb` by threads

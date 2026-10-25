@@ -5,7 +5,9 @@
     MATLAB's log files, and the reference image they write (REFERENCE_IMAGE_OUTPUT: the file reference_image
     names, none with reference_image_import); nuclei_registration declares its fovs/<fov>/nuclei_registration.json.
     The codebook input is CODEBOOK (common.smk), and the image folders are those of image_dir_template
-    (_image_dir_inputs: <INPUT>/<round>/<fov>, or <INPUT>/<fov>/<round>).
+    (_image_dir_inputs: <INPUT>/<round>/<fov>, or <INPUT>/<fov>/<round>). The inputs are named, and the adapters
+    read them by name (snakemake.input.<name>); the rules take no JSON copy of the configuration, which the
+    adapters read from snakemake.config (the MATLAB rules keep it, registration.smk).
     Uses variables from common.smk
 """
 
@@ -13,9 +15,8 @@
 
 rule rsf_single_fov:
     input:
-        config['config_path'].replace('.yaml', '.json'),
-        CODEBOOK,
-        _image_dir_inputs(config, ROUND),
+        codebook=CODEBOOK,
+        images=_image_dir_inputs(config, ROUND),
     output:
         RUN_RECORD,
         REFERENCE_IMAGE_OUTPUT,
@@ -33,9 +34,8 @@ rule rsf_single_fov:
 
 rule gr_single_fov_subtile:
     input:
-        config['config_path'].replace('.yaml', '.json'),
-        CODEBOOK,
-        _image_dir_inputs(config, ROUND),
+        codebook=CODEBOOK,
+        images=_image_dir_inputs(config, ROUND),
     output:
         RUN_RECORD,
         REFERENCE_IMAGE_OUTPUT,
@@ -55,8 +55,7 @@ rule gr_single_fov_subtile:
 
 rule deep_create_subtile:
     input:
-        config['config_path'].replace('.yaml', '.json'),
-        _image_dir_inputs(config, ROUND),
+        images=_image_dir_inputs(config, ROUND),
     output:
         RUN_RECORD,
         REFERENCE_IMAGE_OUTPUT,
@@ -78,8 +77,7 @@ additional_round_names = get_additional_round_names()
 
 rule nuclei_registration:
     input:
-        config['config_path'].replace('.yaml', '.json'),
-        _image_dir_inputs(config, additional_round_names),
+        images=_image_dir_inputs(config, additional_round_names),
     output:
         expand("{output_dir}/fovs/{{fovID}}/nuclei_registration.json", output_dir=OUTPUT_DIR),
     resources:
@@ -91,8 +89,12 @@ rule nuclei_registration:
 
 def get_dapi_input(wildcards):
     from starfinder import _layout
+    from starfinder.dataset.workflow import _nuclear_stain
     template = config.get('image_dir_template') or _layout.IMAGE_DIR_TEMPLATE
-    pattern = f"{_layout.image_dir(INPUT_DIR, config['dapi_round'], wildcards.fovID, template)}/*ch04.tif"
+    # The reference round's file of the declared reference stain (_nuclear_stain: reference_stains), where the
+    # MATLAB rule reads dapi_round's *ch04.tif.
+    stain = _nuclear_stain(config).channel
+    pattern = f"{_layout.image_dir(INPUT_DIR, config['ref_round'], wildcards.fovID, template)}/*{stain}.tif"
     ff = sorted(glob.glob(pattern))
     if len(ff) != 1:
         raise ValueError(f"rotate_nuclei needs exactly one file matching {pattern}; found {len(ff)}: {ff}")

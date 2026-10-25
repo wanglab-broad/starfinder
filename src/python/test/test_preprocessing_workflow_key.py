@@ -9,7 +9,8 @@ import yaml
 
 from starfinder.dataset import from_workflow_config
 from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig, MinMaxNormalizationConfig, PercentileNormalizationConfig,
-    PreprocessingRecipe, PreprocessingStep, ScalarBackgroundConfig, StepResult, PreprocessingSpec, TophatConfig)
+    PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig, StepResult, PreprocessingSpec,
+    TophatConfig)
 
 pytestmark = [pytest.mark.preprocessing, pytest.mark.contract]
 
@@ -114,13 +115,28 @@ def test_supplied_statistics_path_is_passed_to_the_recipe(tmp_path):
     assert from_workflow_config(config).pipeline.preprocessing.supplied_statistics == tmp_path / "supplied.json"
 
 
+# The native form each legacy key's error names (backend python).
+NATIVE = {"enhance_contrast": "min_max_normalization", "hist_equalize": "histogram_matching",
+          "morph_recon": "reconstruction", "tophat": "white_tophat", "snr_threshold": "min_max_normalization"}
+
+
 @pytest.mark.parametrize("key", sorted(LEGACY))
-def test_the_key_is_mutually_exclusive_with_each_legacy_key(key):
-    config = with_preprocessing({"steps": [{"method": "white_tophat"}]}, **{key: LEGACY[key]})
+def test_each_legacy_key_raises_on_the_python_backend_naming_its_native_form(key):
+    """Under backend python a legacy key raises naming its preprocessing step, with or without the preprocessing key,
+    and the schema's backend guard refuses it; a MATLAB-backend configuration keeps the mutual exclusion."""
+    for config in (with_preprocessing({"steps": [{"method": "white_tophat"}]}, **{key: LEGACY[key]}),
+                   with_preprocessing(None, **{key: LEGACY[key]})):
+        if config["rules"]["rsf_single_fov"]["parameters"]["preprocessing"] is None:
+            del config["rules"]["rsf_single_fov"]["parameters"]["preprocessing"]
+        with pytest.raises(ValueError, match=f"{key} is a MATLAB key, which the Python backend replaces by .*"
+                                             f"{NATIVE[key]}"):
+            from_workflow_config(config)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(config, SCHEMA)
+    matlab = with_preprocessing({"steps": [{"method": "white_tophat"}]}, **{key: LEGACY[key]})
+    del matlab["backend"]
     with pytest.raises(ValueError, match="mutually exclusive with the legacy keys"):
-        from_workflow_config(config)
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(config, SCHEMA)
+        from_workflow_config(matlab)
 
 
 @pytest.mark.parametrize("steps, extra, message", [
@@ -131,7 +147,11 @@ def test_the_key_is_mutually_exclusive_with_each_legacy_key(key):
     ([{"method": "white_tophat"}], {"registration_source": "detection"}, "registration_source 'detection' is not a snapshot"),
     ([{"method": "white_tophat", "save_as": "detection"}], {}, 'must not be "detection"'),
     ([{"method": "white_tophat", "save_as": "a"}, {"method": "white_tophat", "save_as": "a"}], {}, "more than once"),
-    ([{"method": "white_tophat"}], {"post_registration": []}, "unknown preprocessing keys"),
+    ([{"method": "white_tophat"}], {"post_steps": []}, "unknown preprocessing keys"),
+    ([{"method": "white_tophat"}], {"post_registration": [{"method": "white_tophat"}]},
+     "post_registration may contain only ReconstructionConfig steps"),
+    ([{"method": "white_tophat"}], {"post_registration": [{"method": "reconstruction", "save_as": "late"}]},
+     "keep no snapshots"),
 ])
 def test_unknown_methods_fields_and_snapshots_raise(steps, extra, message):
     config = with_preprocessing({"steps": steps, **extra})
@@ -159,11 +179,34 @@ def test_schema_accepts_the_key_only_on_the_python_backend(backend):
     jsonschema.validate(config, SCHEMA)
 
 
-def test_legacy_keys_still_map_to_recipe_1_without_the_key():
+@pytest.mark.parametrize("rule", PYTHON_RULES)
+def test_the_post_registration_list_carries_to_the_recipe(rule):
+    """preprocessing.post_registration lists the steps run after registration (reconstruction), in any rule."""
+    preprocessing = {"steps": [{"method": "white_tophat", "radius_yx": 2}],
+                     "post_registration": [{"method": "reconstruction", "radius_yx": 5}]}
+    config = with_preprocessing(preprocessing, rule)
+    jsonschema.validate(config, SCHEMA)
+    recipe = from_workflow_config(config, rule).pipeline.preprocessing
+    assert recipe == PreprocessingRecipe((PreprocessingStep(TophatConfig(radius_yx=2)),),
+                                         (PreprocessingStep(ReconstructionConfig(radius_yx=5)),))
+    assert from_workflow_config(with_preprocessing({"steps": []}, rule), rule).pipeline.preprocessing \
+        .post_registration == ()
+    for bad in ([{"method": "white_tophat"}], [{"method": "reconstruction", "save_as": "late"}], {}):
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(with_preprocessing(dict(preprocessing, post_registration=bad), rule), SCHEMA)
+
+
+def test_legacy_keys_still_map_to_recipe_1_on_the_matlab_backend():
+    """A MATLAB-backend configuration, which the adapters of the shared rules read, keeps the translation of the
+    legacy keys (_legacy_config); the Python backend refuses them."""
     config = copy.deepcopy(EXAMPLE)
     parameters = config["rules"]["rsf_single_fov"]["parameters"]
     del parameters["preprocessing"]
     parameters["tophat"] = {"run": True, "radius": 2}
-    jsonschema.validate(config, SCHEMA)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(config, SCHEMA)
+    with pytest.raises(ValueError, match="tophat is a MATLAB key.*white_tophat"):
+        from_workflow_config(config)
+    del config["backend"]
     recipe = from_workflow_config(config).pipeline.preprocessing
     assert recipe == PreprocessingRecipe((PreprocessingStep(TophatConfig(radius_yx=2)),))

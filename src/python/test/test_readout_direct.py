@@ -345,7 +345,7 @@ MATLAB_FOVS = {"fov_id_pattern": "%s", "n_fovs": 1, "subset_range": False, "subs
 
 
 def yaml_config(tmp_path, **top):
-    parameters = {"spot_finding": {"run": True, "intensity_estimation": "noise", "intensity_threshold": 10.0,
+    parameters = {"spot_finding": {"run": True, "threshold_mode": "noise", "threshold_value": 10.0,
                                    "rounds": list(ROUNDS)},
                   "reads_extraction": {"run": True}, "reads_filtration": {"run": True}}
     config = dict(config_path="config.yaml", starfinder_path=str(ROOT), root_input_path=str(tmp_path),
@@ -368,7 +368,8 @@ def test_yaml_direct_route_writes_the_four_genes(tmp_path):
     DIRECT_MAPPING.to_csv(panel, index=False)
     config = yaml_config(tmp_path)
     jsonschema.validate(config, SCHEMA)
-    snakemake = SimpleNamespace(config=config, input=["unused", str(panel)], wildcards=SimpleNamespace(fovID="FOV"))
+    snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(panel)),
+                                wildcards=SimpleNamespace(fovID="FOV"))
     runpy.run_path(str(ROOT / "workflow" / "scripts" / "rsf_single_fov.py"), init_globals={"snakemake": snakemake})
     adapted = from_workflow_config(config)
     assert adapted.dataset.readout_mode == "direct" and adapted.pipeline.decoding == DirectDecoderConfig()

@@ -45,18 +45,20 @@ def pipeline_case(name, *, case_id, fov_id, sources, codebook, n_rounds=None):
         'load_raw_images': {'run': True},
         # Profiles record the encoded zero-based split; the shared key is MATLAB's one-based position.
         'load_codebook': {'run': True, 'split_index': [] if p['split_index'] is None else [p['split_index'] + 1]},
-        'enhance_contrast': {'run': True, 'snr_threshold': p['snr_threshold']},
-        'spot_finding': {'run': True, 'intensity_estimation': p['threshold_mode'],
-                         'intensity_threshold': p['threshold_value']},
+        # The historical recipe 1 normalization, written out (uint8, 0-255, truncating).
+        'preprocessing': {'steps': [{'method': 'min_max_normalization', 'output_dtype': 'uint8',
+                                     'output_range': [0, 255], 'rounding': 'truncate',
+                                     'snr_threshold': p['snr_threshold']}]},
+        'spot_finding': {'run': True, 'threshold_mode': p['threshold_mode'], 'threshold_value': p['threshold_value']},
         'reads_extraction': {'run': True, 'voxel_size': p['neighborhood_radius_zyx']},
         'reads_filtration': {'run': True, 'end_base': p['end_bases'], 'start_base': p['start_base']}}
     if len(p['registration']) > 2:
         raise ValueError('recipe supports at most global and local stages')
-    for key, step in zip(('global_registration', 'local_registration'), p['registration']):
-        params[key] = {'run': True, **step}
-    workflow = {'dataset_id': 'benchmark', 'sample_id': case_id, 'output_id': 'out',
+    # The profile's steps are registration.steps entries (method, config fields, signal).
+    params['registration'] = {'steps': p['registration']}
+    workflow = {'dataset_id': 'benchmark', 'sample_id': case_id, 'output_id': 'out', 'backend': 'python',
         'n_rounds': count, 'ref_round': p['reference_round'], 'rotate_angle': p['rotation_degrees'],
-        'seq_channel_order': p['channel_order'], 'fov_id_pattern': p['fov_pattern'],
+        'seq_channel_order': p['channel_order'],
         'rules': {'rsf_single_fov': {'parameters': params}}}
     inputs, source_names = {}, {}
     for i, (round_name, channels) in enumerate(sources.items()):

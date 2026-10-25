@@ -267,9 +267,9 @@ MATLAB_FOVS = {"fov_id_pattern": "%s", "n_fovs": 1, "subset_range": False, "subs
 
 
 def workflow_config(root: Path, out: str, **parameters) -> dict:
-    """The rsf_single_fov configuration of the golden scene (legacy keys, translation global registration)."""
-    rule = {"global_registration": {"run": True},
-            "spot_finding": {"run": True, "intensity_estimation": "adaptive", "intensity_threshold": 0.2},
+    """The rsf_single_fov configuration of the golden scene (native keys, translation registration)."""
+    rule = {"registration": {"steps": [{"method": "translation"}]},
+            "spot_finding": {"run": True, "threshold_mode": "adaptive", "threshold_value": 0.2},
             "reads_extraction": {"run": True, "voxel_size": [1, 1, 1]}, "reads_filtration": {"run": True},
             **parameters}
     return dict(config_path=str(root / "config.yaml"), starfinder_path=str(ROOT), root_input_path=str(root),
@@ -283,7 +283,7 @@ def run_rule(config: dict, codebook: Path):
     """Write the configuration file and run workflow/scripts/rsf_single_fov.py with a stub snakemake object."""
     jsonschema.validate(config, SCHEMA)
     Path(config["config_path"]).write_text(yaml.safe_dump(config))
-    snakemake = SimpleNamespace(config=config, input=["unused", str(codebook)],
+    snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook)),
                                 wildcards=SimpleNamespace(fovID="FOV_001"))
     runpy.run_path(str(ROOT / "workflow" / "scripts" / "rsf_single_fov.py"), init_globals={"snakemake": snakemake})
     paths = from_workflow_config(config).dataset.fov("FOV_001").paths

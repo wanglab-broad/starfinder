@@ -314,10 +314,13 @@ def test_the_shared_rules_do_not_branch_on_the_backend_and_read_no_envs_path():
 
 
 def get_dapi_input(path, input_dir, dapi_round="round1"):
-    """get_dapi_input of a rule file, executed with the names common.smk provides."""
+    """get_dapi_input of a rule file, executed with the names common.smk provides: MATLAB's reads dapi_round's
+    *ch04.tif, the Python one the reference round's file of the declared reference stain (here ch04)."""
     text = path.read_text()
     source = re.search(r"^def get_dapi_input\(wildcards\):\n(?:    .*\n)+", text, re.MULTILINE).group(0)
-    namespace = {"glob": glob, "INPUT_DIR": input_dir, "config": {"dapi_round": dapi_round}}
+    config = ({"backend": "python", "ref_round": dapi_round, "reference_stains": [{"channel": "ch04", "name": "DAPI"}]}
+              if path.name == "registration-py.smk" else {"dapi_round": dapi_round})
+    namespace = {"glob": glob, "INPUT_DIR": input_dir, "config": config}
     exec(source, namespace)
     return namespace["get_dapi_input"]
 

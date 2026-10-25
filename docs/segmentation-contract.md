@@ -1106,7 +1106,7 @@ as declared.
 | `segmentation_input_folder` | The role of the input file's one channel: `overlay` (default; the file written by the `create_nuclei_amplicon_overlay` rule, which itself calls `composite_nuclei_amplicon`): `composite`; `DAPI`: `nuclear`; `flamingo/enhanced_DAPI` (written by the `enhance_dapi_with_flamingo` rule through `enhance_with_flamingo`): `nuclear`; any other folder: `nuclear`. |
 | (none) | `target`: a new Python-only key of the legacy block; without it, `cell` for `overlay` and `nucleus` otherwise, recorded as `"target_source": "legacy_default"`. |
 | `create_nuclei_amplicon_overlay.parameters.maximum_projection`, top-level `maximum_projection` | the run's `projection` (`ProjectionConfig()` when true). |
-| `rotate_angle`, `dapi_round` | not read by the segmentation adapter. In the legacy rules they still drive `rotate_nuclei`, whose file the composite rule reads; `get_dapi_input` raises unless exactly one file matches, naming the matches. In the `segmentation` block, inputs come from the FOV's rounds after `FOV.run`'s rotation and `FOV.register`. |
+| `rotate_angle`, `dapi_round` | not read by the segmentation adapter. In the legacy rules they still drive `rotate_nuclei` (on the Python backend `reference_stains` replaces `dapi_round`, W-569), whose file the composite rule reads; `get_dapi_input` raises unless exactly one file matches, naming the matches. In the `segmentation` block, inputs come from the FOV's rounds after `FOV.run`'s rotation and `FOV.register`. |
 
 `rules.reads_assignment.parameters.expand_labels` and `dilation_distance` are W-308's;
 this page only requires that a label image is expanded once.

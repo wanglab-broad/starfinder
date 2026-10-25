@@ -30,6 +30,8 @@ from starfinder import _snakemake
 from starfinder.dataset import Dataset
 from starfinder.report import MarkerGroup, ReportConfig, ReportLimits, RuleLimit, load_report
 
+from .test_fov_membership import MATLAB_RSF
+
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -155,7 +157,7 @@ def test_wf1_the_block_is_python_only_in_the_schema():
     # by fovs.csv).
     without = {**{k: v for k, v in base.items() if k != "backend"}, "fov_id_pattern": "tile_{i}", "n_fovs": 1,
                "subset_list": [], "subset_range": False, "subset_start": 1, "subset_end": 1, "subset_random": False,
-               "n_random_tests": 1}
+               "n_random_tests": 1, "rules": {"rsf_single_fov": MATLAB_RSF}}
     assert SCHEMA["properties"]["backend"]["default"] == "matlab"
     for block in (REPORT, {}):
         VALIDATOR.validate(dict(base, report=copy.deepcopy(block)))

@@ -63,7 +63,8 @@ snakemake -s workflow/Snakefile --configfile /absolute/path/my-config.yaml \
 ```
 
 These templates require real paths and data; the documentation build does not
-run them. `rsf_preparation` converts the YAML to JSON for MATLAB.
+run them. `rsf_preparation` (MATLAB backend only) converts the YAML to JSON for MATLAB;
+the Python rules take no JSON copy.
 [`run_matlab_scripts`](https://github.com/wanglab-broad/starfinder/blob/dev/workflow/rules/common.smk)
 adds `workflow/scripts` to MATLAB's path and calls the entry point with
 `-batch`, printing the full command line to the Snakemake log. The

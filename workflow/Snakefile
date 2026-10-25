@@ -75,9 +75,9 @@ else:
 
 ### ==================== [ Local Rules ] =========================
 
-localrules: rsf_preparation
+# rsf_preparation writes the JSON copy of the configuration that only the MATLAB scripts read.
 if BACKEND == "matlab":
-    localrules: create_sample_maf
+    localrules: create_sample_maf, rsf_preparation
 
 ### ==================== [ Main Target Rule ] =========================
 

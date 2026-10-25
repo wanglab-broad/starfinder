@@ -165,17 +165,22 @@ def test_minimal_key_and_defaults():
 
 
 @pytest.mark.parametrize("block", ["global_registration", "local_registration"])
-def test_the_key_is_mutually_exclusive_with_an_enabled_legacy_block(block):
-    config = with_registration({"steps": [{"method": "translation"}]}, **{block: {"run": True}})
-    config["rules"]["rsf_single_fov"]["parameters"].pop("global_registration", None)
-    config["rules"]["rsf_single_fov"]["parameters"][block] = {"run": True}
+def test_a_legacy_block_raises_on_the_python_backend_naming_registration_steps(block):
+    """Under backend python a legacy block raises naming registration.steps, enabled or not, and the schema's backend
+    guard refuses it; a MATLAB-backend configuration keeps the mutual exclusion with an enabled block."""
+    for run in (True, False):
+        config = with_registration({"steps": [{"method": "translation"}]}, **{block: {"run": run}})
+        with pytest.raises(ValueError, match=f"{block} is a MATLAB key, which the Python backend replaces by a "
+                                             "registration.steps entry"):
+            from_workflow_config(config)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(config, SCHEMA)
+    matlab = with_registration({"steps": [{"method": "translation"}]}, **{block: {"run": True}})
+    del matlab["backend"]
     with pytest.raises(ValueError, match="mutually exclusive with the enabled legacy blocks"):
-        from_workflow_config(config)
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(config, SCHEMA)
-    config["rules"]["rsf_single_fov"]["parameters"][block] = {"run": False}
-    jsonschema.validate(config, SCHEMA)
-    assert from_workflow_config(config).pipeline.registration == RegistrationRecipe((RegistrationStep(TranslationConfig()),))
+        from_workflow_config(matlab)
+    matlab["rules"]["rsf_single_fov"]["parameters"][block] = {"run": False}
+    assert from_workflow_config(matlab).pipeline.registration == RegistrationRecipe((RegistrationStep(TranslationConfig()),))
 
 
 @pytest.mark.parametrize("registration, error, message", [
@@ -227,8 +232,11 @@ def test_schema_accepts_the_key_only_on_the_python_backend(backend):
 
 
 def test_the_widened_local_method_enum_is_accepted():
+    """The MATLAB-backend definition of local_registration keeps its enum, which the adapters of the shared rules
+    translate (_legacy_config); tissue_2D_test.yaml is a MATLAB configuration."""
+    matlab = yaml.safe_load((ROOT / "tests/tissue_2D_test.yaml").read_text())
     for method in sorted({s.name for s in REGISTRATION_METHODS.values() if s.step_kind == "local"} | set(LEGACY_ALIASES)):
-        config = copy.deepcopy(EXAMPLE)
+        config = copy.deepcopy(matlab)
         config["rules"]["rsf_single_fov"]["parameters"]["local_registration"] = {"run": True, "method": method}
         jsonschema.validate(config, SCHEMA)
         recipe = from_workflow_config(config).pipeline.registration

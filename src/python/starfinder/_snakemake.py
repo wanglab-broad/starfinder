@@ -13,13 +13,12 @@ from types import SimpleNamespace
 
 from starfinder import _layout
 from starfinder.dataset._declared import reference_settings
-from starfinder.dataset.types import ChannelInfo
-from starfinder.dataset.workflow import (_BIGSTITCHER, _LEGACY_SEGMENTATION_RUN, _NUCLEI_REFERENCE_CHANNEL,
-    _after_fusion, _assembly_block, _declared_metadata, _export_config, _export_dataset, _flag, _label_namespace,
-    _image_dir_template, _input_root, _legacy_molecules, _load_reference, _membership, _molecule_table,
-    _nuclei_checkpoints, _nuclei_registration, _reads_assignment, _reference_genes, _report_assignment, _report_block,
-    _rule_checkpoints, _rule_parameters, _sample_fovs, _sample_grid_fovs, _sample_table, _segmentation,
-    _stage_position_ids, _stitching_block, _workflow_dataset, from_workflow_config)
+from starfinder.dataset.workflow import (_BIGSTITCHER, _LEGACY_SEGMENTATION_RUN, _after_fusion, _assembly_block,
+    _declared_metadata, _export_config, _export_dataset, _flag, _label_namespace, _image_dir_template, _image_shape,
+    _input_root, _legacy_molecules, _load_reference, _membership, _molecule_table, _nuclear_stain, _nuclei_checkpoints,
+    _nuclei_registration, _reads_assignment, _reference_genes, _report_assignment, _report_block, _rule_checkpoints,
+    _rule_parameters, _sample_fovs, _sample_grid_fovs, _sample_table, _segmentation, _stage_position_ids,
+    _stitching_block, _workflow_dataset, from_workflow_config)
 from starfinder.preprocessing import ProjectionConfig
 from starfinder.registration import (ExternalReference, RegistrationRecipe, RegistrationSignalConfig,
     RegistrationStep, TranslationConfig)
@@ -38,7 +37,10 @@ def _run_workflow(snakemake, rule):
     declared output written after it (molecules, the reference image, the
     subtile files, a resident subtile's ``subtile_goodSpots_<n>.csv`` as
     ``outputs.subtile_spots``) is then added to its ``outputs`` with its path
-    and SHA-256.
+    and SHA-256. The rule's inputs are read by name: ``codebook`` (the
+    reference file, _reference_file) and, for the resident subtile rules,
+    ``subtile`` (the saved subtile .npz); the rules take no JSON copy of the
+    configuration, which the adapter reads from ``snakemake.config``.
     """
     from .dataset.fov import FOV
     adapted = from_workflow_config(snakemake.config, rule)
@@ -47,15 +49,15 @@ def _run_workflow(snakemake, rule):
     resident = rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile')
     if adapted.pipeline.decoding:
         # The rule's codebook input is the reference file (_reference_file): the panel CSV in direct mode.
-        _load_reference(adapted, Path(snakemake.input[1]))
-    fov = FOV.from_subtile(Path(snakemake.input[2]), dataset, fov_id) if resident else dataset.fov(fov_id)
+        _load_reference(adapted, Path(snakemake.input.codebook))
+    fov = FOV.from_subtile(Path(snakemake.input.subtile), dataset, fov_id) if resident else dataset.fov(fov_id)
     fov.run(adapted.pipeline, execution=adapted.execution, checkpoints=_rule_checkpoints(snakemake.config, rule))
     if resident:
         from starfinder.readout.spots import _export_legacy_spots
         number = snakemake.wildcards.n_subtile
         # The legacy route: stitch_subtile reads the one-based subtile tables.
         path = _export_legacy_spots(fov.spot_result, fov.filtering_result,
-                                    Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
+                                    Path(snakemake.input.subtile).parent / f'subtile_goodSpots_{number}.csv')
         fov._record_output('subtile_spots', path)
     else:
         if dataset.reference_image_import is None:
@@ -70,11 +72,12 @@ def _run_workflow(snakemake, rule):
 def _run_nuclei_registration(snakemake):
     """Python counterpart of nuclei_registration.m for the Python backend, through FOV.prepare_morphology.
 
-    The entry loads the reference round's ch04 image as the reference stain
-    and each additional round with its channel_order, rotates them by
-    rotate_angle, and registers each round by one translation step on its
-    shared stain (the channel _nuclei_registration matches) against the stain
-    as an ExternalReference labelled ``<ref_round>:ch04``, transferring the
+    The entry loads the reference stains of reference_stains and each
+    additional round with its channel_order, rotates them by rotate_angle,
+    and registers each round by one translation step on its shared stain (the
+    channel _nuclei_registration matches) against the reference stain
+    (_nuclear_stain, for example ch04) as an ExternalReference labelled
+    ``<ref_round>:<stain channel>``, transferring the
     transform to all its channels. A round whose shared stain has another
     pattern than the rounds before it is registered after the entry by the
     same public calls (load_images with the angle, register), in the
@@ -99,28 +102,22 @@ def _run_nuclei_registration(snakemake):
     config = snakemake.config
     dataset, stains, folders = _nuclei_registration(config)
     checkpoints = _nuclei_checkpoints(config)
-    if not dataset.reference_stains:
-        # nuclei_registration.m reads the reference round's ch04 file with or without dapi_round. The rule reads
-        # no sequencing channel, so a ch04 that a configuration without dapi_round lists among the sequencing
-        # colours is left out of the rule's Dataset, where it is the reference stain.
-        sequencing = dataset.channel_info(dataset.rounds.sequencing_rounds[0])
-        dataset = replace(dataset, channel_order=tuple(c for c in sequencing if c.channel != _NUCLEI_REFERENCE_CHANNEL),
-                          other_channel_order={name: dataset.channel_info(name) for name in dataset.other_channel_order},
-                          reference_stains=(ChannelInfo(_NUCLEI_REFERENCE_CHANNEL, config['ref_channel']),))
+    stain = _nuclear_stain(config).channel
     fov = dataset.fov(snakemake.wildcards.fovID)
     angle, ref = config.get('rotate_angle'), dataset.rounds.reference_round
     names = list(dataset.rounds.other_rounds)
 
     def recipe(name):
-        signal = RegistrationSignalConfig('channel', _NUCLEI_REFERENCE_CHANNEL, stains[name])
+        signal = RegistrationSignalConfig('channel', stain, stains[name])
         return RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=signal)
 
     # The leading rounds that share the first round's stain pattern go through the entry in one call.
     leading = next((i for i, name in enumerate(names) if stains[name] != stains[names[0]]), len(names))
     fov.prepare_morphology(MorphologyConfig(rotation_degrees=angle, recipe=recipe(names[0]),
                                             rounds=tuple(names[:leading])), checkpoints=checkpoints)
-    reference = ExternalReference(np.ascontiguousarray(fov.images[REFERENCE_STAIN][..., 0]),
-                                  fov.metadata[REFERENCE_STAIN], f'{ref}:{_NUCLEI_REFERENCE_CHANNEL}')
+    reference = ExternalReference(
+        np.ascontiguousarray(fov.images[REFERENCE_STAIN][..., dataset.channel_index(REFERENCE_STAIN, stain)]),
+        fov.metadata[REFERENCE_STAIN], f'{ref}:{stain}')
     for name in names[leading:]:
         fov.load_images(rounds=[name], rotation_degrees=angle)
         fov.register(recipe(name), rounds=[name], reference=reference, checkpoints=checkpoints)
@@ -692,7 +689,8 @@ def _write_tile_config(result, path, config):
     fallback.
     """
     from starfinder.stitching import legacy_tile_config_view
-    frame = legacy_tile_config_view(result, img_col=config['img_col'], img_row=config['img_row'])
+    img_row, img_col = _image_shape(config, 'the legacy tile configuration writer')
+    frame = legacy_tile_config_view(result, img_col=img_col, img_row=img_row)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(frame.to_csv())

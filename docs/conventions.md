@@ -77,8 +77,9 @@ not runtime-validated.
 ## Spot-finding thresholds
 
 For {py:func}`~starfinder.spot_finding.find_spots` and FOV calls, set
-`LocalMaximaConfig(threshold_mode=..., threshold_value=...)` together. Shared
-workflow keys remain `intensity_estimation` and `intensity_threshold`.
+`LocalMaximaConfig(threshold_mode=..., threshold_value=...)` together. The Python
+workflow's `spot_finding` block takes the same fields; MATLAB configurations keep
+the keys `intensity_estimation` and `intensity_threshold`.
 
 | Python mode | Absolute cutoff | Example pair |
 | --- | --- | --- |

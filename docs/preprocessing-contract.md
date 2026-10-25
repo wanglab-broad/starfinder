@@ -232,14 +232,19 @@ are in {doc}`preprocessing-algorithms`.
 
 ### Legacy mapping
 
-Python workflow rules keep their existing keys. The adapter maps them to recipe 1,
-reproducing the golden outputs exactly:
+The Python backend accepts the explicit step list only (W-569): each legacy key
+below raises `ValueError` under `backend: python`, naming the step that replaces
+it, and the schema refuses it. The mapping is kept for MATLAB-backend
+configurations, which the adapters of the shared rules read
+(`dataset/_legacy_config.py`), and it is the native form a migrated
+configuration writes out ({doc}`migration`, "One Python configuration
+dialect"); both reproduce recipe 1 and its golden outputs exactly:
 
 | Legacy key | Recipe step |
 | --- | --- |
 | `enhance_contrast.run` (with `snr_threshold`) | `MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=..., rounding="truncate")`, `dtype_policy="declared"` |
 | `hist_equalize.run` (with `reference_channel`) | `HistogramMatchingConfig(reference_channel=reference_channel)`, scope `needs_reference` |
-| `morph_recon.run` (with `radius`) | `ReconstructionConfig(radius_yx=radius)`, in `post_registration` for resident subtile rules |
+| `morph_recon.run` (with `radius`) | `ReconstructionConfig(radius_yx=radius)`, in `post_registration` for resident subtile rules (the key's `post_registration` list) |
 | `tophat.run` (with `radius`) | `TophatConfig(radius_yx=radius)` |
 
 `maximum_projection` keeps its meaning for the saved reference merged image and
@@ -247,8 +252,8 @@ does not enter the recipe.
 
 ### Explicit step list
 
-A new optional Python-rule key, `preprocessing`, takes an explicit recipe and is
-mutually exclusive with the legacy keys:
+The optional Python-rule key `preprocessing` takes an explicit recipe; the
+legacy keys raise beside it and without it on the Python backend:
 
 ```yaml
 preprocessing:
@@ -262,6 +267,10 @@ preprocessing:
 
 * `method` is a step name from `PREPROCESSING_METHODS`; an unknown name raises. The remaining keys
   of a step, except `save_as`, are the fields of its config dataclass.
+* `post_registration` (absent: none) lists the steps run after registration in
+  the same form, carried to `PreprocessingRecipe.post_registration`: only
+  `reconstruction` steps, without `save_as` (the resident subtile rules' form of
+  `morph_recon`).
 * `extraction_source`, `registration_source` and `supplied_statistics` are the
   recipe fields above.
 * `workflow/schemas/config.schema.yaml` declares the `preprocessing` key as a
@@ -271,7 +280,7 @@ preprocessing:
 
 The key is available only on the Python backend. MATLAB APIs and shared MATLAB
 keys are unchanged. The pipeline default remains recipe 1 until evaluation
-supports a change.
+supports a change; a Python configuration states it as the step list above.
 
 ## Exclusions
 

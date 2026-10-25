@@ -189,20 +189,24 @@ equal the dataset reference round) and gains, as Python-only keys:
 | Key | Meaning |
 | --- | --- |
 | `method` | A `SPOT_FINDING_METHODS` name with `pipeline=True`, through `config_type_for()`; default `local_maxima`. |
-| the config's init fields | Every other key is an init field of the selected config (YAML lists become tuples), for example `exclude_border`, `merge_radius_zyx`, `model`, `prob_thresh`, `threshold`, or one of the `local_maxima` legacy aliases below. Unknown keys raise `ValueError`. |
+| the config's init fields | Every other key is an init field of the selected config (YAML lists become tuples), for example `exclude_border`, `merge_radius_zyx`, `model`, `prob_thresh`, `threshold`; for `local_maxima` `threshold_mode`, `threshold_value` and `min_distance_voxels`. Unknown keys raise `ValueError`. |
 | `channel_overrides` | A mapping from channel label to a mapping of config fields; each entry becomes `ChannelOverride(label, replace(config, **fields))`. |
 | `rounds` | A list of round labels; omitted means the reference round only. |
 
-The legacy keys `intensity_estimation`, `intensity_threshold` and
-`min_distance` are aliases for `local_maxima` only, and keep their meaning.
-`min_distance` is also a native init field of two other configs. The adapter
-handles each key by method, and this table is the only rule:
+The MATLAB keys `intensity_estimation`, `intensity_threshold` and
+`min_distance` of `local_maxima` raise under `backend: python` (W-569), naming
+the fields `threshold_mode`, `threshold_value` and `min_distance_voxels`; the
+schema refuses them there. For MATLAB-backend configurations, which the
+adapters of the shared rules read, they stay aliases for `local_maxima` only
+(`dataset/_legacy_config.py`) and keep their meaning. `min_distance` is also a
+native init field of two other configs. The adapter handles each key by method,
+and this table is the only rule:
 
 | Key | `local_maxima` (also when `method` is omitted) | `spotiflow`, `piscis` | `starfish_log` |
 | --- | --- | --- | --- |
-| `intensity_estimation` | Alias of `threshold_mode`; `ValueError` together with `threshold_mode` | `ValueError` (not a field) | `ValueError` (not a field) |
-| `intensity_threshold` | Alias of `threshold_value`; `ValueError` together with `threshold_value` | `ValueError` (not a field) | `ValueError` (not a field) |
-| `min_distance` | Alias of `min_distance_voxels`; `ValueError` together with `min_distance_voxels` (today `min_distance_voxels` silently wins) | The native field `min_distance` of `SpotiflowConfig` and `PiscisConfig`, passed unchanged | `ValueError` (not a field) |
+| `intensity_estimation` | Python backend: `ValueError` naming `threshold_mode`. MATLAB backend: alias of `threshold_mode`; `ValueError` together with `threshold_mode` | `ValueError` (not a field) | `ValueError` (not a field) |
+| `intensity_threshold` | Python backend: `ValueError` naming `threshold_value`. MATLAB backend: alias of `threshold_value`; `ValueError` together with `threshold_value` | `ValueError` (not a field) | `ValueError` (not a field) |
+| `min_distance` | Python backend: `ValueError` naming `min_distance_voxels`. MATLAB backend: alias of `min_distance_voxels`; `ValueError` together with `min_distance_voxels` | The native field `min_distance` of `SpotiflowConfig` and `PiscisConfig`, passed unchanged | `ValueError` (not a field) |
 | `min_distance_voxels` | The field | `ValueError` (not a field) | `ValueError` (not a field) |
 
 `channel_overrides` entries follow the same rule for the selected method. A
@@ -589,7 +593,8 @@ The implementation adds these entries:
    {doc}`spot-finding-contract`). **Intentional change:** for `local_maxima`,
    `min_distance` together with `min_distance_voxels`, or another legacy key
    together with its field, now raises instead of silently preferring one;
-   `local` leaves the schema enum.
+   `local` leaves the schema enum. (W-569 later made the legacy keys raise on the
+   Python backend; {doc}`migration`, "One Python configuration dialect".)
 4. **Detection plan.** `SpotFindingPlan` and `ChannelOverride`; `find_spots` and
    `PipelineConfig.spot_finding` accept a plan; the `round` column of multi-round
    results; decoding a multi-round set raises in readout mode `multiplexed` and is

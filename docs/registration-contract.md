@@ -577,8 +577,13 @@ estimation entries and sees every fallback through `fallback` and
 ### Legacy mapping
 
 The shared MATLAB keys (`global_registration`, `local_registration` and their
-existing fields) keep their names and MATLAB meaning. The adapter
-(`dataset/workflow.py`) translates them to one recipe:
+existing fields) keep their names and MATLAB meaning. Under `backend: python`
+they raise `ValueError` naming `registration.steps`, and the schema refuses them
+(W-569): the Python backend reads the [Python-only key](#python-only-key) alone.
+For MATLAB-backend configurations, which the adapters of the shared rules read,
+`dataset/_legacy_config.py` translates them to one recipe, and the table is also
+the native form a migrated configuration writes out ({doc}`migration`, "One
+Python configuration dialect"):
 
 | Legacy key | Python meaning after §2.6 |
 | --- | --- |
@@ -593,16 +598,17 @@ existing fields) keep their names and MATLAB meaning. The adapter
 | `boundary_mode` | The recipe's `warp.boundary_mode`; different values in the two blocks are rejected, since there is one final resampling. |
 | `recovery` | `RecoveryConfig` of that step; alternatives must have the block's step kind. |
 | `ref_round` | Must equal the dataset reference round (unchanged). |
-| Method-specific MATLAB names (`detection_threshold`, `match_distance`, `tps_smoothing`, `grid_spacing`, `beta`, `lmbda`, `cpd_w`, `candidate_radius`, `k_neighbors`) and the CPD adapter defaults | Unchanged. |
+| Method-specific MATLAB names (`detection_threshold`, `match_distance`, `tps_smoothing`, `grid_spacing`, `beta`, `lmbda`, `cpd_w`, `candidate_radius`, `k_neighbors`) and the CPD adapter defaults | Unchanged. The CPD defaults are `detection_noise_sigma=3.0` and `grid_spacing_voxels=32` (the config's defaults are 5.0 and 16); a native `cpd` step states them. |
+| `ref_img: single-channel` in `rsf_single_fov` with the global block alone | The rule's reference image is that channel (`WorkflowConfig.reference_image` `single-channel`); natively the rule parameter `reference_image_view: {mode: channel, channel: c}`. |
 | `local_registration.method` enum in the schema | Widened to the registered names plus the legacy aliases, kept equal by a default-tier test (W-240 choice 4). |
 
 ### Python-only key
 
 A Python-only `registration` key in a Python rule's parameters declares a
-recipe explicitly. It is rejected together with an enabled
-`global_registration` or `local_registration`. Its `steps` entries name a
-method and give that config's init fields (YAML lists become tuples), as the
-preprocessing key does:
+recipe explicitly; it is the Python backend's one registration key. Its `steps`
+entries name a method and give that config's init fields (YAML lists become
+tuples), as the preprocessing key does; every setting is written out, with no
+hidden adapter default:
 
 ```yaml
 registration:
@@ -619,6 +625,10 @@ registration:
 The schema gains one definition per registered method, kept equal to
 `REGISTRATION_METHODS` by a default-tier test, as the preprocessing definitions
 are kept equal to the preprocessing registry.
+
+The rule parameter `reference_image_view` (`{mode: max | channel, channel: <index
+or label>}`, default `max`) selects the reference image the rule writes
+(`FOV.save_reference_image`); the resident subtile rules write none and refuse it.
 
 ## `docs/migration.md` entries
 

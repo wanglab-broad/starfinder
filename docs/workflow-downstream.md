@@ -27,8 +27,8 @@ in the backend registration rule file).
 
 | Rule | Inputs | Outputs / behavior |
 | --- | --- | --- |
-| `nuclei_registration` | Config JSON and INPUT additional-round/FOV directories; script also reads reference-round `*ch04.tif` | MATLAB: `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`; Python: `fovs/{fovID}/nuclei_registration.json` (the registered rounds and their attempts); both: registered `images/<round>/<channel name>/{fovID}.tif`; MATLAB script, or with `backend: python` the Python script, which calls `FOV.prepare_morphology` and, with the Python-only `parameters.checkpoints`, also writes the saved form under `fovs/{fovID}/other_rounds/` (not declared) ([workflows](workflows.md#nuclei-registration)) |
-| `rotate_nuclei` | INPUT/`{dapi_round}/{fovID}/*ch04.tif` | `images/DAPI/{fovID}.tif`, rotated and optionally projected by top-level `maximum_projection` |
+| `nuclei_registration` | INPUT additional-round/FOV directories, and for MATLAB the config JSON; the MATLAB script also reads the reference-round `*ch04.tif`, the Python one the reference stain `reference_stains` declares | MATLAB: `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`; Python: `fovs/{fovID}/nuclei_registration.json` (the registered rounds and their attempts); both: registered `images/<round>/<channel name>/{fovID}.tif`; MATLAB script, or with `backend: python` the Python script, which calls `FOV.prepare_morphology` and, with the Python-only `parameters.checkpoints`, also writes the saved form under `fovs/{fovID}/other_rounds/` (not declared) ([workflows](workflows.md#nuclei-registration)) |
+| `rotate_nuclei` | MATLAB: INPUT/`{dapi_round}/{fovID}/*ch04.tif`; Python: the reference round's file of the declared reference stain, `INPUT/{ref_round}/{fovID}/*<channel>.tif` (laid out by `image_dir_template`) | `images/DAPI/{fovID}.tif`, rotated and optionally projected by top-level `maximum_projection` |
 | `create_nuclei_amplicon_overlay` | DAPI and the reference image: MATLAB's `images/ref_merged/{fovID}.tif`, on the Python backend the file `reference_image` names (`fovs/{fovID}/reference.tif` by default) or `reference_image_import` (the reference round's channel-merged detection image, ZYX, or YX with top-level `maximum_projection`; see [projection views](workflows.md#projection-views-and-the-reference-merged-image)) | `images/overlay/{fovID}.tif`; `composite_nuclei_amplicon` (contrast stretch, maximum of the DAPI and amplicon images) and the optional Z projection |
 | `enhance_dapi_with_flamingo` | `images/flamingo/DAPI/{fovID}.tif`, `images/flamingo/Flamingo/{fovID}.tif` | `images/flamingo/enhanced_DAPI/{fovID}.tif` (`enhance_with_flamingo`); those input folders must be supplied separately |
 | `stardist_segmentation` | `images/{segmentation_input_folder}/{fovID}.tif` (default folder `overlay`) | `images/stardist_segmentation/{fovID}.tif`, `uint32` labels of the package's `stardist` method, and the run record beside it as `{fovID}.json` |
@@ -65,8 +65,9 @@ Behavior to check on real inputs:
   top-level projection before the overlay works; inputs of different shapes raise.
 - An image without objects gives an all-zero label image with outcome `empty`; the
   legacy Otsu gate, which raised on an image without foreground, is gone.
-- `rotate_nuclei` raises unless exactly one file matches
-  `INPUT/{dapi_round}/{fovID}/*ch04.tif`, naming the matches.
+- `rotate_nuclei` raises unless exactly one file matches its pattern (MATLAB:
+  `INPUT/{dapi_round}/{fovID}/*ch04.tif`; Python: the reference stain's file of
+  `ref_round`), naming the matches.
 - Label expansion in segmentation and in assignment operates per XY slice on 3-D
   data. `reads_assignment` refuses a label file expanded by `stardist_segmentation`
   (`expand_labels: true` there), because no original mask exists: expand in

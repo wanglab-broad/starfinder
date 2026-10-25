@@ -268,7 +268,7 @@ def test_five_workflow_adapters_and_shared_filenames(tmp_path, streaming):
     config = workflow_config(tmp_path)
     root = Path(__file__).resolve().parents[3]
     config['starfinder_path'] = str(root)
-    config['fov_id_pattern'] = '%s'
+    config['backend'] = 'python'
     for name, image in images().items():
         for c, channel in enumerate(config['seq_channel_order']):
             path = tmp_path/'data'/'sample'/name/'FOV'/f'{channel}.tif'
@@ -276,7 +276,7 @@ def test_five_workflow_adapters_and_shared_filenames(tmp_path, streaming):
             save_volume(image[..., c], path, metadata=ImageMetadata('common'))
     codebook = tmp_path/'genes.csv'
     codebook.write_text('gene,barcode\ngene,AAA\n')
-    rsf = dict(streaming=streaming, spot_finding={'run': True, 'intensity_estimation': 'adaptive', 'intensity_threshold': .1},
+    rsf = dict(streaming=streaming, spot_finding={'run': True, 'threshold_mode': 'adaptive', 'threshold_value': .1},
                reads_extraction={'run': True, 'voxel_size': [0, 0, 0]}, reads_filtration={'run': True})
     creation = dict(streaming=streaming, create_subtiles={'run': True, 'sqrt_pieces': 2})
     for rule, parameters in [('rsf_single_fov', rsf), ('gr_single_fov_subtile', creation),
@@ -287,7 +287,8 @@ def test_five_workflow_adapters_and_shared_filenames(tmp_path, streaming):
         adapted = from_workflow_config(config, rule)
         fov = adapted.dataset.fov('FOV')
         subtile = fov.paths.subtile_dir/'subtile_data_1.npz'
-        snakemake = SimpleNamespace(config=config, input=['unused', str(codebook), str(subtile)],
+        # The rules' named inputs (the adapters read snakemake.input.<name>; no JSON copy).
+        snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook), subtile=str(subtile)),
                                    wildcards=SimpleNamespace(fovID='FOV', n_subtile='1'))
         runpy.run_path(str(root/f'workflow/scripts/{rule}.py'), init_globals={'snakemake': snakemake})
         if rule == 'rsf_single_fov':

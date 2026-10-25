@@ -2245,6 +2245,95 @@ with `assignment: null` (molecules only) write the same files as before.
   `reads_assignment.csv`), the assembly schema keys, and the BigStitcher end-to-end test,
   which runs with and without an `assembly` block.
 
+### One Python configuration dialect
+
+W-569 (OM-12, SM-16, OM-02, OM-15, OM-11) makes the Python backend read one configuration
+dialect and only the inputs its rules use. The MATLAB scripts, the MATLAB rules, their JSON
+copy and MATLAB's schema definitions are unchanged. Each change has no alias and no dual read.
+
+* **The MATLAB keys of the processing rules raise under `backend: python`.** Each key below,
+  in `rules.<rule>.parameters` of `rsf_single_fov`, `gr_single_fov_subtile`,
+  `lrsf_single_fov_subtile`, `deep_create_subtile` or `deep_rsf_subtile`, raises `ValueError`
+  in `from_workflow_config` naming its native form, and the schema's backend guard refuses it
+  (also `tophat`, which the guard did not cover, and a block with `run: false`). Migrate each
+  key to its native form; every default is written out, so the effective `PipelineConfig` is
+  the same:
+
+  | Legacy key or value | Native form (`backend: python`) |
+  | --- | --- |
+  | `enhance_contrast: {run: true, snr_threshold: s}` (or the rule-level `snr_threshold: s`) | `preprocessing.steps` entry `{method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate, snr_threshold: s}` (`snr_threshold` omitted when unset) |
+  | `hist_equalize: {run: true, reference_channel: c}` (default 0) | `{method: histogram_matching, reference_channel: c}` |
+  | `morph_recon: {run: true, radius: r}` (default 3) in `rsf_single_fov`, `gr_single_fov_subtile`, `deep_create_subtile` | `{method: reconstruction, radius_yx: r}` in `preprocessing.steps` |
+  | `morph_recon` in `lrsf_single_fov_subtile`, `deep_rsf_subtile` | the same entry in the new `preprocessing.post_registration` list (`steps: []` when nothing runs before registration) |
+  | `tophat: {run: true, radius: r}` (default 3) | `{method: white_tophat, radius_yx: r}` |
+  | the fixed order normalize, histogram, reconstruction, top-hat | the order of `preprocessing.steps` |
+  | `global_registration: {run: true, method: m}` (default `translation`) | a `registration.steps` entry `{method: m}` |
+  | `local_registration: {run: true, method: m}` (default `demons`) | a `registration.steps` entry after the global ones |
+  | method `diffeomorphic`, `symmetric`, `fast_symmetric` | `{method: demons, variant: <name>}` |
+  | `ref_img`/`mov_img: merged-image` (or `merged`) | `registration.signal: {mode: max}` (the default) |
+  | `ref_img`/`mov_img: single-channel` with block `ref_channel: c` (default 0) | `registration.signal: {mode: channel, reference_channel: c}`; a second block with another signal becomes that step's own `signal` |
+  | block `boundary_mode: nearest` | `registration.warp: {backend: scipy, boundary_mode: nearest}`; `constant` (or none) is no `warp` |
+  | block `ref_round` | `registration.reference_round`, or nothing (both are checked against `ref_round`) |
+  | block `recovery` with alternatives without `method` | step `recovery`, each alternative naming its `method` |
+  | `detection_threshold`, `match_distance`, `tps_smoothing`, `grid_spacing`, `beta`, `lmbda`, `cpd_w`, `candidate_radius`, `k_neighbors` | `detection_noise_sigma`, `match_distance_voxels`, `smoothing`, `grid_spacing_voxels`, `kernel_width_voxels`, `regularization_weight`, `outlier_fraction`, `candidate_radius_voxels`, `neighbors_per_anchor` |
+  | a `cpd` block without `detection_threshold` or `grid_spacing` (hidden defaults 3.0 and 32) | `detection_noise_sigma: 3.0`, `grid_spacing_voxels: 32` written out (the native defaults are 5.0 and 16) |
+  | `ref_img: single-channel` in `rsf_single_fov` with `global_registration` alone (the single-channel reference image) | the new rule parameter `reference_image_view: {mode: channel, channel: c}` (an index or a channel label; default `{mode: max}`, the channel maximum) |
+  | local_maxima's `intensity_estimation`, `intensity_threshold`, `min_distance` (also in `channel_overrides`) | `threshold_mode`, `threshold_value`, `min_distance_voxels` (`min_distance` stays the native field of `spotiflow` and `piscis`) |
+  | top-level `dapi_round` (the stain `*ch04.tif`) | the new top-level `reference_stains: [{channel: ch04, name: DAPI}]` |
+
+  `spot_finding.ref_round`, `load_codebook.split_index` and the `reads_filtration` keys are
+  shared keys, not aliases, and stay (the zero-based `split_index` is a separate follow-up).
+* **The MATLAB-only translation moves to `starfinder.dataset._legacy_config`.** The private
+  `_LEGACY_PREPROCESSING`, `_DEMONS_VARIANTS`, `_SPOT_ALIASES`, `_SIGNAL_MODES`,
+  `_registration`, `_legacy_registration` and `_legacy_recipe` leave `dataset/workflow.py`,
+  as does `_NUCLEI_REFERENCE_CHANNEL` (now `_legacy_config._MATLAB_STAIN_CHANNEL`).
+  `from_workflow_config` imports the module only for a MATLAB-backend configuration (backend
+  absent or `matlab`), which the adapters of the shared rules read
+  (`reads_assignment` loads its codebook with the first rule's layout); such a configuration
+  translates as before. The Python backend's refusal table is `_NATIVE_FORMS`.
+* **New native forms.** `preprocessing.post_registration` (a list of `reconstruction` steps
+  without `save_as`, carried to `PreprocessingRecipe.post_registration`) and the rule
+  parameter `reference_image_view` (`{mode: max | channel, channel}`; `WorkflowConfig`'s
+  `reference_image` and `reference_channel` follow it; the resident subtile rules refuse it).
+* **No JSON copy for Python (OM-02).** The Python rules `rsf_single_fov`,
+  `gr_single_fov_subtile`, `deep_create_subtile`, `nuclei_registration`,
+  `lrsf_single_fov_subtile` and `deep_rsf_subtile` no longer take
+  `<config_path with .json>`, and their inputs are named: `codebook`, `images` and, in the
+  resident subtile rules, `subtile`. `_run_workflow` reads `snakemake.input.codebook` and
+  `snakemake.input.subtile` (they were `input[1]` and `input[2]`). `rsf_preparation`, which
+  writes the copy, is defined and a local rule for the MATLAB backend only. `run.json`
+  records the source file as before (`workflow_config`). The unused committed copy
+  `tests/tissue_2D_test.json` is removed.
+* **Explicit reference stains (OM-11).** The Python backend declares the reference round's
+  stain files with the new top-level `reference_stains` (`{channel, name}` entries, optional
+  `wavelength`; `Dataset.reference_stains`). `dapi_round` raises for it, naming the new key;
+  there is no hard-coded `ch04` and no fallback to it. The Python `rotate_nuclei`
+  (`get_dapi_input`) reads `<ref_round>`'s file of the stain, and `nuclei_registration`
+  registers against it (label `<ref_round>:<channel>`), the one entry or, with several, the
+  one whose name contains `ref_channel` (`_nuclear_stain`). MATLAB's `dapi_round`,
+  `*ch04.tif` and rules are unchanged.
+* **Conditional image dimensions and Fiji (OM-11, OM-15).** `img_row` and `img_col` are
+  required for the MATLAB backend as before, and for the Python backend only by an active
+  `create_subtiles` block (the subtile windows) and by stitching method `bigstitcher` without
+  an `assembly` block (the legacy tile configuration writer); missing there, the schema and
+  the adapters raise naming them. `fiji_path` is read at parse time only by the legacy
+  `run_BigStitcher_macro` (`stitching.smk`, included for the MATLAB backend only). The
+  minimal example drops `envs_path` and `fiji_path` (and `prepare_workflow.py` sets them only
+  where a template has them). `common.smk`'s MATLAB branch reads the subset keys with `.get`.
+  The unused `run_fiji_macros` (`common.smk`) and the private `_legacy_stitching`
+  (`dataset/workflow.py`, used only by a test) are removed.
+* **Migrated configurations.** `docs/examples/workflow-full.yaml`, `workflow-minimal.yaml`
+  and `workflow-recipe-2.yaml`; `benchmarks/recipes.py` (the pipeline case's workflow is a
+  `backend: python` configuration of native keys; its unused `fov_id_pattern` is dropped) and
+  the registration steps of `benchmarks/configs/pipeline.json` (native step entries with
+  `signal`). `tests/minimal_config.yaml` and `tests/tissue_2D_test.yaml` are MATLAB
+  configurations and keep the MATLAB keys.
+* **Tests.** The Python-backend test configurations use the native keys and named rule
+  inputs; tests whose configurations have no `backend` (MATLAB ones) keep testing the
+  translation, now `_legacy_config`'s, and several also assert the native form gives the same
+  result. The tests of the removed `_legacy_stitching` and of the Python backend's acceptance
+  of `tophat` are replaced by the refusal tests.
+
 ### The processing report
 
 * **New: the processing report.** `Dataset.report(sample, fov_ids, …)` writes

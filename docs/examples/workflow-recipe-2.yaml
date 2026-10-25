@@ -1,9 +1,9 @@
 # Recipe 2 on the Python backend: scalar background subtraction, kept as the
 # snapshot bg_corrected, then percentile normalization. Detection and
 # registration use the normalized (detection) image; extraction reads the
-# background-corrected snapshot before normalization. The preprocessing key
-# replaces enhance_contrast, hist_equalize, morph_recon and tophat, which must
-# be absent. Parameter values are the provisional defaults, not tissue tuning.
+# background-corrected snapshot before normalization. The Python backend reads
+# only the native keys (preprocessing, registration, the spot_finding fields).
+# Parameter values are the provisional defaults, not tissue tuning.
 config_path: /absolute/run/config.yaml
 starfinder_path: /absolute/starfinder
 root_input_path: /absolute/input
@@ -37,7 +37,9 @@ rules:
             p_low: 1.0
             p_high: 99.9
         extraction_source: bg_corrected
-      global_registration: {run: true}
-      spot_finding: {run: true, intensity_estimation: noise, intensity_threshold: 5.0}
+      registration:
+        steps:
+          - {method: translation}
+      spot_finding: {run: true, threshold_mode: noise, threshold_value: 5.0}
       reads_extraction: {run: true, voxel_size: [1, 2, 2]}
       reads_filtration: {run: true, end_base: CC, start_base: C}

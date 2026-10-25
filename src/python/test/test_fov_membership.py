@@ -129,6 +129,15 @@ def test_a_missing_membership_file_raises(tmp_path):
         workflow._membership(config_for(tmp_path))
 
 
+# The rsf_single_fov rule of the minimal example in the MATLAB keys (those of the example on the base revision), which a
+# MATLAB-backend configuration holds: the example's native keys are Python-only.
+MATLAB_RSF = {"run": True, "parameters": {
+    "global_registration": {"run": True},
+    "spot_finding": {"run": True, "intensity_estimation": "noise", "intensity_threshold": 5.0},
+    "reads_extraction": {"run": True, "voxel_size": [1, 2, 2]},
+    "reads_filtration": {"run": True, "end_base": "CC", "start_base": "C"}}}
+
+
 def test_the_schema_refuses_the_matlab_fov_keys_for_python_and_requires_them_for_matlab():
     import jsonschema
     schema = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
@@ -136,7 +145,8 @@ def test_the_schema_refuses_the_matlab_fov_keys_for_python_and_requires_them_for
     config = yaml.safe_load((ROOT / "docs/examples/workflow-minimal.yaml").read_text())
     validator.validate(dict(config, selected_fovs=["tile_1"]))
     matlab = dict(config, backend="matlab", fov_id_pattern="tile_{i}", n_fovs=1, subset_list=[], subset_range=False,
-                  subset_start=1, subset_end=1, subset_random=False, n_random_tests=1)
+                  subset_start=1, subset_end=1, subset_random=False, n_random_tests=1,
+                  rules={"rsf_single_fov": MATLAB_RSF})
     validator.validate(matlab)
     for key, value in (("fov_id_pattern", "tile_{i}"), ("n_fovs", 1), ("subset_list", []), ("subset_range", False),
                        ("subset_start", 1), ("subset_end", 1), ("subset_random", False), ("n_random_tests", 1)):

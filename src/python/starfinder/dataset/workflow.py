@@ -8,13 +8,12 @@ from ._declared import reference_settings
 from .dataset import Dataset
 from .types import ChannelInfo, RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
-from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
-    ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type)
+from starfinder.preprocessing import ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type
 from starfinder import _layout
 from starfinder._registry import config_type_for
-from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig,
-    InsufficientLandmarksError, RecoveryConfig, RegistrationEstimationError, RegistrationQcConfig, RegistrationRecipe,
-    RegistrationRejectedError, RegistrationSignalConfig, RegistrationStep, WarpConfig)
+from starfinder.registration import (REGISTRATION_METHODS, InsufficientLandmarksError, RecoveryConfig,
+    RegistrationEstimationError, RegistrationQcConfig, RegistrationRecipe, RegistrationRejectedError,
+    RegistrationSignalConfig, RegistrationStep, WarpConfig)
 from starfinder.readout import (DECODING_METHODS, ENCODINGS, BarcodeLayout, EncodingConfig, LocalBackgroundConfig,
     NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig, ReadScoreConfig, Segment, WtaDecoderConfig,
     DeduplicationConfig)
@@ -23,13 +22,26 @@ from starfinder.spot_finding import SPOT_FINDING_METHODS, ChannelOverride, Local
 
 _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
           'deep_create_subtile', 'deep_rsf_subtile')
-# Keys replaced by the explicit preprocessing key (snr_threshold only feeds min-max).
-_LEGACY_PREPROCESSING = ('enhance_contrast', 'hist_equalize', 'morph_recon', 'tophat', 'snr_threshold')
-# Legacy method names: the demons variants select method demons with that variant.
-_DEMONS_VARIANTS = ('diffeomorphic', 'symmetric', 'fast_symmetric')
-# Legacy spot_finding keys: aliases of LocalMaximaConfig fields, for local_maxima only.
-_SPOT_ALIASES = {'intensity_estimation': 'threshold_mode', 'intensity_threshold': 'threshold_value',
-                 'min_distance': 'min_distance_voxels'}
+_RESIDENT_RULES = ('lrsf_single_fov_subtile', 'deep_rsf_subtile')
+# The MATLAB keys of the Python processing rules and their native forms. The Python backend accepts the
+# native keys only and raises naming the form; the MATLAB backend's configurations are translated by
+# _legacy_config (docs/migration.md, "One Python configuration dialect").
+_NATIVE_FORMS = {
+    'enhance_contrast': 'a preprocessing.steps entry {method: min_max_normalization, output_dtype: uint8, '
+                        'output_range: [0, 255], rounding: truncate}',
+    'hist_equalize': 'a preprocessing.steps entry {method: histogram_matching, reference_channel: 0}',
+    'morph_recon': 'a preprocessing.steps entry {method: reconstruction, radius_yx: 3} (in the resident subtile '
+                   'rules a preprocessing.post_registration entry)',
+    'tophat': 'a preprocessing.steps entry {method: white_tophat, radius_yx: 3}',
+    'snr_threshold': 'the snr_threshold of the preprocessing.steps entry {method: min_max_normalization}',
+    'global_registration': 'a registration.steps entry of a global method (default translation), with the '
+                           'recipe signal and warp',
+    'local_registration': 'a registration.steps entry of a local method (default demons), with the recipe signal '
+                          'and warp',
+}
+# The MATLAB spot_finding keys of local_maxima and the LocalMaximaConfig fields they name.
+_NATIVE_SPOT_FIELDS = {'intensity_estimation': 'threshold_mode', 'intensity_threshold': 'threshold_value',
+                       'min_distance': 'min_distance_voxels'}
 
 
 def _known(values, allowed, context):
@@ -51,8 +63,6 @@ def _operation(params, name, allowed):
 _RECOVERY_ERRORS = {'InsufficientLandmarksError': InsufficientLandmarksError,
                     'RegistrationEstimationError': RegistrationEstimationError,
                     'RegistrationRejectedError': RegistrationRejectedError}
-# Legacy image representations: merged (either spelling) is the channel maximum, as in MATLAB.
-_SIGNAL_MODES = {'merged-image': 'max', 'merged': 'max', 'single-channel': 'channel'}
 
 
 def _recovery(values, alternative):
@@ -65,76 +75,6 @@ def _recovery(values, alternative):
     except KeyError as error:
         raise ValueError('invalid recovery error category') from error
     return RecoveryConfig(allowed, tuple(alternative(entry) for entry in values['alternatives']))
-
-
-def _registration(values, *, local=False):
-    """One legacy block: (config, signal, boundary_mode, recovery) of its registration step."""
-    values = dict(values)
-    method = values.pop('method', 'demons' if local else 'translation')
-    ref_img, mov_img = values.pop('ref_img', 'merged-image'), values.pop('mov_img', 'merged-image')
-    if ref_img not in _SIGNAL_MODES or mov_img not in _SIGNAL_MODES:
-        raise ValueError('unknown registration image representation')
-    if _SIGNAL_MODES[ref_img] != _SIGNAL_MODES[mov_img]:
-        raise ValueError(f'ref_img {ref_img!r} and mov_img {mov_img!r} differ; one registration signal is used for both rounds')
-    channel = values.pop('ref_channel', 0)
-    signal = (RegistrationSignalConfig('channel', channel) if _SIGNAL_MODES[ref_img] == 'channel'
-              else RegistrationSignalConfig('max'))
-    boundary = values.pop('boundary_mode', None)
-    recovery_values = values.pop('recovery', None)
-    mapping = {'detection_threshold': 'detection_noise_sigma', 'match_distance': 'match_distance_voxels',
-        'tps_smoothing': 'smoothing', 'grid_spacing': 'grid_spacing_voxels', 'beta': 'kernel_width_voxels',
-        'lmbda': 'regularization_weight', 'cpd_w': 'outlier_fraction', 'candidate_radius': 'candidate_radius_voxels',
-        'k_neighbors': 'neighbors_per_anchor'}
-    translated = {}
-    for key, value in values.items():
-        target = mapping.get(key, key)
-        if target in translated:
-            raise ValueError(f'duplicate registration setting {target}')
-        translated[target] = value
-    config_type = config_type_for(REGISTRATION_METHODS, 'demons' if method in _DEMONS_VARIANTS else method,
-                                  'registration method', message=f'unknown registration method {method}')
-    block = 'local' if local else 'global'
-    if REGISTRATION_METHODS[config_type].step_kind != block:
-        raise ValueError(f'{method} is not a {block} registration method')
-    if config_type is CpdConfig:
-        translated.setdefault('detection_noise_sigma', 3.0)
-        translated.setdefault('grid_spacing_voxels', 32)
-    if config_type is DemonsConfig:
-        if 'iterations' in translated:
-            translated['iterations'] = tuple(translated['iterations'])
-        config = DemonsConfig(variant=method, **translated)
-    else:
-        config = config_type(**translated)
-    recovery = None
-    if recovery_values is not None:
-        def alternative(entry):
-            # Alternatives configure estimators only; no hidden warp/reduction policy.
-            if set(entry) & {'recovery', 'boundary_mode', 'ref_img', 'mov_img', 'ref_channel'}:
-                raise ValueError('recovery alternatives configure estimators only')
-            return _registration(entry, local=local)[0]
-        recovery = _recovery(recovery_values, alternative)
-    return config, signal, boundary, recovery
-
-
-def _legacy_registration(blocks):
-    """The recipe of the enabled legacy blocks, global then local; None when neither runs.
-
-    The first block's signal is the recipe signal and a different one becomes
-    the other step's own signal. The blocks' boundary_mode is the recipe's one
-    final resampling, so different values are rejected; nearest selects the
-    SciPy backend, and constant (or none) keeps the derived default.
-    """
-    if not blocks:
-        return None
-    steps = [_registration(values, local=local) for values, local in blocks]
-    boundaries = {boundary for _, _, boundary, _ in steps if boundary is not None}
-    if len(boundaries) > 1:
-        raise ValueError(f'boundary_mode differs between the registration blocks: {sorted(boundaries)}')
-    boundary = boundaries.pop() if boundaries else None
-    signal = steps[0][1]
-    warp = None if boundary in (None, 'constant') else WarpConfig(backend='scipy', boundary_mode=boundary)
-    return RegistrationRecipe(tuple(RegistrationStep(config, recovery, None if own == signal else own)
-                                    for config, own, _, recovery in steps), signal=signal, warp=warp)
 
 
 def _registration_step(entry):
@@ -179,18 +119,26 @@ def _explicit_registration(values):
                               reference_round=values.get('reference_round'), **options)
 
 
-def _spot_fields(values, config_type, context):
+def _spot_fields(values, config_type, context, aliases=None):
     """Init fields of config_type from one spot_finding mapping (YAML lists become tuples).
 
-    The legacy keys are aliases of LocalMaximaConfig fields for local_maxima
-    only, and raise together with their field; for any other method a key
-    must be an init field of its config (min_distance is then that config's
-    native field, passed unchanged). Unknown keys raise ValueError.
+    A key must be an init field of its config (min_distance is the native
+    field of spotiflow and piscis, passed unchanged). For local_maxima the
+    MATLAB keys intensity_estimation, intensity_threshold and min_distance
+    raise naming their LocalMaximaConfig fields; aliases (the MATLAB backend's
+    translation, _legacy_config) maps them to those fields instead, and an
+    alias raises together with its field. Unknown keys raise ValueError.
     """
     if not isinstance(values, dict):
         raise TypeError(f'{context} must be a mapping')
     names = {f.name for f in fields(config_type) if f.init}
-    aliases = _SPOT_ALIASES if config_type is LocalMaximaConfig else {}
+    if config_type is LocalMaximaConfig and aliases is None:
+        given = [key for key in _NATIVE_SPOT_FIELDS if key in values]
+        if given:
+            keys = 'is a MATLAB key' if len(given) == 1 else 'are MATLAB keys'
+            raise ValueError(f'{context}: {", ".join(given)} {keys} of local_maxima; the Python backend names the '
+                             f'LocalMaximaConfig fields {", ".join(_NATIVE_SPOT_FIELDS[key] for key in given)}')
+    aliases = aliases if aliases is not None and config_type is LocalMaximaConfig else {}
     _known(values, names | set(aliases), context)
     for key, field_name in aliases.items():
         if key in values and field_name in values:
@@ -198,11 +146,12 @@ def _spot_fields(values, config_type, context):
     return {aliases.get(key, key): _tuples(value) for key, value in values.items()}
 
 
-def _detection(values, channels):
+def _detection(values, channels, aliases=None):
     """The detection config of the spot_finding block, or a SpotFindingPlan when it has channel_overrides or rounds.
 
     method names a SPOT_FINDING_METHODS method with pipeline=True (default
-    local_maxima); the other keys are its config's fields (_spot_fields),
+    local_maxima); the other keys are its config's fields (_spot_fields, with
+    the MATLAB backend's aliases),
     and a config field without a default (such as the four starfish_log
     scale and threshold settings) must be given, else ValueError.
     channel_overrides maps a channel label to config fields that replace the
@@ -217,7 +166,7 @@ def _detection(values, channels):
     config_type = config_type_for(SPOT_FINDING_METHODS, method, 'spot-finding method')
     if not SPOT_FINDING_METHODS[config_type].pipeline:
         raise ValueError(f'spot-finding method {method!r} is not a pipeline method')
-    values = _spot_fields(values, config_type, 'spot_finding')
+    values = _spot_fields(values, config_type, 'spot_finding', aliases)
     missing = [f.name for f in fields(config_type)
                if f.init and f.default is MISSING and f.default_factory is MISSING and f.name not in values]
     if missing:
@@ -234,47 +183,21 @@ def _detection(values, channels):
         raise ValueError(f'spot_finding.channel_overrides names unknown channels {unknown}; '
                          f'seq_channel_order is {list(channels)}')
     return SpotFindingPlan(config, tuple(
-        ChannelOverride(label, replace(config, **_spot_fields(entry, config_type, f'spot_finding.channel_overrides.{label}')))
+        ChannelOverride(label, replace(config, **_spot_fields(
+            entry, config_type, f'spot_finding.channel_overrides.{label}', aliases)))
         for label, entry in overrides.items()), None if rounds is None else tuple(rounds))
-
-
-def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident):
-    """Recipe 1 from the legacy keys, in the legacy order; None when no key runs.
-
-    Resident subtile rules run reconstruction after registration.
-    """
-    steps, post = [], []
-    if do_norm:
-        steps.append(MinMaxNormalizationConfig('uint8', (0, 255), rounding='truncate',
-            snr_threshold=norm.get('snr_threshold', params.get('snr_threshold'))))
-    if do_hist:
-        steps.append(HistogramMatchingConfig(reference_channel=hist.get('reference_channel', 0)))
-    if do_morph:
-        (post if resident else steps).append(ReconstructionConfig(radius_yx=morph.get('radius', 3)))
-    if do_top:
-        steps.append(TophatConfig(radius_yx=top.get('radius', 3)))
-    if not steps and not post:
-        return None
-    return PreprocessingRecipe(tuple(map(PreprocessingStep, steps)), tuple(map(PreprocessingStep, post)))
 
 
 def _tuples(value):
     return tuple(_tuples(v) for v in value) if isinstance(value, list) else value
 
 
-def _explicit_recipe(values):
-    """Recipe from the preprocessing key: steps named by their PREPROCESSING_METHODS names, plus the recipe fields.
-
-    A step's keys other than method and save_as are the fields of its config
-    dataclass; YAML lists become tuples.
-    """
-    if not isinstance(values, dict):
-        raise TypeError('preprocessing must be a mapping')
-    _known(values, ('steps', 'extraction_source', 'registration_source', 'supplied_statistics'), 'preprocessing')
-    if not isinstance(values.get('steps'), list):
-        raise ValueError('preprocessing.steps must be a list')
+def _preprocessing_steps(entries, context):
+    """PreprocessingSteps of one list of the preprocessing key: each a method name, its config fields and save_as."""
+    if not isinstance(entries, list):
+        raise ValueError(f'{context} must be a list')
     steps = []
-    for entry in values['steps']:
+    for entry in entries:
         if not isinstance(entry, dict) or 'method' not in entry:
             raise ValueError('each preprocessing step must be a mapping with a method')
         entry = dict(entry)
@@ -282,8 +205,25 @@ def _explicit_recipe(values):
         save_as = entry.pop('save_as', None)
         _known(entry, [f.name for f in fields(config_type) if f.init], f'preprocessing step {config_type.__name__}')
         steps.append(PreprocessingStep(config_type(**{k: _tuples(v) for k, v in entry.items()}), save_as))
+    return tuple(steps)
+
+
+def _explicit_recipe(values):
+    """Recipe from the preprocessing key: steps named by their PREPROCESSING_METHODS names, plus the recipe fields.
+
+    A step's keys other than method and save_as are the fields of its config
+    dataclass; YAML lists become tuples. post_registration (absent: none)
+    lists the steps run after registration, in the same form
+    (PreprocessingRecipe.post_registration: reconstruction only).
+    """
+    if not isinstance(values, dict):
+        raise TypeError('preprocessing must be a mapping')
+    _known(values, ('steps', 'post_registration', 'extraction_source', 'registration_source', 'supplied_statistics'),
+           'preprocessing')
+    steps = _preprocessing_steps(values.get('steps'), 'preprocessing.steps')
+    post = _preprocessing_steps(values.get('post_registration', []), 'preprocessing.post_registration')
     supplied = values.get('supplied_statistics')
-    return PreprocessingRecipe(tuple(steps), extraction_source=values.get('extraction_source'),
+    return PreprocessingRecipe(steps, post, extraction_source=values.get('extraction_source'),
                                registration_source=values.get('registration_source'),
                                supplied_statistics=None if supplied is None else Path(supplied))
 
@@ -507,7 +447,9 @@ class WorkflowConfig:
 
     reference_projection, reference_image and reference_channel are passed to
     FOV.save_reference_image, which writes the file of the dataset's
-    reference_image (default ``fovs/{fov_id}/reference.tif``). split_index is the
+    reference_image (default ``fovs/{fov_id}/reference.tif``); reference_image
+    and reference_channel are the rule's reference_image_view (``merged`` and 0
+    for mode max, ``single-channel`` and the channel's index for mode channel). split_index is the
     zero-based EncodingConfig.split_index converted from the shared one-based
     load_codebook.split_index (None without a split); encoding and layout are
     the codebook's encoding config and segment layout (None: one segment), which
@@ -529,18 +471,21 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
 
     Other rules/top-level acquisition/downstream keys are shared with MATLAB.
     Unknown fields in this Python rule's parameters raise instead of disappearing.
-    The Python-only preprocessing key declares an explicit recipe and is
-    mutually exclusive with the legacy keys enhance_contrast, hist_equalize,
-    morph_recon, tophat and snr_threshold, which map to recipe 1. The
-    Python-only registration key declares a RegistrationRecipe and is
-    mutually exclusive with an enabled global_registration or
-    local_registration; those legacy blocks map to one recipe (global step,
-    then local step; merged-image is the channel maximum). The spot_finding
-    block's Python-only method key names a pipeline SPOT_FINDING_METHODS
-    method (default local_maxima) whose config fields are the other keys;
-    the legacy keys intensity_estimation, intensity_threshold and
-    min_distance are aliases for local_maxima only, channel_overrides
-    gives per-channel settings and rounds the rounds to detect in. The rule-level Python-only device key sets
+    With backend: python the rule takes one dialect, the native keys: the
+    preprocessing key declares an explicit recipe (steps, and post_registration
+    for the steps run after registration), the registration key a
+    RegistrationRecipe, and the spot_finding block's method key names a
+    pipeline SPOT_FINDING_METHODS method (default local_maxima) whose config
+    fields are the other keys, channel_overrides gives per-channel settings and
+    rounds the rounds to detect in. A MATLAB key of these rules
+    (enhance_contrast, hist_equalize, morph_recon, tophat, snr_threshold,
+    global_registration, local_registration, and local_maxima's
+    intensity_estimation, intensity_threshold and min_distance) raises
+    ValueError naming its native form (_NATIVE_FORMS). The rule parameter
+    reference_image_view ({mode: max | channel, channel: index or label},
+    default max) selects the reference image FOV.save_reference_image writes.
+    A MATLAB-backend configuration (backend absent or matlab), which the
+    adapters of the shared rules read, is translated by _legacy_config. The rule-level Python-only device key sets
     ExecutionConfig.device. The shared load_codebook.split_index is MATLAB's
     one-based position and becomes the two-segment layout (zero-based
     EncodingConfig.split_index s - 1); reads_filtration.n_barcode_segments,
@@ -565,7 +510,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     split_index, n_barcode_segments and exclude_invalid_endpoints raise.
     The Python-only checkpoints key ({stages: [...]}) is checked here and read
     by the rule's runner (_rule_checkpoints); the top-level config_path is kept
-    on the Dataset, whose run.json records it as workflow_config.
+    on the Dataset, whose run.json records it as workflow_config. img_row and
+    img_col are read only for the subtile windows of create_subtiles.
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -574,28 +520,37 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         raise ValueError('direct Python field names belong to Dataset; use seq_channel_order here (the FOVs are those '
                          'of fovs.csv)')
     params = config.get('rules', {}).get(rule, {}).get('parameters', {})
+    python = config.get('backend', 'matlab') == 'python'
     mode = _readout_mode(config, params)
     dataset = _workflow_dataset(config, readout_mode=mode)
     rounds, channels = dataset.rounds, dataset.channel_order
-    _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
-        'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
-        'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring', 'deduplication',
-        'create_subtiles', 'device', _layout.CHECKPOINTS),
+    _known(params, ('streaming', 'load_codebook', 'load_raw_images', 'preprocessing', 'registration',
+        'reference_image_view', 'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring',
+        'deduplication', 'create_subtiles', 'device', _layout.CHECKPOINTS, *_NATIVE_FORMS),
         'Python workflow parameter')
     _rule_checkpoints(config, rule)
     if config.get('config_path') is not None:
         # run.json records the configuration file a rule ran with (workflow_config).
         dataset._workflow_config = Path(config['config_path']).absolute()
-    legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
-    if 'preprocessing' in params and legacy:
-        raise ValueError(f'preprocessing is mutually exclusive with the legacy keys {legacy}')
-    norm, do_norm = _operation(params, 'enhance_contrast', ('snr_threshold',))
-    hist, do_hist = _operation(params, 'hist_equalize', ('reference_channel',))
-    morph, do_morph = _operation(params, 'morph_recon', ('radius',))
-    top, do_top = _operation(params, 'tophat', ('radius',))
+    if python:
+        replaced = [key for key in _NATIVE_FORMS if key in params]
+        if replaced:
+            raise ValueError(f'rules.{rule}.parameters: ' + '; '.join(
+                f'{key} is a MATLAB key, which the Python backend replaces by {_NATIVE_FORMS[key]}' for key in replaced)
+                + ' (docs/migration.md, "One Python configuration dialect")')
+        preprocessing = _explicit_recipe(params['preprocessing']) if 'preprocessing' in params else None
+        registration = _explicit_registration(params['registration']) if 'registration' in params else None
+        reference_view = _reference_image_view(params, dataset, rule)
+        spot_aliases = None
+    else:
+        _python_only(config, [f'rules.{rule}.parameters.reference_image_view'] if 'reference_image_view' in params
+                     else [])
+        from ._legacy_config import legacy_processing
+        preprocessing, registration, reference_view, spot_aliases = legacy_processing(params, rule,
+                                                                                      rounds.reference_round)
     spot_keys = {f.name for cls, spec in SPOT_FINDING_METHODS.items() if spec.pipeline for f in fields(cls) if f.init}
-    spot, do_spot = _operation(params, 'spot_finding', {'ref_round', 'method', 'channel_overrides', 'rounds', *_SPOT_ALIASES,
-                                                        *spot_keys})
+    spot, do_spot = _operation(params, 'spot_finding', {'ref_round', 'method', 'channel_overrides', 'rounds',
+                                                        *_NATIVE_SPOT_FIELDS, *spot_keys})
     extract, do_extract = _operation(params, 'reads_extraction', ('voxel_size', 'background'))
     filt, do_filter = _operation(params, 'reads_filtration', ('end_base', 'start_base', 'exclude_invalid_endpoints', 'score_bounds', 'n_barcode_segments', 'split_index'))
     book, _ = _operation(params, 'load_codebook', ('split_index', 'encoding'))
@@ -611,40 +566,17 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     scoring = _scoring(params, decoding if do_filter else None, extraction)
     deduplication = _deduplication(params, decoding if do_filter else None, mode)
     load, do_load = _operation(params, 'load_raw_images', ('subdir',))
-    registration_keys = {f.name for cls in REGISTRATION_METHODS for f in fields(cls) if f.init}
-    registration_keys |= {'ref_round', 'method', 'ref_img', 'mov_img', 'ref_channel', 'boundary_mode', 'recovery',
-        'detection_threshold', 'match_distance', 'tps_smoothing', 'grid_spacing', 'beta', 'lmbda', 'cpd_w', 'candidate_radius', 'k_neighbors'}
-    blocks, enabled_registration = [], []
-    for name in ('global_registration', 'local_registration'):
-        values, enabled = _operation(params, name, registration_keys)
-        if values.pop('ref_round', rounds.reference_round) != rounds.reference_round:
-            raise ValueError('rule reference round differs from dataset reference')
-        if enabled:
-            blocks.append((values, name == 'local_registration'))
-            enabled_registration.append(name)
-    if 'registration' in params and enabled_registration:
-        raise ValueError(f'registration is mutually exclusive with the enabled legacy blocks {enabled_registration}')
-    registration = (_explicit_registration(params['registration']) if 'registration' in params
-                    else _legacy_registration(blocks))
     if registration is not None and registration.reference_round not in (None, rounds.reference_round):
         raise ValueError('registration reference round differs from dataset reference')
-    # The reference image is what the MATLAB script saves: the reference image of its last
-    # registration. Only rsf_single_fov passes ref_img, to global registration;
-    # its local registration and the other scripts use the channel maximum.
-    reference_view = ('merged', 0)
-    if rule == 'rsf_single_fov' and enabled_registration == ['global_registration']:
-        signal = registration.signal
-        reference_view = ('single-channel', signal.reference_channel) if signal.mode == 'channel' else ('merged', 0)
     if spot.get('ref_round', rounds.reference_round) != rounds.reference_round:
         raise ValueError('detection reference differs from dataset reference')
-    resident = rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile')
+    resident = rule in _RESIDENT_RULES
     # The adapter loads raw input unless this is a saved-subtile job or explicitly disabled.
     load_config = ImageLoadConfig(channel_labels=channels, **load) if channels and not resident and ('load_raw_images' not in params or do_load) else None
     pipeline = PipelineConfig(load=load_config, rotation_degrees=None if resident else config.get('rotate_angle'),
-        preprocessing=(_explicit_recipe(params['preprocessing']) if 'preprocessing' in params else
-                       _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident)),
+        preprocessing=preprocessing,
         registration=registration,
-        spot_finding=_detection(spot, channels) if do_spot else None,
+        spot_finding=_detection(spot, channels, spot_aliases) if do_spot else None,
         extraction=extraction,
         decoding=decoding if do_filter else None, scoring=scoring, deduplication=deduplication,
         filtering=ReadFilterConfig(end_bases=end_base, start_base=filt.get('start_base', 'C'), exclude_invalid_endpoints=filt.get('exclude_invalid_endpoints', False), score_bounds=filt.get('score_bounds', {})) if do_filter else None)
@@ -657,7 +589,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         values, enabled = _operation(subtile_params, 'create_subtiles', ('sqrt_pieces', 'overlap_ratio'))
         if enabled or values:
             dataset.subtile = SubtileConfig(values.get('sqrt_pieces', 4), values.get('overlap_ratio', .1))
-            dataset.subtile.compute_windows(config['img_row'], config['img_col'])
+            dataset.subtile.compute_windows(*_image_shape(config, f'rules.{subtile_rule}.parameters.create_subtiles'))
             break
     streaming = params.get('streaming', False)
     if not isinstance(streaming, bool):
@@ -667,6 +599,52 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
                         params.get('device', 'cpu')),
         split_index, ProjectionConfig() if config.get('maximum_projection', False) else None, *reference_view,
         encoding=encoding, layout=layout)
+
+
+def _reference_image_view(params, dataset, rule):
+    """(reference_image, reference_channel) of FOV.save_reference_image from the rule parameter reference_image_view.
+
+    {mode: max} (the default, also when the key is absent) is the channel
+    maximum; {mode: channel, channel: c} is one channel of the reference
+    round, c a zero-based index or a channel pattern or name
+    (Dataset.channel_index). The resident subtile rules write no reference
+    image, so the key raises there.
+    """
+    context = f'rules.{rule}.parameters.reference_image_view'
+    values = params.get('reference_image_view')
+    if values is None:
+        return 'merged', 0
+    if not isinstance(values, dict):
+        raise TypeError(f'{context} must be a mapping {{mode, channel}}')
+    _known(values, ('mode', 'channel'), context)
+    if rule in _RESIDENT_RULES:
+        raise ValueError(f'{context}: the resident subtile rule {rule} writes no reference image')
+    view = values.get('mode', 'max')
+    if view == 'max':
+        if values.get('channel') is not None:
+            raise ValueError(f'{context}.channel applies to mode channel only')
+        return 'merged', 0
+    if view != 'channel':
+        raise ValueError(f"{context}.mode must be 'max' or 'channel'; got {view!r}")
+    channel = values.get('channel')
+    if isinstance(channel, bool) or not isinstance(channel, (int, str)):
+        raise ValueError(f'{context}: mode channel needs channel, a zero-based index or a channel label; got '
+                         f'{channel!r}')
+    if isinstance(channel, int):
+        if channel < 0:
+            raise ValueError(f'{context}.channel must be a zero-based index; got {channel}')
+        return 'single-channel', channel
+    return 'single-channel', dataset.channel_index(dataset.rounds.reference_round, channel)
+
+
+def _image_shape(config, consumer):
+    """(img_row, img_col) of the configuration, which only their consumers require (the subtile windows, the legacy
+    tile configuration writer); missing, ValueError naming the keys and the consumer."""
+    missing = [key for key in ('img_row', 'img_col') if config.get(key) is None]
+    if missing:
+        raise ValueError(f'{" and ".join(missing)} (the image height and width in pixels) '
+                         f'{"is" if len(missing) == 1 else "are"} required by {consumer}')
+    return config['img_row'], config['img_col']
 
 
 def _rule_checkpoints(config, rule):
@@ -688,10 +666,6 @@ def _rule_checkpoints(config, rule):
             raise TypeError(f'{context} must be a mapping')
         _known(values, ('stages',), context)
     return CheckpointConfig(stages=_tuples(values.get('stages', [])), overwrite=True)
-
-
-# The reference stain nuclei_registration.m reads: the reference round's *ch04.tif.
-_NUCLEI_REFERENCE_CHANNEL = 'ch04'
 
 
 def _additional_rounds(config):
@@ -716,19 +690,49 @@ def _additional_rounds(config):
 
 
 def _reference_stains(config):
-    """Dataset.reference_stains of the shared keys: the reference round's *ch04.tif, named by ref_channel.
+    """Dataset.reference_stains: the Python-only reference_stains, or the MATLAB backend's dapi_round stain.
 
-    dapi_round names the round whose ch04 file is the stain (MATLAB's
-    nuclei_registration rule); it must be ref_round. Without dapi_round there
-    is no reference stain.
+    With backend: python the reference round's stain files are declared by
+    reference_stains, a list of {channel, name} entries (channel the file
+    pattern and label, name the content; absent or null: none), and
+    dapi_round, which names MATLAB's hard-coded *ch04.tif stain, raises
+    naming reference_stains. A MATLAB-backend configuration keeps the
+    translation of its dapi_round (_legacy_config.matlab_reference_stains).
     """
-    dapi, ref = config.get('dapi_round'), config['ref_round']
-    if dapi is None:
+    if config.get('backend', 'matlab') != 'python':
+        _python_only(config, ['reference_stains'] if config.get('reference_stains') is not None else [])
+        from ._legacy_config import matlab_reference_stains
+        return matlab_reference_stains(config)
+    if config.get('dapi_round') is not None:
+        raise ValueError('dapi_round names the *ch04.tif stain file of the MATLAB rules; the Python backend declares '
+                         "the reference round's stain files with reference_stains: [{channel, name}]")
+    values = config.get('reference_stains')
+    if values is None:
         return ()
-    if dapi != ref:
-        raise ValueError(f'dapi_round {dapi!r} differs from ref_round {ref!r}: the stain file '
-                         f'(*{_NUCLEI_REFERENCE_CHANNEL}.tif) is a file of the reference round')
-    return (ChannelInfo(_NUCLEI_REFERENCE_CHANNEL, config.get('ref_channel')),)
+    if not isinstance(values, list) or not values or any(not isinstance(v, dict) for v in values):
+        raise ValueError('reference_stains must be a nonempty list of {channel, name} entries')
+    return tuple(ChannelInfo.from_value(v) for v in values)
+
+
+def _nuclear_stain(config):
+    """The reference stain that the Python rules rotate_nuclei and nuclei_registration read (ChannelInfo).
+
+    The one entry of reference_stains; with several, the one whose name
+    contains the top-level ref_channel (the match nuclei_registration makes
+    in each other round). None or several raise ValueError.
+    """
+    stains = _reference_stains(config)
+    if not stains:
+        raise ValueError("rotate_nuclei and nuclei_registration read the reference round's stain file: declare it "
+                         'with reference_stains: [{channel, name}]')
+    if len(stains) == 1:
+        return stains[0]
+    stain = config.get('ref_channel')
+    matches = [c for c in stains if isinstance(stain, str) and stain and c.name is not None and stain in c.name]
+    if len(matches) != 1:
+        raise ValueError(f'expected one of the reference_stains {[c.channel for c in stains]} whose name contains '
+                         f'ref_channel {stain!r}; found {len(matches)}')
+    return matches[0]
 
 
 def _workflow_dataset(config, **fields):
@@ -852,7 +856,9 @@ def _nuclei_registration(config):
     folder (MATLAB names it by entry ``name``, which may repeat).
     The round's shared stain is its one channel whose name contains the
     top-level ref_channel (MATLAB single-channel matching, kept here instead of
-    Dataset.channel_index); none or several is a ValueError.
+    Dataset.channel_index); none or several is a ValueError. The reference
+    side is the reference stain of reference_stains (_nuclear_stain), which
+    must be declared.
     """
     stain = config.get('ref_channel')
     if not isinstance(stain, str) or not stain:
@@ -866,6 +872,7 @@ def _nuclei_registration(config):
                 any(not isinstance(c, dict) or not isinstance(c.get('channel'), str) or not isinstance(c.get('name'), str)
                     for c in order)):
             raise ValueError(f'additional round {name!r} requires a channel_order of channel and name entries')
+    _nuclear_stain(config)
     dataset = _workflow_dataset(config)
     stains, folders = {}, {}
     for name in names:
@@ -1329,27 +1336,12 @@ def _stitching_block(config) -> _StitchingBlock:
                          'required with method bigstitcher')
     if method != _BIGSTITCHER and save_dir is not None:
         raise ValueError(f'stitching.bigstitcher_save_dir is read with method bigstitcher only; method is {method!r}')
+    if method == _BIGSTITCHER and 'assembly' not in config:
+        # Without an assembly block the import writes output/tile_config_{sample}.csv with the legacy writer.
+        _image_shape(config, 'the legacy tile configuration writer of stitching method bigstitcher without an '
+                             'assembly block')
     return _StitchingBlock(method, method_config, input_name, {k: _tuples(v) for k, v in positions.items()}, review,
                            fallback, None if save_dir is None else Path(save_dir))
-
-
-def _legacy_stitching(config) -> dict:
-    """The adapter's translation of a legacy configuration (one without a stitching block).
-
-    Today's grid derivation sends stage X to columns and stage Y to rows of the
-    rotated images, so the translation is StageAxisMapping(x="+x", y="+y",
-    source="legacy") with the rotate_angle it ran with and the YAML voxel sizes
-    (docs/stitching-contract.md, "Stage-axis mapping"). It applies only to the
-    legacy writer: the four legacy rules run their scripts unchanged. A
-    configuration with a stitching block names stage_axes itself (ValueError).
-    """
-    from starfinder.stitching import StageAxisMapping
-    if 'stitching' in config:
-        raise ValueError('a configuration with a stitching block names positions.stage_axes; the legacy translation '
-                         'is for configurations without the block')
-    return {'stage_axes': StageAxisMapping(x='+x', y='+y', source='legacy'),
-            'rotate_angle': config.get('rotate_angle'),
-            'voxel_size_xy': config.get('voxel_size_xy'), 'voxel_size_z': config.get('voxel_size_z')}
 
 
 @dataclass(frozen=True)

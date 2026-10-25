@@ -92,10 +92,12 @@ edge content; equality is not a general quality criterion.
 {py:func}`~starfinder.registration.apply_transform` uses the displacement as it is. Supply equal-shaped 3D volumes; select or merge channels explicitly
 before calling a single-channel function.
 
-Workflow settings: `ref_round` and `rules.<rule>.parameters.global_registration`
-(`run`, `ref_img`, `mov_img`) in the
-[parameter reference](workflow-configuration.md#rule-resources-and-parameters).
-The direct FOV API uses `merged`; workflow YAML uses `merged-image`.
+Workflow settings: `ref_round` and, for the Python backend,
+`rules.<rule>.parameters.registration` (`steps: [{method: translation}]`, the
+recipe `signal`) in the
+[parameter reference](workflow-configuration.md#rule-resources-and-parameters);
+MATLAB configurations use `global_registration` (`run`, `ref_img`, `mov_img`),
+where `merged-image` is the channel maximum (`signal: {mode: max}`).
 For {mat:func}`DFTRegister3D` / {mat:func}`DFTApply3D`, use the
 [MATLAB sign and axis convention](conventions.md#registration-signs).
 
@@ -115,8 +117,9 @@ This zero-background illustration is not a noise-model validation. Noise mode
 uses a k-sigma multiplier; adaptive mode uses a fraction of channel maximum.
 Do not carry a threshold of `5.0` from noise mode into adaptive mode.
 
-Workflow settings: `rules.<rule>.parameters.spot_finding.intensity_estimation`
-and `.intensity_threshold` in the
+Workflow settings: `rules.<rule>.parameters.spot_finding.threshold_mode` and
+`.threshold_value` (MATLAB configurations: `intensity_estimation` and
+`intensity_threshold`) in the
 [parameter reference](workflow-configuration.md#rule-resources-and-parameters).
 See [threshold conventions](conventions.md#spot-finding-thresholds) for MATLAB
 {mat:func}`SpotFindingMax3D` and wrapper limitations.

@@ -1,4 +1,5 @@
-"""Python workflow adapter: nuclei_registration (other rounds registered to the reference round's ch04 stain)."""
+"""Python workflow adapter: nuclei_registration (other rounds registered to the reference stain that reference_stains
+declares)."""
 import sys
 sys.path.insert(0, snakemake.config['starfinder_path'] + '/src/python')
 from starfinder._snakemake import _run_nuclei_registration

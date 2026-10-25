@@ -4,9 +4,6 @@ config_path: /absolute/run/config.yaml
 starfinder_path: /absolute/starfinder
 root_input_path: /absolute/input
 root_output_path: /absolute/output
-# Parsed even when the associated downstream rules are disabled:
-envs_path: /absolute/conda-envs
-fiji_path: /absolute/Fiji.app/ImageJ-linux64
 dataset_id: example
 sample_id: sample
 output_id: direct
@@ -15,6 +12,8 @@ output_id: direct
 n_rounds: 4
 ref_round: round1
 rotate_angle: 0
+# img_row and img_col are read only by the subtile windows and the legacy tile configuration writer
+# (stitching method bigstitcher without an assembly block); this direct-mode run needs neither.
 img_col: 32
 img_row: 32
 backend: python
@@ -25,7 +24,9 @@ rules:
   rsf_single_fov:
     run: true
     parameters:
-      global_registration: {run: true}
-      spot_finding: {run: true, intensity_estimation: noise, intensity_threshold: 5.0}
+      registration:
+        steps:
+          - {method: translation}
+      spot_finding: {run: true, threshold_mode: noise, threshold_value: 5.0}
       reads_extraction: {run: true, voxel_size: [1, 2, 2]}
       reads_filtration: {run: true, end_base: CC, start_base: C}

@@ -31,9 +31,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -71,9 +69,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -111,22 +107,21 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           },
           {
             "method": "demons",
-            "ref_img": "single-channel",
-            "mov_img": "single-channel",
-            "ref_channel": 0,
             "iterations": [
               100,
               50,
               25
             ],
             "smoothing_sigma": 1.0,
-            "pyramid_mode": "antialias"
+            "pyramid_mode": "antialias",
+            "signal": {
+              "mode": "channel",
+              "reference_channel": 0
+            }
           }
         ]
       },
@@ -164,9 +159,7 @@
         "split_index": 4,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -204,9 +197,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -244,9 +235,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -284,22 +273,21 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           },
           {
             "method": "demons",
-            "ref_img": "single-channel",
-            "mov_img": "single-channel",
-            "ref_channel": 0,
             "iterations": [
               100,
               50,
               25
             ],
             "smoothing_sigma": 1.0,
-            "pyramid_mode": "antialias"
+            "pyramid_mode": "antialias",
+            "signal": {
+              "mode": "channel",
+              "reference_channel": 0
+            }
           }
         ]
       },
@@ -334,9 +322,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -371,9 +357,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -408,22 +392,21 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           },
           {
             "method": "demons",
-            "ref_img": "single-channel",
-            "mov_img": "single-channel",
-            "ref_channel": 0,
             "iterations": [
               100,
               50,
               25
             ],
             "smoothing_sigma": 1.0,
-            "pyramid_mode": "antialias"
+            "pyramid_mode": "antialias",
+            "signal": {
+              "mode": "channel",
+              "reference_channel": 0
+            }
           }
         ]
       },
@@ -458,9 +441,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -495,9 +476,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -532,22 +511,21 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           },
           {
             "method": "demons",
-            "ref_img": "single-channel",
-            "mov_img": "single-channel",
-            "ref_channel": 0,
             "iterations": [
               100,
               50,
               25
             ],
             "smoothing_sigma": 1.0,
-            "pyramid_mode": "antialias"
+            "pyramid_mode": "antialias",
+            "signal": {
+              "mode": "channel",
+              "reference_channel": 0
+            }
           }
         ]
       },
@@ -582,9 +560,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -619,9 +595,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -656,22 +630,21 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           },
           {
             "method": "demons",
-            "ref_img": "single-channel",
-            "mov_img": "single-channel",
-            "ref_channel": 0,
             "iterations": [
               100,
               50,
               25
             ],
             "smoothing_sigma": 1.0,
-            "pyramid_mode": "antialias"
+            "pyramid_mode": "antialias",
+            "signal": {
+              "mode": "channel",
+              "reference_channel": 0
+            }
           }
         ]
       },
@@ -709,9 +682,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -749,9 +720,7 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           }
         ]
       },
@@ -789,22 +758,21 @@
         "split_index": null,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           },
           {
             "method": "demons",
-            "ref_img": "single-channel",
-            "mov_img": "single-channel",
-            "ref_channel": 0,
             "iterations": [
               100,
               50,
               25
             ],
             "smoothing_sigma": 1.0,
-            "pyramid_mode": "antialias"
+            "pyramid_mode": "antialias",
+            "signal": {
+              "mode": "channel",
+              "reference_channel": 0
+            }
           }
         ]
       },
@@ -842,22 +810,21 @@
         "split_index": 4,
         "registration": [
           {
-            "method": "translation",
-            "ref_img": "merged-image",
-            "mov_img": "merged-image"
+            "method": "translation"
           },
           {
             "method": "demons",
-            "ref_img": "single-channel",
-            "mov_img": "single-channel",
-            "ref_channel": 0,
             "iterations": [
               100,
               50,
               25
             ],
             "smoothing_sigma": 1.0,
-            "pyramid_mode": "antialias"
+            "pyramid_mode": "antialias",
+            "signal": {
+              "mode": "channel",
+              "reference_channel": 0
+            }
           }
         ]
       },

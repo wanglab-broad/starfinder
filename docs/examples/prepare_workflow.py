@@ -30,9 +30,11 @@ def main():
         starfinder_path=str(repo),
         root_input_path=str(output / "input"),
         root_output_path=str(output / "output"),
-        envs_path=str(output / "unavailable-envs"),
-        fiji_path=str(output / "unavailable-fiji"),
     )
+    # The full template keeps the downstream keys; the minimal one has none (no rule it runs reads them).
+    for key, name in (("envs_path", "unavailable-envs"), ("fiji_path", "unavailable-fiji")):
+        if key in config:
+            config[key] = str(output / name)
     if args.mode:
         config["workflow_mode"] = args.mode
     required = {

@@ -15,7 +15,9 @@ output_id: full
 n_rounds: 4
 ref_round: round1
 ref_channel: DAPI
-dapi_round: round1
+# The reference round's stain files besides the sequencing colours (nuclei_registration, rotate_nuclei).
+reference_stains:
+  - {channel: ch04, name: DAPI}
 rotate_angle: 0
 maximum_projection: false
 img_col: 32
@@ -37,12 +39,15 @@ rules:
     resources: {mem_mb: 8000, runtime: 30}
     parameters:
       streaming: false
-      enhance_contrast: {run: true}
-      hist_equalize: {run: false, reference_channel: 0}
-      morph_recon: {run: false, radius: 3}
-      global_registration: {run: true, ref_round: round1, ref_img: merged-image, mov_img: merged-image}
-      local_registration: {run: false, ref_round: round1, method: demons}
-      spot_finding: {run: true, ref_round: round1, intensity_estimation: noise, intensity_threshold: 5.0}
+      preprocessing:
+        steps:
+          - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
+      registration:
+        signal: {mode: max}
+        steps:
+          - {method: translation}
+      reference_image_view: {mode: max}
+      spot_finding: {run: true, ref_round: round1, threshold_mode: noise, threshold_value: 5.0}
       load_codebook: {run: true, split_index: []}
       reads_extraction: {run: true, voxel_size: [1, 2, 2]}
       reads_filtration: {run: true, end_base: CC, start_base: C, n_barcode_segments: 1, split_index: []}
@@ -51,18 +56,18 @@ rules:
     resources: {mem_mb: 8000, runtime: 30}
     parameters:
       streaming: false
-      enhance_contrast: {run: true}
-      hist_equalize: {run: false, reference_channel: 0}
-      morph_recon: {run: false, radius: 3}
-      global_registration: {run: true, ref_round: round1, ref_img: merged-image, mov_img: merged-image}
+      preprocessing:
+        steps:
+          - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
+      registration:
+        steps:
+          - {method: translation}
       create_subtiles: {run: true, sqrt_pieces: 2}
   lrsf_single_fov_subtile:
     run: false
     resources: {mem_mb: 8000, runtime: 30}
     parameters:
-      local_registration: {run: false, ref_round: round1, method: demons}
-      morph_recon: {run: false, radius: 3}
-      spot_finding: {run: true, ref_round: round1, intensity_estimation: noise, intensity_threshold: 5.0}
+      spot_finding: {run: true, ref_round: round1, threshold_mode: noise, threshold_value: 5.0}
       load_codebook: {run: true, split_index: []}
       reads_extraction: {run: true, voxel_size: [1, 2, 2]}
       reads_filtration: {run: true, end_base: CC, start_base: C, n_barcode_segments: 1, split_index: []}
@@ -71,15 +76,15 @@ rules:
     resources: {mem_mb: 8000, runtime: 30}
     parameters:
       streaming: false
-      hist_equalize: {run: false, reference_channel: 0}
-      global_registration: {run: true, ref_round: round1, ref_img: merged-image, mov_img: merged-image}
+      registration:
+        steps:
+          - {method: translation}
       create_subtiles: {run: true, sqrt_pieces: 2}
   deep_rsf_subtile:
     run: false
     resources: {mem_mb: 8000, runtime: 30}
     parameters:
-      morph_recon: {run: false, radius: 3}
-      spot_finding: {run: true, ref_round: round1, intensity_estimation: noise, intensity_threshold: 5.0}
+      spot_finding: {run: true, ref_round: round1, threshold_mode: noise, threshold_value: 5.0}
       load_codebook: {run: true, split_index: []}
       reads_extraction: {run: true, voxel_size: [1, 2, 2]}
       reads_filtration: {run: true, end_base: CC, start_base: C, n_barcode_segments: 1, split_index: []}

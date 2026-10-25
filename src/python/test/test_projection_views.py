@@ -136,33 +136,77 @@ def test_ref_merged_rejects_invalid_views(tmp_path):
 
 # --- Workflow adapter: the view the MATLAB script of the same rule saves -------------
 
-def workflow_config(tmp_path, rule='rsf_single_fov', maximum_projection=False, **parameters):
-    return dict(root_input_path=str(tmp_path), root_output_path=str(tmp_path / 'out'), dataset_id='data',
-                sample_id='sample', output_id='run', n_rounds=2, ref_round='round1', seq_channel_order=list(CHANNELS),
-                rotate_angle=0, img_row=6, img_col=7, maximum_projection=maximum_projection,
-                rules={rule: {'parameters': parameters}})
+def workflow_config(tmp_path, rule='rsf_single_fov', maximum_projection=False, backend=None, **parameters):
+    config = dict(root_input_path=str(tmp_path), root_output_path=str(tmp_path / 'out'), dataset_id='data',
+                  sample_id='sample', output_id='run', n_rounds=2, ref_round='round1', seq_channel_order=list(CHANNELS),
+                  rotate_angle=0, img_row=6, img_col=7, maximum_projection=maximum_projection,
+                  rules={rule: {'parameters': parameters}})
+    return config if backend is None else dict(config, backend=backend)
 
 
 SINGLE = {'run': True, 'ref_img': 'single-channel', 'mov_img': 'single-channel', 'ref_channel': 2}
+# The native forms (backend python): the recipe's single-channel signal and the rule's reference_image_view.
+SINGLE_SIGNAL = {'mode': 'channel', 'reference_channel': 2}
+CHANNEL_VIEW = {'mode': 'channel', 'channel': 2}
 
 
-@pytest.mark.parametrize('rule, parameters, view', [
+@pytest.mark.parametrize('rule, parameters, native, view', [
     # rsf_single_fov.m: GlobalRegistration(ref_img from config), else channel maximum.
-    ('rsf_single_fov', {'global_registration': SINGLE}, ('single-channel', 2)),
-    ('rsf_single_fov', {'global_registration': {'run': True}}, ('merged', 0)),
-    ('rsf_single_fov', {}, ('merged', 0)),
+    ('rsf_single_fov', {'global_registration': SINGLE},
+     {'registration': {'signal': SINGLE_SIGNAL, 'steps': [{'method': 'translation'}]}, 'reference_image_view': CHANNEL_VIEW},
+     ('single-channel', 2)),
+    ('rsf_single_fov', {'global_registration': {'run': True}}, {'registration': {'steps': [{'method': 'translation'}]}},
+     ('merged', 0)),
+    ('rsf_single_fov', {}, {}, ('merged', 0)),
     # rsf_single_fov.m: LocalRegistration(ref_layer only) resets it to the channel maximum.
-    ('rsf_single_fov', {'global_registration': SINGLE, 'local_registration': {'run': True}}, ('merged', 0)),
+    ('rsf_single_fov', {'global_registration': SINGLE, 'local_registration': {'run': True}},
+     {'registration': {'signal': SINGLE_SIGNAL, 'steps': [{'method': 'translation'},
+                                                          {'method': 'demons', 'signal': {'mode': 'max'}}]},
+      'reference_image_view': {'mode': 'max'}}, ('merged', 0)),
     # gr_single_fov_subtile.m passes no ref_img; deep_create_subtile.m sets the channel maximum.
-    ('gr_single_fov_subtile', {'global_registration': SINGLE}, ('merged', 0)),
-    ('deep_create_subtile', {'global_registration': SINGLE}, ('merged', 0)),
+    ('gr_single_fov_subtile', {'global_registration': SINGLE},
+     {'registration': {'signal': SINGLE_SIGNAL, 'steps': [{'method': 'translation'}]}}, ('merged', 0)),
+    ('deep_create_subtile', {'global_registration': SINGLE},
+     {'registration': {'signal': SINGLE_SIGNAL, 'steps': [{'method': 'translation'}]}}, ('merged', 0)),
 ])
-def test_adapter_reference_view_follows_the_matlab_script(tmp_path, rule, parameters, view):
+def test_adapter_reference_view_follows_the_matlab_script(tmp_path, rule, parameters, native, view):
+    """The MATLAB-backend translation (_legacy_config) gives the view of the MATLAB script; the Python backend's native
+    form (registration and reference_image_view) gives the same view and the same registration recipe."""
     adapted = from_workflow_config(workflow_config(tmp_path, rule, **parameters), rule)
     assert (adapted.reference_image, adapted.reference_channel) == view
     assert adapted.reference_projection is None
     projected = from_workflow_config(workflow_config(tmp_path, rule, maximum_projection=True, **parameters), rule)
     assert projected.reference_projection == ProjectionConfig()
+    python = from_workflow_config(workflow_config(tmp_path, rule, backend='python', **native), rule)
+    assert (python.reference_image, python.reference_channel) == view
+    assert python.pipeline == adapted.pipeline
+
+
+def test_the_reference_image_view_key(tmp_path):
+    """reference_image_view: mode max (the default) or mode channel with an index or a label; the resident subtile
+    rules write no reference image, and the MATLAB backend refuses the Python-only key."""
+    def view(value, rule='rsf_single_fov', backend='python'):
+        adapted = from_workflow_config(workflow_config(tmp_path, rule, backend=backend, reference_image_view=value), rule)
+        return adapted.reference_image, adapted.reference_channel
+    assert view({'mode': 'channel', 'channel': CHANNELS[2]}) == view(CHANNEL_VIEW) == ('single-channel', 2)
+    assert view({'mode': 'max'}) == view({}) == view(None) == ('merged', 0)
+    for value, match in ((CHANNEL_VIEW, 'writes no reference image'), ({'mode': 'channel'}, 'needs channel'),
+                         ({'mode': 'sum'}, "must be 'max' or 'channel'"), ({'mode': 'max', 'channel': 1}, 'mode channel only'),
+                         ({'channel': 1, 'other': 2}, 'unknown')):
+        with pytest.raises(ValueError, match=match):
+            view(value, 'lrsf_single_fov_subtile' if match == 'writes no reference image' else 'rsf_single_fov')
+    with pytest.raises(ValueError, match='Python-only'):
+        view(CHANNEL_VIEW, backend=None)
+
+
+# The rule parameters of the script test (backend python): recipe 1's normalization, a single-channel translation, the
+# single-channel reference view and local_maxima's native fields.
+NATIVE_DETECTION = dict(
+    preprocessing={'steps': [{'method': 'min_max_normalization', 'output_dtype': 'uint8', 'output_range': [0, 255],
+                              'rounding': 'truncate'}]},
+    registration={'signal': SINGLE_SIGNAL, 'steps': [{'method': 'translation'}]}, reference_image_view=CHANNEL_VIEW,
+    spot_finding={'run': True, 'threshold_mode': 'adaptive', 'threshold_value': .1},
+    reads_extraction={'run': True, 'voxel_size': [0, 0, 0]}, reads_filtration={'run': True})
 
 
 @pytest.mark.parametrize('maximum_projection', [False, True])
@@ -173,11 +217,10 @@ def test_rsf_single_fov_script_writes_the_detection_view(tmp_path, maximum_proje
             save_volume(raw[..., c], tmp_path / 'data' / 'sample' / name / 'FOV' / f'{channel}.tif', metadata=METADATA)
     codebook = tmp_path / 'genes.csv'
     codebook.write_text('gene,barcode\ngene,AAA\n')
-    config = workflow_config(tmp_path, maximum_projection=maximum_projection, enhance_contrast={'run': True},
-        global_registration=SINGLE, spot_finding={'run': True, 'intensity_estimation': 'adaptive', 'intensity_threshold': .1},
-        reads_extraction={'run': True, 'voxel_size': [0, 0, 0]}, reads_filtration={'run': True})
-    config.update(starfinder_path=str(ROOT), fov_id_pattern='%s')
-    snakemake = SimpleNamespace(config=config, input=['unused', str(codebook)], wildcards=SimpleNamespace(fovID='FOV'))
+    config = workflow_config(tmp_path, maximum_projection=maximum_projection, backend='python', **NATIVE_DETECTION)
+    config.update(starfinder_path=str(ROOT))
+    snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook)),
+                                wildcards=SimpleNamespace(fovID='FOV'))
     runpy.run_path(str(ROOT / 'workflow' / 'scripts' / 'rsf_single_fov.py'), init_globals={'snakemake': snakemake})
     adapted = from_workflow_config(config)
     fov = adapted.dataset.fov('FOV')

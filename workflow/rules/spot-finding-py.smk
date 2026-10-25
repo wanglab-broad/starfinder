@@ -3,7 +3,9 @@
     Mirrors spot-finding.smk but uses Python scripts via Snakemake script: directive.
     The subtile rules declare the subtile's run.json (SUBTILE_RUN_RECORD, fovs/<fov>/subtile_<n>/run.json)
     instead of MATLAB's score logs; stitch_subtile reads the FOV's reference image (REFERENCE_IMAGE_INPUT, one path,
-    its input reference). The codebook input is CODEBOOK (common.smk).
+    its input reference). The codebook input is CODEBOOK (common.smk). The inputs of the subtile rules are named
+    (codebook, subtile), each one path, and the adapter reads them by name; they take no JSON copy of the
+    configuration.
     Uses variables from common.smk
 """
 
@@ -11,9 +13,8 @@
 
 rule lrsf_single_fov_subtile:
     input:
-        config['config_path'].replace('.yaml', '.json'),
-        CODEBOOK,
-        expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{{n_subtile}}.npz", output_dir=OUTPUT_DIR),
+        codebook=CODEBOOK,
+        subtile=f"{OUTPUT_DIR}/output/subtile/{{fovID}}/subtile_data_{{n_subtile}}.npz",
     output:
         SUBTILE_RUN_RECORD,
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{{n_subtile}}.csv", output_dir=OUTPUT_DIR)),
@@ -30,9 +31,8 @@ rule lrsf_single_fov_subtile:
 
 rule deep_rsf_subtile:
     input:
-        config['config_path'].replace('.yaml', '.json'),
-        CODEBOOK,
-        expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{{n_subtile}}.npz", output_dir=OUTPUT_DIR),
+        codebook=CODEBOOK,
+        subtile=f"{OUTPUT_DIR}/output/subtile/{{fovID}}/subtile_data_{{n_subtile}}.npz",
     output:
         SUBTILE_RUN_RECORD,
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{{n_subtile}}.csv", output_dir=OUTPUT_DIR)),

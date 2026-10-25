@@ -12,10 +12,10 @@ An em dash in the default column means the schema defines no default.
 
 | Field(s) | Type / constraint | Required by schema | Default / runtime meaning |
 | --- | --- | --- | --- |
-| `config_path` | string | Yes | —; absolute path to the same `.yaml` passed to `--configfile`; conversion writes a sibling JSON |
+| `config_path` | string | Yes | —; absolute path to the same `.yaml` passed to `--configfile`; for the MATLAB backend `rsf_preparation` writes a sibling JSON, which the MATLAB scripts read (the Python rules read `snakemake.config` and take no JSON) |
 | `starfinder_path` | string | Yes | —; repository root used to locate Python/MATLAB code |
 | `root_input_path`, `root_output_path` | strings | Yes | —; roots before dataset/sample or dataset/output components |
-| `fiji_path` | string | No | —; **needed at parse time**, because the included Fiji rule indexes it even if disabled |
+| `fiji_path` | string | No | —; read at parse time only by the legacy BigStitcher rule `run_BigStitcher_macro` (`stitching.smk`, included for the MATLAB backend without a `stitching` block); the Python BigStitcher engine rule reads it when it runs |
 | `envs_path` | string | No | —; no rule reads it: `stardist_segmentation` runs in the environment that runs Snakemake (see [segmentation and assignment](#segmentation-and-assignment)); kept in the schema until §2.13 |
 | `dataset_id`, `sample_id`, `output_id` | strings | Yes | —; directory identifiers |
 | `fov_id_pattern` | string | MATLAB backend | —; MATLAB backend only (the Python backend refuses it, see [FOV membership](#fov-membership)): Python format string with `{i}`, e.g. `tile_{i}`, `Position{i:03}` |
@@ -23,9 +23,11 @@ An em dash in the default column means the schema defines no default.
 | `n_rounds` | integer >=1 | Yes | —; round names are exactly `round1` … `roundN` |
 | `selected_fovs` | nonempty array of unique FOV IDs, or null | No | null (every FOV); Python only: the FOV IDs of `fovs.csv` to run; it restricts every rule, per-sample rules included, see [FOV membership](#fov-membership) |
 | `ref_round` | string | Yes | —; must identify an existing sequencing round; membership is not schema-checked |
-| `ref_channel`, `dapi_round` | strings | No | —; nuclei registration / DAPI input selection, not Python sequencing-channel selection. In Python, `dapi_round` with `ref_channel` gives `Dataset.reference_stains` (`ChannelInfo("ch04", ref_channel)`); `dapi_round` must equal `ref_round`, else every rule raises `ValueError` |
+| `ref_channel` | string | No | —; nuclei registration: the shared stain's name in each other round (and, with several `reference_stains`, the one of the reference round), not Python sequencing-channel selection |
+| `dapi_round` | string | No | —; MATLAB backend only: the round whose `*ch04.tif` `nuclei_registration.m` and `rotate_nuclei` read. The Python backend refuses it, naming `reference_stains` |
+| `reference_stains` | nonempty array of `channel_info` objects (`channel`, `name`, optional `wavelength`), or null | No | None; Python only: the reference round's stain files that are not sequencing colours (`Dataset.reference_stains`), for example `[{channel: ch04, name: DAPI}]`; the Python `rotate_nuclei` and `nuclei_registration` read its one entry, or with several the one whose name contains `ref_channel`. See [channels](#channels) |
 | `rotate_angle` | number | Yes | —; degrees, 0 for no rotation |
-| `img_col`, `img_row` | integers >=1 | Yes | —; width X and height Y; subtile windows use these values |
+| `img_col`, `img_row` | integers >=1 | MATLAB backend; Python where read | —; width X and height Y. The Python backend requires them only for the subtile windows (an active `create_subtiles` block of `gr_single_fov_subtile` or `deep_create_subtile`) and the legacy tile configuration writer (stitching method `bigstitcher` without an `assembly` block); elsewhere they are not read |
 | `img_z` | integer >=1 | No | —; downstream 3-D metadata/preview uses it; `reads_assignment` needs it for a YX label image (the Z size of the molecule grid) |
 | `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching and the declared calibration of the files the segmentation and assignment rules read, and of a FOV's reference image (`reference_image`) that stores no metadata when the stitching rules, `reads_assignment` (with an `assembly` block) and `export_sample` read its grid; **not** extraction window radii |
 | `reference_image` | string with `{fov_id}` | No | `fovs/{fov_id}/reference.tif`; Python only: the file pattern of a FOV's reference image, absolute or relative to the output root, whose grid the stitching rules, `reads_assignment` (with an `assembly` block) and `export_sample` read and which `reference_merged` names (`Dataset.reference_image`); a pattern without `{fov_id}` raises `ValueError`, a missing file `FileNotFoundError`, each naming the key. Absent or null is the default; the Python processing rules write the file there, and `FOV.load_reference_image` and every reader read it. Excludes `reference_image_import` |
@@ -147,19 +149,27 @@ The shared keys keep their names; Python reads them into the channel groups of
   entry's `round_name` and takes the round's channels from its `channel_order`
   (`Dataset.other_channel_order`); an entry without `channel_order` takes the
   sequencing channels.
-* `dapi_round` with `ref_channel` gives the reference stain:
-  `Dataset.reference_stains == (ChannelInfo("ch04", ref_channel),)`, the
-  `*ch04.tif` file of the reference round that `nuclei_registration` reads.
-  Without `dapi_round` there is none. A `dapi_round` other than `ref_round`
-  raises `ValueError` naming both keys: the stain file is always in the
-  reference round.
+* The Python-only `reference_stains` declares the reference round's stain
+  files that are not sequencing colours (`Dataset.reference_stains`), as
+  `{channel, name}` entries with an optional `wavelength`; absent or null,
+  there is none. The Python `rotate_nuclei` reads the reference round's file of
+  its one entry (with several, the one whose name contains `ref_channel`), and
+  `nuclei_registration` registers each other round against it, labelled
+  `<ref_round>:<channel>`. No channel is assumed: there is no hard-coded
+  `ch04` on the Python backend.
+* `dapi_round` is the MATLAB backend's key: `nuclei_registration.m` and the
+  MATLAB `rotate_nuclei` read `dapi_round`'s `*ch04.tif`. The Python backend
+  refuses it, naming `reference_stains`; for a MATLAB-backend configuration,
+  which the adapters of the shared rules read, it still gives
+  `ChannelInfo("ch04", ref_channel)` and must equal `ref_round`.
 
 `nuclei_registration` still selects each other round's shared stain by
 MATLAB's substring match of `ref_channel` in the channel names.
 
 ```yaml
 ref_round: round1
-dapi_round: round1
+reference_stains:
+  - {wavelength: 405, channel: ch04, name: DAPI}
 ref_channel: DAPI
 seq_channel_order:
   - {wavelength: 488, channel: ch00, name: seq}
@@ -222,18 +232,31 @@ there is no schema default. Optional blocks are not a promise that every script
 can omit them: MATLAB scripts often index fields directly. The minimal example
 is specifically for the Python batch/direct wrapper.
 
+The Python backend accepts one dialect: the native keys `preprocessing`,
+`registration`, `reference_image_view` and the `spot_finding` fields. The
+MATLAB keys of the processing rules (`enhance_contrast`, `hist_equalize`,
+`morph_recon`, `tophat`, `snr_threshold`, `global_registration`,
+`local_registration`, and local_maxima's `intensity_estimation`,
+`intensity_threshold` and `min_distance`) raise `ValueError` under
+`backend: python`, naming the native form, and the schema's backend guard
+refuses them; the table of {doc}`migration` ("One Python configuration
+dialect") gives each key's native form. Their definitions stay for the MATLAB
+backend, whose scripts read them, and for the adapters of the shared rules,
+which read MATLAB-backend configurations (`dataset/_legacy_config.py`).
+
 | Block | Schema fields and constraints | Wrapper behavior / defaults |
 | --- | --- | --- |
-| `enhance_contrast` | boolean `run` | Python calls normalization only when true in both execution modes; optional top-level parameter `snr_threshold` is forwarded; MATLAB uses min-max enhancement |
-| `hist_equalize` | boolean `run`, integer `reference_channel` | Python direct/GR/deep uses channel index 0 by default; MATLAB deep passes the configured 1-based index, direct uses its method default |
-| `morph_recon` | boolean `run`, integer `radius` >=1 | Python default radius 3; used in direct/GR and subtile processing, also supported in deep creation |
-| `tophat` | boolean `run`, integer `radius` >=1 | Python rules only: white top-hat per XY slice, default radius 3, the last preprocessing step before registration; with `enhance_contrast`, `hist_equalize` and `morph_recon` it forms recipe 1 of the [preprocessing contract](preprocessing-contract.md); no MATLAB counterpart key |
-| `preprocessing` | `steps` (list; each with `method`, a step name, its config fields and optional `save_as`), optional `extraction_source`, `registration_source`, `supplied_statistics` | Python rules only (the schema rejects it unless `backend: python`): an explicit [preprocessing recipe](#explicit-preprocessing-recipe) that replaces `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` and `snr_threshold`, which must then be absent |
-| `registration` | `steps` (list; each with `method`, a registered method name, its config fields and optional `recovery` and `signal`), optional `signal`, `warp`, `qc`, `reference_round` | Python rules only (the schema rejects it unless `backend: python`): an explicit [registration recipe](#explicit-registration-recipe); rejected together with an enabled `global_registration` or `local_registration` |
-| `global_registration` | boolean `run`, string `ref_round`, `ref_img`/`mov_img` in `merged-image`,`single-channel` | Python: the recipe's global step (default `translation`); `merged-image` is the channel maximum, as in MATLAB; `ref_img` and `mov_img` must agree; this block's reference must match top-level `ref_round`; MATLAB wrappers pass the block reference; MATLAB deep uses scale 0.25 |
-| `create_subtiles` | boolean `run`, integer `sqrt_pieces` >=1 | Grid default 4; only GR/deep creation rules produce subtile files; Python creation scripts call splitting unconditionally |
-| `local_registration` | boolean `run`, string `ref_round`, method `demons`,`bspline`,`tps`,`cpd` or the demons variants `diffeomorphic`,`symmetric`,`fast_symmetric` (schema default `demons`); Python-only `ref_img`/`mov_img` | Python: the recipe's local step, after the global one; translates supported method-specific settings; `ref_img`/`mov_img` default to `merged-image` (the channel maximum); `boundary_mode` must agree with the global block (one final resampling); demons needs optional SimpleITK, B-spline the `registration-elastix` extra; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
-| `spot_finding` | boolean `run`, string `ref_round`, nonnegative numeric `intensity_threshold`, mode `global`,`noise`,`adaptive`,`adaptive_round`; Python-only `method`, the selected config's fields, `channel_overrides` and `rounds` | Python wrappers default mode to `noise` but require a threshold when used; pass both explicitly. Python rules: see [the method key](#spot-finding-method-key); MATLAB supports adaptive/global only |
+| `enhance_contrast` | boolean `run` | MATLAB backend: min-max enhancement. The Python backend refuses it (`preprocessing` step `min_max_normalization`) |
+| `hist_equalize` | boolean `run`, integer `reference_channel` | MATLAB backend: deep passes the configured 1-based index, direct uses its method default. The Python backend refuses it (step `histogram_matching`) |
+| `morph_recon` | boolean `run`, integer `radius` >=1 | MATLAB backend: reconstruction, after registration in the resident subtile scripts. The Python backend refuses it (step `reconstruction`, in `post_registration` for the resident subtile rules) |
+| `tophat` | boolean `run`, integer `radius` >=1 | No MATLAB script reads it; the Python backend refuses it (step `white_tophat`); kept for MATLAB-backend configurations read by the shared rules' adapters |
+| `preprocessing` | `steps` (list; each with `method`, a step name, its config fields and optional `save_as`), optional `post_registration` (a list of `reconstruction` steps without `save_as`), `extraction_source`, `registration_source`, `supplied_statistics` | Python rules only (the schema rejects it unless `backend: python`): an explicit [preprocessing recipe](#explicit-preprocessing-recipe); `post_registration` lists the steps run after registration (`PreprocessingRecipe.post_registration`) |
+| `registration` | `steps` (list; each with `method`, a registered method name, its config fields and optional `recovery` and `signal`), optional `signal`, `warp`, `qc`, `reference_round` | Python rules only (the schema rejects it unless `backend: python`): an explicit [registration recipe](#explicit-registration-recipe). Every default is written out: `method` is required, and a CPD step migrated from the MATLAB keys states `detection_noise_sigma: 3.0` and `grid_spacing_voxels: 32` (the native defaults are 5.0 and 16) |
+| `reference_image_view` | `mode` `max` (default) or `channel`, with `channel` (a zero-based index or a channel label of the reference round) for `channel` | Python rules only: the reference image the rule writes (`FOV.save_reference_image`), the channel maximum or one channel; `rsf_single_fov`, `gr_single_fov_subtile` and `deep_create_subtile` (the resident subtile rules write none and refuse it). It replaces the single-channel reference image that `ref_img: single-channel` selected in `rsf_single_fov` |
+| `global_registration` | boolean `run`, string `ref_round`, `ref_img`/`mov_img` in `merged-image`,`single-channel` | MATLAB backend: the wrappers pass the block reference; MATLAB deep uses scale 0.25. The Python backend refuses it (a global `registration.steps` entry, the recipe `signal`) |
+| `create_subtiles` | boolean `run`, integer `sqrt_pieces` >=1 | Grid default 4; only GR/deep creation rules produce subtile files; Python creation scripts call splitting unconditionally; an active block (`run: true` or a window setting) needs `img_row` and `img_col` |
+| `local_registration` | boolean `run`, string `ref_round`, method `demons`,`bspline`,`tps`,`cpd` or the demons variants `diffeomorphic`,`symmetric`,`fast_symmetric` (schema default `demons`); `ref_img`/`mov_img` | MATLAB backend: the wrappers do not forward `method`; deep subtile does not perform local registration. The Python backend refuses it (a local `registration.steps` entry) |
+| `spot_finding` | boolean `run`, string `ref_round`; MATLAB keys nonnegative numeric `intensity_threshold` and mode `intensity_estimation` (`global`,`noise`,`adaptive`,`adaptive_round`); Python-only `method`, the selected config's fields, `channel_overrides` and `rounds` | Python rules: see [the method key](#spot-finding-method-key); for local_maxima the fields are `threshold_mode`, `threshold_value` and `min_distance_voxels`, and the MATLAB keys raise naming them. MATLAB supports adaptive/global only |
 | `load_codebook` | boolean `run`, integer-array `split_index`; Python-only `encoding` (`method` `two_base` or `one_base` and that config's fields; `two_base`: `reverse_bases` and `pair_to_color`, see [encoding table](#codebook-encoding-table)) | `split_index` is **one-based**: MATLAB's position in the encoded color string of the junction color that is removed (aging `[5]`). Python wrappers load unconditionally, turn missing/empty split into None and translate `[s]` into the two-segment layout, equal to the zero-based `EncodingConfig(split_index=s - 1)` ([segment layout](#codebook-segment-layout)); MATLAB respects `run` |
 | `reads_extraction` | boolean `run`, exactly three integers >=1 in `voxel_size`; Python-only `background` (`false` or `inner_radius_zyx`, `outer_radius_zyx`, `min_voxels`) | Pixel half-widths, Python `(z,y,x)` versus MATLAB `(row,column,z)`; e.g. `[1,2,2]` versus `[2,2,1]`, not physical microns. Python rules measure the local background and noise next to the sums (`LocalBackgroundConfig`, on by default; {doc}`readout-contract`, "Extraction"); `background: false` turns it off. Without the key, the default ring (inner box `(1,3,3)`, outer box `(1,6,6)`, `min_voxels` 16) grows by the same number of voxels in both boxes along any axis where `voxel_size` exceeds the inner box, so the inner box contains the extraction box |
 | `reads_filtration` | boolean `run`, string or string-array `end_base`, integer `n_barcode_segments` >=1, integer-array `split_index` | Python wrappers forward a string `end_base` and extra `start_base` (default `C`) to `ReadFilterConfig`; a list `end_base` becomes the allowed ends of the layout's segments; `n_barcode_segments` and this block's `split_index`, when given, must agree with the layout ([segment layout](#codebook-segment-layout)); MATLAB forwards segment count and split |
@@ -242,24 +265,21 @@ is specifically for the Python batch/direct wrapper.
 | `deduplication` | Python-only boolean `run` (default false), `distance_voxels` (default 1.0, voxel index space) and `compatibility` (`same_sequence`) | Python rules only (the schema rejects it unless `backend: python`): with `run: true` the adapter sets `PipelineConfig.deduplication` ({doc}`readout-contract`, "Optional deduplication"), which marks cross-channel reads of one amplicon within the distance with the same WTA sequence as duplicates of one representative; the read filter then rejects them (`ReadFilterConfig.exclude_duplicates`, default true). Off without the block. It needs `reads_filtration.run` and raises `ValueError` with `readout_mode: direct` |
 | `checkpoints` | Python-only mapping with the one key `stages` (a list of `registered`, `candidates`, `pre_qc`), or null | Python rules only: the checkpoint stages the five processing rules (`rsf_single_fov`, `gr_single_fov_subtile`, `lrsf_single_fov_subtile`, `deep_create_subtile`, `deep_rsf_subtile`) write besides `run.json`; absent or null is `{stages: []}`, `run.json` alone. See [run records of the processing rules](#run-records-of-the-processing-rules) |
 
-Always pair `intensity_estimation` with `intensity_threshold`. Python `noise`
-uses a k-sigma threshold (e.g. 5), whereas `adaptive` is a fraction of channel
-maximum (e.g. 0.2). These are different quantities. MATLAB direct and local
-subtile wrappers pass only the threshold and retain the method's adaptive mode;
-only the deep wrapper forwards `intensity_estimation`. Putting `noise` in a
-MATLAB configuration does not enable the Python detector.
+In a MATLAB configuration, always pair `intensity_estimation` with
+`intensity_threshold`; in a Python one, `threshold_mode` with `threshold_value`.
+`noise` uses a k-sigma threshold (e.g. 5), whereas `adaptive` is a fraction of
+channel maximum (e.g. 0.2). These are different quantities. MATLAB direct and
+local subtile wrappers pass only the threshold and retain the method's adaptive
+mode; only the deep wrapper forwards `intensity_estimation`. Putting `noise` in
+a MATLAB configuration does not enable the Python detector.
 
 `streaming: true` selects round-at-a-time loading in the same Python
 `FOV.run(PipelineConfig, execution=ExecutionConfig(...))` sequence as batch.
 Every enabled/disabled stage and its supported settings follow the same path.
 Creation jobs explicitly retain processed images for subtile export, so streaming
-creation does not imply bounded total resident image memory. The enabled
-`global_registration` and `local_registration` blocks become one
-`RegistrationRecipe` (global step, then local step); a method whose kind does
-not match its block is rejected, and so is a recovery alternative of another
-kind. Local registration settings are translated to typed method configs
-(including TPS/CPD controls). When the two blocks name different signals, the
-global block's is the recipe signal and the local step keeps its own.
+creation does not imply bounded total resident image memory. The
+`registration` key's steps become one `RegistrationRecipe` (global steps, then
+at most one local step); a recovery alternative of another kind is rejected.
 Unknown Python rule parameters and conflicting reference rounds raise early;
 shared MATLAB keys remain unchanged. See [coordination](coordination.md).
 
@@ -384,7 +404,7 @@ rules:
   rsf_single_fov:
     run: true
     parameters:
-      spot_finding: {run: true, intensity_estimation: noise, intensity_threshold: 10, rounds: [round1, round2]}
+      spot_finding: {run: true, threshold_mode: noise, threshold_value: 10, rounds: [round1, round2]}
       reads_extraction: {run: true}
       reads_filtration: {run: true}
 ```
@@ -402,11 +422,24 @@ config class, and `save_as` keeps a named snapshot of the step's output.
 `extraction_source` and `registration_source` name a snapshot for extraction
 and for registration signals; each defaults to the detection image, the last
 step's output. `supplied_statistics` is the file read by steps with
-`fit: supplied`. An unknown method, field or snapshot name raises, and so does
-combining the key with a legacy preprocessing key. The steps run before
-registration in every rule; the key has no `post_registration` list. MATLAB
-keys and behaviour are unchanged, and without the key the legacy keys still
-map to recipe 1.
+`fit: supplied`. An unknown method, field or snapshot name raises. The steps
+run before registration; `post_registration` (absent: none) lists the steps run
+after it, in the same form, which may only be `reconstruction` steps without
+`save_as` (`PreprocessingRecipe.post_registration`; the resident subtile rules'
+form of MATLAB's `morph_recon`). Without the key no preprocessing runs. A legacy
+preprocessing key raises under `backend: python`, naming its step; MATLAB keys
+and behaviour are unchanged.
+
+```yaml
+rules:
+  lrsf_single_fov_subtile:
+    run: true
+    parameters:
+      preprocessing:
+        steps: []
+        post_registration:
+          - {method: reconstruction, radius_yx: 3}
+```
 
 This recipe-2 configuration subtracts a scalar background, keeps that image as
 the snapshot `bg_corrected`, then applies percentile normalization. Detection
@@ -434,9 +467,17 @@ a channel label), `warp` (the `WarpConfig` of the one final resampling;
 omitted, it is derived from the transforms) and `qc` (the
 `RegistrationQcConfig` rejection criteria; none by default) configure the
 recipe. The steps must be zero or more global steps followed by at most one
-local step. An unknown method, field or sequence raises, and so does combining
-the key with an enabled `global_registration` or `local_registration`.
-MATLAB keys and behaviour are unchanged.
+local step. An unknown method, field or sequence raises; `global_registration`
+and `local_registration` raise under `backend: python`, naming this key.
+MATLAB keys and behaviour are unchanged. Each step states its settings: the
+MATLAB keys' hidden defaults are written out when a configuration is migrated,
+for example `detection_noise_sigma: 3.0` and `grid_spacing_voxels: 32` for a
+`cpd` step (the native defaults are 5.0 and 16).
+
+The rule parameter `reference_image_view` selects the reference image the rule
+writes: `{mode: max}` (the default) is the channel maximum, `{mode: channel,
+channel: <index or label>}` one channel of the reference round. The resident
+subtile rules write no reference image and refuse the key.
 
 ```yaml
 registration:
@@ -459,11 +500,11 @@ example `exclude_border`, `measure_peak_intensity` or the opt-in W-218 merge
 `starfish_log` requires `min_sigma`, `max_sigma`, `num_sigma` and `threshold`, and
 `spotiflow` and `piscis` require `model`, a pretrained model fetched beforehand with
 `starfinder weights fetch <method> <model>` (detection never downloads).
-The legacy keys are aliases for `local_maxima` only:
-`intensity_estimation` of `threshold_mode`, `intensity_threshold` of
-`threshold_value` and `min_distance` of `min_distance_voxels`; a legacy key
-together with its field raises an error. For another method, `min_distance` is
-that config's own field and the other legacy keys are errors.
+For `local_maxima` the MATLAB keys `intensity_estimation`,
+`intensity_threshold` and `min_distance` raise under `backend: python`, in the
+block and in `channel_overrides`, naming the fields `threshold_mode`,
+`threshold_value` and `min_distance_voxels`. For another method, `min_distance`
+is that config's own field and the other MATLAB keys are errors.
 `channel_overrides` maps a channel label of `seq_channel_order` to fields that
 replace the block's for that channel (a `SpotFindingPlan`), and `rounds` lists the
 round labels to detect in (omitted: the reference round only); a candidate set of several
@@ -807,9 +848,10 @@ use. The schema does not check path existence, reference membership, barcode
 length, channel count, stage prerequisites or backend feature compatibility.
 
 Snakemake combines `--configfile` and CLI `--config` values for Python scripts
-and DAG selection. However, `rsf_preparation` serializes the original file on
-disk for MATLAB; CLI mode/parameter/path overrides are not written back to
-that file. A `.yml` extension is also unsafe because conversion literally
+and DAG selection; the Python rules read that combined `snakemake.config` and
+take no JSON copy. However, for the MATLAB backend `rsf_preparation` serializes
+the original file on disk for MATLAB; CLI mode/parameter/path overrides are not
+written back to that file. A `.yml` extension is also unsafe because conversion literally
 replaces `.yaml`. Use one fully resolved `.yaml` file and matching
 `config_path`, keep it writable for the sibling JSON, and edit that file when
 changing scientific parameters. Avoid overriding `config_path` independently.

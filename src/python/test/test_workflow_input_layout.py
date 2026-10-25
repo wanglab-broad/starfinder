@@ -126,9 +126,10 @@ def test_the_workflow_key_sets_the_dataset_field_and_needs_the_python_backend(tm
 
 @pytest.mark.parametrize("template", list(_layout.IMAGE_DIR_TEMPLATES))
 def test_the_python_rule_inputs_follow_the_template(tmp_path, monkeypatch, template):
-    """The image folders of rsf_single_fov, gr_single_fov_subtile, deep_create_subtile and nuclei_registration, and
-    the stain file of rotate_nuclei (get_dapi_input), follow image_dir_template; MATLAB's rules stay round-first."""
-    config = python_example(tmp_path, image_dir_template=template, dapi_round="round1",
+    """The image folders of rsf_single_fov, gr_single_fov_subtile, deep_create_subtile and nuclei_registration (their
+    named input images), and the stain file of rotate_nuclei (get_dapi_input: the reference round's file of the
+    declared reference stain), follow image_dir_template; MATLAB's rules stay round-first."""
+    config = python_example(tmp_path, image_dir_template=template, reference_stains=[{"channel": "ch04", "name": "DAPI"}],
                             additional_round=[{"round_name": "morph"}])
     write_fovs(config, rows_text(positions=False))
     names = common_names(config, monkeypatch, checks=True)
@@ -136,10 +137,9 @@ def test_the_python_rule_inputs_follow_the_template(tmp_path, monkeypatch, templ
     root = Path(names["INPUT_DIR"])
     folders = [str(root / template.format(round=r, fov="{fovID}")) for r in ("round1", "round2", "round3", "round4")]
     for rule in ("rsf_single_fov", "gr_single_fov_subtile", "deep_create_subtile"):
-        assert [f for f in rule_files(RULES / "registration-py.smk", rule, "input", names)[0]
-                if "{fovID}" in f] == folders, rule
+        assert rule_files(RULES / "registration-py.smk", rule, "input", names)[1]["images"] == folders, rule
     assert rule_files(RULES / "registration-py.smk", "nuclei_registration", "input",
-                      dict(names, additional_round_names=["morph"]))[0][1:] == [
+                      dict(names, additional_round_names=["morph"]))[1]["images"] == [
         str(root / template.format(round="morph", fov="{fovID}"))]
     text = (RULES / "registration-py.smk").read_text()
     source = text[text.index("def get_dapi_input(wildcards):"):text.index("rule rotate_nuclei:")]
@@ -207,7 +207,7 @@ def test_the_rules_read_the_configured_codebook(tmp_path, monkeypatch):
     for path, rules in ((RULES / "registration-py.smk", ("rsf_single_fov", "gr_single_fov_subtile")),
                         (RULES / "spot-finding-py.smk", ("lrsf_single_fov_subtile", "deep_rsf_subtile"))):
         for rule in rules:
-            assert rule_files(path, rule, "input", names)[0][1] == expected, rule
+            assert rule_files(path, rule, "input", names)[1]["codebook"] == expected, rule
     names.update(READS_ASSIGNMENT_GEOMETRY=[])
     inputs = rule_files(RULES / "reads-assignment.smk", "reads_assignment", "input", names)[0]
     assert inputs[inputs.index(names["MOLECULE_TABLE"]) + 1] == expected

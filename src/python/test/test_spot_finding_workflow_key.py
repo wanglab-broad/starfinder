@@ -82,6 +82,24 @@ def test_a_legacy_key_together_with_its_field_raises(alias, name):
         detection({alias: values[name], name: values[name]})
 
 
+@pytest.mark.parametrize("alias, name", list(ALIASES.items()))
+def test_a_legacy_key_raises_on_the_python_backend_naming_its_field(alias, name):
+    """Under backend python the MATLAB keys of local_maxima raise naming their LocalMaximaConfig fields, in the block
+    and in channel_overrides; the configurations above (no backend) are MATLAB ones, which keep the aliases."""
+    values = {"threshold_mode": "noise", "threshold_value": 4.0, "min_distance_voxels": 2}
+    for block in ({alias: values[name]}, {"method": "local_maxima", alias: values[name]},
+                  {"channel_overrides": {"ch02": {alias: values[name]}}}):
+        with pytest.raises(ValueError, match=f"{alias} is a MATLAB key of local_maxima.*{name}"):
+            from_workflow_config(dict(workflow(block), backend="python"))
+    native = from_workflow_config(dict(workflow({name: values[name]}), backend="python")).pipeline.spot_finding
+    assert native == detection({alias: values[name]}) == LocalMaximaConfig(**{name: values[name]})
+
+
+def test_min_distance_stays_native_for_another_method_on_the_python_backend(native_distance):
+    config = dict(workflow({"method": "native_distance", "min_distance": 3}), backend="python")
+    assert from_workflow_config(config).pipeline.spot_finding == NativeDistanceConfig(min_distance=3)
+
+
 @pytest.mark.parametrize("block", [{"method": "noise_landmark"}, {"method": "percentile_centroid"},
                                    {"method": "starfish_log"}, {"method": "local_maxima", "level": 2},
                                    {"channel_labels_typo": ["a"]}])
@@ -187,12 +205,21 @@ MATLAB_FOVS = {"fov_id_pattern": "tile_{i}", "n_fovs": 1, "subset_list": [], "su
     {"device": "cpu"}])
 def test_python_only_keys_validate_on_the_python_backend_only(parameters):
     config = copy.deepcopy(EXAMPLE)
-    del config["rules"]["rsf_single_fov"]["parameters"]["preprocessing"]
-    config["rules"]["rsf_single_fov"]["parameters"]["spot_finding"] = {
-        "run": True, "ref_round": "round1", "intensity_estimation": "adaptive", "intensity_threshold": 0.2}
+    for key in ("preprocessing", "registration"):
+        del config["rules"]["rsf_single_fov"]["parameters"][key]
+    config["rules"]["rsf_single_fov"]["parameters"]["spot_finding"] = {"run": True, "ref_round": "round1"}
     for backend in ("python", "matlab"):
         # the shared keys validate on both
         jsonschema.validate(dict(config, backend=backend, **(MATLAB_FOVS if backend == "matlab" else {})), SCHEMA)
+    # The MATLAB keys of local_maxima validate on the MATLAB backend only; the Python backend names the fields.
+    matlab_keys = copy.deepcopy(config)
+    matlab_keys["rules"]["rsf_single_fov"]["parameters"]["spot_finding"].update(intensity_estimation="adaptive",
+                                                                                 intensity_threshold=0.2)
+    jsonschema.validate(dict(matlab_keys, backend="matlab", **MATLAB_FOVS), SCHEMA)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(matlab_keys, SCHEMA)
+    config["rules"]["rsf_single_fov"]["parameters"]["spot_finding"].update(threshold_mode="adaptive",
+                                                                           threshold_value=0.2)
     config["rules"]["rsf_single_fov"]["parameters"].update(parameters)
     jsonschema.validate(config, SCHEMA)
     from_workflow_config(config)

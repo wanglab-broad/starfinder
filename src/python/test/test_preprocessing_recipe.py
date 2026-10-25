@@ -311,16 +311,33 @@ def test_each_legacy_key_maps_to_its_recipe_step(tmp_path, rule):
         "morph_recon": ({"run": True, "radius": 5}, ReconstructionConfig(radius_yx=5)),
         "tophat": ({"run": True, "radius": 2}, TophatConfig(radius_yx=2)),
     }
+    # The native forms (backend python): the same step in preprocessing.steps, or post_registration for morph_recon
+    # in the resident subtile rules.
+    native = {"enhance_contrast": {"method": "min_max_normalization", "output_dtype": "uint8", "output_range": [0, 255],
+                                   "rounding": "truncate", "snr_threshold": 4.0},
+              "hist_equalize": {"method": "histogram_matching", "reference_channel": 2},
+              "morph_recon": {"method": "reconstruction", "radius_yx": 5},
+              "tophat": {"method": "white_tophat", "radius_yx": 2}}
     for key, (values, expected) in single.items():
         recipe = from_workflow_config(workflow_config(tmp_path, rule, **{key: values}), rule).pipeline.preprocessing
         post = key == "morph_recon" and resident
         assert recipe_configs(recipe) == (([], [expected]) if post else ([expected], []))
+        preprocessing = {"steps": [], "post_registration": [native[key]]} if post else {"steps": [native[key]]}
+        python = dict(workflow_config(tmp_path, rule, preprocessing=preprocessing), backend="python")
+        assert from_workflow_config(python, rule).pipeline.preprocessing == recipe
         assert step_spec(expected).name == {"enhance_contrast": "min_max_normalization", "hist_equalize": "histogram_matching",
                                             "morph_recon": "reconstruction", "tophat": "white_tophat"}[key]
         disabled = from_workflow_config(workflow_config(tmp_path, rule, **{key: {**values, "run": False}}), rule)
         assert disabled.pipeline.preprocessing is None
     everything = {key: values for key, (values, _) in single.items()}
-    steps, post = recipe_configs(from_workflow_config(workflow_config(tmp_path, rule, **everything), rule).pipeline.preprocessing)
+    recipe = from_workflow_config(workflow_config(tmp_path, rule, **everything), rule).pipeline.preprocessing
+    steps, post = recipe_configs(recipe)
+    order = ("enhance_contrast", "hist_equalize", "tophat") if resident else (
+        "enhance_contrast", "hist_equalize", "morph_recon", "tophat")
+    preprocessing = {"steps": [native[k] for k in order],
+                     **({"post_registration": [native["morph_recon"]]} if resident else {})}
+    python = dict(workflow_config(tmp_path, rule, preprocessing=preprocessing), backend="python")
+    assert from_workflow_config(python, rule).pipeline.preprocessing == recipe
     expected = [single[k][1] for k in ("enhance_contrast", "hist_equalize", "morph_recon", "tophat")]
     assert (steps, post) == ((expected[:2] + expected[3:], expected[2:3]) if resident else (expected, []))
     assert step_spec(steps[0]).dtype_policy == "declared" and step_spec(expected[1]).scope == "needs_reference"
@@ -336,12 +353,22 @@ def test_legacy_defaults_and_top_level_snr_threshold(tmp_path):
                      ReconstructionConfig(), TophatConfig()] and post == []
 
 
-def test_schema_validates_python_rules_with_tophat(tmp_path):
+def test_the_schema_refuses_tophat_for_python_rules_and_validates_it_for_matlab(tmp_path):
+    """The schema's backend guard covers tophat: the Python rules refuse it (preprocessing white_tophat), while a
+    MATLAB-backend configuration keeps the key's definition and its translation."""
     schema = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
     config = yaml.safe_load((ROOT / "docs/examples/workflow-full.yaml").read_text())
+    matlab = yaml.safe_load((ROOT / "tests/tissue_2D_test.yaml").read_text())
     for rule in ("rsf_single_fov", "gr_single_fov_subtile", "lrsf_single_fov_subtile", "deep_create_subtile", "deep_rsf_subtile"):
         candidate = copy.deepcopy(config)
         candidate["rules"][rule].setdefault("parameters", {})["tophat"] = {"run": True, "radius": 2}
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(candidate, schema)
+        with pytest.raises(ValueError, match="tophat is a MATLAB key.*white_tophat"):
+            from_workflow_config(candidate, rule)
+        candidate = copy.deepcopy(matlab)
+        candidate["rules"].setdefault(rule, {"run": False}).setdefault("parameters", {})["tophat"] = {"run": True,
+                                                                                                    "radius": 2}
         jsonschema.validate(candidate, schema)
         recipe = from_workflow_config(candidate, rule).pipeline.preprocessing
         assert TophatConfig(radius_yx=2) in recipe_configs(recipe)[0]

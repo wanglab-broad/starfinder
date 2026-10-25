@@ -18,7 +18,7 @@ from starfinder.readout import Codebook
 from starfinder.dataset import (ChannelInfo, CheckpointConfig, Dataset, PipelineConfig, RoundState,
                                 from_workflow_config)
 from starfinder.registration import RegistrationRecipe, RegistrationStep
-from starfinder.dataset.workflow import _nuclei_registration
+from starfinder.dataset.workflow import _nuclear_stain, _nuclei_registration, _reference_stains
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.registration import RegistrationSignalConfig, TranslationConfig
 from starfinder.segmentation import (SEGMENTATION_METHODS, FlamingoEnhancementConfig, InputChannel, SegmentationPlan,
@@ -420,21 +420,43 @@ def test_every_rule_names_the_other_rounds_with_their_channels():
 
 
 @pytest.mark.workflow
-def test_dapi_round_gives_the_reference_stain():
+def test_reference_stains_give_the_reference_stain():
+    """The Python backend declares the reference round's stain files with reference_stains (no hard-coded ch04)."""
     assert from_workflow_config(full_config()).dataset.reference_stains == (ChannelInfo("ch04", "DAPI"),)
+    other = full_config(reference_stains=[{"channel": "ch05", "name": "Hoechst", "wavelength": 405}])
+    assert from_workflow_config(other).dataset.reference_stains == (ChannelInfo("ch05", "Hoechst", 405),)
     without = full_config()
-    del without["dapi_round"]
+    del without["reference_stains"]
     assert from_workflow_config(without).dataset.reference_stains == ()
-    config = dict(without, additional_round=ADDITIONAL)
-    assert _nuclei_registration(config)[0].reference_stains == ()
+    with pytest.raises(ValueError, match="declare it with reference_stains"):
+        _nuclei_registration(dict(without, additional_round=ADDITIONAL))
+    for invalid in ([], "ch04", ["ch04"]):
+        with pytest.raises(ValueError, match="reference_stains must be a nonempty list"):
+            from_workflow_config(full_config(reference_stains=invalid))
+    # With several stains, the rules' one is the stain whose name contains ref_channel.
+    two = full_config(reference_stains=[{"channel": "ch04", "name": "DAPI"}, {"channel": "ch05", "name": "Nissl"}])
+    assert _nuclear_stain(two) == ChannelInfo("ch04", "DAPI")
+    with pytest.raises(ValueError, match="whose name contains ref_channel 'GFAP'; found 0"):
+        _nuclear_stain(dict(two, ref_channel="GFAP"))
 
 
 @pytest.mark.workflow
-def test_a_dapi_round_other_than_the_reference_round_raises():
-    config = full_config(dapi_round="round2", additional_round=ADDITIONAL)
+def test_dapi_round_is_the_matlab_backends_key():
+    """dapi_round names MATLAB's *ch04.tif stain: the Python backend refuses it naming reference_stains, and the
+    MATLAB-backend translation (_legacy_config) keeps it, with dapi_round equal to ref_round."""
+    config = full_config(dapi_round="round1", additional_round=ADDITIONAL)
     for translate in (from_workflow_config, _nuclei_registration):
-        with pytest.raises(ValueError, match="dapi_round 'round2' differs from ref_round 'round1'"):
+        with pytest.raises(ValueError, match="the Python backend declares the reference round's stain files with "
+                                             "reference_stains"):
             translate(config)
+    assert not jsonschema.Draft202012Validator(SCHEMA).is_valid(config)
+    matlab = {"ref_round": "round1", "dapi_round": "round1", "ref_channel": "DAPI"}
+    assert _reference_stains(matlab) == (ChannelInfo("ch04", "DAPI"),)
+    assert _reference_stains({"ref_round": "round1"}) == ()
+    with pytest.raises(ValueError, match="dapi_round 'round2' differs from ref_round 'round1'"):
+        _reference_stains(dict(matlab, dapi_round="round2"))
+    with pytest.raises(ValueError, match="reference_stains is Python-only"):
+        _reference_stains(dict(matlab, reference_stains=[{"channel": "ch04"}]))
 
 
 @pytest.mark.workflow

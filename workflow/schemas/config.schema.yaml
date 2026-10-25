@@ -16,8 +16,6 @@ required:
   - n_rounds
   - ref_round
   - rotate_angle
-  - img_col
-  - img_row
   - rules
 
 properties:
@@ -96,13 +94,29 @@ properties:
 
   dapi_round:
     type: string
-    description: "Round containing DAPI images"
+    description: >-
+      MATLAB backend only: the round whose *ch04.tif is the nuclear stain (nuclei_registration.m,
+      rotate_nuclei). The Python backend declares the stain files with reference_stains.
+
+  reference_stains:
+    type: [array, "null"]
+    minItems: 1
+    items:
+      $ref: "#/$defs/channel_info"
+    description: >-
+      Python only (Dataset.reference_stains): the reference round's stain files that are not sequencing
+      colours, as {channel, name} entries (channel the file pattern and label, name the content); absent or
+      null is none. rotate_nuclei and nuclei_registration read the one entry, or with several the one whose
+      name contains ref_channel. Replaces MATLAB's dapi_round and its hard-coded *ch04.tif.
 
   rotate_angle:
     type: number
     description: "Rotation angle for image alignment (degrees)"
 
   # ==================== Image Dimensions ====================
+  # Required for the MATLAB backend; for the Python backend only by their consumers: the subtile windows
+  # (create_subtiles) and the legacy tile configuration writer (stitching method bigstitcher without an
+  # assembly block). See the allOf clauses below.
   img_col:
     type: integer
     minimum: 1
@@ -397,6 +411,75 @@ allOf:
       required:
         - fov_id_pattern
         - n_fovs
+        - img_col
+        - img_row
+
+  # The Python backend requires img_row and img_col only where they are read: the subtile windows of an
+  # active create_subtiles block (gr_single_fov_subtile or deep_create_subtile) and the legacy tile
+  # configuration writer of stitching method bigstitcher (the default) without an assembly block.
+  - if:
+      required: [backend]
+      properties:
+        backend:
+          const: python
+      anyOf:
+        - required: [rules]
+          properties:
+            rules:
+              anyOf:
+                - required: [gr_single_fov_subtile]
+                  properties:
+                    gr_single_fov_subtile: {$ref: "#/$defs/active_create_subtiles"}
+                - required: [deep_create_subtile]
+                  properties:
+                    deep_create_subtile: {$ref: "#/$defs/active_create_subtiles"}
+        - required: [stitching]
+          not: {required: [assembly]}
+          properties:
+            stitching:
+              anyOf:
+                - not: {required: [method]}
+                - properties: {method: {const: bigstitcher}}
+    then:
+      required:
+        - img_col
+        - img_row
+
+  # The Python backend accepts one dialect: the MATLAB keys of the processing rules (the preprocessing
+  # keys, the registration blocks and local_maxima's spot-finding aliases) and dapi_round raise; their
+  # definitions below stay for the MATLAB backend, which reads them from its JSON copy.
+  - if:
+      required: [backend]
+      properties:
+        backend:
+          const: python
+    then:
+      not:
+        required: [dapi_round]
+      properties:
+        rules:
+          additionalProperties:
+            properties:
+              parameters:
+                not:
+                  anyOf:
+                    - required: [enhance_contrast]
+                    - required: [hist_equalize]
+                    - required: [morph_recon]
+                    - required: [tophat]
+                    - required: [snr_threshold]
+                    - required: [global_registration]
+                    - required: [local_registration]
+                    - required: [spot_finding]
+                      properties:
+                        spot_finding:
+                          anyOf:
+                            - required: [intensity_estimation]
+                            - required: [intensity_threshold]
+                            - required: [min_distance]
+                              anyOf:
+                                - not: {required: [method]}
+                                - properties: {method: {const: local_maxima}}
 
   # If subset_range is true, require subset_start and subset_end (MATLAB backend)
   - if:
@@ -427,8 +510,8 @@ allOf:
       required:
         - n_random_tests
 
-  # The explicit preprocessing and registration recipes, the spot-finding method, channel
-  # overrides and rounds, the execution device, readout_mode direct, scoring,
+  # The explicit preprocessing and registration recipes, the reference image view, the reference
+  # stains, the spot-finding method, channel overrides and rounds, the execution device, readout_mode direct, scoring,
   # deduplication, reads_extraction.background, load_codebook.encoding.pair_to_color, the
   # segmentation, assignment, stitching, assembly, export and report blocks, the
   # stardist_segmentation target and the rules' checkpoints are Python-only (backend
@@ -443,6 +526,7 @@ allOf:
       not:
         anyOf:
           - required: [selected_fovs]
+          - required: [reference_stains]
           - required: [segmentation]
           - required: [assignment]
           - required: [stitching]
@@ -460,6 +544,7 @@ allOf:
                   anyOf:
                     - required: [preprocessing]
                     - required: [registration]
+                    - required: [reference_image_view]
                     - required: [device]
                     - required: [target]
                     - required: [scoring]
@@ -561,7 +646,10 @@ $defs:
     additionalProperties: true
 
   tophat_params:
-    description: "Python-only white top-hat per XY slice; maps to TophatConfig(radius_yx=radius)"
+    description: >-
+      White top-hat per XY slice (TophatConfig(radius_yx=radius)). No MATLAB script reads it; the Python
+      backend refuses it (preprocessing white_tophat), and the adapters of the shared rules translate it
+      for MATLAB-backend configurations.
     type: object
     properties:
       run:
@@ -676,11 +764,20 @@ $defs:
       fit: {$ref: "#/$defs/preprocessing_fit"}
 
   preprocessing_params:
-    description: "Python-only explicit recipe (preprocessing contract, Explicit step list); mutually exclusive with enhance_contrast, hist_equalize, morph_recon, tophat and snr_threshold"
+    description: >-
+      Python-only explicit recipe (preprocessing contract, Explicit step list): steps before registration and
+      post_registration, the steps run after it (reconstruction only); it replaces enhance_contrast,
+      hist_equalize, morph_recon, tophat and snr_threshold
     type: object
     required: [steps]
     additionalProperties: false
     properties:
+      post_registration:
+        type: array
+        items:
+          allOf:
+            - $ref: "#/$defs/preprocessing_step_reconstruction"
+            - not: {required: [save_as]}
       steps:
         type: array
         items:
@@ -908,9 +1005,27 @@ $defs:
     description: >-
       The explicit preprocessing and registration keys replace their legacy keys. device
       (Python only) is the execution device of the methods; §2.7 accepts only cpu.
+      reference_image_view (Python only) selects the reference image the rule writes.
     properties:
       device:
         enum: ["cpu"]
+      reference_image_view:
+        description: >-
+          Python only: the reference image of the rule (FOV.save_reference_image), mode max (the default,
+          the channel maximum) or mode channel with channel, a zero-based index or a channel label of the
+          reference round. The resident subtile rules write none and refuse the key.
+        type: object
+        additionalProperties: false
+        properties:
+          mode: {enum: ["max", "channel"]}
+          channel: {type: ["integer", "string"], minimum: 0}
+        if:
+          required: [mode]
+          properties: {mode: {const: channel}}
+        then:
+          required: [channel]
+        else:
+          not: {required: [channel]}
       checkpoints:
         description: >-
           Python only (backend python). The checkpoint stages the rule writes besides
@@ -984,6 +1099,20 @@ $defs:
         $ref: "#/$defs/registration_recovery_params"
     additionalProperties: true
 
+  # A rule whose create_subtiles block sets the subtile windows (run true, or a window setting given).
+  active_create_subtiles:
+    required: [parameters]
+    properties:
+      parameters:
+        required: [create_subtiles]
+        properties:
+          create_subtiles:
+            anyOf:
+              - required: [run]
+                properties: {run: {const: true}}
+              - required: [sqrt_pieces]
+              - required: [overlap_ratio]
+
   create_subtiles_params:
     type: object
     properties:
@@ -1024,12 +1153,13 @@ $defs:
 
   spot_finding_params:
     description: >-
-      Shared keys run, ref_round, intensity_threshold and intensity_estimation. Python-only:
-      method (a SPOT_FINDING_METHODS name with pipeline=True, default local_maxima) and the
-      fields of its config; intensity_estimation, intensity_threshold and min_distance are
-      aliases for local_maxima only (each raises together with its field); channel_overrides
-      maps a channel label to fields that replace the block's for that channel; rounds lists
-      the rounds to detect in. The Python
+      Shared keys run and ref_round; MATLAB keys intensity_threshold and intensity_estimation.
+      Python-only: method (a SPOT_FINDING_METHODS name with pipeline=True, default local_maxima)
+      and the fields of its config; for local_maxima the Python backend refuses
+      intensity_estimation, intensity_threshold and min_distance, naming threshold_mode,
+      threshold_value and min_distance_voxels (the adapters of the shared rules translate them for
+      MATLAB-backend configurations); channel_overrides maps a channel label to fields that
+      replace the block's for that channel; rounds lists the rounds to detect in. The Python
       adapter validates the fields of the selected method.
     type: object
     properties:

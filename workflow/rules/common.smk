@@ -181,12 +181,6 @@ def run_matlab_scripts(param_string, matlab_script_name):
     matlab_launcher.run_matlab_scripts(config, param_string, matlab_script_name)
 
 
-def run_fiji_macros(fiji_path, macro_path):
-    import subprocess
-    process = subprocess.Popen([fiji_path, "--ij2 --headless --run -macro", macro_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = process.communicate()
-    print(stdout, stderr)
-
 def get_additional_round_names():
     return [current_round['round_name'] for current_round in config['additional_round']]
 
@@ -276,13 +270,13 @@ if BACKEND == "matlab":
     # configurations, which refuse them), so MATLAB's defaults are applied here.
     config.setdefault('subset_range', False)
     config.setdefault('subset_random', False)
-    if config['subset_list']:
+    if config.get('subset_list'):
         FOVS = [config['fov_id_pattern'].format(i=j) for j in config['subset_list']]
         SAMPLE = list(set([FOV_TO_SAMPLE[fov] for fov in FOVS]))
-    elif config['subset_range']:
-        FOVS = [config['fov_id_pattern'].format(i=j) for j in range(config['subset_start'], config['subset_end']+1)]
-    elif config['subset_random']:
-        FOVS = random.sample(FOVS, config['n_random_tests'])
+    elif config.get('subset_range'):
+        FOVS = [config['fov_id_pattern'].format(i=j) for j in range(config.get('subset_start'), config.get('subset_end')+1)]
+    elif config.get('subset_random'):
+        FOVS = random.sample(FOVS, config.get('n_random_tests'))
 
 ### ==================== [ Dynamic Output Function ] =========================
 
@@ -392,13 +386,16 @@ def get_overall_output(wildcards):
 
 ### ==================== [ Preparation Rule ] =========================
 
-rule rsf_preparation:
-    input:
-        yaml_config = config['config_path']
-    output:
-        json_config = config['config_path'].replace('.yaml', '.json')
-    run:
-        json_path = yaml_to_json(config['config_path'])
+# The JSON copy of the configuration that the MATLAB scripts read (jsondecode); the Python rules read
+# snakemake.config and take no copy, so the rule exists for the MATLAB backend only.
+if BACKEND == "matlab":
+    rule rsf_preparation:
+        input:
+            yaml_config = config['config_path']
+        output:
+            json_config = config['config_path'].replace('.yaml', '.json')
+        run:
+            json_path = yaml_to_json(config['config_path'])
 
 # The FOV molecule table that reads_assignment and export_sample read, chosen by its producer
 # (docs/workflows.md, "Molecule tables"): fovs/{fovID}/molecules.csv of the Python rsf_single_fov, or the

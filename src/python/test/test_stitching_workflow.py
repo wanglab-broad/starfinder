@@ -43,7 +43,7 @@ from starfinder.export import (ExportConfig, ExportIncompleteWarning, FusionConf
 from starfinder.segmentation import ReferenceGrid, reference_grid_from_file
 from starfinder.segmentation._labels import same_grid
 from starfinder.stitching import (STITCHING_METHODS, BigStitcherConfig, MultiviewStitcherConfig, ReviewPolicy,
-                                  StageAxisMapping, import_bigstitcher, load_placement)
+                                  import_bigstitcher, load_placement)
 
 from .assembly_fixtures import SAMPLE
 from .fusion_fixtures import export_folder, golden_codebook
@@ -266,19 +266,6 @@ def test_wf1_assembly_previews_is_an_opt_in_flag(tmp_path):
 
 
 # --- WF2: legacy configurations ------------------------------------------------------------------------------
-
-@pytest.mark.parametrize("name", WF_CONFIGS)
-def test_wf2_the_legacy_translation(name):
-    config = wf_config(name)
-    assert not {"stitching", "assembly", "export"} & set(config)
-    translated = workflow._legacy_stitching(config)
-    assert translated["stage_axes"] == StageAxisMapping(x="+x", y="+y", source="legacy")
-    assert translated["rotate_angle"] == config["rotate_angle"]
-    assert (translated["voxel_size_xy"], translated["voxel_size_z"]) == (config.get("voxel_size_xy"),
-                                                                         config.get("voxel_size_z"))
-    with pytest.raises(ValueError, match="stage_axes"):
-        workflow._legacy_stitching(with_blocks(config))
-
 
 def rule_names(text):
     return re.findall(r"^\s*rule (\w+):", text, flags=re.MULTILINE)

@@ -426,10 +426,11 @@ def test_labels_on_the_file_grid_and_molecules_of_run_are_one_grid(raw, threshol
 # --- The nuclei_registration rule ------------------------------------------------------------------------
 
 def rule_config(tmp_path, angle, projection, checkpoints=None):
-    """The shared keys of a real dataset: sequencing ch00–ch03, the stain ch04 of dapi_round = ref_round."""
+    """The shared keys of a real dataset: sequencing ch00–ch03 and the reference round's stain ch04, declared by
+    reference_stains."""
     config = dict(starfinder_path=str(ROOT), root_input_path=str(tmp_path / "in_rule"), dataset_id="dataset",
                   sample_id="sample", root_output_path=str(tmp_path / "out_rule"), output_id="output",
-                  fov_id_pattern="FOV%d", n_rounds=2, ref_round="round1", dapi_round="round1",
+                  n_rounds=2, ref_round="round1", reference_stains=[dict(channel="ch04", name="DAPI")],
                   seq_channel_order=list(LABELS), ref_channel="DAPI", maximum_projection=projection, backend="python",
                   additional_round=[dict(round_name="morph", channel_order=[c.record() for c in MORPH])],
                   rules=dict(nuclei_registration=dict(run=True)))

@@ -160,17 +160,19 @@ def test_the_processing_rules_record_every_declared_output_after_the_processing(
     assert all(e["sha256"] == sha256(folder / e["path"]) for e in outputs.values())
     # The subtile rules.
     rules = {"gr_single_fov_subtile": {"run": True, "parameters": {
-                 "global_registration": {"run": True}, "create_subtiles": {"run": True, "sqrt_pieces": 2}}},
+                 "registration": {"steps": [{"method": "translation"}]},
+                 "create_subtiles": {"run": True, "sqrt_pieces": 2}}},
              "lrsf_single_fov_subtile": {"run": True, "parameters": {
-                 "spot_finding": {"run": True, "intensity_estimation": "adaptive", "intensity_threshold": 0.2},
+                 "spot_finding": {"run": True, "threshold_mode": "adaptive", "threshold_value": 0.2},
                  "reads_extraction": {"run": True, "voxel_size": [1, 1, 1]}, "reads_filtration": {"run": True}}}}
     config = dict(workflow_config(tmp_path, "sub"), workflow_mode="subtile", rules=rules)
     Path(config["config_path"]).write_text(json.dumps(config))
     paths = from_workflow_config(config, "gr_single_fov_subtile").dataset.fov("FOV_001").paths
     subtiles = paths.subtile_dir
     for rule, inputs, wildcards in (
-            ("gr_single_fov_subtile", ["unused", str(codebook)], {}),
-            ("lrsf_single_fov_subtile", ["unused", str(codebook), str(subtiles / "subtile_data_1.npz")],
+            ("gr_single_fov_subtile", SimpleNamespace(codebook=str(codebook)), {}),
+            ("lrsf_single_fov_subtile", SimpleNamespace(codebook=str(codebook),
+                                                        subtile=str(subtiles / "subtile_data_1.npz")),
              {"n_subtile": "1"})):
         snakemake = SimpleNamespace(config=config, input=inputs, wildcards=SimpleNamespace(fovID="FOV_001", **wildcards))
         runpy.run_path(str(ROOT / "workflow" / "scripts" / f"{rule}.py"), init_globals={"snakemake": snakemake})
