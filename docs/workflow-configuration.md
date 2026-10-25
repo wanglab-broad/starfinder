@@ -239,7 +239,11 @@ MATLAB keys of the processing rules (`enhance_contrast`, `hist_equalize`,
 `local_registration`, and local_maxima's `intensity_estimation`,
 `intensity_threshold` and `min_distance`) raise `ValueError` under
 `backend: python`, naming the native form, and the schema's backend guard
-refuses them; the table of {doc}`migration` ("One Python configuration
+refuses them, whatever a block's or a rule's `run` flag and also inside
+`channel_overrides` entries; inside the native keys, the MATLAB names of a
+registration step or recovery alternative, a MATLAB image representation as a
+signal `mode` and MATLAB's `radius` of a preprocessing step raise the same way.
+The table of {doc}`migration` ("One Python configuration
 dialect") gives each key's native form. Their definitions stay for the MATLAB
 backend, whose scripts read them, and for the adapters of the shared rules,
 which read MATLAB-backend configurations (`dataset/_legacy_config.py`).

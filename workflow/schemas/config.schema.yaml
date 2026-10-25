@@ -446,8 +446,10 @@ allOf:
         - img_row
 
   # The Python backend accepts one dialect: the MATLAB keys of the processing rules (the preprocessing
-  # keys, the registration blocks and local_maxima's spot-finding aliases) and dapi_round raise; their
-  # definitions below stay for the MATLAB backend, which reads them from its JSON copy.
+  # keys, the registration blocks and local_maxima's spot-finding aliases) and dapi_round raise, whatever
+  # a block's run flag, also inside spot_finding.channel_overrides and in the registration key's recovery
+  # alternatives (the native step definitions refuse them already); their definitions below stay for
+  # the MATLAB backend, which reads them from its JSON copy.
   - if:
       required: [backend]
       properties:
@@ -480,6 +482,50 @@ allOf:
                               anyOf:
                                 - not: {required: [method]}
                                 - properties: {method: {const: local_maxima}}
+                    # An entry of channel_overrides with a MATLAB key (min_distance for local_maxima only).
+                    - required: [spot_finding]
+                      properties:
+                        spot_finding:
+                          required: [channel_overrides]
+                          properties:
+                            channel_overrides:
+                              not:
+                                additionalProperties:
+                                  not:
+                                    anyOf:
+                                      - required: [intensity_estimation]
+                                      - required: [intensity_threshold]
+                    - required: [spot_finding]
+                      properties:
+                        spot_finding:
+                          required: [channel_overrides]
+                          anyOf:
+                            - not: {required: [method]}
+                            - properties: {method: {const: local_maxima}}
+                          properties:
+                            channel_overrides:
+                              not:
+                                additionalProperties:
+                                  not: {required: [min_distance]}
+                    # A recovery alternative of a registration step with a MATLAB name.
+                    - required: [registration]
+                      properties:
+                        registration:
+                          required: [steps]
+                          properties:
+                            steps:
+                              not:
+                                items:
+                                  not:
+                                    required: [recovery]
+                                    properties:
+                                      recovery:
+                                        required: [alternatives]
+                                        properties:
+                                          alternatives:
+                                            not:
+                                              items:
+                                                not: {$ref: "#/$defs/matlab_registration_names"}
 
   # If subset_range is true, require subset_start and subset_end (MATLAB backend)
   - if:
@@ -1098,6 +1144,27 @@ $defs:
       recovery:
         $ref: "#/$defs/registration_recovery_params"
     additionalProperties: true
+
+  # A registration entry with a MATLAB name: a parameter or block key of the legacy blocks, or a demons
+  # variant as the method (the Python backend refuses it; the native names are those of the step's config).
+  matlab_registration_names:
+    anyOf:
+      - required: [detection_threshold]
+      - required: [match_distance]
+      - required: [tps_smoothing]
+      - required: [grid_spacing]
+      - required: [beta]
+      - required: [lmbda]
+      - required: [cpd_w]
+      - required: [candidate_radius]
+      - required: [k_neighbors]
+      - required: [ref_img]
+      - required: [mov_img]
+      - required: [ref_channel]
+      - required: [boundary_mode]
+      - required: [method]
+        properties:
+          method: {enum: ["diffeomorphic", "symmetric", "fast_symmetric"]}
 
   # A rule whose create_subtiles block sets the subtile windows (run true, or a window setting given).
   active_create_subtiles:

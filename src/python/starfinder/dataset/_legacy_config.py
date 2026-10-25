@@ -16,7 +16,7 @@ from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConf
     RegistrationSignalConfig, RegistrationStep, WarpConfig)
 
 from .types import ChannelInfo
-from .workflow import _explicit_recipe, _explicit_registration, _operation, _recovery
+from .workflow import _NATIVE_PARAMETERS, _explicit_recipe, _explicit_registration, _operation, _recovery
 
 # Keys replaced by the explicit preprocessing key (snr_threshold only feeds min-max).
 _LEGACY_PREPROCESSING = ('enhance_contrast', 'hist_equalize', 'morph_recon', 'tophat', 'snr_threshold')
@@ -28,10 +28,7 @@ _SPOT_ALIASES = {'intensity_estimation': 'threshold_mode', 'intensity_threshold'
 # Legacy image representations: merged (either spelling) is the channel maximum, as in MATLAB.
 _SIGNAL_MODES = {'merged-image': 'max', 'merged': 'max', 'single-channel': 'channel'}
 # The registration parameter aliases of the legacy blocks and the fields they name.
-_PARAMETER_ALIASES = {'detection_threshold': 'detection_noise_sigma', 'match_distance': 'match_distance_voxels',
-    'tps_smoothing': 'smoothing', 'grid_spacing': 'grid_spacing_voxels', 'beta': 'kernel_width_voxels',
-    'lmbda': 'regularization_weight', 'cpd_w': 'outlier_fraction', 'candidate_radius': 'candidate_radius_voxels',
-    'k_neighbors': 'neighbors_per_anchor'}
+_PARAMETER_ALIASES = _NATIVE_PARAMETERS
 # The reference stain nuclei_registration.m reads: the reference round's *ch04.tif.
 _MATLAB_STAIN_CHANNEL = 'ch04'
 _RESIDENT = ('lrsf_single_fov_subtile', 'deep_rsf_subtile')

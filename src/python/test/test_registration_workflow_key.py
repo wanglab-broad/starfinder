@@ -183,6 +183,74 @@ def test_a_legacy_block_raises_on_the_python_backend_naming_registration_steps(b
     assert from_workflow_config(matlab).pipeline.registration == RegistrationRecipe((RegistrationStep(TranslationConfig()),))
 
 
+@pytest.mark.parametrize("block", ["global_registration", "local_registration"])
+def test_a_legacy_block_of_a_disabled_rule_raises_on_the_python_backend(block):
+    """A legacy block of a rule that does not run raises when any rule is read; the schema refuses it."""
+    config = with_registration({"steps": [{"method": "translation"}]})
+    config["rules"]["lrsf_single_fov_subtile"] = {"run": False, "parameters": {block: {"run": False}}}
+    with pytest.raises(ValueError, match=f"rules.lrsf_single_fov_subtile.parameters: {block} is a MATLAB key"):
+        from_workflow_config(config)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(config, SCHEMA)
+
+
+# The MATLAB names of the legacy blocks and the native form each error names.
+MATLAB_NAMES = {"detection_threshold": "detection_noise_sigma", "match_distance": "match_distance_voxels",
+                "tps_smoothing": "smoothing", "grid_spacing": "grid_spacing_voxels", "beta": "kernel_width_voxels",
+                "lmbda": "regularization_weight", "cpd_w": "outlier_fraction",
+                "candidate_radius": "candidate_radius_voxels", "k_neighbors": "neighbors_per_anchor",
+                "ref_img": "the signal", "mov_img": "the signal", "ref_channel": "the signal reference_channel",
+                "boundary_mode": "registration.warp"}
+
+
+@pytest.mark.parametrize("key", sorted(MATLAB_NAMES))
+def test_a_matlab_block_name_inside_a_native_step_or_alternative_raises(key):
+    """A MATLAB parameter or block name inside a registration step or one of its recovery alternatives raises naming
+    the native form; the schema refuses both (the step definitions and the guard of the alternatives)."""
+    value = "merged-image" if key in ("ref_img", "mov_img") else "nearest" if key == "boundary_mode" else 1
+    recovery = {"allowed_errors": ["InsufficientLandmarksError"]}
+    for registration, where in (
+            ({"steps": [{"method": "cpd", key: value}]}, r"steps\[0\]"),
+            ({"steps": [{"method": "tps", "recovery": {**recovery, "alternatives": [{"method": "cpd", key: value}]}}]},
+             r"steps\[0\]\.recovery\.alternatives\[0\]")):
+        config = with_registration(registration)
+        with pytest.raises(ValueError, match=f"registration.{where}: {key} is a MATLAB name, which the Python backend "
+                                             f"writes as {MATLAB_NAMES[key]}"):
+            from_workflow_config(config)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(config, SCHEMA)
+
+
+@pytest.mark.parametrize("variant", LEGACY_ALIASES)
+def test_a_demons_variant_method_name_raises_naming_the_variant_field(variant):
+    recovery = {"allowed_errors": ["InsufficientLandmarksError"]}
+    for registration in ({"steps": [{"method": variant}]},
+                         {"steps": [{"method": "tps", "recovery": {**recovery, "alternatives": [{"method": variant}]}}]}):
+        config = with_registration(registration)
+        with pytest.raises(ValueError, match=f"unknown registration method '{variant}': a MATLAB demons variant name, "
+                                             f"which the Python backend writes as {{method: demons, variant: {variant}}}"):
+            from_workflow_config(config)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(config, SCHEMA)
+    native = {"steps": [{"method": "tps", "recovery": {**recovery, "alternatives": [
+        {"method": "demons", "variant": variant}]}}]}
+    jsonschema.validate(with_registration(native), SCHEMA)
+    assert from_workflow_config(with_registration(native)).pipeline.registration.steps[0].recovery.alternatives == (
+        DemonsConfig(variant=variant),)
+
+
+@pytest.mark.parametrize("mode, native", [("merged-image", "max"), ("merged", "max"), ("single-channel", "channel")])
+def test_a_matlab_image_representation_as_a_signal_mode_raises(mode, native):
+    for registration, where in (({"steps": [{"method": "translation"}], "signal": {"mode": mode}}, "signal"),
+                                ({"steps": [{"method": "translation", "signal": {"mode": mode}}]}, r"steps\[0\]\.signal")):
+        config = with_registration(registration)
+        with pytest.raises(ValueError, match=f"registration.{where}: mode '{mode}' is a MATLAB image representation, "
+                                             f"which the Python backend writes as mode '{native}'"):
+            from_workflow_config(config)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(config, SCHEMA)
+
+
 @pytest.mark.parametrize("registration, error, message", [
     ({"steps": [{"method": "no_such_method"}]}, ValueError, "unknown registration method 'no_such_method'"),
     ({"steps": [{"iterations": 5}]}, ValueError, "with a method"),

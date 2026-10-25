@@ -2254,10 +2254,14 @@ copy and MATLAB's schema definitions are unchanged. Each change has no alias and
 * **The MATLAB keys of the processing rules raise under `backend: python`.** Each key below,
   in `rules.<rule>.parameters` of `rsf_single_fov`, `gr_single_fov_subtile`,
   `lrsf_single_fov_subtile`, `deep_create_subtile` or `deep_rsf_subtile`, raises `ValueError`
-  in `from_workflow_config` naming its native form, and the schema's backend guard refuses it
-  (also `tophat`, which the guard did not cover, and a block with `run: false`). Migrate each
-  key to its native form; every default is written out, so the effective `PipelineConfig` is
-  the same:
+  in `from_workflow_config` and when `common.smk` is parsed, naming its native form, and the
+  schema's backend guard refuses it (also `tophat`, which the guard did not cover). The check
+  does not depend on a `run` flag (a disabled block, or a rule that does not run) and covers the
+  nested positions: each `spot_finding.channel_overrides` entry; the MATLAB parameter and block
+  names and the demons variant names in each `registration.steps` entry and recovery
+  alternative; the MATLAB image representations as a signal `mode`; and MATLAB's `radius` in a
+  `reconstruction` or `white_tophat` step (`_check_python_dialect`). Migrate each key to its
+  native form; every default is written out, so the effective `PipelineConfig` is the same:
 
   | Legacy key or value | Native form (`backend: python`) |
   | --- | --- |

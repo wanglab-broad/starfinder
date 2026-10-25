@@ -95,6 +95,51 @@ def test_a_legacy_key_raises_on_the_python_backend_naming_its_field(alias, name)
     assert native == detection({alias: values[name]}) == LocalMaximaConfig(**{name: values[name]})
 
 
+def python_example(spot_finding, rule="rsf_single_fov", run=True):
+    """The recipe-2 example (backend python) whose rule has this spot_finding block, the rule's run flag as given."""
+    config = copy.deepcopy(EXAMPLE)
+    config["rules"] = {"rsf_single_fov": {"run": True, "parameters": {}}}
+    config["rules"][rule] = {"run": run, "parameters": {"spot_finding": spot_finding}}
+    return config
+
+
+@pytest.mark.parametrize("alias, name", list(ALIASES.items()))
+def test_a_legacy_key_of_a_disabled_block_or_override_raises_on_the_python_backend(alias, name):
+    """The refusal does not depend on run: a MATLAB key of local_maxima in a block with run false, in a channel
+    override of such a block, or in a block of a rule that does not run raises naming its field; the schema's guard
+    refuses the block and the override entry too."""
+    values = {"threshold_mode": "noise", "threshold_value": 4.0, "min_distance_voxels": 2}
+    for spot, rule, run in (({"run": False, alias: values[name]}, "rsf_single_fov", True),
+                            ({"run": False, "channel_overrides": {"ch02": {alias: values[name]}}}, "rsf_single_fov",
+                             True),
+                            ({"run": True, "channel_overrides": {"ch02": {alias: values[name]}}}, "rsf_single_fov",
+                             True),
+                            ({"run": True, alias: values[name]}, "deep_rsf_subtile", False)):
+        config = python_example(spot, rule, run)
+        with pytest.raises(ValueError, match=f"{alias} is a MATLAB key of local_maxima.*{name}"):
+            from_workflow_config(config)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(config, SCHEMA)
+    native = python_example({"run": False, "channel_overrides": {"ch02": {name: values[name]}}})
+    jsonschema.validate(native, SCHEMA)
+    assert from_workflow_config(native).pipeline.spot_finding is None
+
+
+@pytest.mark.parametrize("alias", ["intensity_estimation", "intensity_threshold"])
+def test_a_local_maxima_key_of_another_method_raises_whatever_run(alias):
+    """intensity_estimation and intensity_threshold are no field of another method: a disabled block or override of
+    starfish_log with one raises naming local_maxima's fields, and the schema refuses it."""
+    value = "noise" if alias == "intensity_estimation" else 5.0
+    for spot in ({"run": False, "method": "starfish_log", alias: value},
+                 {"run": False, "method": "starfish_log", "channel_overrides": {"ch02": {alias: value}}}):
+        config = python_example(spot)
+        with pytest.raises(ValueError, match=f"{alias} is a MATLAB key of local_maxima .*method 'starfish_log' has no "
+                                             "such field"):
+            from_workflow_config(config)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(config, SCHEMA)
+
+
 def test_min_distance_stays_native_for_another_method_on_the_python_backend(native_distance):
     config = dict(workflow({"method": "native_distance", "min_distance": 3}), backend="python")
     assert from_workflow_config(config).pipeline.spot_finding == NativeDistanceConfig(min_distance=3)

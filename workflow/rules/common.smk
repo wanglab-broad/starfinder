@@ -412,6 +412,9 @@ SHARED_IMAGE_INPUTS = {"amplicon_img": f"{OUTPUT_DIR}/images/ref_merged/{{fovID}
 # Validate only active Python adapters; shared MATLAB configuration stays intact.
 if BACKEND == "python":
     from starfinder.dataset import from_workflow_config
+    from starfinder.dataset.workflow import _check_python_dialect
+    # One dialect: a MATLAB key of any Python rule raises here, naming its native form, whatever the rule's run flag.
+    _check_python_dialect(config)
     for python_rule in ("rsf_single_fov", "gr_single_fov_subtile",
                         "lrsf_single_fov_subtile", "deep_create_subtile", "deep_rsf_subtile"):
         if is_rule_enabled(python_rule):

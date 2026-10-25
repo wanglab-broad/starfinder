@@ -139,6 +139,32 @@ def test_each_legacy_key_raises_on_the_python_backend_naming_its_native_form(key
         from_workflow_config(matlab)
 
 
+@pytest.mark.parametrize("key", sorted(LEGACY))
+def test_a_legacy_key_of_a_disabled_rule_raises_on_the_python_backend(key):
+    """The refusal does not depend on run: a legacy key (here disabled, run false) in a rule that does not run raises
+    when any rule is read, naming its native form, and the schema refuses it."""
+    config = with_preprocessing({"steps": [{"method": "white_tophat"}]})
+    config["rules"]["gr_single_fov_subtile"] = {"run": False, "parameters": {key: LEGACY[key]}}
+    with pytest.raises(ValueError, match=f"rules.gr_single_fov_subtile.parameters: {key} is a MATLAB key, which the "
+                                         f"Python backend replaces by .*{NATIVE[key]}"):
+        from_workflow_config(config)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(config, SCHEMA)
+
+
+@pytest.mark.parametrize("method", ["reconstruction", "white_tophat"])
+@pytest.mark.parametrize("where", ["steps", "post_registration"])
+def test_the_matlab_radius_inside_a_native_step_raises_naming_radius_yx(method, where):
+    """morph_recon's and tophat's radius inside a native step (before or after registration) names radius_yx."""
+    preprocessing = {"steps": [], where: [{"method": method, "radius": 3}]}
+    config = with_preprocessing(preprocessing)
+    with pytest.raises(ValueError, match=rf"preprocessing.{where}\[0\]: .*radius is the MATLAB key of morph_recon and "
+                                         "tophat, which the Python backend writes as radius_yx"):
+        from_workflow_config(config)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(config, SCHEMA)
+
+
 @pytest.mark.parametrize("steps, extra, message", [
     ([{"method": "no_such_step"}], {}, "unknown preprocessing step 'no_such_step'"),
     ([{"radius_yx": 2}], {}, "with a method"),

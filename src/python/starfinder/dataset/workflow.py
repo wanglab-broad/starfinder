@@ -42,6 +42,19 @@ _NATIVE_FORMS = {
 # The MATLAB spot_finding keys of local_maxima and the LocalMaximaConfig fields they name.
 _NATIVE_SPOT_FIELDS = {'intensity_estimation': 'threshold_mode', 'intensity_threshold': 'threshold_value',
                        'min_distance': 'min_distance_voxels'}
+# The MATLAB registration parameter names and the config fields they name (shared with _legacy_config).
+_NATIVE_PARAMETERS = {'detection_threshold': 'detection_noise_sigma', 'match_distance': 'match_distance_voxels',
+    'tps_smoothing': 'smoothing', 'grid_spacing': 'grid_spacing_voxels', 'beta': 'kernel_width_voxels',
+    'lmbda': 'regularization_weight', 'cpd_w': 'outlier_fraction', 'candidate_radius': 'candidate_radius_voxels',
+    'k_neighbors': 'neighbors_per_anchor'}
+# The keys of MATLAB's registration blocks that the native recipe states elsewhere.
+_NATIVE_BLOCK_KEYS = {'ref_img': 'the signal {mode: max | channel, reference_channel}',
+                      'mov_img': 'the signal {mode: max | channel, reference_channel}',
+                      'ref_channel': 'the signal reference_channel',
+                      'boundary_mode': 'registration.warp {backend: scipy, boundary_mode}'}
+# MATLAB's registration method names that are demons variants, and its image representations.
+_VARIANT_METHODS = ('diffeomorphic', 'symmetric', 'fast_symmetric')
+_MATLAB_SIGNALS = {'merged-image': 'max', 'merged': 'max', 'single-channel': 'channel'}
 
 
 def _known(values, allowed, context):
@@ -123,21 +136,16 @@ def _spot_fields(values, config_type, context, aliases=None):
     """Init fields of config_type from one spot_finding mapping (YAML lists become tuples).
 
     A key must be an init field of its config (min_distance is the native
-    field of spotiflow and piscis, passed unchanged). For local_maxima the
-    MATLAB keys intensity_estimation, intensity_threshold and min_distance
-    raise naming their LocalMaximaConfig fields; aliases (the MATLAB backend's
-    translation, _legacy_config) maps them to those fields instead, and an
-    alias raises together with its field. Unknown keys raise ValueError.
+    field of spotiflow and piscis, passed unchanged). For local_maxima,
+    aliases (the MATLAB backend's translation, _legacy_config) maps the MATLAB
+    keys intensity_estimation, intensity_threshold and min_distance to their
+    fields, and an alias raises together with its field; the Python backend
+    refuses those keys before (_check_python_dialect). Unknown keys raise
+    ValueError.
     """
     if not isinstance(values, dict):
         raise TypeError(f'{context} must be a mapping')
     names = {f.name for f in fields(config_type) if f.init}
-    if config_type is LocalMaximaConfig and aliases is None:
-        given = [key for key in _NATIVE_SPOT_FIELDS if key in values]
-        if given:
-            keys = 'is a MATLAB key' if len(given) == 1 else 'are MATLAB keys'
-            raise ValueError(f'{context}: {", ".join(given)} {keys} of local_maxima; the Python backend names the '
-                             f'LocalMaximaConfig fields {", ".join(_NATIVE_SPOT_FIELDS[key] for key in given)}')
     aliases = aliases if aliases is not None and config_type is LocalMaximaConfig else {}
     _known(values, names | set(aliases), context)
     for key, field_name in aliases.items():
@@ -533,11 +541,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         # run.json records the configuration file a rule ran with (workflow_config).
         dataset._workflow_config = Path(config['config_path']).absolute()
     if python:
-        replaced = [key for key in _NATIVE_FORMS if key in params]
-        if replaced:
-            raise ValueError(f'rules.{rule}.parameters: ' + '; '.join(
-                f'{key} is a MATLAB key, which the Python backend replaces by {_NATIVE_FORMS[key]}' for key in replaced)
-                + ' (docs/migration.md, "One Python configuration dialect")')
+        _check_python_dialect(config)
         preprocessing = _explicit_recipe(params['preprocessing']) if 'preprocessing' in params else None
         registration = _explicit_registration(params['registration']) if 'registration' in params else None
         reference_view = _reference_image_view(params, dataset, rule)
@@ -599,6 +603,112 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
                         params.get('device', 'cpu')),
         split_index, ProjectionConfig() if config.get('maximum_projection', False) else None, *reference_view,
         encoding=encoding, layout=layout)
+
+
+_MIGRATION = ' (docs/migration.md, "One Python configuration dialect")'
+
+
+def _check_python_dialect(config):
+    """Raise ValueError naming the native form of any MATLAB key or value of a Python configuration's processing rules.
+
+    Every position is checked, whatever a block's or a rule's run flag: the
+    rule parameters of _NATIVE_FORMS; local_maxima's spot_finding keys
+    intensity_estimation, intensity_threshold and min_distance, in the block
+    and in each channel_overrides entry (intensity_estimation and
+    intensity_threshold also for another method, which has no such field);
+    in the registration key, the MATLAB parameter and block names and the
+    demons variant method names in each step and recovery alternative, and
+    the MATLAB image representations as a signal mode; and the MATLAB radius
+    of a reconstruction or white_tophat preprocessing step.
+    """
+    for rule in _RULES:
+        params = _rule_parameters(config, rule)
+        context = f'rules.{rule}.parameters'
+        replaced = [key for key in _NATIVE_FORMS if key in params]
+        if replaced:
+            raise ValueError(f'{context}: ' + '; '.join(
+                f'{key} is a MATLAB key, which the Python backend replaces by {_NATIVE_FORMS[key]}' for key in replaced)
+                + _MIGRATION)
+        _check_spot_keys(params.get('spot_finding'), f'{context}.spot_finding')
+        _check_registration_names(params.get('registration'), f'{context}.registration')
+        _check_preprocessing_names(params.get('preprocessing'), f'{context}.preprocessing')
+
+
+def _check_spot_keys(spot, context):
+    """The spot_finding part of _check_python_dialect: the block and its channel_overrides entries."""
+    if not isinstance(spot, dict):
+        return
+    method = spot.get('method', 'local_maxima')
+    overrides = spot.get('channel_overrides')
+    entries = [(context, spot)] + [(f'{context}.channel_overrides.{label}', entry)
+                                   for label, entry in (overrides.items() if isinstance(overrides, dict) else ())
+                                   if isinstance(entry, dict)]
+    for where, entry in entries:
+        if method == 'local_maxima':
+            given = [key for key in _NATIVE_SPOT_FIELDS if key in entry]
+            if given:
+                keys = 'is a MATLAB key' if len(given) == 1 else 'are MATLAB keys'
+                raise ValueError(f'{where}: {", ".join(given)} {keys} of local_maxima; the Python backend names the '
+                                 f'LocalMaximaConfig fields {", ".join(_NATIVE_SPOT_FIELDS[key] for key in given)}'
+                                 + _MIGRATION)
+        else:
+            given = [key for key in ('intensity_estimation', 'intensity_threshold') if key in entry]
+            if given:
+                keys = 'is a MATLAB key' if len(given) == 1 else 'are MATLAB keys'
+                raise ValueError(f'{where}: {", ".join(given)} {keys} of local_maxima (threshold_mode, '
+                                 f'threshold_value); method {method!r} has no such field' + _MIGRATION)
+
+
+def _check_registration_names(registration, context):
+    """The registration part of _check_python_dialect: each step, its recovery alternatives and the signals."""
+    if not isinstance(registration, dict):
+        return
+    _check_signal(registration.get('signal'), f'{context}.signal')
+    steps = registration.get('steps')
+    for n, step in enumerate(steps if isinstance(steps, list) else ()):
+        if not isinstance(step, dict):
+            continue
+        _check_step_names(step, f'{context}.steps[{n}]')
+        _check_signal(step.get('signal'), f'{context}.steps[{n}].signal')
+        recovery = step.get('recovery')
+        alternatives = recovery.get('alternatives') if isinstance(recovery, dict) else None
+        for m, alternative in enumerate(alternatives if isinstance(alternatives, list) else ()):
+            if isinstance(alternative, dict):
+                _check_step_names(alternative, f'{context}.steps[{n}].recovery.alternatives[{m}]')
+
+
+def _check_step_names(step, context):
+    method = step.get('method')
+    if method in _VARIANT_METHODS:
+        raise ValueError(f'{context}: unknown registration method {method!r}: a MATLAB demons variant name, which the '
+                         f'Python backend writes as {{method: demons, variant: {method}}}' + _MIGRATION)
+    named = {**_NATIVE_PARAMETERS, **_NATIVE_BLOCK_KEYS}
+    given = [key for key in named if key in step]
+    if given:
+        raise ValueError(f'{context}: ' + '; '.join(f'{key} is a MATLAB name, which the Python backend writes as '
+                                                    f'{named[key]}' for key in given) + _MIGRATION)
+
+
+def _check_signal(signal, context):
+    mode = signal.get('mode') if isinstance(signal, dict) else None
+    if isinstance(mode, str) and mode in _MATLAB_SIGNALS:
+        raise ValueError(f'{context}: mode {mode!r} is a MATLAB image representation, which the Python backend writes '
+                         f'as mode {_MATLAB_SIGNALS[mode]!r}' + _MIGRATION)
+
+
+def _check_preprocessing_names(preprocessing, context):
+    """The preprocessing part of _check_python_dialect: MATLAB's radius in a reconstruction or white_tophat step."""
+    if not isinstance(preprocessing, dict):
+        return
+    for name in ('steps', 'post_registration'):
+        entries = preprocessing.get(name)
+        for n, entry in enumerate(entries if isinstance(entries, list) else ()):
+            if (isinstance(entry, dict) and entry.get('method') in ('reconstruction', 'white_tophat')
+                    and 'radius' in entry):
+                config_type = step_config_type(entry['method']).__name__
+                raise ValueError(f"{context}.{name}[{n}]: unknown preprocessing step {config_type} keys ['radius']: "
+                                 'radius is the MATLAB key of morph_recon and tophat, which the Python backend '
+                                 'writes as radius_yx' + _MIGRATION)
 
 
 def _reference_image_view(params, dataset, rule):
