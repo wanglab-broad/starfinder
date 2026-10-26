@@ -1475,12 +1475,11 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 
 ### Tour notebook (W-460)
 
-The executed `example/introduction/starfinder_report_tour.ipynb` shows the report through the
-public entries (`Dataset.report`, `Dataset.compare_samples`, `load_report`) on `sample-tiny-v1`
-and `scene_plane`, as the §2.6 to §2.10 tours show theirs: the records of `run.json`, a report
-after the per-FOV processing and after the export, `report.json` and the tables, the unavailable
-values with their reasons, the problematic FOVs under the default and a stricter limit, both
-routes and the comparison page. It is an introduction, not a check of this design.
+W-460 added an executed introductory notebook on the report, on `sample-tiny-v1` and
+`scene_plane`. W-587 retired it with the other six tours; Git history keeps it. The
+[multi-FOV / sample demo](get-started/multi-fov-demo.md) now shows `Dataset.report` after the
+per-FOV runs, the stitching and the export of `sample-tiny-v1`, with the report's key numbers
+and its FOV table. Like the tour, it is an introduction, not a check of this design.
 
 ## The real example
 

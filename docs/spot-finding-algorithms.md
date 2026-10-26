@@ -290,9 +290,11 @@ recorded values only; nothing here was measured again. The sources are:
 * **W-274 values**: `logs/w274-extended-values.json` in the same directory, the
   values each extended case recorded, and `logs/w274-xfail.log`, the rerun of the
   fourteen cases (14 xfailed);
-* **tour notebook**: the executed `example/introduction/starfinder_spot_finding_tour.ipynb`,
+* **tour notebook**: the executed spot-finding tour notebook of `example/introduction/`,
   section 9, which lists the expected failures from the marks of the test module
-  and recomputes one case of each kind;
+  and recomputes one case of each kind. W-587 retired the tours; the values cited
+  here are its outputs as last executed at `1689028` (2026-10-01), which Git
+  history keeps;
 * **the test module**: the tolerance constants and the `strict_xfail` marks of
   `src/python/test/test_spot_finding_validation.py`;
 * this page's method tables, whose values come from W-266 ([Evidence](#evidence)).

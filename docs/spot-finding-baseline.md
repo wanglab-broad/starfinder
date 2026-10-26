@@ -91,6 +91,8 @@ This issue re-measured it on the current code.
   `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-267/20261001T014815Z-af149185`.
   The four runs took 12.8 s and 429 MB peak RSS in all (`/usr/bin/time -v`).
 
+Note (W-587): the foundation tour notebook named under **Pipeline** was retired with the other tours of `example/introduction/`; Git history keeps it.
+
 | Run (one change each) | Candidates | Matched | Duplicate (same channel / other channel) | Spurious | Missed | Precision | Recall |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Notebook settings | 68 | 45 | 22 (0 / 22) | 1 | 5 | 0.662 | 0.90 |

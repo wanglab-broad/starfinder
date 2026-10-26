@@ -183,8 +183,8 @@ deterministic.
 
 Task group 6 of the outline, "Validation and inspection", has three parts: this
 engineering validation, the bounded real examples below and the usage documentation (the
-tour notebook). The engineering validation is, as in §2.7 and §2.8, known-answer fixtures
-with pass/fail tolerances fixed before the run, in default-tier pytest modules, plus
+tour notebook, since W-587 the [multi-FOV / sample demo](get-started/multi-fov-demo.md)).
+The engineering validation is, as in §2.7 and §2.8, known-answer fixtures with pass/fail tolerances fixed before the run, in default-tier pytest modules, plus
 `learned`-tier modules for the checks that need StarDist or Cellpose. It has no
 comparison matrix, no parameter sweep, no ranking of methods, no default chosen from
 comparative data and no accuracy claim. Two fixed settings of one parameter in a check

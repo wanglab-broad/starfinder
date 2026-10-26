@@ -40,11 +40,14 @@ Change only the authorized slice and maintained callers/tests/docs needed for
 coherence. Verify diagnoses in actual code. Prefer functions and small typed
 configs/results; avoid duplicated algorithms and compatibility shims for replaced
 Python APIs. Keep arrays ZYX/ZYXC, explicit channel ordering and boundary conversions
-as specified in the site contracts. The example notebooks in `example/introduction/`
-are regenerated after the housekeeping refactor (W-526): executed, simplified,
-outputs kept. Until then, and for other notebooks, update imports only, without
-executing them or rewriting outputs. Do not qualify process-dependent
-synthetic hash seeds without explicit scope. Preserve historical source before extraction.
+as specified in the site contracts. The two notebooks in `example/introduction/`,
+`single_fov_demo.ipynb` and `sample_demo.ipynb`, are the Get Started demos (W-587):
+executed, outputs kept (at most 1.5 MB each), within 2 minutes and 2 GiB on one CPU,
+classical methods and public API only. After changing one, execute it again and run
+`docs/examples/render_demos.py` to regenerate its page under `docs/get-started/`.
+For other notebooks, update imports only, without executing them or rewriting
+outputs. Do not qualify process-dependent synthetic hash seeds without explicit
+scope. Preserve historical source before extraction.
 
 ## Environment and validation
 

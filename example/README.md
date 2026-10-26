@@ -5,7 +5,10 @@ with the [canonical image-to-molecule quickstart](../docs/getting-started.md).
 It runs the maintained [quickstart script](../docs/examples/quickstart.py) and
 produces molecule-level CSVs; it does not perform segmentation or cell assignment.
 
-The [foundation tour notebook](introduction/starfinder_foundation_tour.ipynb) introduces the package design, synthetic scenes, pipeline API, checkpoints and evaluation on one small synthetic field of view.
+Two executed notebooks in `introduction/` are the Get Started demos, also shown as pages of the documentation:
+the [single FOV demo](introduction/single_fov_demo.ipynb) runs one synthetic field of view to its molecule table, and
+the [multi-FOV / sample demo](introduction/sample_demo.ipynb) runs a synthetic sample of four FOVs to cells, then
+stitches, exports and reports it.
 
 The dataset-specific and cluster examples below have separate requirements:
 

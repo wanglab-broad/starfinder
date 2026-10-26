@@ -43,6 +43,7 @@ export parity, alphabetical reference lists and the five top-level sections.
 ## Software entry points
 
 - [Installation](get-started/installation.md)
+- [Single FOV demo](get-started/single-fov-demo.md) and [multi-FOV / sample demo](get-started/multi-fov-demo.md)
 - [Minimal Python image-to-molecule quickstart](getting-started.md)
 - [Project overview and setup](../README.md)
 - [Python package documentation](../src/python/README.md)

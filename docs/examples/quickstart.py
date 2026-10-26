@@ -3,21 +3,20 @@
 Run from src/python with a new external output directory; see getting-started.md.
 """
 
-from starfinder.assignment import load_molecules
-from starfinder.io import ImageLoadConfig
-from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
-from starfinder.spot_finding import LocalMaximaConfig
 import argparse
 import json
 from dataclasses import replace
 from pathlib import Path
 
-from starfinder.registration import TranslationConfig
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import CheckpointConfig, PipelineConfig, RoundState, Dataset
-from starfinder.registration import RegistrationRecipe, RegistrationStep
+from starfinder.assignment import load_molecules
+from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState
+from starfinder.io import ImageLoadConfig
+from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
+from starfinder.registration import RegistrationRecipe, RegistrationStep, TranslationConfig
+from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.synthetic import (BENCHMARK_PRESETS, benchmark_scene_preset, generate_amplicon_dataset,
                                   save_amplicon_dataset)
 

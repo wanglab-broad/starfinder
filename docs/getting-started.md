@@ -4,7 +4,9 @@ Generate a small synthetic dataset, register its sequencing rounds, detect spots
 extract their color sequences, and filter them against a codebook. The endpoint
 is a CSV of **candidate molecules with gene labels**, one file per field of view
 (FOV). Segmentation, cell assignment, cell expression matrices, and biological
-validation are outside this example.
+validation are outside this example. The [single FOV demo](get-started/single-fov-demo.md)
+shows the same route as an executed notebook, and the
+[multi-FOV / sample demo](get-started/multi-fov-demo.md) continues to cells and a whole sample.
 
 ## Prerequisites and installation
 
