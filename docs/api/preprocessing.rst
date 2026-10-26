@@ -13,15 +13,12 @@ Snapshots and sources
 ---------------------
 
 A :py:class:`~starfinder.preprocessing.PreprocessingStep` with ``save_as`` keeps a named snapshot of
-its output. The recipe's ``extraction_source`` names the snapshot that extraction reads,
-for example the background-corrected image before normalization (recipe 2), and
-``registration_source`` names the snapshot from which registration signals are built;
-both default to the detection image, the last step's output. ``FOV.run`` composes the
-registration steps of a moving round into one transform chain and resamples the round's
-image and every one of its snapshots once, from their pre-registration arrays, through
-that chain, so the snapshots stay aligned with the detection image; it records per round
-and snapshot the composed transforms. The workflow key ``preprocessing`` declares the same recipe in YAML; see
-:doc:`../workflow-configuration`.
+its output. The recipe's ``extraction_source`` and ``registration_source`` name the
+snapshots that extraction and the registration signals read; both default to the
+detection image, the last step's output. How the snapshots are registered with their
+round and recorded, and the workflow key ``preprocessing``, are in the
+:doc:`preprocessing guide <../preprocessing-contract>` ("Recipe", "Registration and
+snapshots", "Provenance", "Explicit step list") and :doc:`../workflow-configuration`.
 
 Background subtraction
 ----------------------

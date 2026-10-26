@@ -1,14 +1,36 @@
-# Preprocessing step and recipe contract
+# Preprocessing guide
 
 **Status: Accepted (W-227, 2026-09-27, at `0d13c26`).**
 
-This contract replaces the fixed preprocessing slots of `PipelineConfig` with an
-ordered recipe of steps. It supports the two agreed recipes: min–max → histogram
-matching → optional morphology, and background correction → percentile
-normalization. It also supports a pre-normalization extraction source and a
-declared registration source. Current behavior is recorded in
-{doc}`preprocessing-baseline`; the new methods are specified in
-{doc}`preprocessing-algorithms`.
+This page is the maintained guide to the preprocessing stage (§2.5) and its contract:
+`starfinder.preprocessing` and `FOV.run` implement it ({doc}`api/preprocessing`).
+
+* **What preprocessing does.** It corrects each round's image before registration,
+  with intensity normalization and background removal, as one linear sequence of
+  pure steps run through one enforcement wrapper ([Step interface](#step-interface),
+  [Enforcement wrapper](#enforcement-wrapper)).
+* **The recipe.** A `PreprocessingRecipe` is an ordered tuple of `PreprocessingStep`s,
+  each holding the frozen config of a step registered in `PREPROCESSING_METHODS`. It
+  supports the two agreed recipes: min–max → histogram matching → optional morphology,
+  and background correction → percentile normalization; statistics are fitted per FOV
+  or supplied for the sample ([Registration of step implementations](#registration-of-step-implementations),
+  [Recipe](#recipe), [Fitting modes](#fitting-modes)).
+* **What it produces.** The last step's output is the detection image; named snapshots
+  can serve as the pre-normalization extraction source and the declared registration
+  source. The `registered` checkpoint stores every snapshot used downstream, and the run
+  record (`run.json`) holds the recipe and one record per round and step
+  ([Registration and snapshots](#registration-and-snapshots), [Provenance](#provenance),
+  {doc}`checkpoints`).
+* **Where the configuration goes.** In Python, `PipelineConfig.preprocessing` holds the
+  recipe. In the workflow, the Python backend reads the `preprocessing` key of a Python
+  rule; the legacy keys map to recipe 1 for MATLAB-backend configurations
+  ([Workflow configuration](#workflow-configuration), {doc}`workflow-configuration`).
+
+The steps follow the shared {doc}`method-registry` design. Beneath this guide,
+{doc}`preprocessing-algorithms` specifies the methods, the shared numerical policy,
+sample-level statistics and the evaluation design ("Evaluation design for task groups 5
+and 6" and its calibrated-rerun amendment, W-243). {doc}`preprocessing-baseline` is
+history: the behavior at `21eda7f`, before §2.5, kept with its golden test.
 
 ## Step interface
 
@@ -88,7 +110,7 @@ called `StepSpec`, `STEPS` and `RecipeStep` before the registry renames
 
 ### Histogram reference channel
 
-`HistogramMatchingConfig` gains `reference_channel: int = 0` and replaces
+`HistogramMatchingConfig` has `reference_channel: int = 0`, which replaced
 `PipelineConfig.histogram_reference_channel`. The reference round is
 `context.reference_round`. For `fit="fov"`, the wrapper passes that round's
 input to the histogram-matching step, restricted to `reference_channel`, as
@@ -123,7 +145,7 @@ class PreprocessingRecipe:
   agreed alternative is the background-corrected image before normalization.
 * **Registration source.** `registration_source` names the snapshot from which
   registration signals are built, for both the reference round and each moving
-  round. By default it is the detection image, which is today's behavior. The
+  round. By default it is the detection image. The
   §2.6 signal modes (maximum, sum or selected channel) apply to this snapshot.
 * **Post-registration steps.** `post_registration` may contain only
   `ReconstructionConfig`, the legacy reconstruction-after-registration path for
@@ -135,10 +157,11 @@ class PreprocessingRecipe:
 * **Supplied statistics.** A recipe whose steps include the same step name twice
   with `fit="supplied"` is rejected at validation.
 
-`PipelineConfig` gains `preprocessing: PreprocessingRecipe | None` and loses the
+`PipelineConfig` has `preprocessing: PreprocessingRecipe | None`, which replaced the
 slots `normalization`, `histogram`, `histogram_reference_channel`,
 `reconstruction`, `reconstruction_after_registration`, `tophat` and
-`projection`. The migration guide records the replaced Python fields.
+`projection`. The migration guide records the replaced Python fields
+({doc}`migration`, "Preprocessing recipe").
 
 ### Projection is not part of preprocessing
 
@@ -157,7 +180,8 @@ views, both with maximum projection by default:
   is the stitching input.
 
 The views and the alignment of the Python reference merged image with MATLAB
-are specified separately (W-235).
+are specified in {doc}`workflows`, "Projection views and the reference merged
+image" (W-235).
 
 ## Registration and snapshots
 
@@ -168,17 +192,16 @@ source.
 
 * **Single registration step.** Each snapshot is resampled once from its
   pre-registration version.
-* **Several registration steps** (for example global then local). Until §2.6
-  task group 4 composes the stages into one resampling, each step's transform is
-  applied to every snapshot in turn, as it is to the single image today. A
-  snapshot is then resampled once per registration step.
-* **Consistency.** Every downstream snapshot goes through the same sequence of
-  resamplings, so all snapshots of a round stay aligned with each other and with
+* **Several registration steps** (for example global then local). The steps compose
+  into one transform chain, and each snapshot is resampled once through it from its
+  pre-registration version ({doc}`registration-contract`, "One final resampling").
+* **Consistency.** Every downstream snapshot goes through the same resampling, so
+  all snapshots of a round stay aligned with each other and with
   the detection coordinates.
 * The reference round is not transformed.
 * Provenance records, per round and snapshot, the transforms applied.
 * The `registered` checkpoint stores every snapshot used downstream under its
-  name. A recipe without an extraction source stores one image, as today.
+  name. A recipe without an extraction source stores one image.
 
 ## Enforcement wrapper
 
@@ -195,7 +218,7 @@ the run record.
 
 ## Provenance
 
-The existing run record (`run.json`) gains a `preprocessing` entry:
+The run record (`run.json`) holds a `preprocessing` entry:
 
 ```json
 {"recipe": {"steps": ["..."], "extraction_source": null, "registration_source": null},
@@ -211,7 +234,7 @@ records, so a reloaded run can report how each image was produced.
 
 ## Streaming
 
-The reference round is processed first, as today. For each `needs_reference`
+The reference round is processed first. For each `needs_reference`
 step, the reference round's input to that step is retained, restricted to the
 channel the config names (one channel volume for histogram matching), until all
 moving rounds have passed the step. The reference round's `registration_source`
@@ -294,6 +317,6 @@ supports a change; a Python configuration states it as the step list above.
 ```{toctree}
 :hidden:
 
-Preprocessing algorithms <preprocessing-algorithms>
-Preprocessing baseline <preprocessing-baseline>
+Preprocessing algorithms and validation <preprocessing-algorithms>
+Preprocessing baseline (history) <preprocessing-baseline>
 ```

@@ -11,8 +11,8 @@ pre-normalization extraction source, together with the shared numerical policy,
 the histogram summary behind sample-level statistics, and the before/after
 evaluation design. Each method and mode starts with the problem it addresses,
 its cause, the synthetic condition that isolates it, and why its benefit may be
-small. The step interface is in {doc}`preprocessing-contract`; current behavior
-is in {doc}`preprocessing-baseline`.
+small. The step interface is in {doc}`preprocessing-contract`, the preprocessing
+guide; the behavior before §2.5 is recorded in {doc}`preprocessing-baseline` (history).
 
 ## What preprocessing corrects
 
@@ -380,7 +380,7 @@ Each comparison reports:
   `mad_zero`.
 * **Variation.** The mean and range across held-out seeds.
 
-The task group 6 report is organized by method: problem, condition,
+The report is organized by method: problem, condition,
 before/after panels, metrics and flag. The panels show the same Z slice and XZ
 view before and after, with the display range stated and the ground truth
 overlaid; per-channel histograms with the noise threshold marked; and one line
