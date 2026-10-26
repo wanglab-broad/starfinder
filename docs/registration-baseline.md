@@ -204,7 +204,7 @@ test that refers to `RegistrationStep` or `PipelineConfig.registration`. The
 pinned runs use each config's defaults, so a changed `DemonsConfig` default
 changes a digest. The §2.6 refactor replaces that helper; its one other named
 edit is the translation → demons image digest, which one final resampling
-changes ({doc}`registration-contract`, "Tests the implementation changes").
+changes ({doc}`registration-contract`, "One final resampling").
 Two further tests show that a changed demons iteration count and the
 `single-channel` signal change the pinned translation → demons image digest
 and move the demons field outside the float64 tolerance. The translation-only

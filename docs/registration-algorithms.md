@@ -5,8 +5,9 @@ Status: Accepted (W-246, 2026-09-30, at 47057aa)
 This page specifies the numerical methods that §2.6 adds: rigid, affine and
 B-spline registration, and demons on Z=1 data. It also gives the engineering
 validation design of registration task group 6. The recipe, transforms,
-composition and records they plug into are in {doc}`registration-contract`;
-the current behavior is in {doc}`registration-baseline`. The methods are implemented in
+composition and records they plug into are in {doc}`registration-contract`, the
+registration guide; the behavior before §2.6 is recorded in {doc}`registration-baseline`
+(history). The methods are implemented in
 `starfinder.registration` ({doc}`api/registration`), with the checks that "Implemented
 checks (W-258)" lists, and nothing here sets a default beyond the agreed
 translation-only default: the parameter values below are what each method
@@ -32,8 +33,7 @@ settings, medians over cases and seeds, errors in voxels.
 | Rigid | elastix (weak preference) | `rigid` × backends × `matched` on all scenes | Equivalent on the development sizes (0.03 to 0.06). elastix closer on medium local-deformation cases (`gaussian_small` 0.09 against 0.75); neither recovers the realistic rigid case with shifts near 50 voxels without pre-alignment. Chosen for one integration with affine and B-spline and for speed from medium upward; SimpleITK remains an adequate locked alternative (worker notes, open choice). |
 | Demons on Z=1 | SimpleITK 2.5.3 (locked, `local-registration` extra) | `z1_3d_probe` rows (all six method × backend pairs failed on a 3D Z=1 volume) and the Z=1 rows with `dimension_estimated = 2` (all completed) | W-244 did not run demons. Its Z=1 rows show that both backends estimate genuine 2D transforms from 2D arrays and fail on 3D volumes with Z=1; the existing demons implementation already uses SimpleITK, whose demons filters are dimension-generic, so no new backend is needed. |
 
-elastix is a new optional dependency. Using it needs a dependency and lock
-change, which the task group 3 issue must have authorized before it starts;
+elastix is an optional dependency (the `registration-elastix` extra).
 W-244 measured about 11 s of import time and 0.5 to 0.8 GB of extra baseline
 RSS per process, so it is imported lazily and only when a recipe selects an
 elastix method.
@@ -221,27 +221,6 @@ exceeded:
 At the chosen density every V4 and V5 case meets its bound, with p95 at most
 0.79. The per-case values are in the W-255 run directory
 (`bound_sensitivity.csv`). Task group 6 (W-258) uses the same density.
-
-Metrics that must be added to `starfinder.evaluation` for these checks, as
-specified in {doc}`registration-contract` ("Routine QC"):
-
-* `evaluate_displacement_field(estimated, truth, *, mask, spacing_zyx=None)`:
-  median, 95th percentile and maximum of the displacement error, in voxels and
-  optionally physical units, over a mask;
-* `registration_qc(...)`: valid overlap, coverage, masked NCC, Z-projection
-  SSIM, transform summary and optimizer diagnostics;
-* an optional `mask` keyword for `normalized_cross_correlation` and
-  `structural_similarity`, with unchanged results when it is omitted.
-
-`evaluate_translation`, `forward_displacement`, `generate_registration_pair`,
-`GeometryConfig`, `DEFORMATION_PRESETS`, `DEVELOPMENT_SIZES` and the
-registration benchmark task are used as they are.
-
-Resource plan: every fixture is at most 16×64×64 voxels; elastix calls take
-about 1 to 4 s each at these sizes (W-244) plus one 11 s import per process,
-so the task group 6 modules are expected to run in a few minutes at one
-thread. Each run records wall time and maximum RSS with `/usr/bin/time -v`
-against the 1800 s and 4 GiB stop targets.
 
 ### Implemented checks (W-258)
 

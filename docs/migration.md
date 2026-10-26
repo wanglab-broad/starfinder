@@ -588,6 +588,17 @@ script `workflow/scripts/nuclei_registration.py` instead of MATLAB, with the
 same inputs and outputs; see [workflows](workflows.md). The MATLAB backend's
 rule and script are unchanged.
 
+### Registration evaluation additions
+
+`starfinder.evaluation.registration` gains `registration_qc` (the routine QC of one
+step or chain on the signals: valid overlap, coverage, masked NCC, Z-projection SSIM,
+the transform summary and the optimizer diagnostics) and
+`evaluate_displacement_field` (the error of an estimated pull field against a
+supplied truth field, over a mask). `normalized_cross_correlation` and
+`structural_similarity` gain an optional Boolean `mask` keyword; without it their
+results are unchanged. Nothing is renamed or removed, so existing calls need no
+change. See the [registration guide](registration-contract.md#routine-qc).
+
 ### Translation displacement
 
 `TranslationTransform` stores the detected displacement `d` of the moving

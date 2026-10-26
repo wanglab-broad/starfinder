@@ -47,25 +47,19 @@ TPS/CPD fields are float32; demons fields are float64. Do not negate dense field
 Direction and units are validated; inversion/composition/conversion is not implicit.
 
 `AffineTransform.matrix_zyx` is the 4×4 index-space pull matrix `[[A, b], [0, 1]]`:
-`registered[p] = moving[A p + b]`. Rigid and affine are estimated in physical
-space; with `S = diag(spacing_zyx)` and `P` the ZYX/XYZ reversal, the physical
-pull map `x -> M (x - c) + c + t` becomes `A = S⁻¹ P M P S` and
-`b = S⁻¹ P (t + c - M c)`, and `physical` keeps `matrix_xyz`, `center_xyz`,
-`translation_xyz`, the elastix parameters and their names and `spacing_zyx`.
-`BSplineTransform` keeps the ITK control grid (XYZ) and float64 coefficients;
-its pull map is `p + S⁻¹ P v(P S p)` and `dense()` evaluates it with SimpleITK.
-Unknown spacing on both metadata values is estimated with unit spacing and
-recorded as `spacing_source="unknown_unit"` with a warning.
+`registered[p] = moving[A p + b]`. The B-spline type, the physical-space
+estimation of rigid, affine and B-spline (with its `physical` parameters and the
+unknown-spacing rule) and the composition of steps into a `TransformChain` are
+specified in the registration guide ({doc}`../registration-contract`, "Transform
+types" and "Physical-space estimation").
 
 Apply accepts ZYX or ZYXC and preserves channel order. Output metadata is
 `result.transform.reference_metadata`. Equal-shaped grids with matching physical
 fields are required; frame identifiers may differ. Explicitly unknown geometry
 is allowed, but is never inferred. Unsupported conversion raises
-`image.IncompatibleGeometryError`. Translation supports singleton axes. Rigid,
-affine, B-spline and demons estimate a Z=1 input as genuine 2D (Y and X at least
-16 for the elastix methods, 4 for demons) and embed it with no Z motion; they
-reject 1 < Z < 4. TPS and CPD require 3D with every axis at least two. Dense
-application also supports singleton axes.
+`image.IncompatibleGeometryError`. Translation and dense application support
+singleton axes; each method's Z=1 and minimum-shape rules are in the guide
+("Registry entries" and "Z=1").
 
 ### Translation edge cases and resampling precision
 

@@ -1,17 +1,34 @@
-# Registration recipe contract
+# Registration guide
 
 Status: Accepted (W-246, 2026-09-30, at 47057aa)
 
-This page proposes the §2.6 registration contract: a `RegistrationRecipe` of
-ordered `RegistrationStep`s, a configurable registration signal, typed
-transforms that compose into one pull field, one final resampling of every
-image of a moving round, reloadable transforms, and native Python registration
-of other rounds from a shared stain. It builds on the {doc}`method-registry`
-design and on the §2.5 snapshots of the {doc}`preprocessing-contract`. The
-current behavior is recorded in {doc}`registration-baseline`; the numerical
-methods are specified in {doc}`registration-algorithms`. The contract is implemented by
-`starfinder.registration` and `FOV.register` ({doc}`api/registration`), with the checks
-that {doc}`registration-algorithms` lists ("Implemented checks (W-258)").
+This page is the maintained guide to the registration stage (§2.6) and its contract:
+`starfinder.registration` and `FOV.register` implement it ({doc}`api/registration`).
+
+* **What registration does.** It aligns each moving round of a FOV with the
+  reference round. It estimates a transform from one registration signal per round,
+  then resamples the round once onto the reference grid. Other rounds, such as
+  morphology rounds, are registered the same way through a shared stain
+  ([Other-round and external-reference registration](#other-round-and-external-reference-registration)).
+* **The recipe.** A `RegistrationRecipe` is an ordered tuple of `RegistrationStep`s:
+  zero or more global steps (`translation`, `rigid`, `affine`), then at most one local
+  step (`demons`, `bspline`, `tps`, `cpd`). It also holds the signal, the final
+  resampling and the routine QC ([RegistrationRecipe](#registrationrecipe),
+  [Registration signal](#registration-signal), [Routine QC](#routine-qc)).
+* **The transforms.** Each step returns a pull map from reference to moving
+  coordinates. A round's steps compose into one `TransformChain`, the round is
+  resampled once through it, and the registered checkpoint stores it
+  ([Transform types](#transform-types), [One final resampling](#one-final-resampling),
+  [Persistence](#persistence)).
+* **Where the configuration goes.** In Python, `PipelineConfig.registration` holds the
+  recipe. In the workflow, the Python backend reads the `registration` key of a Python
+  rule ([Workflow configuration](#workflow-configuration), {doc}`workflow-configuration`).
+
+The recipe follows the shared {doc}`method-registry` design and reads the §2.5
+snapshots of the {doc}`preprocessing-contract`. Beneath this guide,
+{doc}`registration-algorithms` specifies the numerical methods and the engineering
+validation (V1 to V11 and "Implemented checks (W-258)"). {doc}`registration-baseline`
+is history: the behavior at `2e48d3f`, before §2.6, kept with its golden test.
 
 ## Terms
 
@@ -172,16 +189,10 @@ single `warp` replaces per-method application backends.
 | `tps` | `TpsConfig` (exists) | local | 3 | (2, 2, 2) | dense | index | none |
 | `cpd` | `CpdConfig` (exists) | local | 3 | (2, 2, 2) | dense | index | none |
 
-The table shows the registry after task group 3. Registry move 2 (task group
-2) registers only the four existing methods with their current capabilities,
-so it changes no behavior: `demons` then declares `dimensions={3}` and keeps
-rejecting Z=1. Task group 3 adds `2` to demons and registers `rigid`, `affine`
-and `bspline`.
-
 The names, fields and defaults of the four existing configs do not change. The
 demons variants stay one method, `demons`, with `variant` (W-240 choice 6).
-The `registration-elastix` extra is a dependency change that the
-implementation issue must have authorized; see {doc}`registration-algorithms`.
+The `registration-elastix` extra is optional and imported only when a recipe selects
+an elastix method; see {doc}`registration-algorithms`.
 
 ## Transform types
 
@@ -227,9 +238,9 @@ interpolated during composition. A chain of translations only reduces to one
 
 Each example gives the expected pull field `u(p) = Φ(p) − p` at named points,
 and the value that the wrong order `Tₙ(…T₁(p))` would give, so an order error
-fails. The future test file is `test/test_registration_composition.py`
-(registration task group 4); each example is one test, with tolerance 1e-12
-voxels because every value is exact in float64 up to rounding of the inputs.
+fails. The tests are in `test/test_registration_composition.py`; each example is
+one test, with tolerance 1e-12 voxels because every value is exact in float64 up
+to rounding of the inputs.
 
 **Example 1: translation then affine**
 (`test_translation_then_affine_pull_field`). Grid 8×32×32.
@@ -631,64 +642,6 @@ The rule parameter `reference_image_view` (`{mode: max | channel, channel: <inde
 or label>}`, default `max`) selects the reference image the rule writes
 (`FOV.save_reference_image`); the resident subtile rules write none and refuse it.
 
-## `docs/migration.md` entries
-
-The implementation adds these entries:
-
-1. **Registration recipe.** `PipelineConfig.registration: tuple[RegistrationStep, ...]`
-   → `RegistrationRecipe(steps=(...))`; `RegistrationStep(config, reference_image,
-   moving_image, reference_channel, recovery, warp)` → `RegistrationStep(config,
-   recovery, signal)`, with the signal on `RegistrationSignalConfig` and the
-   warp on the recipe. No aliases.
-2. **Intentional change: signal.** `merged` / `merged-image` is the channel
-   maximum, not the sum; the workflow's local default is `merged-image`, not
-   `single-channel`. Use `mode="sum"` for the previous Python behavior.
-3. **Intentional change: one resampling.** A multi-step recipe resamples each
-   image once from its pre-registration array; results differ from the
-   per-step resampling at the boundary and by integer rounding.
-4. **Registered checkpoints version 2.** New kinds `affine` and `bspline`;
-   per-round `application`; version 1 still loads, as `sequential`.
-5. **New methods and Z=1.** `rigid`, `affine`, `bspline` (optional extra
-   `registration-elastix`); demons accepts Z=1 as 2D; `REGISTRATION_METHODS`
-   and exact-type lookup; `RegistrationRejectedError`.
-6. **Evaluation.** `registration_qc`, `evaluate_displacement_field` and the
-   optional `mask` of `normalized_cross_correlation` and `structural_similarity`.
-7. **Other rounds.** `FOV.register` on other rounds and `ExternalReference`; the Python
-   workflow rule for morphology rounds.
-8. **Preprocessing names** (registry move 1): `STEPS` → `PREPROCESSING_METHODS`,
-   `StepSpec` → `PreprocessingSpec`, `RecipeStep` → `PreprocessingStep`.
-
-## Tests the implementation changes
-
-* `test/test_registration_golden.py`: task group 4 makes two named edits and
-  no other. It replaces the body of `registration_config` with a builder of
-  `RegistrationRecipe(steps=..., signal=RegistrationSignalConfig(mode="sum" if
-  signal == "merged" else "channel", ...))`. It also replaces the one value
-  `PINNED_RUNS[("translation", "demons")]["images"]["round2"]`, with a comment
-  that names Jiahao's approval. The input and translation-only digests stay.
-  The translation → demons field digest stays, because step 2 still sees the
-  integer-shifted sum signal (since W-574 the field is an explicit expected
-  array compared with the float64 tolerance of [contributing](contributing.md),
-  "Expected values and tolerances", equal to the digest pinned before). The translation → demons image digest changes
-  with the one final resampling. The reviewed change must show that the new
-  image equals the pinned one within one intensity unit on every voxel whose
-  pull point lies at least one voxel inside the moving grid.
-* `test_declared_local_2d_rejection` (`test/test_registration_contract.py:123-126`)
-  asserts that demons, TPS and CPD reject Z=1. Task group 3 makes one named
-  edit: it removes `DemonsConfig()` from that parametrization and adds a test
-  that demons accepts Z=1 as 2D. TPS and CPD keep the rejection unchanged.
-* `test_two_registration_steps_resample_every_snapshot_in_the_same_sequence`
-  (`test/test_recipe_sources.py:182`, W-232) is replaced by a test that each
-  snapshot equals its pre-registration array resampled once by the round's
-  chain; its record assertion keeps the per-image lists of results.
-* The tests that construct `PipelineConfig(registration=...)` or read the field
-  change their construction only: `test_checkpoints.py`, `test_e2e.py`,
-  `test_recipe_sources.py`, `test_summaries.py`, `test_projection_views.py`,
-  `test_benchmark_recipes.py` and `test_coordination_contract.py`
-  (move 3 of the registry decision record, {doc}`method-registry`, "History"), plus `conftest.py`, `test_fov.py` and
-  `test_registration_contract.py`, which construct `RegistrationStep` with the
-  removed fields.
-
 ## Exclusions
 
 No unequal-grid conversion, plane-to-volume registration, subpixel translation
@@ -699,6 +652,6 @@ beyond the agreed translation-only default. Method comparisons belong to E01
 ```{toctree}
 :hidden:
 
-Registration algorithms <registration-algorithms>
-Registration baseline <registration-baseline>
+Registration algorithms and validation <registration-algorithms>
+Registration baseline (history) <registration-baseline>
 ```

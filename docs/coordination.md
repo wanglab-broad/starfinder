@@ -194,24 +194,14 @@ later.load_registered_round("morph", checkpoints=CheckpointConfig())
 
 A {py:class}`~starfinder.registration.RegistrationRecipe` is zero or more global steps
 (`translation`, `rigid`, `affine`) followed by at most one local step (`demons`,
-`bspline`, `tps`, `cpd`), as specified in {doc}`registration-contract`. For
-each moving sequencing round, `FOV.register` (which `run` calls):
-
-1. builds a float64 ZYX signal per round with the recipe's
-   {py:class}`~starfinder.registration.RegistrationSignalConfig` (default: the
-   channel maximum; `sum`; or one `channel` per round, by index or label), or
-   with a step's own `signal`;
-2. estimates step k on the moving signal resampled in float64 through steps 1
-   to k−1 (the reference signal is not resampled), runs
-   `registration_qc` on the result and raises `RegistrationRejectedError` when
-   a criterion of `recipe.qc` fails (none is set by default);
-3. composes the step transforms into one
-   {py:class}`~starfinder.registration.TransformChain`
-   (`Φ(p) = T₁(T₂(…Tₙ(p)))`) and resamples the round's detection image and every
-   one of its snapshots once, each from its pre-registration array. A chain of
-   translations uses the exact translation path; any other chain is sampled
-   linearly with SciPy, plane by plane, unless `recipe.warp` selects another
-   policy. Integer outputs are rounded once.
+`bspline`, `tps`, `cpd`), as specified in {doc}`registration-contract`, the
+registration guide. For each moving sequencing round, `FOV.register` (which `run`
+calls) builds the signal of each round with the recipe's
+{py:class}`~starfinder.registration.RegistrationSignalConfig`, estimates the steps
+in order with routine QC after each, composes them into one
+{py:class}`~starfinder.registration.TransformChain` and resamples the round's
+detection image and every one of its snapshots once. The guide gives each rule
+("Registration signal", "Composition order", "One final resampling" and "Routine QC").
 
 The reference round is not transformed. `registration_results[round]` keeps the
 step results (their `application_config` is the round's one `WarpConfig`),
