@@ -1,18 +1,45 @@
 # Wiki
 
-Use these maintained guides for vocabulary, package responsibilities and detailed
-contracts. The repository's CONTEXT.md is the concise orientation; AGENTS.md
-covers operational work.
+:::{container} sf-lead
+Guides to how STARfinder is built: its vocabulary, package responsibilities and
+detailed contracts.
+:::
 
-* **Starfinder Design:** the architecture, the array and coordinate contracts,
-  Dataset/FOV coordination, checkpoints, backends and learned detectors, and the guide of
-  each pipeline stage.
-* **Dataset:** the synthetic scenes and the real data.
-* **Method registry:** how the methods of each stage are registered, and how to add one.
-* **Development:** contributing, the development recipes, troubleshooting, the migration
-  guide and proposals.
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} Starfinder Design
+:link: wiki/design
+:link-type: doc
+:class-card: sf-card
+The architecture, the shared contracts and the guide of each pipeline stage.
+:::
+
+:::{grid-item-card} Dataset
+:link: wiki/dataset
+:link-type: doc
+:class-card: sf-card
+The synthetic scenes and the real data.
+:::
+
+:::{grid-item-card} Method registry
+:link: method-registry
+:link-type: doc
+:class-card: sf-card
+How each stage selects its methods, and how to add one.
+:::
+
+:::{grid-item-card} Development
+:link: wiki/development
+:link-type: doc
+:class-card: sf-card
+Contributing, recipes, troubleshooting and migration.
+:::
+
+::::
 
 ```{toctree}
+:hidden:
 :maxdepth: 2
 
 Starfinder Design <wiki/design>

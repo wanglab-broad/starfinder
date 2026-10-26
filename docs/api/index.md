@@ -1,14 +1,40 @@
 # API
 
-Choose a language for alphabetical function/class references. Python exports are
-explicitly supported by each namespace's `__all__`; MATLAB references parse the
-project-owned source without executing MATLAB. Cross-links describe shared
-responsibilities, not numerical equivalence. The Sphinx
-{ref}`general index <genindex>` lists every documented object A–Z across both
-languages: functions, classes, class members, data entries and MATLAB objects. The
-small API examples are one executable script that exercises individual Python contracts.
+:::{container} sf-lead
+Alphabetical function and class references for Python and MATLAB.
+:::
+
+::::{grid} 1 1 3 3
+:gutter: 3
+
+:::{grid-item-card} Python
+:link: python
+:link-type: doc
+:class-card: sf-card
+Every public namespace, with signatures and source links.
+:::
+
+:::{grid-item-card} MATLAB
+:link: matlab
+:link-type: doc
+:class-card: sf-card
+The MATLAB class and functions, parsed from source.
+:::
+
+:::{grid-item-card} Examples
+:link: examples
+:link-type: doc
+:class-card: sf-card
+One executable script of small Python API examples.
+:::
+
+::::
+
+The {ref}`general index <genindex>` lists every documented object A–Z across both
+languages.
 
 ```{toctree}
+:hidden:
 :maxdepth: 2
 
 Python <python>
