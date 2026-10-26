@@ -58,8 +58,8 @@ PREPROCESSING_METHODS: dict[type, PreprocessingSpec]  # populated in starfinder.
 ```
 
 `PreprocessingSpec`, `PREPROCESSING_METHODS` and `PreprocessingStep` were
-called `StepSpec`, `STEPS` and `RecipeStep` before the {doc}`method-registry`
-renames; the shared fields and lookups are specified there.
+called `StepSpec`, `STEPS` and `RecipeStep` before the registry renames
+({doc}`method-registry`, "History"); the shared fields and lookups are specified there.
 
 * `name` is the single identifier of a step. The workflow adapter, provenance and
   the supplied-statistics file all use it. Names are unique lowercase

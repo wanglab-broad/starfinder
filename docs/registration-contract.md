@@ -685,7 +685,7 @@ The implementation adds these entries:
   change their construction only: `test_checkpoints.py`, `test_e2e.py`,
   `test_recipe_sources.py`, `test_summaries.py`, `test_projection_views.py`,
   `test_benchmark_recipes.py` and `test_coordination_contract.py`
-  ({doc}`method-registry`, move 3), plus `conftest.py`, `test_fov.py` and
+  (move 3 of the registry decision record, {doc}`method-registry`, "History"), plus `conftest.py`, `test_fov.py` and
   `test_registration_contract.py`, which construct `RegistrationStep` with the
   removed fields.
 

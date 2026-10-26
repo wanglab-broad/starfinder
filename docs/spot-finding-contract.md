@@ -625,8 +625,8 @@ The implementation adds these entries:
   `test/test_registration_validation.py:433` stay unchanged with option A; option
   B would need the named edits listed in its row.
 * Every other existing test passes byte for byte unchanged. Each draft
-  implementation issue names its set, following {doc}`method-registry`
-  ("Migration plan", move 4).
+  implementation issue names its set, following move 4 of the registry decision
+  record's migration plan ({doc}`method-registry`, "History").
 
 ## Exclusions
 

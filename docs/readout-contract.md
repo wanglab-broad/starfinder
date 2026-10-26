@@ -126,7 +126,7 @@ New names under N1:
 | Readout mode | `Dataset.readout_mode`, `"multiplexed"` (default) or `"direct"`; YAML top-level `readout_mode` | Dataset field |
 | Encoding registry | `ENCODINGS: dict[type, EncodingSpec]` in `starfinder.readout`; entries `two_base` (`EncodingConfig`, which gains `method="two_base"`) and `one_base` (`OneBaseEncodingConfig`) | registry |
 | Encoding table (W-304) | `EncodingConfig.pair_to_color`; `EncodingSpec.table`; `Codebook.encoding_table()`, `Dataset.encoding_table()`, `FOV.encoding_table()`; YAML `load_codebook.encoding.pair_to_color` | config field, spec field, methods |
-| Decoding registry | `DECODING_METHODS: dict[type, DecodingSpec]` in `starfinder.readout`; entries `wta`, `codebook_aware`, `direct` | registry (the "Decoding" row of {doc}`method-registry` names it `DECODERS`; this page uses the `*_METHODS` pattern of decision 2 there) |
+| Decoding registry | `DECODING_METHODS: dict[type, DecodingSpec]` in `starfinder.readout`; entries `wta`, `codebook_aware`, `direct` | registry (the first version of the registry decision record named it `DECODERS`; this page uses the `*_METHODS` pattern of that record's decision 2, {doc}`method-registry`, "History") |
 | Segment layout | `BarcodeLayout`, `Segment`; `Codebook.layout` | frozen dataclasses |
 | Codebook entries | `Codebook.table` column `entry_id`; `n_entries`, `seq_to_entry`, `entry_to_seq` | codebook |
 | Direct mapping | `DirectPanel`, `load_direct_panel`; `Dataset.direct_panel`, `Dataset.load_direct_panel` | dataset |
