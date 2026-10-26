@@ -36,6 +36,22 @@ def tiles_width(n, tile, slot=FULL):
 # W-478: no figure is shown wider than two thirds of its drawn width.
 SHOWN_AT_MOST = 2 / 3
 
+# The table of figures of "Figure sizes" (W-478): per figure, its slot, its shown widths and the leading numbers of its
+# drawn width, as many as the checks read ("Distributions" in a third, then in a half; the Preprocessing grid's width,
+# then its tile). test_report_docs_contract.py checks that the page's table says this.
+FIGURES = {
+    "Time per step": ("half", [442], [884]),
+    "Intensity after each step": ("full", [932], [1864]),
+    "All FOVs and rounds": ("full", [932], [1864]),
+    "Reads along Z": ("half", [442], [884]),
+    "Distributions across FOVs and per cell": ("third or half", [300, 442], [600, 884]),
+    "Box plots by sample (`index.html`)": ("comparison", [1160], [2320]),
+    "Preprocessing example grid": ("full", [932], [1398, 256]),
+    "Registration and segmentation examples": ("full", [932], [1564]),
+    "Whole-sample marker view": ("full", [932], [1600]),
+    "Marker zoom-in tile, XY and XZ": ("third", [300], [512]),
+}
+
 
 def preprocessing_tile(columns, slot=FULL):
     """The tile of a Preprocessing grid of ``columns`` states: 256 px, or the smallest whole size above it whose grid

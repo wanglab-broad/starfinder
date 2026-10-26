@@ -202,6 +202,8 @@ scene of real appearance is checked by GA1 to GA24 and GA26 to GA27 of
 {doc}`synthetic-real-appearance-validation`, whose table 'How the cellular checks apply' says
 which of these rows applies to it.
 
+(synthetic-cellular-scene-validation-generator-checks)=
+
 | # | Check | Fixture (seed) | What is computed | Expected result (source) | Tolerance | Tier and markers |
 | --- | --- | --- | --- | --- | --- | --- |
 | GN1 | An existing preset unchanged; O1 | `sample_presets`, `ctx_off` (42) | (a) The thirteen group digests of everything `save_sample_scene` writes for each sample preset; (b) `generate_cellular_scene` with every new part at its default against `generate_sample_scene`, field for field, and their saved directories file by file. | (a) The pins of `test/test_synthetic_sample_golden.py`, computed at 943bb6b (W-394); (b) identity 1 (O1, "Opt-in"): arrays equal, tables equal with `check_exact`, `record` equal, `sample.json` and every file of the sample layout equal. | Exact (SHA-256 of content, as the golden test defines it; arrays and tables exact); in (a) the floating-point values of the CSV files and JSON records to 6 significant digits, magnitudes below 1e-9 as 0 (amendment of 2026-10-19). | (a) The existing golden test, its float comparison amended on 2026-10-19: routine for `sample-tiny-v1`, `slow` for `sample-small-v1` (4.99 s, W-394 notes §3); `synthetic`, `golden`. (b) routine on `sample-tiny-v1`, `slow` on `sample-small-v1`; `synthetic`, `validation`. |
@@ -322,6 +324,8 @@ worker notes, and the row is not changed:
 **Retired check:** GN25 was retired on 2026-10-19 because it froze test, helper and selected
 fixture source text during development, forcing later test changes to edit source pins first.
 Behavioral goldens and shared-fixture checks remain.
+
+(synthetic-cellular-scene-validation-implemented-checks)=
 
 | # | Module and tests | Fixtures | Tier | Floats |
 | --- | --- | --- | --- | --- |

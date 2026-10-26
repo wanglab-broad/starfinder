@@ -324,6 +324,8 @@ names the Python of a GPU environment, that is in a batch whose guidance grants 
 otherwise it skips with that reason. The learned checks need the extras and the cached
 models (L10's P1 and L12 also `STARFINDER_STARDIST_3D_SPLEEN`) and skip without them.
 
+(assignment-algorithms-implemented-checks)=
+
 | # | Module and tests | Tier |
 | --- | --- | --- |
 | L1 | `test_segmentation_labels.py`, `test_l1_*` | default |

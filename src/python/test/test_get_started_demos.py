@@ -1,9 +1,10 @@
-"""The Get Started demos: their rendered pages, their saved outputs, and a fresh execution.
+"""The Get Started demos: their saved outputs and a fresh execution.
 
 The demos are the executed notebooks of ``example/introduction/``; ``docs/examples/render_demos.py``
 converts each to a page with its figures under ``docs/get-started/``. The bounds are decision 8
 of W-587: at most 2 minutes and 2 GiB on one CPU, at most 1.5 MB per notebook, and at most 2 MB
-of figures under ``docs/get-started/``.
+of figures under ``docs/get-started/``. The rendered pages and their figures are checked in
+``test_integration_docs_contract.py`` (W-602), so that the ``slow`` execution reads no page.
 """
 
 import json
@@ -19,7 +20,6 @@ ROOT = Path(__file__).resolve().parents[3]
 RENDER = runpy.run_path(str(ROOT / "docs" / "examples" / "render_demos.py"))
 DEMOS = RENDER["DEMOS"]
 NOTEBOOK_BYTES = 1_500_000
-FIGURE_BYTES = 2_000_000
 SECONDS = 120
 RSS_KIB = 2 * 1024 * 1024
 # The extras each demo needs beyond the package; without them the execution test skips.
@@ -36,16 +36,6 @@ def errors(notebook):
 
 
 @pytest.mark.parametrize("stem", sorted(DEMOS))
-def test_each_page_equals_a_fresh_conversion_of_its_notebook(stem):
-    pytest.importorskip("nbconvert")
-    fresh = RENDER["render"](stem)
-    committed = RENDER["written"](stem)
-    assert sorted(committed) == sorted(fresh)
-    for name, content in fresh.items():
-        assert committed[name] == content, name
-
-
-@pytest.mark.parametrize("stem", sorted(DEMOS))
 def test_each_notebook_keeps_its_outputs_within_the_size_bound(stem):
     path = notebook_path(stem)
     notebook = json.loads(path.read_text())
@@ -54,11 +44,6 @@ def test_each_notebook_keeps_its_outputs_within_the_size_bound(stem):
     assert all(cell["outputs"] and cell["execution_count"] for cell in code)
     assert [cell["execution_count"] for cell in code] == list(range(1, len(code) + 1))
     assert not errors(notebook)
-
-
-def test_the_figures_of_the_get_started_pages_stay_within_two_megabytes():
-    figures = [p for stem in DEMOS for p in (ROOT / "docs" / "get-started" / f"{DEMOS[stem]}_files").iterdir()]
-    assert figures and sum(p.stat().st_size for p in figures) <= FIGURE_BYTES
 
 
 @pytest.mark.slow

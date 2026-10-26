@@ -2,8 +2,8 @@
 
 Rows of the engineering validation design in docs/assignment-algorithms.md ("Checks"). Rows A1
 to A20 are in the modules of their task groups; the section "Implemented checks" of that page
-maps every row to its tests, and ``test_every_a_row_names_existing_tests`` keeps that map true.
-This module adds:
+maps every row to its tests, and ``test_every_a_row_names_existing_tests``
+(``test_segmentation_docs_contract.py``, W-602) keeps that map true. This module adds:
 
 * A2 on ``assign_golden`` with every identity of docs/assignment-contract.md ("Count
   accounting", 1 to 5) recomputed from the tables, in 3D and 2D, without and with the legacy
@@ -28,13 +28,8 @@ from .segmentation_fixtures import BOXES_METADATA, BOXES_SHAPE, boxes, seeded_st
 from .test_assignment import BOXES_MOLECULES, GOLDEN_GRID, GOLDEN_KEEP, check_accounting, golden_inputs
 from .test_assignment_golden import MOLECULES, SEG_LABELS
 from .test_assignment_persistence import EXPANSION, TABLES, boxes_codebook, hashes, import_run, set_boxes_reads
-from .test_segmentation_validation import check_rows
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.validation]
-
-
-def test_every_a_row_names_existing_tests():
-    check_rows("A", 20)
 
 
 @pytest.mark.parametrize("expand", [False, True], ids=["no_expansion", "planar_pixel_4"])

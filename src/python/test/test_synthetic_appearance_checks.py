@@ -6,19 +6,23 @@ that no named test is skipped or expected to fail; that each carries the listed 
 and kind markers; and that its tier matches the tests' ``slow`` markers. A row whose tier is
 ``evidence project`` names its script under ``benchmarks/`` and no test (W-536); every
 script a row names exists.
+
+A docs-contract module (docs/contributing.md, "Test markers"; W-602): it finds the two tables by their
+labels (``docs_pages``), not by their headings: ``(synthetic-real-appearance-validation-generator-checks)=`` and
+``(synthetic-real-appearance-validation-implemented-checks)=``.
 """
 from pathlib import Path
 import re
 
 import pytest
 
+from . import docs_pages
 
-pytestmark = [pytest.mark.synthetic]
+pytestmark = [pytest.mark.synthetic, pytest.mark.contract]
 
 TEST = Path(__file__).resolve().parent
 REPOSITORY = TEST.parents[2]
-DESIGN = TEST.parents[2] / "docs" / "synthetic-real-appearance-validation.md"
-SECTION = "## Implemented checks\n"
+PAGE = "synthetic-real-appearance-validation.md"
 TIERS = {"routine": (False,), "slow": (True,), "routine and slow": (False, True)}
 # The tier of a check that the Chapter II evidence project runs from its script under benchmarks/ (W-536).
 EVIDENCE = "evidence project"
@@ -28,7 +32,7 @@ KINDS = {"contract", "validation", "golden"}
 
 def ga_rows():
     """{row: the backticked markers of its "Tier and markers" cell} of the table "Generator checks", in page order."""
-    text = DESIGN.read_text(encoding="utf-8").split("## Generator checks\n", 1)[1].split("\n## ", 1)[0]
+    text = docs_pages.table(docs_pages.read(PAGE), "synthetic-real-appearance-validation-generator-checks")
     rows = {}
     for line in text.splitlines():
         match = re.match(r"\| (GA\d+) \|", line)
@@ -41,9 +45,9 @@ def ga_rows():
 
 def implemented_checks():
     """{row: (the backticked names of its "Module and tests" cell, its tier)}, in table order."""
-    section = DESIGN.read_text(encoding="utf-8").split(SECTION, 1)[1].split("\n## ", 1)[0]
+    text = docs_pages.table(docs_pages.read(PAGE), "synthetic-real-appearance-validation-implemented-checks")
     rows = {}
-    for line in section.splitlines():
+    for line in text.splitlines():
         match = re.match(r"\| (GA\d+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$", line)
         if match:
             assert match.group(1) not in rows, match.group(1)
@@ -75,7 +79,6 @@ def collected(session, module):
     return items
 
 
-@pytest.mark.contract
 def test_every_ga_row_names_collected_tests(request):
     expected, rows = ga_rows(), implemented_checks()
     expected_rows = [f"GA{k}" for k in range(1, 25)] + ["GA26", "GA27"]

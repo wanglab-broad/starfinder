@@ -29,7 +29,6 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 from itertools import combinations
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -51,7 +50,6 @@ pytestmark = [pytest.mark.report, pytest.mark.validation]
 # The shared fixtures of report_fixtures.py: the pages drawn once for the session, and KEEP_CANVAS on.
 drawn, keep = report_fixtures.drawn, report_fixtures.keep
 
-DESIGN = Path(__file__).resolve().parents[3] / "docs" / "report-algorithms.md"
 YELLOW = (0xff, 0xd2, 0x1f)
 WHITE = (255, 255, 255)
 # The step names of a workflow run record (the per-FOV steps, then the sample steps, of LN sample1's runs).
@@ -199,8 +197,9 @@ def px(declarations, name):
 
 
 def test_slots_are_the_page_columns_and_the_table():
-    """The slots follow from the page's CSS in a window 1,200 px wide, equal the code's constants and the numbers of
-    the page's table "Figure sizes"."""
+    """The slots follow from the page's CSS in a window 1,200 px wide and equal the code's constants and the numbers
+    of the page's table "Figure sizes" as ``report_sizes`` writes them. ``test_report_docs_contract.py`` checks the
+    page's table and its rules against ``report_sizes`` (W-602)."""
     rules = css_rules(_page.template_text())
     wrap = rules[".wrap"]
     content = min(1200.0, px(wrap, "max-width")[0]) - 2 * px(wrap, "padding-inline")[0]
@@ -213,13 +212,6 @@ def test_slots_are_the_page_columns_and_the_table():
     assert (_figures.FULL_COLUMN, _figures.HALF_COLUMN, _figures.THIRD_COLUMN, _figures.COMPARISON_COLUMN) == (
         FULL, HALF, THIRD, COMPARISON)
     assert ".g3.fixed" in rules and "repeat(3," in rules[".g3.fixed"] and "repeat(2," in rules[".g2"]
-    # The page's table: one row per slot, its width in px.
-    passage = DESIGN.read_text(encoding="utf-8").split("### Figure sizes\n", 1)[1].split("\n### ", 1)[0]
-    table = dict(re.findall(r"^\| ([A-Za-z ,'()]+?) \| ([\d,]+) \|", passage, flags=re.M))
-    assert {k: int(v.replace(",", "")) for k, v in table.items()} == {
-        "Full column": FULL, "Half column": HALF, "Third of the column": THIRD, "Comparison page column": COMPARISON}
-    for words in ("twice the width of its slot", "11 px", "8 px", "14 px", "64"):
-        assert words in passage, words
     assert (_figures.MIN_TEXT_PX, _figures.TILE_GAP_PX, _figures.MARK_PX, _figures.HEATMAP_ROWS) == (
         MIN_TEXT_PX, TILE_GAP_PX, MARK_PX, MAX_ROWS)
 

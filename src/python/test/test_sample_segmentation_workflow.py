@@ -287,9 +287,11 @@ def page_examples():
             and "route" in b["export"]]
 
 
+@pytest.mark.contract
 def test_rs5_the_example_configuration_of_each_route():
     """docs/workflow-configuration.md gives one example per route; each validates, translates and passes the
-    parse-time check of the route."""
+    parse-time check of the route. It reads the page, so it is ``contract`` and runs in Q: this module holds no
+    ``slow``, ``learned`` or ``extended`` test (docs/contributing.md, "Test markers"; W-602)."""
     examples = page_examples()
     assert sorted(e["export"]["route"] for e in examples) == ["after_fusion", "per_fov"]
     for example in examples:

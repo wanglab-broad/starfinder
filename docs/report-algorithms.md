@@ -1150,6 +1150,7 @@ Three tables of two columns, as the mockup, without the marker row (D4):
 | `replay_differs` | the replayed preprocessing differs from the record |
 | `undefined` | undefined: the denominator is zero |
 
+(report-algorithms-figure-sizes)=
 ### Figure sizes
 
 Every static figure of `report.html` and `index.html` is drawn for its slot, the width at
@@ -1304,6 +1305,8 @@ Rules:
 
 ### Checks
 
+(report-algorithms-checks)=
+
 | # | Check | Fixture (seed) | Metric | Pass/fail tolerance |
 | --- | --- | --- | --- | --- |
 | RC1 | Collection, a normal sample | `report_records` (none) | Every cell, dtype and row order of `fovs.csv`, `registration.csv`, `steps.csv`, `readout_totals.csv` and `problematic_fovs.csv` | Equal to the expected tables written in the test, compared whole (nothing left out). Among them: residuals F2 round2 `x` +1, F3 round2 `y` +1, F3 round3 `z` +1, F4 round3 `x` +8, every other residual 0; `readout_totals` spots 4000, correct form 2960 (0.74), matched 2800 (0.7), merged 40 (0.01), passed 2590 (0.6475), each with `fovs` 4; `problematic_fovs.csv` exactly two rows, (F3, `correct_form_fraction`, measured 0.5, median 0.8, limit 0.05, `fraction`) and (F4, `shift_residual`, round3, `x`, measured 8, median 0, limit 5, `voxels`); `unavailable.csv` exactly the rows the test lists: `rule:alignment_score` (`not_configured`), the time of `stitch` (`not_recorded`), the replayed examples (`input_missing`: the fixture writes no image) and every part, column and rule that needs an export (`no_export`). Exact. |
@@ -1415,6 +1418,8 @@ the sample's default folder, so before the assignment exists the segmentation ex
 read the assignment folder on the route per FOV, are `input_missing`. A part counts as
 present at a stage when no row of `unavailable.csv` names it with a reason other than
 `not_configured` and `not_recorded`.
+
+(report-algorithms-implemented-checks)=
 
 | # | Module and tests | Tier | Floats |
 | --- | --- | --- | --- |

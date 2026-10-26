@@ -183,6 +183,7 @@ and 354 and 355 (W-354's position and label fixtures); in the real examples only
 1100 + tile for W-324's real_2x2 cut fixture. No other seed and no other random number is
 used. Fixtures marked "none" use no random number.
 
+(stitching-assembly-validation-checks)=
 ## Checks
 
 "Needs" says what a check requires beyond the routine locked environment: **G** the
@@ -690,6 +691,8 @@ so no named test is skipped there. The `slow` tests run in the `slow` tier of th
 registration or spot_finding)`), except the `slow` tests of `test_synthetic_sample_scene.py`,
 which carry the `synthetic` marker. PL13 of the first version is RX4. The RX rows read the
 records on the share and are run by the real-example issue (W-376), not by a test.
+
+(stitching-assembly-validation-implemented-checks)=
 
 | # | Module and tests | Tier |
 | --- | --- | --- |

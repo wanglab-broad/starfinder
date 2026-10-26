@@ -346,6 +346,8 @@ ordered {py:class}`~starfinder.preprocessing.PreprocessingRecipe` in
 `PipelineConfig.preprocessing` replaces them, as specified in the
 [preprocessing contract](preprocessing-contract.md). There are no aliases.
 
+(migration-preprocessing-recipe)=
+
 | Before | After |
 | --- | --- |
 | `PipelineConfig.normalization` | `PreprocessingStep(MinMaxNormalizationConfig(...))` in `preprocessing.steps` |

@@ -337,6 +337,8 @@ Routine tier unless the row says otherwise. "Source" names the section of
 real data**: every routine fixture is built from a closed-form bank or from hand-made
 arrays.
 
+(synthetic-real-appearance-validation-generator-checks)=
+
 | # | Check | Fixture (seed) | What is computed | Expected result (source) | Tolerance | Tier and markers |
 | --- | --- | --- | --- | --- | --- | --- |
 | GA1 | The accepted presets unchanged (identity 1) | `sample_presets`, the six context presets (42) | (a) GN1 (a) and (b) unchanged; (b) the group digests of everything `save_cellular_scene` writes for each context preset, as the golden test of the sample presets computes them, against pins taken at the base revision of the implementation batch before its first change. | (a) as GN1; (b) equal to the pins ("Opt-in": the six presets keep their behaviour; E1). | Exact (SHA-256 of content); the floating-point values of the CSV files and JSON records to 6 significant digits, magnitudes below 1e-9 as 0 (amendment of 2026-10-19). | (a) as GN1; (b) routine for the three routine presets, `slow` for the three `slow` presets; `synthetic`, `golden`. |
@@ -520,6 +522,8 @@ notes, and the row is not changed:
 **Retired check:** GA25 was retired on 2026-10-19 because it froze test, helper and selected
 fixture source text during development, forcing later test changes to edit source pins first.
 Behavioral goldens and shared-fixture checks remain.
+
+(synthetic-real-appearance-validation-implemented-checks)=
 
 | # | Module and tests | Fixtures | Tier | Floats |
 | --- | --- | --- | --- | --- |

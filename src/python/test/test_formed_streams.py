@@ -1,7 +1,6 @@
 """Stream-key isolation, cross-process repeatability and package boundaries."""
 import json
 import os
-import re
 from pathlib import Path
 import subprocess
 import sys
@@ -16,9 +15,6 @@ from .amplicon_repeatability import every_effect, paths
 from .formed_oracle import COMPONENTS, generator, stream_descriptor, stream_digest
 
 pytestmark = pytest.mark.synthetic
-
-PACKAGE = Path(__file__).resolve().parents[1] / 'starfinder/synthetic'
-DOCS = Path(__file__).resolve().parents[3] / 'docs'
 
 
 def test_descriptor_bytes():
@@ -130,16 +126,3 @@ bad = sorted(m for m in sys.modules if m == 'starfinder.provenance' or m.startsw
 print(bad)
 '''
     assert subprocess.check_output([sys.executable, '-c', code], text=True, timeout=120).strip() == '[]'
-
-
-def test_no_artifact_contract_or_issue_references():
-    sources = list(PACKAGE.glob('*.py'))
-    docs = [DOCS / 'synthetic-specification.md', DOCS / 'api/synthetic.rst',
-            *(DOCS / 'examples' / f'{name}.py' for name in
-              ('amplicon_scene', 'readout_effects', 'background_noise', 'amplicon_geometry'))]
-    for path in sources + docs:
-        text = path.read_text()
-        assert 'starfinder.artifacts/1' not in text, path
-        assert 'starfinder.provenance' not in text and 'RunRecorder' not in text, path
-    for path in docs:
-        assert not re.search(r'\bW-\d+', path.read_text()), path

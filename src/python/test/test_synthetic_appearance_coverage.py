@@ -5,15 +5,15 @@ molecules, GN8 to GN12) on ``app_routine``, the three routine appearance presets
 copy with type 2's abundance row changed (the molecules of the other types and the ambient ones unchanged, GN21);
 GA21 on the culture copies of ``app_plane`` and of ``app_morph`` with MT1's drawn round; GA22's subprocess that, beside
 building ``cf_banks``, generates ``app_routine`` under an ``open`` audit hook; GA15 on ``app_plane`` (GA19 names it);
-GA2's fifteen new names together, exported and on the API pages. Each check is the one its row states,
-with the row's tolerance; the helpers are those of the stain and contract modules, so the arithmetic is theirs.
+GA2's fifteen new names together, exported (test_synthetic_docs_contract.py checks their API page). Each check is
+the one its row states, with the row's tolerance; the helpers are those of the stain and contract modules, so the
+arithmetic is theirs.
 """
 from dataclasses import replace
 import json
 import math
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 
@@ -29,6 +29,7 @@ from starfinder.synthetic._appearance import _point_evaluator
 
 from . import cellular_appearance_oracle as oracle
 from .cellular_appearance_scenes import ROUTINE_PRESETS, app_routine, appearance_config
+from .appearance_names import NAMES  # GA2's new names ("Opt-in")
 from .cellular_scenes import tiny
 from .test_synthetic_appearance_contract import test_ga21_layout_versions_nulls_tables_and_hashes as check_ga21
 from .test_synthetic_appearance_stains import background_of, frame_of, generated, growth_of, images, placing_cell
@@ -37,24 +38,17 @@ pytestmark = [pytest.mark.synthetic]
 
 TOLERANCE = 1e-9
 slow = pytest.mark.slow
-DOCS = Path(__file__).resolve().parents[3] / "docs"
-# GA2's new names ("Opt-in").
-NAMES = ("generate_appearance_scene", "AppearanceScene", "AppearanceSceneConfig", "BankReference", "AugmentationConfig",
-         "LayoutConfig", "CompositionConfig", "build_appearance_bank", "generate_closed_form_bank", "load_appearance_bank",
-         "save_appearance_scene", "appearance_scene_preset", "APPEARANCE_PRESETS", "APPEARANCE_PRESET_VERSION",
-         "APPEARANCE_TRUTH_VERSION")
 
 
 # ---------------------------------------------------------------- GA2: the new names
 
 @pytest.mark.contract
 def test_ga2_every_new_name_is_exported_and_on_the_api_pages():
-    pages = {page: (DOCS / "api" / page).read_text(encoding="utf-8")
-             for page in ("synthetic.rst",)}
+    """GA2's fifteen new names are exported; ``test_ga2_every_new_name_is_on_the_api_page``
+    (``test_synthetic_docs_contract.py``, W-602) checks that each is on the API page."""
     assert len(NAMES) == 15
     for name in NAMES:
         assert name in synthetic.__all__ and hasattr(synthetic, name), name
-        assert re.search(rf"^   {name}$", pages["synthetic.rst"], re.M), name
     assert synthetic.APPEARANCE_PRESET_VERSION == "appearance-presets-v1" and synthetic.APPEARANCE_TRUTH_VERSION == "1"
 
 

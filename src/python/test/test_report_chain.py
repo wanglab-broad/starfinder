@@ -8,8 +8,8 @@ the one-plane scene (RT1, RT2); ``Z = 1`` (Z1); an export without run records, o
 of ``scene_no_run_json``, with and without ``example_fovs`` (A2); the comparison page of two
 synthetic samples (CP1); and the determinism of the chain in two single-thread processes
 (DT1). PG1 to PG6 and RC12 hold on every page written here. The table "Implemented checks
-(W-459)" of the algorithms page names the tests of every check; a default-tier test here
-keeps it true.
+(W-459)" of the algorithms page names the tests of every check; test_report_docs_contract.py
+keeps it true (W-602).
 
 The chains are those of ``report_scene.py`` (``sample_scene_preset("sample-tiny-v1")``, seed 42),
 each built once per module; every chain test is ``slow`` and skips without the ``anndata`` and
@@ -39,7 +39,6 @@ import tifffile
 
 from starfinder.report import REPORT_PARTS, MarkerGroup, ReportConfig, load_report
 
-from .conftest import SUBSYSTEM_MARKERS
 from . import test_report_collection as collection_checks
 from . import test_report_comparison as comparison_checks
 from . import test_report_measurements as measurement_checks
@@ -50,10 +49,6 @@ from .report_sizes import EXAMPLE_TILE, INTENSITY_SIZE, preprocessing_tile, tile
 pytestmark = [pytest.mark.report, pytest.mark.integration, pytest.mark.validation]
 
 TOL = 1e-9
-DESIGN = Path(__file__).resolve().parents[3] / "docs" / "report-algorithms.md"
-SECTION = "### Implemented checks (W-459)"
-ROW = r"(?:RC|DF|PR|EF|RP|PG|CH|RT|Z|A|CP|RR|WF|DT)\d+"
-TIERS = {"default": (False,), "slow": (True,), "default and slow": (False, True)}
 KIB, MIB = 1024, 1024 * 1024
 ROLES = ("example_1", "example_2", "example_3")
 # The columns of fovs.csv "up to the readout": the run's status and the read levels (docs/report-contract.md, A2).
@@ -941,69 +936,3 @@ def test_z_size_from_the_dataset_reference_image_pattern(tmp_path):
     assert [r[2] for r in z_size_rows(result.record)] == ["not_recorded"]
     assert "refs/{fov_id}_ref.tif" in z_size_rows(result.record)[0][3]
     assert reference_inputs(result.record, case.root) == []
-
-
-# --- The table "Implemented checks (W-459)" -------------------------------------------------------------------------
-
-def design_rows():
-    """The row ids of the table "Checks" of the validation design."""
-    text = DESIGN.read_text(encoding="utf-8").split("### Checks\n", 1)[1].split("\n### ", 1)[0]
-    return [m.group(1) for m in re.finditer(rf"^\| ({ROW}) \|", text, flags=re.MULTILINE)]
-
-
-def implemented_checks():
-    """{row: (the backticked names of its "Module and tests" cell, its tier)}."""
-    section = DESIGN.read_text(encoding="utf-8").split(SECTION, 1)[1].split("\n## ", 1)[0]
-    rows = {}
-    for line in section.splitlines():
-        match = re.match(rf"\| ({ROW}) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$", line)
-        if match:
-            assert match.group(1) not in rows, match.group(1)
-            rows[match.group(1)] = (re.findall(r"`([^`]+)`", match.group(2)), match.group(3).strip())
-    return rows
-
-
-def named_tests(names):
-    """(module, test name) of a row, each name under the module named before it."""
-    module, named = None, []
-    for name in names:
-        if name.endswith(".py"):
-            module = name
-        elif name.startswith("test_"):
-            assert module is not None, name
-            named.append((module, name))
-    return named
-
-
-def collected(session, module):
-    """The items pytest collects from one test module."""
-    items, nodes = [], [pytest.Module.from_parent(session, path=Path(__file__).resolve().parent / module)]
-    while nodes:
-        node = nodes.pop()
-        for child in node.collect():
-            (items if isinstance(child, pytest.Item) else nodes).append(child)
-    return items
-
-
-def test_every_check_names_collected_tests(request):
-    """Every row of the table "Checks" has a row in "Implemented checks (W-459)", in the same order, naming tests that
-    pytest collects, none an expected failure, each with a subsystem marker and the tier the row states."""
-    rows, expected = implemented_checks(), design_rows()
-    assert len(expected) == len(set(expected)) == 54
-    assert list(rows) == expected
-    modules = sorted({module for names, _ in rows.values() for module, _ in named_tests(names)})
-    items_of = {module: collected(request.session, module) for module in modules}
-    for row, (names, tier) in rows.items():
-        named = named_tests(names)
-        assert named and tier in TIERS, row
-        items = []
-        for module, name in named:
-            found = [item for item in items_of[module] if (item.originalname.startswith(name[:-1])
-                                                           if name.endswith("*") else item.originalname == name)]
-            assert found, (row, module, name)
-            items += found
-        for item in items:
-            marks = {mark.name for mark in item.iter_markers()}
-            assert "xfail" not in marks and SUBSYSTEM_MARKERS & marks, item.nodeid
-        slow = {item.get_closest_marker("slow") is not None for item in items}
-        assert tuple(sorted(slow)) == TIERS[tier], (row, tier)

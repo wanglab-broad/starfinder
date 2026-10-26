@@ -304,7 +304,21 @@ Rules for a new or changed test:
    marks=pytest.mark.slow)` when only some are slow. An existing test changes
    its cost marker only with a saved measurement that separates the one-time
    import and setup from the execution.
-6. Reviewers check the markers of new and changed tests.
+6. A test that reads a documentation page, a file under `docs/` other than
+   `docs/examples/`, lives in a docs-contract module: a file that holds no
+   `slow`, `learned` or `extended` test and that no module holding one
+   imports. The test is marked `contract`, so it runs in Q; a new such file is
+   named `test_<subsystem>_docs_contract.py`. A `slow`, `learned` or
+   `extended` test reads no documentation page, and neither do the modules
+   and helpers it imports: a helper that both need goes to a test helper
+   module that names no page. A table or passage that a test parses carries a
+   MyST target label right before it, such as `(report-algorithms-checks)=`,
+   and the test finds it by that label with `test/docs_pages.py`, never by
+   heading text, so a heading may change while the label and the table's row
+   shape stay. The files of `docs/examples/` are configurations and scripts
+   that tests execute and stay inputs of the checks that run them
+   (`scripts/learned_closure.py` lists what a check's tests read; W-602).
+7. Reviewers check the markers of new and changed tests.
 
 #### Expected values and tolerances
 

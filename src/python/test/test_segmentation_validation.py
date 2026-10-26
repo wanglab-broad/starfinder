@@ -2,8 +2,8 @@
 
 Rows of the engineering validation design in docs/assignment-algorithms.md ("Checks"). Rows L1
 to L11, L13 and L14 are in the modules of their task groups; the section "Implemented checks"
-of that page maps every row to its tests, and ``test_every_l_row_names_existing_tests`` keeps
-that map true. This module adds:
+of that page maps every row to its tests, and ``test_every_l_row_names_existing_tests``
+(``test_segmentation_docs_contract.py``, W-602) keeps that map true. This module adds:
 
 * L4's identity, empty-image and missing-spacing clauses on the row's own fixtures, the
   ``seg_golden`` stand-in labels and the single voxel in 9×21×21 with spacing (0.3, 0.1, 0.1)
@@ -22,10 +22,8 @@ that map true. This module adds:
 Fixtures are hand-built or pinned (``seg_golden``, seed 20261005; the parity file); no other
 random number is used.
 """
-import ast
 import hashlib
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -45,59 +43,10 @@ from .test_segmentation_golden import SHAPE_ZYX, expected_shrunk_image, fixture,
 pytestmark = [pytest.mark.segmentation, pytest.mark.validation]
 
 TEST_ROOT = Path(__file__).resolve().parent
-DESIGN = TEST_ROOT.parents[2] / "docs" / "assignment-algorithms.md"
 PARITY = TEST_ROOT / "data" / "segmentation_parity.npz"
 PARITY_SHA256 = "4a5df9973e0f487920aeed2dd9523bed1a929d020695f95c6c212f61be443e0f"
 GPU_PYTHON = "STARFINDER_L12_GPU_PYTHON"
 SPLEEN_VARIABLE = "STARFINDER_STARDIST_3D_SPLEEN"
-
-
-# --- The map of the section "Implemented checks" ---------------------------------------------------
-
-def implemented_checks():
-    """{row: the backticked names of its "Module and tests" cell} from the design page."""
-    section = DESIGN.read_text().split("### Implemented checks", 1)[1].split("\n## ", 1)[0]
-    rows = {}
-    for line in section.splitlines():
-        match = re.match(r"\| ([LA]\d+) \| ([^|]+) \|", line)
-        if match:
-            rows[match.group(1)] = re.findall(r"`([^`]+)`", match.group(2))
-    return rows
-
-
-def defined_tests(module):
-    tree = ast.parse((TEST_ROOT / module).read_text())
-    return {node.name for node in tree.body if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")}
-
-
-def unmatched_names(names):
-    """The test names of one row that no function of the module named before them matches."""
-    module, missing = None, []
-    for name in names:
-        if name.endswith(".py"):
-            module = name
-            continue
-        if not name.startswith("test_"):
-            continue
-        pattern = name.split("[", 1)[0]
-        defined = defined_tests(module) if module else set()
-        found = any(f.startswith(pattern[:-1]) for f in defined) if pattern.endswith("*") else pattern in defined
-        if not found:
-            missing.append((module, name))
-    return missing
-
-
-def check_rows(prefix, count):
-    rows = implemented_checks()
-    expected = [f"{prefix}{i}" for i in range(1, count + 1)]
-    assert sorted(r for r in rows if r.startswith(prefix)) == sorted(expected)
-    for row in expected:
-        assert any(n.startswith("test_") for n in rows[row]), row
-        assert unmatched_names(rows[row]) == [], row
-
-
-def test_every_l_row_names_existing_tests():
-    check_rows("L", 14)
 
 
 # --- L4: expand_labels on the row's fixtures --------------------------------------------------------

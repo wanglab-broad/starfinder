@@ -4,7 +4,7 @@ Uses the golden fixture of test_preprocessing_golden (two uint16 rounds of
 4x32x32 voxels and four channels) and its pinned FOV.run digests.
 """
 import copy
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 
@@ -203,20 +203,6 @@ def test_post_registration_accepts_only_reconstruction():
         PreprocessingRecipe((TophatConfig(),))
     with pytest.raises(ValueError, match="reference_channel"):
         HistogramMatchingConfig(reference_channel=-1)
-
-
-def test_pipeline_config_has_no_preprocessing_slots_or_projection():
-    removed = {"normalization", "histogram", "histogram_reference_channel", "reconstruction",
-               "reconstruction_after_registration", "tophat", "projection"}
-    names = {f.name for f in fields(PipelineConfig)}
-    assert "preprocessing" in names and not removed & names
-    for name in removed:
-        with pytest.raises(TypeError):
-            PipelineConfig(**{name: None})
-    migration = (ROOT / "docs/migration.md").read_text()
-    section = migration.split("### Preprocessing recipe", 1)[1].split("\n## ", 1)[0]
-    for name in removed:
-        assert f"`PipelineConfig.{name}`" in section
 
 
 # --- Runner ----------------------------------------------------------------------

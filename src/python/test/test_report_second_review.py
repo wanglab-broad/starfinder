@@ -32,8 +32,8 @@ from starfinder.report._measurements import GroupFigureData
 
 from . import report_fixtures
 from .report_fixtures import CASES, IDS, collect_drawn
-from .report_sizes import FULL, HALF, MIN_TEXT_PX, SHOWN_AT_MOST, THIRD, preprocessing_tile, tiles_width
-from .test_report_figure_rules import (DESIGN, FOV_STEPS, SAMPLE_STEPS, check_slot, check_text_size, css_rules,
+from .report_sizes import FIGURES, FULL, HALF, MIN_TEXT_PX, SHOWN_AT_MOST, THIRD, preprocessing_tile, tiles_width
+from .test_report_figure_rules import (FOV_STEPS, SAMPLE_STEPS, check_slot, check_text_size, css_rules,
                                        hand_previews, hand_replay, intersect, overlaps, page_figures, shown)
 from .test_report_page import SHIM
 
@@ -309,37 +309,31 @@ def test_legend_of_the_whole_sample_view(tmp_path, keep):
 
 
 def test_figures_table_equals_the_constants():
-    """The table of "Figure sizes" states each figure's slot, shown width and drawn width; they equal the code's
-    constants, and every shown width is at most two thirds of the drawn width."""
-    passage = DESIGN.read_text(encoding="utf-8").split("### Figure sizes\n", 1)[1].split("\n### ", 1)[0]
-    rows = re.findall(r"^\| ([^|]+?) \| (full|half|third|third or half|comparison) \| ([\d, or]+?) \| ([^|]+?) \|",
-                      passage, flags=re.M)
-    table = {name: (slot, shown_w, drawn) for name, slot, shown_w, drawn in rows}
+    """The table of "Figure sizes", as ``report_sizes.FIGURES`` writes it from the page, states each figure's slot,
+    shown width and drawn width; they equal the code's constants, and every shown width is at most two thirds of the
+    drawn width. ``test_report_docs_contract.py`` checks that the page's table is ``FIGURES`` (W-602)."""
+    table = FIGURES
     slots = {"full": [FULL], "half": [HALF], "third": [THIRD], "third or half": [THIRD, HALF], "comparison": [1160]}
-
-    def numbers(text):
-        return [int(n.replace(",", "")) for n in re.findall(r"\d[\d,]*", text)]
     for name, (slot, shown_w, drawn) in table.items():
-        assert numbers(shown_w) == slots[slot], name
-    assert numbers(table["Time per step"][2])[:1] == [2 * _figures.HALF_COLUMN]
-    assert numbers(table["Intensity after each step"][2])[:1] == [2 * _figures.FULL_COLUMN]
-    assert numbers(table["All FOVs and rounds"][2])[:1] == [2 * _figures.FULL_COLUMN]
-    assert numbers(table["Reads along Z"][2])[:1] == [2 * _figures.HALF_COLUMN]
-    assert numbers(table["Distributions across FOVs and per cell"][2])[:2] == [2 * _figures.THIRD_COLUMN,
-                                                                               2 * _figures.HALF_COLUMN]
-    assert numbers(table["Box plots by sample (`index.html`)"][2])[:1] == [2 * _figures.COMPARISON_COLUMN]
-    assert numbers(table["Preprocessing example grid"][2])[:2] == [1398, _figures.PREPROCESSING_TILE]
+        assert shown_w == slots[slot], name
+    assert table["Time per step"][2][:1] == [2 * _figures.HALF_COLUMN]
+    assert table["Intensity after each step"][2][:1] == [2 * _figures.FULL_COLUMN]
+    assert table["All FOVs and rounds"][2][:1] == [2 * _figures.FULL_COLUMN]
+    assert table["Reads along Z"][2][:1] == [2 * _figures.HALF_COLUMN]
+    assert table["Distributions across FOVs and per cell"][2][:2] == [2 * _figures.THIRD_COLUMN,
+                                                                      2 * _figures.HALF_COLUMN]
+    assert table["Box plots by sample (`index.html`)"][2][:1] == [2 * _figures.COMPARISON_COLUMN]
+    assert table["Preprocessing example grid"][2][:2] == [1398, _figures.PREPROCESSING_TILE]
     assert tiles_width(2, preprocessing_tile(2)) == 1398
-    assert numbers(table["Registration and segmentation examples"][2])[:1] == [
-        tiles_width(3, _figures.EXAMPLE_TILE)]
+    assert table["Registration and segmentation examples"][2][:1] == [tiles_width(3, _figures.EXAMPLE_TILE)]
     from starfinder.report import ReportConfig
-    assert numbers(table["Whole-sample marker view"][2])[:1] == [ReportConfig().figure_width_px]
-    assert numbers(table["Marker zoom-in tile, XY and XZ"][2])[:1] == [_figures.EXAMPLE_TILE]
+    assert table["Whole-sample marker view"][2][:1] == [ReportConfig().figure_width_px]
+    assert table["Marker zoom-in tile, XY and XZ"][2][:1] == [_figures.EXAMPLE_TILE]
     for name, (slot, shown_w, drawn) in table.items():
-        for width, slot_width in zip(numbers(drawn)[:len(slots[slot])], slots[slot]):
+        for width, slot_width in zip(drawn[:len(slots[slot])], slots[slot]):
             assert slot_width / width <= SHOWN_AT_MOST + 1e-12, name
     assert len(table) == 10
-    assert "two thirds" in passage and _figures.SHOWN_AT_MOST == (2, 3)
+    assert _figures.SHOWN_AT_MOST == (2, 3)
     assert (_figures.MAP_MAX_WIDTH, MIN_TEXT_PX) == (480, 11)
 
 
