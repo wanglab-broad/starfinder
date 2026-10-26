@@ -506,26 +506,35 @@ def audit(event, arguments):
     if event == "open" and isinstance(arguments[0], (str, bytes, os.PathLike)):
         opened.append(os.fsdecode(arguments[0]))
 sys.addaudithook(audit)
-bank = generate_closed_form_bank(sys.argv[1], 4)
-sys.stdout.write(json.dumps(dict(opened=opened, inputs=bank.record["inputs"], held_out=bank.record["held_out"],
-                                 entries=len(bank))))
+records = {}
+for preset in sys.argv[1:]:
+    opened = []
+    bank = generate_closed_form_bank(preset, 4)
+    records[preset] = dict(opened=opened, inputs=bank.record["inputs"], held_out=bank.record["held_out"],
+                           entries=len(bank))
+sys.stdout.write(json.dumps(records))
 """
 
 
+# One audited child builds the three banks in turn: about 9.9 s on one CPU (W-576), so slow.
+@pytest.mark.slow
 @pytest.mark.contract
-@pytest.mark.parametrize("preset", ROUTINE)
-def test_closed_form_bank_reads_no_file_outside_the_package(preset, tmp_path):
+def test_closed_form_bank_reads_no_file_outside_the_package(tmp_path):
+    # The files opened are recorded per preset; a module imported lazily is opened during the first build only.
     import starfinder
     env = dict(os.environ, TMPDIR=str(tmp_path))
-    result = subprocess.run([sys.executable, "-c", _AUDIT, preset], cwd=tmp_path, env=env, capture_output=True,
+    result = subprocess.run([sys.executable, "-c", _AUDIT, *ROUTINE], cwd=tmp_path, env=env, capture_output=True,
                             text=True, check=True)
-    record = json.loads(result.stdout)
+    records = json.loads(result.stdout)
+    assert list(records) == list(ROUTINE)
     allowed = [Path(tmp_path).resolve(), Path(starfinder.__file__).resolve().parent,
                *{Path(p).resolve() for p in (sys.prefix, sys.base_prefix, sys.exec_prefix)}]
-    outside = sorted({p for p in record["opened"]
-                      if not any(Path(p).resolve().is_relative_to(root) for root in allowed)})
-    print("GA22", preset, "files opened during the build:", len(record["opened"]), "outside:", outside)
-    assert outside == []
-    assert [(i["preset"], i["seed"]) for i in record["inputs"]] == [(preset, s) for s in SEEDS if s != HELD_OUT]
-    assert [i["seed"] for h in record["held_out"] for i in h["inputs"]] == [HELD_OUT]
-    assert not any(key in i for i in record["inputs"] for key in ("path", "sha256"))
+    for preset, record in records.items():
+        outside = sorted({p for p in record["opened"]
+                          if not any(Path(p).resolve().is_relative_to(root) for root in allowed)})
+        print("GA22", preset, "files opened during the build:", len(record["opened"]), "outside:", outside)
+        assert outside == [], preset
+        assert [(i["preset"], i["seed"]) for i in record["inputs"]] == [(preset, s) for s in SEEDS
+                                                                        if s != HELD_OUT], preset
+        assert [i["seed"] for h in record["held_out"] for i in h["inputs"]] == [HELD_OUT], preset
+        assert not any(key in i for i in record["inputs"] for key in ("path", "sha256")), preset

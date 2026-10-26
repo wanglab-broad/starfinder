@@ -2,11 +2,8 @@
 from dataclasses import replace
 import hashlib
 import json
-import os
 from pathlib import Path
 import runpy
-import subprocess
-import sys
 
 import numpy as np
 import pandas as pd
@@ -132,28 +129,6 @@ def test_overflow_and_zero_mixing():
     scene = generate(ReadoutEffectsConfig(mixing_enabled=True, mixing=np.zeros((3, 4, 4))))
     assert scene.intended.any() and scene.pre_mix.any() and not scene.realized.any()
     assert not scene.round_truth.emitting.any() and not scene.round_truth.lost.any()
-
-
-def test_cross_process_repeatability():
-    code = '''
-import hashlib, json
-from starfinder.synthetic import *
-from dataclasses import replace
-b,c = amplicon_scene_preset()
-e = ReadoutEffectsConfig(dropout_enabled=True, dropout_probability=(.2,.5,.8),
-    weakening_enabled=True, weakening_probability=(.3,.7,.4), weak_factor=(.2,.4,.6),
-    loss_enabled=True, loss_probability=.5, trend_enabled=True, trend_base=.9,
-    mixing_enabled=True, mixing=[[[1,.1,0,0],[.2,1,0,0],[0,0,1,.3],[0,0,0,1]]]*3)
-s = generate_amplicon_scene(b, config=replace(c,readout=e))
-h=hashlib.sha256()
-for a in [*s.rounds.values(),s.intended,s.pre_mix,s.realized]: h.update(a.tobytes())
-for t in [s.formed,s.round_truth]: h.update(t.to_json(orient='table').encode())
-h.update(json.dumps(s.provenance,sort_keys=True).encode())
-print(h.hexdigest())
-'''
-    outputs = [subprocess.check_output([sys.executable, '-c', code],
-               env=dict(os.environ, PYTHONHASHSEED=value), text=True) for value in ('1', '987')]
-    assert outputs[0] == outputs[1]
 
 
 def test_acquisition_order_mapping_and_single_round_loss_default():

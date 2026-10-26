@@ -6,8 +6,8 @@ it, and per FOV a ZYX label image and a one-based goodSpots CSV; nothing outside
 is read and Fiji never runs):
 
 (a) the tile offsets and non-overlap rectangles of ``workflow/scripts/create_tile_config.py``
-    for the sample, through ``legacy_tile_config`` of the W-325 golden test; the tiles are
-    not square, so ``img_col`` stands for the Y extent;
+    for the sample, through ``legacy_tile_config`` of the W-325 golden test, which cut the FOVs
+    and give the rectangles of (b); the tiles are not square, so ``img_col`` stands for the Y extent;
 (b) the legacy per-FOV assembly of ``workflow/scripts/reads_assignment.py`` at 6b384cd
     (blob 26a7eab): global coordinates, the overlap filter of cells and molecules and the
     empty branch, through ``legacy_fov_assembly``, which follows the script's lines 78-80,
@@ -31,7 +31,9 @@ locked project environment (Python 3.12.12, pandas 3.0.0, NumPy 2.2.6, scikit-im
 0.26.0, anndata 0.12.6) and are identical over repeated single-thread runs; see
 docs/assembly-baseline.md. When §2.10 replaces these steps, the helpers stay as the frozen
 legacy reference, and docs/assembly-contract.md names what the assemble entry must
-reproduce and what it changes on purpose.
+reproduce and what it changes on purpose. The tests that called only these helpers on the
+fixture, and no package or repository code, were removed (W-576, TM-19); the helpers stay
+the reference of the adapter and script tests.
 """
 import runpy
 import sys
@@ -368,14 +370,6 @@ def read_rows(reads):
 
 # ---------------------------------------------------------------------------------------
 # Pinned values.
-# tile_config per grid row j: x, y, z, start_x, start_y, end_x, end_y,
-# start_x_norm, start_y_norm, end_x_norm, end_y_norm
-TILE_CONFIG = [
-    (0, 0, 0, 0, 0, 60, 51, 0, 0, 60, 51),
-    (0, 37, 1, 0, 43, 64, 101, 0, 6, 64, 64),
-    (55, 0, 0, 60, 0, 119, 64, 5, 0, 64, 64),
-    (56, 36, 0, 0, 0, 0, 0, 0, 0, 0, 0),          # the blank: offsets kept, rectangle zero
-]
 # FOV number -> the scene cells it sees, in local label order (local label k is the k-th)
 SCENE_CELLS = {1: [1, 2, 3, 4, 5, 9], 2: [4, 5, 6], 3: [2, 3, 7, 8, 9]}
 # dimensions -> FOV number -> kept cells: (seg_label, fov_x, fov_y[, fov_z], global_x, global_y[, global_z])
@@ -406,11 +400,6 @@ KEPT_READS = {
                (10, 39, 6, "E", 0)],
            2: _FOV2, 3: _FOV3},
 }
-# FOV number -> the scene cells it keeps (both dimensions): cell 4 twice, every cell at least once
-KEPT_SCENE_CELLS = {1: [1, 2, 4, 5, 9], 2: [4, 6], 3: [3, 7, 8]}
-# Scene molecule (MOLECULES order) -> how many FOVs keep it (both dimensions): the two of cell 4
-# and the background one at y 45 twice; cell 9's at x 64 (outside FOV1, in FOV3's dropped part) never
-RETAINED = [1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 2, 1, 1, 1, 1]
 # The empty branch: FOV3 with its three background molecules only (local x 2, 7 and 55)
 EMPTY_LEGACY_READS = [(57, 28, 2, "B", 0), (62, 28, 2, "C", 0), (110, 40, 6, "B", 0)]   # unfiltered
 EMPTY_ADAPTER_READS = [(62, 28, 2, "C", 0), (110, 40, 6, "B", 0)]                       # x 2 < 5 dropped
@@ -428,12 +417,6 @@ SAMPLE_READS = {
 SAMPLE_READS["2d"] = dict(SAMPLE_READS["3d"], sample1_Position001_0=4, sample1_Position001_1=3)
 
 
-def scene_index(rows):
-    """Scene molecule index of each kept molecule row (global position and gene)."""
-    where = {((z, y, x), gene): i for i, ((z, y, x), gene) in enumerate(MOLECULES)}
-    return [where[((gz, gy, gx), gene)] for gx, gy, gz, gene, _ in rows]
-
-
 @pytest.fixture(scope="module", params=["3d", "2d"])
 def sample(request, tmp_path_factory):
     """The fixture sample of one dimension: the legacy helper and the adapter on every FOV."""
@@ -445,51 +428,6 @@ def sample(request, tmp_path_factory):
                            legacy=run_legacy(out, frame, dimensions), adapter=adapter)
 
 
-def test_tile_offsets_and_rectangles(tmp_path):
-    """create_tile_config.py's offsets (cast, then shifted) and rectangles for the fixture placement."""
-    frame = tile_frame(tmp_path)
-    columns = ["x", "y", "z", "start_x", "start_y", "end_x", "end_y",
-               "start_x_norm", "start_y_norm", "end_x_norm", "end_y_norm"]
-    assert [tuple(int(v) for v in row) for row in frame[columns].itertuples(index=False)] == TILE_CONFIG
-    assert offsets(frame) == {1: (0, 0, 0), 2: (1, 37, 0), 3: (0, 0, 55)}
-
-
-def test_img_col_is_the_y_extent():
-    """FOV1's lower edge uses img_col (64) where its height is img_row (48): 51 instead of 43.
-
-    The band y in [43, 51) is then owned by FOV1 and by FOV2 (start 43), and both keep
-    scene cell 4, whose centroid is at y 45.
-    """
-    y1, y2 = 0, 37
-    assert int((y1 + IMG_COL - y2) / 2 + 0.5 + y2) == TILE_CONFIG[0][6] == 51
-    assert int((y1 + IMG_ROW - y2) / 2 + 0.5 + y2) == 43
-    assert int((y1 + IMG_ROW - y2) / 2 + 0.5) + y2 == TILE_CONFIG[1][4] == 43
-
-
-def test_fixture(tmp_path):
-    frame = tile_frame(tmp_path)
-    inputs = fov_inputs(frame)
-    assert {number: present for number, (_, present, _) in inputs.items()} == SCENE_CELLS
-    assert {number: len(local) for number, (_, _, local) in inputs.items()} == {1: 16, 2: 8, 3: 11}
-    for labels, present, _ in inputs.values():
-        assert labels.dtype == np.uint16 and sorted(np.unique(labels).tolist()) == list(range(len(present) + 1))
-
-
-def test_cells_and_their_global_coordinates(sample):
-    """Kept cells: truncated centroid in the FOV's rectangle (XY only), global = truncated centroid + offset."""
-    for number in FOVS:
-        meta, _, empty = sample.legacy[number]
-        assert not empty
-        assert cell_rows(meta, sample.dimensions == "3d") == KEPT_CELLS[sample.dimensions][number]
-
-
-def test_molecules_and_their_global_coordinates(sample):
-    """Kept molecules: every molecule of a kept cell, then background molecules inside the rectangle."""
-    for number in FOVS:
-        _, reads, _ = sample.legacy[number]
-        assert read_rows(reads) == KEPT_READS[sample.dimensions][number]
-
-
 def test_the_adapter_writes_the_legacy_values(sample):
     """raw.h5ad and reads_assignment.csv of the workflow adapter carry the legacy helper's values."""
     for number in FOVS:
@@ -499,20 +437,6 @@ def test_the_adapter_writes_the_legacy_values(sample):
         assert read_rows(csv) == read_rows(reads)
         assert np.array_equal(np.asarray(adata.X).sum(axis=1), adata.obs.n_molecules.to_numpy())
         assert set(csv.assignment_status) <= {"assigned", "unassigned"}
-
-
-def test_duplicates_and_losses_across_fovs(sample):
-    """Scene cell 4 is kept by FOV1 and FOV2; cell 9's molecule at x 64 is kept by no FOV."""
-    kept = {}
-    for number, (labels, present, _) in sample.inputs.items():
-        meta, _, _ = sample.legacy[number]
-        kept[number] = [present[int(label) - 1] for label in meta.seg_label]
-    assert kept == KEPT_SCENE_CELLS
-    counts = [0] * len(MOLECULES)
-    for number in FOVS:
-        for i in scene_index(read_rows(sample.legacy[number][1])):
-            counts[i] += 1
-    assert counts == RETAINED
 
 
 @pytest.mark.parametrize("dimensions", ["3d", "2d"])
@@ -559,29 +483,3 @@ def test_the_sample_h5ad_script_needs_pandas_2_strings(sample, monkeypatch):
     from anndata._io.specs.registry import IORegistryError
     with pytest.raises(IORegistryError, match="ArrowStringArray"):
         run_sample_script(sample.root, sample.out, "create_sample_h5ad.py", monkeypatch, pandas_2_strings=False)
-
-
-@pytest.mark.parametrize("dimensions", ["3d", "2d"])
-def test_moving_one_centroid_across_an_edge_changes_the_pins(tmp_path, dimensions):
-    """Scene cell 3 one voxel left (centroid x 59): FOV1 now keeps it and FOV3 drops it."""
-    cells = dict(CELLS)
-    cells[3] = ((4, 34, 59), (2, 2, 2))
-    frame, _, out = build_sample(tmp_path, dimensions, cells=cells)
-    legacy = run_legacy(out, frame, dimensions)
-    three_d = dimensions == "3d"
-    first, third = cell_rows(legacy[1][0], three_d), cell_rows(legacy[3][0], three_d)
-    assert first != KEPT_CELLS[dimensions][1] and third != KEPT_CELLS[dimensions][3]
-    assert [row[0] for row in first] == [1, 2, 3, 4, 5, 6] and [row[0] for row in third] == [3, 4]
-
-
-@pytest.mark.parametrize("dimensions", ["3d", "2d"])
-def test_changing_one_tile_offset_changes_the_pins(tmp_path, dimensions):
-    """Setup 2's stitching x from −0.6 to 0.7: FOV3's offset becomes 56 and its global x moves by 1."""
-    placement = dict(STITCHING)
-    placement[2] = (0.7, -0.3, -0.6)
-    frame, _, out = build_sample(tmp_path, dimensions, placement=placement)
-    assert offsets(frame)[3] == (0, 0, 56)
-    rows = cell_rows(run_legacy(out, frame, dimensions)[3][0], dimensions == "3d")
-    assert rows != KEPT_CELLS[dimensions][3]
-    width = 3 if dimensions == "3d" else 2
-    assert [row[-width] for row in rows[:3]] == [row[-width] + 1 for row in KEPT_CELLS[dimensions][3]]

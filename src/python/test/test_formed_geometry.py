@@ -2,9 +2,6 @@
 from dataclasses import replace
 import hashlib
 import json
-import os
-import subprocess
-import sys
 
 import numpy as np
 import pandas as pd
@@ -154,25 +151,6 @@ def test_invalid_geometry(geometry):
 def test_singleton_rejects_out_of_plane_even_disabled(geometry):
     with pytest.raises(ValueError, match='Z=1'):
         make(1, count=0, geometry=geometry)
-
-
-def test_random_singleton_and_cross_process_repeat():
-    code = '''
-import hashlib,json
-from dataclasses import replace
-from starfinder.synthetic import *
-cb,cfg=amplicon_scene_preset('formed-z1-v1')
-s=generate_amplicon_scene(cb,config=replace(cfg,shape_zyx=(1,7,9),geometry=GeometryConfig(
- translation_enabled=True,translation_max_zyx=(0,.2,.3),local_enabled=True,
- centers_zyx=((0,2,3),),strength=.03)))
-p=s.provenance
-assert all(t['vectors_zyx'][0][0]==0 for t in p['transforms'].values())
-print(json.dumps(dict(provenance=s.provenance,truth=s.round_truth.to_json(),
- images={k:hashlib.sha256(v.tobytes()).hexdigest() for k,v in s.rounds.items()}),sort_keys=True))
-'''
-    results = [subprocess.check_output([sys.executable,'-c',code], env=dict(os.environ,PYTHONHASHSEED=str(seed)))
-               for seed in (1,991)]
-    assert results[0] == results[1]
 
 
 def test_multiple_3d_controls_scales_and_vector_components():

@@ -4,9 +4,7 @@ Expectations are literals, closed forms or replays of the documented stream key
 (formed_oracle); none is derived from the producer's rendering path.
 """
 from dataclasses import replace
-import hashlib
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -25,28 +23,12 @@ from starfinder.synthetic import _geometry, _observation
 from starfinder.synthetic._formed import _prepare
 from starfinder.synthetic._presets import _estimate_peak_bytes
 
+from .amplicon_repeatability import bounded, digest
 from .formed_oracle import generator
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.contract]
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def bounded(name='tiny', *, preset_dtype='uint16', **changes):
-    """A benchmark preset reduced to a bounded grid; every appearance default kept."""
-    book, config = benchmark_scene_preset(name, dtype=preset_dtype)
-    return book, replace(config, shape_zyx=(4, 48, 48), count=6, **changes)
-
-
-def digest(result):
-    h = hashlib.sha256()
-    for fov in sorted(result.rounds):
-        for label, image in result.rounds[fov].items():
-            h.update(label.encode())
-            h.update(image.tobytes())
-    for table in (result.formed, result.round_truth):
-        h.update(table.to_json(orient='table').encode())
-    return h.hexdigest()
 
 
 def test_old_generator_api_is_removed():
@@ -153,23 +135,6 @@ def test_toggling_one_control_changes_no_other_draw():
     other = generate_amplicon_dataset(book, moved).rounds['FOV_001']
     np.testing.assert_array_equal(other['round1'], base['round1'])
     assert not np.array_equal(other['round2'], base['round2'])
-
-
-@pytest.mark.slow
-def test_cross_process_byte_repeatability():
-    code = '''
-import sys
-sys.path.insert(0, sys.argv[1])
-from test.test_synthetic_contracts import bounded, digest
-from starfinder.synthetic import generate_amplicon_dataset, generate_registration_pair
-book, config = bounded()
-print(digest(generate_amplicon_dataset(book, config, fov_ids=('FOV_001', 'FOV_002'))), hash('probe'))
-'''
-    outputs = [subprocess.check_output([sys.executable, '-c', code, str(ROOT)], text=True, timeout=300,
-                                       env=dict(os.environ, PYTHONHASHSEED=value)).split()
-               for value in ('3', '4242')]
-    assert outputs[0][1] != outputs[1][1]
-    assert outputs[0][0] == outputs[1][0]
 
 
 @pytest.mark.parametrize('dtype', ['uint8', 'uint16'])

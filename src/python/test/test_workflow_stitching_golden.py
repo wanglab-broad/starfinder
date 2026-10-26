@@ -24,7 +24,8 @@ lock. The arithmetic is therefore held by ``legacy_tile_config``, which follows 
 script at 8e7d256 line by line, with the cited lines (``SCRIPT_LINES``). The unchanged
 script is run once with a stand-in ``plotly.express`` module, which only replaces the
 plot written after the CSV, to show that its CSV equals the helper's. The tests that ran
-only the helper are gone (W-535); ``TILE_CONFIG`` and ``SUMS`` are asserted on the package
+only the helper are gone (W-535), as is the check of the stage step on the fixture alone
+(W-576); ``TILE_CONFIG`` and ``SUMS`` are asserted on the package
 in test_stitching_bigstitcher.py and test_stitching_workflow.py.
 
 The values were produced in the locked project environment (Python 3.12.12, pandas 3.0.0,
@@ -36,7 +37,6 @@ reproduce.
 """
 import hashlib
 import importlib.util
-import io
 import runpy
 import sys
 import types
@@ -311,15 +311,6 @@ def test_stage_file_grid(tmp_path, monkeypatch):
             assert tile.shape == BLANK_SHAPE and not tile.any()
         else:
             assert tile.shape == (SECTIONS, IMG_ROW, IMG_COL) and (tile == pid).all()
-
-
-def test_stage_step_is_the_most_frequent_y_difference():
-    """Fixture A's consecutive Y differences: +1 step four times, −2 steps twice, +2 steps once."""
-    maf = pd.read_xml(io.StringIO(stage_file()))
-    differences = (maf['StageYPos'].shift(-1) - maf['StageYPos']).dropna()
-    counts = pd.Series(differences).value_counts()
-    assert counts.index[0] == STEP_M and counts.iloc[0] == 4
-    assert sorted(counts.to_dict().items()) == [(-2 * STEP_M, 2), (STEP_M, 4), (2 * STEP_M, 1)]
 
 
 def test_bigstitcher_macro(tmp_path):

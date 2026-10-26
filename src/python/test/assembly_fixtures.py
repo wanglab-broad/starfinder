@@ -33,7 +33,7 @@ DATASET, NAMESPACE_SAMPLE = "data", "sample"
 SAMPLE = "sample1"
 GOLDEN_GENES = tuple(g for g, _ in GOLDEN_GENE_ROWS)
 GOLDEN_IDS = [FOVS[k] for k in sorted(FOVS)]
-# The integer offsets at which test_workflow_assembly_golden.py cuts each FOV (pinned there by TILE_CONFIG).
+# The integer offsets at which test_workflow_assembly_golden.py cuts each FOV (legacy_tile_config's offsets).
 CUT = {1: (0, 0, 0), 2: (1, 37, 0), 3: (0, 0, 55)}
 # The setup (grid row of GRID_CSV) of each FOV number: FOV1 setup 0 (column 0, row 0), FOV2 setup 1
 # (column 0, row 1), FOV3 setup 2 (column 1, row 0).

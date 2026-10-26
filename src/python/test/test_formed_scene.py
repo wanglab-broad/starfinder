@@ -2,10 +2,7 @@
 from dataclasses import replace
 import hashlib
 import json
-import os
 from pathlib import Path
-import subprocess
-import sys
 
 import numpy as np
 import pandas as pd
@@ -309,34 +306,6 @@ def test_split_is_a_stream_label():
     assert not np.array_equal(base.formed[['z', 'y', 'x']], other.formed[['z', 'y', 'x']])
     descriptor = other.provenance['stream_scheme']['streams'][0]
     assert descriptor[:4] == ['starfinder.synthetic/1', 'evaluation', 42, 'formed-v1']
-
-
-def test_actual_cross_process_repeats_and_no_files(tmp_path):
-    code = '''
-import hashlib,json
-from starfinder.synthetic import (DEVELOPMENT_FIXTURES, development_scene_preset,
-                                  amplicon_scene_preset, generate_amplicon_scene)
-output=[]
-configs=[amplicon_scene_preset(name) for name in ('formed-small-v1','formed-z1-v1')]
-configs+=[development_scene_preset(c,size=s) for c,s in DEVELOPMENT_FIXTURES.values()]
-for cb,cfg in configs:
-    s=generate_amplicon_scene(cb,config=cfg)
-    output.append(dict(provenance=s.provenance, formed=s.formed.to_json(), rounds=s.round_truth.to_json(),
-                       images={k:hashlib.sha256(v.tobytes()).hexdigest() for k,v in s.rounds.items()},
-                       signals=hashlib.sha256(s.realized.tobytes()).hexdigest()))
-print(json.dumps(output,sort_keys=True))
-'''
-    outputs = [subprocess.check_output([sys.executable, '-c', code], cwd=tmp_path, timeout=120,
-                                       env=dict(os.environ, PYTHONHASHSEED=str(seed))) for seed in (1, 991)]
-    assert outputs[0] == outputs[1]
-    assert list(tmp_path.iterdir()) == []
-    data = json.loads(outputs[0])
-    assert len(data) == 6
-    # Clean fixtures have explicit coordinates and constant/supplied properties,
-    # so they draw nothing; every recorded stream uses the documented namespace.
-    streams = [s for preset in data for s in preset['provenance']['stream_scheme']['streams']]
-    assert streams and all(s[0] == 'starfinder.synthetic/1' for s in streams)
-    assert not data[2]['provenance']['stream_scheme']['streams']
 
 
 def test_bounded_downstream_example():

@@ -659,8 +659,8 @@ script `scripts/execution_costs.py` of W-482's run directory
   carry the subsystem marker `synthetic`, in its `pytest-slow-synthetic` selection, and the
   truth-label chains (`slow`, not `learned`), which carry `integration`, in
   `pytest-slow-other`; each runs when its paths change and at the last issue of a batch.
-* The routine tier and the CI environment also run GA1 (routine presets) to GA22,
-  on closed-form banks. The `slow` selection also runs GA8 to GA18 and GA24 on the routine
+* The routine tier and the CI environment also run GA1 (routine presets) to GA21,
+  on closed-form banks (GA22 is `slow` since W-576). The `slow` selection also runs GA8 to GA18 and GA24 on the routine
   appearance presets.
 * The Chapter II evidence project runs, outside the test suite since W-536, GN23 and the
   `slow` and acquired cases of GN24 (`benchmarks/cellular_evidence.py`, "Implemented

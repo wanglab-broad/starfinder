@@ -219,25 +219,3 @@ def test_noise_cast_once_and_round_channel_streams():
     assert [s[4:] for s in streams] == [['noise.independent', None, r, c]
                                         for r in signed.round_labels for c in signed.channel_labels]
     assert streams == payload(cast)['stream_scheme']['streams']
-
-
-def test_observation_cross_process_repeatability():
-    import os
-    import subprocess
-    import sys
-    code = '''
-import hashlib,json
-from dataclasses import replace
-from starfinder.synthetic import *
-b,c=amplicon_scene_preset()
-s=generate_amplicon_scene(b,config=replace(c,shape_zyx=(1,7,9),
-    background=BackgroundConfig(texture_enabled=True,tissue_weights=[[1]*4]*3),
-    noise=NoiseConfig(True,4,True,2)))
-h=hashlib.sha256()
-for a in s.rounds.values(): h.update(a.tobytes())
-h.update(json.dumps(s.provenance,sort_keys=True).encode())
-print(h.hexdigest())
-'''
-    outputs = [subprocess.check_output([sys.executable, '-c', code],
-        env=dict(os.environ, PYTHONHASHSEED=value), text=True) for value in ('1', '987')]
-    assert outputs[0] == outputs[1]

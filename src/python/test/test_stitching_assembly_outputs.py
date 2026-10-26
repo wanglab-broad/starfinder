@@ -3,7 +3,7 @@ export folder, ``write_h5ad`` and the legacy adapter, and determinism.
 
 Fixtures: ``assembly_golden`` (3D with an expanded FOV, 2D, molecules only), ``own_cases`` (a
 retained ``excluded_no_nucleus`` cell; FOV1 with nuclei, FOV2 without), an annotation row, the
-§2.9 boxes and golden assignments of ``test_assignment.py``; the three single-thread
+§2.9 boxes and golden assignments of ``test_assignment.py``; the two single-thread
 processes of AS14 are ``slow``. ``frozen_write_raw_h5ad`` is the adapter's ``_write_raw_h5ad``
 as it was before ``write_h5ad`` was factored out (W-366 revision), kept as the reference.
 """
@@ -399,12 +399,12 @@ def test_as14_permuted_molecule_rows_give_the_same_per_key_results():
 
 
 @pytest.mark.slow
-def test_as14_three_single_thread_processes_give_identical_tables():
+def test_as14_two_single_thread_processes_give_identical_tables():
     script = ("import json; from test.test_stitching_assembly_outputs import table_hashes; "
               "print(json.dumps(table_hashes()))")
-    env = {**__import__("os").environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
-           "PYTHONHASHSEED": "random"}
-    outputs = [subprocess.run([sys.executable, "-c", script], cwd=ROOT, env=env, capture_output=True, text=True,
-                              check=True).stdout.strip().splitlines()[-1] for _ in range(3)]
-    assert outputs[0] == outputs[1] == outputs[2]
+    env = {**__import__("os").environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
+    outputs = [subprocess.run([sys.executable, "-c", script], cwd=ROOT, env={**env, "PYTHONHASHSEED": seed},
+                              capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1]
+               for seed in ("1", "2")]
+    assert outputs[0] == outputs[1]
     assert json.loads(outputs[0]) == table_hashes()

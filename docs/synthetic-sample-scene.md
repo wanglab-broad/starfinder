@@ -158,9 +158,10 @@ CPU (the repeatability limit of {doc}`synthetic-specification`, "Random streams"
 * the files of `save_amplicon_scene` for the fixtures above.
 
 The implementation shows this by running the files above unchanged; the cross-process
-tests (`test_actual_cross_process_repeats_and_no_files`,
-`test_cross_process_byte_repeatability`, `test_cross_process_repeatability_with_hash_seeds`)
-compare the provenance and digests of these presets between processes, and the pinned R6
+test (`test_cross_process_repeatability_with_hash_seeds`, which generates every preset and
+fixture above, the dataset-level path and the effect paths in two processes with different
+`PYTHONHASHSEED` values, in an empty working directory that it leaves empty)
+compares the provenance and digests of these presets between processes, path by path, and the pinned R6
 and spot-finding digests compare them with values pinned before this addition.
 
 ## Names

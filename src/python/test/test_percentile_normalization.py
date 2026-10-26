@@ -292,7 +292,7 @@ def test_supplied_histogram_reference_equals_matching_the_concatenated_reference
                                                                 section))
 
 
-def test_supplied_histogram_reference_through_fov_run_matches_legacy_recipe_1(tmp_path):
+def test_supplied_histogram_reference_through_fov_run_matches_the_per_fov_reference(tmp_path):
     """Recipe 1 with a single-FOV supplied reference reproduces the per-FOV reference."""
     fovs = random_fovs(np.uint16, seed=5)
     minmax = PreprocessingStep(MinMaxNormalizationConfig("uint8", (0, 255)))

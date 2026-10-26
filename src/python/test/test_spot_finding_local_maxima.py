@@ -124,7 +124,7 @@ def test_the_merge_on_a_plane_ignores_the_z_radius():
         assert result.diagnostics["merged"] == {"0": 1, "1": 1}
 
 
-def test_none_is_the_legacy_result():
+def test_the_default_merge_radius_is_none_and_merges_nothing():
     image = merge_fixture()
     assert LocalMaximaConfig().merge_radius_zyx is None
     default, explicit = detect(image, CONFIG), detect(image, replace(CONFIG, merge_radius_zyx=None))

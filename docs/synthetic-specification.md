@@ -163,7 +163,10 @@ exact order:
   separators `,` and `:`), hashed with SHA-256, and the whole digest, read as a
   big-endian unsigned integer, seeds NumPy `PCG64` wrapped in
   `numpy.random.Generator`. Python `hash()`, global generators and wall-clock
-  seeds are never used, so results do not depend on `PYTHONHASHSEED`.
+  seeds are never used, so results do not depend on `PYTHONHASHSEED`. One test,
+  `test_cross_process_repeatability_with_hash_seeds` (`slow`), generates every amplicon
+  path of its helper module in two processes with different `PYTHONHASHSEED` values and
+  compares the outputs path by path.
 * Components: `count`, `placement`, `identity`, `brightness`, `width.axial`,
   `width.lateral`, `elongation`, `angle`, `round.dropout`, `round.weakening`,
   `round.loss`, `geometry.translation`, `geometry.local`, `geometry.affine`,

@@ -1,5 +1,5 @@
 """Stream-key isolation, cross-process repeatability and package boundaries."""
-from dataclasses import replace
+import json
 import os
 import re
 from pathlib import Path
@@ -10,10 +10,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.synthetic import (BackgroundConfig, GeometryConfig, NoiseConfig,
-                                  ReadoutEffectsConfig, ScalarDistribution, TextureConfig,
-                                  amplicon_scene_preset, generate_amplicon_scene)
+from starfinder.synthetic import GeometryConfig, NoiseConfig, ReadoutEffectsConfig
 
+from .amplicon_repeatability import every_effect, paths
 from .formed_oracle import COMPONENTS, generator, stream_descriptor, stream_digest
 
 pytestmark = pytest.mark.synthetic
@@ -38,29 +37,6 @@ def test_namespace_separation():
     # JSON field boundaries avoid collisions from concatenating labels.
     assert stream_digest('placement', scene='ab', entity='c') != stream_digest(
         'placement', scene='a', entity='bc')
-
-
-def every_effect(**changes):
-    """A scene drawing from every registered component."""
-    book, config = amplicon_scene_preset()
-    config = replace(config, shape_zyx=(3, 9, 11), density=.02, dtype='float64',
-        brightness=ScalarDistribution('lognormal', (2, .2)),
-        axial_width=ScalarDistribution('uniform', (.8, 1.2)),
-        lateral_width=ScalarDistribution('uniform', (.8, 1.2)),
-        elongation=ScalarDistribution('folded_lognormal', (0, .2)),
-        angle=ScalarDistribution('uniform', (0, np.pi)),
-        readout=ReadoutEffectsConfig(dropout_enabled=True, dropout_probability=(.3, .3, .3),
-            weakening_enabled=True, weakening_probability=(.3, .3, .3), weak_factor=(.5, .5, .5),
-            loss_enabled=True, loss_probability=.3),
-        background=BackgroundConfig(texture_enabled=True, tissue_weights=np.ones((3, 4)),
-            texture=TextureConfig(density=.01, axial_width=ScalarDistribution('uniform', (1, 2)),
-                                  brightness=ScalarDistribution('uniform', (2, 4)))),
-        noise=NoiseConfig(True, .5, True, .5),
-        geometry=GeometryConfig(translation_enabled=True, translation_max_zyx=(.2, .5, .5),
-                                local_enabled=True, centers_zyx=((1, 4, 5),), strength=.05,
-                                affine_enabled=True, affine_max_zyx=(.01, .05, .05),
-                                polynomial_enabled=True, polynomial_max_zyx=(.01, .05, .05)))
-    return generate_amplicon_scene(book, config=replace(config, **changes))
 
 
 def test_every_component_uses_its_documented_key():
@@ -96,25 +72,39 @@ def test_unrelated_changes_preserve_other_streams():
 
 
 @pytest.mark.slow
-def test_cross_process_repeatability_with_hash_seeds():
+def test_cross_process_repeatability_with_hash_seeds(tmp_path):
+    # One child per hash seed generates every path of amplicon_repeatability (the every-effect scene, the six
+    # presets and development fixtures, the singleton random geometry, background and noise, readout trend and
+    # mixing, and the bounded dataset) and prints one JSON document per path.
     code = '''
-import hashlib, json, sys
+import sys
 sys.path.insert(0, sys.argv[1])
-from test.test_formed_streams import every_effect
-s = every_effect()
-h = hashlib.sha256()
-for a in [*s.rounds.values(), s.intended, s.pre_mix, s.realized]: h.update(a.tobytes())
-for t in [s.formed, s.round_truth]: h.update(t.to_json(orient='table').encode())
-h.update(json.dumps(s.provenance, sort_keys=True).encode())
-print(h.hexdigest(), hash('probe'))
+from test.amplicon_repeatability import main
+main()
 '''
     root = str(Path(__file__).resolve().parents[1])
-    outputs = [subprocess.check_output([sys.executable, '-c', code, root], text=True, timeout=120,
-                                       env=dict(os.environ, PYTHONHASHSEED=value)).split()
-               for value in ('1', '7654321')]
+    outputs = []
+    for value in ('1', '7654321'):
+        run = subprocess.run([sys.executable, '-c', code, root], cwd=tmp_path, capture_output=True, text=True,
+                             timeout=600, env=dict(os.environ, PYTHONHASHSEED=value))
+        assert run.returncode == 0, f'the child with PYTHONHASHSEED={value} failed:\n{run.stderr}'
+        lines = run.stdout.splitlines()
+        outputs.append(({json.loads(line)[0]: line for line in lines[:-1]}, json.loads(lines[-1])))
+    # Generating writes no file, for every path.
+    assert list(tmp_path.iterdir()) == []
+    (documents, probe), (other, other_probe) = outputs
     # The Python hash differs between processes; generated content does not.
-    assert outputs[0][1] != outputs[1][1]
-    assert outputs[0][0] == outputs[1][0]
+    assert probe[0] == other_probe[0] == 'probe' and probe[1] != other_probe[1]
+    assert list(documents) == list(other) == list(paths())
+    for path in documents:
+        assert documents[path] == other[path], f'path {path} differs between the two processes'
+    scenes = [json.loads(line)[1] for path, line in documents.items() if path.startswith('scene/')]
+    assert len(scenes) == 6
+    # Clean fixtures have explicit coordinates and constant/supplied properties,
+    # so they draw nothing; every recorded stream uses the documented namespace.
+    streams = [s for scene in scenes for s in scene['provenance']['stream_scheme']['streams']]
+    assert streams and all(s[0] == 'starfinder.synthetic/1' for s in streams)
+    assert not json.loads(documents['scene/z1-clean'])[1]['provenance']['stream_scheme']['streams']
 
 
 @pytest.mark.parametrize('keys', [
