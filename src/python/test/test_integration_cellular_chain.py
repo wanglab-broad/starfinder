@@ -1191,43 +1191,15 @@ class _Folder:
         self.grids = {f: _grid(chain.root, f) for f in chain.fov_ids}
 
 
-def check_export_after_fusion(folder):
-    """``check_export``'s conditions on an export after fusion, by its own functions in its order (R1 to R3, F, T1,
-    T5, T2, T4, L, S), with T3 evaluated by the route tests' ``t3_failures``, the same condition: the package's
-    ``_t3`` compares ``owner_fov_id`` with ``Series.eq`` on an object column holding ``pd.NA`` and raises
-    ``TypeError`` for a molecule that no FOV owns (excluded ``outside_grid``, a valid export), which these chains hold
-    (W-487 worker notes, a finding for a later issue; the package is not changed here)."""
-    from starfinder.assembly import load_assembly
-    from starfinder.export import _check as checks
-    from .test_sample_segmentation_route import t3_failures
-    folder = Path(folder)
-    record = checks._r1(folder)
-    checks._r2(folder, record)
-    checks._r3(folder, record)
-    checks._check_fusion(folder, record)
-    section = record.get("segmentation")
-    assert checks.part_status(record, "segment") in ("written", "reused") and isinstance(section, dict)
-    checks._t1(folder, record, section)
-    assert checks.part_status(record, "assemble") in ("written", "reused")
-    checks._t5(record, section)
-    assert checks._after_fusion(record.get("assembly"))
-    assembly = load_assembly(folder)
-    checks._t2(folder, section, assembly.cells)
-    assert t3_failures(folder, record, assembly.molecules) == []
-    checks._t4(record["assembly"], assembly.cells)
-    checks._check_labels(folder, record)
-    checks._check_spatialdata(folder, record)
-
-
 def check_fused_identities(chain):
-    """SA7's identities (``load_assembly``), ``check_export``'s conditions (R1 to R3, F, L, S, T1 to T5;
-    ``check_export_after_fusion``), with T1 to T5 also evaluated by the route tests' helpers; ``n_obs`` equal to the
-    counted cells."""
+    """SA7's identities (``load_assembly``), ``check_export``'s conditions (R1 to R3, F, L, S, T1 to T5), with T1 to
+    T5 also evaluated by the route tests' helpers; ``n_obs`` equal to the counted cells."""
     from starfinder.assembly import load_assembly
+    from starfinder.export import check_export
     from .test_report_measurements import matrix
     from .test_sample_segmentation_route import t1, t2, t3_failures, t4, t5
     loaded = load_assembly(chain.export_dir)
-    check_export_after_fusion(chain.export_dir)
+    check_export(chain.export_dir)
     record = _read_json(chain.export_dir / "export.json")
     t1(chain.export_dir, record)
     t2(chain.export_dir, record, loaded.cells)

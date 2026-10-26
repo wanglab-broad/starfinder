@@ -517,8 +517,9 @@ def _t3(folder, record, section, molecules):
     pixel = np.where(np.isfinite(pixel), pixel, -1).astype(np.int64)
     inside = finite & (pixel >= 0).all(axis=1) & (pixel < np.asarray(territories.shape[1:])).all(axis=1)
     retained = molecules["assembly_status"].astype(object).eq("retained").to_numpy(dtype=bool)
-    owner, fov = molecules["owner_fov_id"].astype(object), molecules["fov_id"].astype(object)
-    own = (owner.notna() & owner.eq(fov)).fillna(False).to_numpy(dtype=bool)
+    # A null owner (no FOV owns the position) compares as NA under the string dtype and counts as not owned.
+    owner, fov = molecules["owner_fov_id"].astype("string"), molecules["fov_id"].astype("string")
+    own = owner.eq(fov).fillna(False).to_numpy(dtype=bool)
     outside_grid = molecules["assembly_reason"].eq("outside_grid").fillna(False).to_numpy(dtype=bool)
     outside = finite & ~inside & (retained | (own & ~outside_grid))
     if outside.any():

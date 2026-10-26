@@ -19,7 +19,9 @@ import dataclasses
 import importlib.util
 import json
 import math
+import re
 import shutil
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -36,6 +38,7 @@ from .sample_segmentation_fixtures import (
     DS,
     QUAD_CELLS,
     SAMPLE,
+    fused_pair,
     per_fov_routes,
     quad_grid_placement,
     route_config,
@@ -44,6 +47,7 @@ from .sample_segmentation_fixtures import (
     truth_import,
     truth_runs,
     write_folder,
+    write_scene,
 )
 from .test_sample_segmentation_route import EXPANSION, export, export_grid, record_of, truth_config
 
@@ -307,6 +311,46 @@ def test_so2_check_export_after_a_reuse(tmp_path, fuse_on):
     assert record["parts"]["fuse_labels"] == "written"
     assert any(e["image"] == "flamingo" for e in record["segmentation"]["inputs"]["images"])
     check_export(folder.export_dir)
+
+
+@pytest.mark.contract
+@needs_anndata
+@needs_library
+def test_so2_check_export_t3_with_a_molecule_no_fov_owns(tmp_path, monkeypatch):
+    """``fused_pair`` with a fourth FOV1 molecule at y index 23.8, beyond every footprint (y < 23.5) and the
+    segmentation grid: its ``owner_fov_id`` is null and it is excluded ``outside_grid``, and ``check_export`` passes
+    (W-521: ``_t3`` compared the null owner and raised ``TypeError``). With the molecule table that ``check_export``
+    loads edited, T3 fails on the molecule retained, and on it owned by its FOV and excluded for another reason; a
+    null owner with another reason counts as not owned and passes."""
+    import starfinder.assembly
+    scene = fused_pair()
+    scene = dataclasses.replace(scene, molecules={**scene.molecules,
+                                                  "FOV1": scene.molecules["FOV1"] + [((1, 23.8, 10), "B")]})
+    folder = write_scene(tmp_path, scene)
+    export(folder, route_config(segmentation=truth_config(folder, export_grid(folder))))
+    loaded = load_assembly(folder.export_dir)
+    molecules = loaded.molecules
+    row = int(np.flatnonzero(molecules["owner_fov_id"].isna().to_numpy())[0])
+    assert molecules["owner_fov_id"].isna().sum() == 1
+    assert molecules[["fov_id", "spot_id", "assembly_status", "assembly_reason"]].iloc[row].tolist() == [
+        "FOV1", "m3", "excluded", "outside_grid"]
+    check_export(folder.export_dir)
+
+    def checked(**changes):
+        edited = molecules.copy()
+        for column, value in changes.items():
+            edited.loc[row, column] = value
+        monkeypatch.setattr(starfinder.assembly, "load_assembly",
+                            lambda _: SimpleNamespace(cells=loaded.cells, molecules=edited))
+        check_export(folder.export_dir)
+
+    message = ("check_export T3: 1 molecules outside the segmentation grid are not excluded outside_grid, the first "
+               f"{molecules['spot_namespace'].iloc[row]} m3")
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        checked(assembly_status="retained", assembly_reason=pd.NA)
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        checked(owner_fov_id="FOV1", assembly_reason="not_owner")
+    checked(assembly_reason="not_owner")
 
 
 @needs_anndata
