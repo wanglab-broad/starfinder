@@ -913,3 +913,10 @@ No implementation, rename, dependency or lock change; no change to the placement
 observations and merges nothing), no recovery of complete cells across borders, no reassignment of molecules; no
 fused image, label export or SpatialData (W-328); no real data (every measured number is
 from the W-324 records and the W-326 derivations cited above).
+
+```{toctree}
+:hidden:
+
+Assembly algorithms <assembly-algorithms>
+Assembly baseline <assembly-baseline>
+```

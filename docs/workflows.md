@@ -8,13 +8,8 @@ enhance, register, detect, extract and filter are operations **inside** those
 jobs, not seven independent Snakemake rules. Segmentation and assignment are
 separate jobs after the molecule tables ({doc}`workflow-downstream`); the
 stitching, assembly, export and report blocks are in {doc}`workflow-configuration`.
-
-```{toctree}
-:maxdepth: 2
-
-workflow-configuration
-workflow-downstream
-```
+How the workflow relates to the Python API is in {doc}`workflow/index`; installing
+Snakemake is in {doc}`get-started/installation`.
 
 This guide follows `workflow/Snakefile`, `workflow/rules/*.smk`,
 `workflow/scripts/*` and `workflow/schemas/config.schema.yaml` in this checkout.
@@ -337,48 +332,9 @@ Use the explicit examples here and check the selected backend's parameters.
 
 ## Broad UGER execution
 
-The repository's `config/environment-v9.yaml` describes a Snakemake 9 environment
-(Python >=3.11,<3.13) including the cluster-generic executor. It is separate from
-the Python package's uv environment; install the package/dependencies into the
-actual compute environment when using the Python backend. StarDist runs in the
-environment that runs Snakemake, with the package's `stardist` extra; no rule reads `envs_path`.
-
-On a suitably configured Broad host, after editing paths and preparing real data:
-
-```bash
-conda env create -f config/environment-v9.yaml
-conda activate starfinder-v9
-# From the repository root, with a real, fully edited config:
-snakemake -s workflow/Snakefile --configfile /absolute/config.yaml --cores 1 -n all
-snakemake -s workflow/Snakefile --configfile /absolute/config.yaml \
-  --profile profile/broad-uger --workflow-profile profile/broad-uger \
-  --jobscript profile/broad-uger/broad-jobscript.sh all
-```
-
-The explicit `--jobscript` is intentional: the checked-in profile puts a
-`jobscript` string under `default-resources`, which does not select Snakemake's
-jobscript template. Review a site-local copy of the template before submission:
-it activates `/stanley/WangLab/envs/starfinder-v9` and loads UGER, Anaconda3 and
-MATLAB through Broad `useuse`. Set `matlab_launcher: broad` in configurations
-submitted this way. Profile submit/status paths are relative to the
-working directory; running from another directory requires absolute paths in
-a local profile copy. This guide does not certify submission on other clusters.
-
-The [profile](https://github.com/wanglab-broad/starfinder/tree/dev/profile/broad-uger)
-sets `executor: cluster-generic`, conda deployment, `jobs: 1000`, one local core,
-60-second latency wait, three retries, keep-going, rerun-incomplete and retention
-of temporary files. Choose a smaller `--jobs` limit appropriate to your account.
-For the MATLAB backend, `rsf_preparation` and `create_sample_maf` always run locally.
-
-`broad-submit.py` reads job properties, submits via `qsub -P broad`, uses an SMP
-parallel environment for multithreaded jobs, divides total `mem_mb` by threads
-for `h_vmem`, and converts runtime minutes to `h_rt`. It requests reservation
-above 15 GiB or at four or more threads. Logs use a rule log, `params.uger_log`,
-or `~/snakemake-logs/{rule}/`. `broad-status.py` consults `qstat` then `qacct`;
-missing accounting information is treated as still running. Scheduler access,
-account/project allocation, tool modules, environment paths, model files and
-licenses must be checked on the submission host. A local dry run does not test
-them or validate cluster resource sufficiency.
+Running the workflow on the Broad UGER cluster with `profile/broad-uger/`, its
+environment, commands, settings, submission and logs, is described on the profile page
+{doc}`workflow/broad-uger`.
 
 ## What §2.13 replaces
 
@@ -425,7 +381,8 @@ The runner and planner signatures do not change before §2.13.
   `deep_create_subtile`, `lrsf_single_fov_subtile`, `deep_rsf_subtile`,
   `stardist_segmentation`, `bigstitcher_engine` and the legacy
   `run_BigStitcher_macro`. No rule has a `log:` directive. On the cluster, a job's
-  standard output and error go to the file the UGER profile names (above).
+  standard output and error go to the file the UGER profile names
+  ({doc}`workflow/broad-uger`, "Submission, status and logs").
 - **STARfinder** records the seconds of each FOV step in `fovs/<fov>/run.json`
   (`steps`, appended by the `_log_step` decorator of the `FOV` methods). The
   processing rules always write it: `_run_workflow` passes `FOV.run` the

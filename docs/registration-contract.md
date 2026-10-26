@@ -695,3 +695,10 @@ No unequal-grid conversion, plane-to-volume registration, subpixel translation
 estimator, stitching (§2.10), TPS or CPD performance study, or new default
 beyond the agreed translation-only default. Method comparisons belong to E01
 (W-94).
+
+```{toctree}
+:hidden:
+
+Registration algorithms <registration-algorithms>
+Registration baseline <registration-baseline>
+```

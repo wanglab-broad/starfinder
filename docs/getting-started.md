@@ -8,31 +8,10 @@ validation are outside this example.
 
 ## Prerequisites and installation
 
-Use a STARfinder checkout, `uv`, and Python 3.12 for the validated route below.
-The package requires Python 3.11 or newer; other interpreters have not been
-validated for this quickstart. A first installation needs package-registry access
-or an existing uv cache. No downloaded microscopy data, MATLAB, Snakemake, GPU,
-SimpleITK, or SpatialData is needed.
-
-From the repository root:
-
-```bash
-cd src/python
-export UV_PYTHON=python3.12
-export PYTHONDONTWRITEBYTECODE=1
-uv sync --locked --no-default-groups
-uv run python --version
-```
-
-`UV_PYTHON` can also be the absolute path to your Python 3.12 interpreter.
-Validation used conda-forge Python **3.12.12** on Linux host GP099-29C, selected
-with `/home/unix/jiahao/miniforge3/bin/python3.12`, in an existing recorded uv
-environment. This host's earlier Python 3.14 environment encountered a system
-MKL linkage failure; the 3.12 selection changes no dependency pin or algorithm.
-This is a host-specific observation, not a general incompatibility claim.
-
-The documentation build additionally uses the `docs` dependency group; see
-[contributing](contributing.md) for installation, strict build, and preview.
+Install the package as [Installation](get-started/installation.md#the-python-package)
+describes: a STARfinder checkout, `uv` and Python 3.12, with no optional extra. No
+downloaded microscopy data, MATLAB, Snakemake, GPU, SimpleITK, or SpatialData is
+needed.
 
 ## Run the complete example
 

@@ -9,10 +9,10 @@ Snakemake coordinates the Python and MATLAB backends.</p>
 
 <div class="sf-actions">
 
-```{button-ref} getting-started
+```{button-ref} get-started/index
 :color: primary
 :class: sf-btn
-Get started
+Get Started
 ```
 
 ```{button-ref} api/python
@@ -41,46 +41,39 @@ MATLAB API
 ::::{grid} 1 2 2 3
 :gutter: 3
 
-:::{grid-item-card} {fas}`rocket` Get started
-:link: getting-started
+:::{grid-item-card} {fas}`rocket` Get Started
+:link: get-started/index
 :link-type: doc
 :class-card: sf-card
-Generate tiny synthetic images and process them to molecule-level CSVs on a local CPU.
+Install the package, then process tiny synthetic images to molecule-level CSVs on a local CPU.
 :::
 
 :::{grid-item-card} {fas}`diagram-project` Workflow
-:link: workflows
+:link: workflow/index
 :link-type: doc
 :class-card: sf-card
-Configure Snakemake, coordinate Dataset/FOV processing, and understand downstream boundaries.
-:::
-
-:::{grid-item-card} {fas}`flask` Benchmark
-:link: benchmark
-:link-type: doc
-:class-card: sf-card
-Generate inputs, run explicit cases, evaluate saved outputs and report results with provenance.
-:::
-
-:::{grid-item-card} {fas}`magnifying-glass` Research scripts
-:link: research-scripts
-:link-type: doc
-:class-card: sf-card
-Inspect codebook-aware decoding results, image evidence and saved benchmark inputs.
+Run the Snakemake workflow: its relationship to the Python API, the config scheme and the Broad UGER profile.
 :::
 
 :::{grid-item-card} {fas}`code` API
 :link: api/index
 :link-type: doc
 :class-card: sf-card
-Alphabetical Python and MATLAB references, supported exports and source links.
+Alphabetical Python and MATLAB references, supported exports, source links and small examples.
 :::
 
-:::{grid-item-card} {fas}`ruler-combined` Wiki / Convention
+:::{grid-item-card} {fas}`ruler-combined` Wiki
 :link: wiki
 :link-type: doc
 :class-card: sf-card
-Architecture, spatial contracts, recipes, migration and contributor guidance.
+Starfinder design and the stage guides, the synthetic and real datasets, the method registry and development.
+:::
+
+:::{grid-item-card} {fas}`flask` Benchmark
+:link: benchmark/index
+:link-type: doc
+:class-card: sf-card
+Benchmark data, the lifecycle with its recipes and research scripts, and where results are kept.
 :::
 
 ::::
@@ -89,17 +82,11 @@ Architecture, spatial contracts, recipes, migration and contributor guidance.
 :hidden:
 :maxdepth: 2
 
-Get started <getting-started>
-Workflow <workflows>
-Benchmark <benchmark>
+Get Started <get-started/index>
+Workflow <workflow/index>
 API <api/index>
-Wiki / Convention <wiki>
-```
-
-```{toctree}
-:hidden:
-
-Research scripts <research-scripts>
+Wiki <wiki>
+Benchmark <benchmark/index>
 ```
 
 ## Existing entry points

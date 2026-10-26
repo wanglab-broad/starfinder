@@ -953,3 +953,10 @@ No implementation, rename, dependency or lock change; no overlap ownership, samp
 coordinates of molecules or cells, or export (W-326, W-328); no rotation, affine or
 deformable stitching, no GPU, no backend ranking or default change; no real data (every
 measured number comes from W-323 and W-324 by reference).
+
+```{toctree}
+:hidden:
+
+Stitching algorithms <stitching-algorithms>
+Stitching baseline <stitching-baseline>
+```

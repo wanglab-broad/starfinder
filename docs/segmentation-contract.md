@@ -1211,3 +1211,10 @@ No assignment, correspondence, compartment, count or export specification (W-308
 transcript-based or combined segmentation, training or fine-tuning; no managed
 CellProfiler execution (its masks enter through `import_labels`); no accuracy claim and
 no comparison between segmenters (E04, W-123); no default model and no recommended scale.
+
+```{toctree}
+:hidden:
+
+Segmentation algorithms <segmentation-algorithms>
+Segmentation baseline <segmentation-baseline>
+```

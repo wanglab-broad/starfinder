@@ -1309,3 +1309,10 @@ algorithm, layout or validation design (W-386); no new dependency and no lock ch
 real data; nothing here marks a page as accepted. Not read by the report: the comparison of
 the two routes, the earlier pipeline's logs, the registered images. Not in the first
 delivery: the items listed under "Settled decisions this page follows".
+
+```{toctree}
+:hidden:
+
+Processing-report algorithms <report-algorithms>
+Processing-report baseline <report-baseline>
+```

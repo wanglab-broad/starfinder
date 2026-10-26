@@ -5,11 +5,13 @@ explicitly supported by each namespace's `__all__`; MATLAB references parse the
 project-owned source without executing MATLAB. Cross-links describe shared
 responsibilities, not numerical equivalence. The Sphinx
 {ref}`general index <genindex>` lists every documented object A–Z across both
-languages: functions, classes, class members, data entries and MATLAB objects.
+languages: functions, classes, class members, data entries and MATLAB objects. The
+small API examples are one executable script that exercises individual Python contracts.
 
 ```{toctree}
 :maxdepth: 2
 
 Python <python>
 MATLAB <matlab>
+Examples <examples>
 ```

@@ -997,3 +997,9 @@ to the rule for molecules; no change to the route per FOV beyond the column
 GPU and no real data in the validation (every number is cited from
 {doc}`cells-across-fovs-proposal` with its limits, and every statement about a present
 function from W-401's call record).
+
+```{toctree}
+:hidden:
+
+Sample segmentation validation <sample-segmentation-validation>
+```

@@ -635,3 +635,10 @@ no generic spot fitting or spot masks, and no cross-channel deduplication (§2.8
 No readout-mode configuration, gene mapping or direct-mode wiring in `FOV.run`
 (§2.8). No GPU execution, and no default method or model chosen from comparative
 data; method comparisons belong to E02.
+
+```{toctree}
+:hidden:
+
+Spot-finding algorithms <spot-finding-algorithms>
+Spot-finding baseline <spot-finding-baseline>
+```

@@ -81,7 +81,7 @@ For a project-path preview, build into a `starfinder` subdirectory of your
 external preview root, serve that parent directory, and open
 <http://127.0.0.1:8000/starfinder/>. This checks the same relative asset and source
 paths used by Pages.
-Check the five navigation sections (Get started, Workflow, Benchmark, API, Wiki / Convention), search for `normalize_min_max`, open its
+Check the five navigation sections (Get Started, Workflow, API, Wiki and Benchmark), search for `normalize_min_max`, open its
 generated API page, and follow the `[source]` link beside its signature. The
 separate page-source link shows the documentation markup.
 
@@ -196,7 +196,7 @@ After a reviewed change is committed and pushed to the selected branch:
 2. Open `build-info.json` under the site URL. Match `revision` and `run_url` to
    the pushed commit/run; allow deployment propagation before diagnosing a stale
    response. Record the public URL, revision and run URL in the release handoff.
-3. Open the home page and all five navigation sections (Get started, Workflow, Benchmark, API, Wiki / Convention). Check a nested
+3. Open the home page and all five navigation sections (Get Started, Workflow, API, Wiki and Benchmark). Check a nested
    [Python API page](api/python.rst), its function anchor and `[source]` backlink;
    open [MATLAB dataset methods](api/matlab/dataset.rst) and
    [workflow configuration](workflows.md). Follow links between guides and APIs.

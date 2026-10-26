@@ -1892,3 +1892,10 @@ raster on the route per FOV (the route after fusion assigns the sample's molecul
 cells of a segmentation of the fused image: {doc}`sample-segmentation-contract`); no real data (every measured number comes from the W-323, W-324, W-328, W-354 and
 W-359 records by path, and the label and stack sizes are derived from them without reading
 an image).
+
+```{toctree}
+:hidden:
+
+§2.10 validation design <stitching-assembly-validation>
+Sample-output baseline <sample-output-baseline>
+```

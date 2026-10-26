@@ -17,6 +17,9 @@ cd src/python
 uv sync --locked --no-default-groups
 ```
 
+[Installation](../../docs/get-started/installation.md) lists the optional extras, the
+Snakemake environment and the MATLAB requirement.
+
 ## Development
 
 ```bash
@@ -30,6 +33,6 @@ uv run starfinder synthetic generate --mode e2e --owner Jiahao --preset tiny --s
 ## Architecture and migration
 
 See [project context](../../CONTEXT.md), [Python migration](../../docs/migration.md),
-and [the five-section documentation site](../../docs/index.md).
+and [the documentation site](../../docs/index.md), in five sections: Get Started, Workflow, API, Wiki and Benchmark.
 Detailed contracts live in the site; operational instructions live in
 [AGENTS.md](../../AGENTS.md).

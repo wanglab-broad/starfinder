@@ -290,3 +290,10 @@ supports a change; a Python configuration states it as the step list above.
 * No projection inside the recipe or pipeline.
 * No change to MATLAB behavior or shared MATLAB-facing keys.
 * No registration or detection registries; §2.6 and §2.7 own those.
+
+```{toctree}
+:hidden:
+
+Preprocessing algorithms <preprocessing-algorithms>
+Preprocessing baseline <preprocessing-baseline>
+```

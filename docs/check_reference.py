@@ -72,10 +72,12 @@ def main():
     names = re.findall(r':mat:(?:func|class):`([^`]+)`', (DOCS / 'api/matlab-index.rst').read_text())
     assert set(names) == expected_matlab
     assert names == sorted(names, key=str.casefold)
-    home = (DOCS / 'index.md').read_text().split('```{toctree}', 1)[1].split('```', 1)[0]
+    index = (DOCS / 'index.md').read_text()
+    assert index.count('```{toctree}') == 1, 'the home page has one toctree, the five sections'
+    home = index.split('```{toctree}', 1)[1].split('```', 1)[0]
     assert re.findall(r'^([^:\n].*) <([^>]+)>$', home, re.M) == [
-        ('Get started', 'getting-started'), ('Workflow', 'workflows'),
-        ('Benchmark', 'benchmark'), ('API', 'api/index'), ('Wiki / Convention', 'wiki')]
+        ('Get Started', 'get-started/index'), ('Workflow', 'workflow/index'),
+        ('API', 'api/index'), ('Wiki', 'wiki'), ('Benchmark', 'benchmark/index')]
     assert ':member-order: alphabetical' in (DOCS / '_templates/autosummary/class.rst').read_text()
     assert ':member-order: alphabetical' in (DOCS / 'api/matlab/dataset.rst').read_text()
     print(f'PASS: {len(expected)} Python exports, {len(root_names)} root exports '

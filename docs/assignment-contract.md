@@ -988,3 +988,10 @@ No segmentation and no change to the label contract (W-307); no stitching, globa
 coordinates, overlap ownership or cross-FOV matching (§2.10); no probabilistic or
 transcript-based assignment; no size or count filter; no automatic compartment repair; no
 new exporter (§2.4's are reused); no real data and no accuracy claim (E04, W-123).
+
+```{toctree}
+:hidden:
+
+Assignment algorithms <assignment-algorithms>
+Assignment baseline <assignment-baseline>
+```

@@ -48,19 +48,17 @@ html_css_files = [
     "custom.css",
 ]
 html_show_sourcelink = True
-# The landing page is a full-width hero and card grid, and top-level guides
-# without child pages have no section navigation to show. Pages with children
-# keep the section navigation and page table of contents.
+# The landing page is a full-width hero and card grid. Every other page sits in
+# one of the five sections and keeps the section navigation and page table of
+# contents.
 html_sidebars = {
     "index": [],
-    "getting-started": [],
-    "recipes": [],
-    "troubleshooting": [],
-    "contributing": [],
 }
 html_theme_options = {
     "logo": {"text": "STARfinder"},
-    "navigation_depth": 2,
+    # Four sidebar levels reach a stage's pages in the Wiki section: Starfinder
+    # Design › Pipeline stages › the stage guide › its algorithms and baseline.
+    "navigation_depth": 4,
     "show_toc_level": 2,
     "navbar_align": "left",
     "header_links_before_dropdown": 5,

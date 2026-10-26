@@ -31,7 +31,7 @@ Following datasets are provided for testing:
 Additional sources: [Single Cell Portal](https://singlecell.broadinstitute.org/single_cell/study/SCP2637)
 
 ## Usage
-For the Python backend, follow the [uv installation and quickstart](docs/getting-started.md).
+For the Python backend, follow the [installation](docs/get-started/installation.md) and the [quickstart](docs/getting-started.md).
 For the existing Conda-based workflow demos, download the
 [latest release](https://github.com/wanglab-broad/starfinder/releases) and create the workflow environment:
 ```bash
@@ -74,6 +74,6 @@ For questions and help requests, please use the [issue tracker](https://github.c
 ## Architecture and migration
 
 See [project context](CONTEXT.md), [Python migration](docs/migration.md),
-and [the five-section documentation site](docs/index.md).
+and [the documentation site](docs/index.md), in five sections: Get Started, Workflow, API, Wiki and Benchmark.
 Detailed contracts live in the site; operational instructions live in
 [AGENTS.md](AGENTS.md).

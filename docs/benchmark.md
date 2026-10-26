@@ -1,12 +1,5 @@
 # Benchmark lifecycle
 
-```{toctree}
-:hidden:
-
-benchmark-recipes
-image-statistics
-```
-
 The supported interface is `BenchmarkCase`, `BenchmarkTrialResult`,
 `run_benchmark`, `evaluate_benchmark`, and `report_benchmark`. The built-in task
 adapters are registration (translation, demons, TPS or CPD) and the shared

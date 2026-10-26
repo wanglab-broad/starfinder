@@ -7,7 +7,7 @@ assertions check software behavior on small synthetic inputs.
 
 ## Run the recipes
 
-Install the [quickstart environment](getting-started.md#prerequisites-and-installation)
+Install the [package environment](get-started/installation.md#the-python-package)
 first. From `src/python`, choose two **new directories outside the checkout**:
 
 ```bash

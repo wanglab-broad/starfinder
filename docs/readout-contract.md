@@ -634,3 +634,10 @@ re-extraction or incomplete-barcode inference; no external decoder; no automatic
 direct-mode reassignment or merging; no score cutoff, calibrated probability or
 recommended default filter; no real data. Comparisons and real-data cutoffs belong
 to E03.
+
+```{toctree}
+:hidden:
+
+Readout algorithms <readout-algorithms>
+Readout baseline <readout-baseline>
+```

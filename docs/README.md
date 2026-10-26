@@ -27,16 +27,22 @@ license is needed to build the site. Exact dependency resolutions are in
 
 ## Site structure
 
-The five sections are Get started, Workflow, Benchmark, API (Python/MATLAB),
-and Wiki / Convention. Start with [architecture](architecture.md) and the
+The five sections are Get Started (installation and the demos), Workflow (Snakemake
+and its relationship to the Python API; Nextflow is planned), API (Python and MATLAB),
+Wiki (Starfinder design with the pipeline-stage guides, datasets, the method registry and
+development) and Benchmark (data, recipes and experiments, results). Each section and
+subsection has an index page with its toctree; every page belongs to exactly one toctree,
+except the `:orphan:` pointer pages that keep old addresses.
+Start with [architecture](architecture.md) and the
 [Python migration guide](migration.md) when updating existing callers.
 [CONTEXT.md](../CONTEXT.md) is concise orientation; [AGENTS.md](../AGENTS.md)
 owns operations. Detailed interfaces remain canonical in the site.
 Run `uv run python ../../docs/check_reference.py` from `src/python` to check
-export parity and alphabetical reference lists.
+export parity, alphabetical reference lists and the five top-level sections.
 
 ## Software entry points
 
+- [Installation](get-started/installation.md)
 - [Minimal Python image-to-molecule quickstart](getting-started.md)
 - [Project overview and setup](../README.md)
 - [Python package documentation](../src/python/README.md)

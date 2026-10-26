@@ -108,7 +108,7 @@ UGER submission combines stdout/stderr with `qsub -j y -o <logfile>`. A rule's
 output named `log/...` is not necessarily a Snakemake `log:` directive, so
 check the actual job properties and fallback directory. See the checked-in
 [submit helper](https://github.com/wanglab-broad/starfinder/blob/dev/profile/broad-uger/broad-submit.py)
-and [UGER guide](workflows.md#broad-uger-execution). Log routing is source-checked;
+and [UGER guide](workflow/broad-uger.md). Log routing is source-checked;
 submission, accounting and cluster recovery have not been exercised here.
 
 ## Documentation builds and local environment
