@@ -38,8 +38,8 @@ Every transform is a pull map from reference to moving coordinates
 the detected displacement `d` of the moving content: pull sampling is
 `registered[p] = moving[p + displacement_zyx]`, so a moving image displaced by
 `(1, -2, 3)` gets displacement `(1, -2, 3)`. `FOV.registration_results` stores
-these transforms, and its MATLAB-compatible shift CSV holds the same detected
-displacements.
+these transforms, and the FOV's `run.json` records the same detected displacements
+under `transforms` ("MATLAB boundary", below).
 
 `DenseDisplacementTransform.displacement_zyx` uses
 `registered[p] = moving[p + displacement_zyx[p]]`, in ZYX voxel-index components.
@@ -212,7 +212,7 @@ have no aliases. FOV/Dataset coordination changes are documented in the
 [coordination guide](../coordination.md). MATLAB APIs and shared configuration keys are
 unchanged; Python numeric corrections are not claims of MATLAB equivalence.
 
-## Spots, barcodes and output
+## Spots, reads and output
 
 {func}`starfinder.spot_finding.find_spots` requires `config`, `metadata` and
 `spot_namespace`, and returns {class}`starfinder.spot_finding.SpotFindingResult`.
@@ -271,7 +271,8 @@ and joins on **(spot_namespace, spot_id)**; never regenerate IDs for a subset or
 join by row position. Results reject duplicate IDs within a namespace. Callers
 must choose distinct namespaces for independent detection results; identities
 are not promised invariant across changed images or detector configurations.
-Barcode results now carry these identities; the full workflow/export coordination redesign is separate.
+Read results carry these identities into `molecules.csv`, and the sample-level stages
+keep them ({doc}`../assembly-contract`, {doc}`../sample-output-contract`).
 
 Before: `find_spots_3d(image, intensity_estimation="adaptive", intensity_threshold=0.2)`.
 After:
@@ -285,7 +286,7 @@ result = find_spots(image, config=LocalMaximaConfig("adaptive", 0.2),
 spots = result.spots
 ```
 
-### Independent barcode stages
+### Independent readout stages
 
 `extract_intensities(rounds, spots, config=NeighborhoodSumConfig(...))` takes an
 ordered mapping of round names to `ImageLoadResult`, plus `SpotFindingResult`.
@@ -307,7 +308,7 @@ the inner box `(1,3,3)`, clipped to the image; NaN below `min_voxels` ring voxel
 (`(C,R)`). These measurements never change `values` or `valid`
 ({doc}`../readout-contract`, "Extraction").
 
-`load_codebook` returns `barcode.Codebook`; explicit `round_labels` and
+`load_codebook` returns `readout.Codebook`; explicit `round_labels` and
 `channel_labels` are required. Its ordered table has one row per entry:
 `entry_id` (unique), `gene_id` (may repeat), `color_sequence` (unique) and optional
 `base_sequence` (unique). Repeated entry IDs, base sequences or encoded sequences
@@ -452,3 +453,96 @@ use one-based inclusive start/end coordinates and one-based tile IDs;
 {class}`starfinder.dataset.CropWindow` uses zero-based, end-exclusive slices.
 Evaluation functions expect zero-based `z, y, x`, as the exported tables hold them;
 convert the one-based `goodSpots` CSVs of the legacy route before using them.
+
+## MATLAB boundary
+
+Use this section when moving data between Python, MATLAB and workflow YAML. It holds only
+what differs at the Python↔MATLAB boundary; the Python side is stated in the sections
+above, and the [MATLAB reference](matlab.md#array-and-calling-conventions) gives
+operation-specific details. Corresponding APIs do not imply numerical parity.
+
+### Axes and coordinates
+
+| Quantity | Python (and `molecules.csv`, `reads.csv`) | MATLAB / legacy `goodSpots` CSV |
+| --- | --- | --- |
+| Image | `(Z,Y,X,C)`; single channel `(Z,Y,X)` | MATLAB `(Y,X,Z,C)`, single channel `(Y,X,Z)` |
+| Spot table | Named `z,y,x`, **0-based** voxel indices | Named `x,y,z`, **1-based**; x is column, y is row |
+| Channel index | Table `channel` is 0-based | MATLAB array channel indices are 1-based |
+| Color labels | Strings `1`–`4` for four channels | Strings `1`–`4`; labels are not zero-based channel indices |
+| Extraction `voxel_size` | Half-widths `(dz,dy,dx)` | Half-widths `(row,column,Z)` |
+
+For array exchange, `python_image.transpose(1,2,0,3)` produces MATLAB axis order;
+`matlab_array.transpose(2,0,1,3)` restores Python order after loading into NumPy.
+These are axis permutations, not coordinate-origin conversions. Confirm file
+metadata first; do not use `reshape` to exchange axes. For a single channel,
+the analogous permutations are `(1,2,0)` and `(2,0,1)`.
+
+The Python tables keep the in-memory zero-based coordinates ("Spots, reads and output"):
+`(z,y,x)=(5,10,10)` is `z,y,x = 5,10,10` in `molecules.csv` and `reads.csv` (since W-562;
+{doc}`../migration`). To index a NumPy image from those tables, select columns by name in
+ZYX order, as in the [output recipe](../recipes.md#inspect-molecule-outputs). The one-based
+`x,y,z` CSVs of the legacy route (MATLAB's `goodSpots`, and those of the subtile and deep
+modes) need one subtracted **once**;
+{py:func}`~starfinder.assignment.import_legacy_molecules_csv` does it. Do not subtract one
+from shift vectors, color labels or already internal coordinates. Exports carry no
+physical calibration; distances are voxel indices.
+
+Extraction `(1,2,2)` in Python corresponds to `(2,2,1)` in MATLAB, both describing
+interior windows 3 Z × 5 Y × 5 X. Python zero-pads boundary windows; MATLAB clips
+them. Workflow `voxel_size_xy` / `voxel_size_z` are separate physical quantities
+for downstream stitching. See [configuration fields](../workflow-configuration.md#top-level-fields).
+
+### Channel order
+
+The wavelength-sorted MATLAB default is **`ch00,ch02,ch01,ch03`**, so filename
+`ch01` and `ch02` are swapped relative to natural sorting. The Python loader
+uses exactly the provided pattern list ("Intensities and channels"); it does not infer
+wavelengths. Set `channel_order` in the direct API or `seq_channel_order` in Python
+workflow YAML. An empty Python list is not a request for the MATLAB default.
+
+The tiny synthetic quickstart deliberately uses **`ch00,ch01,ch02,ch03`**.
+Color `2` therefore selects ch01 there, but selects ch02 under the real-data
+MATLAB ordering. Check acquisition and codebook metadata together before decoding.
+A channel permutation can produce plausible intensities with incorrect genes.
+
+Use unambiguous patterns: {py:func}`~starfinder.io.load_round` searches
+`*{channel}*.tif` and `*{channel}*.tiff`, and rejects ambiguous matches. MATLAB's loader
+expects a struct array for custom channel settings; the schema's string list is not
+portable to that custom path. See the
+[backend configuration caveat](../workflow-configuration.md#top-level-fields).
+
+### Registration signs
+
+| Interface / stored value | Meaning and sign |
+| --- | --- |
+| Python transforms ("Registration transforms") | Pull maps from reference to moving; a translation's `displacement_zyx` is the detected `(dz,dy,dx)`, and dense fields are passed to their warp directly |
+| Python `run.json` `transforms` | Each translation's `displacement_zyx` is the detected `(dz,dy,dx)`, with no origin offset (the former `row,col,z` shift log columns were `dy,dx,dz`) |
+| MATLAB {mat:func}`DFTRegister3D` → {mat:func}`DFTApply3D` | Correction parameters in `(row,column,Z)` order; passed directly, without Python's negation |
+
+The [registration recipe](../recipes.md#register-two-volumes) verifies the Python sign with
+an interior spot. MATLAB behavior here is source-checked, not runtime-validated.
+
+### Spot-finding thresholds
+
+For {py:func}`~starfinder.spot_finding.find_spots` and FOV calls, set
+`LocalMaximaConfig(threshold_mode=..., threshold_value=...)` together ("Spots, reads and
+output" gives each mode's cutoff). The Python workflow's `spot_finding` block takes the
+same fields; MATLAB configurations keep the keys `intensity_estimation` and
+`intensity_threshold`.
+
+| Python mode | Example pair |
+| --- | --- |
+| `noise` (default) | `noise`, `5.0` for the synthetic quickstart |
+| `adaptive` | `adaptive`, `0.2` as a fraction-of-max example |
+| `adaptive_round` | `adaptive_round`, `0.2` |
+| `global` | `global`, `0.2` (uint8/uint16 only) |
+
+Examples explain units, not recommended parameters for every dataset. All-zero channels
+yield no spots.
+
+MATLAB {mat:func}`SpotFindingMax3D` supports adaptive/global, not Python's noise
+or adaptive_round. The schema accepts `local`, but the Python detector rejects
+it. MATLAB direct/local-subtile wrappers only forward the threshold; their mode
+stays adaptive. The deep wrapper forwards the mode. Consult
+[rule parameters and overrides](../workflow-configuration.md#rule-resources-and-parameters)
+before assuming a YAML setting reached the selected backend.

@@ -6,7 +6,9 @@ This page specifies, for each §2.9 segmentation method and each reusable functi
 problem it addresses, its parameters with units and defaults, its failure behavior
 (including an image with no foreground) and its resource estimate. The registry,
 configs, label contract and records they plug into are in {doc}`segmentation-contract`;
-the current behavior is in {doc}`segmentation-baseline`. Nothing here is implemented,
+the current behavior is in {doc}`segmentation-baseline`. The methods and functions
+specified here are implemented in `starfinder.segmentation` ({doc}`api/segmentation`),
+with the engineering checks of {doc}`assignment-algorithms` ("Implemented checks (W-318)"),
 and nothing here ranks the methods, sets a default model or makes an accuracy claim.
 The validation design for the whole section is W-308's.
 

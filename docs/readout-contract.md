@@ -17,8 +17,10 @@ rules that go with them. It builds on {doc}`method-registry`, whose registry fie
 lookup, dependency and provenance rules it uses unchanged, and on the option-A
 multi-round candidate set of {doc}`spot-finding-contract`. The current behavior is
 recorded in {doc}`readout-baseline`; the numerical methods, worked examples and the
-engineering validation design are in {doc}`readout-algorithms`. Nothing here is
-implemented, and nothing here renames anything: the existing names
+engineering validation design are in {doc}`readout-algorithms`. The contract is
+implemented by `starfinder.readout` and the FOV readout methods ({doc}`api/readout`), with
+the checks that {doc}`readout-algorithms` lists ("Implemented checks (W-296)"); as
+decided, nothing here renames anything: the existing names
 (`starfinder.barcode`, `BarcodeDecodingResult`, `PipelineConfig.decoding`) stay.
 
 Later note: W-556 renamed the module `starfinder.barcode` to `starfinder.readout`

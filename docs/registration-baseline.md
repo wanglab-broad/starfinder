@@ -2,6 +2,8 @@
 
 Status: Accepted (W-246, 2026-09-30, at 47057aa)
 
+Note (W-583): {doc}`registration-contract` and {doc}`registration-algorithms` were accepted at W-246 (2026-09-30) and are implemented in `starfinder.registration`; this page keeps the text of its revision.
+
 Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
 
 This page records how registration behaves at revision `2e48d3f` (branch

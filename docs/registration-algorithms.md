@@ -6,8 +6,9 @@ This page specifies the numerical methods that §2.6 adds: rigid, affine and
 B-spline registration, and demons on Z=1 data. It also gives the engineering
 validation design of registration task group 6. The recipe, transforms,
 composition and records they plug into are in {doc}`registration-contract`;
-the current behavior is in {doc}`registration-baseline`. Nothing here is
-implemented yet, and nothing here sets a default beyond the agreed
+the current behavior is in {doc}`registration-baseline`. The methods are implemented in
+`starfinder.registration` ({doc}`api/registration`), with the checks that "Implemented
+checks (W-258)" lists, and nothing here sets a default beyond the agreed
 translation-only default: the parameter values below are what each method
 uses when a recipe selects it.
 

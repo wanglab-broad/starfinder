@@ -2,6 +2,8 @@
 
 Status: Accepted (W-387, 2026-10-12, at c0aa8b0)
 
+Note (W-583): {doc}`report-contract` and {doc}`report-algorithms` were accepted at W-387 (2026-10-12) and are implemented in `starfinder.report`, `Dataset.report` and `Dataset.compare_samples`; this page keeps the text of its revision.
+
 Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
 
 This page records what exists for the §2.11 processing report before {doc}`report-contract`

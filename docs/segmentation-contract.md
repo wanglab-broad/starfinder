@@ -10,7 +10,9 @@ and environment plan, and the workflow translation of the legacy keys. Its regis
 fields, lookup, dependency and provenance rules are those of {doc}`method-registry`,
 used unchanged. The current behavior is recorded in {doc}`segmentation-baseline`; the
 numerical behavior of each method and function is in {doc}`segmentation-algorithms`.
-Nothing here is implemented and nothing is renamed. Assignment, nucleus–cell
+The contract is implemented by `starfinder.segmentation` and `FOV.segment`
+({doc}`api/segmentation`), with the checks listed in {doc}`assignment-algorithms`
+("Implemented checks (W-318)"); as decided, nothing is renamed. Assignment, nucleus–cell
 correspondence, compartments, counts and exports belong to W-308, which builds on the
 label contract below and does not redefine it.
 

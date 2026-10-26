@@ -11,8 +11,10 @@ unavailable, the output folder with the schema of every table and of the record
 example images, and the fields the earlier stages add to `run.json`. The algorithms, the
 layout and the validation design are the algorithms page, `docs/report-algorithms.md` (W-386); where this page needs
 one of them it names the open point ("Open points for the algorithms page"). What exists
-today, the source of every value and every gap are in {doc}`report-baseline`. Nothing here
-is implemented, and no accepted page is changed.
+today, the source of every value and every gap are in {doc}`report-baseline`. The
+contract is implemented by `starfinder.report`, `Dataset.report` and
+`Dataset.compare_samples` ({doc}`api/report`), with the checks that
+{doc}`report-algorithms` lists ("Implemented checks (W-459)"), and no accepted page is changed.
 
 **The report describes a run and judges nothing.** It shows what the records of one
 sample's processing hold. Its table "Problematic FOVs" lists each FOV whose value lies

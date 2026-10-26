@@ -2,6 +2,8 @@
 
 Status: Accepted (W-280, 2026-10-02, at b1c7261)
 
+Note (W-583): {doc}`readout-contract` and {doc}`readout-algorithms` were accepted at W-280 (2026-10-02) and are implemented in `starfinder.readout`; this page keeps the text of its revision.
+
 This page records how intensity extraction, barcode decoding and read filtering
 behave at revision `141c093` (branch `runner/s28-spec-20261001`, on `dev` after
 the §2.7 work), before the Chapter II §2.8 work changes them. It is the reference

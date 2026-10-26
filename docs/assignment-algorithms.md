@@ -9,8 +9,9 @@ engineering validation design for the whole of §2.9, segmentation and assignmen
 plan for the bounded real examples. The entry, records and files are in
 {doc}`assignment-contract`; the current behavior is in {doc}`assignment-baseline`; the
 segmentation methods and label functions are specified in {doc}`segmentation-algorithms`.
-Nothing here is implemented, and nothing here ranks a method, sets a default model or
-makes an accuracy claim.
+The rules are implemented in `starfinder.assignment` ({doc}`api/assignment`) and the
+validation design's checks in the tests that "Implemented checks (W-318)" lists, and
+nothing here ranks a method, sets a default model or makes an accuracy claim.
 
 ## Evidence
 

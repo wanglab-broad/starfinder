@@ -16,10 +16,11 @@ A :py:class:`~starfinder.preprocessing.PreprocessingStep` with ``save_as`` keeps
 its output. The recipe's ``extraction_source`` names the snapshot that extraction reads,
 for example the background-corrected image before normalization (recipe 2), and
 ``registration_source`` names the snapshot from which registration signals are built;
-both default to the detection image, the last step's output. ``FOV.run`` applies each
-registration step's transform to every snapshot of a moving round, so the snapshots stay
-aligned with the detection image, and records per round and snapshot the transforms
-applied. The workflow key ``preprocessing`` declares the same recipe in YAML; see
+both default to the detection image, the last step's output. ``FOV.run`` composes the
+registration steps of a moving round into one transform chain and resamples the round's
+image and every one of its snapshots once, from their pre-registration arrays, through
+that chain, so the snapshots stay aligned with the detection image; it records per round
+and snapshot the composed transforms. The workflow key ``preprocessing`` declares the same recipe in YAML; see
 :doc:`../workflow-configuration`.
 
 Background subtraction

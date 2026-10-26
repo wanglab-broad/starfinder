@@ -2,6 +2,8 @@
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
+Note (W-583): {doc}`sample-output-contract` was accepted at W-329 (2026-10-07) and is implemented in `starfinder.export` and `Dataset.export`; this page keeps the text of its revision.
+
 This page records what exists for the §2.10 sample outputs before {doc}`sample-output-contract`
 specifies them: the shared raster preparation (W-169) and the partial exporter (W-170) on
 the reference branch, the W-168 specification and its documentation there, what `dev`

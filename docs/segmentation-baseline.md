@@ -2,6 +2,8 @@
 
 Status: Accepted (W-309, 2026-10-05, at 3550723)
 
+Note (W-583): {doc}`segmentation-contract` and {doc}`segmentation-algorithms` were accepted at W-309 (2026-10-05) and are implemented in `starfinder.segmentation`; this page keeps the text of its revision.
+
 Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
 
 This page records how segmentation and its inputs behave at revision `6b384cd`

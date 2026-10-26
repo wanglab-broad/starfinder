@@ -35,14 +35,3 @@ Modules (alphabetical)
    spot_finding
    stitching
    synthetic
-
-Previous reference locations
-----------------------------
-
-.. toctree::
-   :maxdepth: 1
-
-   registration.benchmark
-   registration.pointset
-   registration.pyramid
-   utils

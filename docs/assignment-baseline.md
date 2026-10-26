@@ -2,6 +2,8 @@
 
 Status: Accepted (W-309, 2026-10-05, at 3550723)
 
+Note (W-583): {doc}`assignment-contract` and {doc}`assignment-algorithms` were accepted at W-309 (2026-10-05) and are implemented in `starfinder.assignment`; this page keeps the text of its revision.
+
 This page records how molecule-to-cell assignment behaves at revision `6b384cd` (branch
 `runner/s29-spec-20261004`, on `dev` after the §2.8 work), before the Chapter II §2.9
 work changes it. It is the reference that the golden test

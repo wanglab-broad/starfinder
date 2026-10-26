@@ -55,7 +55,6 @@ html_sidebars = {
     "index": [],
     "getting-started": [],
     "recipes": [],
-    "conventions": [],
     "troubleshooting": [],
     "contributing": [],
 }

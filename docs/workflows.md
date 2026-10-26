@@ -1,10 +1,13 @@
 # Workflows and configuration
 
 The sequencing workflow turns round/FOV TIFF directories and a codebook into
-per-FOV molecule CSVs. Snakemake schedules whole FOVs or subtiles; load, rotate,
+per-FOV molecule CSVs, and its later rules segment cells and assign molecules to
+them, stitch each sample's FOVs, assemble and export the sample and write its
+processing report. Snakemake schedules whole FOVs or subtiles; load, rotate,
 enhance, register, detect, extract and filter are operations **inside** those
-jobs, not seven independent Snakemake rules. Cell segmentation and assignment
-are separate downstream jobs.
+jobs, not seven independent Snakemake rules. Segmentation and assignment are
+separate jobs after the molecule tables ({doc}`workflow-downstream`); the
+stitching, assembly, export and report blocks are in {doc}`workflow-configuration`.
 
 ```{toctree}
 :maxdepth: 2

@@ -27,7 +27,7 @@ imports/parses APIs; it does not execute these optional algorithms.
 | --- | --- |
 | `Directory not found` or `expected one TIFF matching channel ...; found 0` | Inspect the resolved `input_root/round/FOV` and actual filenames. {py:func}`~starfinder.io.load_round` matches `*{pattern}*.tif`; `.tiff` is also supported, but a wrong suffix/layout will not match. The synthetic generator's FOV/round layout needs the quickstart's explicit layout conversion. |
 | `channel_labels must be nonempty and unique` while loading | An empty `channel_order` reaches the channel loader without a default. Supply a nonempty, acquisition-correct list; check `seq_channel_order` when using {py:func}`~starfinder.dataset.from_workflow_config`. |
-| Ambiguous-file error or unexpected channel intensities | Narrow each pattern to exactly one file, or provide explicit source paths. Check [channel order](conventions.md#channel-order) against the codebook. |
+| Ambiguous-file error or unexpected channel intensities | Narrow each pattern to exactly one file, or provide explicit source paths. Check [channel order](api/contracts.md#channel-order) against the codebook. |
 | Channel-size mismatch warning or smaller-than-expected image | The loader crops to minimum Z/Y/X dimensions. Inspect `metadata['original_shapes']` and `metadata['cropped']`; verify acquisition/export alignment before accepting the crop. Cropping is not registration. |
 | `Expected 4D (Z, Y, X, C) image` in detection | Inspect `image.shape`. For a known single-channel ZYX volume, append a singleton channel axis with `volume[..., None]`. A YX projection or unknown axis order cannot be repaired by blindly appending dimensions. |
 | Shape unpacking/broadcast error during global registration | The single-channel registration call expects equal-shaped 3D ZYX inputs. Check both shapes and the intended channel/merge; the function does not provide full input-shape validation. |
@@ -43,7 +43,7 @@ An empty detection table is a possible outcome, not necessarily an exception.
 Check the reference image's range, all-zero channels, the mode/threshold pair,
 and excluded border (`min_distance`). Do not mix noise k-sigma values with
 adaptive fractions. Python rejects the schema-accepted `local` spot mode;
-see [threshold conventions](conventions.md#spot-finding-thresholds).
+see [threshold conventions](api/contracts.md#spot-finding-thresholds).
 
 If filtering raises `Codebook not loaded`, call
 {py:meth}`~starfinder.dataset.Dataset.load_codebook` first. If candidates
@@ -67,7 +67,7 @@ A one-voxel overlay offset often warrants checking origins: `molecules.csv` and
 CSVs (MATLAB, and the subtile and deep modes) are 1-based XYZ. Convert a legacy file
 exactly once and check bounds against the loaded image. A subtile coordinate also needs
 its crop offset before full-FOV comparison; a FOV coordinate is not a stitched
-sample coordinate. See [conventions](conventions.md#axes-and-coordinates).
+sample coordinate. See [the MATLAB boundary conventions](api/contracts.md#axes-and-coordinates).
 These are diagnostic possibilities, not a diagnosis of every shifted overlay.
 
 ## Configuration and workflow startup

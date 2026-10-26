@@ -7,8 +7,10 @@ encodings, the WTA and codebook-aware decoders, direct assignment, the local
 background and noise estimator, the shared read-QC score and the deduplication rule.
 It gives worked examples and the engineering validation design of task group 6. The
 registries, configs, modes and records they plug into are in {doc}`readout-contract`;
-the current behavior is in {doc}`readout-baseline`. Nothing here is implemented,
-and nothing here sets a score cutoff, a calibrated probability or a default filter.
+the current behavior is in {doc}`readout-baseline`. The encodings, decoders, estimator,
+score and deduplication rule are implemented in `starfinder.readout` ({doc}`api/readout`),
+with the checks that "Implemented checks (W-296)" lists, and nothing here sets a score
+cutoff, a calibrated probability or a default filter.
 
 ## Evidence
 

@@ -7,8 +7,9 @@ local maxima with the W-218 option, the native Starfish LoG, Spotiflow and Pisci
 It also gives the engineering validation design of task group 6. The registry
 entries, configs, weights handling, rounds and records they plug into are in
 {doc}`spot-finding-contract`; the current behavior is in
-{doc}`spot-finding-baseline`. Nothing here is implemented yet, and nothing here
-selects a default method, model or operating point: the parameter values below are
+{doc}`spot-finding-baseline`. The four methods are implemented in `starfinder.spot_finding`
+({doc}`api/spot_finding`), with the checks that "Implemented checks (W-274)" lists, and
+nothing here selects a default method, model or operating point: the parameter values below are
 each method's native defaults or the values a check uses.
 
 ## Evidence

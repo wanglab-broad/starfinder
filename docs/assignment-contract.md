@@ -12,7 +12,9 @@ of the legacy keys. It builds on the label contract of {doc}`segmentation-contra
 image, its dtype, grid, target, geometry, namespace, record and saved files are as
 specified there. The current behavior is recorded in {doc}`assignment-baseline`; the
 numerical rules, resources and the validation design for the whole of §2.9 are in
-{doc}`assignment-algorithms`. Nothing here is implemented and nothing is renamed.
+{doc}`assignment-algorithms`. The contract is implemented by `starfinder.assignment` and
+`FOV.assign_molecules` ({doc}`api/assignment`), with the checks listed in
+{doc}`assignment-algorithms` ("Implemented checks (W-318)"); as decided, nothing is renamed.
 
 Assignment has no model. Its behavior is fully determined by the label images, the
 molecule table and the config, so every rule on this page can be pinned by hand-built

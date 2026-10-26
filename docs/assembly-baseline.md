@@ -2,6 +2,8 @@
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
+Note (W-583): {doc}`assembly-contract` and {doc}`assembly-algorithms` were accepted at W-329 (2026-10-07) and are implemented in `starfinder.assembly`; this page keeps the text of its revision.
+
 This page records how sample assembly behaves at revision `0f5cbd8` (branch
 `runner/s210-spec-20261006`, on `dev` after the §2.9 work and W-325), before the Chapter II
 §2.10 work changes it. It is the reference that the golden test

@@ -1,5 +1,7 @@
 # Preprocessing baseline
 
+Note (W-583): {doc}`preprocessing-contract` and {doc}`preprocessing-algorithms` were accepted at W-227 (2026-09-27) and are implemented in `starfinder.preprocessing`; this page keeps the text of its revision.
+
 This page records how the existing preprocessing operations behave at revision
 `21eda7f` (`dev`, 2026-09-27), before the Chapter II §2.5 step/recipe work
 changes them. It is the reference that the golden test

@@ -9,7 +9,9 @@ the real example. The entries, inputs, tables, reasons and records are in
 {doc}`report-baseline`. This page redefines nothing those pages state: every table, column,
 reason, part and record is used as {doc}`report-contract` gives it, and where this page
 needs a rule that page leaves open ("Open points for the algorithms page") it states it
-here. Nothing here is implemented, and no accepted page is changed.
+here. The algorithms, layout and validation design are implemented in
+`starfinder.report` ({doc}`api/report`) and the tests that "Implemented checks (W-459)"
+lists, and no accepted page is changed.
 
 ## What this design is and is not
 

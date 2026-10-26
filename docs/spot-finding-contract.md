@@ -10,8 +10,9 @@ of rounds, compact diagnostics, and the dependency plan for the learned
 detectors. It builds on the {doc}`method-registry` design, whose registry fields,
 lookup, dependency and provenance rules it uses unchanged. The current behavior is
 recorded in {doc}`spot-finding-baseline`; the numerical methods and the
-engineering validation design are in {doc}`spot-finding-algorithms`. Nothing here
-is implemented yet.
+engineering validation design are in {doc}`spot-finding-algorithms`. The contract is
+implemented by `starfinder.spot_finding` and `FOV.find_spots` ({doc}`api/spot_finding`),
+with the checks that {doc}`spot-finding-algorithms` lists ("Implemented checks (W-274)").
 
 The evidence comes from W-266 (versions, weights, CPU behavior and Starfish parity;
 run directory

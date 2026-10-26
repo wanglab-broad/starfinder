@@ -73,7 +73,7 @@ For workflows, check `seq_channel_order`, path identifiers and `n_rounds` in
 Python expects `input_root/round/FOV/*ch*.tif`, or `input_root/FOV/round/*ch*.tif` with
 `Dataset(image_dir_template="{fov}/{round}")` (the workflow key of the same name).
 MATLAB reads the round-first layout only; its corresponding entry is
-{mat:func}`LoadImageStacks`; see [channel conventions](conventions.md#channel-order).
+{mat:func}`LoadImageStacks`; see [channel conventions](api/contracts.md#channel-order).
 
 ## Register two volumes
 
@@ -99,7 +99,7 @@ recipe `signal`) in the
 MATLAB configurations use `global_registration` (`run`, `ref_img`, `mov_img`),
 where `merged-image` is the channel maximum (`signal: {mode: max}`).
 For {mat:func}`DFTRegister3D` / {mat:func}`DFTApply3D`, use the
-[MATLAB sign and axis convention](conventions.md#registration-signs).
+[MATLAB sign and axis convention](api/contracts.md#registration-signs).
 
 ## Detect spots in a volume
 
@@ -121,7 +121,7 @@ Workflow settings: `rules.<rule>.parameters.spot_finding.threshold_mode` and
 `.threshold_value` (MATLAB configurations: `intensity_estimation` and
 `intensity_threshold`) in the
 [parameter reference](workflow-configuration.md#rule-resources-and-parameters).
-See [threshold conventions](conventions.md#spot-finding-thresholds) for MATLAB
+See [threshold conventions](api/contracts.md#spot-finding-thresholds) for MATLAB
 {mat:func}`SpotFindingMax3D` and wrapper limitations.
 
 ## Choose the 3D background radius

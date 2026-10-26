@@ -2,6 +2,8 @@
 
 Status: Accepted (W-268, 2026-10-01, at b5fcb7f); amended at the W-276 review, 2026-10-01
 
+Note (W-583): {doc}`spot-finding-contract` and {doc}`spot-finding-algorithms` were accepted at W-268 (2026-10-01) and are implemented in `starfinder.spot_finding`; this page keeps the text of its revision.
+
 This page records how spot finding behaves at revision `42f652d` (branch
 `runner/s27-spec-20260930`, on `dev` after the §2.6 work), before the Chapter II
 §2.7 work changes it. It is the reference that the golden test

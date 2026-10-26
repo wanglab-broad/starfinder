@@ -662,8 +662,8 @@ environment of the controller's `slow` and `learned` selections. Otherwise the r
 checks skip there too (choice VA8), and the implementation issue's criterion asks for the
 selection log that shows them passed, not skipped.
 
-**Measured cost of each tier.** Nothing of the appearance scene is implemented, so no tier
-was measured as such. Each row gives what the prototype record or W-513 measured on one CPU
+**Measured cost of each tier.** The appearance scene is now implemented (W-516 to W-519,
+"Implemented checks"), but no tier was measured as such when this design was written. Each row gives what the prototype record or W-513 measured on one CPU
 with `/usr/bin/time -v` (W-513 `tables/prototype_steps.csv` from `round10/logs/<context>.run.log`;
 W-513 `tables/resources.csv`, final attempts), and names what is missing. "Peak RSS" is in
 KiB.

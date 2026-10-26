@@ -9,8 +9,9 @@ image of a moving round, reloadable transforms, and native Python registration
 of other rounds from a shared stain. It builds on the {doc}`method-registry`
 design and on the §2.5 snapshots of the {doc}`preprocessing-contract`. The
 current behavior is recorded in {doc}`registration-baseline`; the numerical
-methods are specified in {doc}`registration-algorithms`. Nothing here is
-implemented yet.
+methods are specified in {doc}`registration-algorithms`. The contract is implemented by
+`starfinder.registration` and `FOV.register` ({doc}`api/registration`), with the checks
+that {doc}`registration-algorithms` lists ("Implemented checks (W-258)").
 
 ## Terms
 

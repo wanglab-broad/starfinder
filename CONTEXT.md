@@ -1,9 +1,10 @@
 # STARfinder context
 
-STARfinder processes STARmap-related microscopy into molecule-level tables.
+STARfinder processes STARmap-related microscopy into molecule tables, cell
+segmentations, cell-by-gene counts and sample-level outputs.
 Python functions implement processing; Dataset and FOV coordinate them;
 Snakemake coordinates file-based workflows with Python or MATLAB backends.
-Cell segmentation, read assignment and cell matrices are downstream work.
+Segmentation and read-to-cell assignment are separate entries after `FOV.run`.
 
 ## Vocabulary
 
@@ -17,16 +18,18 @@ from renaming.
 
 ## Responsibilities and data flow
 
-`io` → `preprocessing` → `registration` → `spot_finding` → `readout`
-is the processing flow. `image` owns metadata; `dataset` owns coordination.
+`io` → `preprocessing` → `registration` → `spot_finding` → `readout` is the
+per-FOV flow, followed by `segmentation` and `assignment`; `stitching` →
+`assembly` → `export` → `report` is the per-sample flow. `image` owns metadata;
+`dataset` owns coordination.
 `synthetic` produces processed images/truth; `evaluation` computes pure metrics;
 `benchmark` runs explicit cases, measures resources and writes reports.
 Algorithms do not depend on benchmark orchestration. Registration estimates a
-correction transform, then applies it directly. Barcode extraction, decoding
-and filtering are independent stages that retain spot identity.
+correction transform, then applies it directly. Intensity extraction, read
+decoding and read filtering are independent readout stages that retain spot identity.
 
-Use the [architecture](docs/architecture.md), [contracts](docs/api/contracts.md),
-[conventions](docs/conventions.md), and [migration guide](docs/migration.md) as
-maintained detail. [AGENTS.md](AGENTS.md) owns operational instructions;
+Use the [architecture](docs/architecture.md), the
+[contracts](docs/api/contracts.md) (with their MATLAB boundary section) and the
+[migration guide](docs/migration.md) as maintained detail. [AGENTS.md](AGENTS.md) owns operational instructions;
 [Linear](https://linear.app/jiahaoh/document/thesis-and-implementation-workflow-c12f30bffe9f)
 owns current plans, decisions and evidence. This file is orientation, not a run log.

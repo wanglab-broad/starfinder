@@ -36,9 +36,10 @@ and the sample's molecules are assigned to those cells. It states how the route 
 which images and settings it takes, how the sample's molecules reach `assign_molecules`,
 what every column, key and file of the outputs holds on this route, what the record says,
 how a dataset chooses its route, and how the two routes are checked against each other.
-The validation design is {doc}`sample-segmentation-validation`. Nothing here is
-implemented; this page changes no accepted page and names, in "What changes in the
-accepted pages", the sentences an implementation would change.
+The validation design is {doc}`sample-segmentation-validation`. The route is implemented
+in the package and the workflow (W-425 to W-430), with the checks that {doc}`sample-segmentation-validation` lists
+("Implemented checks"); this page changes no accepted page and names, in "What changes in
+the accepted pages", the sentences an implementation would change.
 
 It builds on these pages and redefines none of them: {doc}`sample-output-contract` (the
 export entry, `export/<sample>/`, the fused image, the label export, the SpatialData

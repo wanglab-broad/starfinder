@@ -3,8 +3,9 @@
 # STARfinder
 
 <p class="sf-lead">Image processing for STARmap-related spatial transcriptomics.
-STARfinder takes raw microscopy volumes to molecule-level tables with Python and
-MATLAB backends coordinated by Snakemake.</p>
+STARfinder takes raw microscopy volumes to per-FOV molecule tables, cells and counts,
+then stitches, assembles and exports each sample and writes its processing report.
+Snakemake coordinates the Python and MATLAB backends.</p>
 
 <div class="sf-actions">
 
@@ -32,7 +33,7 @@ MATLAB API
 
 <div class="sf-pipeline" aria-label="Pipeline stages">
 <span class="sf-pipeline__label">Pipeline</span>
-<span>load</span><span>rotate</span><span>enhance</span><span>registration</span><span>spot finding</span><span>extraction</span><span>filtration</span>
+<span>preprocessing</span><span>registration</span><span>spot finding</span><span>readout</span><span>segmentation</span><span>assignment</span><span>stitching</span><span>assembly</span><span>export</span><span>report</span>
 </div>
 
 ## Explore the documentation
