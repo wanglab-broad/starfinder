@@ -76,7 +76,7 @@ stage's own.
 | Exact config type | the registry key | A frozen dataclass whose `__post_init__` validates it. Lookup uses `type(config)` exactly. In every registry except preprocessing the config carries a `method` discriminator whose value equals `spec.name`. |
 | Implementation | `spec.run` | A callable with the stage's own signature. The stage's entry point calls it; callers never do. |
 | Optional dependencies | `spec.requires` | A tuple of `Dependency`, imported only when the method runs. Importing the package or constructing a config never needs them. |
-| Smallest input | `spec.min_shape_zyx` | The smallest accepted size of each spatial axis; a Z=1 input is checked against the last two entries. Not present in `DecodingSpec` and `EncodingSpec`, which take no image. |
+| Smallest input | `spec.min_shape_zyx` | The smallest accepted size of each spatial axis. `check_shape`, segmentation and stitching check a Z=1 input against the last two entries; preprocessing's `run_step` checks all three entries for every input. Not present in `DecodingSpec` and `EncodingSpec`, which take no image. |
 
 `check_shared` validates the name, a callable `run`, `requires` and `min_shape_zyx`; the
 preprocessing, registration, spot-finding, segmentation and stitching specs call it.
@@ -85,8 +85,9 @@ preprocessing, registration, spot-finding, segmentation and stitching specs call
 ### Shared and stage-specific capabilities
 
 A capability is shared only when it means the same in every stage and a generic check
-uses it: `requires`, `min_shape_zyx` and, for the stages that call `check_shape`,
-`dimensions` (2 when Z=1 runs as a plane, 3 when Z>1 runs as a volume). Everything else
+uses it: `requires`, `min_shape_zyx` and, for registration, spot finding, segmentation
+and stitching, `dimensions` (2 when Z=1 runs as a plane, 3 when Z>1 runs as a volume);
+`PreprocessingSpec` has no `dimensions` field. Everything else
 is a field of the stage spec, documented with the spec's docstring and its stage
 contract: for example `category`, `scope`, `post_registration` and `supplied` for
 preprocessing ({doc}`preprocessing-contract`); `step_kind`, `transform_kind` and `space`
@@ -158,9 +159,11 @@ reads it, and a new method adds to it only when its stage has the hook.
   method registers itself the same way and is imported by `stitching/__init__.py`.
 * **`check_shape`** (`_registry.py`). The geometry check of a spec's `dimensions` and
   `min_shape_zyx`; `estimate_transform` and `find_spots` call it. Segmentation
-  (`_check_dimensions` in `segmentation/_segment.py`), stitching (`_check_shapes` in
-  `stitching/_stitch.py`) and preprocessing (`run_step`) apply the same rules with their own
-  messages. A new method only declares the two fields.
+  (`_check_dimensions` in `segmentation/_segment.py`) and stitching (`_check_shapes` in
+  `stitching/_stitch.py`) apply the same rules with their own messages, so a new method of
+  these four stages only declares the two fields. Preprocessing's `run_step` has its own
+  check: `PreprocessingSpec` has no `dimensions` field, and every input, Z=1 included, must
+  reach all three entries of `min_shape_zyx`, or `run_step` raises `ValueError`.
 * **`check_shared`** (`_registry.py`). Called from the spec's `__post_init__`, so a new method
   gets it by constructing its spec; a new stage's spec calls it first and adds its own
   checks.
