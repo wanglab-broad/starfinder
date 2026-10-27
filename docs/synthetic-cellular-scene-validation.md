@@ -49,7 +49,7 @@ before acceptance (*the scene page's drafting*, *correction* and *amendment*, as
 (*this page's drafting* and *amendment*); their audits and scripts are cited by those names.
 
 % The context measurements: W-393, run directory `runs/W-393/20261015T003630Z-3fec2493/` under the artifact root
-% `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/; "W-393 `notes.md` §n" is "the measurement notes,
+% `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/`; "W-393 `notes.md` §n" is "the measurement notes,
 % section n"; "W-393 `routes.csv`", "W-393 `sizing.csv`", "W-393 `section10_values.txt`"
 % The input spike: W-392. The scene page's drafting: W-394; its correction: W-480; its amendment: W-481.
 % This page's drafting: W-395 (`runs/W-395/20261015T080623Z-62fad7ad/`); its amendment: W-482
@@ -710,6 +710,10 @@ in the input spike's `inventory/models.json`, which the implementation checks be
 | CU | Cellpose `cpsam_v2`: `<home>/.cache/starfinder/weights/cellpose/cpsam_v2/cpsam_v2` | `STARFINDER_WEIGHTS_DIR`, as CT; `HF_HUB_OFFLINE=1` | As CD, extra `cellpose`; CPU |
 
 % <home> is the lab machine's home directory, /home/unix/jiahao; CT: "open point of synthetic-cellular-scene, W-393 `notes.md` §4"
+% The paths as written: CD `/home/unix/jiahao/.cache/starfinder/user-models/stardist/3D_spleen`;
+% CT `/home/unix/jiahao/.cache/starfinder/weights/stardist/2D_versatile_fluo` and
+% `STARFINDER_WEIGHTS_DIR=/home/unix/jiahao/.cache/starfinder/weights`;
+% CU `/home/unix/jiahao/.cache/starfinder/weights/cellpose/cpsam_v2/cpsam_v2`
 
 The GPU is not used by any gate. The context measurements also measured each model call on the GPU (the
 environment of an earlier segmentation spike); those numbers are given below for comparison

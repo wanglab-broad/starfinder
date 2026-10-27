@@ -31,7 +31,7 @@ amended on 2026-10-15 with audit A run again for the two `slow` presets whose pi
 (*the amendment*); each audit is cited by its file in the run directory of the step that made it.
 
 % The context measurements: W-393, run directory `runs/W-393/20261015T003630Z-3fec2493/` under
-% the artifact root `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/; "W-393 `notes.md` §n" is
+% the artifact root `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/`; "W-393 `notes.md` §n" is
 % "the measurement notes, section n". The input spike: W-392 (`runs/W-392/20261009T0323Z-inputs/`).
 % This page's drafting: W-394; the correction: W-480 (`runs/W-480/20261015T070249Z-868bf70b/`); the amendment:
 % W-481 (`runs/W-481/20261015T160947Z-7ca392b2/`).
