@@ -1,6 +1,47 @@
-# Assembly contract: sample coordinates, ownership, retained and excluded populations and the sample tables
+# Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
+
+This page is the maintained guide to the assembly stage (§2.10) and its contract.
+
+* **What assembly does.** It puts the per-FOV §2.9 results of one sample into the sample
+  frame of its placement, in µm: every molecule and cell gets sample coordinates, each
+  point of the sample is owned by one owning FOV (nearest footprint centre), and every
+  observation is retained or excluded with a reason, with flags for partial and
+  conflicting cells and the duplicate rule for two observations of one cell; it matches no
+  cell across FOVs and moves no molecule to another cell
+  ([Settled decisions this page follows](#settled-decisions-this-page-follows),
+  [Terms](#terms), [Sample coordinates](#sample-coordinates),
+  [Ownership regions](#ownership-regions), [Retention](#retention),
+  [Statuses and reasons](#statuses-and-reasons), [Flags](#flags)).
+* **The entry and its configs.** `assemble` takes a `PlacementResult` (an approved one
+  where its review is required), one `AssemblyInput` per FOV (its reference grid and its
+  `AssignmentResult` or saved assignment folder, or a `MoleculeTable` alone) and an
+  `AssemblyConfig`, and applies eight checks in order; `ownership_map` gives the ownership
+  regions; the assemble part of `Dataset.export` runs it for one sample from the saved
+  files ([Names](#names), [The assemble entry](#the-assemble-entry),
+  [Checks the entry applies](#checks-the-entry-applies)).
+* **What it produces.** One `AssemblyResult`: the four sample tables (`fovs`, `cells`,
+  `molecules`, the long `counts` of the counted cells), the genes and the record, whose
+  count identities its construction checks; `write_sample_h5ad` writes `sample.h5ad`, one
+  row per counted cell, and `save_assembly` writes the tables, `sample.h5ad` and the
+  `assembly` section of `export.json` to `<OUTPUT>/export/<sample>/`, which
+  `load_assembly` reads back ([What assemble records](#what-assemble-records),
+  [Result](#result), [Sample-level identities](#sample-level-identities),
+  [Count accounting](#count-accounting), [Sample tables](#sample-tables),
+  [Persistence](#persistence), [Sample-level AnnData](#sample-level-anndata)).
+* **Where the configuration goes.** The `AssemblyConfig` passed to `assemble`, or
+  `ExportConfig.assembly` of `Dataset.export`, a sample-level entry outside
+  `PipelineConfig` (D3); in the workflow, the Python-only `assembly` block, which the rule
+  `export_sample` reads ([Workflow configuration](#workflow-configuration)).
+
+Beneath this guide, {doc}`assembly-algorithms` gives the numerical rules, parameters and
+resources of the coordinate rule, ownership, retention, the duplicate rule, the flags,
+the count accounting and the sample-level AnnData, with the golden tests;
+{doc}`stitching-assembly-validation` is the engineering validation design that assembly
+shares with stitching and the sample outputs, with its implemented checks (rows AS1 to
+AS17) and the results of the real examples; {doc}`assembly-baseline` is history
+(`0f5cbd8`, before §2.10).
 
 This page specifies the §2.10 assembly contract: a sample-level assemble entry separate
 from stitch and from export, the rule that puts molecules and cells into sample
@@ -20,10 +61,8 @@ neither:
   `(spot_namespace, spot_id)` and `(cell_namespace, cell_id)`, `MoleculeTable`, the grid
   rule and its count identities.
 
-Where this page lists a column of those tables, it copies it unchanged. The current
-behavior is recorded in {doc}`assembly-baseline`; the numerical rules, parameters and
-resources are in {doc}`assembly-algorithms`. It is implemented in `starfinder.assembly`, and
-nothing is renamed. The fused image and the SpatialData export belong to W-328.
+Where this page lists a column of those tables, it copies it unchanged. It is implemented
+in `starfinder.assembly`, and nothing is renamed. The fused image and the SpatialData export belong to W-328.
 
 Evidence, cited by path:
 
@@ -865,46 +904,6 @@ when the assemble part was neither written nor reused. `export.json` does not li
 Without an `assembly` block the figures stay as `reads_assignment` draws them, in
 `expr/{fovID}/`: the tile configuration is not an ownership source.
 
-## Tests the implementation keeps and adds
-
-* `test_workflow_assembly_golden.py`, `test_workflow_stitching_golden.py`,
-  `test_assignment_golden.py` and `test_assignment_workflow.py` pass unchanged; their
-  helpers stay as the frozen legacy reference.
-* New tests: each check of the entry with its error; the coordinate rule against
-  `placed_metadata(…).index_to_world` on fractional origins; ownership under O1 on the
-  golden fixture's placement (boundaries near x 59.2 and y 42.2 for the fractional origins;
-  every covered point one owner; T1 on a constructed exact tie); the retained sets of
-  `tables/option_effects.json` on the fixture (3D: FOV1 retains scene cells 1, 2, 5, 9;
-  FOV2 4, 6; FOV3 3, 7, 8; 2D: FOV3 also 9, with both copies flagged `conflict`, with the
-  duplicate rule off); every
-  identity of "Count accounting" on the fixture and on a `molecules_only` variant; the
-  `fov_not_placed` and review refusal cases; the AnnData checks above, with a retained
-  `excluded_no_nucleus` cell that has no AnnData row and an expanded FOV whose
-  `obsm["spatial"]` holds the expanded centroids; the save and load
-  round trip with its SHA-256 check; the workflow block and its schema.
-* For the amendments of the W-329 review: a constructed placement with a `placeholder` at
-  a corner and one at an edge of the grid, where every point of a placeholder's footprint
-  that an owning FOV covers is owned by the nearest such FOV, the rest has no owner, no
-  placeholder appears as an owner, and a neighbour's cell whose ownership centroid lies in
-  the placeholder's footprint is retained; a placement whose FOVs are all placeholders,
-  which raises `ValueError` because there is no owning FOV; `candidates` restricting the
-  owner on that placement, its default equal to every owning FOV, and its `ValueError` for
-  a placeholder or unknown `fov_id`; the territory path in the `assembly` section of `export.json` resolving to the
-  file whose SHA-256 is recorded beside it; and `write_h5ad` with no cell, which writes an
-  AnnData of shape `(0, n_genes)`, while `raw.h5ad` written through it keeps A18's values.
-
-## `docs/migration.md` entries
-
-The implementation adds the `starfinder.assembly` module and its names; the `assembly`
-YAML block, read by the `export_sample` rule of {doc}`sample-output-contract`; `write_h5ad`
-in `starfinder.assignment`, which the adapter calls for `raw.h5ad`;
-and, for configurations with an `assembly` block only, the intentional changes: the
-per-FOV `raw.h5ad` and `reads_assignment.csv` are not box-filtered and have no `global_*`
-columns, the sample outputs are in `export/<sample>/` instead of
-`expr/{sample}_raw.h5ad` and `expr/{sample}_reads_assignment.csv`, cells and molecules are
-retained by ownership regions of the placement instead of the `tile_config` rectangles,
-and every excluded observation is kept with its reason.
-
 ## Exclusions
 
 No implementation, rename, dependency or lock change; no change to the placement contract
@@ -917,6 +916,7 @@ from the W-324 records and the W-326 derivations cited above).
 ```{toctree}
 :hidden:
 
-Assembly algorithms <assembly-algorithms>
-Assembly baseline <assembly-baseline>
+Assembly algorithms and validation <assembly-algorithms>
+Stitching and assembly validation (§2.10) <stitching-assembly-validation>
+Assembly baseline (history) <assembly-baseline>
 ```

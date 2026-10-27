@@ -5,7 +5,7 @@ Status: Accepted (W-329, 2026-10-07, at 9033d46)
 This page specifies the numerical behavior of each element of {doc}`assembly-contract`:
 the coordinate rule, the ownership regions, retention, the duplicate rule, the flags and
 the count accounting, and the sample-level AnnData built from them. Each has its
-parameters, units, defaults, failure behavior and a resource estimate. The current behavior is in
+parameters, units, defaults, failure behavior and a resource estimate. The behavior before §2.10 is history, in
 {doc}`assembly-baseline`; the placement it starts from is specified in
 {doc}`stitching-contract` and {doc}`stitching-algorithms`, and the per-FOV tables in
 {doc}`assignment-contract` and {doc}`assignment-algorithms`. Each element is implemented in
@@ -348,6 +348,17 @@ filter, and the file's content is as before.
 Cost: `X` and each layer are dense float64, as in `raw.h5ad`: 8 bytes × cells × genes
 (100,000 cells × 1,000 genes is 0.8 GB per matrix). A sparse `X` would change the
 `raw.h5ad` convention and is not proposed here.
+
+## Golden tests and the §2.10 checks
+
+The golden and legacy tests hold the behavior of the rules this page replaces.
+`test_workflow_assembly_golden.py`, `test_workflow_stitching_golden.py`,
+`test_assignment_golden.py` and `test_assignment_workflow.py` pass unchanged; their
+helpers stay as the frozen legacy reference.
+
+The checks of the elements above are rows AS1 to AS17 and WF1 of
+{doc}`stitching-assembly-validation` ("Checks"), each named with its tests in
+"Implemented checks (W-373)".
 
 ## Limitations
 
