@@ -33,3 +33,6 @@ The files are MyST Markdown, like the site's pages, but Sphinx does not build th
 a `{doc}` role here does not resolve. Link to a site page with its path, for example
 `docs/synthetic-cellular-scene.md`, and to another record with a relative link.
 Lines that start with `%` are source comments.
+
+A record's history before it moved here is under its old path in `docs/`:
+`git log --follow docs/<page>.md` shows it.

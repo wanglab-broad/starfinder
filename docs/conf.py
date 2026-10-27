@@ -22,6 +22,7 @@ extensions = [
     "sphinxcontrib.matlab",
     "sphinx_design",
     "synthetic_presets",
+    "method_tables",
 ]
 # Parse only project-owned MATLAB code; no MATLAB process or license is needed.
 matlab_src_dir = str(Path(__file__).resolve().parents[1] / "src" / "matlab")
