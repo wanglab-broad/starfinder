@@ -1,20 +1,55 @@
-# Processing-report contract: the sample report, the comparison page, their inputs, tables and record, and the records added to `run.json`
+# Processing-report guide: the sample report, the comparison page, their inputs, tables and record, and the records added to `run.json`
 
 Status: Accepted (W-387, 2026-10-12, at c0aa8b0)
 
-This page specifies the §2.11 processing report so that it can be implemented after Jiahao
-approves it: the entry that writes one sample's report, the entry that writes the comparison
-page of a dataset, the configuration, where every input is looked for and what the report
+This page is the maintained guide to the processing report (§2.11) and its contract.
+
+* **What the report does.** It shows what the records of one sample's processing hold: it
+  reads the sample's saved run records, placement, segmentation and assignment records and
+  export, without running a stage, and writes one page with its tables and its record; a
+  value whose input is missing is unavailable with one reason of a closed list, and the
+  report gives no verdict and no score. A second entry writes the comparison page of a
+  dataset from the finished sample reports
+  ([Settled decisions this page follows](#settled-decisions-this-page-follows),
+  [Terms](#terms), [Inputs](#inputs), [Unavailable parts](#unavailable-parts),
+  [The two routes](#the-two-routes), [The example FOVs](#the-example-fovs),
+  [The replay](#the-replay)).
+* **The entries and their configs.** `Dataset.report(sample, fov_ids, …)` applies its checks
+  before anything is written and returns a `ReportRecord`; `Dataset.compare_samples(samples)`
+  returns a `ComparisonRecord`; both are implemented in `starfinder.report`, whose
+  `load_report` reads a report back. The configuration is `ReportConfig`, with
+  `MarkerGroup`, `ReportLimits` and `RuleLimit` ([Names](#names),
+  [The sample entry](#the-sample-entry), [The comparison entry](#the-comparison-entry),
+  [Configuration](#configuration)).
+* **What it produces.** The folder `<output_root>/report/<sample>/` with `report.html`, the
+  tables in `tables/` and the record `report.json`; the comparison page
+  `<output_root>/report/index.html` with `samples.csv`. The earlier stages add the records
+  R1 to R4 that the report reads to `run.json`, and the workflow writes `run.json` (R5)
+  ([The output folder](#the-output-folder),
+  [Records added to `run.json`](#records-added-to-runjson)).
+* **Where the configuration goes.** The `ReportConfig` passed to `Dataset.report` as
+  `config`, a sample-level entry outside `PipelineConfig`; in the workflow, the Python-only
+  top-level `report` block, with the rules `report_sample` and `report_dataset`
+  ([Workflow configuration](#workflow-configuration)).
+
+Beneath this guide, {doc}`report-algorithms` gives how every value and figure is computed
+and drawn, how the page is laid out and built, and the engineering validation design with
+its implemented checks and the plan of the real example; {doc}`report-baseline` is history
+(the legacy QC notebook, the diagnostics and records before the report, and their gaps, at
+`dc5fc3c`).
+
+This page specifies the §2.11 processing report: the entry that writes one sample's
+report, the entry that writes the comparison page of a dataset, the configuration, where every input is looked for and what the report
 holds at each stage of a sample's processing, the closed list of reasons a part can be
 unavailable, the output folder with the schema of every table and of the record
 `report.json`, the two routes to a sample's cells, the example FOVs, the replay of the
 example images, and the fields the earlier stages add to `run.json`. The algorithms, the
 layout and the validation design are the algorithms page, `docs/report-algorithms.md` (W-386); where this page needs
-one of them it names the open point ("Open points for the algorithms page"). What exists
-today, the source of every value and every gap are in {doc}`report-baseline`. The
-contract is implemented by `starfinder.report`, `Dataset.report` and
-`Dataset.compare_samples` ({doc}`api/report`), with the checks that
-{doc}`report-algorithms` lists ("Implemented checks (W-459)"), and no accepted page is changed.
+one of them it names the open point ("Open points for the algorithms page"). The source of
+every value and every gap, as they were before the report, are recorded as history in
+{doc}`report-baseline`. The contract is implemented by `starfinder.report`, `Dataset.report`
+and `Dataset.compare_samples` ({doc}`api/report`), with the checks that
+{doc}`report-algorithms` lists ("Implemented checks (W-459)").
 
 **The report describes a run and judges nothing.** It shows what the records of one
 sample's processing hold. Its table "Problematic FOVs" lists each FOV whose value lies
@@ -74,7 +109,7 @@ Statements not in this table follow the settled decisions or the accepted pages.
 | 14 | The provisional limits of the problematic-FOV rules | The defaults of `ReportLimits` below, from W-384's candidate limits; Jiahao sets the numbers | "Configuration" |
 | 15 | The pixel width and format of the whole-sample figures | 1600 px, JPEG at quality 85 for figures that draw the fused image; PNG for plots (W-384 `figure_sizes.csv`) | "Configuration" |
 | 16 | The workflow rule of the report | WR1: rules `report_sample` and `report_dataset`, run when the configuration has a `report` block | "Workflow configuration" |
-| 17 | The existing test that pins the exact key set of `run.json` | TC1: change it to "at least these keys" with the additions listed; it is the one existing test the additions change | "Tests the implementation keeps and adds" |
+| 17 | The existing test that pins the exact key set of `run.json` | TC1: change it to "at least these keys" with the additions listed; it is the one existing test the additions change | "The tests that pin `run.json`" |
 | 18 | The reason of a value to which several reasons apply | P1: one reason, the first that applies in the order of the closed list | "The reasons" |
 | 19 | The form of the record of unavailable values | U1: one row per unavailable value, key (`part`, `table`, `column`, `row_key`) | "Where a reason is shown and recorded" |
 | 20 | The route of an export whose assembly records none (W-447) | RT1: read as `per_fov`, as `export/_compare.py`: `_route_of` does | "The two routes" |
@@ -338,54 +373,6 @@ genes; base64 adds a third. 1000 px halves the JPEG bytes; 2400 px costs 1.9 to 
 | FW2 | 1000 px, JPEG at quality 85 | Half the bytes; less detail in the zoom-in regions. |
 | FW3 | 2400 px, JPEG at quality 85 | 1.9 to 2.4 MB per figure before base64. |
 | FW4 | PNG at 1600 px | 4.2 to 4.7 MB per figure; lossless. |
-
-## Workflow configuration
-
-A Python-only top-level `report` block (rejected unless `backend: python`), read by a new
-adapter in `dataset/workflow.py`, each key a field of `ReportConfig`; lists become tuples,
-and an unknown key raises `ValueError` naming it, as for the other typed blocks:
-
-```yaml
-report:
-  markers:
-    - name: lymph node compartments
-      genes: [Cd3e, Cd79a, Lyz2, Pecam1]
-    - name: T cell subsets
-      genes: [Cd4, Cd8a, Foxp3]
-  marker_pairs:
-    - [Cd3e, Cd79a]
-    - [Cd4, Cd8a]
-  positive_threshold: 1
-  example_fovs: null              # or three FOV IDs
-  limits:
-    shift_residual: {k: 5, floor: 5, absolute: null}
-    alignment_score: {k: null, floor: null, absolute: null}
-    correct_form_fraction: {k: 3, floor: 0.05, absolute: null}
-    matched_fraction: {k: 3, floor: 0.05, absolute: null}
-    spots_near_zero: 0.05
-  figure_width_px: 1600
-  jpeg_quality: 85
-```
-
-The example is W-383's `markers.yaml` for LN sample1, shortened. `markers` entries are
-`MarkerGroup(name, genes)`; `marker_pairs` entries are pairs; `limits` is `ReportLimits`
-with each rule a `RuleLimit`.
-
-### Options for the rules (choice 16)
-
-| Option | What runs | Note |
-| --- | --- | --- |
-| **WR1 (recommended)** | With a `report` block: `report_sample` per sample, calling `Dataset.report(sample, <the sample's FOVs>, assignment=<assembly.assignment>, config=…)`, declared output `report/{sample}/report.json`, declared input the last per-sample output the configuration has (`export/{sample}/export.json` with an `export` block; else `stitching/{sample}/placement.json`; else the FOVs' `log/sf_scores/{fovID}.txt`); and `report_dataset`, calling `Dataset.compare_samples` on every sample, with output `report/samples.csv`. `report: {}` gives the defaults. | A configuration without the block runs as today. |
-| WR2 | Both rules always run with the Python backend. | Every existing configuration gains two rules and their outputs. |
-| WR3 | No rule; the user calls the entries. | The workflow writes no report. |
-
-Note (W-563): the last fallback input is now the FOVs' `checkpoints/{fovID}/run.json`, which the
-Python processing rules declare instead of the logs ({doc}`migration`, "Sequencing logs and the
-morphology record").
-Note (W-564): it is now `fovs/{fovID}/run.json` ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
-
-A static schema test keeps the block equal to the fields of `ReportConfig`, as for the other
-blocks.
 
 ## Inputs
 
@@ -1231,25 +1218,7 @@ The report fixtures (`src/python/test/report_fixtures.py`) are of this version.
 | OF2 | As OF1, and else the translation or affine summary of the estimation attempts' QC records (`registration.<round>[i].qc.details.transform`, `evaluation/registration.py`: `_transform_summary`) | Shows shifts for more older runs, but the summary is a QC value whose form no contract fixes as a record, it is null for an attempt that failed before its QC, and an affine's 3 × 3 `matrix` and `offset` are not the 4 × 4 index matrix the chain is built from. |
 | OF3 | Unavailable for every run record without R1 (leave it as it is) | Simplest; costs the shifts of every run saved with the stage `registered` before R1. |
 
-## `docs/migration.md` entries
-
-* **New: the processing report.** `Dataset.report(sample, fov_ids, …)` writes
-  `<output_root>/report/<sample>/` (`report.html`, `report.json`, `tables/`), and
-  `Dataset.compare_samples(samples)` writes `report/index.html` and `report/samples.csv`;
-  the workflow's `report` block adds the rules `report_sample` and `report_dataset`.
-  Nothing existing changes.
-* **`run.json` gains `transforms`, `codebook`, `workflow_config` and
-  `counts.filtering.endpoint_valid`** (with `endpoint_valid_segments`); `format_version`
-  stays 1, and a `run.json` without them still loads.
-  Note (W-565): `run.json` is now version 2 ({doc}`migration`, "run.json version 2").
-* **The workflow writes `checkpoints/<fov>/run.json`** for the processing rules, alone by
-  default, with `overwrite` on; `rules.<rule>.parameters.checkpoints` adds stages.
-  Note (W-564): the record is now `fovs/<fov>/run.json` ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
-* **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256.**
-* **`workflow/notebook/create_rsf_qc_report.py.ipynb` is superseded** by the report; it is
-  left in place.
-
-## Tests the implementation keeps and adds
+## The tests that pin `run.json`
 
 Kept unchanged: `src/python/test/test_report_records_golden.py` (this issue; every pinned
 key and value of `run.json` and every checkpoint file stays, so the additions pass it);
@@ -1263,35 +1232,9 @@ of top-level keys of `run.json`.
 | TC2 | It stays an exact set, with the three keys added to it | Every later additive key edits it again. |
 | TC3 | Leave it as it is | The implementation of R1, R2 and R4 then fails the routine gate. |
 
-Added (the numbered validation table with known answers is on the algorithms page):
-
-* the records R1 to R4 on a synthetic FOV: a translation and an affine step with and
-  without the stage `registered`, a dense step with its `field` reference and without;
-  `endpoint_valid` equal to the filter's diagnostic; the codebook's path and SHA-256;
-  `workflow_config` from the workflow adapter, null outside it; R5: a workflow run writes
-  `run.json` and a rerun replaces it;
-* an older `run.json` (the golden test's form) gives `not_recorded` for each addition, and
-  the shifts from `registered/transforms.json` when it exists;
-* the entry's checks 1 to 7, each raising with the folder unchanged, among them a marker
-  gene not in the codebook;
-* every null cell of a report table is either n/a by its column's null rule or named by
-  exactly one row of `unavailable.csv`, and no row names two values (the cases the W-385
-  repair walked: an older `run.json`, an undefined MECR pair beside a defined one, a FOV
-  without a run record, a failed round, a run without `registered`, an export without run
-  records, the stages before and after segmentation on both routes, no placement, no
-  markers, one FOV, `Z=1`);
-* the closed lists: every reason in `unavailable.csv` and `report.json` is one of
-  `UNAVAILABLE_REASONS`, every part one of `REPORT_PARTS`;
-* every table's columns, dtypes, row order and key uniqueness; the data embedded in the
-  page equal to the saved tables; the page with no external resource;
-* the stages of "The report at each stage of a sample's processing", each with the parts
-  it states present and unavailable; both routes; an export without run records (A2);
-  a `molecules_only` export;
-* the replay bit-identical to the saved registered images of a synthetic FOV;
-  `field_not_saved`; `input_changed`; `replay_differs`;
-* the reads assigned to cells equal to the sum of `sample.h5ad`'s whole counts;
-* the comparison page with a missing sample;
-* no key of `report.json` or column of a table is a verdict or a score.
+The checks of the records added to `run.json` and of the report are the rows of
+{doc}`report-algorithms` ("Checks"), with their tests in "Implemented checks (W-459)":
+RR1 checks the records R1 to R5 and RR2 an older record.
 
 ## Open points for the algorithms page
 
@@ -1301,6 +1244,54 @@ sides of each problematic-FOV rule and which FOVs enter them; the shift of an af
 the geometry of the region a FOV owns and its area; the rounds and signals the examples
 show; the bins of the intensity distributions; how a molecule's `z` becomes a plane; the
 layout of every section and figure; the figure sizes; and the numbered validation table.
+
+## Workflow configuration
+
+A Python-only top-level `report` block (rejected unless `backend: python`), read by a new
+adapter in `dataset/workflow.py`, each key a field of `ReportConfig`; lists become tuples,
+and an unknown key raises `ValueError` naming it, as for the other typed blocks:
+
+```yaml
+report:
+  markers:
+    - name: lymph node compartments
+      genes: [Cd3e, Cd79a, Lyz2, Pecam1]
+    - name: T cell subsets
+      genes: [Cd4, Cd8a, Foxp3]
+  marker_pairs:
+    - [Cd3e, Cd79a]
+    - [Cd4, Cd8a]
+  positive_threshold: 1
+  example_fovs: null              # or three FOV IDs
+  limits:
+    shift_residual: {k: 5, floor: 5, absolute: null}
+    alignment_score: {k: null, floor: null, absolute: null}
+    correct_form_fraction: {k: 3, floor: 0.05, absolute: null}
+    matched_fraction: {k: 3, floor: 0.05, absolute: null}
+    spots_near_zero: 0.05
+  figure_width_px: 1600
+  jpeg_quality: 85
+```
+
+The example is W-383's `markers.yaml` for LN sample1, shortened. `markers` entries are
+`MarkerGroup(name, genes)`; `marker_pairs` entries are pairs; `limits` is `ReportLimits`
+with each rule a `RuleLimit`.
+
+### Options for the rules (choice 16)
+
+| Option | What runs | Note |
+| --- | --- | --- |
+| **WR1 (recommended)** | With a `report` block: `report_sample` per sample, calling `Dataset.report(sample, <the sample's FOVs>, assignment=<assembly.assignment>, config=…)`, declared output `report/{sample}/report.json`, declared input the last per-sample output the configuration has (`export/{sample}/export.json` with an `export` block; else `stitching/{sample}/placement.json`; else the FOVs' `log/sf_scores/{fovID}.txt`); and `report_dataset`, calling `Dataset.compare_samples` on every sample, with output `report/samples.csv`. `report: {}` gives the defaults. | A configuration without the block runs as today. |
+| WR2 | Both rules always run with the Python backend. | Every existing configuration gains two rules and their outputs. |
+| WR3 | No rule; the user calls the entries. | The workflow writes no report. |
+
+Note (W-563): the last fallback input is now the FOVs' `checkpoints/{fovID}/run.json`, which the
+Python processing rules declare instead of the logs ({doc}`migration`, "Sequencing logs and the
+morphology record").
+Note (W-564): it is now `fovs/{fovID}/run.json` ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
+A static schema test keeps the block equal to the fields of `ReportConfig`, as for the other
+blocks.
 
 ## Exclusions
 
@@ -1313,6 +1304,6 @@ delivery: the items listed under "Settled decisions this page follows".
 ```{toctree}
 :hidden:
 
-Processing-report algorithms <report-algorithms>
-Processing-report baseline <report-baseline>
+Processing-report algorithms and validation <report-algorithms>
+Processing-report baseline (history) <report-baseline>
 ```

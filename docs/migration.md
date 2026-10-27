@@ -2388,6 +2388,8 @@ scripts, rules and the JSON copy are unchanged, and `common.smk` selects the sam
   `export_sample`, else its `stitch_sample`, else its FOVs' processing rule) and
   `report_dataset` (`Dataset.compare_samples` over every sample, declared output
   `report/samples.csv`). A configuration without the block gains no rule and no output.
+* **`workflow/notebook/create_rsf_qc_report.py.ipynb` is superseded** by the report; it is
+  left in place.
 
 ## Intentional behavior changes — not mechanical equivalence
 
