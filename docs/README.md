@@ -32,7 +32,9 @@ and its relationship to the Python API; Nextflow is planned), API (Python and MA
 Wiki (Starfinder design with the pipeline-stage guides, datasets, the method registry and
 development) and Benchmark (data, recipes and experiments, results). Each section and
 subsection has an index page with its toctree; every page belongs to exactly one toctree,
-except the `:orphan:` pointer pages that keep old addresses.
+except the `:orphan:` pointer pages that keep old addresses. The section index pages
+listed in `SECTION_PAGES` of `conf.py` show their subsections as cards above a hidden
+toctree; the build warns when the cards and the toctree differ, so `-W` fails the build.
 Start with [architecture](architecture.md) and the
 [Python migration guide](migration.md) when updating existing callers.
 [CONTEXT.md](../CONTEXT.md) is concise orientation; [AGENTS.md](../AGENTS.md)

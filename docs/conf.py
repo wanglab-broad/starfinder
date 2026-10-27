@@ -49,8 +49,14 @@ html_css_files = [
 ]
 html_show_sourcelink = True
 # The landing page is a full-width hero and card grid. Every other page sits in
-# one of the five sections and keeps the section navigation and page table of
-# contents.
+# one of the five sections and keeps the section navigation. The section and
+# subsection index pages are maps of cards, so they drop the page table of
+# contents and use its width.
+SECTION_PAGES = [
+    "get-started/index", "workflow/index", "api/index", "benchmark/index", "wiki",
+    "wiki/design", "wiki/pipeline-stages", "wiki/dataset", "wiki/synthetic",
+    "wiki/real-data", "wiki/development",
+]
 html_sidebars = {
     "index": [],
 }
@@ -72,7 +78,8 @@ html_theme_options = {
             "icon": "fa-brands fa-github",
         }
     ],
-    "secondary_sidebar_items": {"**": ["page-toc", "sourcelink"], "index": []},
+    "secondary_sidebar_items": {
+        "**": ["page-toc", "sourcelink"], "index": [], **{page: [] for page in SECTION_PAGES}},
     "footer_start": ["copyright"],
     "footer_end": [],
 }
@@ -86,14 +93,44 @@ linkcheck_workers = 5
 
 
 def setup(app):
+    app.connect("doctree-read", _cards_follow_toctree)
     app.connect("html-page-context", _source_backlinks)
     app.connect("html-page-context", _landing_page_class)
 
 
 def _landing_page_class(app, pagename, templatename, context, doctree):
-    """Scope the landing-page styles in ``_static/custom.css`` to the index."""
-    if pagename == "index" and "body" in context:
+    """Scope the landing and section-page styles in ``_static/custom.css``."""
+    if "body" not in context:
+        return
+    if pagename == "index":
         context["body"] = f'<div class="sf-landing">{context["body"]}</div>'
+    elif pagename in SECTION_PAGES:
+        context["body"] = f'<div class="sf-section">{context["body"]}</div>'
+
+
+def _cards_follow_toctree(app, doctree):
+    """Warn when a section page's linked cards and its hidden toctree differ.
+
+    A section page shows its subsections as sphinx-design cards and keeps the
+    navigation in a hidden toctree; both must name the same pages in one order.
+    """
+    from sphinx import addnodes
+    from sphinx.util import docname_join, logging
+
+    docname = app.env.docname
+    if docname not in SECTION_PAGES:
+        return
+    cards = [docname_join(docname, node["reftarget"])
+             for node in doctree.findall(addnodes.pending_xref)
+             if "sd-stretched-link" in node.get("classes", []) and node.get("reftype") == "doc"]
+    if not cards:
+        return
+    entries = [entry for node in doctree.findall(addnodes.toctree) if node.get("hidden")
+               for _, entry in node["entries"]]
+    if cards != entries:
+        logging.getLogger(__name__).warning(
+            "section cards %s differ from the hidden toctree %s", cards, entries,
+            location=docname)
 
 
 def _source_backlinks(app, pagename, templatename, context, doctree):

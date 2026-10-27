@@ -1,12 +1,32 @@
 # Workflow
 
-The workflow runs STARfinder over every FOV and sample of a dataset: it turns round/FOV
-TIFF directories and a codebook into per-FOV molecule tables, then segments cells and
-assigns molecules to them, stitches each sample's FOVs, assembles and exports the
-sample and writes its processing report. The workflow that exists is the Snakemake
-workflow in `workflow/`; a Nextflow workflow is planned.
+:::{container} sf-lead
+The workflow runs STARfinder over every FOV and sample of a dataset, from round/FOV
+TIFF directories and a codebook to per-FOV molecule tables and cells, and to each
+sample's export and processing report.
+:::
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} Snakemake
+:link: snakemake
+:link-type: doc
+:class-card: sf-card
+The workflow, its configuration and the Broad UGER profile.
+:::
+
+:::{grid-item-card} Nextflow
+:link: nextflow
+:link-type: doc
+:class-card: sf-card sf-card-planned
+Planned; not implemented yet.
+:::
+
+::::
 
 ```{toctree}
+:hidden:
 :maxdepth: 2
 
 Snakemake <snakemake>
@@ -43,5 +63,5 @@ So a configuration that the workflow accepts describes calls of the API; the
 it is read. `backend: python` selects the Python rules for the
 sequencing stages; `backend: matlab`, the default, runs the MATLAB scripts of the
 {doc}`../api/matlab` instead, and the segmentation and assignment rules call the package
-under both backends. The adapters are the part §2.13 replaces; the API they call is kept
-([What §2.13 replaces](../workflows.md#what-213-replaces)).
+under both backends. The adapters are the part a planned rewrite of the workflow replaces; the API they call
+is kept ([what the rewrite replaces](../workflows.md#what-213-replaces)).
