@@ -1,4 +1,4 @@
-"""The table "Implemented checks (W-373)" of docs/stitching-assembly-validation.md and the rows it maps (W-602).
+"""The table "Implemented checks" of docs/stitching-assembly-validation.md and the rows it maps (W-602).
 
 A docs-contract module (docs/contributing.md, "Test markers"): ``test_every_row_names_collected_tests``, from
 ``test_stitching_validation.py``, reads the page here, so that no ``slow`` test reads it. It finds the rows of the
@@ -30,7 +30,7 @@ BATCH_EXTRAS = ("multiview_stitcher", "spatialdata", "anndata")
 
 def design_rows():
     """The row ids of the page's check tables and of the real examples: the passage from the label of "Checks" to the
-    label of the table "Implemented checks (W-373)"."""
+    label of the table "Implemented checks"."""
     text = docs_pages.between(docs_pages.read(PAGE), "stitching-assembly-validation-checks",
                               "stitching-assembly-validation-implemented-checks")
     return [m.group(1) for m in re.finditer(rf"^\| ({ROW}) \|", text, flags=re.MULTILINE)]

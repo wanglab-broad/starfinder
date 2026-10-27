@@ -1,11 +1,13 @@
 starfinder.assembly
 ===================
 
-Sample assembly (§2.10) puts the per-FOV §2.9 results of one sample into the sample frame
+Sample assembly puts the per-FOV assignment results of one sample into the sample frame
 of its placement and decides which observations represent the sample. It is a
 sample-level computation: it runs no per-FOV stage, matches no cell across FOVs and moves
 no molecule to another cell. See :doc:`../assembly-contract` and
 :doc:`../assembly-algorithms`.
+
+.. Sample assembly (§2.10); the per-FOV §2.9 results
 
 :py:func:`~starfinder.assembly.assemble` takes a
 :py:class:`~starfinder.stitching.PlacementResult` (from any backend, or from
@@ -34,13 +36,15 @@ tests (``territory`` or ``original``), the tie rule, and whether the ``conflict`
 A cell is retained when the owner of its ownership centroid is its own FOV; every
 molecule assigned to it follows it, wherever it lies; an unassigned molecule is retained
 by its own position; ``outside_grid`` molecules and every observation of a FOV without an
-origin are excluded. Every row keeps its §2.9 columns and gets one status of
+origin are excluded. Every row keeps its assignment columns and gets one status of
 ``ASSEMBLY_STATUSES`` with a reason of ``CELL_ASSEMBLY_REASONS`` or
 ``MOLECULE_ASSEMBLY_REASONS`` and the flags of ``CELL_ASSEMBLY_FLAGS`` and
 ``MOLECULE_ASSEMBLY_FLAGS``, which never change a status. The
 :py:class:`~starfinder.assembly.AssemblyResult` holds the four sample tables (``fovs``,
 ``cells``, ``molecules`` and the long ``counts`` of the counted cells: retained and
-§2.9 ``kept``), the genes and the record; its construction checks the count identities.
+assignment ``kept``), the genes and the record; its construction checks the count identities.
+
+.. its §2.9 columns; §2.9 ``kept``
 
 :py:func:`~starfinder.assembly.write_sample_h5ad` writes ``sample.h5ad``, one row per
 counted cell with ``obsm["spatial"]`` the ownership centroid's X and Y in µm, through

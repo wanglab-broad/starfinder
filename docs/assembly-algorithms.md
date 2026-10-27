@@ -1,29 +1,35 @@
 # Assembly algorithm specification
 
-Status: Accepted (W-329, 2026-10-07, at 9033d46)
+% Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page specifies the numerical behavior of each element of {doc}`assembly-contract`:
 the coordinate rule, the ownership regions, retention, the duplicate rule, the flags and
 the count accounting, and the sample-level AnnData built from them. Each has its
-parameters, units, defaults, failure behavior and a resource estimate. The behavior before §2.10 is history, in
+parameters, units, defaults, failure behavior and a resource estimate. The behavior before sample assembly is history, in
 {doc}`assembly-baseline`; the placement it starts from is specified in
 {doc}`stitching-contract` and {doc}`stitching-algorithms`, and the per-FOV tables in
 {doc}`assignment-contract` and {doc}`assignment-algorithms`. Each element is implemented in
 `starfinder.assembly`, and no default here is accepted.
+
+% The behavior before §2.10
 
 ## Evidence
 
 * The golden fixture of `src/python/test/test_workflow_assembly_golden.py` (three FOVs of
   8 × 48 × 64 voxels, nine cells, 24 molecules) and the effect of each ownership option
   on it, computed by `scripts/option_effects.py` into `tables/option_effects.json` in the
-  W-326 run directory
-  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-326/20261006T092110Z-48452974`.
-* The LN sample1 placement of 2024 as the W-324 parity records give it
-  (`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421/parity/`:
+  run directory of the assembly measurements, kept with the run records outside the repository.
+* The LN sample1 placement of 2024 as the stitching parity records give it
+  (their `parity/` folder:
   `script_tile_config_ln.csv`, `prototype/tile_config_ln/T2_sum.csv`), rasterized at 4 px
-  by `scripts/ln_ownership.py` into `tables/ln_ownership.json` (W-326 run directory). That
+  by `scripts/ln_ownership.py` into `tables/ln_ownership.json` (the assembly measurements' run directory). That
   derivation reads records only, took 14 s and 1.6 GB peak RSS on one CPU, and measures
   areas, not molecules or cells: no image or molecule table of LN was read.
+
+% The assembly measurements: the W-326 run directory
+% `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-326/20261006T092110Z-48452974`.
+% The stitching parity records: W-324,
+% `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421/parity/`.
 
 No resource figure below was measured on an implementation; each is an order of
 magnitude from the array sizes, for planning.
@@ -50,7 +56,7 @@ row of `placement.fovs` and `spacing`, `D` from its `ReferenceGrid.metadata`
 | Input | `p` | Output columns |
 | --- | --- | --- |
 | molecule | `z, y, x` (float64, zero-based; sub-voxel kept); on a one-plane grid `z` is read as 0, the plane | `sample_z, sample_y, sample_x` |
-| cell | `centroid_z/y/x`; `expanded_centroid_z/y/x` | `sample_centroid_*`; `sample_expanded_centroid_*` (NaN where the §2.9 value is NaN) |
+| cell | `centroid_z/y/x`; `expanded_centroid_z/y/x` | `sample_centroid_*`; `sample_expanded_centroid_*` (NaN where the assignment value is NaN) |
 | plane cell | as above, but `centroid_z` is not a position | `sample_centroid_z` = NaN |
 | ownership centroid | the expanded centroid when `centroid="territory"` and assign expanded, else the original | `ownership_centroid` (`expanded` or `original`) and `sample_ownership_centroid_*`, a copy of the pair it names |
 
@@ -159,8 +165,10 @@ it; a sample with FOVs of different `nominal_z` raises (check 8 of the entry).
 (each point then tests the few FOVs of its bin; four or fewer on a grid with overlaps
 under half a tile). Per point a few float64 comparisons: `O(points × candidates)` time,
 `O(points)` memory, vectorized per FOV. The tables of a whole sample are the memory that
-matters: about 100 bytes per molecule row with the §2.9 columns, so 10 million molecules
+matters: about 100 bytes per molecule row with the assignment columns, so 10 million molecules
 take about 1 GB. Not measured.
+
+% with the §2.9 columns
 
 ## Retention
 
@@ -176,11 +184,13 @@ Per FOV, in order:
    (reason `cell_not_owner` for `not_owner`); `unassigned` → owner of the molecule's own
    position; `outside_grid` → `outside_grid`. In `molecules_only` mode every molecule is
    treated as `unassigned`, except `outside_grid` positions (`z, y, x` outside the grid by
-   the §2.9 bounds; `y, x` only on a one-plane grid), which are excluded.
-4. Counts: the FOV's §2.9 `counts` rows of its counted cells (retained, §2.9 status
+   the assignment bounds; `y, x` only on a one-plane grid), which are excluded.
+4. Counts: the FOV's assignment `counts` rows of its counted cells (retained, assignment status
    `kept`; {doc}`assembly-contract`, "Statuses and reasons"), with `fov_id` and
-   `cell_namespace` added. A retained `excluded_no_nucleus` cell has no §2.9 count rows and
+   `cell_namespace` added. A retained `excluded_no_nucleus` cell has no assignment count rows and
    gets none.
+
+% Step 3: the §2.9 bounds. Step 4: §2.9 `counts`, §2.9 status, no §2.9 count rows.
 
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
@@ -197,12 +207,14 @@ per cell and per unassigned molecule, one join of molecules to cells by `cell_id
 ## Duplicate rule
 
 Decided by Jiahao on 2026-10-09 ({doc}`cells-across-fovs-proposal`, question 3, option b)
-and implemented by W-400: rule 8 of {doc}`assembly-contract`, "Retention". **Order of the
+and implemented on that date: rule 8 of {doc}`assembly-contract`, "Retention". **Order of the
 steps inside `assemble`:** retention by the ownership centroid (steps 1 and 2 above); then
 the duplicate rule among the cells retained so far; then the flags ("Flags"), among the
 cells retained after the rule, by their definitions; then the molecules, which follow
 their cell (step 3), so that the molecules of an observation the rule excludes are
 excluded `cell_duplicate_observation`.
+
+% implemented by W-400
 
 **The measure.** Each FOV's retained-cell territory (the territory assign sampled, with
 every value that is not one of its retained cells set to 0) is placed on the sample grid
@@ -230,10 +242,12 @@ the inputs nor the order of the FOV pairs changes the result.
 | --- | --- | --- | --- |
 | `duplicate_threshold` | share of the smaller territory's voxels | `0.5` | a number above 0 and at most 1, or null (the rule off); a bool, a string or any other value raises `ValueError` naming the field |
 
-On the two cellular blocks of W-399, 0.5 picks exactly the cells that `conflict` marked
+On the two cellular blocks measured for that proposal, 0.5 picks exactly the cells that `conflict` marked
 ({doc}`cells-across-fovs-proposal`, measurement 1 and question 3). The kept observation is
 the larger: a cut observation is smaller than an uncut one. The rule removes a second
 observation; it does not complete a cell cut by a FOV edge.
+
+% the two cellular blocks of W-399
 
 Failure: with the rule on and retained cells in two or more FOVs, FOVs of different
 spacings or of mixed `plane` and `volume` territories among them raise `ValueError` (the
@@ -242,11 +256,13 @@ raises as for the flags. Cost: the territories are read two FOVs at a time (each
 once, and once more for each earlier FOV in table order whose extent overlaps it), the
 shared voxels counted plane by plane on the box where both extents overlap, so at most two
 territory images and one plane of each box are in memory; time `O(voxels of the overlap
-boxes)`. The rule reads the territories also when `conflicts=False`. Measured by W-400 on
+boxes)`. The rule reads the territories also when `conflicts=False`. Measured by its implementation on
 the implementation, unlike the estimates elsewhere on this page, on a synthetic 3 × 3 grid
 of 16×256×256 tiles with cells along every seam (1,158 cell observations, 45,775 molecule
 observations, saved assignment folders, one CPU): `assemble` took 1.58 s without the rule
 and 2.08 s with it, with a peak RSS of 254 MB to 264 MB in both.
+
+% Measured by W-400
 
 ## Flags
 
@@ -259,22 +275,26 @@ and 2.08 s with it, with a peak RSS of 254 MB to 264 MB in both.
 | `outside_owner_region` | A retained molecule of a retained cell whose own position's owner is another FOV. | One owner query per such molecule. |
 | `cell_unclaimed` | A molecule of a cell flagged `unclaimed`. | A join. |
 
-The territories are those of the §2.9 result (`territories` when assign expanded, else
+The territories are those of the assignment result (`territories` when assign expanded, else
 `cell_labels`), read from the saved assignment folder with their SHA-256 checked. The
 record (the `assembly` section of `export.json`) holds, per FOV, the path of the file
-read, as the §2.9 loader resolved it, beside that SHA-256 ({doc}`assembly-contract`, "What assemble records"), so a
+read, as the assignment loader resolved it, beside that SHA-256 ({doc}`assembly-contract`, "What assemble records"), so a
 later reader, such as the label export, opens the file directly. Pairs of
 FOVs are processed so that at most two territory images are in memory: 4 bytes per voxel
 (`uint32`), 8.95 MB per plane of a 1496 × 1496 grid. A retained cell is one the cell
 table retains after the duplicate rule: a cell the rule excluded is neither flagged
 `conflict` nor tested as a retained cell of its FOV.
 
+% the §2.9 result; the §2.9 loader
+
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
 | `conflicts` | – | `True` | `False` skips `conflict` and `unclaimed` (no label image is read for them; the duplicate rule, when on, still reads the territories); the columns are then null and the record says so |
 
 Failure: a territory file missing or with another SHA-256 raises `ValueError` naming the
-path and both hashes (the §2.9 loader's rule).
+path and both hashes (the assignment loader's rule).
+
+% the §2.9 loader's rule
 
 On the fixture under O1: in 2D FOV1's cell 6 and FOV3's cell 5 (both scene cell 9) are
 flagged `conflict` with the duplicate rule off (with the default rule FOV3's cell 5 is
@@ -293,11 +313,13 @@ result:
    molecules;
 3. per molecule, the status rule of "Retention" recomputed from the molecule's
    `assignment_status`, its cell's status and its owner;
-4. the sample `counts` equal the concatenation of the per-FOV §2.9 `counts` restricted to
+4. the sample `counts` equal the concatenation of the per-FOV assignment `counts` restricted to
    the counted cells (a sorted comparison of `(fov_id, cell_id, gene_id, compartment,
    count)`), and `Σ whole` equals the retained `assigned` molecules and the sum of
    `n_molecules` over the counted cells;
-5. the §2.9 compartment identities over the counted cells.
+5. the assignment compartment identities over the counted cells.
+
+% 4: the per-FOV §2.9 `counts`; 5: the §2.9 compartment identities
 
 Placeholders change none of these identities. A placeholder's observations, when it has an
 input, all get excluded reasons (`not_owner`, `cell_not_owner`, `outside_grid`), and
@@ -316,7 +338,7 @@ genes, *, layers, uns, var, obsm)` of `starfinder.assignment`, which builds the 
 (step 2) and writes it at `path`:
 
 1. Select the counted cells: the cell-table rows with `assembly_status == "retained"` and
-   §2.9 `status == "kept"`, in table order. A retained cell whose §2.9 status is
+   assignment `status == "kept"`, in table order. A retained cell whose assignment status is
    `excluded_no_nucleus` is not selected; it stays in the cell table with its assembly
    status. Check that the number selected equals `adata.n_obs` at the end.
 2. Build `X` (float64, rows × genes) from the `whole` counts by `(cell_namespace,
@@ -334,6 +356,8 @@ genes, *, layers, uns, var, obsm)` of `starfinder.assignment`, which builds the 
 4. `molecules_only`: zero rows, `var["n_molecules_retained"]`, passed to `write_h5ad` as
    `var`; with no row in `obs`, `write_h5ad` writes `X` of shape `(0, n_genes)`.
 
+% Step 1: §2.9 `status == "kept"`; a retained cell whose §2.9 status is
+
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
 | `annotation` | – | `None` | a mapping of extra `obs` columns for the sample (the workflow passes the annotation row) |
@@ -349,7 +373,9 @@ Cost: `X` and each layer are dense float64, as in `raw.h5ad`: 8 bytes × cells �
 (100,000 cells × 1,000 genes is 0.8 GB per matrix). A sparse `X` would change the
 `raw.h5ad` convention and is not proposed here.
 
-## Golden tests and the §2.10 checks
+## Golden tests and the validation checks
+
+% Golden tests and the §2.10 checks
 
 The golden and legacy tests hold the behavior of the rules this page replaces.
 `test_workflow_assembly_golden.py`, `test_workflow_stitching_golden.py`,
@@ -358,7 +384,9 @@ helpers stay as the frozen legacy reference.
 
 The checks of the elements above are rows AS1 to AS17 and WF1 of
 {doc}`stitching-assembly-validation` ("Checks"), each named with its tests in
-"Implemented checks (W-373)".
+"Implemented checks".
+
+% "Implemented checks (W-373)"
 
 ## Limitations
 
@@ -372,5 +400,7 @@ The checks of the elements above are rows AS1 to AS17 and WF1 of
 * Losses are flagged, and duplicates are flagged or, at or above the duplicate threshold,
   resolved by the duplicate rule; neither is counted as biological cells, and their
   frequency on real samples is not known and is a question for the validation design
-  (W-331).
+  ({doc}`stitching-assembly-validation`).
 * The resource figures are estimates from array sizes, not measurements.
+
+% the validation design (W-331)

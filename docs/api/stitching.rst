@@ -1,10 +1,12 @@
 starfinder.stitching
 ====================
 
-Stitching (§2.10) places the FOVs of one sample in one physical frame, ``sample:<sample>``
+Stitching places the FOVs of one sample in one physical frame, ``sample:<sample>``
 in µm. It is a sample-level computation outside ``PipelineConfig`` and ``FOV.run``: it
 reads only saved per-FOV files and runs no per-FOV stage. See
 :doc:`../stitching-contract` and :doc:`../stitching-algorithms`.
+
+.. Stitching (§2.10)
 
 A :py:class:`~starfinder.stitching.TilePositionTable` holds one row per acquired FOV in
 acquisition order: ``fov_id``, ``position_id``, ``nominal_z``, ``nominal_y``,

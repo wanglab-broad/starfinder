@@ -1,30 +1,37 @@
 # Stitching algorithm specification
 
-Status: Accepted (W-329, 2026-10-07, at 9033d46)
+% Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page specifies the numerical behavior of each element of {doc}`stitching-contract`:
 the three converters into the tile position table, the neighbour derivation, the
 `multiview_stitcher` method, the import arithmetic of BigStitcher's `dataset.xml`, the
 supplied placement, and the placement-quality checks. Each has its parameters, units,
-defaults, failure behavior and a resource estimate. The behavior before §2.10 is history, in {doc}`stitching-baseline`. Each element is
+defaults, failure behavior and a resource estimate. The behavior before the stitching stage is history, in {doc}`stitching-baseline`. Each element is
 implemented in `starfinder.stitching`, and no default here is accepted.
+
+% The behavior before §2.10
 
 ## Evidence
 
-Every measured number is cited from W-323
-(`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-323/`) and W-324
-(`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421`,
-`notes.md`, `tables/runs.csv`, `tables/comparison_summary.csv`,
-`tables/fixtures_summary.csv`, `tables/pairs_between_runs.csv`). W-324 measured
+Every measured number is cited from the stitching input inventory and the stitching
+parity runs (their `notes.md`, `tables/runs.csv`, `tables/comparison_summary.csv`,
+`tables/fixtures_summary.csv`, `tables/pairs_between_runs.csv`), both kept with the run
+records outside the repository. The parity runs measured
 multiview-stitcher 0.1.62 on GP099 (Python 3.12.12) with the raw-acquisition calibration
 (0.194398 µm in x and y for LN and cell-culture-3D, 0.094635 µm for tissue-2D, 0.346255 µm
-in z), translation only, on the CPU. W-324 ranks no backend and makes no accuracy claim;
+in z), translation only, on the CPU. The parity runs rank no backend and make no accuracy claim;
 neither does this page.
+
+% The stitching input inventory: W-323 (`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-323/`).
+% The stitching parity runs: W-324 (`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421`).
+% On this page "the input inventory" is W-323 and "the parity runs" (and their notes) are W-324.
 
 **How to read the resource figures.** Wall and CPU time and peak RSS are from
 `/usr/bin/time -v` per process; loading the tiles from the CIFS share is reported apart
-from registration where W-324 measured it. Three whole samples, one host, one Python
+from registration where the parity runs measured it. Three whole samples, one host, one Python
 version: the figures are an order of magnitude for planning, not a bound.
+
+% where W-324 measured it
 
 ## Converters
 
@@ -41,19 +48,21 @@ FOVs; it was not measured and is negligible beside registration.
    `StageZPos`) are kept in the record, not used.
 2. With `position_ids`, keep only those positions, in file order. Every later step (the
    axis mapping, the shift, the snap step, the cells and the clash check) sees only them,
-   so a whole-acquisition file gives the table of the sample's subset (W-566).
+   so a whole-acquisition file gives the table of the sample's subset (since 2026-10-24).
    `Dataset.stitch` selects the positions of its `fov_ids`: by its `position_ids` argument
    (the workflow passes `fovs.csv`'s `position_id`), or else the `PositionID` values `p`
    whose `fov_pattern.format(i=p)` is one of them.
 3. Convert to µm (× 1e6) and apply `stage_axes`: stage +X goes to the image axis and sign
-   it names, likewise stage +Y. For LN, `x="+x"`, `y="+y"` (W-323 `positions.md`; fit
+   it names, likewise stage +Y. For LN, `x="+x"`, `y="+y"` (the input inventory's `positions.md`; fit
    residual RMS 0.29 µm in x and 0.34 µm in y).
 4. Shift so that the smallest y and x are 0; z is 0 for every FOV.
 5. Map `PositionID` to `fov_id` through `fov_ids`.
 
+% Step 2: the sample's subset (W-566). Step 3: W-323 `positions.md`.
+
 With `snap_to_grid=GridSnap(overlap=…, tile_shape_yx=…, spacing_yx=…)`, the positions are
 replaced by a regular grid, which reproduces the start of today's BigStitcher macro and of
-W-324's main configuration. The converter reads no image: the tile size and spacing are
+the parity runs' main configuration. The converter reads no image: the tile size and spacing are
 `GridSnap` fields, given as values. `Dataset.stitch` fills them, when the configuration
 does not give them, from the FOVs' `ReferenceGrid` (`shape_zyx[1:]` and
 `metadata.spacing_zyx[1:]`) and raises `IncompatibleGeometryError` if the FOVs of the
@@ -64,7 +73,7 @@ the dataset").
   (y for a column scan), rounded to 0.1 µm; the step is the most frequent absolute
   difference; a tie goes to the smaller value. (The legacy rule is the most frequent exact
   float difference, signed, with the first value in the counts' order winning a tie,
-  {doc}`stitching-baseline` G2; the rounding removes the last-bit ties W-324 recorded in
+  {doc}`stitching-baseline` G2; the rounding removes the last-bit ties the parity runs recorded in
   `maf_2x3_jitter`. On LN both give 262.0 µm.)
 * **Cells.** `column = floor((x − min x)/step + 0.5)`, `row = floor((y − min y)/step +
   0.5)`, the legacy rounding written for every sign.
@@ -92,7 +101,7 @@ script summed two such ids into one cell.
 `positions_from_grid(*, columns, rows, order, tile_shape_yx, spacing_yx, overlap, fov_ids)`
 
 * FOV `k` of `fov_ids` goes to a cell by `order`: `column_major_down_right` (column
-  `k // rows`, row `k % rows`; the scan of tissue-2D and cell-culture-3D, W-323
+  `k // rows`, row `k % rows`; the scan of tissue-2D and cell-culture-3D, the input inventory's
   `positions.md`), `row_major_right_down`, and their serpentine forms.
 * Nominal `y = row × (1 − overlap_y) × tile_y × spacing_y`, `x = column × (1 − overlap_x)
   × tile_x × spacing_x`, `z = 0`.
@@ -106,8 +115,10 @@ script summed two such ids into one cell.
 | `overlap` | fraction | none | `0 ≤ overlap < 1` |
 
 Failure: more FOVs than cells, or an unknown order, raise `ValueError`. The y step is
-nominal: W-323 found the registered y step 0.3 % (culture) and 0.5 % (tissue) larger, up
+nominal: the input inventory found the registered y step 0.3 % (culture) and 0.5 % (tissue) larger, up
 to 46 and 153 px over a column, which the method must correct.
+
+% W-324's main configuration; ties W-324 recorded; W-323 `positions.md`; W-323 found the registered y step
 
 ### Supplied table
 
@@ -131,13 +142,17 @@ repeated or empty `fov_id`, a missing column or a non-finite value raises `Value
 | `tolerance_um` | µm | 0.0 | ≥ 0; covers stage error when the nominal boxes only touch |
 
 multiview-stitcher's own overlap graph found 213 pairs on LN from the grid start, 181 on
-tissue-2D and 231 on cell-culture-3D, diagonals included (W-324 notes section 2.1). The
+tissue-2D and 231 on cell-culture-3D, diagonals included (the parity runs' notes, section 2.1). The
 rule here is the same box intersection with zero tolerance; the implementation checks that
 it gives the same pairs on its fixtures. No pair is derived from row or column indices.
 
+% W-324 notes section 2.1
+
 ## `multiview_stitcher`
 
-One call per sample. Steps, as W-324 ran them (notes sections 3 and 5):
+One call per sample. Steps, as the parity runs ran them (their notes, sections 3 and 5):
+
+% as W-324 ran them (notes sections 3 and 5)
 
 1. **Views.** Each tile becomes a one-level image with `spacing` from its reference grid
    and its nominal origin as the array translation (`get_sim_from_array(…,
@@ -169,16 +184,20 @@ One call per sample. Steps, as W-324 ran them (notes sections 3 and 5):
 | --- | --- | --- | --- |
 | `method` | | `"multiview_stitcher"` | discriminator, equals the spec name |
 | `binning_zyx` | voxels | `(4, 4, 4)` | integers ≥ 1; ignored for z on Z=1 |
-| `pairwise` | | `"phase_correlation"` | the only value in §2.10 |
+| `pairwise` | | `"phase_correlation"` | the only value in the accepted design |
 | `upsample_factor` | | `None` (library default) | integer ≥ 1 |
 | `quality_threshold` | | `0.7` | in [−1, 1] |
 | `drop_nan_quality` | | `True` | |
 | `pruning` | | `"alternating_pattern"` | or `None` (register every pair) |
 | `overlap_tolerance_um` | µm | `0.0` | ≥ 0 |
-| `groupwise` | | `"global_optimization"` | the only value in §2.10 |
+| `groupwise` | | `"global_optimization"` | the only value in the accepted design |
 | `abs_tol_um`, `rel_tol`, `max_iter` | µm, –, – | `None` (library defaults; `abs_tol` is the voxel diagonal, 0.44 µm for LN) | |
 
-**Behavior W-324 recorded.**
+% `pairwise` and `groupwise`: the only value in §2.10
+
+**Behavior the parity runs recorded.**
+
+% Behavior W-324 recorded
 
 * *Determinism:* identical translations, bit for bit, for repetitions and between one and
   four threads on every sample, and for the 24 fixture reruns (`pairs_between_runs.csv`).
@@ -198,9 +217,13 @@ component with the identity, so it would stay at its nominal position silently; 
 wrapper makes it `failed` (or `metadata_only` with the fallback). A non-finite
 translation: `failed`. A constant tile: its links are NaN and dropped, so it is
 disconnected. The library's 3D adjacency helper raises on one-plane 3D views
-(W-324 notes section 2.6); the wrapper passes Z=1 tiles as 2D.
+(the parity runs' notes, section 2.6); the wrapper passes Z=1 tiles as 2D.
 
-**Resources** (W-324 notes section 2.2; ranges over the runs at one and four threads, without the `upsample_factor` 10 run, which took 191.5 s on LN):
+% W-324 notes section 2.6
+
+**Resources** (the parity runs' notes, section 2.2; ranges over the runs at one and four threads, without the `upsample_factor` 10 run, which took 191.5 s on LN):
+
+% W-324 notes section 2.2
 
 | Sample | FOVs, shape | Load wall (s) | Register wall (s) | Total wall (s) | Peak RSS (GiB) |
 | --- | --- | --- | --- | --- | --- |
@@ -224,7 +247,7 @@ For each `ViewRegistration` (setup `v`, timepoint 0):
    numbers, the row-major 3 × 4 matrix in XYZ. Compose all transforms except
    `calibration`, in file order (newest first), as 4 × 4 matrices. If the composed linear
    part differs from the identity by more than 1e-9, raise `ValueError` naming the view
-   and transforms: §2.10 admits translation only. A view without a `Stitching Transform`
+   and transforms: the accepted design admits translation only. A view without a `Stitching Transform`
    fails the engine task before the import (Fiji's exit status does not report it).
 2. **World translation** `w_v = (w_x, w_y, w_z)`: the composed translation. For
    translations this is the sum of `Stitching Transform` and `Translation to Regular Grid`
@@ -246,6 +269,8 @@ For each `ViewRegistration` (setup `v`, timepoint 0):
 7. **Views.** A view mapped to an acquired FOV gives that FOV's row; a padding view keeps
    only its raw `w_v` and grid cell in the method record; a placeholder view gives its FOV
    the status `placeholder`. A FOV of the table without a view is `missing`.
+
+% Step 1: §2.10 admits translation only
 
 **Status from links.** An acquired view with at least one link into the reference
 component is `image_supported`. One without (a view BigStitcher's second round placed from
@@ -270,8 +295,10 @@ the LN `dataset.xml` must reproduce"); on the golden fixture it must reproduce
 Failure: a missing or unreadable file, a view without a view-map entry, a non-translation,
 or a calibration with `c_x ≠ c_y` raise `ValueError` naming the view. Cost: a parse of one
 XML file (141 KB for LN's 72 views and 145 links); not measured, negligible beside the
-Fiji run (W-323: 14 min 33 s, almost all of it the HDF5 resave, and 18 s for shifts,
+Fiji run (the input inventory: 14 min 33 s, almost all of it the HDF5 resave, and 18 s for shifts,
 filter and optimization).
+
+% W-323: 14 min 33 s
 
 ## Supplied placement
 
@@ -329,18 +356,22 @@ the record and cost nothing measurable.
 | NaN-quality links | quality NaN | – | dropped under L1; flag `nan_quality_link` |
 | Optimizer-removed links | reported by the method | – | flag `optimizer_removed_link`; review required |
 
-For scale (W-324 notes section 5): LN corrections from the grid start reach 33.9 px in x
+For scale (the parity runs' notes, section 5): LN corrections from the grid start reach 33.9 px in x
 and 44.5 px in y, below half the 149.6 px overlap (74.8 px); from the stage start they
-reach 149.9 px in x, above it. The defaults are proposals for W-331's validation design;
-W-331 sets the validation tolerances.
+reach 149.9 px in x, above it. The defaults are proposals for the validation design
+({doc}`stitching-assembly-validation`), which sets the validation tolerances.
+
+% W-324 notes section 5; W-331's validation design; W-331 sets the validation tolerances
 
 ## Limitations
 
 * Three samples, one host, Python 3.12 only; two of the references are Fiji
-  Grid/Collection results with unrecorded settings (W-324 notes section 6).
+  Grid/Collection results with unrecorded settings (the parity runs' notes, section 6).
 * No placement truth on real data; the known-answer fixtures have integer offsets and
   identical signal in every overlap.
 * The converters, the neighbour rule, the import and the checks are specified, not run:
   the import's agreement with the LN parity outputs is a requirement on the
   implementation, not a measurement.
 * The stage-start failure of multiview-stitcher was observed with library defaults only.
+
+% W-324 notes section 6

@@ -1,10 +1,12 @@
 # Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables
 
-Status: Accepted (W-329, 2026-10-07, at 9033d46)
+% Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-This page is the maintained guide to the assembly stage (§2.10) and its contract.
+This page is the maintained guide to the assembly stage and its contract.
 
-* **What assembly does.** It puts the per-FOV §2.9 results of one sample into the sample
+% the assembly stage (§2.10)
+
+* **What assembly does.** It puts the per-FOV assignment results of one sample into the sample
   frame of its placement, in µm: every molecule and cell gets sample coordinates, each
   point of the sample is owned by one owning FOV (nearest footprint centre), and every
   observation is retained or excluded with a reason, with flags for partial and
@@ -32,8 +34,10 @@ This page is the maintained guide to the assembly stage (§2.10) and its contrac
   [Persistence](#persistence), [Sample-level AnnData](#sample-level-anndata)).
 * **Where the configuration goes.** The `AssemblyConfig` passed to `assemble`, or
   `ExportConfig.assembly` of `Dataset.export`, a sample-level entry outside
-  `PipelineConfig` (D3); in the workflow, the Python-only `assembly` block, which the rule
+  `PipelineConfig` (a settled decision); in the workflow, the Python-only `assembly` block, which the rule
   `export_sample` reads ([Workflow configuration](#workflow-configuration)).
+
+% the per-FOV §2.9 results; a sample-level entry outside `PipelineConfig` (D3)
 
 Beneath this guide, {doc}`assembly-algorithms` gives the numerical rules, parameters and
 resources of the coordinate rule, ownership, retention, the duplicate rule, the flags,
@@ -41,9 +45,11 @@ the count accounting and the sample-level AnnData, with the golden tests;
 {doc}`stitching-assembly-validation` is the engineering validation design that assembly
 shares with stitching and the sample outputs, with its implemented checks (rows AS1 to
 AS17) and the results of the real examples; {doc}`assembly-baseline` is history
-(`0f5cbd8`, before §2.10).
+(`0f5cbd8`, before the stitching and assembly work).
 
-This page specifies the §2.10 assembly contract: a sample-level assemble entry separate
+% before §2.10
+
+This page specifies the assembly contract: a sample-level assemble entry separate
 from stitch and from export, the rule that puts molecules and cells into sample
 coordinates, ownership regions computed from the placement, the retention rule agreed on
 2026-09-27, assembly statuses and reasons, flags for partial and conflicting cells,
@@ -62,33 +68,39 @@ neither:
   rule and its count identities.
 
 Where this page lists a column of those tables, it copies it unchanged. It is implemented
-in `starfinder.assembly`, and nothing is renamed. The fused image and the SpatialData export belong to W-328.
+in `starfinder.assembly`, and nothing is renamed. The fused image and the SpatialData export belong to the sample outputs ({doc}`sample-output-contract`).
 
-Evidence, cited by path:
+% The §2.10 assembly contract; the fused image and the SpatialData export belong to W-328
 
-* W-324, run directory
-  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421`
-  (found with `timeout 30 find …/runs/W-324 -maxdepth 2 -name stitching-manifest.json`):
+Evidence, cited by path, kept with the run records outside the repository:
+
+* The stitching parity runs, whose run directory holds a `stitching-manifest.json`:
   the LN parity outputs `parity/script_tile_config_ln.csv` and
   `parity/prototype/tile_config_ln/T2_sum.csv`.
-* W-326, run directory
-  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-326/20261006T092110Z-48452974`:
+* The assembly measurements:
   `tables/ln_ownership.json` (ownership areas of each option on LN, from the two records
   above, `scripts/ln_ownership.py`) and `tables/option_effects.json` (each option on the
   golden fixture, `scripts/option_effects.py`).
 
+% The stitching parity runs: W-324, run directory
+% `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421`
+% (found with `timeout 30 find …/runs/W-324 -maxdepth 2 -name stitching-manifest.json`).
+% The assembly measurements: W-326, run directory
+% `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-326/20261006T092110Z-48452974`.
+% On this page "the parity runs" are W-324 and "the assembly measurements" (and their derivations) are W-326.
+
 ## Settled decisions this page follows
 
-Decided by Jiahao in the §2.10 planning session (W-152 comment "§2.10 planning decisions
-(2026-10-05)" and its reply "Amendment on the sample outputs"), and in the W-152 comments
-of 2026-09-27 on §2.10:
+Decided by Jiahao in the stitching and assembly planning session (the planning decisions
+of 2026-10-05 and their amendment on the sample outputs), and in the planning comments
+of 2026-09-27 on stitching and assembly:
 
 * **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
-  and `Dataset.export` (D3, as amended at the W-329 review of 2026-10-06);
+  and `Dataset.export` (as amended at the review gate of 2026-10-06);
   `Dataset.export` calls `assemble`, `fuse_images`, `fuse_labels` and `export_spatialdata` in
   order ({doc}`sample-output-contract`, "The export entry"). **Ownership regions are
   computed in assemble from the placement**, not stored in it.
-* **Placement from either backend** enters as one `PlacementResult` (D1, D2).
+* **Placement from either backend** enters as one `PlacementResult`.
 * **Retention** (2026-09-27): a cell is retained by its centroid; all molecules of a
   retained cell are kept wherever they lie; an unassigned molecule is retained by its own
   position. This holds for the route per FOV; on the route after fusion
@@ -99,9 +111,9 @@ of 2026-09-27 on §2.10:
   matched only by the duplicate rule of 2026-10-09 (below). The workflow is FOV-first:
   per-FOV results are produced first, and assembly follows per sample.
 * **The sample-level AnnData is a required default output of every assembled sample**
-  (Jiahao, 2026-10-05, amendment), written from the sample tables through the §2.9
-  AnnData code, without a second exporter. The fused image and SpatialData are W-328's.
-* **Amended at the W-329 review (2026-10-06):** placeholder FOVs own no points, and only a
+  (Jiahao, 2026-10-05, amendment), written from the sample tables through the assignment
+  AnnData code, without a second exporter. The fused image and SpatialData are the sample outputs'.
+* **Amended at the review gate (2026-10-06):** placeholder FOVs own no points, and only a
   placed FOV that has an input owns points ("Placeholder FOVs"); the shared AnnData
   function is named `write_h5ad` and builds the AnnData and writes the file ("Sample-level
   AnnData"); the record holds each territory label file's path beside its SHA-256 ("What
@@ -109,12 +121,18 @@ of 2026-09-27 on §2.10:
   ("Ownership regions"). A placement from `placement_from_table`
   ({doc}`stitching-contract`, "Supplied placement") is a `PlacementResult` like any other.
 * **Decided on 2026-10-09** (Jiahao, on {doc}`cells-across-fovs-proposal`, question 3,
-  option b; implemented by W-400): the route per FOV keeps one of two observations of a
+  option b; implemented on that date): the route per FOV keeps one of two observations of a
   cell, as a part of that route for good. Two retained cells of different FOVs whose
   territories share at least `duplicate_threshold` (default 0.5) of the smaller territory
   on the sample grid are one candidate cell: the larger observation stays retained, and
   the other is excluded `duplicate_observation` with its molecules ("Retention", rule 8).
   The rule removes a second observation; it does not complete a cell cut by a FOV edge.
+
+% Decided in the §2.10 planning session (W-152 comment "§2.10 planning decisions (2026-10-05)" and its reply
+% "Amendment on the sample outputs"), and in the W-152 comments of 2026-09-27 on §2.10.
+% Two sample-level entries: D3, as amended at the W-329 review of 2026-10-06. Placement from either backend: D1, D2.
+% The sample-level AnnData: through the §2.9 AnnData code; the fused image and SpatialData are W-328's.
+% Amended at the W-329 review (2026-10-06). Decided on 2026-10-09: implemented by W-400.
 
 Excluded: merging of cells across FOVs (the duplicate rule of "Retention", rule 8, excludes
 one of two observations and merges nothing), recovery of complete cells, reassignment
@@ -139,21 +157,27 @@ assignment contracts.
   ("Ownership regions"); a FOV's **ownership region** is the set of points it owns.
 * An observation is **retained** when it represents the sample, and **excluded**
   otherwise; the **assembly status** records which, with a reason. It is distinct from the
-  §2.9 assignment status (`assigned`, …) and cell status (`kept`, …), which assemble copies
+  per-FOV assignment status (`assigned`, …) and cell status (`kept`, …), which assemble copies
   and never changes.
+
+% §2.9
 
 ## Names
 
 | Option | Names | Effect on the golden values | Effect on existing files and outputs |
 | --- | --- | --- | --- |
 | **A1. A `starfinder.assembly` module (recommended)** | Module `starfinder.assembly`; entry `assemble`; result `AssemblyResult`; input `AssemblyInput`; config `AssemblyConfig`; ownership `ownership_map`, `OwnershipMap`; vocabularies `ASSEMBLY_STATUSES`, `CELL_ASSEMBLY_REASONS`, `MOLECULE_ASSEMBLY_REASONS`, `CELL_ASSEMBLY_FLAGS`, `MOLECULE_ASSEMBLY_FLAGS`; persistence `save_assembly`, `load_assembly`; AnnData `write_sample_h5ad`; coordination through the assemble part of `Dataset.export` ({doc}`sample-output-contract`) | None: `test_workflow_assembly_golden.py` pins the legacy scripts and the adapter through frozen helpers, which no option edits. | New files only; `Dataset.export` belongs to {doc}`sample-output-contract`; the exports go into `__all__` and the autosummary list of `docs/api/assembly.rst`, which `docs/check_reference.py` requires. `tile_config_{sample}.csv` and the legacy per-FOV and sample files stay as they are while the legacy rules run. |
-| A2. Inside `starfinder.stitching` | `starfinder.stitching.assemble` returning `SampleAssembly`; the same `Dataset.export` | None. | The same files; one module then holds placement and the observation populations, which D3 separates, and the stitching module gains a dependency on `starfinder.assignment`. |
-| A3. One `starfinder.sample` module for assemble and export | `starfinder.sample.assemble`, `AssembledSample`; W-328's export beside it | None. | The same files; the module grows a second responsibility when W-328 adds the fused image and SpatialData export. |
+| A2. Inside `starfinder.stitching` | `starfinder.stitching.assemble` returning `SampleAssembly`; the same `Dataset.export` | None. | The same files; one module then holds placement and the observation populations, which the settled stage split separates, and the stitching module gains a dependency on `starfinder.assignment`. |
+| A3. One `starfinder.sample` module for assemble and export | `starfinder.sample.assemble`, `AssembledSample`; the sample outputs' export beside it | None. | The same files; the module grows a second responsibility when the sample outputs add the fused image and SpatialData export. |
 
-**Recommendation: A1.** It mirrors the stage split of D3 (stitch, assemble, fuse and
-export), follows W-325's recommendation that assemble keeps its own module
-({doc}`stitching-contract`, "Names"), and keeps `starfinder.stitching` free of the §2.9
+% D3; W-328
+
+**Recommendation: A1.** It mirrors the settled stage split (stitch, assemble, fuse and
+export), follows the stitching contract's recommendation that assemble keeps its own module
+({doc}`stitching-contract`, "Names"), and keeps `starfinder.stitching` free of the assignment
 tables.
+
+% D3; W-325; §2.9
 
 New names under A1:
 
@@ -182,7 +206,7 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
 class AssemblyInput:
     fov_id: str
     grid: ReferenceGrid                                  # the FOV's reference grid (the molecule run's)
-    assignment: AssignmentResult | str | Path | None = None   # a §2.9 result, or its saved folder
+    assignment: AssignmentResult | str | Path | None = None   # an assignment result, or its saved folder
     molecules: MoleculeTable | None = None               # a molecule table alone (no segmentation)
 
 @dataclass(frozen=True)
@@ -194,9 +218,11 @@ class AssemblyConfig:
     duplicate_threshold: float | None = 0.5   # the duplicate rule ("Retention", rule 8); None: off
 ```
 
+% `AssemblyInput.assignment`: a §2.9 result, or its saved folder
+
 `assemble` checks its arguments, maps every observation into sample coordinates, computes
 the ownership map from the placement, assigns one assembly status per cell and molecule,
-computes the flags, copies the §2.9 counts of the counted cells ("Statuses and reasons"),
+computes the flags, copies the assignment counts of the counted cells ("Statuses and reasons"),
 and returns an
 `AssemblyResult`. It never reads or writes files except to load a saved assignment named
 by path, never runs stitch, assign or any per-FOV stage (with a `segmentation`, the route
@@ -206,6 +232,8 @@ matches observations of two FOVs only by the duplicate rule ("Retention", rule 8
 moves no molecule to another cell. Like `stitch`, it is a sample-level computation, not a
 multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV runner").
 
+% §2.9
+
 **Inputs.**
 
 * **Placement**: a `PlacementResult` from `stitch` (`multiview_stitcher`) or from
@@ -213,8 +241,8 @@ multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV runner").
   from the method record, which it copies.
 * **Per FOV, one of two kinds**, the same kind for every FOV of the sample (with a
   `segmentation`, the inputs are molecule tables):
-  * `assignment`: the §2.9 `AssignmentResult` of that FOV, in memory, or the path of its
-    saved folder (`fovs/<fov_id>/assignment/<name>/`), loaded with the §2.9
+  * `assignment`: the `AssignmentResult` of that FOV, in memory, or the path of its
+    saved folder (`fovs/<fov_id>/assignment/<name>/`), loaded with the assignment
     loader, which checks every recorded SHA-256. Assemble reads its molecule table, cell
     table, counts, record and, for the flags, its territories;
   * `molecules`: a `MoleculeTable` alone, for a sample without segmentation. Every
@@ -222,10 +250,12 @@ multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV runner").
     cells ("Retention").
 * `grid`: the FOV's reference grid, which places its index coordinates.
 
+% §2.9
+
 `assemble` is the first part of the one sample-level export entry
 `Dataset.export(sample, *, placement, assignment="default", config=ExportConfig(),
 output_dir)` ({doc}`sample-output-contract`, "The export entry"), which replaces a
-separate `Dataset.assemble` (W-329 review, 2026-10-06, amending D3). Its assemble part
+separate `Dataset.assemble` (the review gate of 2026-10-06, amending a settled decision). Its assemble part
 loads the saved placement (`load_placement`), builds one `AssemblyInput` per FOV of the
 placement from the saved assignment folders named `assignment` (or, with
 `assignment=None`, from the saved molecule tables through `molecule_table`) and the
@@ -237,6 +267,8 @@ saves the result in `output_dir`, the sample's export folder ("Persistence"). It
 tables of every FOV and at most two label images in memory at a time
 ({doc}`assembly-algorithms`, "Resources"). With `assemble: false` the entry loads the
 saved result instead (`load_assembly`). `assemble` stays callable alone.
+
+% W-329; D3
 
 ### Checks the entry applies
 
@@ -287,9 +319,9 @@ The record of the result (the `assembly` section of `export.json` when saved, "P
   SHA-256 of its record by the rule of `record_sha256` in {doc}`assignment-contract`, "Run
   record") and of its molecule, cell and count tables, the
   molecule table's `sha256` (`MoleculeTable`), the territory label file read for the flags
-  as `territories`: its path (absolute, as the §2.9 loader resolved it) beside its SHA-256,
+  as `territories`: its path (absolute, as the assignment loader resolved it) beside its SHA-256,
   both null when no file was read (`conflicts=False`, a `molecules_only` input, or an
-  assignment given in memory, whose territories' SHA-256 its §2.9 record already holds),
+  assignment given in memory, whose territories' SHA-256 its assignment record already holds),
   the grid (shape, metadata, SHA-256) and its `calibration_source`
   (`grid` for a grid read from an image's metadata, `declared` for a grid declared from
   `voxel_size_*`, by the legacy adapter or for a reference image that stores no metadata,
@@ -302,8 +334,10 @@ The record of the result (the `assembly` section of `export.json` when saved, "P
   `default` as `Dataset.export` resolved the route; null when `assemble` is called alone),
   and on the route after fusion `segmentation_files` (per run the label file's name and
   SHA-256 that it read, and `territories.ome.tif` when it wrote one) and the sample
-  assignment's §2.9 record as `assignment` ({doc}`sample-segmentation-contract`, "The
+  assignment's record as `assignment` ({doc}`sample-segmentation-contract`, "The
   record").
+
+% §2.9
 
 ```json
 {
@@ -344,10 +378,12 @@ class AssemblyResult:
     fovs: pd.DataFrame        # one row per FOV of the placement ("Sample tables")
     cells: pd.DataFrame       # one row per cell of every input FOV
     molecules: pd.DataFrame   # one row per molecule of every input FOV
-    counts: pd.DataFrame      # the §2.9 long counts of the counted cells
+    counts: pd.DataFrame      # the assignment's long counts of the counted cells
     genes: tuple[str, ...]
     record: Mapping[str, Any]
 ```
+
+% `AssemblyResult.counts`: the §2.9 long counts of the counted cells
 
 `__post_init__` checks the identities of "Count accounting".
 
@@ -359,15 +395,15 @@ reference grid, pushed into the sample frame by the rule of {doc}`stitching-cont
 `sample_zyx = origin_zyx + D · (p ⊙ spacing_zyx)`, equivalently
 `placed_metadata(placement, fov_id).index_to_world(p)`.
 
-* **Molecules**: `p` is the molecule's `z, y, x` from the §2.9 molecule table, float64,
+* **Molecules**: `p` is the molecule's `z, y, x` from the assignment molecule table, float64,
   sub-voxel positions included; never the sampled voxel. On a FOV whose reference grid has
   one plane a molecule is sampled at its `y, x` only ({doc}`assignment-contract`,
   "Coordinate sampling"), so its `p_z` is 0, the plane: its `sample_z` is the plane's,
   and its recorded `z` stays in the column `z`. An `outside_grid` molecule is
   mapped too (its position is finite) and keeps its coordinates while excluded.
-* **Cells**: `p` is the float centroid of the §2.9 cell table, `centroid_*` for the
+* **Cells**: `p` is the float centroid of the assignment cell table, `centroid_*` for the
   original territory and `expanded_centroid_*` for the expanded one; never truncated. For
-  a cell of a `plane` label image, `centroid_z` is 0.0 by the §2.9 table but is not a
+  a cell of a `plane` label image, `centroid_z` is 0.0 by the assignment table but is not a
   measured position, so its `sample_centroid_z` is NaN.
 * **The ownership centroid** is the centroid that ownership tests ("Retention", rule 1):
   the expanded territory's when `centroid="territory"` and assign expanded the FOV's
@@ -382,7 +418,7 @@ reference grid, pushed into the sample frame by the rule of {doc}`stitching-cont
   it (float64 µm, never cast); so are the fractional centroids and molecule positions.
 * **Unknown calibration stays unknown**: a grid without known spacing cannot be placed
   (`stitch` and the import refuse it) and assemble refuses it too (check 6). No pixel size
-  is assumed, the YAML `voxel_size_*` is never read by assemble, and a §2.9 `size_physical`
+  is assumed, the YAML `voxel_size_*` is never read by assemble, and an assignment `size_physical`
   that is NaN stays NaN. A grid declared from YAML values, by the legacy adapter or by the
   export entry for a reference image that stores no metadata, is recorded with
   `calibration_source: declared`.
@@ -390,13 +426,15 @@ reference grid, pushed into the sample frame by the rule of {doc}`stitching-cont
   produced by assemble; they stay in the legacy files while the legacy rules run
   ("Workflow configuration").
 
+% §2.9
+
 Example: FOV origin `(1.3, 37.4, 0.7)` µm, spacing `(1.0, 1.0, 1.0)` µm (the golden
 fixture's units), a cell centroid `(3.0, 8.0, 20.0)` → `(4.3, 45.4, 20.7)` µm.
 
 ## Ownership regions
 
 Ownership is computed in assemble from the placement's origins and each placed FOV's
-grid shape and spacing (D3); it is not stored in the placement, and it uses no row or
+grid shape and spacing (a settled decision); it is not stored in the placement, and it uses no row or
 column index, no padding view and no YAML tile size. `ownership_map(placement, grids, *,
 config, candidates=None)` returns an `OwnershipMap` whose `owner(points_zyx)` gives, for
 each sample-frame point, the owning `fov_id` or none. Only owning FOVs own points: a
@@ -405,6 +443,8 @@ placed FOV that has an input and is `image_supported` or `metadata_only` ("Terms
 assemble passes the grids of its inputs, and check 3 gives every FOV of those statuses an
 input. A point in no owning FOV's footprint has no owner. Ownership is decided in Y and X
 only (option Z1 below).
+
+% D3
 
 **Candidates.** `candidates`, an optional collection of `fov_id`s, restricts the FOVs that
 may own a point: with it, a point goes to the nearest-centre owning FOV among the
@@ -442,8 +482,10 @@ effects:
   included; neither its fixture nor the LN records have a placeholder (LN's eight blank
   cells are padding views, which have no row in the placement).
 
-This follows the W-329 review (2026-10-06): no observation is lost to a FOV that has
+This follows the review gate (2026-10-06): no observation is lost to a FOV that has
 none.
+
+% W-329
 
 ### Geometry
 
@@ -480,8 +522,10 @@ and the order it uses is part of the placement record.
 | Option | Rule | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- |
 | **Z1. Y and X, one layer (recommended)** | Ownership is decided in Y and X; z is carried into the sample coordinates but never decides ownership. Every placed FOV must have the same `nominal_z` (check 8): one layer of tiles, which is what the three converters give (z 0) and what BigStitcher's macro sets (`tiles_z=1`). | None (today's filter is XY only). | None for the three samples, each one layer. A placement's z correction moves sample z, not ownership. |
-| Z2. 3D footprints | Ownership by nearest centre in Z, Y and X among footprints containing the point in all three axes. | None for the pins; for one layer the same owners as Z1 except points outside a FOV's z range, which today's data does not have (such molecules are `outside_grid`). | Needed only for stacked tile layers, which §2.10 does not acquire; a z correction can then change ownership of points near a FOV's top or bottom. |
+| Z2. 3D footprints | Ownership by nearest centre in Z, Y and X among footprints containing the point in all three axes. | None for the pins; for one layer the same owners as Z1 except points outside a FOV's z range, which today's data does not have (such molecules are `outside_grid`). | Needed only for stacked tile layers, which the accepted design does not acquire; a z correction can then change ownership of points near a FOV's top or bottom. |
 | Z3. Y and X without the layer check | Today's rule. | None. | A multi-layer acquisition would be assembled with layers owning each other's points silently. |
+
+% §2.10
 
 **Recommendation: Z1.** It keeps today's decision axis, makes the single-layer
 assumption explicit and refuses the case it cannot handle.
@@ -498,24 +542,24 @@ As agreed on 2026-09-27, with the reasons of "Statuses and reasons":
    `placeholder` with an input is excluded `not_owner`, because a placeholder owns no
    point; its `owner_fov_id` is the neighbour that owns the centroid, or null when none
    does.
-2. **Molecules of cells.** An `assigned` or `excluded_cell` molecule (§2.9) takes the
+2. **Molecules of cells.** An `assigned` or `excluded_cell` molecule (an assignment status) takes the
    assembly status of its cell: retained with a retained cell, wherever its own position
    lies, even in another FOV's ownership region; excluded with the reason
    `cell_not_owner` when its cell is excluded `not_owner`, and `cell_duplicate_observation`
    when its cell is excluded `duplicate_observation` (rule 8).
 3. **Unassigned molecules** are retained when the owner of their own sample position is
    their FOV, else excluded `not_owner` (also when the position has no owner).
-4. **`outside_grid` molecules** (§2.9) are excluded with the reason `outside_grid`: their
+4. **`outside_grid` molecules** (an assignment status) are excluded with the reason `outside_grid`: their
    FOV did not sample them, so no FOV claims them by position.
 5. **FOVs without an origin** (`missing`, `failed`): every observation is excluded with the
    reason `fov_not_placed`.
 6. **A sample without segmentation** (`mode` `molecules_only`) applies rules 3 to 5 to
    every molecule: its molecules have no cell, so they are retained by their own position.
-7. **§2.9 statuses are kept as they are.** A §2.9 cell with status `excluded_no_nucleus` is
+7. **Assignment statuses are kept as they are.** A cell with assignment status `excluded_no_nucleus` is
    retained or excluded by ownership like any cell. Retained, it is not a counted cell
    ("Statuses and reasons"): it has no row in the counts table or in the AnnData, because
-   of its §2.9 status, not because of assembly; it stays in the sample cell table with its
-   assembly status, and its molecules (§2.9 `excluded_cell`) take that status by rule 2.
+   of its assignment status, not because of assembly; it stays in the sample cell table with its
+   assembly status, and its molecules (assignment status `excluded_cell`) take that status by rule 2.
 8. **Two observations of one cell** (the duplicate rule, decided on 2026-10-09). With
    `duplicate_threshold` set (default 0.5), two cells of different FOVs that rule 1
    retained are two observations of one candidate cell when their territories share at
@@ -532,6 +576,8 @@ As agreed on 2026-09-27, with the reasons of "Statuses and reasons":
    observation is still the part its FOV saw (`fov_edge`). `duplicate_threshold=None` turns
    the rule off and gives the result of rules 1 to 7 alone.
 
+% §2.9
+
 There is no other outcome, and no branch: a FOV whose molecules all miss its cells, a FOV
 without molecules and a FOV without cells go through the same rules.
 
@@ -542,20 +588,26 @@ Every cell and every molecule of every input FOV has exactly one assembly status
 | Status | Cells: reason | Molecules: reason |
 | --- | --- | --- |
 | `retained` | null | null |
-| `excluded` | `not_owner`: its ownership centroid is not owned by its own FOV (another FOV owns it, or, for a cell of a `placeholder`, possibly none); `fov_not_placed`: its FOV has no origin; `duplicate_observation`: a second observation of a cell that another FOV's retained cell keeps ("Retention", rule 8) | `cell_not_owner`: its cell is excluded `not_owner`; `not_owner`: unassigned and its position is not owned by its own FOV; `outside_grid`: §2.9 `outside_grid`; `fov_not_placed`; `cell_duplicate_observation`: its cell is excluded `duplicate_observation` |
+| `excluded` | `not_owner`: its ownership centroid is not owned by its own FOV (another FOV owns it, or, for a cell of a `placeholder`, possibly none); `fov_not_placed`: its FOV has no origin; `duplicate_observation`: a second observation of a cell that another FOV's retained cell keeps ("Retention", rule 8) | `cell_not_owner`: its cell is excluded `not_owner`; `not_owner`: unassigned and its position is not owned by its own FOV; `outside_grid`: assignment status `outside_grid`; `fov_not_placed`; `cell_duplicate_observation`: its cell is excluded `duplicate_observation` |
+
+% §2.9
 
 **Counted cells.** The sample's **counted cells** are the cells with
-`assembly_status == "retained"` and §2.9 `status == "kept"`. They are the only cells with
+`assembly_status == "retained"` and assignment `status == "kept"`. They are the only cells with
 rows in the sample counts table and in the sample-level AnnData. A retained cell whose
-§2.9 status is `excluded_no_nucleus` is not a counted cell: §2.9 gives it no counts, so it
+assignment status is `excluded_no_nucleus` is not a counted cell: assignment gives it no counts, so it
 has no row in either; it stays in the sample cell table with its assembly status, and its
 molecules keep the assembly status of the cell.
 
+% §2.9
+
 Excluded observations are preserved: they stay in the sample cell and molecule tables
-with their sample coordinates, owner, reason and flags, and with every §2.9 column. The
+with their sample coordinates, owner, reason and flags, and with every assignment column. The
 counts table and the AnnData hold only counted cells, so they leave out every excluded
-cell, and also the retained cells that §2.9 excluded. A molecule of an excluded cell keeps
-its §2.9 `assignment_status` and `cell_id`; assembly never moves it to another cell.
+cell, and also the retained cells that assignment excluded. A molecule of an excluded cell keeps
+its `assignment_status` and `cell_id`; assembly never moves it to another cell.
+
+% §2.9
 
 ## Flags
 
@@ -570,7 +622,7 @@ Flags make visible what assembly cannot decide; they never change a status.
 | `outside_owner_region` | retained molecule | Retained with its cell, but its own position is owned by another FOV, which may retain the same molecule as unassigned. |
 | `cell_unclaimed` | excluded molecule | Its cell is flagged `unclaimed`. |
 
-"Inside a territory" is the §2.9 sampling rule applied in the other FOV: the sample point
+"Inside a territory" is the assignment sampling rule applied in the other FOV: the sample point
 is mapped into that FOV's index coordinates by the inverse rule of {doc}`stitching-contract`
 and sampled at `floor(c + 0.5)` (Y and X for a `plane`, Z, Y and X otherwise); a point
 outside its grid is in no territory. With `conflicts=False` the `conflict` and `unclaimed`
@@ -578,6 +630,8 @@ flags are not computed and the record says so. "Retained" in the rules of `confl
 `unclaimed` means retained after the duplicate rule ("Retention", rule 8): a cell it
 excludes is not a retained cell for either flag, so the kept observation of a pair no
 longer carries `conflict` for it. `fov_edge` and `z_edge` are not changed by the rule.
+
+% §2.9
 
 **What this policy does not guarantee.** Assembly retains observations; it does not
 identify biological cells. Where neighbouring FOVs segment the same cell differently, or
@@ -598,17 +652,19 @@ planning decisions).
 
 ## Sample-level identities
 
-* **Cells** keep the §2.9 key `(cell_namespace, cell_id)`. `cell_namespace` already names
+* **Cells** keep the assignment key `(cell_namespace, cell_id)`. `cell_namespace` already names
   `[dataset_id, sample_id, fov_id, subtile_id, run]`, so the key is unique in the sample and
   traces back to the FOV, the segmentation run and the label value in its label file. On
   the route after fusion it names `[dataset_id, sample_id, null, null, run]`, the run of
   the sample segmentation, with a null FOV.
 * **Molecules** keep `(spot_namespace, spot_id)`, unique in the sample, tracing back to the
-  FOV's read and spot rows; their cell link is the §2.9 nullable `(cell_namespace, cell_id)`.
+  FOV's read and spot rows; their cell link is the assignment table's nullable `(cell_namespace, cell_id)`.
 * **Readable names**: `obs_name = "<sample>_<fov_id>_<cell_id>"`, the format of today's
   `unique_index`, used as the AnnData obs names and as a column of the cell table;
   `assemble` checks it is unique. Background molecules no longer share a key.
 * **FOV**: `fov_id`, as in the placement and the inputs.
+
+% §2.9
 
 ## Count accounting
 
@@ -635,13 +691,13 @@ With `F` the input FOVs, `C_f` and `M_f` the cell and molecule tables of FOV `f`
    and only a retained molecule has a sample assignment.
 4. **Counted cells' counts equal the per-FOV counts.** For every counted cell
    ("Statuses and reasons"), keyed by `(cell_namespace, cell_id)`, its rows in the sample
-   `counts` equal its rows in its FOV's §2.9 `counts`, compartment by compartment; no
-   other cell has rows, so a retained cell that §2.9 excluded has none. Hence
+   `counts` equal its rows in its FOV's assignment `counts`, compartment by compartment; no
+   other cell has rows, so a retained cell that assignment excluded has none. Hence
    `Σ counts(whole) = #{retained molecules with assignment_status assigned}
    = Σ n_molecules over counted cells`, also cell by cell, each molecule counted in the
    cell of its own `(cell_namespace, cell_id)`, and the AnnData has one row per counted cell
    ("Sample-level AnnData").
-5. **§2.9 identities carry over.** Each counted cell keeps its §2.9 counts, so
+5. **Assignment identities carry over.** Each counted cell keeps its assignment counts, so
    `whole = nucleus + cytoplasm` holds for every counted cell whose `compartments` is
    `available`, counted cells whose compartments are `withheld`, `no_nucleus` or
    `unavailable` have no compartment rows, and the per-molecule compartment identity of
@@ -649,6 +705,8 @@ With `F` the input FOVs, `C_f` and `M_f` the cell and molecule tables of FOV `f`
    molecules.
 6. **No identity about biological cells.** The number of distinct biological cells or
    molecules is not known and is not claimed ("Flags").
+
+% §2.9
 
 `record["counts"]` holds the totals of 2 per status and reason, and the flag counts; the
 reasons `duplicate_observation` and `cell_duplicate_observation` are counted when the
@@ -677,9 +735,9 @@ footprint centre: {doc}`sample-segmentation-contract`, "The cells"):
 | Column | Type | Content |
 | --- | --- | --- |
 | `fov_id` | string | The FOV. |
-| `cell_namespace`, `cell_id` | string, UInt32 | The §2.9 key. |
+| `cell_namespace`, `cell_id` | string, UInt32 | The assignment key. |
 | `obs_name` | string | `<sample>_<fov_id>_<cell_id>`. |
-| every column of the §2.9 cell table | as there | `status`, `exclusion_reason`, sizes, `centroid_*`, `expanded_centroid_*`, `n_molecules`, `n_nuclei`, `correspondence`, `correspondence_flags`, `compartments`: copied unchanged. |
+| every column of the assignment cell table | as there | `status`, `exclusion_reason`, sizes, `centroid_*`, `expanded_centroid_*`, `n_molecules`, `n_nuclei`, `correspondence`, `correspondence_flags`, `compartments`: copied unchanged. |
 | `sample_centroid_z/y/x` | float64, µm | The original territory's centroid in sample coordinates; `sample_centroid_z` NaN for a plane. |
 | `sample_expanded_centroid_z/y/x` | float64, µm | The same for the expanded territory; NaN unless assign expanded. |
 | `ownership_centroid` | string | Which centroid ownership tests: `expanded` or `original` ("Sample coordinates"). |
@@ -690,8 +748,10 @@ footprint centre: {doc}`sample-segmentation-contract`, "The cells"):
 | `conflict_with` | string | `;`-joined `obs_name`s of the conflicting retained cells; empty when none. |
 | `duplicate_of` | string | For a cell excluded `duplicate_observation`, the `obs_name` of the retained cell of another FOV that keeps it ("Retention", rule 8); null otherwise, and null on every row with the rule off. |
 
+% §2.9
+
 **`molecules`**, one row per molecule of every input FOV, in placement table order, then
-input order: `fov_id`; every column of the §2.9 molecule table, copied (for a
+input order: `fov_id`; every column of the assignment molecule table, copied (for a
 `molecules_only` sample, the `MoleculeTable` columns and `assignment_status` null);
 `cell_namespace` (string: the namespace of the molecule's cell, so that
 `(cell_namespace, cell_id)` is the cell key of a row of `cells`; null for a molecule
@@ -699,6 +759,8 @@ without a `cell_id`, so null on every row of a `molecules_only` sample; `load_as
 fills it for a table saved before the column existed from the `cells` row of the
 molecule's `fov_id` and `cell_id`, null where no single row holds them); `sample_z`, `sample_y`, `sample_x` (float64, µm); `owner_fov_id`;
 `assembly_status`; `assembly_reason`; `assembly_flags`.
+
+% §2.9
 
 **`counts`**, the long table of {doc}`assignment-contract` with `fov_id` and
 `cell_namespace` added: one row per nonzero (counted cell, gene, compartment), with
@@ -708,25 +770,31 @@ molecule's `fov_id` and `cell_id`, null where no single row holds them); `sample
 
 | Option | Layout | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **S1. The sample's export folder beside the placement (recommended)** | `<OUTPUT>/export/<sample>/`: the section `assembly` of `export.json` (the record, with the SHA-256 of every file), `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>` and `sample.h5ad`. `<fmt>` is CSV by default or Parquet, through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), as for the §2.9 tables. The other parts of `Dataset.export` write their files and sections in the same folder ({doc}`sample-output-contract`, "The export folder and the output profiles"). | None: the golden test pins values, not files. | New folder beside `stitching/<sample>/` (W-325 S1), shared by every part of the export entry (W-329 review, 2026-10-06). `output/tile_config_{sample}.csv`, `expr/{fovID}/*` and the legacy sample files are untouched while the legacy rules run. |
+| **S1. The sample's export folder beside the placement (recommended)** | `<OUTPUT>/export/<sample>/`: the section `assembly` of `export.json` (the record, with the SHA-256 of every file), `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>` and `sample.h5ad`. `<fmt>` is CSV by default or Parquet, through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), as for the assignment tables. The other parts of `Dataset.export` write their files and sections in the same folder ({doc}`sample-output-contract`, "The export folder and the output profiles"). | None: the golden test pins values, not files. | New folder beside `stitching/<sample>/` (option S1 of {doc}`stitching-contract`), shared by every part of the export entry (the review gate, 2026-10-06). `output/tile_config_{sample}.csv`, `expr/{fovID}/*` and the legacy sample files are untouched while the legacy rules run. |
 | S2. The legacy sample file names as the store | `expr/{sample}_raw.h5ad` (the AnnData) and `expr/{sample}_reads_assignment.csv` (the molecule table), with new content; the record in `uns`. | None. | The same names hold different populations and columns depending on the configuration; readers of earlier runs cannot tell which they read. The cell table of excluded cells has no file. |
 | S3. One AnnData as the only store | `sample.h5ad` with every cell (retained and excluded) as `obs`, the molecule table in `uns`. | None. | Breaks "one row per counted cell" of the AnnData, needs anndata to read any table, and stores a large molecule table inside an H5AD. |
 
+% §2.9; W-325; W-329
+
 **Recommendation: S1.** It follows the run-record pattern of the placement and of the
-§2.9 assignment folders, keeps every population in a plain table, and needs anndata only
+per-FOV assignment folders, keeps every population in a plain table, and needs anndata only
 for the one file that is an AnnData. `save_assembly(result, folder, *, table_format)`
 writes the files atomically and replaces only the `assembly` section of
 `folder/export.json`, creating the record when it does not exist; `load_assembly(folder)`
 reads that section, checks every SHA-256 against it and raises `ValueError` on a
 mismatch.
 
+% §2.9
+
 ## Sample-level AnnData
 
 Every assembled sample has `sample.h5ad`, written by `write_sample_h5ad(result, path, *,
 annotation=None)` from the sample tables. It is not a second exporter: the AnnData is
-built and written by the §2.9 AnnData code, which the implementation factors out of the
+built and written by the assignment AnnData code, which the implementation factors out of the
 workflow adapter's `_write_raw_h5ad` (`src/python/starfinder/dataset/workflow.py:1395-1430`)
 into one function of `starfinder.assignment`:
+
+% §2.9
 
 ```python
 def write_h5ad(path, obs: pd.DataFrame, keys: pd.DataFrame, counts: pd.DataFrame,
@@ -755,7 +823,7 @@ It has two callers, and each prepares its own `obs`:
   the adapter applies its tile-box filter to them as today and calls `write_h5ad` with the
   FOV result's counts, `layers` when the result has nuclei, and `uns["assignment"]`.
   `raw.h5ad` keeps the content it has today: the same rows, `obs` columns, `X`, layers and
-  `uns`, which A18 of {doc}`assignment-algorithms` compares with the frozen helper. (W-568:
+  `uns`, which A18 of {doc}`assignment-algorithms` compares with the frozen helper. (Since 2026-10-24:
   the adapter writes `raw.h5ad` without an `assembly` block, or with molecules only; on the
   route of a saved assignment it writes the saved folder alone.)
 * **`write_sample_h5ad`**, for `sample.h5ad`. It prepares the sample's `obs` from the sample
@@ -763,23 +831,29 @@ It has two callers, and each prepares its own `obs`:
   in `molecules_only` mode, `var["n_molecules_retained"]`, and calls `write_h5ad` with the
   sample `counts`. `save_assembly` calls it for `sample.h5ad`.
 
+% W-568
+
 The content of `sample.h5ad`:
 
 | Part | Content |
 | --- | --- |
-| `obs` | One row per counted cell ("Statuses and reasons": `assembly_status == "retained"` and §2.9 `status == "kept"`), in the cell table's order. `obs_names` are the cells' `obs_name`. Columns: `sample`, `fov_id`, `cell_namespace`, `cell_id`, the §2.9 cell columns that `raw.h5ad` carries (`size_voxels`, `expanded_size_voxels`, `size_physical`, `centroid_*`, `n_molecules`, `n_nuclei`, `correspondence`, `correspondence_flags`, `compartments`), `sample_centroid_z/y/x`, `sample_expanded_centroid_z/y/x`, `ownership_centroid`, `sample_ownership_centroid_z/y/x`, `assembly_flags`, `conflict_with`, and with `annotation` the columns of that sample's annotation row (`save_assembly`, which `export_sample` calls, passes none, so the workflow's `sample.h5ad` has no annotation columns). |
+| `obs` | One row per counted cell ("Statuses and reasons": `assembly_status == "retained"` and assignment `status == "kept"`), in the cell table's order. `obs_names` are the cells' `obs_name`. Columns: `sample`, `fov_id`, `cell_namespace`, `cell_id`, the assignment cell columns that `raw.h5ad` carries (`size_voxels`, `expanded_size_voxels`, `size_physical`, `centroid_*`, `n_molecules`, `n_nuclei`, `correspondence`, `correspondence_flags`, `compartments`), `sample_centroid_z/y/x`, `sample_expanded_centroid_z/y/x`, `ownership_centroid`, `sample_ownership_centroid_z/y/x`, `assembly_flags`, `conflict_with`, and with `annotation` the columns of that sample's annotation row (`save_assembly`, which `export_sample` calls, passes none, so the workflow's `sample.h5ad` has no annotation columns). |
 | `var` | The sample's `genes`, in order (`var_names`). |
-| `X` | float64 whole-cell counts: row `i` equals the `whole` rows of cell `i` in the sample `counts`, which equal its §2.9 counts (identity 4). |
+| `X` | float64 whole-cell counts: row `i` equals the `whole` rows of cell `i` in the sample `counts`, which equal its assignment counts (identity 4). |
 | `layers` | When the inputs gave nuclei (on the route after fusion: when the sample segmentation has a nucleus run): `nucleus` and `cytoplasm`, float64, 0.0 for a measured zero and NaN for every gene of a cell whose `compartments` is not `available`, as in `raw.h5ad`; a FOV assigned without nuclei contributes NaN rows. Without nuclei in any FOV: no layer. |
 | `obsm["spatial"]` | `(n, 2)` float64 in µm, the X and Y of the ownership centroid: `[sample_ownership_centroid_x, sample_ownership_centroid_y]` of the cell table. On a row whose `ownership_centroid` is `expanded` (`centroid="territory"` and assign expanded) these equal `sample_expanded_centroid_x, sample_expanded_centroid_y`; on a row where it is `original` (`centroid="original"`, or no expansion) they equal `sample_centroid_x, sample_centroid_y`. X, Y is the order of the scanpy and squidpy convention; the ZYX values are the `obs` columns. |
 | `uns` | `assembly`: the record as JSON text (the per-FOV assignment record hashes included); `spatial_unit`: `"µm"`; `frame_id`; `spatial_centroid`: which centroid `obsm["spatial"]` holds, as JSON text: the columns it copies (`sample_ownership_centroid_x`, `sample_ownership_centroid_y`), the `centroid` setting, and the number of rows whose `ownership_centroid` is `expanded` and `original`. |
 
+% §2.9
+
 **Which cells have a row.** The rows are the counted cells and no others. A retained cell
-whose §2.9 status is `excluded_no_nucleus` has no row in the counts table and none in the
+whose assignment status is `excluded_no_nucleus` has no row in the counts table and none in the
 AnnData; it stays in the sample cell table with its assembly status, and its molecules keep
 the assembly status of the cell. The identity a test checks: `adata.n_obs` equals the
 number of rows of the sample cell table with `assembly_status == "retained"` and
 `status == "kept"`.
+
+% §2.9
 
 **A test can check it against the sample tables**, on the counted cells (the cell-table
 rows with `assembly_status == "retained"` and `status == "kept"`), in table order:
@@ -856,18 +930,22 @@ equal to them, as for the other blocks.
 
 | Option | With an `assembly` block | Without one | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- | --- |
-| **W1. Replace per configuration (recommended)** | `reads_assignment` writes the per-FOV files without the filter and without `global_*` (every kept cell and every molecule, with their §2.9 columns), and saves the FOV's assignment folder; `export_sample` runs `Dataset.export` per sample and writes `export/<sample>/`; `create_sample_h5ad` and `create_sample_reads_assignment` do not run; `tile_config_{sample}.csv` is still written by the legacy writer and read by nothing. | The four legacy rules run unchanged, with the adapter's filter. | None: the pins are legacy. `test_assignment_workflow.py` runs without the block and passes unchanged. | Configurations without the block are unchanged; with it, the per-FOV files change content (named in `docs/migration.md`) and the sample outputs move to `export/<sample>/`. |
+| **W1. Replace per configuration (recommended)** | `reads_assignment` writes the per-FOV files without the filter and without `global_*` (every kept cell and every molecule, with their assignment columns), and saves the FOV's assignment folder; `export_sample` runs `Dataset.export` per sample and writes `export/<sample>/`; `create_sample_h5ad` and `create_sample_reads_assignment` do not run; `tile_config_{sample}.csv` is still written by the legacy writer and read by nothing. | The four legacy rules run unchanged, with the adapter's filter. | None: the pins are legacy. `test_assignment_workflow.py` runs without the block and passes unchanged. | Configurations without the block are unchanged; with it, the per-FOV files change content (named in `docs/migration.md`) and the sample outputs move to `export/<sample>/`. |
 | W2. Both side by side | The legacy chain runs as today and `export_sample` runs as well. | Unchanged. | None. | Two sample populations for one run (box-filtered and owned), which disagree where the rectangles do. |
 | W3. Replace everywhere | The adapter drops the filter in every configuration and the legacy sample rules read assembly outputs. | The same as with the block. | None for the pins; `test_assignment_workflow.py` assertions on the legacy columns would need edits. | Every existing configuration changes its outputs at once. |
+
+% §2.9
 
 **Recommendation: W1.** It keeps legacy configurations reproducible, gives the new
 populations one home, and follows the stitching block's pattern ({doc}`stitching-contract`,
 "Workflow configuration").
 
-Note (W-568): with an assignment name, `reads_assignment` now writes the saved folder alone
+Note: with an assignment name, `reads_assignment` now writes the saved folder alone
 (no per-FOV `raw.h5ad`, `reads_assignment.csv` or `log.txt`), and with an `assembly`
 block `stitch_sample` neither writes nor declares `tile_config_{sample}.csv`; molecules
 only keeps the per-FOV files.
+
+% Note (W-568)
 
 **The label grid with an `assembly` block.** `reads_assignment` imports a legacy label file
 on the grid of the FOV's reference image, the file `reference_image` names (default
@@ -886,8 +964,8 @@ the files of "Persistence" and of the other parts it runs. It runs once per samp
 ({doc}`sample-segmentation-contract`, "The route setting") and after the placement exists; unlike
 `reads_assignment` today, no rule reads another sample's placement.
 
-**The assignment figures with ownership** (W-330, added after the implementation; opt-in
-since W-568). With an assignment name (`assembly.assignment` not null), `assembly.previews:
+**The assignment figures with ownership** (added after the implementation, on 2026-10-08; opt-in
+since 2026-10-24). With an assignment name (`assembly.assignment` not null), `assembly.previews:
 true` and an assembly in the folder (the assemble part written or reused), `export_sample`
 then draws `export/<sample>/previews/{fovID}/assignment.png`, and
 `assignment_single_layer.png` for a ZYX label image, for each FOV of the sample whose
@@ -904,19 +982,25 @@ when the assemble part was neither written nor reused. `export.json` does not li
 Without an `assembly` block the figures stay as `reads_assignment` draws them, in
 `expr/{fovID}/`: the tile configuration is not an ownership source.
 
+% W-330; W-568
+
 ## Exclusions
 
 No implementation, rename, dependency or lock change; no change to the placement contract
-(W-325) or to the §2.9 label and assignment contracts; no merging of cells across FOVs
+({doc}`stitching-contract`) or to the label and assignment contracts; no merging of cells across FOVs
 (the duplicate rule of "Retention", rule 8, decided on 2026-10-09, excludes one of two
 observations and merges nothing), no recovery of complete cells across borders, no reassignment of molecules; no
-fused image, label export or SpatialData (W-328); no real data (every measured number is
-from the W-324 records and the W-326 derivations cited above).
+fused image, label export or SpatialData (the sample outputs); no real data (every measured number is
+from the parity records and the assembly measurements' derivations cited above).
+
+% W-325; §2.9; W-328; W-324; W-326
 
 ```{toctree}
 :hidden:
 
 Assembly algorithms and validation <assembly-algorithms>
-Stitching and assembly validation (§2.10) <stitching-assembly-validation>
+Stitching and assembly validation <stitching-assembly-validation>
 Assembly baseline (history) <assembly-baseline>
 ```
+
+% toctree: Stitching and assembly validation (§2.10)

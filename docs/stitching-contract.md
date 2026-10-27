@@ -1,9 +1,11 @@
 # Stitching guide: tile positions, placement, methods and BigStitcher
 
-Status: Accepted (W-329, 2026-10-07, at 9033d46)
+% Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-This page is the maintained guide to the stitching stage (§2.10) and its placement
+This page is the maintained guide to the stitching stage and its placement
 contract.
+
+% the stitching stage (§2.10)
 
 * **What stitching does.** It places the FOVs of one sample in one physical frame,
   `sample:<sample>` in µm: from each FOV's nominal position and saved stain image it
@@ -33,9 +35,11 @@ contract.
   [Persistence](#persistence)).
 * **Where the configuration goes.** The method config, `ReviewPolicy` and `fallback`
   passed to `stitch` or `Dataset.stitch`, a sample-level entry outside `PipelineConfig`
-  (D3); in the workflow, the Python-only `stitching` block
+  (a settled decision); in the workflow, the Python-only `stitching` block
   ([Workflow configuration](#workflow-configuration)). The `multiview-stitcher` extra and
   the package's Python bound are in [Dependency plan](#dependency-plan).
+
+% a sample-level entry outside `PipelineConfig` (D3)
 
 Beneath this guide, {doc}`stitching-algorithms` gives the numerical behavior of each
 converter, the neighbour derivation, the `multiview_stitcher` method, the import
@@ -43,9 +47,11 @@ arithmetic, the supplied placement and the placement-quality checks, with their
 resources; {doc}`stitching-assembly-validation` is the engineering validation design that
 stitching shares with assembly and the sample outputs, with its implemented checks and
 the results of the real examples; {doc}`stitching-baseline` is history (`8e7d256`, before
-§2.10).
+the stitching stage).
 
-This page specifies the §2.10 placement contract: a sample-level stitch entry separate
+% before §2.10
+
+This page specifies the placement contract: a sample-level stitch entry separate
 from `PipelineConfig` and `FOV.run`, one tile position table with three converters, an
 explicit stage-axis mapping, neighbour pairs from nominal overlap, the stitching input
 image, one placement record for every backend, a stitching registry on the shared
@@ -56,54 +62,69 @@ provenance rules are those of {doc}`method-registry`, used unchanged. It uses th
 `ImageMetadata` (`src/python/starfinder/image.py`) as they are, and redefines neither.
 It is implemented in `starfinder.stitching`, and nothing is renamed. Sample coordinates of molecules and
 cells, overlap ownership, retained and excluded populations and the sample tables belong
-to W-326, which builds on the placement record below and does not redefine it; the fused
-image and the exports belong to W-328.
+to sample assembly ({doc}`assembly-contract`), which builds on the placement record below and does not redefine it; the fused
+image and the exports belong to the sample outputs ({doc}`sample-output-contract`).
 
-Evidence (cited by path; this page repeats only the numbers it needs):
+% The §2.10 placement contract; sample assembly: W-326; the sample outputs: W-328
 
-* W-323, `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-323/`:
+Evidence (cited by path; this page repeats only the numbers it needs), kept with the run
+records outside the repository:
+
+* The stitching input inventory:
   `20261005T1930Z-fiji-baseline/fiji-baseline.md` (BigStitcher baseline),
   `20261005T2110Z-input-inventory/inputs.md` (calibration),
   `20261005T2050Z-stage-axis-mapping/positions.md` (stage axes, scan order),
   `20261005T2025Z-spike-environment/` (`environment.json`, `lock-diff.txt`,
   `spike-added-packages.txt`, `resolve-python312.txt`).
-* W-324, run directory
-  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421`
-  (found with `timeout 30 find …/runs/W-324 -maxdepth 2 -name stitching-manifest.json`):
+* The stitching parity runs, whose run directory holds a `stitching-manifest.json`:
   `notes.md` (sections 1 to 5 and 7), `tables/runs.csv`, `tables/comparison_summary.csv`,
   `tables/fixtures_summary.csv`, and the parity outputs under `parity/`.
 
-W-324 is dependency selection: it ranks no backend, sets no default and makes no accuracy
+% The stitching input inventory: W-323, `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-323/`.
+% The stitching parity runs: W-324, run directory
+% `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421`
+% (found with `timeout 30 find …/runs/W-324 -maxdepth 2 -name stitching-manifest.json`).
+% On this page "the input inventory" is W-323 and "the parity runs" (and their notes) are W-324.
+
+The parity runs are dependency selection: they rank no backend, set no default and make no accuracy
 claim. Real data has no placement truth, so agreement between two placements shows only
 that they agree. This page makes no accuracy claim either.
 
+% W-324 is dependency selection
+
 ## Settled decisions this page follows
 
-Decided by Jiahao in the §2.10 planning session (W-152 comment "§2.10 planning decisions
-(2026-10-05)" and its reply "Amendment on the sample outputs"):
+Decided by Jiahao in the stitching and assembly planning session (the planning decisions
+of 2026-10-05 and their amendment on the sample outputs):
 
-* **Both backends are kept** and BigStitcher stays the initial default (D1); no backend is
+* **Both backends are kept** and BigStitcher stays the initial default; no backend is
   ranked and no default changes here.
 * **BigStitcher** runs as an engine task through Fiji. The package generates the macro and
-  imports `dataset.xml` into the same placement record; there is no PyImageJ adapter (D2).
+  imports `dataset.xml` into the same placement record; there is no PyImageJ adapter.
 * **multiview-stitcher** is an in-process method in `STITCHING_METHODS`; a method takes
   the tiles and nominal positions and returns per-FOV translations and link diagnostics in
-  one call (D3).
+  one call.
 * **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
-  and `Dataset.export` (D3, as amended at the W-329 review of 2026-10-06);
+  and `Dataset.export` (as amended at the review gate of 2026-10-06);
   `Dataset.export` calls `assemble`, `fuse_images`, `fuse_labels` and `export_spatialdata` in
   order ({doc}`sample-output-contract`, "The export entry"). Ownership regions are
   computed in assemble from the placement.
 * **One tile position table**, fed by three converters (Leica stage file, regular grid,
   supplied table), with an explicit stage-axis mapping; placeholder tiles stay inside the
-  BigStitcher path (D4).
+  BigStitcher path.
 * **Placement runs on the CPU only.**
-* The failure policy agreed on 2026-09-27 (W-152 comments on §2.10): successful transforms
+* The failure policy agreed on 2026-09-27 (in the planning comments on stitching): successful transforms
   and diagnostics are saved; unreliable or disconnected placement needs review before
   sample assembly; stage-position fallback is opt-in and flagged.
-* Amended at the W-329 review (2026-10-06): a known placement enters through a public
+* Amended at the review gate (2026-10-06): a known placement enters through a public
   `placement_from_table` that the caller must approve ("Supplied placement"), and the
   package requires Python 3.11 or later ("Dependency plan").
+
+% Decided in the §2.10 planning session (W-152 comment "§2.10 planning decisions (2026-10-05)" and its reply
+% "Amendment on the sample outputs"). Both backends kept, BigStitcher the initial default: D1. BigStitcher through
+% Fiji, no PyImageJ adapter: D2. multiview-stitcher in `STITCHING_METHODS`, one call: D3. Two sample-level
+% entries: D3, as amended at the W-329 review of 2026-10-06. Placeholder tiles inside the BigStitcher path: D4.
+% The failure policy: W-152 comments on §2.10. Amended at the W-329 review (2026-10-06).
 
 Excluded: rotation, affine or deformable stitching, the GPU, a backend ranking, and any
 default change.
@@ -135,12 +156,16 @@ default change.
 | Option | Names | Effect on the golden values | Effect on existing files and outputs | Effect on the engines |
 | --- | --- | --- | --- | --- |
 | **N1. A `starfinder.stitching` module (recommended)** | Module `starfinder.stitching`; entry `stitch`; result `PlacementResult`; input `StitchingInput`; registry `STITCHING_METHODS` with `StitchingSpec`; table `TilePositionTable`; dataset coordination `Dataset.stitch` | None: the golden test pins the legacy scripts, which no option edits. | New files only, plus one method on `Dataset` (`dataset/dataset.py`); the exports go into `__all__` and the autosummary list of `docs/api/stitching.rst`, which `docs/check_reference.py` requires. `tile_config_{sample}.csv`, `grid.csv` and `dataset.xml` stay as they are. | The workflow adapter gains `_run_stitching`; the four legacy rules stay. |
-| N2. One `starfinder.sample` module for the three sample-level entries | Module `starfinder.sample`; entries `place_fovs`, `assemble`, `fuse_images`; result `SamplePlacement` | None. | The same files; W-326 and W-328 then add to one module, which grows a second responsibility per entry. | The same adapter function under another name. |
+| N2. One `starfinder.sample` module for the three sample-level entries | Module `starfinder.sample`; entries `place_fovs`, `assemble`, `fuse_images`; result `SamplePlacement` | None. | The same files; sample assembly and the sample outputs then add to one module, which grows a second responsibility per entry. | The same adapter function under another name. |
+
+% N2: W-326 and W-328 then add to one module
 
 **Recommendation: N1.** The stage is called stitching in the chapter, registries are named
 after stages (`SEGMENTATION_METHODS`, `DECODING_METHODS`), and `stitch` reads as the verb
 next to `segment` and `assign`. Assemble and fuse keep their own modules or names, which
-W-326 and W-328 propose.
+{doc}`assembly-contract` and {doc}`sample-output-contract` propose.
+
+% which W-326 and W-328 propose
 
 New names under N1:
 
@@ -211,11 +236,13 @@ FOV of the sample; if the FOVs do not share one tile size or one spacing,
 the caller must give both values explicitly (spacing must be shared in any case, "Input
 image"). The values used are recorded in the table's record. It loads one FOV image at
 a time into the list the method needs and holds nothing else: the method's memory is the
-loaded tiles (W-324: LN 6.67 GiB of uint8 loaded, 7.0 GiB peak).
+loaded tiles (the parity runs: LN 6.67 GiB of uint8 loaded, 7.0 GiB peak).
+
+% W-324: LN 6.67 GiB
 
 ### Not the multi-FOV runner
 
-The §2.13 boundary excludes a multi-FOV runner: a package loop that runs `FOV.run`,
+The workflow integration's boundary excludes a multi-FOV runner: a package loop that runs `FOV.run`,
 `FOV.segment` or `FOV.assign_molecules` over many FOVs, with scheduling, parallelism and retries.
 Snakemake stays that runner. A sample-level computation is different in kind: its input
 is inherently a set of FOVs (images that overlap and the positions that relate them), and
@@ -223,6 +250,8 @@ its output is one sample-level record that no single FOV owns. `stitch` and
 `Dataset.stitch` call no per-FOV stage, schedule no per-FOV work and read only saved
 per-FOV artifacts, as `FOV.assign_molecules` reads one FOV's saved artifacts. Snakemake runs one
 stitch task per sample after the per-FOV tasks that write those artifacts.
+
+% The §2.13 boundary excludes a multi-FOV runner
 
 ## Tile position table
 
@@ -267,24 +296,26 @@ def positions_from_table(path_or_frame, *, unit: str = "µm") -> TilePositionTab
 
 * **Leica stage file** (`.maf`, LAS X): `StageXPos`, `StageYPos` in metres, mapped through
   `stage_axes` into image x and y, in µm, shifted so that the smallest y and x are 0; z is
-  0 for every FOV, because the stage file gives no z offset between tiles (W-323
+  0 for every FOV, because the stage file gives no z offset between tiles (the input inventory's
   `positions.md`). `fov_ids` maps `PositionID` to the FOV id. `position_ids` selects the
   positions to read (each in the file once; None reads them all) before the axis mapping,
   the shift, the snap step, the cells and the clash check, so that a file that holds every
   sample's positions gives the table of a file that holds only the selected ones
-  (`Dataset.stitch` selects the FOVs of `fov_ids`, W-566). `snap_to_grid` optionally
+  (`Dataset.stitch` selects the FOVs of `fov_ids`, since 2026-10-24). `snap_to_grid` optionally
   replaces the positions by a regular grid derived from them, as today's grid derivation
   does ({doc}`stitching-algorithms`, "Leica stage file"): the stage positions decide each
   FOV's cell, and `GridSnap`'s `overlap`, `tile_shape_yx` and `spacing_yx` give the step,
   with the same names, types, units and rules as the arguments of `positions_from_grid`.
   None of the three fields has a default.
 * **Regular grid**: FOV `k` in `fov_ids` order goes to a cell by `order`;
-  `column_major_down_right`, the scan of the two sample datasets (W-323 `positions.md`),
+  `column_major_down_right`, the scan of the two sample datasets (the input inventory's `positions.md`),
   puts it at column `k // rows`, row `k % rows`. The step is `(1 − overlap) ×
   tile_shape_yx × spacing_yx` per axis. `order`, `overlap`, `tile_shape_yx` and
   `spacing_yx` have no defaults.
 * **Supplied table**: a CSV or frame with `fov_id`, `nominal_z`, `nominal_y`, `nominal_x`
   in `unit` (converted to µm), for example from another microscope's metadata.
+
+% W-323 `positions.md` (twice); `Dataset.stitch` selects the FOVs of `fov_ids`, W-566
 
 ### Stage-axis mapping
 
@@ -298,7 +329,9 @@ class StageAxisMapping:
 
 The mapping is an explicit input of `positions_from_leica` with no default, and it is
 recorded in the table's record. For LN sample1 it is `StageAxisMapping(x="+x", y="+y")`,
-for the images as they are stored in the 2024 stitching input (W-323 `positions.md`).
+for the images as they are stored in the 2024 stitching input (the input inventory's `positions.md`).
+
+% W-323 `positions.md`
 
 **`rotate_angle`.** The legacy key stays what it is: an image rotation applied before
 stitching (`rotate_nuclei` and the Python pipeline's `rotation_degrees`), so the stitching
@@ -322,8 +355,10 @@ ranges must intersect as well. Diagonal neighbours are pairs too. Row and column
 are never used, so a stage file, a regular grid and a supplied table give pairs by the
 same rule. `neighbor_pairs(table, grids, *, tolerance_um=0.0)` returns them with the
 nominal overlap box of each; the method may register a subset (multiview-stitcher's
-`alternating_pattern` registered 111 of LN's 213 pairs, W-324 notes section 2.1) and
+`alternating_pattern` registered 111 of LN's 213 pairs, the parity runs' notes, section 2.1) and
 reports which.
+
+% W-324 notes section 2.1
 
 ## Input image
 
@@ -344,7 +379,7 @@ class StitchingInput:
   dataset's `reference_image` names (a file pattern with `{fov_id}`, absolute or relative
   to the output root; default `fovs/{fov_id}/reference.tif`, which
   `FOV.save_reference_image(reference_image="merged")` writes with the reference metadata,
-  the image W-323 names for the two sample datasets); `input="reference_stain"` reads the
+  the image the input inventory names for the two sample datasets); `input="reference_stain"` reads the
   saved `reference_stain` of `FOV.prepare_morphology`
   (`fovs/<fov_id>/other_rounds/reference_stain/image.ome.tif`), the nuclear
   stain LN is stitched on. Its grid is the reference grid by the grid rule of
@@ -363,7 +398,9 @@ class StitchingInput:
   its grid is the reference grid read from the FOV's reference image.
 * The spacing is the reference grid's: the YAML `voxel_size_xy` and `voxel_size_z` give it
   only for a reference image that stores no metadata, since the stitching input files
-  carry no calibration (W-323 `inputs.md`).
+  carry no calibration (the input inventory's `inputs.md`).
+
+% the image W-323 names; W-323 `inputs.md`
 
 ## Placement record
 
@@ -406,7 +443,7 @@ The **statuses**:
   `metadata_only` too, flagged `supplied` instead of `fallback`, at its supplied origin
   when origins are given and at `origin = nominal` otherwise ("Supplied placement").
 * `placeholder`: an acquired FOV whose image is absent and was replaced by a blank of the
-  tile's shape so that the BigStitcher grid stays complete (D4; only in the BigStitcher
+  tile's shape so that the BigStitcher grid stays complete (a settled decision; only in the BigStitcher
   path, with `BigStitcherConfig.pad_missing=True`); its origin is the one BigStitcher gives
   the blank view, which is its regular-grid position. `pad_missing=True`, off by default, is
   the caller's explicit opt-in to this metadata position; review is `required`.
@@ -416,6 +453,8 @@ The **statuses**:
   the BigStitcher import alike), a non-finite translation, or a method error that
   affects every FOV (multiview-stitcher's `NotEnoughOverlapError` makes every FOV
   `failed`). Its method translation, if any, stays in `method_translation_*`.
+
+% `placeholder`: so that the BigStitcher grid stays complete (D4)
 
 **Index to sample coordinates.** For a FOV with a finite origin, the zero-based index
 position `p = (z, y, x)` of its reference grid, the convention of molecules and labels
@@ -444,13 +483,15 @@ without a direction has the identity direction), known spacing and the unit `µm
 (`ImageMetadata.cropped(start, …)`) maps its own index `q` to the FOV index `q + start`
 first.
 
-**Relation to the §2.6 transform direction.** §2.6 transforms are pull maps from
+**Relation to the registration transform direction.** Registration transforms are pull maps from
 reference to moving index coordinates within one FOV ({doc}`registration-contract`). A
 placement is the opposite sense: a push map from FOV coordinates into the sample frame,
-the direction in which both backends store their result ("view to common frame", W-324
-notes section 3). Molecules, already in reference-grid indices after registration, are
+the direction in which both backends store their result ("view to common frame", the parity
+runs' notes, section 3). Molecules, already in reference-grid indices after registration, are
 pushed into the sample frame with the rule above; a fused image pulls each output voxel
 from the FOV through the inverse.
+
+% Relation to the §2.6 transform direction. §2.6 transforms are pull maps; "view to common frame", W-324 notes section 3
 
 **Gauge.** A placement fixes relative positions only; both backends anchor an arbitrary
 view. The record removes that freedom with a stated gauge:
@@ -493,10 +534,12 @@ placed statuses; under G1 the mean correction over `image_supported` FOVs is 0 w
 
 ## Method registry
 
-`STITCHING_METHODS` is the stage's registry on the W-240 mechanism
+`STITCHING_METHODS` is the stage's registry on the shared registry mechanism
 ({doc}`method-registry`, "The shared mechanism"): a plain module-level `dict` from an exact
 frozen config type to its spec, with lookup, names, lazy dependencies and provenance
 through `starfinder._registry`.
+
+% the stage's registry on the W-240 mechanism
 
 ```python
 @dataclass(frozen=True)
@@ -507,7 +550,7 @@ class StitchingSpec:
     min_shape_zyx: tuple[int, int, int] = (1, 1, 1)   # shared
     dimensions: frozenset[int] = frozenset({2, 3})    # Z=1 placed as a plane, Z>1 as a volume
     devices: tuple[str, ...] = ("cpu",)          # placement is CPU only
-    transform_kind: str = "translation"          # the only kind §2.10 admits
+    transform_kind: str = "translation"          # the only kind the accepted design admits
 
 def run(tiles: Sequence[np.ndarray], grids: Sequence[ReferenceGrid], nominal_zyx: np.ndarray,
         pairs: Sequence[NeighborPair], *, config) -> MethodPlacement: ...
@@ -521,8 +564,10 @@ class MethodPlacement:
 ```
 
 The method takes the tiles and nominal positions and returns per-FOV translations and
-link diagnostics in one call (D3); `stitch` applies everything else (statuses, gauge,
+link diagnostics in one call (a settled decision); `stitch` applies everything else (statuses, gauge,
 review). `tiles[i]` is `None` for an absent image, which the method must leave unplaced.
+
+% the code block above: `transform_kind`, the only kind §2.10 admits; one call (D3)
 
 **The first method, `multiview_stitcher`.** `MultiviewStitcherConfig` (discriminator
 `method="multiview_stitcher"`), with `requires=(Dependency("multiview_stitcher",
@@ -537,8 +582,10 @@ plan".
 
 ## BigStitcher
 
-BigStitcher stays the initial default (D1) and runs as an engine task through Fiji (D2).
+BigStitcher stays the initial default and runs as an engine task through Fiji, as settled.
 The package owns the two ends:
+
+% the initial default (D1); an engine task through Fiji (D2)
 
 ```python
 def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput], *,
@@ -569,12 +616,16 @@ macro's SHA-256.
 (padding views) and, with `pad_missing=True`, for each acquired FOV whose image is absent
 (status `placeholder`), and returns the view map (`view`, `grid_column`, `grid_row`,
 `fov_id` or empty for padding, `kind` `fov`/`padding`/`placeholder`). Placeholder and
-padding handling stays inside this path (D4).
+padding handling stays inside this path (a settled decision).
+
+% padding handling inside this path (D4)
 
 **The Fiji run stays an engine task**: the rule runs Fiji on the macro with the save folder
-on local disk (W-323: BigStitcher cannot write its HDF5 on the CIFS mount), and it fails
+on local disk (the input inventory: BigStitcher cannot write its HDF5 on the CIFS mount), and it fails
 unless `dataset.xml` exists and holds a `Stitching Transform` for every view, because Fiji
 exits with status 0 when the macro fails.
+
+% W-323: BigStitcher cannot write its HDF5 on the CIFS mount
 
 **The import** reads `dataset.xml`, maps each view to a FOV through the view map and the
 `ViewSetup` tile attribute (not through the order of the transforms), composes the view's
@@ -613,16 +664,21 @@ translations, not the statuses.
 padded regular grid, the macro can define the dataset from the table's nominal positions
 (BigStitcher's tile configuration import), with acquired FOVs only and no padding views.
 Effect on existing results: the start positions change from the 10 % grid to the stage
-positions (LN: about 4 px per step, 1342.6 against 1346.4 px, W-324 notes section 2.4),
+positions (LN: about 4 px per step, 1342.6 against 1346.4 px, the parity runs' notes, section 2.4),
 which changes the overlap boxes and so the link set; the 2024 `dataset.xml` and
-`tile_config_sample1.csv` would not be reproduced, and W-324 saw multiview-stitcher's
+`tile_config_sample1.csv` would not be reproduced, and the parity runs saw multiview-stitcher's
 placement from the stage start diverge (19 FOVs about 147 px off). It is therefore an
-option for a later issue, not the default; the golden values are unaffected.
+option for later work, not the default; the golden values are unaffected.
+
+% W-324 notes section 2.4; W-324 saw multiview-stitcher's placement diverge
 
 ### What the import of the LN `dataset.xml` must reproduce
 
-From the W-324 parity outputs (`parity/` in the W-324 run directory) and the 2024 file
-(W-323 `20261005T1930Z-fiji-baseline/inputs/dataset_2024.xml`):
+From the parity outputs (`parity/` in the parity runs' directory) and the 2024 file
+(the input inventory's `20261005T1930Z-fiji-baseline/inputs/dataset_2024.xml`):
+
+% From the W-324 parity outputs (`parity/` in the W-324 run directory) and the 2024 file
+% (W-323 `20261005T1930Z-fiji-baseline/inputs/dataset_2024.xml`)
 
 1. **Raw translations.** For each of the 72 setups, the raw translation the import keeps
    (`method_translation_*` of the 64 FOVs and the padding views' entries) equals the sums
@@ -640,9 +696,11 @@ From the W-324 parity outputs (`parity/` in the W-324 run directory) and the 202
    least one, none involves a blank view, and the 64 acquired views form one component, so
    all 64 FOVs are `image_supported` (counted from the 2024 file for this page).
 5. **Units.** z in slices is the world z divided by the calibration's z scale
-   1.7894736842105263, as W-324's comparison (`compare_xml.py`) converts it; origins in µm
-   use the reference grid's spacing. Relative origins agree with W-323's rerun within
+   1.7894736842105263, as the parity runs' comparison (`compare_xml.py`) converts it; origins in µm
+   use the reference grid's spacing. Relative origins agree with the input inventory's Fiji rerun within
    1.3e-06 px, the run-to-run variation of BigStitcher's optimization.
+
+% W-324's comparison (`compare_xml.py`); W-323's rerun
 
 The golden test holds item 3 on its own fixture.
 `test_workflow_stitching_golden.py` passes unchanged while the legacy scripts exist; when
@@ -659,17 +717,21 @@ and the import's legacy view must reproduce its pinned `TILE_CONFIG` from the fi
 | Shifted so each axis' minimum is 0 (a positive minimum moves further) | Gauge G1 | A stated frame that does not depend on the extreme FOV |
 | One row per grid cell, blanks included with offsets | One row per acquired FOV; padding views only in the method record | Placeholders stay inside the BigStitcher path |
 | FOV identity = the grid's `id` (Leica `PositionID`) | `fov_id` from the tile position table | `fovs.csv` names FOVs (`fov_id_pattern` for the MATLAB backend) |
-| Non-overlap rectangles from `img_col` and `img_row` | none | Ownership is assemble's (W-326), from each grid's shape |
+| Non-overlap rectangles from `img_col` and `img_row` | none | Ownership is assemble's ({doc}`assembly-contract`), from each grid's shape |
 | Calibration from `voxel_size_xy`, `voxel_size_z` | From each FOV's reference grid | The files carry no calibration; the YAML values are rounded for LN |
 | No status, no links, no method record | Statuses, links with quality, provenance, review | The failure policy needs them |
+
+% Ownership is assemble's (W-326)
 
 The legacy writer of `tile_config_{sample}.csv` stays for the rule chain that reads it
 (`reads_assignment` through the workflow adapter) until assemble replaces it; it takes
 its values from the record's raw translations and the view map, so its output is
-unchanged. (W-568: with an `assembly` block, where assemble has replaced that chain, the
+unchanged. (Since 2026-10-24, with an `assembly` block, where assemble has replaced that chain, the
 BigStitcher `stitch_sample` neither writes nor declares the file.)
 `test_assignment_workflow.py` and the other readers of `tile_config_{sample}.csv` pass
 unchanged, because the legacy writer's output is unchanged.
+
+% W-568: with an `assembly` block
 
 ## Supplied placement
 
@@ -785,9 +847,11 @@ with a NaN or infinite value each raise `ValueError` naming the FOV. The arithme
 
 | Option | Rule | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **L1. Threshold 0.7, NaN dropped (recommended)** | A link is kept when its quality is finite and ≥ 0.7 (the macro's `min_r`). For `multiview_stitcher` the wrapper turns the library's filter on at 0.7 and also drops NaN-quality links, which the library keeps (W-324 notes section 3); for the import, the links in `dataset.xml` are those that passed BigStitcher's filter. | None. | BigStitcher: none (same threshold). multiview-stitcher on LN: 14 of 111 links dropped, placement moved by at most 0.622 px against no filter, still one component (W-324 notes section 2.3). |
-| L2. The library default | No quality filter; the global optimization removes links by residual; NaN links kept. | None. | multiview-stitcher's main W-324 configuration; a constant tile's NaN links pull it to its nominal position, and a noise tile was placed 22 px off (W-324 `no_signal_noise`). |
+| **L1. Threshold 0.7, NaN dropped (recommended)** | A link is kept when its quality is finite and ≥ 0.7 (the macro's `min_r`). For `multiview_stitcher` the wrapper turns the library's filter on at 0.7 and also drops NaN-quality links, which the library keeps (the parity runs' notes, section 3); for the import, the links in `dataset.xml` are those that passed BigStitcher's filter. | None. | BigStitcher: none (same threshold). multiview-stitcher on LN: 14 of 111 links dropped, placement moved by at most 0.622 px against no filter, still one component (the parity runs' notes, section 2.3). |
+| L2. The library default | No quality filter; the global optimization removes links by residual; NaN links kept. | None. | multiview-stitcher's main configuration in the parity runs; a constant tile's NaN links pull it to its nominal position, and a noise tile was placed 22 px off (the parity case `no_signal_noise`). |
 | L3. A per-sample threshold | Keep links above a quantile of the sample's qualities | None. | Not measured; the threshold would vary between samples. |
+
+% L1: W-324 notes section 3; W-324 notes section 2.3. L2: multiview-stitcher's main W-324 configuration; W-324 `no_signal_noise`.
 
 **Recommendation: L1.** It applies one rule to both backends, matches the macro's current
 behavior, and treats a constant overlap as carrying no information about the offset.
@@ -801,7 +865,7 @@ As agreed on 2026-09-27:
    never discards a result.
 2. **Unreliable or disconnected placement needs review before sample assembly.**
    `review_placement(result, policy)` sets `record["review"]` to `not_needed` or
-   `required` with the reasons ("Review criterion"). Assemble (W-326) refuses a placement
+   `required` with the reasons ("Review criterion"). Assemble ({doc}`assembly-contract`) refuses a placement
    whose review is `required` and that has no approval, raising
    `PlacementReviewRequiredError` with the reasons. `approve_placement(result, *, reviewer,
    note)` records an approval (reviewer, UTC time, note, the SHA-256 of the per-FOV and
@@ -815,23 +879,30 @@ As agreed on 2026-09-27:
    translation kept as a diagnostic, and `metadata_only` only with `fallback="nominal"`
    ("BigStitcher"). BigStitcher's two-round strategy is today's built-in fallback inside
    Fiji; the import does not adopt its result as a placement unless the caller opts in.
-   The macro keeps the two-round strategy as its default (decided at the W-329 review,
+   The macro keeps the two-round strategy as its default (decided at the review gate,
    2026-10-06); `BigStitcherConfig` records it ("BigStitcher").
+
+% Assemble (W-326) refuses a placement; decided at the W-329 review, 2026-10-06
 
 ### Review criterion
 
 | Option | Review is required when | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **V1. Disconnection, unplaced FOVs, corrections, residuals (recommended)** | any FOV is not `image_supported`; or a correction exceeds `max_correction_fraction` (default 0.5) of the nominal overlap width in Y or X; or a kept link's residual exceeds `max_residual_um` (default 1.0 µm, about 5 px at 0.1944 µm); or the optimizer removed a link (where the backend reports it) | None. | LN BigStitcher import: all 64 FOVs `image_supported`; the residual check decides on the two links the 2024 optimization removed (W-323 log), which `dataset.xml` does not mark. multiview-stitcher on LN from the grid start: corrections up to 33.9 px in x and 44.5 px in y, under half the 149.6 px overlap; from the stage start up to 149.9 px, flagged (W-324 notes section 5). |
+| **V1. Disconnection, unplaced FOVs, corrections, residuals (recommended)** | any FOV is not `image_supported`; or a correction exceeds `max_correction_fraction` (default 0.5) of the nominal overlap width in Y or X; or a kept link's residual exceeds `max_residual_um` (default 1.0 µm, about 5 px at 0.1944 µm); or the optimizer removed a link (where the backend reports it) | None. | LN BigStitcher import: all 64 FOVs `image_supported`; the residual check decides on the two links the 2024 optimization removed (the input inventory's log), which `dataset.xml` does not mark. multiview-stitcher on LN from the grid start: corrections up to 33.9 px in x and 44.5 px in y, under half the 149.6 px overlap; from the stage start up to 149.9 px, flagged (the parity runs' notes, section 5). |
 | V2. Disconnection and failed FOVs only | more than one component, or any `failed` or `missing` FOV | None. | The LN stage-start placement, with 19 FOVs about 147 px off in one component, passes unflagged. |
 | V3. Always | every placement | None. | Every sample needs a sign-off before assembly, also the 2024 LN placement. |
 
-**Recommendation: V1.** The W-324 stage-start case shows that a wrong placement can stay
+% V1: W-323 log; W-324 notes section 5
+
+**Recommendation: V1.** The parity runs' stage-start case shows that a wrong placement can stay
 connected, so connectivity alone is not enough; the correction bound catches a shift of
 about one overlap width, and the residual catches links the optimization could not
-reconcile. The two defaults are proposals for W-331's validation design; neither is
+reconcile. The two defaults are proposals for the validation design
+({doc}`stitching-assembly-validation`); neither is
 accepted. Whatever the criterion, a supplied placement is always `required`, with the
 reason `supplied_placement` ("Supplied placement").
+
+% The W-324 stage-start case; W-331's validation design
 
 ## The form of the placement
 
@@ -840,9 +911,11 @@ reason `supplied_placement` ("Supplied placement").
 | **F1. An origin per FOV (recommended)** | `origin_z/y/x` per FOV in the sample frame; the FOV's sample-frame `ImageMetadata` is derived by `placed_metadata`. | None. | `tile_config` is a view of the raw translations; `ImageMetadata` needs no change. |
 | F2. A separate transform per FOV | A push transform object per FOV (a translation, or a 4 × 4 affine) from FOV index or physical coordinates to the sample frame, stored like the registration transforms. | None. | The same views; a transform type and its persistence to define, only to hold a translation, since rotation and affine stitching are excluded. |
 
-**Recommendation: F1.** Translation is the only kind §2.10 admits, an origin composes with
+**Recommendation: F1.** Translation is the only kind the accepted design admits, an origin composes with
 `ImageMetadata` without a new type, and the index rule above is one line. F2 becomes
-worth its cost only if a later section admits rotation.
+worth its cost only if later work admits rotation.
+
+% the only kind §2.10 admits
 
 ## Persistence
 
@@ -868,9 +941,14 @@ saved and loaded the same way ("Supplied placement").
 
 ## Dependency plan
 
-Amended at the W-329 review of 2026-10-06, from W-323 (`20261005T2025Z-spike-environment/`),
-W-324 (notes sections 1 and 5) and the trial resolution of 2026-10-06,
-`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-329/20261006T1630Z-gate-review-preparation/lock-py311-trial/README.md`:
+Amended at the review gate of 2026-10-06, from the input inventory's spike environment
+(`20261005T2025Z-spike-environment/`), the parity runs (notes sections 1 and 5) and the
+trial resolution of 2026-10-06, recorded with the review gate's preparation (its
+`lock-py311-trial/README.md`):
+
+% Amended at the W-329 review of 2026-10-06, from W-323 (`20261005T2025Z-spike-environment/`), W-324 (notes sections 1 and 5)
+% and the trial resolution of 2026-10-06,
+% `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-329/20261006T1630Z-gate-review-preparation/lock-py311-trial/README.md`
 
 * **Python bound of the package:** `requires-python >= 3.11`, written
   `requires-python = ">=3.11"` in `pyproject.toml`. multiview-stitcher 0.1.62 declares
@@ -895,15 +973,17 @@ W-324 (notes sections 1 and 5) and the trial resolution of 2026-10-06,
     `itkwasm-downsample` 2.0.2, `itkwasm-downsample-wasi` 2.0.2,
     `itkwasm-downsample-emscripten` 2.0.2, `wasmtime` 49.0.0, `importlib-resources` 7.1.0
     and `rich-argparse` 1.8.0. The emscripten package is in the universal lock for that
-    platform; the Linux spike environment of W-323 installed the other eight (71.8 MB on
+    platform; the Linux spike environment of the input inventory installed the other eight (71.8 MB on
     disk).
-* **Locked packages that change version: none.** W-323 also resolved the extra against the
+* **Locked packages that change version: none.** The input inventory also resolved the extra against the
   complete locked set on Python 3.12, Linux x86_64 (`resolve-python312.txt`, every other
   package at its locked version), and installed it (`lock-diff.txt`: none differs). The
   pins the library declares are met by the lock's versions: `dask!=2025.11.0` (2024.11.2),
   `zarr>=3` (3.1.5), `ngff-zarr<0.44`, `xarray>=2024.10.0` (2026.1.0).
 * **Not verified:** installation or any test on Python 3.11 or 3.13 (only 3.12 has an
   environment), and platforms other than Linux x86_64.
+
+% the Linux spike environment of W-323; W-323 also resolved the extra
 
 **The `pyproject.toml` change** (proposed; applied by the batch-preparation commit, not by
 this page):
@@ -940,16 +1020,20 @@ Verification for whoever applies it: `uv lock`; `uv export --locked --all-extras
 --all-groups --no-hashes` before and after, whose difference must be exactly that of the
 trial (the 27 entries removed and the nine packages added); `uv sync --extra
 multiview-stitcher` in a fresh environment; the routine test gate. A difference beyond the
-trial returns to Jiahao, as the §2.9 lock change did.
+trial returns to Jiahao, as the assignment stage's lock change did.
+
+% as the §2.9 lock change did
 
 ## Workflow configuration
 
 A Python-only `stitching` block (`backend: python`), read by `_run_stitching` in the
-workflow adapter and by the §2.13 rule that runs it:
+workflow adapter and by the workflow rule that runs it:
+
+% the §2.13 rule that runs it
 
 ```yaml
 stitching:
-  method: bigstitcher            # or multiview_stitcher; bigstitcher is the initial default (D1)
+  method: bigstitcher            # or multiview_stitcher; bigstitcher is the initial default
   input: reference_merged        # or reference_stain, or a file pattern
   positions:
     source: stage_file           # stage_file | regular_grid | table
@@ -965,6 +1049,8 @@ stitching:
   fallback: null                 # or nominal; for multiview_stitcher and the BigStitcher import alike
   bigstitcher_save_dir: null     # a local folder; required with method: bigstitcher
 ```
+
+% `method`: bigstitcher is the initial default (D1)
 
 * Without the block the four legacy rules run unchanged with `backend: matlab`, and the
   adapter's legacy translation (`StageAxisMapping(x="+x", y="+y", source="legacy")`, the
@@ -982,22 +1068,28 @@ stitching:
 * `fiji_path` is read by the BigStitcher engine rule when it runs, not when the rule file
   is parsed; the key stays required for that rule only.
 * With `method: bigstitcher`, `stitch_sample` writes and declares
-  `output/tile_config_{sample}.csv` only without an `assembly` block (W-568): with one,
+  `output/tile_config_{sample}.csv` only without an `assembly` block (since 2026-10-24): with one,
   nothing reads it.
 * The static schema lists the method names and is kept equal to `STITCHING_METHODS` plus
   `bigstitcher` by a default-tier test, as for the other registries.
 
+% only without an `assembly` block (W-568)
+
 ## Exclusions
 
 No implementation, rename, dependency or lock change; no overlap ownership, sample
-coordinates of molecules or cells, or export (W-326, W-328); no rotation, affine or
+coordinates of molecules or cells, or export (sample assembly and the sample outputs); no rotation, affine or
 deformable stitching, no GPU, no backend ranking or default change; no real data (every
-measured number comes from W-323 and W-324 by reference).
+measured number comes from the input inventory and the parity runs by reference).
+
+% (W-326, W-328); from W-323 and W-324 by reference
 
 ```{toctree}
 :hidden:
 
 Stitching algorithms and validation <stitching-algorithms>
-Stitching and assembly validation (§2.10) <stitching-assembly-validation>
+Stitching and assembly validation <stitching-assembly-validation>
 Stitching baseline (history) <stitching-baseline>
 ```
+
+% toctree: Stitching and assembly validation (§2.10)

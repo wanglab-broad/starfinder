@@ -1855,8 +1855,10 @@ test pass unchanged; nothing here changes a legacy script or an existing output.
 of the export entry, the fused image, the label export, the SpatialData export and the
 workflow blocks are the rows EX, FI, LB, SD and WF of {doc}`stitching-assembly-validation`,
 "Checks", from the conditions of "Sample position to image position" and "Read-back
-checks", with their tests in "Implemented checks (W-373)". Tests that call
+checks", with their tests in "Implemented checks". Tests that call
 multiview-stitcher need its extra and are skipped without it, naming the extra.
+
+% "Implemented checks (W-373)" of {doc}`stitching-assembly-validation`
 
 ## Workflow configuration
 
