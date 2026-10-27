@@ -6,8 +6,8 @@ This page specifies the four pipeline spot-finding methods of §2.7: Starfinder
 local maxima with the W-218 option, the native Starfish LoG, Spotiflow and Piscis.
 It also gives the engineering validation design of task group 6. The registry
 entries, configs, weights handling, rounds and records they plug into are in
-{doc}`spot-finding-contract`; the current behavior is in
-{doc}`spot-finding-baseline`. The four methods are implemented in `starfinder.spot_finding`
+{doc}`spot-finding-contract`; the behavior before §2.7 is recorded in
+{doc}`spot-finding-baseline` (history). The four methods are implemented in `starfinder.spot_finding`
 ({doc}`api/spot_finding`), with the checks that "Implemented checks (W-274)" lists, and
 nothing here selects a default method, model or operating point: the parameter values below are
 each method's native defaults or the values a check uses.
@@ -191,31 +191,11 @@ Checks:
 | S15 | Dimensionality rules | Tiny inputs (1×32×32, 2×32×32, 6×32×32, 7×8×8, 1×5×5, 1×8×8) for every pipeline method | Raised error type; z of the result | LM, LoG and PI succeed on Z=1 with z=0; SF 3D models raise `IncompatibleGeometryError` on Z=1 and Z=6 and run on 7×8×8; SF 2D models raise on Z>1 and on 1×5×5; LoG with a 3-tuple σ raises on Z=1. Derived from W-266: its `z1` development rows (LM, LoG, PI plane mode), its minimum-shape and dimensionality probes (the shapes where Spotiflow returns nothing or raises, Piscis stack mode needing Z ≥ 2) and its parity error case (a 3-tuple σ on a plane raises). The error type `IncompatibleGeometryError` is the contract's. |
 | S16 | The W-218 resolution on the §2.12 formed-amplicon scene | `formed16`, seeds 100–102: LM on the reference round with `merge_radius_zyx` None and (2, 2, 2), and with `exclude_border` True and False; the uint8 variant for the merge | `evaluate_spots` with policy `greedy`, 5.0 voxels, `exclusive`, eligible truth = `center_in_bounds` (the W-218 notebook policy); `classify_detections` (new) with channels as groups | With the merge: same-channel duplicates 0, and matched count ≥ the count without the merge. With `exclude_border=False`: no eligible amplicon within 1 voxel of a face missed. Cross-channel duplicates are reported, not gated (§2.8). Derived from the W-218 re-measurement of this issue (`small`, uint8: 2 same-channel ties removed and no matched candidate lost at radius (2, 2, 2); border misses 5 → 0), and **provisional**, because `formed16` is smaller and denser than `small`. |
 
-Metrics that must be added to `starfinder.evaluation.spot_finding`. The task-group-2
-foundation issue adds them, because the task-group-3 and task-group-4 issues use them
-already (S2, S16); task group 6 reuses them:
-
-* `localization_errors(match_result, detected, truth)`: from the matched pairs, the
-  maximum and 95th percentile of the absolute Z, Y and X errors, the lateral and 3D
-  distances, and the number of matches with absolute Z error above 1, in the
-  matching units (W-266 `localization-per-axis.csv` columns);
-* `classify_detections(match_result, detected, truth, *, radius, groups=None)`:
-  counts of matched, duplicate (an unmatched detection within `radius` of a matched
-  truth point) and spurious detections, with duplicates split into the same group
-  as the truth point's matched detection or another group when `groups` (for
-  example the channel) is given (the W-218 classification by position and
-  channel).
+S2 and S16 use the metrics `localization_errors` and `classify_detections` of
+`starfinder.evaluation.spot_finding`, which {doc}`api/evaluation.registration` defines.
 
 `evaluate_spots`, `match_points` and the W-266 scene generators (ported into the
 test helpers) are used as they are.
-
-Resource plan: every fixture is at most 32×64×64 voxels. Scaling W-266's
-per-voxel inference cost from `medium` gives about 0.3 s per Spotiflow call and
-about 4 s per Piscis stack-mode call on `iso3d`, plus one import of 3 to 6 s per
-process. LM and LoG calls take well under 1 s each (LoG with `num_sigma=30` needs
-about 40 MB). So the default-tier checks add seconds and the extended-tier checks a
-few minutes at one thread. Each run records wall time and maximum RSS with
-`/usr/bin/time -v` against the 4 GiB stop target.
 
 ### Implemented checks (W-274)
 
@@ -272,8 +252,8 @@ Resources at one thread (`/usr/bin/time -v`): the default-tier cases take under 
 minute (48 s, peak RSS 0.3 GB). The extended-tier cases take about 37 minutes with a
 peak RSS of 1.7 GB: about 1064 s for Piscis `20230905`, 985 s for Piscis
 `20251212` and 165 s for Spotiflow. Piscis's native 256-pixel tile costs about
-0.73 s per 64×64 plane (24 s per `iso3d` call, not the 4 s of the resource plan
-above). Every design case is kept (W-274 decision, option A): the project checks
+0.73 s per 64×64 plane (24 s per `iso3d` call, not the 4 s projected from W-266
+before the run). Every design case is kept (W-274 decision, option A): the project checks
 run the Piscis cases of each model as a separate extended check, selected by the
 model name in the test id (`-k "test_spot_finding_validation and 20230905"`, and
 likewise `20251212`), and the rest of the extended tier excludes them.
@@ -373,7 +353,7 @@ named, or the test's own assertion where the module has no constant.
     or more from a boundary. See [Piscis](#piscis), "Tiling".
   * *The native 256-pixel tile on small images.* A 64×64 plane is padded into one
     256-pixel tile, which costs about 0.73 s per plane, 24 s per 32-plane `iso3d`
-    call against the 4 s of the resource plan above; Piscis took 2048 s of the
+    call against the 4 s projected from W-266 before the run; Piscis took 2048 s of the
     2217 s extended tier (W-274 notes, "Extended-tier time"). The padding is also
     the cause of the S4 failures (above).
   * *Training pixel sizes.* The authors have not published the training pixel size

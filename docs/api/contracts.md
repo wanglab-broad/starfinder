@@ -535,8 +535,8 @@ Examples explain units, not recommended parameters for every dataset. All-zero c
 yield no spots.
 
 MATLAB {mat:func}`SpotFindingMax3D` supports adaptive/global, not Python's noise
-or adaptive_round. The schema accepts `local`, but the Python detector rejects
-it. MATLAB direct/local-subtile wrappers only forward the threshold; their mode
+or adaptive_round. The schema does not accept `local`, which the Python detector
+also rejects. MATLAB direct/local-subtile wrappers only forward the threshold; their mode
 stays adaptive. The deep wrapper forwards the mode. Consult
 [rule parameters and overrides](../workflow-configuration.md#rule-resources-and-parameters)
 before assuming a YAML setting reached the selected backend.

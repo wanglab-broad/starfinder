@@ -1,18 +1,42 @@
-# Spot-finding contract
+# Spot-finding guide
 
 Status: Accepted (W-268, 2026-10-01, at b5fcb7f); amended at the W-276 review, 2026-10-01
 
-This page proposes the §2.7 spot-finding contract: four selectable pipeline
-methods (Starfinder local maxima, the native Starfish LoG, native-3D Spotiflow
-and Piscis stack mode) in 3D and Z=1, explicitly named pretrained weights,
-per-channel overrides with recorded effective settings, detection in a named set
-of rounds, compact diagnostics, and the dependency plan for the learned
-detectors. It builds on the {doc}`method-registry` design, whose registry fields,
-lookup, dependency and provenance rules it uses unchanged. The current behavior is
-recorded in {doc}`spot-finding-baseline`; the numerical methods and the
-engineering validation design are in {doc}`spot-finding-algorithms`. The contract is
-implemented by `starfinder.spot_finding` and `FOV.find_spots` ({doc}`api/spot_finding`),
-with the checks that {doc}`spot-finding-algorithms` lists ("Implemented checks (W-274)").
+This page is the maintained guide to the spot-finding stage (§2.7) and its contract:
+`starfinder.spot_finding` and `FOV.find_spots` implement it ({doc}`api/spot_finding`).
+
+* **What spot finding does.** It detects candidate spots in each channel of a round's
+  detection image, in 3D and at Z=1, with one of four pipeline methods: Starfinder local
+  maxima, the native Starfish LoG, and the learned detectors Spotiflow and Piscis
+  ([Registry entries](#registry-entries),
+  [Z=1, dimensionality, scale and tiling](#z1-dimensionality-scale-and-tiling)).
+* **The entry and its configs.** `find_spots`, `FOV.find_spots` and `FOV.run` take a
+  method config (`LocalMaximaConfig`, `StarfishLogConfig`, `SpotiflowConfig`,
+  `PiscisConfig`) or a `SpotFindingPlan` with per-channel overrides and a set of rounds.
+  The learned detectors name explicit pretrained weights, which are fetched only by an
+  explicit command and verified before every run
+  ([Configs of the new methods and the W-218 option](#configs-of-the-new-methods-and-the-w-218-option),
+  [Detection plan](#detection-plan-per-channel-overrides-and-rounds),
+  [Pretrained weights](#pretrained-weights)).
+* **What it produces.** A `SpotFindingResult`: a table of zero-based voxel coordinates
+  with `spot_id`, `channel` and the method's columns, and compact diagnostics with the
+  effective settings of every channel. With checkpoints on, `FOV.run` saves it in the
+  `candidates` checkpoint, and the run record (`run.json`) holds the config or plan, the execution entry and the
+  provenance of the method and its weights ([Candidates checkpoint](#candidates-checkpoint),
+  [Diagnostics](#diagnostics), {doc}`checkpoints`).
+* **Where the configuration goes.** In Python, `PipelineConfig.spot_finding` holds the
+  config or plan, and `ExecutionConfig.device` the device. In the workflow, the Python
+  backend reads the `spot_finding` block of a Python rule and the rule-level `device`
+  key ([Workflow configuration](#workflow-configuration), [Execution device](#execution-device),
+  {doc}`workflow-configuration`).
+
+The methods follow the shared {doc}`method-registry` design, whose registry fields,
+lookup, dependency and provenance rules this page uses unchanged. Beneath this guide,
+{doc}`spot-finding-algorithms` specifies the four methods and the engineering validation
+(S1 to S16, "Implemented checks (W-274)" and "Known limits"), and {doc}`learned-detectors`
+gives the steps to install, fetch the weights of, run and test the learned detectors.
+{doc}`spot-finding-baseline` is history: the behavior at `42f652d`, before §2.7, kept
+with its golden test.
 
 The evidence comes from W-266 (versions, weights, CPU behavior and Starfish parity;
 run directory
@@ -92,12 +116,12 @@ its last two entries. A smaller input, or Z=1 for a method without `2` in
 
 | Name | Config | `pipeline` | `dimensions` | `min_shape_zyx` | `output_columns` | `requires` (extra) | `weights` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `local_maxima` | `LocalMaximaConfig` (exists; gains `merge_radius_zyx`) | yes | 2, 3 | (1, 1, 1) | `z, y, x, channel, peak_intensity?` | none | no |
-| `noise_landmark` | `NoiseLandmarkConfig` (exists) | no | 2, 3 | (1, 1, 1) | `z, y, x` | none | no |
-| `percentile_centroid` | `PercentileCentroidConfig` (exists) | no | 2, 3 | (1, 1, 1) | `z, y, x` (fractional) | none | no |
-| `starfish_log` | `StarfishLogConfig` (new) | yes | 2, 3 | (1, 1, 1) | `z, y, x, channel, peak_intensity, radius` | none | no |
-| `spotiflow` | `SpotiflowConfig` (new) | yes | 2, 3 | (7, 6, 6), and the model's minimum (below) | `z, y, x` (fractional), `channel, peak_intensity, probability` | `spotiflow`, `torch` (`spotiflow`) | yes |
-| `piscis` | `PiscisConfig` (new) | yes | 2, 3 | (2, 1, 1) | `z` (integer in stack mode), `y, x` (fractional), `channel, peak_intensity` | `piscis`, `torch` (`piscis`) | yes |
+| `local_maxima` | `LocalMaximaConfig` (with `merge_radius_zyx`) | yes | 2, 3 | (1, 1, 1) | `z, y, x, channel, peak_intensity?` | none | no |
+| `noise_landmark` | `NoiseLandmarkConfig` | no | 2, 3 | (1, 1, 1) | `z, y, x` | none | no |
+| `percentile_centroid` | `PercentileCentroidConfig` | no | 2, 3 | (1, 1, 1) | `z, y, x` (fractional) | none | no |
+| `starfish_log` | `StarfishLogConfig` | yes | 2, 3 | (1, 1, 1) | `z, y, x, channel, peak_intensity, radius` | none | no |
+| `spotiflow` | `SpotiflowConfig` | yes | 2, 3 | (7, 6, 6), and the model's minimum (below) | `z, y, x` (fractional), `channel, peak_intensity, probability` | `spotiflow`, `torch` (`spotiflow`) | yes |
+| `piscis` | `PiscisConfig` | yes | 2, 3 | (2, 1, 1) | `z` (integer in stack mode), `y, x` (fractional), `channel, peak_intensity` | `piscis`, `torch` (`piscis`) | yes |
 
 Column meanings: coordinates are zero-based voxel indices in float64, with the
 voxel centre at the integer. W-266's mean biases on the isolated-spot scenes were
@@ -109,10 +133,10 @@ even; `radius` is starfish's blob radius `round(σ·√ndim)` in voxels (float64
 float64, in [0, 1]). Piscis 1.1.0 returns coordinates only (`Piscis.predict` gives
 scores only through its intermediate feature maps), so it has no score column.
 
-The names, fields and defaults of the three existing configs do not change, except
-the new optional `LocalMaximaConfig.merge_radius_zyx` (default `None`, the current
-behavior). Exact-type lookup rejects subclasses, which `isinstance` accepts today;
-no caller, script or test subclasses them at `42f652d`.
+The three configs that predate §2.7 kept their names, fields and defaults, except
+the optional `LocalMaximaConfig.merge_radius_zyx` (default `None`, the earlier
+behavior). Exact-type lookup rejects subclasses, which the earlier `isinstance` check
+accepted; no caller, script or test subclassed them at `42f652d`.
 
 **Dependency error.** `SpotFindingBackendUnavailableError(ImportError)`, exported
 by `starfinder.spot_finding`, is raised through `require(spec, "spot-finding
@@ -126,12 +150,12 @@ constructing or validating a config never needs one.
 ## Configs of the new methods and the W-218 option
 
 Every config is a frozen dataclass validated in `__post_init__`, with
-`channel_labels: tuple[str, ...] | None = None` as today and a `method` field
+`channel_labels: tuple[str, ...] | None = None` and a `method` field
 (`init=False`) equal to the spec name. Units are voxels unless stated.
 
 | Config | Fields (default) |
 | --- | --- |
-| `LocalMaximaConfig` | unchanged fields, plus `merge_radius_zyx: tuple[float, float, float] \| None = None`: the opt-in W-218 within-channel merge ({doc}`spot-finding-algorithms`, "Local maxima"). Positive finite radii; the Z radius is unused for Z=1. |
+| `LocalMaximaConfig` | the fields of `42f652d`, plus `merge_radius_zyx: tuple[float, float, float] \| None = None`: the opt-in W-218 within-channel merge ({doc}`spot-finding-algorithms`, "Local maxima"). Positive finite radii; the Z radius is unused for Z=1. |
 | `StarfishLogConfig` | `min_sigma`, `max_sigma`: a number or a ZYX 3-tuple, required; `num_sigma: int`, required; `threshold: float`, required (starfish `BlobDetector` has no defaults for these four); `overlap: float = 0.5`; `exclude_border: bool \| int = False` (the starfish and `blob_log` defaults). |
 | `SpotiflowConfig` | `model: str`, required (a `spotiflow` row of the known-weights table); `prob_thresh: float \| None = None` (the threshold stored with the weights); `min_distance: int = 1`; `exclude_border: bool = False`; `subpix: bool \| None = None` (the model configuration's choice); `n_tiles: tuple[int, ...] \| None = None` (the library's choice); `scale: float = 1.0` (only 1 is accepted). |
 | `PiscisConfig` | `model: str`, required (a `piscis` row of the known-weights table); `threshold: float = 0.5`; `min_distance: int = 1`; `input_size: int \| None = None` (the tile side in pixels passed to the `Piscis` constructor, which rounds it to a multiple of 8; `None` keeps the model's 256); `scale: float = 1.0` (only 1 is accepted). The `Piscis` class is used, never `PiscisLegacy`. |
@@ -142,8 +166,8 @@ model: every run names its weights.
 
 ## Detection plan: per-channel overrides and rounds
 
-`PipelineConfig.spot_finding` accepts a registered config with `pipeline=True` (as
-today for `LocalMaximaConfig`) or a `SpotFindingPlan`. The field was named
+`PipelineConfig.spot_finding` accepts a registered config with `pipeline=True` (such
+as `LocalMaximaConfig`) or a `SpotFindingPlan`. The field was named
 `detection` until the W-276 review (2026-10-01), which renamed it to the stage name
 ({doc}`migration`).
 
@@ -171,7 +195,7 @@ class SpotFindingPlan:
   plan config's exact type (one method per run), and its `channel_labels` must be
   `None` or equal to the plan's. Channels must be unique and must be labels of
   `Dataset.channel_order` (checked by `FOV.run` and `FOV.find_spots`, which fill
-  `channel_labels` from it as today). Direct `find_spots` accepts a plan without
+  `channel_labels` from it). Direct `find_spots` accepts a plan without
   `rounds` and needs `config.channel_labels` when it has overrides. An override
   may change any setting except one that changes the output columns (for
   `local_maxima`, `measure_peak_intensity` must equal the plan's), and plan
@@ -182,60 +206,9 @@ class SpotFindingPlan:
   resolved (for example Spotiflow's stored `prob_thresh` 0.4 for `smfish_3d`).
 * `rounds` is described under "Detection in several rounds".
 
-## Workflow configuration
-
-The `spot_finding` block of a Python rule keeps `run` and `ref_round` (which must
-equal the dataset reference round) and gains, as Python-only keys:
-
-| Key | Meaning |
-| --- | --- |
-| `method` | A `SPOT_FINDING_METHODS` name with `pipeline=True`, through `config_type_for()`; default `local_maxima`. |
-| the config's init fields | Every other key is an init field of the selected config (YAML lists become tuples), for example `exclude_border`, `merge_radius_zyx`, `model`, `prob_thresh`, `threshold`; for `local_maxima` `threshold_mode`, `threshold_value` and `min_distance_voxels`. Unknown keys raise `ValueError`. |
-| `channel_overrides` | A mapping from channel label to a mapping of config fields; each entry becomes `ChannelOverride(label, replace(config, **fields))`. |
-| `rounds` | A list of round labels; omitted means the reference round only. |
-
-The MATLAB keys `intensity_estimation`, `intensity_threshold` and
-`min_distance` of `local_maxima` raise under `backend: python` (W-569), naming
-the fields `threshold_mode`, `threshold_value` and `min_distance_voxels`; the
-schema refuses them there. For MATLAB-backend configurations, which the
-adapters of the shared rules read, they stay aliases for `local_maxima` only
-(`dataset/_legacy_config.py`) and keep their meaning. `min_distance` is also a
-native init field of two other configs. The adapter handles each key by method,
-and this table is the only rule:
-
-| Key | `local_maxima` (also when `method` is omitted) | `spotiflow`, `piscis` | `starfish_log` |
-| --- | --- | --- | --- |
-| `intensity_estimation` | Python backend: `ValueError` naming `threshold_mode`. MATLAB backend: alias of `threshold_mode`; `ValueError` together with `threshold_mode` | `ValueError` (not a field) | `ValueError` (not a field) |
-| `intensity_threshold` | Python backend: `ValueError` naming `threshold_value`. MATLAB backend: alias of `threshold_value`; `ValueError` together with `threshold_value` | `ValueError` (not a field) | `ValueError` (not a field) |
-| `min_distance` | Python backend: `ValueError` naming `min_distance_voxels`. MATLAB backend: alias of `min_distance_voxels`; `ValueError` together with `min_distance_voxels` | The native field `min_distance` of `SpotiflowConfig` and `PiscisConfig`, passed unchanged | `ValueError` (not a field) |
-| `min_distance_voxels` | The field | `ValueError` (not a field) | `ValueError` (not a field) |
-
-`channel_overrides` entries follow the same rule for the selected method. A
-rule-level Python-only key `device` sets `ExecutionConfig.device`.
-
-```yaml
-rsf_single_fov:
-  parameters:
-    device: cpu                       # the only accepted value in §2.7
-    spot_finding:
-      run: true
-      ref_round: round1
-      method: spotiflow
-      model: smfish_3d                # required: every run names its weights
-      prob_thresh: null               # null: the threshold stored with the weights
-      channel_overrides:
-        ch03: {prob_thresh: 0.5}
-```
-
-The schema (`workflow/schemas/config.schema.yaml`, `spot_finding_params`) gains
-`method` with an enum kept equal to the pipeline methods by a default-tier test, as
-`test_preprocessing_workflow_key.py` does for preprocessing, declares the
-Python-only keys, and drops `local` from `intensity_estimation`, which neither
-Python nor MATLAB accepts. MATLAB rules, shared keys and filenames do not change.
-
 ## Execution device
 
-`ExecutionConfig` gains `device: str = "cpu"`. In §2.7 any other value raises
+`ExecutionConfig` has `device: str = "cpu"`. In §2.7 any other value raises
 `ValueError("device must be 'cpu'; §2.7 runs on CPU only")`. Direct `find_spots`
 takes the same keyword (`device="cpu"`). The setting belongs to execution, not to
 a method; it is recorded in `run.json` with the rest of `ExecutionConfig`. §2.9
@@ -479,7 +452,7 @@ The `candidates` stage keeps its files, table layout, dtype map and
   of rounds), `detection_plan` (the channel overrides as `{channel, config}`
   entries), `execution` (the execution entry) and `weights` (the `artifacts`
   entries);
-* `_detectors()` is replaced by the name-to-type map from `SPOT_FINDING_METHODS`
+* `_detectors()` derives the name-to-type map from `SPOT_FINDING_METHODS`
   (`config_type_for`), and the override configs are rebuilt the same way;
 * reload: `dataset.load_checkpoint(..., "candidates")` returns a `SpotFindingResult` whose
   table equals the written one exactly (CSV and Parquet), whose config and plan
@@ -489,13 +462,13 @@ The `candidates` stage keeps its files, table layout, dtype map and
 
 `run.json` keeps `format_version` 1. Its `config.pipeline.spot_finding` holds the
 config or plan, `config.execution` holds `device`, and the detection step record
-gains the `methods` list of provenance entries (registry move 5).
+holds the `methods` list of provenance entries (registry move 5).
 
 ## Diagnostics
 
-`SpotFindingResult.diagnostics` keeps today's keys for a single-round result
+`SpotFindingResult.diagnostics` holds the keys of `42f652d` for a single-round result
 (`method`, `channel_labels`, `thresholds`, `coordinate_units`,
-`singleton_z_policy`, `measurements`) and adds:
+`singleton_z_policy`, `measurements`) and these:
 
 | Key | Content |
 | --- | --- |
@@ -518,8 +491,8 @@ matplotlib (a core dependency) and returns the axes. It is never called by
 
 ## Dependency plan
 
-The batch-preparation commit, applied only after W-268 approves it explicitly,
-changes `src/python/pyproject.toml` and `src/python/uv.lock` and nothing else:
+The learned detectors' entries of `src/python/pyproject.toml`, locked in
+`src/python/uv.lock`, are these; later issues added further packages to `constraint-dependencies`:
 
 ```toml
 [project.optional-dependencies]
@@ -575,58 +548,56 @@ explicit = true
 The full commit text, with the verification commands, is the draft
 `drafts/batch-prep-dependency-commit.md` in the W-267 run directory.
 
-## `docs/migration.md` entries
+## Workflow configuration
 
-The implementation adds these entries:
+The `spot_finding` block of a Python rule holds `run` and `ref_round` (which must
+equal the dataset reference round) and, as Python-only keys:
 
-1. **Spot-finding registry.** `SPOT_FINDING_METHODS` and `SpotFindingSpec`;
-   exact-type lookup, so subclasses of the detection configs are no longer
-   accepted; `SpotFindingBackendUnavailableError`.
-2. **New methods and extras.** `starfish_log` (`StarfishLogConfig`, no extra,
-   starfish `BlobDetector` parity), `spotiflow` and `piscis` (`SpotiflowConfig`,
-   `PiscisConfig`; extras `spotiflow` and `piscis`); `KNOWN_MODELS`, `starfinder
-   weights fetch`, `MissingModelError`, `ModelHashMismatchError`; `FOV.run`
-   never downloads weights.
-3. **Workflow keys.** The `spot_finding` block's `method` key and config fields,
-   `channel_overrides`, `rounds` and the rule-level `device`. The legacy keys are
-   aliases for `local_maxima` only, and `min_distance` is the native field of
-   `spotiflow` and `piscis` (the method-aware table of
-   {doc}`spot-finding-contract`). **Intentional change:** for `local_maxima`,
-   `min_distance` together with `min_distance_voxels`, or another legacy key
-   together with its field, now raises instead of silently preferring one;
-   `local` leaves the schema enum. (W-569 later made the legacy keys raise on the
-   Python backend; {doc}`migration`, "One Python configuration dialect".)
-4. **Detection plan.** `SpotFindingPlan` and `ChannelOverride`; `find_spots` and
-   `PipelineConfig.spot_finding` accept a plan; the `round` column of multi-round
-   results; decoding a multi-round set raises in readout mode `multiplexed` and is
-   direct readout in readout mode `direct` (§2.8, W-293).
-5. **Execution.** `ExecutionConfig.device` (only `"cpu"`) and the execution
-   record.
-6. **Diagnostics.** The new keys. **Intentional change:** `SpotFindingWarning` when
-   a channel's MAD is 0 or more than half of its voxels are zero, where nothing was
-   reported before; the thresholds and detections are unchanged.
-7. **W-218 option.** `LocalMaximaConfig.merge_radius_zyx`, off by default; the
-   default behavior is unchanged unless W-268 decides otherwise.
-8. **Evaluation.** `localization_errors` and `classify_detections` in
-   `starfinder.evaluation.spot_finding`.
-9. **Checkpoints.** The optional `candidates.json` keys and spot columns;
-   `FORMAT_VERSION` stays 2.
+| Key | Meaning |
+| --- | --- |
+| `method` | A `SPOT_FINDING_METHODS` name with `pipeline=True`, through `config_type_for()`; default `local_maxima`. |
+| the config's init fields | Every other key is an init field of the selected config (YAML lists become tuples), for example `exclude_border`, `merge_radius_zyx`, `model`, `prob_thresh`, `threshold`; for `local_maxima` `threshold_mode`, `threshold_value` and `min_distance_voxels`. Unknown keys raise `ValueError`. |
+| `channel_overrides` | A mapping from channel label to a mapping of config fields; each entry becomes `ChannelOverride(label, replace(config, **fields))`. |
+| `rounds` | A list of round labels; omitted means the reference round only. |
 
-## Tests the implementation changes
+The MATLAB keys `intensity_estimation`, `intensity_threshold` and
+`min_distance` of `local_maxima` raise under `backend: python` (W-569), naming
+the fields `threshold_mode`, `threshold_value` and `min_distance_voxels`; the
+schema refuses them there. For MATLAB-backend configurations, which the
+adapters of the shared rules read, they stay aliases for `local_maxima` only
+(`dataset/_legacy_config.py`) and keep their meaning. `min_distance` is also a
+native init field of two other configs. The adapter handles each key by method,
+and this table is the only rule:
 
-* `test/test_spot_finding_golden.py`: every pinned value stays (since W-573 as
-  explicit expected values with the tolerances of [contributing](contributing.md)
-  ("Expected values and tolerances"), equal to the digests pinned before). The diagnostics
-  change makes one named edit: `test_noise_mode_mad_zero_passes_silently` becomes
-  a test that the MAD-0 channel keeps threshold 0 and now emits one
-  `SpotFindingWarning` per affected channel. If the registry move changes how a
-  local-maxima config is built, only the body of `detection_config` may change.
-* `test/test_registration_recipe.py:520-525` and
-  `test/test_registration_validation.py:433` stay unchanged with option A; option
-  B would need the named edits listed in its row.
-* Every other existing test passes byte for byte unchanged. Each draft
-  implementation issue names its set, following move 4 of the registry decision
-  record's migration plan ({doc}`method-registry`, "History").
+| Key | `local_maxima` (also when `method` is omitted) | `spotiflow`, `piscis` | `starfish_log` |
+| --- | --- | --- | --- |
+| `intensity_estimation` | Python backend: `ValueError` naming `threshold_mode`. MATLAB backend: alias of `threshold_mode`; `ValueError` together with `threshold_mode` | `ValueError` (not a field) | `ValueError` (not a field) |
+| `intensity_threshold` | Python backend: `ValueError` naming `threshold_value`. MATLAB backend: alias of `threshold_value`; `ValueError` together with `threshold_value` | `ValueError` (not a field) | `ValueError` (not a field) |
+| `min_distance` | Python backend: `ValueError` naming `min_distance_voxels`. MATLAB backend: alias of `min_distance_voxels`; `ValueError` together with `min_distance_voxels` | The native field `min_distance` of `SpotiflowConfig` and `PiscisConfig`, passed unchanged | `ValueError` (not a field) |
+| `min_distance_voxels` | The field | `ValueError` (not a field) | `ValueError` (not a field) |
+
+`channel_overrides` entries follow the same rule for the selected method. A
+rule-level Python-only key `device` sets `ExecutionConfig.device`.
+
+```yaml
+rsf_single_fov:
+  parameters:
+    device: cpu                       # the only accepted value in §2.7
+    spot_finding:
+      run: true
+      ref_round: round1
+      method: spotiflow
+      model: smfish_3d                # required: every run names its weights
+      prob_thresh: null               # null: the threshold stored with the weights
+      channel_overrides:
+        ch03: {prob_thresh: 0.5}
+```
+
+The schema (`workflow/schemas/config.schema.yaml`, `spot_finding_params`) has
+`method` with an enum kept equal to the pipeline methods by a default-tier test, as
+`test_preprocessing_workflow_key.py` does for preprocessing, declares the
+Python-only keys, and has no `local` in `intensity_estimation`, which neither
+Python nor MATLAB accepts. MATLAB rules, shared keys and filenames do not change.
 
 ## Exclusions
 
@@ -639,6 +610,6 @@ data; method comparisons belong to E02.
 ```{toctree}
 :hidden:
 
-Spot-finding algorithms <spot-finding-algorithms>
-Spot-finding baseline <spot-finding-baseline>
+Spot-finding algorithms and validation <spot-finding-algorithms>
+Spot-finding baseline (history) <spot-finding-baseline>
 ```
