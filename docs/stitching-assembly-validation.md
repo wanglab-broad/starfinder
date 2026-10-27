@@ -190,8 +190,8 @@ used. Fixtures marked "none" use no random number.
 generator addition of {doc}`synthetic-sample-scene` (W-327); **H** nothing but
 hand-built geometry; **A** the `anndata` extra; **MV** the `multiview-stitcher` extra;
 **SD** the `spatialdata` extra; **S** `slow`. A test that needs an extra is skipped
-without it, naming the extra ({doc}`sample-output-contract`, "Tests the implementation
-keeps"); the batch that implements it installs the extra, and no such test is skipped
+without it, naming the extra ({doc}`sample-output-contract`, "Golden tests and the §2.10
+checks"); the batch that implements it installs the extra, and no such test is skipped
 there.
 
 ### Placement (PL)

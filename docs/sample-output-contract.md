@@ -1,6 +1,47 @@
-# Sample-output contract: the export entry, the fused image, the label export, the SpatialData export and the output profiles
+# Sample-output guide: the export entry, the fused image, the label export, the SpatialData export and the output profiles
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
+
+This page is the maintained guide to the sample outputs (§2.10), the export stage, and its
+contract.
+
+* **What the export does.** It writes what a sample has on disk after spatial assembly:
+  the sample tables and `sample.h5ad` of the assembly; the fused image, made by
+  multiview-stitcher's `fuse` from the placement of either backend, by default a 2D
+  maximum projection at scale 0.5 as OME-TIFF and on request a 3D stack, OME-Zarr or
+  further channels; the assembled label image, drawn by retained cells; and the
+  SpatialData store; and it reads each file back against its record
+  ([Settled decisions this page follows](#settled-decisions-this-page-follows),
+  [Terms](#terms), [The fused image](#the-fused-image),
+  [Assembled label export](#assembled-label-export),
+  [SpatialData export](#spatialdata-export), [Read-back checks](#read-back-checks)).
+* **The entry and its configs.** `Dataset.export` applies its checks before anything is
+  written and calls the parts `assemble`, `fuse` (`fuse_images`), `fuse_labels` and
+  `export_spatialdata` in order, with the part `segment` on the route after fusion; each
+  part is turned off by its field of `ExportConfig` and can be called alone, and
+  `ExportConfig` holds the `AssemblyConfig`, `FusionConfig`, `LabelConfig` and
+  `SpatialDataExportConfig` of the parts ([Names](#names),
+  [The export entry](#the-export-entry), [Configuration](#configuration)).
+* **What it produces.** The export folder `<OUTPUT>/export/<sample>/`: the record
+  `export.json` with a section per part, `sample.h5ad`, the four sample tables in
+  `tables/`, the fused images `<image>_projection.ome.tif` or `<image>_stack.ome.tif`,
+  `cell_labels.ome.tif` and `sample.zarr/`, as the output profile selects; a part that
+  cannot run is recorded and warned about with `ExportIncompleteWarning`, and
+  `check_export` checks the folder against its record
+  ([The export folder and the output profiles](#the-export-folder-and-the-output-profiles),
+  [File layouts](#file-layouts), [Resources](#resources)).
+* **Where the configuration goes.** The `ExportConfig` passed to `Dataset.export`, a
+  sample-level entry outside `PipelineConfig`; in the workflow, the Python-only `export`
+  block, which the per-sample rule `export_sample` reads together with the `assembly`
+  block ([Workflow configuration](#workflow-configuration)).
+
+Beneath this guide, {doc}`stitching-assembly-validation` is the engineering validation
+design that the sample outputs share with stitching and assembly, with the checks of the
+export entry, the fused image, the label export, the SpatialData export and the workflow
+(rows EX, FI, LB, SD and WF), their implemented checks and the results of the real
+examples; {doc}`sample-output-baseline` is history (the reference-branch exporter at
+`17e8dda` and `dev` at `8e7d256`, before §2.10). The stage has no separate algorithm page:
+its numerical rules, measured resources and dependencies are on this page.
 
 ## Amendments after acceptance
 
@@ -30,10 +71,7 @@ dependencies each output needs. It builds on three contracts and redefines none 
   (`src/python/starfinder/image.py`).
 
 Where this page names a column, a function or a rule of those pages, it uses it unchanged.
-The current exporter work and today's fused files are recorded in
-{doc}`sample-output-baseline`. It is implemented in `starfinder.export`, nothing is
-renamed and no dependency changes. The validation design and the implementation issues are in
-{doc}`stitching-assembly-validation`.
+It is implemented in `starfinder.export`, nothing is renamed and no dependency changes.
 
 This page was revised on 2026-10-06 after the W-329 review, from the fusion measurement of
 W-354: the fused image is now made by multiview-stitcher's `fuse`, the export has one
@@ -1713,62 +1751,6 @@ and `FusionConfig.ome_zarr_version` (`"0.5"` under Z2, `"0.4"` under Z1), passed
 library writer's `ngff_version`. `__post_init__` refuses other values. Both follow
 the gate's choice 7; the defaults are Z2.
 
-## Workflow configuration
-
-The Python-only `export` block, read by `_run_export` in the workflow adapter and run by
-one per-sample rule `export_sample`, which runs `Dataset.export` after the placement
-exists and, on the route per FOV, after `reads_assignment` of every FOV of the sample; on
-the route after fusion the rule needs the molecule tables and the source images
-({doc}`sample-segmentation-contract`, "The route setting"). The assemble part takes its
-keys from the `assembly` block ({doc}`assembly-contract`, "Workflow configuration"):
-
-```yaml
-export:
-  assemble: true              # false: reuse the saved assembly of export/<sample>/
-  fuse: true                  # false: no fused image (the tables and sample.h5ad stay)
-  fuse_labels: false          # true: cell_labels.ome.tif at labels_scale_yx
-  export_spatialdata: false   # true: export/<sample>/sample.zarr
-  images: [reference_stain]   # source images; further channels are further names
-  dimensionality: projection  # projection | stack | both; dense 3D tissue (LN sample1): stack
-  projection: max             # max | sum
-  scale_yx: 0.5               # 1/k
-  ome_zarr: false             # standalone OME-Zarr (not with export_spatialdata)
-  ome_zarr_version: "0.5"     # "0.5" | "0.4"
-  pyramid_levels: 0
-  labels_scale_yx: 0.25       # 1/k
-  spatialdata_zarr_format: 3  # 3 | 2
-  route: null                 # per_fov | after_fusion; null: by dimensionality
-  segment: true               # false: reuse the saved sample segmentation
-  segmentation: null          # the settings of the route after fusion
-```
-
-* The rule runs for every sample of a configuration with `stitching` and `assembly`
-  blocks; without an `export` block the defaults above apply. Without an `assembly` block
-  the legacy rules run unchanged and nothing here runs.
-* The block is part of each dataset's configuration, so `dimensionality` is set per
-  dataset: a dataset of dense 3D tissue, such as LN sample1, sets `dimensionality: stack`
-  and gets no projection file; the others keep the default projection ("The fused image
-  by dataset").
-* It reads `stitching/{sample}/placement.json`, the saved assignment folders (or molecule
-  tables) and reference grids of the sample's FOVs (from the files the top-level
-  `reference_image` names), and the source images, and writes the
-  files of "The export folder and the output profiles". Its declared output is
-  `export/{sample}/export.json`, which lists every other file; a part that cannot run
-  therefore does not fail the rule, and the warning and the record say so ("When a part
-  cannot run").
-* After `Dataset.export`, with `assembly.assignment` set, `assembly.previews: true` (W-568;
-  default false) and the assembly written or reused, the rule also draws each FOV's
-  assignment figures `export/{sample}/previews/{fovID}/assignment.png` and
-  `assignment_single_layer.png`, with the FOV's ownership region
-  ({doc}`assembly-contract`, "Workflow configuration"; W-330). The folder `previews/` is a
-  declared directory output of the rule on the route per FOV with `assemble` on, the
-  conditions the configuration decides; the rule creates it whenever it declares it (empty
-  when the assemble part was neither written nor reused). It is not listed in
-  `export.json`; `Dataset.export` itself writes no figure. On the route after fusion, or
-  with `assemble: false`, no assignment figure is drawn and the folder is not declared.
-* A default-tier test keeps the static schema equal to the fields of `ExportConfig`,
-  `FusionConfig`, `LabelConfig` and `SpatialDataExportConfig`, as for the other blocks.
-
 ## Resources
 
 Measured by W-354 (`tables/runs.csv`, `worker-notes.md` sections 8 and 10; wall, CPU and
@@ -1866,20 +1848,71 @@ options stay there as options not taken.
 11. **A part that cannot run**: recorded and warned about. Not taken: raise after writing
     the record, or refuse before writing ("When a part cannot run").
 
-## Tests the implementation keeps
+## Golden tests and the §2.10 checks
 
 `test_workflow_stitching_golden.py`, `test_workflow_assembly_golden.py` and every existing
-test pass unchanged; nothing here changes a legacy script or an existing output. The new
-tests follow {doc}`stitching-assembly-validation` from the conditions of "Sample position
-to image position" and "Read-back checks". Tests that call multiview-stitcher need its
-extra and are skipped without it, naming the extra.
+test pass unchanged; nothing here changes a legacy script or an existing output. The checks
+of the export entry, the fused image, the label export, the SpatialData export and the
+workflow blocks are the rows EX, FI, LB, SD and WF of {doc}`stitching-assembly-validation`,
+"Checks", from the conditions of "Sample position to image position" and "Read-back
+checks", with their tests in "Implemented checks (W-373)". Tests that call
+multiview-stitcher need its extra and are skipped without it, naming the extra.
 
-## `docs/migration.md` entries
+## Workflow configuration
 
-The implementation adds the `starfinder.export` module and its names,
-`Dataset.export`, the `export` YAML block and the `export_sample` rule, and the folder
-`<OUTPUT>/export/<sample>/` for configurations with `stitching` and `assembly` blocks.
-Legacy configurations and `images/fused/{sample}/` are unchanged.
+The Python-only `export` block, read by `_run_export` in the workflow adapter and run by
+one per-sample rule `export_sample`, which runs `Dataset.export` after the placement
+exists and, on the route per FOV, after `reads_assignment` of every FOV of the sample; on
+the route after fusion the rule needs the molecule tables and the source images
+({doc}`sample-segmentation-contract`, "The route setting"). The assemble part takes its
+keys from the `assembly` block ({doc}`assembly-contract`, "Workflow configuration"):
+
+```yaml
+export:
+  assemble: true              # false: reuse the saved assembly of export/<sample>/
+  fuse: true                  # false: no fused image (the tables and sample.h5ad stay)
+  fuse_labels: false          # true: cell_labels.ome.tif at labels_scale_yx
+  export_spatialdata: false   # true: export/<sample>/sample.zarr
+  images: [reference_stain]   # source images; further channels are further names
+  dimensionality: projection  # projection | stack | both; dense 3D tissue (LN sample1): stack
+  projection: max             # max | sum
+  scale_yx: 0.5               # 1/k
+  ome_zarr: false             # standalone OME-Zarr (not with export_spatialdata)
+  ome_zarr_version: "0.5"     # "0.5" | "0.4"
+  pyramid_levels: 0
+  labels_scale_yx: 0.25       # 1/k
+  spatialdata_zarr_format: 3  # 3 | 2
+  route: null                 # per_fov | after_fusion; null: by dimensionality
+  segment: true               # false: reuse the saved sample segmentation
+  segmentation: null          # the settings of the route after fusion
+```
+
+* The rule runs for every sample of a configuration with `stitching` and `assembly`
+  blocks; without an `export` block the defaults above apply. Without an `assembly` block
+  the legacy rules run unchanged and nothing here runs.
+* The block is part of each dataset's configuration, so `dimensionality` is set per
+  dataset: a dataset of dense 3D tissue, such as LN sample1, sets `dimensionality: stack`
+  and gets no projection file; the others keep the default projection ("The fused image
+  by dataset").
+* It reads `stitching/{sample}/placement.json`, the saved assignment folders (or molecule
+  tables) and reference grids of the sample's FOVs (from the files the top-level
+  `reference_image` names), and the source images, and writes the
+  files of "The export folder and the output profiles". Its declared output is
+  `export/{sample}/export.json`, which lists every other file; a part that cannot run
+  therefore does not fail the rule, and the warning and the record say so ("When a part
+  cannot run").
+* After `Dataset.export`, with `assembly.assignment` set, `assembly.previews: true` (W-568;
+  default false) and the assembly written or reused, the rule also draws each FOV's
+  assignment figures `export/{sample}/previews/{fovID}/assignment.png` and
+  `assignment_single_layer.png`, with the FOV's ownership region
+  ({doc}`assembly-contract`, "Workflow configuration"; W-330). The folder `previews/` is a
+  declared directory output of the rule on the route per FOV with `assemble` on, the
+  conditions the configuration decides; the rule creates it whenever it declares it (empty
+  when the assemble part was neither written nor reused). It is not listed in
+  `export.json`; `Dataset.export` itself writes no figure. On the route after fusion, or
+  with `assemble: false`, no assignment figure is drawn and the folder is not declared.
+* A default-tier test keeps the static schema equal to the fields of `ExportConfig`,
+  `FusionConfig`, `LabelConfig` and `SpatialDataExportConfig`, as for the other blocks.
 
 ## Exclusions
 
@@ -1896,6 +1929,6 @@ an image).
 ```{toctree}
 :hidden:
 
-§2.10 validation design <stitching-assembly-validation>
-Sample-output baseline <sample-output-baseline>
+Stitching and assembly validation (§2.10) <stitching-assembly-validation>
+Sample-output baseline (history) <sample-output-baseline>
 ```
