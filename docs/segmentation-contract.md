@@ -1337,9 +1337,9 @@ there as well:
 No assignment, correspondence, compartment, count or export specification (those are
 {doc}`assignment-contract`'s); no transcript-based or combined segmentation, training or
 fine-tuning; no managed CellProfiler execution (its masks enter through `import_labels`);
-no accuracy claim and no comparison between segmenters (both need annotation and an answer
-to whether a mask is one biological cell, which are left to later work); no default model
-and no recommended scale.
+no accuracy claim and no comparison between segmenters (they wait on the open question of
+whether two masks are one biological cell, and on annotation, which stays with separate
+work); no default model and no recommended scale.
 
 % (W-308); (E04, W-123)
 

@@ -623,7 +623,7 @@ and always carries `ambiguous_nucleus`, so its compartments are withheld.
 
 % one culture crop of W-320
 
-**Decision: C2, provisional (Jiahao, at the review of the bounded real examples,
+**Decision: C2, provisional (Jiahao, at the human review of the implementation,
 2026-10-05).** The default `outside_tolerance` was raised from 0.0 (C1, the option this
 page recommended at its acceptance review) to 0.1; `match_fraction` stays 0.5, the strict rule and the flags are unchanged. A matched
 nucleus is flagged `outside` only when its share outside its cell is strictly greater
@@ -1038,8 +1038,8 @@ No segmentation and no change to the label contract ({doc}`segmentation-contract
 stitching, global coordinates, overlap ownership or cross-FOV matching (stitching and
 assembly); no probabilistic or transcript-based assignment; no size or count filter; no
 automatic compartment repair; no new exporter (the existing exporters are reused); no real
-data and no accuracy claim (both need annotation and an answer to whether a mask is one
-biological cell, which are left to later work).
+data and no accuracy claim (they wait on the open question of whether two masks are one
+biological cell, and on annotation, which stays with separate work).
 
 % (W-307); (§2.10); (§2.4's are reused); (E04, W-123)
 
