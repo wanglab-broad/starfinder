@@ -4,6 +4,10 @@ from importlib.metadata import version as package_version
 import posixpath
 import re
 from pathlib import Path
+import sys
+
+# Project-owned Sphinx extensions (docs/_ext).
+sys.path.insert(0, str(Path(__file__).resolve().parent / "_ext"))
 
 project = "STARfinder"
 author = "STARfinder contributors"
@@ -17,6 +21,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinxcontrib.matlab",
     "sphinx_design",
+    "synthetic_presets",
 ]
 # Parse only project-owned MATLAB code; no MATLAB process or license is needed.
 matlab_src_dir = str(Path(__file__).resolve().parents[1] / "src" / "matlab")

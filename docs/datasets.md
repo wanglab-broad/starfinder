@@ -90,53 +90,18 @@ assay identity, geometry and masks must be reconciled before qualification.
 
 ## Current synthetic presets
 
-The current generator is the amplicon-scene model in `starfinder.synthetic`
-(see the [synthetic API](api/synthetic.rst) and the
-[model definition](synthetic-specification.md)). Its benchmark presets are
-generated on demand with `starfinder synthetic generate`; no generated images
-are stored in the repository. The test suite generates `small` (e2e, seed 42)
-once per session under pytest's temporary directory (`src/python/test/conftest.py`).
+Synthetic data is generated on demand from the presets of `starfinder.synthetic`; no
+generated images are stored in the repository. The
+[synthetic reference](synthetic-reference.md) lists the presets of all four scenes,
+read from the code, and the [synthetic overview](wiki/synthetic.md) says which scene to
+use. The test suite generates the amplicon preset `small` once per session
+(`src/python/test/conftest.py`).
 
-| Preset (`benchmark-presets-v1`) | ZYX / dtype | Amplicons per FOV, FOVs | Seed |
-| --- | --- | --- | --- |
-| `tiny` | `(8,128,128)`, uint16 | 10, 2 | 42 |
-| `small` | `(16,256,256)`, uint16 | 50, 2 | 42 |
-| `medium` | `(32,512,512)`, uint16 | 400, 2 | 42 |
-| `large` | `(30,1024,1024)`, uint16 | 1,500, 2 | 123 |
-| `tissue` | `(30,3072,3072)`, uint16 | 14,000, 2 | 456 |
-| `thick_medium` | `(100,1024,1024)`, uint16 | 5,200, 2 | 789 |
-
-These are uncalibrated development inputs: appearance defaults are chosen to be
-plausible, not fitted to real data, and they carry no molecular truth claim.
-Their images differ from every historical synthetic version below, even where the
-shape, count and seed match. No register ID is assigned to them; whether D06 moves
-to `benchmark-presets-v1/small` is a register decision.
-
-### Calibrated development preset
-
-`calibrated-development-v1` (`calibrated_scene_preset`) is a development
-calibration against the measured processed-image statistics
-([image statistics](image-statistics.md)); it is **not D04**, not a benchmark
-calibration and qualifies no dataset. Scenes are generated on demand; nothing is
-stored in the repository.
-
-% (`calibrated_scene_preset`, W-241); the W-238 processed-image statistics
-
-| Version | ZYX / dtype | Amplicons per FOV | Conditions | Codebooks |
-| --- | --- | --- | --- | --- |
-| `calibrated-development-v1` | `(8,64,64)`, uint8 or uint16 | 80, lognormal brightness | The 13 preprocessing evaluation conditions (`CALIBRATED_CONDITIONS`) | `balanced` (16 genes) or `unbalanced` |
-
-% The 13 §2.5 evaluation conditions
-
-Every condition, including `clean`, carries the calibrated baseline: a uniform
-pedestal, Poisson, white and spatially correlated noise, non-uniform channel
-gains and a mild round trend. uint8 is the measured scale. uint16 uses the same
-calibrated shape with every intensity multiplied by 16 (the ratio of the
-benchmark presets); **the uint16 scale is unverified against real data**,
-because the processed-image statistics measured only 8-bit exports. The side-by-side
-comparison with those targets is a run record outside the repository.
-
-% because W-238 measured only 8-bit exports; the W-238 targets
+The presets are chosen to look plausible, not fitted to real data. The one exception,
+`calibrated-development-v1`, matches the 8-bit processed-image statistics of
+[image statistics](image-statistics.md); its 16-bit scale is not checked against real
+data. Images of the current presets differ from every historical version below, even
+where shape, count and seed match.
 
 ## Historical synthetic sequencing inputs
 

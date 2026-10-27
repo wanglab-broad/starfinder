@@ -1,25 +1,26 @@
 # Synthetic
 
 :::{container} sf-lead
-The synthetic generator of `starfinder.synthetic` renders processed-image scenes and
-their truth records. Each scene has its design page, and the cellular scenes also a
-validation design. The synthetic guide, the amplicon scene's page, has the sample scene,
-the cellular scene and its validation design beneath it; the real-appearance guide has
-its validation design beneath it. The presets in use are listed in the
-[dataset catalog](../datasets.md#current-synthetic-presets), and the functions in the
-[synthetic API](../api/synthetic.rst).
+`starfinder.synthetic` generates processed images together with their truth: where
+every molecule, nucleus and cell is, and where every FOV really sits. Use it to test
+each stage of the pipeline, or the whole chain, against known answers. The four scenes
+build on each other; pick the smallest one that has what your test needs.
 :::
 
 :::{container} sf-stage-table
 
-| Scene | Renders | Design | Validation |
-| --- | --- | --- | --- |
-| Amplicon | Formed amplicons read out round by round | [Amplicon scene](../synthetic-specification.md) | |
-| Sample | A multi-FOV sample with a minimal cellular scene | [Sample scene](../synthetic-sample-scene.md) | |
-| Cellular | Nuclei, cells, stains and the morphology round | [Cellular scene](../synthetic-cellular-scene.md) | [validation](../synthetic-cellular-scene-validation.md) |
-| Real appearance | The cellular scene with appearance sampled from real images | [Real-appearance scene](../synthetic-real-appearance.md) | [validation](../synthetic-real-appearance-validation.md) |
+| Scene | What it renders | Use it to test |
+| --- | --- | --- |
+| [Amplicon](../synthetic-specification.md) | One FOV of amplicons read out round by round | Registration, spot finding, decoding |
+| [Sample](../synthetic-sample-scene.md) | Overlapping FOVs of one sample, with simple cells and a nuclear stain | Stitching, assignment, assembly |
+| [Cellular](../synthetic-cellular-scene.md) | Lobed, touching nuclei, cell types, stains and a morphology round, for dense tissue, 2D tissue and culture | Segmentation and the chain after it |
+| [Real appearance](../synthetic-real-appearance.md) | The cellular scene with nuclei and cells taken from real images | Segmentation on realistic images |
 
 :::
+
+The {doc}`synthetic reference <../synthetic-reference>` lists every preset and every
+file the scenes write; the {doc}`synthetic API <../api/synthetic>` documents the
+functions.
 
 ```{toctree}
 :hidden:
@@ -27,6 +28,9 @@ its validation design beneath it. The presets in use are listed in the
 :titlesonly:
 :includehidden:
 
-Synthetic guide <../synthetic-specification>
-Synthetic real-appearance guide <../synthetic-real-appearance>
+Amplicon scene <../synthetic-specification>
+Sample scene <../synthetic-sample-scene>
+Cellular scene <../synthetic-cellular-scene>
+Real-appearance scene <../synthetic-real-appearance>
+Synthetic reference <../synthetic-reference>
 ```

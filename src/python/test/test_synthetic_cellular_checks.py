@@ -29,7 +29,7 @@ pytestmark = [pytest.mark.synthetic, pytest.mark.contract]
 
 TEST = Path(__file__).resolve().parent
 REPOSITORY = TEST.parents[2]
-PAGE = "synthetic-cellular-scene-validation.md"
+PAGE = "validation/synthetic-cellular-scene.md"
 TIERS = {"routine": (False,), "slow": (True,), "routine and slow": (False, True)}
 # The tier of a check that the Chapter II evidence project runs from its script under benchmarks/ (W-536).
 EVIDENCE = "evidence project"
@@ -39,7 +39,7 @@ KINDS = {"contract", "validation", "golden"}
 
 def gn_rows():
     """{row: the backticked markers of its "Tier and markers" cell} of the table "Generator checks", in page order."""
-    text = docs_pages.table(docs_pages.read(PAGE), "synthetic-cellular-scene-validation-generator-checks")
+    text = docs_pages.table(docs_pages.design(PAGE), "synthetic-cellular-scene-validation-generator-checks")
     rows = {}
     for line in text.splitlines():
         match = re.match(r"\| (GN\d+) \|", line)
@@ -52,7 +52,7 @@ def gn_rows():
 
 def implemented_checks():
     """{row: (the backticked names of its "Module and tests" cell, its tier)}, in table order."""
-    text = docs_pages.table(docs_pages.read(PAGE), "synthetic-cellular-scene-validation-implemented-checks")
+    text = docs_pages.table(docs_pages.design(PAGE), "synthetic-cellular-scene-validation-implemented-checks")
     rows = {}
     for line in text.splitlines():
         match = re.match(r"\| (GN\d+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$", line)
@@ -126,7 +126,7 @@ CHAIN_MARKERS = {"integration", "validation", "slow"}
 def chain_rows():
     """{row: (the backticked names of its "Module and tests" cell, those of its evidence cell, the tier the suite
     keeps)}, in table order."""
-    text = docs_pages.table(docs_pages.read(PAGE), "synthetic-cellular-scene-validation-implemented-chain-checks")
+    text = docs_pages.table(docs_pages.design(PAGE), "synthetic-cellular-scene-validation-implemented-chain-checks")
     rows = {}
     for line in text.splitlines():
         match = re.match(r"\| (C[DTU]\d) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$", line)

@@ -22,7 +22,7 @@ pytestmark = [pytest.mark.synthetic, pytest.mark.contract]
 
 TEST = Path(__file__).resolve().parent
 REPOSITORY = TEST.parents[2]
-PAGE = "synthetic-real-appearance-validation.md"
+PAGE = "validation/synthetic-real-appearance-scene.md"
 TIERS = {"routine": (False,), "slow": (True,), "routine and slow": (False, True)}
 # The tier of a check that the Chapter II evidence project runs from its script under benchmarks/ (W-536).
 EVIDENCE = "evidence project"
@@ -32,7 +32,7 @@ KINDS = {"contract", "validation", "golden"}
 
 def ga_rows():
     """{row: the backticked markers of its "Tier and markers" cell} of the table "Generator checks", in page order."""
-    text = docs_pages.table(docs_pages.read(PAGE), "synthetic-real-appearance-validation-generator-checks")
+    text = docs_pages.table(docs_pages.design(PAGE), "synthetic-real-appearance-validation-generator-checks")
     rows = {}
     for line in text.splitlines():
         match = re.match(r"\| (GA\d+) \|", line)
@@ -45,7 +45,7 @@ def ga_rows():
 
 def implemented_checks():
     """{row: (the backticked names of its "Module and tests" cell, its tier)}, in table order."""
-    text = docs_pages.table(docs_pages.read(PAGE), "synthetic-real-appearance-validation-implemented-checks")
+    text = docs_pages.table(docs_pages.design(PAGE), "synthetic-real-appearance-validation-implemented-checks")
     rows = {}
     for line in text.splitlines():
         match = re.match(r"\| (GA\d+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$", line)
