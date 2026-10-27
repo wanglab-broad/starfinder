@@ -1,12 +1,14 @@
-"""The MATLAB-key translation that remains for MATLAB-backend configurations (SM-16, W-569).
+"""The MATLAB-key translation that remains for MATLAB-backend configurations.
 
 The Python backend accepts one dialect, the native keys of from_workflow_config; a legacy key under
 ``backend: python`` raises naming its native form. The shared rules (reads_assignment, the legacy
 stitching and segmentation rules) also run for the MATLAB backend, and their Python adapters call
 from_workflow_config on a MATLAB configuration, which holds the keys the MATLAB scripts read. This
-module translates those keys, as the Python path did before W-569: only from_workflow_config's
-MATLAB branch imports it (docs/migration.md, "One Python configuration dialect").
+module translates those keys, as the Python path did before the configuration-dialect change of
+2026-10-25: only from_workflow_config's MATLAB branch imports it (docs/migration.md, "One Python
+configuration dialect").
 """
+# SM-16, W-569; before W-569
 from dataclasses import fields
 
 from starfinder._registry import config_type_for
@@ -123,9 +125,9 @@ def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, d
 def legacy_processing(params, rule, reference_round):
     """(preprocessing, registration, reference view, spot aliases) of one rule's MATLAB-backend parameters.
 
-    The translation of the Python path before W-569: the native preprocessing
-    key is mutually exclusive with enhance_contrast, hist_equalize,
-    morph_recon, tophat and snr_threshold, which map to recipe 1 (resident
+    The translation of the Python path before the configuration-dialect change
+    of 2026-10-25: the native preprocessing key is mutually exclusive with
+    enhance_contrast, hist_equalize, morph_recon, tophat and snr_threshold, which map to recipe 1 (resident
     subtile rules run reconstruction after registration); the native
     registration key is mutually exclusive with an enabled global_registration
     or local_registration, which map to one recipe (global step, then local
@@ -135,6 +137,7 @@ def legacy_processing(params, rule, reference_round):
     a single-channel signal. The spot aliases are those of _spot_fields for
     local_maxima.
     """
+    # Before W-569
     legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
     if 'preprocessing' in params and legacy:
         raise ValueError(f'preprocessing is mutually exclusive with the legacy keys {legacy}')

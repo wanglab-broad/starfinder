@@ -77,11 +77,12 @@ def candidates_frame(spot_result, intensity_result=None):
     """Wide table: identity, spot columns, then sig_<round>_<channel> and valid_<round>.
 
     Signals are round-major in round-label order, channels in channel order.
-    With background measurements (§2.8, option C1) the table continues with
+    With background measurements (option C1 of the readout contract) the table continues with
     bg_<round>_<channel> and noise_<round>_<channel> (float64, the same order),
     bgvox_<round> (ring voxels) and boxvox_<round> (box voxels, int64).
     Built with array reshapes; no per-row work.
     """
+    # §2.8, option C1
     spots = spot_result.spots
     frame = spots.copy()
     if "spot_namespace" not in frame:
@@ -128,8 +129,10 @@ def parse_candidates(frame, round_labels, channel_labels):
 def parse_background(frame, round_labels, channel_labels):
     """(background N×C×R, noise N×C×R, background_voxels N×R, box_voxels N×R) of a wide table.
 
-    None when the table has no background columns (written without them, or before §2.8).
+    None when the table has no background columns (written without them, or before the readout stage
+    measured background).
     """
+    # Before §2.8
     bg, noise, bgvox, boxvox = _background_columns(round_labels, channel_labels)
     if not any(c in frame for c in bg + noise + bgvox + boxvox):
         return None
@@ -210,7 +213,11 @@ def verify_payload(directory, header, stage):
 
 
 def readout_mode(header):
-    """The readout mode of a candidates or pre_qc header; a header without the key (before §2.8) is multiplexed."""
+    """The readout mode of a candidates or pre_qc header; a header without the key is multiplexed.
+
+    A header without the key was written before the readout stage recorded the readout mode.
+    """
+    # Before §2.8
     return header.get("readout_mode", "multiplexed")
 
 
@@ -479,7 +486,11 @@ def _extraction_fields(config):
 
 
 def _extraction_config(header):
-    """The NeighborhoodSumConfig of a candidates header; no background_config (before §2.8) is background=None."""
+    """The NeighborhoodSumConfig of a candidates header; no background_config is background=None.
+
+    A header without background_config was written before the readout stage measured background.
+    """
+    # Before §2.8
     from starfinder.readout import LocalBackgroundConfig, NeighborhoodSumConfig
     background = header.get("background_config")
     fields_ = {k: tuples(v) for k, v in header["signals"]["extraction_config"].items() if k != "method"}
@@ -488,7 +499,11 @@ def _extraction_config(header):
 
 
 def _detection_plan(header, config, detectors):
-    """The SpotFindingPlan of a candidates header; a header without the plan keys (before §2.7) gives the bare plan."""
+    """The SpotFindingPlan of a candidates header; a header without the plan keys gives the bare plan.
+
+    A header without the plan keys was written before the spot-finding stage recorded the plan.
+    """
+    # Before §2.7
     from starfinder.spot_finding import ChannelOverride, SpotFindingPlan
     overrides = tuple(ChannelOverride(entry["channel"], _config(entry["config"], detectors))
                       for entry in header.get("detection_plan") or ())

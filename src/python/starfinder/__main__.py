@@ -95,10 +95,11 @@ def main(argv=None):
 def _weights(args):
     """starfinder weights fetch|list|verify; verify exits 1 when a local copy is missing or changed.
 
-    The known detector models (spot_finding.KNOWN_MODELS, §2.7) and the known segmentation
-    models (segmentation.KNOWN_MODELS, §2.9) share the cache and the commands. Both stages
+    The known detector models (spot_finding.KNOWN_MODELS) and the known segmentation
+    models (segmentation.KNOWN_MODELS) share the cache and the commands. Both stages
     name their members alike, so each is used through its module.
     """
+    # §2.7, §2.9
     from starfinder import segmentation, spot_finding
     from starfinder._weights import RECORD_NAME, model_folder, weights_directory
     from starfinder.segmentation._models import _fetch_model

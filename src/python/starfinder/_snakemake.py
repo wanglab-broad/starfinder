@@ -1,4 +1,4 @@
-"""Snakemake adapters of the workflow rules, which §2.13 (workflow orchestration) replaces.
+"""Snakemake adapters of the workflow rules, which workflow orchestration replaces.
 
 The runners that take the ``snakemake`` object of a rule script, the rule input lists that the
 rule files build their inputs from, and the writers of the MATLAB-shaped per-FOV files. They were
@@ -6,6 +6,7 @@ moved unchanged out of ``starfinder.dataset.workflow``, which keeps the configur
 they call (WorkflowConfig, from_workflow_config and the block translators). Only ``workflow/``
 and the tests import this module (docs/workflows.md, "What workflow orchestration replaces").
 """
+# §2.13
 import json
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -496,7 +497,8 @@ def _run_reads_assignment(snakemake):
     (_reference_genes: Codebook.genes or DirectPanel.genes), and
     the tile configuration, read for the sample of the FOV and applied outside
     the package: global coordinates and the overlap filter, as the script does
-    (§2.10 boundary); outside_grid molecules are kept in reads_assignment.csv.
+    (at the boundary with the sample assembly); outside_grid molecules are kept in
+    reads_assignment.csv.
     Also writes expr/{fovID}/assignment.png (plot_assignment, Z-maximum view
     over the DAPI image), assignment_single_layer.png (its middle plane) for a
     ZYX label image only, and log.txt with the assignment ratio.
@@ -513,6 +515,7 @@ def _run_reads_assignment(snakemake):
     holds the counts), and the two figures only with assembly.previews on,
     into fovs/{fovID}/previews/ (_reads_assignment_outputs).
     """
+    # §2.10 boundary
     from starfinder.assignment import assign_molecules, import_legacy_molecules_csv, load_molecules
     config, fov_id = snakemake.config, snakemake.wildcards.fovID
     assignment, target, translation = _reads_assignment(config)

@@ -7,9 +7,10 @@ presets place the entries of their context's closed-form bank (CF1) by a fixed c
 reached once on the same configuration. The ``slow`` presets place the entries of the real banks of SRC2, each named
 by its name and SHA-256 (ST1, VA7), until the composed stain's visible-stain share reaches DN1's target; a stored
 bank holds no source image, so the target and the threshold are given here, measured on the bank's source images by
-the build issue (W-519) with the generator's own arithmetic (``_appearance._density_rows``). No bank, record, source
-configuration or array derived from real images is kept in the repository.
+the build of these presets with the generator's own arithmetic (``_appearance._density_rows``). No bank, record,
+source configuration or array derived from real images is kept in the repository.
 """
+# Build issue W-519
 from __future__ import annotations
 
 from dataclasses import replace

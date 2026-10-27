@@ -1266,9 +1266,10 @@ def _segmentation_block(config):
     (expand_labels or extend_labels_through_z with their config fields) and
     method, a SEGMENTATION_METHODS name whose config fields are the run's other
     keys, or import with the LabelImportConfig fields. device is cpu (default)
-    or cuda. The block needs backend: python; the §2.13 rule runs it with
-    FOV.segment (docs/segmentation-contract.md, "Workflow configuration").
+    or cuda. The block needs backend: python; a workflow-orchestration rule
+    runs it with FOV.segment (docs/segmentation-contract.md, "Workflow configuration").
     """
+    # The §2.13 rule
     from starfinder.segmentation import SegmentationPlan
     _python_only(config, ['segmentation'])
     values = config['segmentation']
@@ -1292,9 +1293,10 @@ def _assignment_block(config):
     FOV.assign_molecules arguments cells, nuclei, name, population and checkpoints (a
     mapping of CheckpointConfig fields); a supplied correspondence table is not
     a YAML value, so correspondence configures the overlap rule. The block needs
-    backend: python; the §2.13 rule runs it with FOV.assign_molecules
+    backend: python; a workflow-orchestration rule runs it with FOV.assign_molecules
     (docs/assignment-contract.md, "Workflow configuration").
     """
+    # The §2.13 rule
     from starfinder.assignment import AssignmentConfig, CorrespondenceConfig
     from starfinder.segmentation import ExpandLabelsConfig
     from .config import CheckpointConfig

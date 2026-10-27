@@ -71,8 +71,8 @@ def classify_detections(match_result, detected, truth, *, radius, groups=None, b
 
     A detection in a matched pair is matched. An unmatched detection is a
     duplicate when it lies within radius of a matched truth point (strictly
-    for boundary "exclusive", the W-218 classification), and spurious
-    otherwise. With groups (one label per detection, for example its
+    for boundary "exclusive", the duplicate classification of the spot-finding
+    baseline), and spurious otherwise. With groups (one label per detection, for example its
     channel), each duplicate is also counted as same group or other group:
     the group of the duplicate compared with the group of the detection
     matched to its nearest matched truth point within radius. counts hold
@@ -80,6 +80,7 @@ def classify_detections(match_result, detected, truth, *, radius, groups=None, b
     ``duplicate_same_group`` and ``duplicate_other_group``; radius is in the
     matching units.
     """
+    # W-218 classification
     detected, truth = _points(detected, "detected"), _points(truth, "truth")
     if not np.isfinite(radius) or radius < 0:
         raise ValueError("radius must be finite and nonnegative")

@@ -84,7 +84,9 @@ def _error_at_retention(score, incorrect, q):
 
 
 def ranking_quality(score, correct, *, orientation, retention=(0.5, 0.8, 0.9, 1.0)):
-    """How well a score ranks correct calls above incorrect ones (the W-278 scores.csv measures).
+    """How well a score ranks correct calls above incorrect ones.
+
+    The measures of scores.csv of the readout design study of 2026-10-02.
 
     score holds one value per call and correct whether the call is correct;
     orientation is "lower" or "higher", the direction that ranks a call as more
@@ -97,6 +99,7 @@ def ranking_quality(score, correct, *, orientation, retention=(0.5, 0.8, 0.9, 1.
     standard error undefined with a reason; no calls leave every value
     undefined. A ranking measure only: no cutoff and no calibrated probability.
     """
+    # W-278 scores.csv
     if orientation not in ("lower", "higher"):
         raise ValueError("orientation must be 'lower' or 'higher'")
     retention = tuple(retention)
@@ -144,7 +147,9 @@ def _labels(values, name, n=None):
 
 
 def evaluate_deduplication(groups, source, *, pairs):
-    """Missed duplicates and false merges over a stated pair population (the W-278 duplicates.csv measures).
+    """Missed duplicates and false merges over a stated pair population.
+
+    The measures of duplicates.csv of the readout design study of 2026-10-02.
 
     groups gives each read's duplicate group (reads with equal labels were
     merged; a missing label is a read that was not grouped), source each read's
@@ -156,6 +161,7 @@ def evaluate_deduplication(groups, source, *, pairs):
     an unattributed read is counted and left out. Rates are over the true
     duplicate and distinct pairs and undefined, with a reason, when there are none.
     """
+    # W-278 duplicates.csv
     groups = _labels(groups, "groups")
     source = _labels(source, "source", len(groups))
     pairs = [tuple(pair) for pair in pairs]

@@ -1068,11 +1068,12 @@ class FOV:
 
         In readout mode multiplexed a spot table with a ``round`` column
         (detection in several rounds) raises ValueError naming the readout
-        mode (§2.8). In readout mode direct, config must be a
+        mode. In readout mode direct, config must be a
         DirectDecoderConfig and the candidates must have a ``round``
         column; reads come from decode_direct with dataset.direct_panel. A
         decoder that does not support the dataset's mode raises TypeError.
         """
+        # §2.8
         from starfinder.readout import decode_direct, decode_reads
         self._check_readout(config, self.spot_result is not None and 'round' in self.spot_result.spots)
         self._check_reference()

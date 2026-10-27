@@ -1,10 +1,12 @@
 """The six cellular presets of the cellular scene (docs/synthetic-cellular-scene.md, "Presets", option PS1).
 
-One routine and one ``slow`` preset per context of D2: dense 3D tissue, 2D tissue (projection samples) and the
-sparse culture. Each value is the page's table of its context; the routine and ``slow`` presets of a context differ
-only where that table says so. The expected numbers of nuclei and molecules are outcomes of audit A (W-394, re-run by
-W-481 for the two ``slow`` presets whose pixel is twice the acquired one), recorded beside the values, not parameters.
+One routine and one ``slow`` preset per context of the stains-and-contexts decision: dense 3D tissue, 2D tissue
+(projection samples) and the sparse culture. Each value is the page's table of its context; the routine and ``slow``
+presets of a context differ only where that table says so. The expected numbers of nuclei and molecules are outcomes
+of audit A of the cellular-scene page's drafting (run again on 2026-10-15 for the two ``slow`` presets whose pixel is
+twice the acquired one), recorded beside the values, not parameters.
 """
+# D2; audit A: W-394, re-run by W-481
 from __future__ import annotations
 
 from starfinder.readout import Codebook

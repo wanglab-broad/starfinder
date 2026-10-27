@@ -13,7 +13,8 @@ THREAD_VARIABLES = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"
 
 
 def check_device(device) -> None:
-    """Raise ValueError unless device is "cpu", the only device of §2.7."""
+    """Raise ValueError unless device is "cpu", the only device of the spot-finding contract."""
+    # §2.7
     if not isinstance(device, str) or device not in DEVICES:
         raise ValueError("device must be 'cpu'; §2.7 runs on CPU only")
 

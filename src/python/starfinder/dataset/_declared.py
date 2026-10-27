@@ -3,11 +3,12 @@
 docs/sample-output-contract.md ("The export entry") and docs/assembly-contract.md ("Workflow
 configuration"). One rule for ``Dataset.export`` (the assembly and fusion inputs),
 ``Dataset.stitch``, the workflow's stitching rules and its ``reads_assignment`` with an
-``assembly`` block, so that a dataset analysed before §2.10, whose files store no calibration
-or keep the reference image elsewhere, is placed and exported as saved. The file is the one
-``_layout.reference_image_path`` resolves: the setting ``reference_image_import`` when it is
-given, else ``reference_image``.
+``assembly`` block, so that a dataset analysed before the stitching and sample-assembly stages,
+whose files store no calibration or keep the reference image elsewhere, is placed and exported
+as saved. The file is the one ``_layout.reference_image_path`` resolves: the setting
+``reference_image_import`` when it is given, else ``reference_image``.
 """
+# Before §2.10
 from __future__ import annotations
 
 import math
@@ -57,8 +58,10 @@ def declared_metadata(dataset_id, output_id, fov_id, *, voxel_size_xy=None, voxe
     Frame ``declared:<dataset_id>/<output_id>/<fov_id>``; with both voxel sizes
     the spacing ``(voxel_size_z, voxel_size_xy, voxel_size_xy)`` in
     ``micrometer``, no origin and no direction; with either missing, the frame
-    alone. The §2.9 workflow declares the files it reads with this metadata.
+    alone. The workflow's segmentation and assignment rules declare the files
+    they read with this metadata.
     """
+    # The §2.9 workflow
     from starfinder.image import ImageMetadata
     frame = f"declared:{dataset_id}/{output_id}/{fov_id}"
     if voxel_size_z is None or voxel_size_xy is None:

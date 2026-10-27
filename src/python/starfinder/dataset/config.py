@@ -21,9 +21,10 @@ class ExecutionConfig:
 
     retain_images keeps processed rounds (required for subtile creation).
     Otherwise only the reference image remains after streaming. device is
-    the cross-stage execution device of the methods; §2.7 accepts only
-    "cpu" (any other value raises ValueError).
+    the cross-stage execution device of the methods; the spot-finding
+    contract accepts only "cpu" (any other value raises ValueError).
     """
+    # §2.7
     mode: str = 'batch'
     retain_images: bool = False
     device: str = 'cpu'

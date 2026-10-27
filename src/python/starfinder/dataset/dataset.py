@@ -655,7 +655,7 @@ class Dataset:
         placement : PlacementResult, str or Path
             The placement, or its saved folder ``stitching/<sample>/``.
         assignment : str or None
-            The §2.9 assignment name read per FOV, or None for a sample without
+            The assignment name read per FOV, or None for a sample without
             segmentation: each FOV's ``fovs/{fovID}/molecules.csv``
             (``FOV.export_spots``) is read with
             :func:`~starfinder.assignment.load_molecules`, its identities kept,
@@ -681,6 +681,7 @@ class Dataset:
             Check 7: a model of ``config.segmentation`` is missing or has
             another SHA-256, with the folder unchanged.
         """
+        # §2.9
         from starfinder.export import ExportConfig
         from starfinder.dataset._export import export_sample
         return export_sample(self, sample, placement=placement, assignment=assignment,
@@ -718,7 +719,7 @@ class Dataset:
             The sample's FOVs, nonempty and unique, in the order the report
             shows them.
         assignment : str or None
-            The §2.9 assignment name of the route per FOV, read at
+            The assignment name of the route per FOV, read at
             ``fovs/{fovID}/assignment/<assignment>/``; None for a sample
             without cells.
         segmentation : str or None
@@ -748,6 +749,7 @@ class Dataset:
         FileExistsError
             The output folder holds a file that is not one of the report's own.
         """
+        # §2.9
         from starfinder.report._collect import report_sample
         return report_sample(self, sample, fov_ids, assignment=assignment, segmentation=segmentation, config=config,
                              output_dir=output_dir)
