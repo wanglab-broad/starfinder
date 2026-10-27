@@ -197,6 +197,13 @@ S2 and S16 use the metrics `localization_errors` and `classify_detections` of
 `evaluate_spots`, `match_points` and the W-266 scene generators (ported into the
 test helpers) are used as they are.
 
+Each run records wall time and maximum RSS with
+`/usr/bin/time -v` against the 4 GiB stop target.
+
+`test/test_spot_finding_golden.py`: every pinned value stays (since W-573 as
+explicit expected values with the tolerances of [contributing](contributing.md)
+("Expected values and tolerances"), equal to the digests pinned before).
+
 ### Implemented checks (W-274)
 
 The checks are in `src/python/test/test_spot_finding_validation.py`, one test
