@@ -666,7 +666,7 @@ cell equal its retained `assigned` molecules.
 
 | Part | Route after fusion |
 | --- | --- |
-| `obs` rows | The counted cells, the same rule (`retained` and segmentation `kept`), in the cell table's order. |
+| `obs` rows | The counted cells, the same rule (`retained`, and the assignment's status `kept`), in the cell table's order. |
 | `obs` columns | The same names, with the values of "The cells". |
 | `var`, `X` | The same. |
 | `layers` | `nucleus` and `cytoplasm` when the sample segmentation has a nucleus run. Today `write_sample_h5ad` decides this from the FOV entries of the record (`fovs[*].nuclei`: call C20 gave no layer with every entry false and both with every entry true), which are false for molecule inputs, so it reads the `segmentation` record on this route. |

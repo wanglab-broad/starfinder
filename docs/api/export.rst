@@ -65,7 +65,7 @@ with more than 2^24 = 16,777,216 cell rows is refused before anything is written
 second source: nothing is filtered, reassigned or recounted. One coordinate system, named
 after the sample (whose name must satisfy spatialdata's element naming rule), in the
 sample frame's axes and µm. The points ``molecules`` hold every molecule with finite
-sample coordinates (the assignment ``z, y, x`` renamed ``fov_index_z/y/x``, ``sample_x/y/z``
+sample coordinates (the per-FOV index columns ``z, y, x`` renamed ``fov_index_z/y/x``, ``sample_x/y/z``
 the coordinate columns ``x, y, z``, ``cell_instance_id`` added); the shapes
 ``cell_centroids`` one circle per cell with a finite ownership centroid, at that centroid,
 with the equivalent radius of the original territory (a sphere for ``volume``, a disc for
@@ -86,7 +86,7 @@ store file. A table that already has ``uns["spatialdata_attrs"]`` is refused by
 spatialdata and no store is written. Without the ``spatialdata`` extra the part is
 recorded ``not_run``. :py:func:`~starfinder.export.lookup_source` traces a molecule
 or a cell of an export folder back to its FOV, its assignment folder and the row's
-position in the assignment table, after verifying the record's hashes.
+position in the FOV's own table, after verifying the record's hashes.
 :py:func:`~starfinder.export.check_export` reads the store back and evaluates the
 SpatialData conditions S1 to S8.
 

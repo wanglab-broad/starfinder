@@ -219,7 +219,7 @@ route after fusion assigns the sample's molecules to the cells of a segmentation
 fused image: {doc}`sample-segmentation-contract`), merging of cells across
 FOVs (the assembly's duplicate rule, decided on 2026-10-09, excludes one of two
 observations of a cell before these parts read the cell table: {doc}`assembly-contract`,
-"Retention", rule 8), and any change to the placement or assignment contracts or to the assembly contract beyond its
+"Retention", rule 8), and any change to the placement, segmentation or assignment contracts or to the assembly contract beyond its
 `Dataset` method, saved layout and workflow configuration, which move to the export
 entry.
 
@@ -1251,7 +1251,7 @@ row or its image exists ("Empty populations"):
 
 | Element | Content | Transform to the sample coordinate system |
 | --- | --- | --- |
-| points `molecules` | Every row of the sample molecule table whose `sample_z/y/x` are finite (every molecule of a placed FOV, retained or excluded), with every other column; the assignment index columns `z`, `y`, `x` are first renamed `fov_index_z/y/x`; `PointsModel.parse(…, coordinates={"x": "sample_x", "y": "sample_y", "z": "sample_z"})` then turns `sample_x/y/z` into the coordinate columns `x`, `y`, `z` (float64, µm) and does not keep them under their old names (`spatialdata/models/models.py` lines 831 to 847 of 0.6.1); `cell_instance_id` (pandas `UInt32`, null without a cell) is added. No feature or instance key is declared, so the model adds only its `transform` attribute (lines 865 to 895). | Identity |
+| points `molecules` | Every row of the sample molecule table whose `sample_z/y/x` are finite (every molecule of a placed FOV, retained or excluded), with every other column; the per-FOV index columns `z`, `y`, `x` are first renamed `fov_index_z/y/x`; `PointsModel.parse(…, coordinates={"x": "sample_x", "y": "sample_y", "z": "sample_z"})` then turns `sample_x/y/z` into the coordinate columns `x`, `y`, `z` (float64, µm) and does not keep them under their old names (`spatialdata/models/models.py` lines 831 to 847 of 0.6.1); `cell_instance_id` (pandas `UInt32`, null without a cell) is added. No feature or instance key is declared, so the model adds only its `transform` attribute (lines 865 to 895). | Identity |
 | shapes `cell_centroids` | One circle per row of the sample cell table with a finite ownership centroid: centre `(sample_ownership_centroid_x, sample_ownership_centroid_y)`, column `radius` the equivalent radius of the original territory (`size_voxels` × voxel volume as a sphere for `volume`, × pixel area as a disc for `plane`), index `instance_id`. Radii must be positive (`ShapesModel`, lines 458 to 463); a cell with `size_voxels` 0 makes the export raise. | Identity |
 | table `cells` | The sample cell table for the same rows, every column as `obs`, no `X` (zero variables); added `obs` columns `region` (categorical, every value `cell_centroids`) and `instance_id` (numpy `uint32`, an instance-key dtype the model accepts, lines 1033 to 1047); parsed with `TableModel.parse(region="cell_centroids", region_key="region", instance_key="instance_id")` | annotates `cell_centroids` |
 | table `expression` | `sample.h5ad` with every part kept: `X`, `layers`, `var`, `obs`, `obsm` and every key of `uns`; added `obs` columns `region` and `instance_id` as for `cells`; parsed as `cells` | annotates `cell_centroids` |
@@ -1350,7 +1350,7 @@ in its order (uint32; more than 2³² − 1 rows is an error); `cell_instance_id
 is the `instance_id` of its `(cell_namespace, cell_id)`. `lookup_source(folder, spot=…)` or
 `(cell=…)` reads `export.json`, verifies each section hash that `export.json` records and
 the files of the assembly, finds the row and returns its FOV, the FOV's assignment folder,
-its `assignment.json` SHA-256 and the row's position in the assignment table, from the `assembly`
+its `assignment.json` SHA-256 and the row's position in the FOV's own table, from the `assembly`
 section; for a cell of the route after fusion, its FOV, no assignment folder, the row's
 position in the sample cell table, and `label_file` (the cell run's label file) and
 `label_value` (its `cell_id`) ({doc}`sample-segmentation-contract`, "Readers that change").
@@ -1790,7 +1790,7 @@ recorded as `omitted` is tested by check S1 only.
 * S2. **Points**: the `molecules` rows, joined on `(spot_namespace, spot_id)`, equal the
   sample molecule table's rows with finite sample coordinates, column by column: `x`,
   `y`, `z` equal `sample_x`, `sample_y`, `sample_z` exactly, `fov_index_z/y/x` equal the
-  assignment `z`, `y`, `x`, every other source column equals its source (NaN equals NaN, null
+  per-FOV index columns `z`, `y`, `x`, every other source column equals its source (NaN equals NaN, null
   equals null), the column `cell_namespace` of the molecule's cell key among them (a
   table saved before that column existed has none, and neither has its store),
   `cell_instance_id` follows S5, and no `sample_x/y/z` column remains; the
@@ -2075,7 +2075,7 @@ export:
 
 No implementation, rename, dependency or lock change; no code brought over from the
 reference branch; no fusion of Starfinder's own and no BigStitcher fusion in Fiji; no
-viewer session (deferred); no change to the placement or assignment contracts, and none to the
+viewer session (deferred); no change to the placement, segmentation or assignment contracts, and none to the
 assembly contract beyond its `Dataset` method, saved layout and workflow configuration;
 no reassignment of molecules or recomputation of counts from a fused image or a label
 raster on the route per FOV (the route after fusion assigns the sample's molecules to the
