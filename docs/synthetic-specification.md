@@ -26,7 +26,9 @@ defines its amplicon scene.
   `generate_amplicon_scene` as `config`, or the one a preset returns, adjusted with
   `dataclasses.replace`. The generator has no workflow key; the command
   `starfinder synthetic generate` writes the dataset of a benchmark preset to a new
-  directory ({doc}`synthetic API page <api/synthetic>`).
+  directory ([Inputs and conventions](#inputs-and-conventions),
+  [Stages and effect order](#stages-and-effect-order),
+  {doc}`synthetic API page <api/synthetic>`).
 
 Beneath this guide, {doc}`synthetic-sample-scene` gives the multi-FOV sample scene with a
 minimal cellular scene, its placement, cell and per-FOV truth;
