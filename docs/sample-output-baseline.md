@@ -89,7 +89,7 @@ tampering, the three-molecule link oracle).
 
 % The W-168 specification; the shared geometry and fallback of W-169; W-171; deferred to W-170
 
-The premise of that specification differs from the accepted stitching and assembly design now: it took the assembly as a caller-supplied
+The premise of the reference branch's sample-export specification differs from the accepted stitching and assembly design now: it took the assembly as a caller-supplied
 affine per source and left "which overlap observation survives" open. That design now has a
 placement record ({doc}`stitching-contract`) and sample tables with ownership and
 retention ({doc}`assembly-contract`), so the export reads those instead.

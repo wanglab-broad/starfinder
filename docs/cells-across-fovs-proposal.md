@@ -605,8 +605,10 @@ holds its notes, tables (`results/tables/`), figures (`results/figures/`) and ma
 
 **Method.** The present `assemble` was run on the real-example run's block inputs and placements, once
 with the duplicate rule off (every cell then has the status, reason and flags of the real-example run's
-block export, which this page measured) and once at its default 0.5, which excludes 8 culture
-and 4 LN observations `duplicate_observation`, one per candidate pair of this measurement. Every cell
+block export, which the earlier route comparison of this page measured, in
+[What the four measurements show](#what-the-four-measurements-show)) and once at its default 0.5, which excludes 8 culture
+and 4 LN observations `duplicate_observation`, one per candidate pair of that earlier route comparison
+([Pairs of retained cells of two FOVs](#1-pairs-of-retained-cells-of-two-fovs)). Every cell
 excluded `not_owner` in the second assembly is put in one class by the owner FOV's
 territory at its ownership centroid, read as the package reads it for `unclaimed`: the
 owner retains a cell there; the owner has no cell there; the owner's cell there is
@@ -617,7 +619,7 @@ when it shares less than 0.5 of the smaller territory, the duplicate rule's meas
 every retained cell of any FOV. A synthetic pair of FOVs with a known answer gave the
 expected class and counterpart for each of its cells.
 
-% W-376; W-399
+% W-376; the earlier route comparison: W-399
 
 | Class (assembly with the duplicate rule on) | Culture: excluded | Culture: no counterpart (0.3 / 0.5 / 0.7) | LN: excluded | LN: no counterpart (0.3 / 0.5 / 0.7) |
 | --- | --- | --- | --- | --- |
@@ -635,7 +637,8 @@ expected class and counterpart for each of its cells.
   excluded cells that have a counterpart (9% against 12%, and 30% against 41%). What
   distinguishes them is that the owner's segmentation has no
   nucleus there; in the panels the owner's stain often shows one. The segmentation of
-  the fused block (this measurement, scale 1/1) has a cell sharing at least 0.5 with 114 of the 383,
+  the fused block in the earlier route comparison ([LN sample1 after fusion](#3-ln-sample1-after-fusion),
+  scale 1/1) has a cell sharing at least 0.5 with 114 of the 383,
   against 464 of the 525 excluded LN cells that have a counterpart. That segmentation is
   a second observation, not a truth.
 * **Molecules and counts.** Every molecule a FOV assigned to such a cell is excluded with
@@ -657,7 +660,7 @@ expected class and counterpart for each of its cells.
   Of the 383 LN cells without a counterpart, 27 are one of two excluded observations of
   the same place, and 356 were seen by one FOV only. In the culture the figures are 2 and 4.
 
-% W-399
+% the earlier route comparison: W-399
 
 **Limits of these numbers.**
 
