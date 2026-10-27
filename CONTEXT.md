@@ -30,6 +30,8 @@ decoding and read filtering are independent readout stages that retain spot iden
 
 Use the [architecture](docs/architecture.md), the
 [contracts](docs/api/contracts.md) (with their MATLAB boundary section) and the
-[migration guide](docs/migration.md) as maintained detail. [AGENTS.md](AGENTS.md) owns operational instructions;
+[migration guide](docs/migration.md) as maintained detail; the specifications, validation
+designs and baselines behind each stage are design records in [design/](design/README.md).
+[AGENTS.md](AGENTS.md) owns operational instructions;
 [Linear](https://linear.app/jiahaoh/document/thesis-and-implementation-workflow-c12f30bffe9f)
 owns current plans, decisions and evidence. This file is orientation, not a run log.
