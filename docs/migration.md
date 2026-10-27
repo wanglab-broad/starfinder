@@ -4,10 +4,12 @@ This is a coordinated breaking Python cleanup: update maintained imports and
 callers together. Replaced interfaces have no compatibility aliases. **FOV stays
 FOV.** MATLAB APIs, and the files, keys and coordinate conventions that MATLAB
 code reads or writes, remain unchanged. Since 2026-10-19 the Python package
-otherwise follows its own design (W-526): a Python name, key, layout or format may
+otherwise follows its own design: a Python name, key, layout or format may
 change even where it once matched the MATLAB pipeline, and each such change is
 listed here. Historical scripts and outputs retain their original provenance; they
 are not examples of the current API.
+
+% W-526
 
 ## Mechanical names and ownership
 
@@ -80,10 +82,12 @@ are not examples of the current API.
 | `stitching.bigstitcher_macro` | `stitching.export_bigstitcher` (no alias; the method ID `bigstitcher`, the macro text and the Snakemake rule `bigstitcher_macro_sample` stay) |
 | `export.fuse` | `export.fuse_images` (no alias; the export part `fuse` keeps its name: `ExportConfig.fuse`, the YAML key `export.fuse` and the `parts` of `export.json`) |
 | `FOV.assign` | `FOV.assign_molecules` (no alias) |
-| `FOV.save_spots` | `FOV.export_spots` (no alias; the slots `goodSpots` and `allSpots` and their file names stay; W-562 later replaced them: "Molecule and read tables") |
+| `FOV.save_spots` | `FOV.export_spots` (no alias; the slots `goodSpots` and `allSpots` and their file names stay; the molecule-table change of 2026-10-23 later replaced them: "Molecule and read tables") |
 | `FOV.create_subtiles` | `FOV.save_subtiles` (no alias; the workflow key `create_subtiles` stays) |
 | `Dataset.channel_record` | private `Dataset._channel_record`, which only the run record calls (no public replacement; the `channels` key of `run.json` stays, and `Dataset.channel_info` and `Dataset.channel_labels` stay public) |
 | `FOV.register_rounds(recipe, *, rounds, reference=None, checkpoints=None)` | `FOV.register(recipe, *, rounds, reference=None, checkpoints=None)`, which routes other rounds to the former `register_rounds` (no alias; see the routing below) |
+
+% W-562
 
 These relocations do not make the old positional arguments or return values valid.
 Use typed operation configs and structured results. See the [API
@@ -92,14 +96,18 @@ Registration internals, benchmark helpers and barcode lookup constants are priva
 `io` holds image file I/O only: the checkpoint serializers are private to the package
 and `dataset.load_checkpoint` is public, beside the method `FOV.load_checkpoint`.
 
-The module renames of W-556 change the module paths only: every member keeps its name,
+The module renames of 2026-10-23 change the module paths only: every member keeps its name,
 and the root exports (`decode_barcodes`, `extract_intensities`, `filter_reads`,
 `load_codebook`) keep theirs. The OME annotation namespace `"starfinder.sample_output"`
 that the package's OME-TIFF files carry stays as it is: it is a format identifier, which
 `check_export` reads back.
 
-The member renames of W-557 (W-526, NC-01, NC-02, NM-16, NM-17 and NM-18) change these
+% W-556
+
+The readout and spot-finding member renames of 2026-10-23 change these
 recorded strings with the names:
+
+% W-557 (W-526, NC-01, NC-02, NM-16, NM-17 and NM-18)
 
 * the `run.json` step name `decode_barcodes` is `decode_reads`, the name of the FOV method
   that `FOV.run` calls to decode. The report reads either name: one mapping of the report,
@@ -125,9 +133,11 @@ import them through their module where both are used. The CLI group `weights`,
 `DECODING_METHODS` and `ENCODINGS`, `PipelineConfig.decoding`, the checkpoint header keys
 and `readout_mode` keep their names.
 
-The member renames of W-558 (W-526, NM-02, NM-03, NM-06, NM-07, NM-10, NM-19, NM-20,
-NM-26, NC-07, SM-03 and SM-23) make the package's own files read and written with one
+The preprocessing, segmentation and assignment member renames of 2026-10-23 make
+the package's own files read and written with one
 verb pair, `load_`/`save_`. They change these recorded strings with the names:
+
+% W-558 (W-526, NM-02, NM-03, NM-06, NM-07, NM-10, NM-19, NM-20, NM-26, NC-07, SM-03 and SM-23)
 
 * the `"function"` of the record that `segmentation.resample_labels` returns is
   `resample_labels`, and that of `segmentation.normalize_percentile_unclipped` is
@@ -150,14 +160,16 @@ the recorded `"coordinates": "one-based"` of the legacy CSV reader.
 `preprocessing.normalize_percentile`: it returns float32, does not clip, takes linear
 percentiles over the given axes and returns a record.
 
-The synthetic renames of W-559 (W-526, NC-06, NM-01, NM-15, NM-22 and SM-20) give the
+The synthetic renames of 2026-10-23 give the
 four synthetic scene kinds names a user can guess: the formed scene is the **amplicon**
 scene and the context scene the **cellular** scene; the sample and appearance scenes
-keep their names. **`CellularSceneConfig` changes meaning.** Before W-559 it named the
+keep their names. **`CellularSceneConfig` changes meaning.** Before these renames it named the
 sample scene's cell configuration (`SampleSceneConfig.cells`), which is now `CellsConfig`;
 it now names the cellular scene's configuration, the former `ContextSceneConfig`. A call
 written for the old class fails on its field names. The renames change these recorded
 labels, which no reader dispatches on:
+
+% W-559, W-526, NC-06, NM-01, NM-15, NM-22, SM-20
 
 * the `"type"` of a recorded configuration: `"FormedSceneConfig"` is
   `"AmpliconSceneConfig"` (the `requested_config` and `effective_config` of every amplicon
@@ -198,11 +210,13 @@ with `save_amplicon_dataset` into `input/`. The images, the codebook (as
 `synthetic/` folder with FOV-first copies, no `gene,barcode` codebook and no annotation
 PNGs. Its results are unchanged.
 
-The renames of W-560 (W-526, SM-17, NM-04, NM-05, NM-08, NM-09, NM-21, NC-03, NC-04 and
-NC-05) name what a sample-level function or a FOV method writes or runs.
+The sample-level renames of 2026-10-23 name
+what a sample-level function or a FOV method writes or runs.
 **`FOV.register_rounds` is merged into `FOV.register`**, which now has the signature
 `register(recipe, *, rounds=None, source=None, reference=None, checkpoints=None)` and
 routes by the rounds' category before any estimator runs:
+
+% W-560 (W-526, SM-17, NM-04, NM-05, NM-08, NM-09, NM-21, NC-03, NC-04 and NC-05)
 
 * `rounds=None` registers the sequencing rounds other than the reference round, as before;
 * when every named round is a sequencing round, the **sequencing route** is the former
@@ -425,7 +439,9 @@ and dtype are unchanged. Python outputs written before this change hold ZYXC;
 rerun the rule to replace them. `ProjectionConfig` gains `axis`, `"z"` (the
 default and earlier behavior) or `"channel"`; see
 [projection views](workflows.md#projection-views-and-the-reference-merged-image).
-Since W-564 the Python file is `fovs/{fovID}/reference.tif` by default; see "The FOV folder, the reference image and channel folders by label".
+Since 2026-10-24 the Python file is `fovs/{fovID}/reference.tif` by default; see "The FOV folder, the reference image and channel folders by label".
+
+% W-564
 
 ### Generate, evaluate and report
 
@@ -510,9 +526,11 @@ translation. `FOV.registration_chains` holds each moving round's
 `FOV.registration_attempts[round]` gains the estimation fields (`record`,
 `step`, `attempt`, `fallback`, `backend`, `backend_versions`, `reference`,
 `qc`) and one `application` entry per round. `run.json` keeps
-`format_version` 1 (note (W-565): now 2, see "run.json version 2"); its `config.pipeline.registration` holds the recipe's
+`format_version` 1 (note: now 2, see "run.json version 2"); its `config.pipeline.registration` holds the recipe's
 fields. In the workflow, the Python-only `registration` key declares a recipe;
 see [workflow configuration](workflow-configuration.md).
+
+% W-565
 
 ### Save and reload pipeline checkpoints
 
@@ -533,12 +551,16 @@ Images are OME-TIFF (`<round>.ome.tif`) through `save_volume`, tables are CSV un
 requested, and the location is `<output_root>/checkpoints/<fov_id>/`. Spot
 identity, input SHA-256 hashes, atomic writes and reruns of decoding or
 filtering without images are kept. See [checkpoints](checkpoints.md).
-Since W-564 the location is `<output_root>/fovs/<fov_id>/checkpoints/` beside `run.json`; see "The FOV folder, the reference image and channel folders by label".
+Since 2026-10-24 the location is `<output_root>/fovs/<fov_id>/checkpoints/` beside `run.json`; see "The FOV folder, the reference image and channel folders by label".
+
+% W-564
 
 ### Registered checkpoints version 2
 
-Note (W-565): the headers are now of version 3, which adds the payload hashes (`files`);
+Note: the headers are now of version 3, which adds the payload hashes (`files`);
 see "run.json version 2".
+
+% Note (W-565)
 
 The checkpoint `FORMAT_VERSION` is 2 for the three stages. A registered
 checkpoint stores the new kinds `affine` (the 4×4 index matrix and the physical
@@ -582,8 +604,10 @@ the round. A channel label in `RegistrationSignalConfig(mode="channel")` is
 looked up in the round's own labels: `Dataset.other_channel_order` (new) gives
 an other round its channels, and `FOV.load_images` checks each round against
 `Dataset.channel_labels(round)`. Estimation attempts gain `reference_sha256`
-(`None` for a round reference). `FOV.save_processing_log` accepts `"nr"` (W-563 later
+(`None` for a round reference). `FOV.save_processing_log` accepts `"nr"` (the sequencing-log change of 2026-10-23 later
 removed it: "Sequencing logs and the morphology record").
+
+% W-563
 
 With `backend: python`, the `nuclei_registration` rule now runs the Python
 script `workflow/scripts/nuclei_registration.py` instead of MATLAB, with the
@@ -692,8 +716,10 @@ holds the plan (`None` on construction means `SpotFindingPlan(config)`). Direct
 (§2.8)")`, from `FOV.run` before any processing and from `FOV.decode_reads` for a
 spot table with a `round` column. Extraction reads every candidate in every sequencing
 round, as before; in `FOV.run` it then runs after the last detected round, which needs
-batch mode or `retain_images=True`. Since W-293 this holds in readout mode
+batch mode or `retain_images=True`. Since the readout modes of 2026-10-02 this holds in readout mode
 `multiplexed`; readout mode `direct` reads such a set ([Readout mode](#readout-mode)).
+
+% W-293
 
 ### Spot-finding diagnostics
 
@@ -751,7 +777,7 @@ local copies. `resolve_model` raises `MissingModelError` or
 reimplementation of starfish `BlobDetector` (`blob_log`, `is_volume=True`, no
 reference image, one round and channel at a time; starfish `1fb00cbc`) that needs
 no extra and does not depend on starfish. Its tables equal starfish's exactly
-(the W-266 parity tables in `test/data/starfish_blob_parity`). `min_sigma`,
+(the parity tables of 2026-09-30 in `test/data/starfish_blob_parity`). `min_sigma`,
 `max_sigma` (σ in voxels, a number or a ZYX 3-tuple), `num_sigma` and `threshold`
 are required, because starfish has no defaults for them; `overlap` (0.5) and
 `exclude_border` (False) keep starfish's defaults. Integer images are scaled by
@@ -763,6 +789,8 @@ detected as a plane (z=0), where a 3-tuple σ raises `IncompatibleGeometryError`
 There is no tiling and no memory guard: `diagnostics["geometry"]` records the
 estimate 10.4 bytes × `num_sigma` × voxels. In YAML, `method: starfish_log`
 requires the four settings.
+
+% W-266
 
 ### Spotiflow and Piscis
 
@@ -796,19 +824,23 @@ its SHA-256; `resolve_model(..., extracted=...)` also checks the named files, an
 detection and `starfinder weights verify` re-hash all of them. The weights root is
 always an absolute path (`~` expanded, relative paths resolved).
 
-### Local-maxima W-218 merge
+### Local-maxima duplicate merge
 
-`LocalMaximaConfig.merge_radius_zyx` (default `None`) is the opt-in W-218
-within-channel merge: after border exclusion, a channel's maxima are visited by
+% Local-maxima W-218 merge
+
+`LocalMaximaConfig.merge_radius_zyx` (default `None`) is the opt-in
+within-channel duplicate merge: after border exclusion, a channel's maxima are visited by
 decreasing pixel value, then increasing z, y, x, and a maximum is dropped when an
 earlier kept maximum of the same channel lies within the ellipsoid
 Σ (Δᵢ / rᵢ)² ≤ 1 (radii in voxels; the Z radius is unused for Z=1). It removes
 tied maxima of a plateau and split maxima of one amplicon; kept maxima are
 unchanged, identities are assigned after the merge, and `diagnostics["merged"]`
-records the number removed per channel. W-268 kept `None` as the default, so
+records the number removed per channel. The spot-finding acceptance of 2026-10-01 kept `None` as the default, so
 detections are unchanged unless the option is set; channels are never merged with
-each other (cross-channel duplicates are §2.8's). `exclude_border` is settable in
-YAML for the border misses W-218 reported.
+each other (cross-channel duplicates belong to readout). `exclude_border` is settable in
+YAML for the border misses that the duplicate classification of the spot-finding baseline reported.
+
+% W-218, W-268, §2.8
 
 ### Spot-finding pipeline field
 
@@ -826,15 +858,17 @@ names the new field. YAML already used the `spot_finding` block and is unchanged
 | `run.json`: `config.pipeline.detection` | `run.json`: `config.pipeline.spot_finding` |
 | `TypeError("detection requires its typed operation config")` | `TypeError("spot_finding requires its typed operation config")` |
 
-`run.json` keeps `format_version` 1 (note (W-565): now 2, see "run.json version 2"). Starfinder does not read `config.pipeline`
+`run.json` keeps `format_version` 1 (note: now 2, see "run.json version 2"). Starfinder does not read `config.pipeline`
 back from `run.json`, so records written before the rename stay valid as they
 are; a script that reads them should accept either key. The `candidates.json`
 keys `detection_config`, `detection_rounds`, `detection_plan` and
 `detection_diagnostics` and the preprocessing `detection` image keep their names.
 
+% W-565
+
 ### Readout mode
 
-§2.8 adds two readout modes as one dataset setting ({doc}`readout-contract`,
+The readout stage adds two readout modes as one dataset setting ({doc}`readout-contract`,
 "Readout modes" and "Direct readout"). `Dataset.readout_mode` is `"multiplexed"`
 (the default: every earlier result, identity and digest is unchanged) or
 `"direct"`, where a round and channel identify a gene.
@@ -851,14 +885,18 @@ own round and channel: one read per candidate with `round`, `channel`, `entry_id
 `unmatched` with `unmapped_channel`, and a zero own round `no_signal`. Nothing is
 merged or reassigned. `ReadDecodingResult` gains `readout_mode`.
 
+% §2.8
+
 In `direct` mode, `extract_intensities(..., readout_mode="direct")` (which
 `FOV.run` and `FOV.extract_intensities` pass from the dataset) reads each candidate
 in its own round only; the other rounds are `0.0` with `valid=False`.
 `IntensityExtractionResult` gains `box_voxels` (N×R int64, the voxels each box
-summed, 0 for a round that was not read; since W-294 a candidates checkpoint
+summed, 0 for a round that was not read; since 2026-10-02 a candidates checkpoint
 stores it with the background measurements, and a checkpoint without them reloads
 it as `None`). `FOV.run` and `FOV.decode_reads`
 assign with `DirectDecoderConfig` and `Dataset.direct_panel`.
+
+% W-294
 
 Decoding a multi-round candidate set (a `round` column) needs
 `readout_mode="direct"`: in `multiplexed` mode it still raises `ValueError`, whose
@@ -883,7 +921,7 @@ gain `readout_mode`; a checkpoint without it loads as `multiplexed`, and
 
 ### Readout encodings and decoders
 
-§2.8 registers the barcode encodings and the decoders on the shared registry
+The readout stage registers the barcode encodings and the decoders on the shared registry
 mechanism ({doc}`method-registry`, {doc}`readout-contract`, "Encoding registry").
 `starfinder.readout.ENCODINGS` maps each encoding config type to its
 `EncodingSpec`: `two_base` is {py:class}`~starfinder.readout.EncodingConfig`, which
@@ -900,9 +938,11 @@ codebook's encoding kind is not one the decoder declares. The decoders' numerica
 behavior is unchanged. `Codebook(encoding=...)` accepts any registered encoding
 config; `Dataset.load_codebook` gains keyword-only `encoding` and `layout`.
 
+% §2.8
+
 ### Encoding table
 
-W-304 makes the `two_base` pair-to-color table visible, configurable and recorded
+The encoding-table change of 2026-10-04 makes the `two_base` pair-to-color table visible, configurable and recorded
 ({doc}`readout-contract`, "Encoding registry"). {py:class}`~starfinder.readout.EncodingConfig`
 gains `pair_to_color`, the 16 ordered base pairs mapped to the colors `"1"` to `"4"`,
 whose default is the active table of `src/matlab/EncodeBases.m`; `EncodingConfig()`
@@ -925,6 +965,8 @@ table (the schema rejects it unless `backend: python`; MATLAB is unchanged).
 `layout`, with `FORMAT_VERSION` 2; loading a `pre_qc` checkpoint into a dataset
 whose codebook has another encoding raises `ValueError` naming both, and a
 checkpoint without the key loads as before.
+
+% W-304
 
 ### Segment layout
 
@@ -956,7 +998,7 @@ zero-based split and pass the shared one-based value.
 
 ### Codebook entries
 
-A codebook row is an entry, not a gene (D5). `Codebook.table` gains `entry_id`
+A codebook row is an entry, not a gene (settled decision 5 of {doc}`readout-contract`). `Codebook.table` gains `entry_id`
 (unique) before `gene_id`, which may now repeat; `color_sequence` and
 `base_sequence` stay unique. A `gene,barcode` row has `entry_id` equal to the
 barcode as written; a canonical file may state `entry_id` and otherwise gets the
@@ -964,6 +1006,8 @@ color sequence. Repeated `entry_id`, `base_sequence` or `color_sequence` raise
 naming both source rows. `n_entries`, `seq_to_entry` and `entry_to_seq` are new;
 `n_genes` counts distinct genes and `genes` lists them once each; `gene_to_seq`
 raises `ValueError` for a codebook with repeated genes.
+
+% D5
 
 **Intentional change:** two barcodes for one gene, which raised before, now load
 as two entries of that gene, and the decoding table (and so `pre_qc`) gains
@@ -1001,7 +1045,7 @@ direct panel in readout mode `direct`) returns a
 {py:class}`~starfinder.readout.ReadScoringResult`: the read table with the columns
 `qc_score`, `qc_ambiguity_max`, `qc_signal_to_background`, `qc_rounds` and
 `qc_reason` appended ({doc}`readout-contract`, "Shared read-QC score"). `qc_score`
-(W-278 design D1) is the probability NLL of the assigned entry recomputed on
+(the first design of the readout design study of 2026-10-02) is the probability NLL of the assigned entry recomputed on
 background-subtracted sums; lower ranks as more reliable. It is a ranking, not a
 calibrated probability; it sets no cutoff and never changes `gene_id`, `entry_id`,
 `call_status` or `call_type`. Reads without an assignment have NaN with
@@ -1014,6 +1058,8 @@ filtering, `FOV.score_reads` scores the stored reads, `FOV.scoring_result` holds
 result and `FOV.results` lists it as `scoring`. `filter_reads` accepts a
 `ReadScoringResult` and keeps its score columns; `FOV.filter_reads` filters the scored
 reads when scoring ran.
+
+% W-278, D1
 
 **Intentional change:** the workflow adapter scores whenever it decodes; the
 Python-only `scoring: {run: false}` turns it off. The filtering table and the
@@ -1093,8 +1139,10 @@ background-unavailable counts, cross-channel pairs).
 their values and limits. They accept a read result or `FOV.results`. `FOV.run` never
 calls `inspect_read`, `plot_read` or `explain_read`; when it scores or deduplicates,
 `run.json` records the summary under `counts["summary"]`, and
-`FOV.save_diagnostics` now writes it as `summary` beside the filtering counts (W-563 later
+`FOV.save_diagnostics` now writes it as `summary` beside the filtering counts (the sequencing-log change of 2026-10-23 later
 removed `save_diagnostics` and records the summary whenever reads were decoded).
+
+% W-563
 
 ### Segmentation label contract and mask import
 
@@ -1109,7 +1157,9 @@ labels to `uint32` and raises on a negative value or one above 2³²−1, where 
 `FOV.reference_grid()` returns the grid of the resident reference round after
 `FOV.run`, and {py:func}`~starfinder.segmentation.reference_grid_from_file` reads one
 from a TIFF such as `images/ref_merged/{fovID}.tif`
-(since W-564 Python's reference image is `fovs/{fovID}/reference.tif` by default; see "The FOV folder, the reference image and channel folders by label").
+(since 2026-10-24 Python's reference image is `fovs/{fovID}/reference.tif` by default; see "The FOV folder, the reference image and channel folders by label").
+
+% W-564
 
 Masks made elsewhere, such as CellProfiler outputs, the legacy
 `images/stardist_segmentation` files or the culture references, enter through
@@ -1136,7 +1186,7 @@ their inputs. {py:func}`~starfinder.segmentation.composite_nuclei_amplicon` with
 `create_nuclei_amplicon_overlay.py`, and
 {py:func}`~starfinder.segmentation.enhance_with_flamingo` with
 {py:class}`~starfinder.segmentation.FlamingoEnhancementConfig` the enhancement of
-`enhance_dapi_with_flamingo.py`; both give the scripts' output bit for bit (the W-307
+`enhance_dapi_with_flamingo.py`; both give the scripts' output bit for bit (the segmentation baseline's
 golden digests), including on constant and all-zero images. Two edge cases change: two
 images of different shapes raise `IncompatibleGeometryError` instead of a broadcasting
 error, and a plane is accepted as 1×Y×X where the scripts raised on YX inputs. The
@@ -1146,6 +1196,8 @@ image. The inputs come from the reference frame: a morphology round's DAPI after
 `FOV.register` and the reference round's channel maximum, the image
 `FOV.save_reference_image` writes. The workflow scripts call these functions (see
 "Segmentation and assignment workflow rules" below).
+
+% W-307
 
 {py:func}`~starfinder.segmentation.normalize_percentile_unclipped` is csbdeep's `normalize` as
 `stardist_segmentation.py` calls it (percentiles 1 and 99.8, float32, unclipped), with
@@ -1158,7 +1210,7 @@ shrunk image back onto the exact input grid. None of these is registered in
 
 ### The segment entry and the seeded watershed
 
-Segmentation is its own entry, separate from `FOV.run` (decision D1 of
+Segmentation is its own entry, separate from `FOV.run` (the settled decision "Separate entries" of
 {doc}`segmentation-contract`): `PipelineConfig` and `ExecutionConfig` gain no field.
 {py:func}`~starfinder.segmentation.segment` runs one method of
 {py:data}`~starfinder.segmentation.SEGMENTATION_METHODS` on a
@@ -1168,21 +1220,27 @@ role per channel) behind the stage checks, and `FOV.segment(plan)` runs a
 reference-frame images, keeping the results in `FOV.segmentation_results`. With
 `checkpoints` it also saves each run (see "Saved segmentation runs and assignments" below).
 
+% D1
+
 `segment` and `FOV.segment` take a `device` keyword, `"cpu"` (default) or `"cuda"`, which
-each method accepts only for its own devices. `ExecutionConfig.device` and the §2.7
+each method accepts only for its own devices. `ExecutionConfig.device` and the spot-finding
 `device="cpu"` rule of `FOV.run` do not change. The legacy scripts have no device setting.
+
+% §2.7
 
 The first registered method is `seeded_watershed`
 ({py:class}`~starfinder.segmentation.SeededWatershedConfig`), the nucleus-seeded,
-stain-guided watershed of the W-306 prototype. It grows each cell from a nucleus of an
+stain-guided watershed of the earlier prototype. It grows each cell from a nucleus of an
 earlier run on a stain (amplicon, cytoplasm, membrane or composite), so cell k carries
 nucleus k's value; the legacy workflow has no such step (`reads_assignment.py` expands the
 nuclei instead). There is no foreground gate: an image without objects gives an empty
 label image with outcome `empty` instead of an error.
 
+% W-306
+
 ### The assign entry
 
-Assignment is the third call per FOV, after `FOV.run` and `FOV.segment` (decision D1 of
+Assignment is the third call per FOV, after `FOV.run` and `FOV.segment` (the settled decision "Separate entries" of
 {doc}`assignment-contract`): the new module `starfinder.assignment` holds
 {py:func}`~starfinder.assignment.assign_molecules`, which places the molecules of a
 {py:class}`~starfinder.assignment.MoleculeTable` (from
@@ -1194,6 +1252,8 @@ nucleus tables. `FOV.assign_molecules(config, cells=…, nuclei=…)` runs it on
 keeps the result in `FOV.assignment_results`; `PipelineConfig` gains no field, and with
 `checkpoints` it also saves the assignment (see the next section). The workflow's `reads_assignment`
 rule calls it too (see "Segmentation and assignment workflow rules" below).
+
+% D1
 
 Compared with the per-FOV steps of `reads_assignment.py`, the package changes these on
 purpose:
@@ -1242,7 +1302,7 @@ every recorded SHA-256. The workflow rules keep writing
 `expr/{fovID}/reads_assignment.csv`; nothing reads the new folders yet.
 
 Nothing changes for `FOV.run`: its stages (`registered`, `candidates`, `pre_qc`), its
-checkpoint `FORMAT_VERSION` 2 and `run.json` (`format_version` 1) stay as they are (note (W-565):
+checkpoint `FORMAT_VERSION` 2 and `run.json` (`format_version` 1) stay as they are (note:
 now 3 and 2, see "run.json version 2"), and
 `FOV.assign_molecules` never rewrites a file of `FOV.run` or of segmentation (a saved label image is
 linked by its relative path). The new records carry their own `format_version` 1.
@@ -1250,6 +1310,8 @@ linked by its relative path). The new records carry their own `format_version` 1
 `FOV.segment` and `FOV.assign_molecules`, as in `FOV.run`, where these two calls raised
 `ValueError` for any value other than `None` before. The checkpoint tables also accept
 `UInt32` columns (the cell and nucleus identifiers).
+
+% W-565
 
 ### Segmentation and assignment workflow rules
 
@@ -1266,16 +1328,20 @@ environment that runs Snakemake: with the `stardist` extra for `stardist_segment
 (StarDist, CSBDeep and TensorFlow; Python 3.11 to 3.13), and the `anndata` extra for
 `reads_assignment`. `stardist_segmentation` no longer runs in the conda environment
 `{envs_path}/stardist`, and no rule reads `envs_path`; the key stays in the schema until
-§2.13. The legacy keys are translated the same way under both backends, and the
+workflow orchestration. The legacy keys are translated the same way under both backends, and the
 Python-only keys below are rejected without `backend: python`, so a MATLAB-backend run
 has the legacy target and the CPU.
 
+% §2.13
+
 New configuration: the Python-only top-level `segmentation` and `assignment` blocks
-({doc}`workflow-configuration`, "Segmentation and assignment"), which the §2.13 rule
+({doc}`workflow-configuration`, "Segmentation and assignment"), which the workflow orchestration's rule
 runs with `FOV.segment` and `FOV.assign_molecules` (the legacy rules raise when a block is
 present), and the Python-only `target` and `device` keys of
 `rules.stardist_segmentation.parameters`. The `stardist` and `cellpose` extras supply
 the learned methods.
+
+% §2.13
 
 Intentional changes of the outputs of `stardist_segmentation`:
 
@@ -1305,7 +1371,7 @@ Intentional changes of the outputs of `reads_assignment`:
 * A goodSpots gene outside the codebook raises `ValueError` naming it before
   assignment, where the script silently left it out of the counts; `documents/genes.csv`
   must list the codebook's genes.
-  (W-567 no longer reads `documents/genes.csv`: the genes and their order are the codebook's.)
+  (Since 2026-10-24 it no longer reads `documents/genes.csv`: the genes and their order are the codebook's.)
 * A label file expanded by `stardist_segmentation` (`expand_labels: true` there) raises,
   naming the key: give the distance as `reads_assignment.parameters.dilation_distance`
   with `expand_labels: true`, so assign expands once and keeps both masks.
@@ -1320,14 +1386,18 @@ Intentional changes of the outputs of `reads_assignment`:
   `log.txt` with the assignment ratio replace the four diagnostic PNGs and the coverage
   log ("Assignment diagnostics" below).
 
+% W-567
+
 The legacy `obs` columns keep their meaning, computed on the territories assign samples,
 and the tile configuration, global coordinates and overlap filter are applied outside the
-package as before (§2.10).
+package as before (the stitching and assembly work).
+
+% §2.10
 
 ### Default correspondence tolerance
 
 The default `CorrespondenceConfig.outside_tolerance` is 0.1 instead of 0.0 (option C2 of
-{doc}`assignment-contract`, chosen on 2026-10-05 in the W-321 review); `match_fraction`
+{doc}`assignment-contract`, chosen on 2026-10-05 in the assignment review); `match_fraction`
 stays 0.5. A matched nucleus is flagged `outside`, and its cell's compartments withheld
 with `nucleus_outside_cell`, only when its share outside its cell is strictly greater than
 0.1, so a nucleus with up to a tenth of its voxels outside its cell no longer withholds the
@@ -1335,16 +1405,18 @@ nuclear and cytoplasmic counts of its cell. A part of a nucleus inside another c
 raises `foreign_nucleus` on that cell. The default applies to `assign_molecules`,
 `match_nuclei`, `FOV.assign_molecules` and the `assignment` block when `correspondence` or its
 `outside_tolerance` is omitted, and the record's `config.correspondence` shows it. The
-value is provisional, from one culture crop of W-320 (largest outside share of a matched
+value is provisional, from one culture crop measured for that review (largest outside share of a matched
 nucleus 0.073). To keep exact containment, pass
 `CorrespondenceConfig(outside_tolerance=0.0)`, or `correspondence: {outside_tolerance: 0.0}`
 in the block. The golden digests and the outputs of `reads_assignment`, which has no
 nuclei, do not change.
 
+% W-321, W-320
+
 ### Assignment diagnostics
 
 `plot_assignment` draws one row of four panels instead of the territory panel and three
-histograms (W-321 review, 2026-10-05; the centre colours and the legend entry `excluded`
+histograms (the assignment review, 2026-10-05; the centre colours and the legend entry `excluded`
 from the checkpoint after it, the same day): the stain in grey scale with green territory
 outlines and a dot at each cell's centroid, coloured by the cell's status (`kept` blue,
 excluded orange; legend entries `kept` and `excluded`, the latter only when a cell is
@@ -1363,10 +1435,12 @@ molecule). `summarize_assignment(result)["exclusion"]["before"]` gains `nucleus`
 `cytoplasm`, equal to those after the exclusion, as its docstring promised. No table,
 count or digest changes: `raw.h5ad` and `reads_assignment.csv` are as before.
 
+% W-321
+
 ### Channel name and wavelength per round
 
 {py:class}`~starfinder.dataset.ChannelInfo` (`channel`, `name`, `wavelength`; MATLAB's
-`channel_order_dict` fields) is new (W-336; {doc}`coordination`, "Channels").
+`channel_order_dict` fields) is new (2026-10-05; {doc}`coordination`, "Channels").
 `Dataset.channel_order` and each `Dataset.other_channel_order[round]` accept patterns as
 before, `ChannelInfo` values or mappings, and still hold the patterns after
 construction, so `Dataset.channel_labels(round)` returns what it returned.
@@ -1383,7 +1457,9 @@ non-finite wavelength now raise. `dataclasses.replace(dataset, ...)` reads the c
 the call passes as given (patterns carry no name or wavelength), except that the
 dataset's own tuple of a round (`channel_order`, or `other_channel_order[round]` inside
 any mapping), which `replace` passes for an unchanged field, keeps that round's names
-and wavelengths; it lost them before (W-350).
+and wavelengths; it lost them before (fixed on 2026-10-06).
+
+% W-336, W-350
 
 In the workflow translation the shared keys keep their names: `seq_channel_order` also
 accepts MATLAB's list of `wavelength`/`channel`/`name` objects; every rule names the
@@ -1397,9 +1473,11 @@ are additive. No image, table or digest changes.
 
 ### Sequencing rounds and other rounds handled separately
 
-Two breaking changes (W-337), following the MATLAB workflow, where every
+Two breaking changes (2026-10-05), following the MATLAB workflow, where every
 `STARMapDataset` method works on `layers.seq` and other rounds are prepared by their own
 rules:
+
+% W-337
 
 * **`FOV.run` no longer loads or registers other rounds.** It loads, rotates,
   preprocesses, registers and checkpoints the reference round and the sequencing rounds
@@ -1410,8 +1488,10 @@ rules:
   `save_checkpoint`, holds the reference and sequencing rounds only.
 * **`FOV.register` no longer registers other rounds by default.** Its default rounds are
   the sequencing rounds other than the reference (before: every moving round, other rounds
-  included). An other round named in `rounds` raised `ValueError`; since W-560 it takes
+  included). An other round named in `rounds` raised `ValueError`; since the sample-level renames of 2026-10-23 it takes
   the other-round route of `FOV.register` ("Mechanical names and ownership").
+
+% W-560
 
 Prepare other rounds and the reference stain with the new entry beside `run`:
 
@@ -1434,11 +1514,13 @@ and digests as before.
 
 ### Segmenting from saved reference-frame images
 
-Additions (W-338), following the MATLAB segmentation rules, which read saved
+Additions (2026-10-05), following the MATLAB segmentation rules, which read saved
 reference-frame images and never load a sequencing round. Nothing that worked before
 changes its result:
 
-* `FOV.load_reference_image()` restores `images/ref_merged/{fovID}.tif` (since W-564 the file
+% W-338
+
+* `FOV.load_reference_image()` restores `images/ref_merged/{fovID}.tif` (since 2026-10-24 the file
   of the dataset's `reference_image` or `reference_image_import`; see "The FOV folder, the reference image and channel folders by label"), written by
   `FOV.save_reference_image`. Without the reference round, `FOV.reference_grid()`
   returns that file's grid (source `file:<path>`) and `InputChannel(reference_merged=True)`
@@ -1462,10 +1544,13 @@ changes its result:
   are byte-identical to before. A new Python-only key,
   `rules.nuclei_registration.parameters.checkpoints` (`CheckpointConfig` fields, `{}`
   for the defaults), also writes the saved form under `checkpoints/{fovID}/other_rounds/`
-  (since W-564 `fovs/{fovID}/other_rounds/`; see "The FOV folder, the reference image and channel folders by label").
+  (since 2026-10-24 `fovs/{fovID}/other_rounds/`; see "The FOV folder, the reference image and channel folders by label").
   `save_processing_log("nr")` lists only registered rounds, so the reference stain, which
-  has no registration, is not in `log/{fovID}_nr.txt` (W-563 later replaced both files with
+  has no registration, is not in `log/{fovID}_nr.txt` (the sequencing-log change of 2026-10-23 later replaced both files with
   `fovs/{fovID}/nuclei_registration.json`, which leaves the reference stain out the same way).
+
+% W-564
+% W-564, W-563
 
 ### Multi-FOV synthetic sample scene
 
@@ -1642,7 +1727,9 @@ branch's `sample_export` API is not adopted, and no code is brought over from it
 | Empty populations | An element without a row, or whose image does not exist, is left out and recorded `omitted` with `empty`, `no_cells`, `no_included_fov`, `not_requested` or `part_not_run`; with every element omitted no store is written (`store: null`) |
 | Format | Zarr format 3, spatialdata's default container (`SpatialDataExportConfig(zarr_format=3)`), or Zarr format 2 (`zarr_format=2`); no standalone OME-Zarr beside the store |
 | The `spatialdata` section of `export.json` | Every element with its status, reason or path, rows or shape, transform, `spatialdata_attrs` and column dtypes after the round trip; the counts, the column renames, the formats and the SHA-256 of every store file; `check_export` reads the store back and checks S1 to S8 |
-| Where a row came from | `lookup_source(folder, spot=(spot_namespace, spot_id))` or `cell=(cell_namespace, cell_id)` returns its FOV, the §2.9 assignment folder, its `assignment.json` SHA-256 and the row's position in the §2.9 table |
+| Where a row came from | `lookup_source(folder, spot=(spot_namespace, spot_id))` or `cell=(cell_namespace, cell_id)` returns its FOV, the assignment folder, its `assignment.json` SHA-256 and the row's position in that folder's table |
+
+% §2.9
 
 `export_spatialdata` needs `starfinder[spatialdata]`; without it the part is `not_run`
 (`extra_missing`) with `ExportIncompleteWarning`, and the earlier files are written. A
@@ -1669,9 +1756,13 @@ unchanged; its outputs, including `images/fused/{sample}/`, do not change.
 | `reads_assignment` (with an `assembly` block) | The same rule without the tile filter and without `global_*`, on the grid of `images/ref_merged/{fovID}.tif`, also saving `checkpoints/{fovID}/assignment/<assignment>/` |
 | `create_sample_h5ad`, `create_sample_reads_assignment` | `export_sample`: `Dataset.export` with the `assembly` and `export` blocks into `export/<sample>/` (declared output `export.json`) |
 
-Since W-564 the reference grid is that of `fovs/{fovID}/reference.tif` by default and the folder is `fovs/{fovID}/assignment/<assignment>/`; see "The FOV folder, the reference image and channel folders by label".
+Since 2026-10-24 the reference grid is that of `fovs/{fovID}/reference.tif` by default and the folder is `fovs/{fovID}/assignment/<assignment>/`; see "The FOV folder, the reference image and channel folders by label".
 
-Since W-568 the route of a saved assignment writes that folder alone and no tile configuration; see "The route of a saved assignment writes the saved folder alone; opt-in assignment previews".
+% W-564
+
+Since 2026-10-24 the route of a saved assignment writes that folder alone and no tile configuration; see "The route of a saved assignment writes the saved folder alone; opt-in assignment previews".
+
+% W-568
 
 The adapter's translation of a legacy configuration is `StageAxisMapping(x="+x", y="+y",
 source="legacy")` with the `rotate_angle` it ran with; a configuration with a
@@ -1679,7 +1770,7 @@ source="legacy")` with the `rotate_angle` it ran with; a configuration with a
 
 ### The ownership region on the assignment figures
 
-`plot_assignment` gains the keyword `ownership=None` (W-330): a `FOVOwnership` of
+`plot_assignment` gains the keyword `ownership=None` (2026-10-08): a `FOVOwnership` of
 `starfinder.assignment` (a boolean Y, X region mask, the excluded `cell_id` and `spot_id`),
 built for one FOV of an assembled sample by the new `starfinder.assembly.fov_ownership(result,
 fov_id, *, placement)`. With it, panels 1 and 2 draw the FOV's ownership region as a yellow
@@ -1692,7 +1783,11 @@ regions instead of the tile configuration; no tile box is drawn. Without
 with ownership after the sample is assembled; `reads_assignment` writes them first, as
 before. No table, record, count or `export/<sample>/` file changes.
 
-Since W-568 these figures are opt-in (`assembly.previews`) and the two kinds have their own folders; see "The route of a saved assignment writes the saved folder alone; opt-in assignment previews".
+% W-330
+
+Since 2026-10-24 these figures are opt-in (`assembly.previews`) and the two kinds have their own folders; see "The route of a saved assignment writes the saved folder alone; opt-in assignment previews".
+
+% W-568
 
 ### A deterministic UUID in the package's OME-TIFF files
 
@@ -1725,7 +1820,9 @@ cells ({doc}`sample-segmentation-contract`; for users, {doc}`workflow-downstream
 routes to a sample's cells"). New names in `starfinder.export`, one keyword of
 `assemble`, three fields of `ExportConfig`, three keys of the workflow `export` block and
 one column of the sample molecule table; no existing name, module or format version
-changes. The route per FOV keeps its rules, the duplicate rule of W-400 included.
+changes. The route per FOV keeps its rules, the duplicate rule of 2026-10-09 included.
+
+% W-400
 
 | Need | New name |
 | --- | --- |
@@ -1751,29 +1848,33 @@ run.json"):
 
 * **`run.json` gains `transforms`, `codebook`, `workflow_config` and
   `counts.filtering.endpoint_valid`** (with `endpoint_valid_segments`); `format_version`
-  stays 1 (note (W-565): now 2, see "run.json version 2"), and a `run.json` without them still loads. `transforms` holds, per registered
+  stays 1 (note: now 2, see "run.json version 2"), and a `run.json` without them still loads. `transforms` holds, per registered
   moving round, the entries of `registered/transforms.json` and the round's
   `WarpConfig`; a dense field or B-spline coefficients are named only when the stage
   `registered` wrote them, and no array is written into `run.json`.
 * **The workflow writes `checkpoints/<fov>/run.json`** for the processing rules, alone by
   default, with `overwrite` on; `rules.<rule>.parameters.checkpoints` adds stages
   ({doc}`workflow-configuration`, "Run records of the processing rules"). The logs the
-  rules write do not change (W-563 later removed the Python logs; W-564 moved the record to
+  rules write do not change (the sequencing-log change of 2026-10-23 later removed the Python logs; the FOV-folder change of 2026-10-24 moved the record to
   `fovs/<fov>/run.json`, see "The FOV folder, the reference image and channel folders by label").
 * **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256**,
   which `run.json` records as `codebook`.
 
+% W-565, W-563, W-564
+
 ### Molecule and read tables: `molecules.csv`, `reads.csv` and zero-based coordinates
 
-W-562 (OM-04, OM-18) replaces the one-based, identity-free `goodSpots` and `allSpots`
+The molecule-table change of 2026-10-23 replaces the one-based, identity-free `goodSpots` and `allSpots`
 exports of the Python route with typed, zero-based tables that keep each read's identity.
 This is a breaking change of the files, their columns and their coordinate origin, with no
 alias, no dual write and no dual search.
 
+% W-562, OM-04, OM-18
+
 * **`FOV.export_spots` slots and files.** `FOV.export_spots(slot="molecules", columns=None, *,
   path=None)` takes the slots `molecules` (the accepted reads of the filtering result) and
   `reads` (on request, every read of the decoding result joined to its detection) in place of
-  `goodSpots` and `allSpots`; there is no `export_molecules` or `export_reads` (NM-09). The
+  `goodSpots` and `allSpots`; there is no `export_molecules` or `export_reads`. The
   default paths are `<output_root>/fovs/<fov_id>/molecules.csv` and
   `<output_root>/fovs/<fov_id>/reads.csv`, in place of `signal/<fov_id>_goodSpots.csv` and
   `signal/<fov_id>_allSpots.csv`; `FOV.paths.spot_table(slot)` names them.
@@ -1793,10 +1894,12 @@ alias, no dual write and no dual search.
   succeeded: `export_spots` adds `{path, sha256, molecules_sha256, dtypes, rows}` (the path
   relative to the record's folder; `molecules_sha256` the keyed hash of the six molecule
   columns, null for `reads`) and rewrites the record atomically. `format_version` stays 1,
-  and a `run.json` without `outputs` still loads. Note (W-565): version 2 holds `outputs`
+  and a `run.json` without `outputs` still loads. Note: version 2 holds `outputs`
   from the start and records more outputs, see "run.json version 2".
 * **Removed: `FOV.paths.signal_png`**, the unused helper of `signal/<fov_id>_<slot>.png`
-  (OM-18; no replacement).
+  (no replacement).
+
+% NM-09, W-565, OM-18
 
 `molecules.csv` against the old `goodSpots` (same rows, in the same order):
 
@@ -1842,12 +1945,14 @@ the `Snakefile`'s `ruleorder` selects; it never looks for whichever file exists.
 
 ### Sequencing logs and the morphology record
 
-W-563 (OM-05, OM-17) folds the Python backend's per-FOV sequencing logs into `run.json` and
+The sequencing-log change of 2026-10-23 folds the Python backend's per-FOV sequencing logs into `run.json` and
 replaces the morphology log and its shift table with one JSON record. The MATLAB backend
 writes its logs under the same names as before; only the Python files are removed, with no
 alias and no dual write. Existing output trees are not rewritten.
 
-* **`run.json` gains three fields** (`format_version` stays 1, now 2 since W-565; a record
+% W-563, OM-05, OM-17
+
+* **`run.json` gains three fields** (`format_version` stays 1, now 2 since 2026-10-24; a record
   without them still loads): `counts.filtering.fractions` (`accepted` and, when the filter checked endpoints,
   `endpoint_valid`, as `ReadFilteringResult.fractions` computes them: over all reads, `null`
   without reads); `counts.summary` (`summarize_reads` of the latest reads) whenever reads were
@@ -1856,7 +1961,7 @@ alias and no dual write. Existing output trees are not rewritten.
 * **Removed: `FOV.save_processing_log`, `FOV.save_diagnostics` and `FOV._save_shift_log`**,
   and the path helpers `FOV.paths.rsf_log`, `gr_log`, `nr_log`, `shift_log` and `score_log`.
   A direct caller obtains the record with `FOV.run(..., checkpoints=CheckpointConfig(stages=()))`,
-  which writes `checkpoints/<fov_id>/run.json` and no stage file (since W-564 `fovs/<fov_id>/run.json`; see
+  which writes `checkpoints/<fov_id>/run.json` and no stage file (since 2026-10-24 `fovs/<fov_id>/run.json`; see
   "The FOV folder, the reference image and channel folders by label").
 * **New: `FOV.save_registration_record(path=None)`** writes
   `<output_root>/fovs/<fov_id>/nuclei_registration.json`: `fov_id`, `rounds` (the round roles),
@@ -1864,6 +1969,8 @@ alias and no dual write. Existing output trees are not rewritten.
   registration attempts; the reference stain, which has none, is left out) and
   `registration` (those rounds' attempts, unchanged). Prepared-image persistence
   (`other_rounds/<name>/`) stays opt-in and unchanged.
+
+% W-565, W-564
 
 Each removed file and field, and its place now:
 
@@ -1905,12 +2012,14 @@ The other outputs of these rules do not change. `log/gr_shifts/{fovID}.txt`, whi
 Python processing rules wrote without declaring it, is no longer written. Without an
 `assembly` or `stitching` block, the declared input of `report_sample` is every FOV's
 `checkpoints/{fovID}/run.json` instead of `log/sf_scores/{fovID}.txt`, so it now has a
-producer in the subtile modes too. No new human log file is written (deferred to §2.13).
-Since W-564 the run records are `fovs/{fovID}/run.json` and `fovs/{fovID}/subtile_{n}/run.json`; see "The FOV folder, the reference image and channel folders by label".
+producer in the subtile modes too. No new human log file is written (deferred to workflow orchestration).
+Since 2026-10-24 the run records are `fovs/{fovID}/run.json` and `fovs/{fovID}/subtile_{n}/run.json`; see "The FOV folder, the reference image and channel folders by label".
+
+% §2.13, W-564
 
 ### The FOV folder, the reference image and channel folders by label
 
-W-564 (OM-08, OM-06, OM-01) collects a FOV's durable Python results in one folder,
+The FOV-folder change of 2026-10-24 collects a FOV's durable Python results in one folder,
 writes and reads the reference image through one resolver, and names the Python channel
 folders by the unique channel label. New runs write the new layout. Existing output trees
 are not moved, and no reader looks in the old places (no alias, no dual search, no
@@ -1918,6 +2027,8 @@ fallback). File contents are unchanged, except the recorded paths that name a mo
 The sample-stage roots (`stitching/`, `export/`, `report/`), `log/benchmark/`, the shared
 `output/subtile/` files, the legacy segmentation views under `images/`, `expr/` and the
 MATLAB backend's tree do not change.
+
+% W-564, OM-08, OM-06, OM-01
 
 * **The FOV folder.** `<output_root>/fovs/<fov_id>/` (a subtile: `fovs/<fov_id>/subtile_<n>/`)
   holds `run.json`, `molecules.csv` and `reads.csv`, `nuclei_registration.json`,
@@ -1934,7 +2045,7 @@ MATLAB backend's tree do not change.
   processing, and the folder's other contents, which other calls and rules write, no longer
   do. With it, `FOV.run` clears only `checkpoints/` (`clear_stages`) and replaces `run.json`.
 * **Recorded paths in `run.json`** (`format_version` stays 1; path portability is unchanged;
-  note (W-565): version 2 makes the paths portable, see "run.json version 2"):
+  note: version 2 makes the paths portable, see "run.json version 2"):
   `checkpoints.<stage>` lists each file relative to the FOV folder, which holds `run.json`
   (`checkpoints/registered/round1.ome.tif`, was `registered/round1.ome.tif`);
   `checkpoint_directory` names `<FOV folder>/checkpoints` (was the FOV directory); and
@@ -1972,6 +2083,8 @@ MATLAB backend's tree do not change.
   `checkpoints/<fov_id>/`), and the reasons of unavailable parts name `fovs/<fov>/run.json`
   and `fovs/<fov>/checkpoints/registered/transforms.json`.
 
+% W-565
+
 Each moved path, old and new (`<fov>` is the FOV ID; the Python backend only):
 
 | Before | After |
@@ -1990,7 +2103,9 @@ Each moved path, old and new (`<fov>` is the FOV ID; the Python backend only):
 | `images/<round>/<channel name>/<fov>.tif` (`nuclei_registration`) | `images/<round>/<channel label>/<fov>.tif` |
 
 `fovs/<fov>/molecules.csv`, `reads.csv` and `nuclei_registration.json` were already in the
-FOV folder (W-562, W-563).
+FOV folder (the molecule-table and sequencing-log changes of 2026-10-23).
+
+% W-562, W-563
 
 The configuration entries:
 
@@ -2020,11 +2135,13 @@ MATLAB branch of `segmentation.smk` are unchanged:
 
 ### run.json version 2: portable paths, stage records that own their hashes, and recorded outputs
 
-W-565 (OM-09) makes `run.json` the record a later verified resume can rely on. New runs write
+Version 2 of 2026-10-24 makes `run.json` the record a later verified resume can rely on. New runs write
 `format_version` 2; existing records are not rewritten. The readers of `run.json` (the report's
 collector and replay) read versions 1 and 2. Verified resume, scheduling and job completion
-are not implemented (§2.13); version 2 provides what they need, and version 1 does not
+are not implemented (they belong to workflow orchestration); version 2 provides what they need, and version 1 does not
 ({doc}`checkpoints`, "Reload and continue").
+
+% W-565, OM-09, §2.13
 
 * **Portable paths.** Output and stage paths are relative to the FOV folder, the image inputs
   relative to the input root. A file the run reads outside the input root (a codebook or panel
@@ -2098,11 +2215,13 @@ comparison of the quickstart's records checks this key by key.
 
 ### FOV membership in `fovs.csv`, `{i}` FOV patterns and explicit stage files
 
-W-566 (OM-07, OM-03, OM-14) makes the Python workflow's FOVs explicit, gives FOV names one
+The FOV-membership change of 2026-10-24 makes the Python workflow's FOVs explicit, gives FOV names one
 pattern syntax and reads stage positions from a named file. The MATLAB backend keeps its
 sample annotation, its keys and its scripts; where the two backends share a rule or a
 target, the change is a `BACKEND` branch. Existing output trees are not rewritten. Each
 change has no alias, no dual read and no dual search.
+
+% W-566, OM-07, OM-03, OM-14
 
 * **Membership: `INPUT/fovs.csv`** (`<root_input_path>/<dataset_id>/<sample_id>/fovs.csv`),
   for the Python backend, replaces `OUTPUT/documents/sample-annotation.csv` and its
@@ -2125,7 +2244,7 @@ change has no alias, no dual read and no dual search.
   ones included. A MATLAB configuration gets the same values. Omitting a switch does not
   remove its companion keys: the schema's conditional clauses still require `subset_start`
   and `subset_end`, and `n_random_tests`, so `tests/minimal_config.yaml`, which sets no
-  subset key, still fails validation, as it already did before this change. (W-572 lifts
+  subset key, still fails validation, as it already did before this change. (The subset-switch change of 2026-10-25 lifts
   this: see "MATLAB subset switches that are absent or false" below.)
 * **New key `selected_fovs`** (Python only; absent or null: every FOV): a nonempty list of
   unique FOV IDs of `fovs.csv`. It restricts every rule, the per-sample stitching, export
@@ -2172,12 +2291,16 @@ change has no alias, no dual read and no dual search.
   drop the eight keys; `prepare_workflow.py` writes `INPUT/fovs.csv` instead of the
   annotation; `quickstart.py` uses `fov_pattern="FOV_{i:03d}"` and writes `input/fovs.csv`.
 
+% W-572
+
 ### One gene authority, the reference-file keys and `image_dir_template`
 
-W-567 (OM-13, NM-11) takes the count matrix's genes from the codebook alone and lets Python
+The gene-authority change of 2026-10-24 takes the count matrix's genes from the codebook alone and lets Python
 read FOV-first image folders. The MATLAB code, its codebook input `INPUT/genes.csv` and its
 round-first layout are unchanged. Existing output trees are not rewritten, no input file is
 renamed, and each change has no alias, no dual read and no dual search.
+
+% W-567, OM-13, NM-11
 
 * **`OUTPUT/documents/genes.csv` is no longer read.** `reads_assignment`'s fifth input is
   the codebook the sequencing rules read (`CODEBOOK` of `common.smk`), on both backends,
@@ -2221,11 +2344,13 @@ renamed, and each change has no alias, no dual read and no dual search.
 
 ### The route of a saved assignment writes the saved folder alone; opt-in assignment previews
 
-W-568 (OM-10, OM-16 choice A) removes the per-FOV files that nothing reads on the route of
+The saved-assignment change of 2026-10-24 removes the per-FOV files that nothing reads on the route of
 a saved assignment (an `assembly` block whose `assignment` names a folder) and makes the
 assignment figures opt-in. Existing output trees are not rewritten, and nothing is written
 twice. Configurations without an `assembly` block (the legacy route, both backends) and
 with `assignment: null` (molecules only) write the same files as before.
+
+% W-568 (OM-10, OM-16 choice A)
 
 | Output | Before | After |
 | --- | --- | --- |
@@ -2258,14 +2383,18 @@ with `assignment: null` (molecules only) write the same files as before.
   (`test_workflow_declared_grids.py` compares the saved `molecules.csv` instead of
   `reads_assignment.csv`), the assembly schema keys, and the BigStitcher end-to-end test,
   which runs with and without an `assembly` block.
-  (W-574: `test_declared_grid_header.py` no longer compares the figures with a run of the
+  (Since 2026-10-25 `test_declared_grid_header.py` no longer compares the figures with a run of the
   copied base-revision reader, which it retired; it checks that the figures are drawn.)
+
+% W-574
 
 ### One Python configuration dialect
 
-W-569 (OM-12, SM-16, OM-02, OM-15, OM-11) makes the Python backend read one configuration
+The configuration-dialect change of 2026-10-25 makes the Python backend read one configuration
 dialect and only the inputs its rules use. The MATLAB scripts, the MATLAB rules, their JSON
 copy and MATLAB's schema definitions are unchanged. Each change has no alias and no dual read.
+
+% W-569, OM-12, SM-16, OM-02, OM-15, OM-11
 
 * **The MATLAB keys of the processing rules raise under `backend: python`.** Each key below,
   in `rules.<rule>.parameters` of `rsf_single_fov`, `gr_single_fov_subtile`,
@@ -2315,7 +2444,7 @@ copy and MATLAB's schema definitions are unchanged. Each change has no alias and
   without `save_as`, carried to `PreprocessingRecipe.post_registration`) and the rule
   parameter `reference_image_view` (`{mode: max | channel, channel}`; `WorkflowConfig`'s
   `reference_image` and `reference_channel` follow it; the resident subtile rules refuse it).
-* **No JSON copy for Python (OM-02).** The Python rules `rsf_single_fov`,
+* **No JSON copy for Python.** The Python rules `rsf_single_fov`,
   `gr_single_fov_subtile`, `deep_create_subtile`, `nuclei_registration`,
   `lrsf_single_fov_subtile` and `deep_rsf_subtile` no longer take
   `<config_path with .json>`, and their inputs are named: `codebook`, `images` and, in the
@@ -2324,7 +2453,7 @@ copy and MATLAB's schema definitions are unchanged. Each change has no alias and
   writes the copy, is defined and a local rule for the MATLAB backend only. `run.json`
   records the source file as before (`workflow_config`). The unused committed copy
   `tests/tissue_2D_test.json` is removed.
-* **Explicit reference stains (OM-11).** The Python backend declares the reference round's
+* **Explicit reference stains.** The Python backend declares the reference round's
   stain files with the new top-level `reference_stains` (`{channel, name}` entries, optional
   `wavelength`; `Dataset.reference_stains`). `dapi_round` raises for it, naming the new key;
   there is no hard-coded `ch04` and no fallback to it. The Python `rotate_nuclei`
@@ -2332,7 +2461,7 @@ copy and MATLAB's schema definitions are unchanged. Each change has no alias and
   registers against it (label `<ref_round>:<channel>`), the one entry or, with several, the
   one whose name contains `ref_channel` (`_nuclear_stain`). MATLAB's `dapi_round`,
   `*ch04.tif` and rules are unchanged.
-* **Conditional image dimensions and Fiji (OM-11, OM-15).** `img_row` and `img_col` are
+* **Conditional image dimensions and Fiji.** `img_row` and `img_col` are
   required for the MATLAB backend as before, and for the Python backend only by an active
   `create_subtiles` block (the subtile windows) and by stitching method `bigstitcher` without
   an `assembly` block (the legacy tile configuration writer); missing there, the schema and
@@ -2354,10 +2483,14 @@ copy and MATLAB's schema definitions are unchanged. Each change has no alias and
   result. The tests of the removed `_legacy_stitching` and of the Python backend's acceptance
   of `tophat` are replaced by the refusal tests.
 
+% OM-02, OM-11, OM-15
+
 ### MATLAB subset switches that are absent or false
 
-W-572 relaxes the schema's subset requirements for the MATLAB backend; MATLAB's keys,
+The subset-switch change of 2026-10-25 relaxes the schema's subset requirements for the MATLAB backend; MATLAB's keys,
 scripts, rules and the JSON copy are unchanged, and `common.smk` selects the same FOVs.
+
+% W-572
 
 * **A subset switch requires its companions only when it is `true`.** `subset_range: true`
   requires `subset_start` and `subset_end`, and `subset_random: true` requires
@@ -2408,8 +2541,10 @@ scripts, rules and the JSON copy are unchanged, and `common.smk` selects the sam
 | Benchmark / recipes | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |
 | Segmentation / assignment workflow | The shared rules call the package under both backends: `uint32` labels, `rescale` on the input grid, no foreground gate, cells kept without molecules, `outside_grid` molecules, unknown genes and a double expansion raise, new `raw.h5ad` and `reads_assignment.csv` columns; MATLAB-backend runs need the package and its `stardist` and `anndata` extras. |
 | Sample assembly workflow (configurations with an `assembly` block only) | Option W1 of {doc}`assembly-contract`: the per-FOV `raw.h5ad` and `reads_assignment.csv` are not box-filtered and have no `global_*` columns (every kept cell, and every molecule in input order); the label file is imported on the grid of `images/ref_merged/{fovID}.tif` instead of one declared from `voxel_size_xy` and `voxel_size_z`; the sample outputs are in `export/<sample>/` instead of `expr/{sample}_raw.h5ad` and `expr/{sample}_reads_assignment.csv`; cells and molecules are retained by the ownership regions of the placement instead of the `tile_config` rectangles, and every excluded observation is kept with its reason. Configurations without the block are unchanged. |
-| FOV folder and reference image (W-564) | A FOV's durable results move to `fovs/<fov>/` and its stage files to `fovs/<fov>/checkpoints/`; earlier output roots are not read in the old places. `overwrite=False` no longer refuses a FOV folder that holds only other calls' results, and `overwrite=True` clears only `checkpoints/`. The Python reference image moves to `fovs/<fov>/reference.tif`, and a dataset with `reference_image_import` writes none. A channel pattern that is not a safe path component now raises when the `Dataset` is built. See "The FOV folder, the reference image and channel folders by label". |
+| FOV folder and reference image (2026-10-24) | A FOV's durable results move to `fovs/<fov>/` and its stage files to `fovs/<fov>/checkpoints/`; earlier output roots are not read in the old places. `overwrite=False` no longer refuses a FOV folder that holds only other calls' results, and `overwrite=True` clears only `checkpoints/`. The Python reference image moves to `fovs/<fov>/reference.tif`, and a dataset with `reference_image_import` writes none. A channel pattern that is not a safe path component now raises when the `Dataset` is built. See "The FOV folder, the reference image and channel folders by label". |
 | Sample segmentation route (configurations and calls that export a projection with an assignment) | Rule RD1 of {doc}`sample-segmentation-contract`: without `route`, a sample exported as a projection (the default `dimensionality`) takes the route after fusion. Every existing configuration with `stitching` and `assembly` blocks whose `assembly.assignment` is a name (the default `default`) and whose `export` block has no `route` and no `segmentation` while `dimensionality` is `projection` (also when the block is absent) stops at once: the workflow refuses it when the rules are parsed, before any job is planned, and `Dataset.export` with the same `ExportConfig` refuses it before anything is written, with `ValueError: the route after fusion (route: after_fusion, the default for dimensionality 'projection') segments the fused projection and needs export.segmentation, the settings of that segmentation; set export.segmentation, or route: per_fov to assemble the per-FOV assignments`. The one line `route: per_fov` in the `export` block (`ExportConfig(route="per_fov")` in Python) restores the earlier behaviour: the same jobs and the route per FOV. The route after fusion also refuses `dimensionality: stack` and `projection: sum`. Exports with `route: per_fov` or `dimensionality` `stack` or `both`, and samples without segmentation (`assignment` null), keep their route; their outputs change only by the column `cell_namespace`, the part `segment` recorded `off` with its `segmentation` section, and the keys `route` and `route_source` of the `assembly` section. |
+
+% W-564
 
 Detailed numerical policies, tolerances and edge cases remain canonical in
 [contracts](api/contracts.md), [evaluation](api/evaluation.registration.rst),

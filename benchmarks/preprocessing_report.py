@@ -980,7 +980,7 @@ punctum. The <code>_xsrc</code> variants have the same detection images as their
 
 # --- Calibrated rerun report (W-249) -------------------------------------------------------------------
 #
-# Item 6 of "Evaluation design amendment for the calibrated rerun (Accepted, W-243)" in
+# Item 6 of "Evaluation design amendment for the calibrated rerun" in
 # docs/preprocessing-algorithms.md: the human summary first (setup, one card per method, cross-cutting
 # findings, reading order), then the method sections with the nine visualization changes, then the
 # appendix (identity, checksums, full tables). The W-234 checks run before anything is written.

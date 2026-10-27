@@ -64,4 +64,4 @@ it is read. `backend: python` selects the Python rules for the
 sequencing stages; `backend: matlab`, the default, runs the MATLAB scripts of the
 {doc}`../api/matlab` instead, and the segmentation and assignment rules call the package
 under both backends. The adapters are the part a planned rewrite of the workflow replaces; the API they call
-is kept ([what the rewrite replaces](../workflows.md#what-213-replaces)).
+is kept ([what the rewrite replaces](../workflows.md#what-workflow-orchestration-replaces)).

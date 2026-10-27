@@ -144,12 +144,14 @@ so the radius sets the scale that separates puncta from background:
   when spacing is unknown. `2r + 1` may not exceed the volume along any axis,
   which limits `r_z` for thin stacks.
 
-For Gaussian puncta of width σ voxels per axis, the §2.5 synthetic evaluation
+For Gaussian puncta of width σ voxels per axis, the synthetic preprocessing evaluation
 uses `r = ceil(3σ) + 1`; for example σ = (0.7, 1.0, 1.0) gives
 `radius_voxels_zyx=(4, 4, 4)`, which needs at least 9 Z planes. On real data,
 measure the puncta width first, and check a before/after line profile through
 a dim punctum. The method, its cost and the evaluation design are in
 {doc}`preprocessing-algorithms`.
+
+% §2.5
 
 ```python
 from starfinder.preprocessing import Background3DConfig, subtract_background_3d
@@ -159,11 +161,13 @@ corrected = subtract_background_3d(volume, config=Background3DConfig(radius_voxe
 
 ## Choose a preprocessing recipe
 
-**Defaults remain unchanged pending E13.** The pipeline default is still recipe 1,
-and no recipe is recommended. The §2.5 synthetic comparison (task group 5) and
+**Defaults remain unchanged pending the evaluation on real data.** The pipeline default is still recipe 1,
+and no recipe is recommended. The synthetic preprocessing comparison (task group 5) and
 its inspection report (task group 6) are development evidence on uncalibrated
-presets. E13 decides on real data. Until then, choose by the problem your
+presets. The evaluation on real data decides. Until then, choose by the problem your
 images show, and check a before/after line profile through a dim punctum.
+
+% E13, §2.5
 
 | Recipe | Steps | Choose it when | Watch for |
 | --- | --- | --- | --- |
@@ -220,8 +224,10 @@ saved evaluation directory. The report is organized by method and does not
 rerun the evaluation:
 
 ```bash
-uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/w233/evaluation --output /external/w234/report.html
+uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/evaluation --output /external/report.html
 ```
+
+% /external/w233/evaluation, /external/w234/report.html
 
 Before it writes anything, the renderer checks the following:
 

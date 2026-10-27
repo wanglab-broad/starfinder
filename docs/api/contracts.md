@@ -435,9 +435,11 @@ accepted = filtered.accepted
 
 FOV exposes the same three operations and stores `intensity_result`,
 `decoding_result` and `filtering_result`. Its output tables follow the Python
-package's design (W-562): zero-based, identity-preserving `molecules.csv` and `reads.csv`. Historical saved-tensor diagnostic
+package's design since 2026-10-23: zero-based, identity-preserving `molecules.csv` and `reads.csv`. Historical saved-tensor diagnostic
 scripts explicitly declare positional channel/round axes; missing historical
 physical geometry remains unverified. No historical notebook outputs are rerun.
+
+% W-562
 
 {meth}`starfinder.dataset.FOV.export_spots` writes the joined columns with the
 in-memory zero-based `z`, `y`, `x` and leaves the in-memory table unchanged;
@@ -472,7 +474,7 @@ metadata first; do not use `reshape` to exchange axes. For a single channel,
 the analogous permutations are `(1,2,0)` and `(2,0,1)`.
 
 The Python tables keep the in-memory zero-based coordinates ("Spots, reads and output"):
-`(z,y,x)=(5,10,10)` is `z,y,x = 5,10,10` in `molecules.csv` and `reads.csv` (since W-562;
+`(z,y,x)=(5,10,10)` is `z,y,x = 5,10,10` in `molecules.csv` and `reads.csv` (since 2026-10-23;
 {doc}`../migration`). To index a NumPy image from those tables, select columns by name in
 ZYX order, as in the [output recipe](../recipes.md#inspect-molecule-outputs). The one-based
 `x,y,z` CSVs of the legacy route (MATLAB's `goodSpots`, and those of the subtile and deep
@@ -480,6 +482,8 @@ modes) need one subtracted **once**;
 {py:func}`~starfinder.assignment.import_legacy_molecules_csv` does it. Do not subtract one
 from shift vectors, color labels or already internal coordinates. Exports carry no
 physical calibration; distances are voxel indices.
+
+% W-562
 
 Extraction `(1,2,2)` in Python corresponds to `(2,2,1)` in MATLAB, both describing
 interior windows 3 Z × 5 Y × 5 X. Python zero-pads boundary windows; MATLAB clips

@@ -138,13 +138,17 @@ is made by placing these records in a common table.
 
 ## Preprocessing comparison on synthetic presets
 
-`benchmarks/preprocessing_synthetic.py` runs the bounded §2.5 comparison matrix of
+`benchmarks/preprocessing_synthetic.py` runs the bounded preprocessing comparison matrix of
 {doc}`preprocessing-algorithms` (*Evaluation design*) on development-preset scenes:
 
+% §2.5
+
 ```bash
-uv run python ../../benchmarks/preprocessing_synthetic.py run --output /external/w233/evaluation
-uv run python ../../benchmarks/preprocessing_synthetic.py attach-time --output /external/w233/evaluation --time-log /external/time.log
+uv run python ../../benchmarks/preprocessing_synthetic.py run --output /external/evaluation
+uv run python ../../benchmarks/preprocessing_synthetic.py attach-time --output /external/evaluation --time-log /external/time.log
 ```
+
+% /external/w233/evaluation
 
 It processes every arm with `FOV.run` and sweeps the noise-mode `threshold_value`.
 Tables, precision–recall curves and a manifest (conditions, seeds, dtypes,
@@ -154,12 +158,16 @@ uncalibrated synthetic data, not recommended defaults.
 
 `--design calibrated` runs the calibrated rerun instead, as specified by the
 *Evaluation design amendment for the calibrated rerun* of
-{doc}`preprocessing-algorithms`. The default design stays W-233's:
+{doc}`preprocessing-algorithms`. The default design (`w233`) stays that of task group 5:
+
+% W-233
 
 ```bash
-uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope pilot --output /external/w239/pilot
-uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope full --issue W-248 --output /external/w248/evaluation
+uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope pilot --output /external/pilot
+uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope full --output /external/calibrated-evaluation
 ```
+
+% /external/w239/pilot, W-248, /external/w248/evaluation
 
 * **Scenes.** Every scene is `calibrated_scene_preset` with the balanced
   codebook. The added conditions are `bright_outliers`, `saturation` (with
@@ -167,21 +175,25 @@ uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrate
   for `clean`, `combined` and `bright_outliers`, and the multi-FOV sets run in
   uint8 only. `--reduction R3` drops uint16.
 * **Detection.** Every arm is swept in the noise and adaptive threshold modes.
-* **Tables.** Besides W-233's tables, the output directory holds
+* **Tables.** Besides the tables of task group 5, the output directory holds
   `preconditions.csv`, `fixture_gaps.csv`, the revised `low_benefit_flags.csv`,
   `harm_test.csv` and `image_statistics.csv`. The last compares each
   condition's statistics, measured with the {doc}`image-statistics` tool, with
-  the W-238 development ranges. Every table of detection results has a
+  the measured development ranges. Every table of detection results has a
   `threshold_mode` column.
 * **Projection.** The pilot scope records a projection of the full matrix
   against the 2700 s budget, before and after R3.
+
+% W-233, W-238
 
 `benchmarks/preprocessing_report.py` renders the task group 6 inspection report
 from a saved evaluation directory as one standalone HTML file:
 
 ```bash
-uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/w233/evaluation --output /external/w234/report.html
+uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/evaluation --output /external/report.html
 ```
+
+% /external/w233/evaluation, /external/w234/report.html
 
 Before rendering, it checks every manifest-listed checksum. It also checks that
 the manifest's revision matches the checkout: for a run from an uncommitted
@@ -192,12 +204,16 @@ scenes and outputs, and each must equal its manifest checksum. See
 [Choose a preprocessing recipe](recipes.md#choose-a-preprocessing-recipe).
 
 Given a calibrated evaluation directory, the same command renders the report of
-item 6 of the amendment (W-249). `--summary` also saves the render summary as
+item 6 of the amendment. `--summary` also saves the render summary as
 JSON:
 
+% W-249
+
 ```bash
-uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/w248/evaluation --output /external/w249/report.html --summary /external/w249/render-summary.json
+uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/calibrated-evaluation --output /external/calibrated-report.html --summary /external/render-summary.json
 ```
+
+% /external/w248/evaluation, /external/w249/report.html, /external/w249/render-summary.json
 
 * **Layout.** The human summary comes first: the setup, one card per method,
   the cross-cutting findings and a reading order. The method sections with the

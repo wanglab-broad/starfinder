@@ -1,7 +1,7 @@
 """Focused tests of the calibrated rerun design in benchmarks/preprocessing_synthetic.py (W-239).
 
 The rules are those of docs/preprocessing-algorithms.md, *Evaluation design amendment for the
-calibrated rerun (Accepted, W-243)*: item 2 (threshold modes), item 3 (precondition, including the
+calibrated rerun*: item 2 (threshold modes), item 3 (precondition, including the
 C5 set-specific multi-FOV check), item 4 (revised low-benefit rule), item 5 (added conditions) and
 C7 (histogram matching's harm test).
 """

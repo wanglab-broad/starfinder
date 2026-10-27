@@ -4,10 +4,12 @@
 of one channel volume. The same function measures a real ZYX TIFF and a channel
 of a `starfinder.synthetic` scene, so real and synthetic images are compared
 with identical definitions. The real-data run below sets development target
-ranges for the calibrated synthetic preset version (W-241) and the §2.5 rerun
-(W-239). It is development evidence (W-238): benchmark calibration and D04 stay
-with the Chapter II benchmark register (W-93 Stage 2), and the measured FOVs are
-not qualified (W-92).
+ranges for the calibrated synthetic preset version and the calibrated preprocessing
+rerun. It is development evidence: benchmark calibration and D04 stay
+with the benchmark register and its later calibration work, and the measured FOVs are
+not qualified.
+
+% W-241, §2.5 rerun (W-239), development evidence (W-238), the Chapter II benchmark register (W-93 Stage 2), not qualified (W-92)
 
 ## Usage
 
@@ -108,12 +110,14 @@ corrects for this, and only under the lognormal assumption.
 
 ## Real-data run
 
-Source run: `runs/W-238/20260928T194004Z-1da19f6c/measurement/`, outside the
+Source run: the real-data run's measurement folder, kept with its run record outside the
 repository (host GP099-29C, 2026-09-28, Starfinder `7d08eee` with the
-uncommitted W-238 changes). Its manifest records the plan, every input's path,
+run's uncommitted changes). Its manifest records the plan, every input's path,
 size and modification time, the tool's SHA-256, the environment and the
 `/usr/bin/time -v` record. The data root was read only; the inputs' sizes and
 modification times were unchanged after the run.
+
+% runs/W-238/20260928T194004Z-1da19f6c/measurement/, W-238
 
 For each dataset, the FOV directory names in `round1` are sorted as strings and
 the FOVs at indices round(i·(n − 1)/3), i = 0…3, are chosen; i = 2 is held out.
@@ -273,7 +277,7 @@ in cyan. Inspection on 2026-09-28:
    is out of scope.
 2. **The uint16 and raw-acquisition scale is unverified.** No uint16 or raw
    input was measured. Multiplying uint8 targets by a fixed factor (such as the
-   16× used by the §2.5 presets) is an assumption, not a measurement.
+   16× used by the preprocessing presets) is an assumption, not a measurement.
 3. **The detection selection is biased towards bright puncta.** The adaptive
    selection keeps maxima at or above 0.2 × the volume maximum and the lenient
    selection at or above 10 grey levels, so both describe the brighter part of
@@ -281,15 +285,19 @@ in cyan. Inspection on 2026-09-28:
    distributions are truncated. In dense regions the annulus also contains
    neighbouring puncta, which raises the clutter σ.
 4. **Development targets, not D04 calibration.** The FOVs are unqualified (no
-   independent split exists, W-92), one FOV per dataset is held out only
-   informally, and the targets serve W-241 and W-239. Benchmark calibration and
-   D04 remain with W-93 Stage 2.
+   independent split exists), one FOV per dataset is held out only
+   informally, and the targets serve the calibrated preset and the calibrated preprocessing rerun.
+   Benchmark calibration and D04 remain with the register's later calibration work.
+
+% §2.5 presets; no independent split exists, W-92; the targets serve W-241 and W-239; D04 remain with W-93 Stage 2
 
 Two further caveats apply. Depth quarters follow the stored z order; which end
 is the sample surface is not verified. The first and last planes have only
 one neighbouring plane in the 3×5×5 footprint, so more maxima pass there.
 
-## Calibrated preset (W-241)
+## Calibrated preset
+
+% Calibrated preset (W-241)
 
 `calibrated_scene_preset` (`calibrated-development-v1`) sets its appearance from
 the development targets above. The comparison range for each checked statistic
@@ -314,18 +322,22 @@ intensities below are uint8 grey levels; uint16 multiplies every intensity by 16
 | Background / amplitude p50 up to 0.095 | Offsets 0–1.5 per channel, gradient up to 3, three regions of 2–3, 8 texture blobs of 5, tissue weights 1–0.25 by channel; crosstalk 5 %; weakening 5 % per round to 0.6 | Each factor alone keeps the checked statistics in range; the strengths were halved from a first trial in which the stacked conditions fell far below the range, because a real image carries all effects at once. |
 
 Widths (axial 1.5, lateral 1.3 voxels, log SD 0.1), elongation and angle keep
-the benchmark-preset engineering choices; W-238 did not measure puncta widths.
+the benchmark-preset engineering choices; the real-data run did not measure puncta widths.
+
+% W-238
 
 ### Side-by-side result
 
-The run record `runs/W-241/20260928T203749Z-1d2c4ade/side_by_side/result/` (outside the
+The calibrated preset's side-by-side run (its record is kept outside the
 repository)
 measures every condition in uint8 with this tool, seeds 0, 1 and 2 pooled as one
-dataset, and lists the development range, the W-238 min–max range and the
+dataset, and lists the development range, the real-data run's min–max range and the
 held-out FOVs' range for every statistic. 87 of the 91 checked values (seven
 statistics × 13 conditions) fall in the p10–p90 range; clean and the eleven
 other conditions except `combined` and `combined_geometry` fall in range for
 every checked statistic.
+
+% runs/W-241/20260928T203749Z-1d2c4ade/side_by_side/result/, W-238
 
 | Condition | Peak p50 | Amplitude p50 | SNR clutter p50 | SNR pixel p50 | Clutter / pixel | Gain spread | Round trend |
 | --- | --- | --- | --- | --- | --- | --- | --- |

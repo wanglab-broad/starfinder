@@ -29,7 +29,7 @@ uv sync --extra registration-elastix --extra local-registration
 ```
 
 The first elastix call of a process loads the ITK modules, which takes about
-10 to 15 s and adds roughly 0.5 to 0.8 GB of resident memory (W-244). elastix
+10 to 15 s and adds roughly 0.5 to 0.8 GB of resident memory (measured in the backend comparison of SimpleITK and elastix). elastix
 follows the ITK global thread count (`itk.MultiThreaderBase` or
 `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS`); repeated calls at one thread are
 bit-identical, while one-thread and multi-thread results differ. Each call logs
@@ -38,6 +38,8 @@ final metric values and stop conditions are read from that log into
 `RegistrationDiagnostics`, together with the backend versions, the effective
 elastix parameter map and the spacing source. elastix never resamples the
 images (`WriteResultImage=false`); the transform is applied by Starfinder.
+
+% W-244
 
 Direct and FOV calls have no automatic fallback. Invalid configurations raise
 `InvalidRegistrationConfigError` before backend execution; insufficient landmarks

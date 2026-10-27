@@ -16,7 +16,7 @@ An em dash in the default column means the schema defines no default.
 | `starfinder_path` | string | Yes | —; repository root used to locate Python/MATLAB code |
 | `root_input_path`, `root_output_path` | strings | Yes | —; roots before dataset/sample or dataset/output components |
 | `fiji_path` | string | No | —; read at parse time only by the legacy BigStitcher rule `run_BigStitcher_macro` (`stitching.smk`, included for the MATLAB backend without a `stitching` block); the Python BigStitcher engine rule reads it when it runs |
-| `envs_path` | string | No | —; no rule reads it: `stardist_segmentation` runs in the environment that runs Snakemake (see [segmentation and assignment](#segmentation-and-assignment)); kept in the schema until §2.13 |
+| `envs_path` | string | No | —; no rule reads it: `stardist_segmentation` runs in the environment that runs Snakemake (see [segmentation and assignment](#segmentation-and-assignment)); kept in the schema until workflow orchestration |
 | `dataset_id`, `sample_id`, `output_id` | strings | Yes | —; directory identifiers |
 | `fov_id_pattern` | string | MATLAB backend | —; MATLAB backend only (the Python backend refuses it, see [FOV membership](#fov-membership)): Python format string with `{i}`, e.g. `tile_{i}`, `Position{i:03}` |
 | `n_fovs` | integer >=1 | MATLAB backend | —; MATLAB backend only (refused by the Python backend): FOV indices start at 1 |
@@ -38,7 +38,7 @@ An em dash in the default column means the schema defines no default.
 | `seq_channel_order` | array of strings, or of objects with `wavelength`, `channel`, `name` | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]`, or MATLAB's `channel_order_dict` entries; see [channels](#channels) |
 | `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; supply `[]` when unused; accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
 | `backend` | `python` or `matlab` | No | `matlab` |
-| `segmentation`, `assignment` | objects | No | —; Python only (`backend: python`): a segmentation plan and an assign call for the §2.13 rule, see [segmentation and assignment](#segmentation-and-assignment) |
+| `segmentation`, `assignment` | objects | No | —; Python only (`backend: python`): a segmentation plan and an assign call for the workflow orchestration's segmentation rule, see [segmentation and assignment](#segmentation-and-assignment) |
 | `report` | object | No | —; Python only (`backend: python`): the `ReportConfig` of the processing report, and with it the rules `report_sample` and `report_dataset`, see [processing report](#processing-report) |
 | `readout_mode` | `multiplexed` or `direct` | No | `multiplexed`; Python only (`Dataset.readout_mode`), and `direct` only with `backend: python`; see [readout mode](#readout-mode) |
 | `matlab_launcher` | `path` or `broad` | No | `path`; how MATLAB rules start MATLAB, see [MATLAB launcher](#matlab-launcher) |
@@ -50,6 +50,8 @@ An em dash in the default column means the schema defines no default.
 | `subset_random` | boolean | No | `false`, applied by `common.smk`'s MATLAB branch (the schema holds no default); MATLAB backend only |
 | `n_random_tests` | integer >=1 | Conditional | —; MATLAB backend only; see caveat below |
 | `rules` | object of recognized rule names | Yes | —; each provided section requires boolean `run` |
+
+% §2.13
 
 ### Reference file and image layout
 
@@ -332,9 +334,11 @@ into `BarcodeLayout((Segment("A", n - s), Segment("B", s)), ("A", "B"))`, or wit
 `BarcodeLayout((Segment("A", s), Segment("B", n - s)), ("B", "A"))`; both equal the
 zero-based `EncodingConfig(split_index=s - 1)`, which `WorkflowConfig.split_index`
 holds. For aging (`s = 5`, 11 bases, 9 rounds) segment A has 6 bases (5 colors,
-rounds 1–5) and segment B 5 bases (4 colors, rounds 6–9). Before W-292 the adapter
+rounds 1–5) and segment B 5 bases (4 colors, rounds 6–9). Before 2026-10-02 the adapter
 passed `s` unchanged as the zero-based index, so `[5]` dropped the wrong color; a
 configuration that gave the Python value (4) must give the MATLAB value (5).
+
+% W-292
 
 `reads_filtration.n_barcode_segments` must equal the number of segments (2 with a
 split, 1 without) and `reads_filtration.split_index` must equal
@@ -497,7 +501,7 @@ The `spot_finding` block of the five Python rules accepts the Python-only key
 `method`, a `SPOT_FINDING_METHODS` method that the pipeline accepts
 (`local_maxima`, the default, `starfish_log`, `spotiflow` or `piscis`), and every
 other key is an init field of that method's config (YAML lists become tuples), for
-example `exclude_border`, `measure_peak_intensity` or the opt-in W-218 merge
+example `exclude_border`, `measure_peak_intensity` or the opt-in duplicate merge
 `merge_radius_zyx: [2, 2, 2]`. A config field without a default must be given:
 `starfish_log` requires `min_sigma`, `max_sigma`, `num_sigma` and `threshold`, and
 `spotiflow` and `piscis` require `model`, a pretrained model fetched beforehand with
@@ -514,6 +518,8 @@ rounds is decoded only with `readout_mode: direct` ([readout mode](#readout-mode
 Python-only key `device` sets `ExecutionConfig.device`; `cpu` is the only value.
 The method-aware rules are in the
 [spot-finding contract](spot-finding-contract.md#workflow-configuration).
+
+% W-218
 
 ```yaml
 rsf_single_fov:
@@ -543,7 +549,7 @@ for `stardist_segmentation` and the `anndata` extra for `reads_assignment`; no r
 [downstream parameter blocks](#downstream-parameter-blocks) summarize them.
 
 Two Python-only top-level blocks (rejected unless `backend: python`) describe the same
-steps for the §2.13 rule that loads a FOV and runs `FOV.segment` and `FOV.assign_molecules`; the
+steps for the workflow orchestration's rule that loads a FOV and runs `FOV.segment` and `FOV.assign_molecules`; the
 legacy rules translate their own keys and raise when a block is present. In
 `segmentation`, `device` is `cpu` (default) or `cuda`, and each run has a `name`, a
 `target`, `inputs` (`InputChannel` fields; `prepare` names `composite_nuclei_amplicon` or
@@ -557,6 +563,8 @@ fields and the `FOV.assign_molecules` arguments (`cells`, `nuclei`, `name`, `pop
 `match_fraction` 0.5 and `outside_tolerance` 0.1, a provisional value). Default-tier
 tests keep the schema's method list equal to the registry and the assignment keys equal
 to those fields and arguments.
+
+% §2.13
 
 ```yaml
 segmentation:
@@ -636,7 +644,7 @@ sample-level rules for a configuration that has them. The specification is the
   grid `voxel_size_xy` and `voxel_size_z` declare, as `export_sample` reads it) and reads no
   `tile_config_{sample}.csv`. With an `assignment` name it writes and declares the FOV's
   assignment folder `fovs/{fovID}/assignment/<assignment>/` alone, whose record holds the
-  counts: no `expr/{fovID}/raw.h5ad`, `reads_assignment.csv` or `log.txt` (W-568). With
+  counts: no `expr/{fovID}/raw.h5ad`, `reads_assignment.csv` or `log.txt` (since 2026-10-24). With
   `assignment: null` (molecules only) it writes the per-FOV `raw.h5ad` and
   `reads_assignment.csv` without the tile filter and without `global_*` columns, and
   `log.txt` and the figures beside them, as before. `create_sample_h5ad` and
@@ -652,7 +660,7 @@ sample-level rules for a configuration that has them. The specification is the
   still runs while its `run` flag is on, and can be turned off on that route. Its declared output
   is `export/<sample>/export.json`, which lists every other file of the folder, so a part
   that cannot run (an extra not installed) is recorded `not_run` and does not fail the
-  rule. **Previews** (opt-in, W-568). With an `assignment` name, `previews: true` turns on
+  rule. **Previews** (opt-in, since 2026-10-24). With an `assignment` name, `previews: true` turns on
   the two assignment figures, `assignment.png` (and `assignment_single_layer.png` for a
   ZYX label image), each kind with one writer and its own folder, declared as a directory
   output: `reads_assignment` draws each FOV's figures into `fovs/{fovID}/previews/`, and
@@ -693,8 +701,10 @@ sample-level rules for a configuration that has them. The specification is the
   with a learned model on `cuda` (`segmentation.device: cuda`) the rule must run on a GPU
   node (choice E1 of
   {doc}`sample-segmentation-contract`, whose stated cost this is; the GPU resource of the
-  rule belongs to §2.13 and is not set by this block). The whole fused projection is
+  rule belongs to workflow orchestration and is not set by this block). The whole fused projection is
   segmented in one call, so its size, set by `scale_yx`, must fit that device.
+
+% W-568, §2.13
 
 Default-tier tests keep the method list equal to `STITCHING_METHODS` plus `bigstitcher`
 and the `assembly` and `export` keys equal to those fields, and the methods of a
@@ -800,8 +810,10 @@ configuration without the block runs as before: no report rule and no report out
   `report/samples.csv`, its declared output, after every sample's `report_sample`.
 
 A default-tier test keeps the block's keys equal to the fields of `ReportConfig`,
-`MarkerGroup`, `ReportLimits` and `RuleLimit`. The example is W-383's markers of the lymph
+`MarkerGroup`, `ReportLimits` and `RuleLimit`. The example is the report inputs survey's markers of the lymph
 node sample, shortened; the other values are the defaults:
+
+% W-383
 
 ```yaml
 report:

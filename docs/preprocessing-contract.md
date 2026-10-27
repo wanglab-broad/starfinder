@@ -1,9 +1,11 @@
 # Preprocessing guide
 
-**Status: Accepted (W-227, 2026-09-27, at `0d13c26`).**
+% **Status: Accepted (W-227, 2026-09-27, at `0d13c26`).**
 
-This page is the maintained guide to the preprocessing stage (§2.5) and its contract:
+This page is the maintained guide to the preprocessing stage and its contract:
 `starfinder.preprocessing` and `FOV.run` implement it ({doc}`api/preprocessing`).
+
+% §2.5
 
 * **What preprocessing does.** It corrects each round's image before registration,
   with intensity normalization and background removal, as one linear sequence of
@@ -29,8 +31,10 @@ This page is the maintained guide to the preprocessing stage (§2.5) and its con
 The steps follow the shared {doc}`method-registry` design. Beneath this guide,
 {doc}`preprocessing-algorithms` specifies the methods, the shared numerical policy,
 sample-level statistics and the evaluation design ("Evaluation design for task groups 5
-and 6" and its calibrated-rerun amendment, W-243). {doc}`preprocessing-baseline` is
-history: the behavior at `21eda7f`, before §2.5, kept with its golden test.
+and 6" and its calibrated-rerun amendment, accepted on 2026-09-28). {doc}`preprocessing-baseline` is
+history: the behavior at `21eda7f`, before the step and recipe work, kept with its golden test.
+
+% W-243, §2.5
 
 ## Step interface
 
@@ -146,7 +150,7 @@ class PreprocessingRecipe:
 * **Registration source.** `registration_source` names the snapshot from which
   registration signals are built, for both the reference round and each moving
   round. By default it is the detection image. The
-  §2.6 signal modes (maximum, sum or selected channel) apply to this snapshot.
+  registration signal modes (maximum, sum or selected channel) apply to this snapshot.
 * **Post-registration steps.** `post_registration` may contain only
   `ReconstructionConfig`, the legacy reconstruction-after-registration path for
   resident subtiles. Any statistic a post-registration step computes is
@@ -156,6 +160,8 @@ class PreprocessingRecipe:
   or DAG: snapshots are taps on one linear sequence.
 * **Supplied statistics.** A recipe whose steps include the same step name twice
   with `fit="supplied"` is rejected at validation.
+
+% §2.6
 
 `PipelineConfig` has `preprocessing: PreprocessingRecipe | None`, which replaced the
 slots `normalization`, `histogram`, `histogram_reference_channel`,
@@ -181,7 +187,9 @@ views, both with maximum projection by default:
 
 The views and the alignment of the Python reference merged image with MATLAB
 are specified in {doc}`workflows`, "Projection views and the reference merged
-image" (W-235).
+image" (an amendment of 2026-09-27).
+
+% W-235
 
 ## Registration and snapshots
 
@@ -255,13 +263,15 @@ are in {doc}`preprocessing-algorithms`.
 
 ### Legacy mapping
 
-The Python backend accepts the explicit step list only (W-569): each legacy key
+The Python backend accepts the explicit step list only (since 2026-10-25): each legacy key
 below raises `ValueError` under `backend: python`, naming the step that replaces
 it, and the schema refuses it. The mapping is kept for MATLAB-backend
 configurations, which the adapters of the shared rules read
 (`dataset/_legacy_config.py`), and it is the native form a migrated
 configuration writes out ({doc}`migration`, "One Python configuration
 dialect"); both reproduce recipe 1 and its golden outputs exactly:
+
+% W-569
 
 | Legacy key | Recipe step |
 | --- | --- |
@@ -312,7 +322,9 @@ supports a change; a Python configuration states it as the step list above.
 * No metaclass-based logging; provenance is written by the recipe runner.
 * No projection inside the recipe or pipeline.
 * No change to MATLAB behavior or shared MATLAB-facing keys.
-* No registration or detection registries; §2.6 and §2.7 own those.
+* No registration or detection registries; the registration and spot-finding stages own those.
+
+% §2.6, §2.7
 
 ```{toctree}
 :hidden:

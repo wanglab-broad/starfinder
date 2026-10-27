@@ -4,7 +4,7 @@ The runners that take the ``snakemake`` object of a rule script, the rule input 
 rule files build their inputs from, and the writers of the MATLAB-shaped per-FOV files. They were
 moved unchanged out of ``starfinder.dataset.workflow``, which keeps the configuration translation
 they call (WorkflowConfig, from_workflow_config and the block translators). Only ``workflow/``
-and the tests import this module (docs/workflows.md, "What §2.13 replaces").
+and the tests import this module (docs/workflows.md, "What workflow orchestration replaces").
 """
 import json
 from dataclasses import asdict, replace

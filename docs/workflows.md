@@ -336,11 +336,15 @@ Running the workflow on the Broad UGER cluster with `profile/broad-uger/`, its
 environment, commands, settings, submission and logs, is described on the profile page
 {doc}`workflow/broad-uger`.
 
-## What §2.13 replaces
+## What workflow orchestration replaces
 
-§2.13 (workflow orchestration) replaces the code that talks to Snakemake and keeps
-what that code calls. This section records today's state as input for §2.13; it
-proposes no design.
+% What §2.13 replaces
+
+Workflow orchestration, a later part of the package's development, replaces the code that
+talks to Snakemake and keeps what that code calls. This section records today's state as
+input for that work; it proposes no design.
+
+% §2.13
 
 **Replaced.** The private module `starfinder._snakemake`, which only `workflow/` and
 the tests import, holds:
@@ -353,17 +357,21 @@ the tests import, holds:
   plan the files the engine schedules;
 - the writers of the MATLAB-shaped files of `reads_assignment` and `stitch_sample`
   (`raw.h5ad`, `reads_assignment.csv`, `log.txt`, the assignment figures and
-  `tile_config_<sample>.csv`). Since W-568 the per-FOV files are written without an
+  `tile_config_<sample>.csv`). Since 2026-10-24 the per-FOV files are written without an
   `assembly` block or with molecules only, and the tile configuration without the block;
   the route of a saved assignment writes the assignment folder alone, and the figures
   only with `assembly.previews`.
 
-§2.13 also replaces the input enumeration spread over the rule files (`SAMPLE_TO_FOV`
+% W-568
+
+Workflow orchestration also replaces the input enumeration spread over the rule files (`SAMPLE_TO_FOV`
 and the `get_*_input` functions, from `INPUT/fovs.csv` for the Python backend, read by
 `_membership`, and `documents/sample-annotation.csv` for the MATLAB backend) and the
 start-up validation in `workflow/rules/common.smk`: the backend and workflow-mode
 checks and the translation of each enabled Python rule and block when Snakemake
 parses the rule files.
+
+% §2.13
 
 **Kept.** The seam is `starfinder.dataset.workflow`: `WorkflowConfig`,
 `from_workflow_config`, the block translators (such as `_stitching_block`,
@@ -371,7 +379,9 @@ parses the rule files.
 ([Configuration reference](workflow-configuration.md)). Behind it are the single-FOV,
 stage and sample operations they configure: `FOV.run` and the `FOV` stage methods,
 `Dataset.stitch`, `Dataset.export`, `Dataset.report` and `Dataset.compare_samples`.
-The runner and planner signatures do not change before §2.13.
+The runner and planner signatures do not change before workflow orchestration.
+
+% §2.13
 
 ### Logs, time and memory
 
@@ -393,8 +403,8 @@ The runner and planner signatures do not change before §2.13.
   succeeded; `_run_workflow` then writes the rule's other declared outputs, and each
   writer adds its file to `outputs` (path relative to the FOV folder, SHA-256). A
   declared output missing from `outputs` was not written. Version 2 of the record
-  (since W-565) provides what verified resume and job completion need; that logic,
-  with scheduling, invalidation and retry, is left to §2.13.
+  (since 2026-10-24) provides what verified resume and job completion need; that logic,
+  with scheduling, invalidation and retry, is left to workflow orchestration.
 - At the sample level, the fusion, labels, segmentation and SpatialData parts of
   `Dataset.export`, and `Dataset.report`, record `wall_s`, `cpu_s` and
   `peak_rss_kib` (the process's peak RSS) in `export.json` and `report.json`; the
@@ -403,7 +413,9 @@ The runner and planner signatures do not change before §2.13.
 - No handler is attached to the `"starfinder"` logger, so its INFO lines (each
   step's start and its seconds) are not printed.
 - The Python backend writes no processing log beside `run.json`; human log files
-  are left to §2.13. The MATLAB backend writes its console logs under `log/`.
+  are left to workflow orchestration. The MATLAB backend writes its console logs under `log/`.
+
+% W-565, §2.13
 
 The two work together in two places today. Each rule script calls a runner of
 `starfinder._snakemake` with its `snakemake` object, from which the runner reads the

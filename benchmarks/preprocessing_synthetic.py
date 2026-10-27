@@ -13,7 +13,7 @@ in noise mode over the threshold grid, extracted, decoded and filtered with
 their defaults, and matched to the truth with starfinder.evaluation.match_points.
 
 ``--design calibrated`` runs the calibrated rerun instead (W-239; *Evaluation
-design amendment for the calibrated rerun (Accepted, W-243)* of the same page):
+design amendment for the calibrated rerun* of the same page):
 calibrated_scene_preset scenes with the added conditions, both threshold modes,
 the precondition check, the revised low-benefit rule, histogram matching's harm
 test and per-condition image statistics. The default design is W-233's, unchanged.

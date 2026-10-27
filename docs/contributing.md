@@ -317,13 +317,17 @@ Rules for a new or changed test:
    heading text, so a heading may change while the label and the table's row
    shape stay. The files of `docs/examples/` are configurations and scripts
    that tests execute and stay inputs of the checks that run them
-   (`scripts/learned_closure.py` lists what a check's tests read; W-602).
+   (`scripts/learned_closure.py` lists what a check's tests read).
 7. Reviewers check the markers of new and changed tests.
+
+% W-602
 
 #### Expected values and tolerances
 
-Each expectation a test states belongs to one of three classes (W-526, TM-20,
-TM-22 and TM-27; Jiahao, 2026-10-25):
+Each expectation a test states belongs to one of three classes (Jiahao's
+decision of 2026-10-25):
+
+% W-526, TM-20, TM-22, TM-27
 
 1. **Contract identity: exact.** Bit equality, or a digest of the computed
    values, stays where a contract requires identity: file, record, export and
