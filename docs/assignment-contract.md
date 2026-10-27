@@ -1,20 +1,46 @@
-# Assignment contract: molecules to cells, correspondence, compartments and counts
+# Assignment guide: molecules to cells, correspondence, compartments and counts
 
 Status: Accepted (W-309, 2026-10-05, at 3550723)
 
-This page proposes the §2.9 assignment contract: an assign entry separate from
-`FOV.run`, the rule that turns a molecule position into a voxel, direct assignment with
-an explicit status for every molecule, one recorded label expansion, nucleus–cell
-correspondence, compartments, the exclusion of cells without a nucleus, the cell table,
-the count accounting, persistence, the boundary with §2.10 and the workflow translation
-of the legacy keys. It builds on the label contract of {doc}`segmentation-contract`
-("Label image", "What assign receives from segment") and does not redefine it: the label
-image, its dtype, grid, target, geometry, namespace, record and saved files are as
-specified there. The current behavior is recorded in {doc}`assignment-baseline`; the
-numerical rules, resources and the validation design for the whole of §2.9 are in
-{doc}`assignment-algorithms`. The contract is implemented by `starfinder.assignment` and
-`FOV.assign_molecules` ({doc}`api/assignment`), with the checks listed in
-{doc}`assignment-algorithms` ("Implemented checks (W-318)"); as decided, nothing is renamed.
+This page is the maintained guide to the assignment stage (§2.9) and its contract. It
+builds on the label contract of {doc}`segmentation-contract` ("Label image", "What assign
+receives from segment") and does not redefine it: the label image, its dtype, grid,
+target, geometry, namespace, record and saved files are as specified there.
+
+* **What assignment does.** It places each molecule of one FOV in the cell territory that
+  holds its sampled voxel, with exactly one status per molecule and none dropped; with
+  nuclei, it relates nuclei to cells, gives nuclear and cytoplasmic counts only where that
+  correspondence allows, and excludes cells without a nucleus by default ([Terms](#terms),
+  [Coordinate sampling](#coordinate-sampling),
+  [Direct assignment and statuses](#direct-assignment-and-statuses),
+  [Label expansion](#label-expansion), [Compartments](#compartments),
+  [Exclusion of cells without a nucleus](#exclusion-of-cells-without-a-nucleus)).
+* **The entry and its configs.** `assign_molecules` takes a `MoleculeTable`
+  (`molecule_table`, `load_molecules` or `import_legacy_molecules_csv`), a cell
+  `SegmentationResult`, the molecule run's `ReferenceGrid`, optional nuclei and an
+  `AssignmentConfig` (with `CorrespondenceConfig` and an optional `ExpandLabelsConfig`);
+  `FOV.assign_molecules` is the third of D1's three calls per FOV, after `FOV.run` and
+  `FOV.segment` ([Names](#names), [The assign entry](#the-assign-entry),
+  [Inputs](#inputs), [Checks the entry applies](#checks-the-entry-applies),
+  [The grid rule](#the-grid-rule), [Coordination per FOV](#coordination-per-fov)).
+* **What it produces.** An `AssignmentResult` with the molecule, cell, count and nucleus
+  tables, the original and expanded territories and the run record, kept in
+  `FOV.assignment_results`; with checkpoints, the tables, `assignment.json` and the label
+  images not saved under their run, in `fovs/<fov_id>/assignment/<name>/`, which
+  `FOV.load_assignment` reads back ([Result](#result), [Run record](#run-record),
+  [Cell table](#cell-table), [Count accounting](#count-accounting),
+  [Persistence](#persistence), [Diagnostics](#diagnostics)).
+* **Where the configuration goes.** The `AssignmentConfig` passed to
+  `FOV.assign_molecules` (`PipelineConfig` has no assignment field, D1); in the workflow,
+  the Python-only `assignment` block or the translated `rules.reads_assignment.parameters`
+  ([Workflow configuration](#workflow-configuration)).
+
+Beneath this guide, {doc}`assignment-algorithms` gives the numerical rules and their
+resources, and the engineering validation design for the whole of §2.9 with its
+implemented checks; {doc}`assignment-baseline` is history (`6b384cd`, before §2.9). The
+contract is implemented by `starfinder.assignment` and `FOV.assign_molecules`
+({doc}`api/assignment`), with the checks listed in {doc}`assignment-algorithms`
+("Implemented checks (W-318)"); as decided, nothing is renamed.
 
 Assignment has no model. Its behavior is fully determined by the label images, the
 molecule table and the config, so every rule on this page can be pinned by hand-built
@@ -100,7 +126,7 @@ coordinates, overlap ownership and cross-FOV matching are §2.10's.
 
 | Option | Names | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
-| **N1. A `starfinder.assignment` module (recommended)** | Module `starfinder.assignment`; function `assign_molecules`; result `AssignmentResult`; config `AssignmentConfig` with `CorrespondenceConfig`; input `MoleculeTable` built by `molecule_table`; coordination `FOV.assign_molecules(config, *, cells, nuclei, …)`, `FOV.assignment_results`, `FOV.load_assignment(name)`; status vocabularies `ASSIGNMENT_STATUSES`, `CELL_STATUSES`. | None: the names are new. `test_assignment_golden.py` keeps every digest; its named edits ("Tests the implementation changes") add package calls beside the frozen helper. | None from the names: the files keep the names of "Persistence". `docs/api/` gains an `assignment.rst` page whose autosummary list holds the exports of `__all__`, which `docs/check_reference.py` requires. |
+| **N1. A `starfinder.assignment` module (recommended)** | Module `starfinder.assignment`; function `assign_molecules`; result `AssignmentResult`; config `AssignmentConfig` with `CorrespondenceConfig`; input `MoleculeTable` built by `molecule_table`; coordination `FOV.assign_molecules(config, *, cells, nuclei, …)`, `FOV.assignment_results`, `FOV.load_assignment(name)`; status vocabularies `ASSIGNMENT_STATUSES`, `CELL_STATUSES`. | None: the names are new. `test_assignment_golden.py` keeps every digest; its named edits ({doc}`assignment-algorithms`, "Golden test") add package calls beside the frozen helper. | None from the names: the files keep the names of "Persistence". `docs/api/` gains an `assignment.rst` page whose autosummary list holds the exports of `__all__`, which `docs/check_reference.py` requires. |
 | N2. Inside `starfinder.segmentation` | `starfinder.segmentation.assign` returning `CellTable`; `FOV.assign_molecules`. | None. | The same files. One module would hold the label contract and the counts, which D7 split, and `assign` sits next to §2.8's `starfinder.readout.decode_direct` (direct readout), a different meaning of "assign". |
 | N3. A `starfinder.cells` module | `count_molecules` returning `CellCounts`; `FOV.count_cells`. | None. | The same files. The D1 call is named "assign"; a different verb in the API breaks the three-call vocabulary of the notebook. |
 
@@ -942,46 +968,6 @@ alone: no `raw.h5ad`, `reads_assignment.csv` or `log.txt` (the record holds the 
 and the two figures only with `assembly.previews: true`, in `fovs/{fovID}/previews/`
 ({doc}`workflow-configuration`, "`assembly`").
 
-## Tests the implementation changes
-
-* `test/test_assignment_golden.py`: every pinned digest stays. `legacy_assignment` stays
-  as the frozen legacy reference with its cited lines, and its legacy-behavior tests stay
-  (the empty branch for a FOV whose molecules miss every cell, the far-edge read, the two
-  `IndexError` cases, the two expansions). Named edits, all additions: tests that build a
-  `MoleculeTable` from the golden CSV without the gene-`Z` molecule (unknown genes now
-  raise), run `assign_molecules` on the fixture's uncalibrated grid with
-  `ExpandLabelsConfig(distance=4, unit="pixel", mode="planar")` or no expansion, and assert that the `cell_id` of every
-  molecule equals `SEG_LABELS` (0 as null), that the whole-cell matrix equals the pinned
-  counts (the gene-`Z` molecule was never counted), and that the pinned `volume` and
-  `fov_*` columns equal `size_voxels` and the truncated `centroid_*` without expansion, and
-  `expanded_size_voxels` and the truncated `expanded_centroid_*` with it (the legacy
-  metadata is computed after the expansion); and tests of the new behavior on the same
-  fixture (cells kept when no molecule is assigned, `outside_grid` for one-based 0 and
-  beyond the grid, float coordinates accepted). When `reads_assignment.py` becomes an
-  adapter call, `test_the_helper_follows_the_script` is removed, because the cited lines
-  leave the script; the helper and its pins stay.
-* New tests: each check of the entry with its error, the sampling rule at the bounds,
-  the statuses and the count identities, correspondence and compartments on the
-  hand-built fixtures of the validation design, the exclusion, the persistence round
-  trip, `molecule_table` against `export_spots`, and the workflow key.
-* `test_segmentation_golden.py`, `test_checkpoints.py`, `test_io.py`, `test_fov.py`,
-  `test_e2e.py`, `test_coordination_contract.py`, `test_workflow_scripts.py`, the
-  `test_readout_*` modules and every other existing test pass unchanged.
-* The subsystem marker `segmentation` proposed by {doc}`segmentation-contract` covers
-  assignment tests too; the golden test keeps `workflow` and gains it.
-
-## `docs/migration.md` entries
-
-The implementation adds: the `starfinder.assignment` module and its names; the
-`assignment` YAML block; and these intentional changes of the legacy rule's outputs:
-cells are kept when no molecule lands in them; float goodSpots coordinates are accepted;
-molecules outside the grid are kept as `outside_grid` instead of wrapping or raising;
-genes outside the codebook raise; a label file expanded by `stardist_segmentation`
-(`expand_labels: true` there) raises, with the distance moved to
-`reads_assignment.parameters.dilation_distance`; the new columns of `raw.h5ad` and
-`reads_assignment.csv`. The notebook example of the three calls per FOV
-that D1 asks for is added with them.
-
 ## Exclusions
 
 No segmentation and no change to the label contract (W-307); no stitching, global
@@ -992,6 +978,6 @@ new exporter (§2.4's are reused); no real data and no accuracy claim (E04, W-12
 ```{toctree}
 :hidden:
 
-Assignment algorithms <assignment-algorithms>
-Assignment baseline <assignment-baseline>
+Assignment algorithms and validation <assignment-algorithms>
+Assignment baseline (history) <assignment-baseline>
 ```

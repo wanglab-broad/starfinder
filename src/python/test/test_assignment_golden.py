@@ -32,8 +32,8 @@ see docs/assignment-baseline.md.
 The digests were produced with the locked project environment (NumPy 2.2.6,
 scikit-image 0.26.0, pandas 3.0.0) and are bit-identical over repeated single-thread
 runs. The §2.9 work may replace the body of ``legacy_assignment`` with calls to the
-assignment entry; every pinned digest stays, except where docs/assignment-contract.md
-names an edit.
+assignment entry; every pinned digest stays, except where docs/assignment-algorithms.md
+("Golden test") names an edit.
 """
 import hashlib
 import json
@@ -260,7 +260,7 @@ def test_fixture(labels):
     assert digest(labels) == LABELS_DIGEST
 
 
-# --- The package calls of §2.9 (docs/assignment-contract.md, "Tests the implementation changes") ----
+# --- The package calls of §2.9 (docs/assignment-algorithms.md, "Golden test") -----------------------
 # The gene-Z molecule is left out: genes outside the gene list now raise, and it was never counted.
 # The fixture's grid is uncalibrated, so the legacy expansion is ExpandLabelsConfig(4, "pixel", "planar").
 

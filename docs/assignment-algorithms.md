@@ -7,8 +7,8 @@ correspondence, compartment partition and count accounting), each with its param
 units, defaults, failure behavior and resource estimate. It then gives the task-group-6
 engineering validation design for the whole of §2.9, segmentation and assignment, and the
 plan for the bounded real examples. The entry, records and files are in
-{doc}`assignment-contract`; the current behavior is in {doc}`assignment-baseline`; the
-segmentation methods and label functions are specified in {doc}`segmentation-algorithms`.
+{doc}`assignment-contract`; the behavior before §2.9 is history, in
+{doc}`assignment-baseline`; the segmentation methods and label functions are specified in {doc}`segmentation-algorithms`.
 The rules are implemented in `starfinder.assignment` ({doc}`api/assignment`) and the
 validation design's checks in the tests that "Implemented checks (W-318)" lists, and
 nothing here ranks a method, sets a default model or makes an accuracy claim.
@@ -214,6 +214,8 @@ Rules:
   implementation that cannot meet one goes to Jiahao.
 * Every test runs on CPU with one thread in the routine gate; L12 runs only in a batch whose
   guidance grants the GPU (D6).
+* Each run records wall time and peak RSS with `/usr/bin/time -v` against the 4 GiB stop
+  target.
 
 ### Fixtures
 
@@ -279,12 +281,26 @@ L1–L9, L13, A1–A17, A19 and A20 run in the default tier, and A18 there excep
 Nothing here measures segmentation quality: a hand-built fixture shows that a rule is
 implemented as written, not that a method finds cells.
 
-### Resource plan
+### Golden test
 
-Every default-tier fixture is at most 32×64×64 voxels and every check takes well under a
-second (the golden tests take 0.2–0.3 s each); the learned checks take what W-306 measured
-for its parity inputs on CPU (a few seconds per call after the model load). Each run
-records wall time and peak RSS with `/usr/bin/time -v` against the 4 GiB stop target.
+`test_assignment_golden.py` pins the legacy rule on `assign_golden`
+({doc}`assignment-baseline`, "Golden test") and checks the package against those pins (rows
+A2 and A3):
+
+* `test/test_assignment_golden.py`: every pinned digest stays. `legacy_assignment` stays
+  as the frozen legacy reference of `reads_assignment.py` at `6b384cd`, with its cited
+  lines; the tests that ran only that reference were removed at W-535, and the pins no
+  test read were deleted at W-574. Named edits, all additions: tests that build a
+  `MoleculeTable` from the golden CSV without the gene-`Z` molecule (unknown genes now
+  raise), run `assign_molecules` on the fixture's uncalibrated grid with
+  `ExpandLabelsConfig(distance=4, unit="pixel", mode="planar")` or no expansion, and assert that the `cell_id` of every
+  molecule equals `SEG_LABELS` (0 as null), that the whole-cell matrix equals the pinned
+  counts (the gene-`Z` molecule was never counted), and that the pinned `volume` and
+  `fov_*` columns equal `size_voxels` and the truncated `centroid_*` without expansion, and
+  `expanded_size_voxels` and the truncated `expanded_centroid_*` with it (the legacy
+  metadata is computed after the expansion); and tests of the new behavior on the same
+  fixture (cells kept when no molecule is assigned, `outside_grid` for one-based 0 and
+  beyond the grid, float coordinates accepted).
 
 ### Implemented checks (W-318)
 

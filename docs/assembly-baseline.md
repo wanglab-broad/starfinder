@@ -123,8 +123,8 @@ package:
 | Diagnostics | 1506-1522 | `plot_assignment` draws the whole result; `log.txt` gives the assignment counts of the whole FOV, before the filter, and adds "{n} cells inside the tile box". |
 
 The adapter has no empty branch: a FOV whose molecules all miss the cells keeps its cells
-(with zero counts) and filters its molecules like any other FOV ({doc}`assignment-contract`,
-"`docs/migration.md` entries"). Otherwise its `raw.h5ad` and `reads_assignment.csv` carry
+(with zero counts) and filters its molecules like any other FOV ({doc}`migration`,
+"Segmentation and assignment workflow rules"). Otherwise its `raw.h5ad` and `reads_assignment.csv` carry
 the script's values (golden test, `test_the_adapter_writes_the_legacy_values`).
 
 ## The sample tables
