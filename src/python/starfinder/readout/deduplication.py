@@ -21,7 +21,9 @@ from .scoring import ReadScoringResult
 
 #: Columns deduplicate_reads appends to the read table, in order.
 DEDUPLICATION_COLUMNS = ("duplicate_group", "duplicate_of", "is_representative", "duplicate_reason")
-#: Signal compatibility rules; same_sequence is the W-278 rule with the proposed M/N exclusion.
+#: Signal compatibility rules; same_sequence is the rule the readout design study measured, with the
+#: proposed M/N exclusion.
+# W-278
 COMPATIBILITY = ("same_sequence",)
 MERGED, CONFLICTING = "same_sequence_within_distance", "conflicting_calls"
 

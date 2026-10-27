@@ -51,7 +51,9 @@ POINTS, SHAPES, LABELS = "molecules", "cell_centroids", "cell_labels"
 REGION, REGION_KEY, INSTANCE_KEY = SHAPES, "region", "instance_id"
 CELL_LINK = "cell_instance_id"
 SPATIALDATA_ATTRS = {"region": REGION, "region_key": REGION_KEY, "instance_key": INSTANCE_KEY}
-#: The §2.9 index columns of a molecule and their names in the points element.
+#: The index columns of a molecule in the sample assignment's molecule table and their names in the
+#: points element.
+# §2.9
 INDEX_RENAMES = {"z": "fov_index_z", "y": "fov_index_y", "x": "fov_index_x"}
 #: The sample coordinates that PointsModel turns into the coordinate columns.
 COORDINATE_RENAMES = {"sample_x": "x", "sample_y": "y", "sample_z": "z"}

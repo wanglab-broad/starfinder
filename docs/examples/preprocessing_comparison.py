@@ -1,10 +1,10 @@
-"""Reproduce one §2.5 recipe comparison on a tiny synthetic preset.
+"""Reproduce one preprocessing recipe comparison on a tiny synthetic preset.
 
 Scalar background subtraction is compared on its targeted `baseline`
 development condition in the two ways the evaluation uses: isolated (no
 preprocessing -> scalar background alone) and as an ablation of recipe 2
 (percentile normalization alone -> scalar background then percentile
-normalization). It reuses the W-233 evaluation harness
+normalization). It reuses the preprocessing evaluation harness
 (benchmarks/preprocessing_synthetic.py), so scenes, recipes, detection,
 decoding and matching are exactly those of the saved evaluation, at a tiny
 size: 10x32x32 voxels, 12 amplicons, uint8, one development seed and one
@@ -13,6 +13,7 @@ they are not evaluation results, and the 2-point threshold is provisional.
 
 From src/python: uv run python ../../docs/examples/preprocessing_comparison.py
 """
+# §2.5, W-233
 import importlib.util
 from pathlib import Path
 import tempfile

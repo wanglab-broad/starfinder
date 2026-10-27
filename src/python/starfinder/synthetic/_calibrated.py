@@ -24,7 +24,9 @@ _INTENSITY_SCALE = {"uint8": 1.0, "uint16": 16.0}
 _READOUT = ("weakening", "trend", "gain", "mixing")
 _BACKGROUND = ("baseline", "gradient", "regions", "texture")
 
-#: The §2.5 evaluation conditions mapped to the factors they add to the calibrated clean scene.
+#: The preprocessing evaluation conditions mapped to the factors they add to the calibrated clean
+#: scene.
+# §2.5
 CALIBRATED_CONDITIONS = {
     "clean": (),
     "background_only": _BACKGROUND,

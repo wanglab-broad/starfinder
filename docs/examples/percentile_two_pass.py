@@ -3,10 +3,12 @@
 Pass 1 runs the steps before percentile normalization (a default white
 top-hat) on each FOV, summarizes the histograms at the normalization step's
 input, merges them and writes the supplied-statistics file. Pass 2 applies the
-full recipe with fit="supplied". Snakemake wiring of the two passes is §2.13.
+full recipe with fit="supplied". The Snakemake workflow does not run the
+summary pass; this script runs both passes by hand.
 
 From src/python: uv run python ../../docs/examples/percentile_two_pass.py OUTPUT_DIR
 """
+# §2.13: Snakemake wiring of the two passes
 from pathlib import Path
 import sys
 

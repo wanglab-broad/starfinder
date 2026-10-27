@@ -36,8 +36,9 @@ class _Marker:
 NA = _Marker("NA")
 
 #: run.json step names written before a rename, mapped to the current name the report reads them as: a run
-#: recorded before W-557 names its decoding step after the FOV method of the time. Only the report's readers
-#: use this; steps.csv keeps the recorded name.
+#: recorded before the decoding step was renamed decode_reads names it after the FOV method of the time. Only the
+#: report's readers use this; steps.csv keeps the recorded name.
+# Before W-557
 RECORDED_STEP_NAMES = {"decode_barcodes": "decode_reads"}
 
 

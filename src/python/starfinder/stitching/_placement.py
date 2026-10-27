@@ -42,7 +42,8 @@ LINK_COLUMNS = ("fov_a", "fov_b", *(f"overlap_{a}{e}" for a in AXES for e in "01
 LINK_DTYPES = {c: "float64" for c in LINK_COLUMNS} | {"fov_a": "str", "fov_b": "str", "kept": "bool",
                                                      "reason": "str"}
 IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
-#: The spellings of the micrometre a grid may carry; §2.10 reads them as one unit.
+#: The spellings of the micrometre a grid may carry; the stitching stage reads them as one unit.
+# §2.10
 MICROMETRE = ("µm", "um", "micrometer")
 SUPPLIED_IMPLEMENTATION = "starfinder.stitching.placement_from_table"
 

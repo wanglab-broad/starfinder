@@ -35,7 +35,9 @@ from ._ownership import ownership_map
 
 ROUTE = "after_fusion"
 CONVERSION = "MT1"
-#: The §2.9 assignment columns of the sample molecule table, null on a molecule the sample assignment did not place.
+#: The sample assignment's columns of the sample molecule table, null on a molecule the sample assignment did not
+#: place.
+# §2.9
 ASSIGNED_COLUMNS = [c for c in MOLECULE_DTYPES_29 if c not in ("spot_namespace", "spot_id", "z", "y", "x",
                                                                 "gene_id")]
 #: The private attribute of an AssemblyResult of this route that holds the expanded territories and their grid's
