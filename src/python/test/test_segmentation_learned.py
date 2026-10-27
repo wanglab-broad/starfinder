@@ -2,7 +2,7 @@
 
 Rows of the engineering validation design in docs/assignment-algorithms.md, with the
 checks of docs/segmentation-contract.md ("Checks the stage wrapper applies", "Block-wise
-prediction", "Tests the implementation changes"):
+prediction") and docs/segmentation-algorithms.md ("Golden and parity tests"):
 
 * L10, the ``learned`` parity test: the W-306 parity outputs, copied from
   ``parity/parity_expected.npz`` of run W-306/20261004T194036Z-74e12949 into

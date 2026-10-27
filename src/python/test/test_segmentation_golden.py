@@ -31,7 +31,8 @@ scikit-image 0.26.0, SciPy 1.17.0, tifffile 2026.1.28) and are bit-identical ove
 repeated single-thread runs; see docs/segmentation-baseline.md. The §2.9 work may
 replace the body of ``legacy_stardist_steps``, ``composite`` and
 ``flamingo_enhancement`` with calls to the package functions; every pinned digest
-stays, except where docs/segmentation-contract.md names an edit. The one float64
+stays, except where docs/segmentation-algorithms.md ("Golden and parity tests") names an
+edit. The one float64
 pin, the shrunk DAPI image, is an explicit expected array since W-574
 (``expected_shrunk_image``, ``data/expected/test_segmentation_golden/``), compared
 with the float64 tolerance of docs/contributing.md; the uint8 images and the labels

@@ -6,7 +6,7 @@ This page specifies, for each §2.9 segmentation method and each reusable functi
 problem it addresses, its parameters with units and defaults, its failure behavior
 (including an image with no foreground) and its resource estimate. The registry,
 configs, label contract and records they plug into are in {doc}`segmentation-contract`;
-the current behavior is in {doc}`segmentation-baseline`. The methods and functions
+the behavior before §2.9 is history, in {doc}`segmentation-baseline`. The methods and functions
 specified here are implemented in `starfinder.segmentation` ({doc}`api/segmentation`),
 with the engineering checks of {doc}`assignment-algorithms` ("Implemented checks (W-318)"),
 and nothing here ranks the methods, sets a default model or makes an accuracy claim.
@@ -420,6 +420,34 @@ negative value, a shape different from `grid.shape_zyx` or a metadata mismatch r
 all-zero mask is a valid `empty` result. The W-305 culture references are big-endian
 (W-306 section 6), which the byte-order conversion handles. Resources (code-derived
 estimate): one copy of the file's array and its `uint32` conversion.
+
+## Golden and parity tests
+
+Two tests pin the input and label functions and the `stardist` method to the legacy
+outputs (rows L4, L6, L7 and L10 of {doc}`assignment-algorithms`), with these obligations:
+
+* `test/test_segmentation_golden.py`: every pinned digest stays (the float64 shrunk image is
+  an explicit expected array since W-574, compared with the float64 tolerance of
+  [contributing](contributing.md), "Expected values and tolerances", and equal to the digest
+  pinned before). Named edits: tests are
+  added that compute the composite and the Flamingo enhancement with
+  `composite_nuclei_amplicon` and `enhance_with_flamingo` and assert
+  `COMPOSITE_DIGESTS` and `FLAMINGO_DIGEST`; that `expand_labels(mode="planar",
+  unit="pixel", distance=4)` on the stand-in labels, cast to `uint16`, gives
+  `LABELS_3D[(False, True)]` and `LABELS_2D[(False, True)]`; and that `resample_labels` on
+  the even 16×32×32 → 16×64×64 case gives the values of `RESTORED_LABELS`.
+  `legacy_stardist_steps` stays as the frozen legacy reference of the script at `6b384cd`;
+  the tests that ran only that reference were removed at W-535.
+  `test_constant_and_zero_inputs` keeps its assertions and
+  `CONSTANT_DIGESTS` with the package functions in place of the scripts.
+* A new `learned` parity test copies `parity/parity_expected.npz` of the W-306 run into
+  `src/python/test/data/segmentation_parity.npz` (357 KB, sha256 `4a5df997…`) and runs the
+  `stardist` method on CPU with `scale` 1.0, `normalize_percentiles` (1, 99.8), the
+  script's tiling, the stored thresholds and, for the `expand1` arrays, planar expansion
+  by 4 pixels. It asserts exact equality, after a cast to `uint16`, with the six
+  `rescale0` arrays of P1, P2 and P3. `2D_versatile_fluo` comes from the weights cache,
+  `3D_spleen` from a path in an environment variable. The `rescale1` arrays are not
+  reproduced (the package has no legacy round trip) and stay records.
 
 ## Limitations
 

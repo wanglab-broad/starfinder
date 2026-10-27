@@ -230,7 +230,7 @@ Rules:
 | `seeded` | The `boxes` grid; the `boxes` nuclei as seeds (nucleus 91 among them, in the background); a stain of 200 inside the `boxes` cells and 20 elsewhere plus Gaussian noise of standard deviation 5 (seed 101); `SeededWatershedConfig(sigma_um=0.1)` (one pixel in Y and X), other fields at their defaults. | L9, L13 |
 | `imports` | TIFF files written in the test: big-endian `uint16` labels with the values 4, 9 and 30, `int32`, `float32` and `bool` masks, a YX file, a file with `starfinder_metadata` that differs from the grid, a file of another shape. | L3 |
 | `many_labels` | 32×64×64 `int32` labels whose first 70,000 voxels in C order hold the values 1 to 70,000 and the rest 0. | L2 |
-| `parity` | The W-306 parity outputs, copied as `test/data/segmentation_parity.npz` (357 KB, sha256 `4a5df997…`), {doc}`segmentation-contract` ("Tests the implementation changes"). | L10 |
+| `parity` | The W-306 parity outputs, copied as `test/data/segmentation_parity.npz` (357 KB, sha256 `4a5df997…`), {doc}`segmentation-algorithms` ("Golden and parity tests"). | L10 |
 
 ### Checks
 

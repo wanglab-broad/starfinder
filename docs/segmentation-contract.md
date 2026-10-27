@@ -1,16 +1,34 @@
-# Segmentation contract: label images, methods, inputs and environments
+# Segmentation guide: label images, methods, inputs and environments
 
 Status: Accepted (W-309, 2026-10-05, at 3550723)
 
-This page proposes the §2.9 segmentation contract: a segment entry separate from
-`FOV.run`, one label-image contract for every method and for imported masks, a
-segmentation registry on the shared mechanism of {doc}`method-registry`, the reusable
-input-preparation and label functions that are not methods, the model rules, the device
-and environment plan, and the workflow translation of the legacy keys. Its registry
-fields, lookup, dependency and provenance rules are those of {doc}`method-registry`,
-used unchanged. The current behavior is recorded in {doc}`segmentation-baseline`; the
-numerical behavior of each method and function is in {doc}`segmentation-algorithms`.
-The contract is implemented by `starfinder.segmentation` and `FOV.segment`
+This page is the maintained guide to the segmentation stage (§2.9) and its contract.
+
+* **What segmentation does.** It makes one ZYX `uint32` label image of nuclei or cells per
+  run, on the FOV's reference grid, with a registered method (StarDist, Cellpose or the
+  seeded watershed) or by importing a mask made elsewhere; input and label functions are
+  not methods ([Terms](#terms), [Label image](#label-image),
+  [External-mask import](#external-mask-import),
+  [Input preparation and label functions](#input-preparation-and-label-functions)).
+* **The entry and its configs.** `segment` runs a config of `SEGMENTATION_METHODS`
+  (`StarDistConfig`, `CellposeConfig`, `SeededWatershedConfig`) on a `SegmentationInput`;
+  `FOV.segment` runs a `SegmentationPlan` of named runs after `FOV.run` (and
+  `FOV.prepare_morphology` for morphology rounds); learned methods name a verified model
+  ([The segment entry](#the-segment-entry), [Method registry](#method-registry),
+  [Models](#models), [Device and environments](#device-and-environments)).
+* **What it produces.** A `SegmentationResult` per run in `FOV.segmentation_results`;
+  with checkpoints, `labels.tif`, `input.ome.tif` and `segmentation.json` in
+  `fovs/<fov_id>/segmentation/<run>/`, which assign reads ([Run record](#run-record),
+  [Saved format](#saved-format), [What assign receives from segment](#what-assign-receives-from-segment)).
+* **Where the configuration goes.** The plan passed to `FOV.segment` (`PipelineConfig` has
+  no segmentation field, D1); in the workflow, the Python-only `segmentation` block or the
+  translated `rules.stardist_segmentation.parameters`
+  ([Workflow configuration](#workflow-configuration)).
+
+The registry rules are those of {doc}`method-registry`, used unchanged. Beneath this
+guide, {doc}`segmentation-algorithms` gives each method's and function's behavior,
+resources and pinning tests; {doc}`segmentation-baseline` is history (`6b384cd`, before
+§2.9). The contract is implemented by `starfinder.segmentation` and `FOV.segment`
 ({doc}`api/segmentation`), with the checks listed in {doc}`assignment-algorithms`
 ("Implemented checks (W-318)"); as decided, nothing is renamed. Assignment, nucleus–cell
 correspondence, compartments, counts and exports belong to W-308, which builds on the
@@ -1009,8 +1027,8 @@ Linux x86_64; `uv lock` resolves every Python version the package allows (from 3
 2026-10-05, from 3.11 since 2026-10-07) and every platform, where it may add
 platform-specific entries or find no solution. It did both, and Jiahao decided
 on 2026-10-05 to narrow the marker of the `stardist` extra and to accept the Intel macOS
-entries (W-322). The `learned` parity test does not exist until the implementation adds
-it.
+entries (W-322). The `learned` parity test is row L10 of {doc}`assignment-algorithms`
+(`test_segmentation_learned.py`).
 
 **Limitations of the evidence.** The W-305 matrix ("What this does not show") and the
 W-306 notes (sections 4, 5, 12, 13 and 14) qualify every number on this page and on
@@ -1158,53 +1176,6 @@ MATLAB-backend run, and the §2.9 changes apply to them there as well:
 * `envs_path` is no longer read by any rule. The key stays in the schema; removing it is a
   §2.13 change.
 
-## Tests the implementation changes
-
-* `test/test_segmentation_golden.py`: every pinned digest stays (the float64 shrunk image is
-  an explicit expected array since W-574, compared with the float64 tolerance of
-  [contributing](contributing.md), "Expected values and tolerances", and equal to the digest
-  pinned before). Named edits: tests are
-  added that compute the composite and the Flamingo enhancement with
-  `composite_nuclei_amplicon` and `enhance_with_flamingo` and assert
-  `COMPOSITE_DIGESTS` and `FLAMINGO_DIGEST`; that `expand_labels(mode="planar",
-  unit="pixel", distance=4)` on the stand-in labels, cast to `uint16`, gives
-  `LABELS_3D[(False, True)]` and `LABELS_2D[(False, True)]`; and that `resample_labels` on
-  the even 16×32×32 → 16×64×64 case gives the values of `RESTORED_LABELS`. When the script
-  bodies become adapter calls, `run_script` is replaced by those package calls and
-  `test_the_helper_follows_the_script` is removed, because the cited lines leave the
-  script; `legacy_stardist_steps` stays as the frozen legacy reference, with the four
-  legacy-behavior tests. `test_constant_and_zero_inputs` keeps its assertions and
-  `CONSTANT_DIGESTS` with the package functions in place of the scripts.
-* A new `learned` parity test copies `parity/parity_expected.npz` of the W-306 run into
-  `src/python/test/data/segmentation_parity.npz` (357 KB, sha256 `4a5df997…`) and runs the
-  `stardist` method on CPU with `scale` 1.0, `normalize_percentiles` (1, 99.8), the
-  script's tiling, the stored thresholds and, for the `expand1` arrays, planar expansion
-  by 4 pixels. It asserts exact equality, after a cast to `uint16`, with the six
-  `rescale0` arrays of P1, P2 and P3. `2D_versatile_fluo` comes from the weights cache,
-  `3D_spleen` from a path in an environment variable. The `rescale1` arrays are not
-  reproduced (the package has no legacy round trip) and stay records.
-* A subsystem marker `segmentation` is added to `pyproject.toml` and
-  `SUBSYSTEM_MARKERS` (`test/conftest.py`); the golden test keeps `workflow` and gains it.
-* New tests: registry and checks (each check above with its error), the dtype rule
-  (int32, uint16 and uint32 inputs, a negative value, the 65,536 case), import
-  validation, the run record and `FOV.load_segmentation` round trip, model resolution with
-  missing and changed files, and the workflow key.
-* `test_spot_finding_registry.py`, `test_spot_finding_workflow_key.py`,
-  `test_checkpoints.py`, `test_coordination_contract.py`, `test_fov.py`, `test_e2e.py`,
-  `test_workflow_scripts.py` and every other existing test pass unchanged.
-
-## `docs/migration.md` entries
-
-The implementation adds: the `starfinder.segmentation` module and its names; the
-`segmentation` YAML block; the legacy translation, with two intentional changes, the
-output dtype of `images/stardist_segmentation/{fovID}.tif` (uint16 → uint32) and
-`rescale: true` rendered on the input grid; no foreground gate, so an image without
-foreground gives an empty label image instead of an error; the `stardist` and
-`cellpose` extras; the `device` keyword of the segment entry. The documentation also gains
-the notebook example of the three calls per FOV that D1 asks for: `FOV.run`, then
-`FOV.register` where morphology rounds are used, then `FOV.segment`, then assign
-once W-308's entry exists.
-
 ## Exclusions
 
 No assignment, correspondence, compartment, count or export specification (W-308); no
@@ -1215,6 +1186,6 @@ no comparison between segmenters (E04, W-123); no default model and no recommend
 ```{toctree}
 :hidden:
 
-Segmentation algorithms <segmentation-algorithms>
-Segmentation baseline <segmentation-baseline>
+Segmentation algorithms and validation <segmentation-algorithms>
+Segmentation baseline (history) <segmentation-baseline>
 ```

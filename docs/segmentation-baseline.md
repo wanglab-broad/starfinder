@@ -285,5 +285,5 @@ and `expand_labels`, written by the unchanged script in the legacy environment o
 with the SHA-256 of each array in `parity/legacy-runs.json`. A prototype that follows
 the script with the same library calls reproduced all 12 exactly in the spike
 environment (StarDist 0.9.2, TensorFlow 2.20.0) on CPU. The contract names the test
-that keeps this pin once the StarDist method exists ({doc}`segmentation-contract`,
-"Tests the implementation changes").
+that keeps this pin once the StarDist method exists ({doc}`segmentation-algorithms`,
+"Golden and parity tests").
