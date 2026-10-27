@@ -1,4 +1,4 @@
-# Readout contract: extraction, decoding and read QC
+# Readout guide: extraction, decoding and read QC
 
 Status: Accepted (W-280, 2026-10-02, at b1c7261)
 
@@ -7,19 +7,53 @@ Amendment W-304, on the authority of the W-299 review comment (2026-10-04): the
 (`EncodingConfig.pair_to_color`; "Encoding registry", "Names", "Checkpoints and
 reruns", "Workflow configuration").
 
-This page proposes the §2.8 readout contract: two readout modes (multiplexed
-sequencing and direct readout) as one explicit setting, registered barcode
-encodings, a typed segment layout for one- and two-segment codebooks, codebook
-entries separate from genes, local background and noise measurements kept with the
-traces, one shared read-QC score, optional cross-channel deduplication, complete
-retained outputs with three kinds of diagnostics, and the checkpoint and workflow
-rules that go with them. It builds on {doc}`method-registry`, whose registry fields,
-lookup, dependency and provenance rules it uses unchanged, and on the option-A
-multi-round candidate set of {doc}`spot-finding-contract`. The current behavior is
-recorded in {doc}`readout-baseline`; the numerical methods, worked examples and the
-engineering validation design are in {doc}`readout-algorithms`. The contract is
-implemented by `starfinder.readout` and the FOV readout methods ({doc}`api/readout`), with
-the checks that {doc}`readout-algorithms` lists ("Implemented checks (W-296)"); as
+This page is the maintained guide to the readout stage (§2.8) and its contract:
+extraction, decoding and read QC.
+
+* **What readout does.** It reads every detected candidate: it sums a neighbourhood in
+  each round and channel and measures a local background and noise beside the sums,
+  gives the read an identity, either from its color sequence against the codebook
+  (readout mode `multiplexed`, one- or two-segment barcodes) or from the gene of its own
+  round and channel (readout mode `direct`), ranks the calls with one shared read-QC
+  score, optionally marks cross-channel duplicates, and filters the reads
+  ([Readout modes](#readout-modes), [Extraction](#extraction),
+  [Shared read-QC score](#shared-read-qc-score), [Optional deduplication](#optional-deduplication)).
+* **The entry and its configs.** `FOV.run` runs extract → decode or assign → score →
+  deduplicate → filter; each stage is also its own function (`extract_intensities`,
+  `decode_reads` or `decode_direct`, `score_reads`, `deduplicate_reads`, `filter_reads`).
+  The configs are `NeighborhoodSumConfig` with `LocalBackgroundConfig`, the decoders of
+  `DECODING_METHODS` (`WtaDecoderConfig`, `CodebookAwareDecoderConfig`,
+  `DirectDecoderConfig`), `ReadScoreConfig`, `DeduplicationConfig` and `ReadFilterConfig`;
+  the codebook (`Codebook`, its encoding from `ENCODINGS` and its `BarcodeLayout`) or the
+  direct panel (`DirectPanel`) is loaded on the dataset
+  ([Runtime order and defaults](#runtime-order-and-defaults), [Encoding registry](#encoding-registry),
+  [Segment layout](#segment-layout), [Codebook entries and genes](#codebook-entries-and-genes),
+  [Direct readout](#direct-readout)).
+* **What it produces.** `IntensityExtractionResult`, `ReadDecodingResult`,
+  `ReadScoringResult`, `ReadDeduplicationResult` and `ReadFilteringResult`, which keep
+  every read. With checkpoints on, `FOV.run` saves the sums and background in the
+  `candidates` checkpoint and the read table before the filter in `pre_qc`; the run
+  record (`run.json`) holds the mode, each stage's config, the codebook's encoding and the
+  population summary; `FOV.export_spots` writes the accepted molecules (`molecules.csv`)
+  or every read (`reads.csv`) ([Checkpoints and reruns](#checkpoints-and-reruns),
+  [Diagnostics](#diagnostics), {doc}`checkpoints`).
+* **Where the configuration goes.** In Python, `Dataset.readout_mode` holds the mode,
+  `Dataset.load_codebook` the encoding and layout, and `PipelineConfig.extraction`,
+  `decoding`, `scoring`, `deduplication` and `filtering` the stage configs. In the
+  workflow, the top-level `readout_mode` and the `load_codebook`, `reads_extraction` and
+  `reads_filtration` blocks, with the Python-only `decoding`, `scoring` and
+  `deduplication` blocks ([Workflow configuration](#workflow-configuration),
+  {doc}`workflow-configuration`).
+
+The contract builds on {doc}`method-registry`, whose registry fields, lookup,
+dependency and provenance rules it uses unchanged, and on the option-A multi-round
+candidate set of {doc}`spot-finding-contract`, which "Direct readout" amends. Beneath
+this guide, {doc}`readout-algorithms` specifies the numerical methods, the worked
+examples and the engineering validation (R1 to R19, "Implemented checks (W-296)" and
+"Limitations"). {doc}`readout-baseline` is history: the behavior at `141c093`, before
+§2.8, kept with its golden test. The contract is implemented by `starfinder.readout` and
+the FOV readout methods ({doc}`api/readout`), with the checks that
+{doc}`readout-algorithms` lists; as
 decided, nothing here renames anything: the existing names
 (`starfinder.barcode`, `BarcodeDecodingResult`, `PipelineConfig.decoding`) stay.
 
@@ -557,75 +591,6 @@ The schema lists of `decoding.method` and of the encodings are kept equal to the
 registries by a default-tier test, as for the other stages ({doc}`method-registry`,
 "YAML naming per stage").
 
-## `docs/migration.md` entries
-
-The implementation adds these entries:
-
-1. **Readout mode.** `Dataset.readout_mode`, `DirectPanel`, `load_direct_panel`,
-   `DirectDecoderConfig`, `decode_direct`; the YAML key `readout_mode`; decoding a
-   multi-round candidate set needs `readout_mode="direct"`.
-2. **Encodings and decoders.** `ENCODINGS` with `two_base` (`EncodingConfig`, now
-   with `method`) and `one_base` (`OneBaseEncodingConfig`); `DECODING_METHODS`;
-   exact-type lookup.
-3. **Segment layout.** `BarcodeLayout`, `Segment`, `Codebook.layout`; per-segment
-   end bases. **Intentional change:** the workflow adapter converts the shared
-   `split_index` from MATLAB's one-based position; a configuration that worked
-   around the defect by giving the Python value (for example 4 for aging) must give
-   the MATLAB value (5).
-4. **Codebook entries.** `entry_id`; repeated genes allowed (D5); `n_entries`;
-   `gene_to_seq` raises for codebooks with repeated genes. **Intentional change:**
-   two barcodes for one gene, which raised before, now load as two entries, and the
-   decoding table gains `entry_id`.
-5. **Background measurements.** `LocalBackgroundConfig`,
-   `NeighborhoodSumConfig.background` (on by default), the new result fields and the
-   candidate columns.
-6. **Shared score.** `ReadScoreConfig`, `score_reads`, `PipelineConfig.scoring`;
-   **intentional change:** the workflow adapter scores whenever it decodes.
-7. **Deduplication.** `DeduplicationConfig`, `deduplicate_reads`,
-   `PipelineConfig.deduplication` (off); `ReadFilterConfig.exclude_duplicates`.
-8. **Filtering.** Score bounds on any declared score column; per-segment end bases.
-9. **Checkpoints.** The new `candidates` columns and `pre_qc` content;
-   `FORMAT_VERSION` stays 2.
-10. **Diagnostics and evaluation.** `inspect_read`, `summarize_reads`, `explain_read`;
-    `ranking_quality`, `evaluate_deduplication`.
-11. **Encoding table (W-304).** `EncodingConfig.pair_to_color` (default unchanged),
-    `EncodingSpec.table`, `Codebook.encoding_table()`, `Dataset.encoding_table()`,
-    `FOV.encoding_table()`, the summary line, the YAML key
-    `load_codebook.encoding.pair_to_color`, and the recorded `encoding` of
-    `pre_qc.json` and `run.json` with its rerun check.
-
-## Tests the implementation changes
-
-* `test/test_readout_golden.py`: every pinned value stays, with these named edits
-  only: the body of `readout_config` (registry configs); the digests of the codebook,
-  decoding, filtering and `pre_qc` tables computed after dropping `entry_id` and the
-  score columns, plus new pins for the extended tables; `candidates.csv` re-pinned,
-  with an assertion that the table without the background columns, written by the
-  same writer, has today's digest. Since W-573 the pins of the tensor and of the
-  decoding, filtering and `pre_qc` tables and files are explicit expected values with
-  the tolerances of [contributing](contributing.md) ("Expected values and
-  tolerances"), equal to the digests pinned before; the inputs and the codebook keep
-  their digests. `test_valid_is_always_true_at_the_border_and_in_a_zero_round`
-  and `test_candidates_with_a_round_column_raise_on_decoding` stay unchanged, because
-  they run in `multiplexed` mode. If Jiahao changes the codebook-aware rescue default,
-  its digests (b) and (d) are re-pinned with a comment naming the decision.
-* `test/test_readout_examples.py`: the reference functions of the expected `one_base`
-  and direct-readout behavior are replaced by calls to `ENCODINGS` and
-  `decode_direct`; every asserted value stays.
-* `test/test_readout.py`: one named edit. The case `"A,CACGC\nA,CATGC\n"` of
-  `test_invalid_csv_has_row_context` (`test_readout.py:59-74`) requires two different
-  barcodes for one gene to raise, which D5 reverses. The task-group-2 issue removes
-  that case and adds a test that the same rows load as two entries of gene `A`. The
-  other cases of that test still raise (the identical-row case as a repeated
-  `entry_id`), and the rest of the file is unchanged.
-* `test/test_spot_finding_rounds.py:196-208` stays unchanged: the `multiplexed`
-  message keeps "readout mode (§2.8)".
-* Every other existing test passes unchanged, in particular `test_encoding.py`, `test_extraction.py`, `test_codebook_aware_decoder.py`,
-  `test_checkpoints.py`, `test_fov.py`, `test_e2e.py`,
-  `test_coordination_contract.py`, `test_spot_finding_golden.py` and the
-  registration checkpoint-version tests. Each draft implementation issue names its
-  set.
-
 ## Exclusions
 
 No binary or MERFISH-style code, decoder or example; no new extraction algorithm,
@@ -638,6 +603,6 @@ to E03.
 ```{toctree}
 :hidden:
 
-Readout algorithms <readout-algorithms>
-Readout baseline <readout-baseline>
+Readout algorithms and validation <readout-algorithms>
+Readout baseline (history) <readout-baseline>
 ```

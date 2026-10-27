@@ -7,7 +7,7 @@ encodings, the WTA and codebook-aware decoders, direct assignment, the local
 background and noise estimator, the shared read-QC score and the deduplication rule.
 It gives worked examples and the engineering validation design of task group 6. The
 registries, configs, modes and records they plug into are in {doc}`readout-contract`;
-the current behavior is in {doc}`readout-baseline`. The encodings, decoders, estimator,
+the behavior before §2.8 is history, in {doc}`readout-baseline`. The encodings, decoders, estimator,
 score and deduplication rule are implemented in `starfinder.readout` ({doc}`api/readout`),
 with the checks that "Implemented checks (W-296)" lists, and nothing here sets a score
 cutoff, a calibrated probability or a default filter.
@@ -344,24 +344,37 @@ Checks:
 | R18 | Filtering | `golden`, `two_seg`, `crosstalk` | Filter table | Bounds on `qc_score` and on any declared score column; `exclude_duplicates`; per-segment end bases; the default keeps every `assigned` read with no score bound. **Provisional**: contract rules. |
 | R19 | Determinism | `golden`; `cal` seed 103 | SHA-256 of every table, three single-thread processes | Identical. **Provisional**: no W-278 row covers it; the W-279 golden test gave byte-identical pins in three processes. |
 
-Metrics that must be added to `starfinder.evaluation` (task group 2, because task
-groups 4 and 5 use them already):
-
-* `ranking_quality(score, correct, *, orientation, retention=(0.5, 0.8, 0.9, 1.0))`:
-  AUROC (correct ranked above incorrect), its Hanley–McNeil standard error, and the
-  error at each retention level, with an undefined value and a reason when a class
-  is empty (the W-278 `scores.csv` columns);
-* `evaluate_deduplication(groups, source, *, pairs)`: missed duplicates (pairs of one
-  source not merged), false merges (merged pairs of different sources) and their
-  rates over the stated pair population (the W-278 `duplicates.csv` columns).
+`starfinder.evaluation.readout` holds the two metrics these checks use
+({doc}`api/evaluation.registration`): `ranking_quality` gives the AUROC (correct ranked
+above incorrect), its Hanley–McNeil standard error and the error at each retention
+level (the W-278 `scores.csv` columns), and `evaluate_deduplication` the missed
+duplicates, false merges and their rates over the stated pair population (the W-278
+`duplicates.csv` columns); both report an undefined value with a reason when a class is
+empty.
 
 `match_points` and `evaluate_decoding` are used as they are.
 
-Resource plan: every fixture is at most 32×64×64 voxels. W-278 ran 27 calibrated
-scenes per split (design or held-out) in about 45 s at one thread (worker notes,
-"Budget"); the extended checks run 24 to 27 scenes, so about a minute, and the
-default-tier checks seconds. Each run records wall time and maximum RSS with
+Each run records wall time and maximum RSS with
 `/usr/bin/time -v` against the 4 GiB stop target.
+
+The golden test and the worked-example checks keep their values:
+
+* `test/test_readout_golden.py`: every pinned value stays, with these named edits
+  only: the body of `readout_config` (registry configs); the digests of the codebook,
+  decoding, filtering and `pre_qc` tables computed after dropping `entry_id` and the
+  score columns, plus new pins for the extended tables; `candidates.csv` re-pinned,
+  with an assertion that the table without the background columns, written by the
+  same writer, has today's digest. Since W-573 the pins of the tensor and of the
+  decoding, filtering and `pre_qc` tables and files are explicit expected values with
+  the tolerances of [contributing](contributing.md) ("Expected values and
+  tolerances"), equal to the digests pinned before; the inputs and the codebook keep
+  their digests. `test_valid_is_always_true_at_the_border_and_in_a_zero_round`
+  and `test_candidates_with_a_round_column_raise_on_decoding` stay unchanged, because
+  they run in `multiplexed` mode. If Jiahao changes the codebook-aware rescue default,
+  its digests (b) and (d) are re-pinned with a comment naming the decision.
+* `test/test_readout_examples.py`: the reference functions of the expected `one_base`
+  and direct-readout behavior are replaced by calls to `ENCODINGS` and
+  `decode_direct`; every asserted value stays.
 
 ### Implemented checks (W-296)
 

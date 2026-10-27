@@ -36,7 +36,7 @@ Every extraction, decoding, filtering, encoding, detection, pipeline and checkpo
 configuration is built by ``readout_config``, which holds the only imports of those
 config types. The
 §2.8 work may change that helper's body only; every pinned value stays, except where
-docs/readout-contract.md names an edit.
+docs/readout-algorithms.md ("Engineering validation design (task group 6)") names an edit.
 """
 import hashlib
 import json
