@@ -1,25 +1,33 @@
 # Segmentation baseline: morphology inputs, StarDist and label files
 
-Status: Accepted (W-309, 2026-10-05, at 3550723)
+% Status: Accepted (W-309, 2026-10-05, at 3550723)
 
-Note (W-583): {doc}`segmentation-contract` and {doc}`segmentation-algorithms` were accepted at W-309 (2026-10-05) and are implemented in `starfinder.segmentation`; this page keeps the text of its revision.
+Note: {doc}`segmentation-contract` and {doc}`segmentation-algorithms` were accepted at their acceptance review (2026-10-05) and are implemented in `starfinder.segmentation`; this page keeps the text of its revision.
 
-Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+% Note (W-583); accepted at W-309 (2026-10-05)
+
+Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
+% Note (W-564)
 
 This page records how segmentation and its inputs behave at revision `6b384cd`
-(branch `runner/s29-spec-20261004`, on `dev` after the §2.8 work), before the
-Chapter II §2.9 work changes them. It is the reference that the golden test
+(branch `runner/s29-spec-20261004`, on `dev` after the readout work), before the
+segmentation and assignment work changes them. It is the reference that the golden test
 `src/python/test/test_segmentation_golden.py` pins. The proposed replacement is
 described in {doc}`segmentation-contract` and {doc}`segmentation-algorithms`; neither
 is accepted. Paths are relative to the repository root, and line numbers are at
-`6b384cd`. The assignment half of §2.9 (`reads_assignment.py`, compartments, counts)
-is recorded by W-308; this page names it only where segmentation reaches into it.
+`6b384cd`. The assignment half of the work (`reads_assignment.py`, compartments, counts)
+is recorded in {doc}`assignment-baseline`; this page names it only where segmentation
+reaches into it.
 
-Measured behavior of the current StarDist script comes from W-306, run directory
-`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-306/20261004T194036Z-74e12949`
-(found with `find … -maxdepth 2 -name segmentation-manifest.json`; notes `notes.md`,
-sections 3 and 6; tables `tables/parity.csv`, `tables/label-dtype-probe.json`; parity
-outputs `parity/`).
+% after the §2.8 work; before the Chapter II §2.9 work; The assignment half of §2.9; is recorded by W-308
+
+Measured behavior of the current StarDist script comes from the dependency study of
+2026-10-04, whose run directory is kept with the run records outside the repository
+(notes `notes.md`, sections 3 and 6; tables `tables/parity.csv`,
+`tables/label-dtype-probe.json`; parity outputs `parity/`).
+
+% W-306, run directory `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-306/20261004T194036Z-74e12949` (found with `find … -maxdepth 2 -name segmentation-manifest.json`)
 
 ## Where segmentation lives today
 
@@ -43,24 +51,28 @@ an inline rule body or a MATLAB example:
 | --- | --- | --- |
 | Parameters | 13-14, 26-27, 31, 40, 42, 46-47, 51, 60-61 | Every parameter is read inside the script from `snakemake.config['rules']['stardist_segmentation']['parameters']`: `prob_thresh`, `nms_thresh`, `stardist_model_name`, `stardist_base_path`, `rescale`, `expand_labels`, `distance`. There are no defaults; a missing key raises `KeyError`. The thresholds are always taken from YAML, never from the model's `thresholds.json`. |
 | Input | 16 | `imread(snakemake.input[0])`: one image of any dtype; its rank decides everything below. No metadata is read. |
-| Foreground gate | 17-23 | Otsu threshold of the whole image, strict `>`; connected components (full connectivity); `areas.max() > 100`, a count of pixels or voxels with no physical unit. If the largest component is not larger, the model is never loaded and an all-zero `uint16` image of the input shape is written (64-66). An image with no component makes `areas.max()` raise `ValueError: zero-size array to reduction operation maximum which has no identity` before that fallback, and no file is written (W-306 parity probe `probe_zeros_64x64_2d`). On background noise the gate passes (W-306 `probe_noise_64x64_2d`, where `2D_versatile_fluo` then returns one object). |
+| Foreground gate | 17-23 | Otsu threshold of the whole image, strict `>`; connected components (full connectivity); `areas.max() > 100`, a count of pixels or voxels with no physical unit. If the largest component is not larger, the model is never loaded and an all-zero `uint16` image of the input shape is written (64-66). An image with no component makes `areas.max()` raise `ValueError: zero-size array to reduction operation maximum which has no identity` before that fallback, and no file is written (the dependency study's parity probe `probe_zeros_64x64_2d`). On background noise the gate passes (its `probe_noise_64x64_2d`, where `2D_versatile_fluo` then returns one object). |
 | Dimensionality | 24 | `len(current_img.shape) == 3` chooses `StarDist3D`, anything else `StarDist2D`. A single plane stored as 1×Y×X goes to the 3D model; a 2D image goes to the 2D model; nothing checks that the model's dimensionality matches. |
-| Model | 25-27, 45-47 | `StarDist3D(None, name=<stardist_model_name>, basedir=<stardist_base_path>)` reads `config.json`, `thresholds.json` and the weights from that folder; it does not download (W-306 `tables/loading-probes.json`). Nothing records the model's name, path or file hashes. |
+| Model | 25-27, 45-47 | `StarDist3D(None, name=<stardist_model_name>, basedir=<stardist_base_path>)` reads `config.json`, `thresholds.json` and the weights from that folder; it does not download (the dependency study's `tables/loading-probes.json`). Nothing records the model's name, path or file hashes. |
 | Rescale (optional) | 31-32, 51-52 | With `rescale: true`, `skimage.transform.rescale(img, [1, .5, .5])` (2D `[.5, .5]`): a fixed factor 0.5 in Y and X, with scikit-image's default Gaussian anti-aliasing, returning float64. |
 | Normalization | 29, 33, 37, 49, 53, 57 | `csbdeep.utils.normalize(img, 1, 99.8, axis=(0,1,2))` (2D `(0,1)`): one percentile pair over the whole image, unclipped, not recorded. |
 | Prediction | 34, 38, 54, 58 | `model.predict_instances(img, n_tiles=[1, 4, 4], …)` in 3D, `n_tiles=[2, 2]` in 2D, with the YAML thresholds; `details` is discarded. |
-| Inverse rescale | 35, 55 | `rescale(labels, [1, 2, 2], order=0, preserve_range=True)`: nearest neighbour, so outlines were computed on the shrunk grid. The labels come back on `round(round(n × 0.5) × 2)` pixels per axis, which differs from the input whenever a Y or X size is odd (W-306 P3: 61×67 in, 60×68 out). The file is then written on that grid. |
+| Inverse rescale | 35, 55 | `rescale(labels, [1, 2, 2], order=0, preserve_range=True)`: nearest neighbour, so outlines were computed on the shrunk grid. The labels come back on `round(round(n × 0.5) × 2)` pixels per axis, which differs from the input whenever a Y or X size is odd (the dependency study's P3: 61×67 in, 60×68 out). The file is then written on that grid. |
 | Expansion (optional) | 40-42, 60-61 | `skimage.segmentation.expand_labels(…, distance=<distance>)`, in pixels; in 3D one call per Z plane, so labels grow in Y and X only. |
-| Cast and write | 63 | `imsave(output, labels.astype('uint16'), compression='zlib')`. Labels above 65,535 wrap: 65,536 becomes 0 (background) and 65,537 becomes 1 (W-306 `tables/label-dtype-probe.json`). `tifffile.imsave` no longer exists in the locked tifffile 2026.1.28, so the script runs only in the legacy environment (tifffile 2024.2.12). The TIFF has no axes or geometry description. |
+| Cast and write | 63 | `imsave(output, labels.astype('uint16'), compression='zlib')`. Labels above 65,535 wrap: 65,536 becomes 0 (background) and 65,537 becomes 1 (the dependency study's `tables/label-dtype-probe.json`). `tifffile.imsave` no longer exists in the locked tifffile 2026.1.28, so the script runs only in the legacy environment (tifffile 2024.2.12). The TIFF has no axes or geometry description. |
+
+% (W-306 parity probe `probe_zeros_64x64_2d`); (W-306 `probe_noise_64x64_2d`; (W-306 `tables/loading-probes.json`); (W-306 P3; (W-306 `tables/label-dtype-probe.json`)
 
 The rule (`segmentation.smk:21-35`) reads `images/{segmentation_input_folder}/{fovID}.tif`,
 where `segmentation_input_folder` comes from `common.smk:199` with the default
 `overlay`, and writes `images/stardist_segmentation/{fovID}.tif`. It runs in the conda
 environment `{envs_path}/stardist` with 2 threads and records a Snakemake benchmark
-file. W-306 ran the unchanged script (sha256 `5a2347f8…`) in the legacy environment on
-CPU and a step-by-step prototype in the spike environment; on all 12 parity runs they
-are equal pixel for pixel, and both raise on the all-zero probe (W-306 notes section 3,
-`tables/parity.csv`).
+file. The dependency study ran the unchanged script (sha256 `5a2347f8…`) in the legacy
+environment on CPU and a step-by-step prototype in the spike environment; on all 12 parity
+runs they are equal pixel for pixel, and both raise on the all-zero probe (the dependency
+study's notes, section 3, `tables/parity.csv`).
+
+% W-306 ran the unchanged script; (W-306 notes section 3
 
 ### Configuration keys: `stardist_segmentation_config`
 
@@ -158,8 +170,10 @@ does the same and also stretches the other rounds. The registered sequencing
 reference, `images/ref_merged/{fovID}.tif`, is the reference round's channel maximum
 written by `FOV.save_reference_image` (`fov.py:1534-1580`) or by MATLAB.
 
-Note (W-563): the Python rule writes `fovs/{fovID}/nuclei_registration.json` instead of the log and
+Note: the Python rule writes `fovs/{fovID}/nuclei_registration.json` instead of the log and
 the shift table ({doc}`migration`, "Sequencing logs and the morphology record").
+
+% Note (W-563)
 
 ## Files each rule reads and writes
 
@@ -199,33 +213,40 @@ FOV, and is run by hand:
    where a nucleus carries its cell's label, but where the two labels differ it is their
    difference or 0, not a cytoplasm mask.
 
-Every size is in pixels; no spacing is read. W-305 holds earlier results of this path
-(`reference_Cell_3d_42x512x512.tif` and the 2D labels) as references, not annotations.
+Every size is in pixels; no spacing is read. The model and environment survey holds
+earlier results of this path (`reference_Cell_3d_42x512x512.tif` and the 2D labels) as
+references, not annotations.
 
-## Discrepancies with the agreed §2.9 scope
+% W-305 holds earlier results
+
+## Discrepancies with the agreed scope
+
+% Discrepancies with the agreed §2.9 scope
 
 | # | Discrepancy | Proposed resolution |
 | --- | --- | --- |
 | 1 | The dimensionality is chosen implicitly from the array rank (`stardist_segmentation.py:24`); a 1×Y×X plane goes to the 3D model and nothing checks the model. | The method input is always ZYXC with Z=1 for a plane. Each model declares its dimensionality (StarDist's `config.json` `n_dim`, Cellpose's mode), and the stage wrapper checks it against the input before the model loads: Z=1 runs 2D models and is rejected by 3D models; Z>1 runs 3D models and is rejected by 2D models unless the method declares a per-plane mode ({doc}`segmentation-contract`, "Method registry"). |
-| 2 | `areas.max()` fails on an image with no foreground (`:23`), and the 100-voxel gate decides whether the model runs at all. | No foreground gate. An image with no foreground gives an all-zero label image with outcome `empty`, which all three libraries already return (W-306 notes section 6). |
+| 2 | `areas.max()` fails on an image with no foreground (`:23`), and the 100-voxel gate decides whether the model runs at all. | No foreground gate. An image with no foreground gives an all-zero label image with outcome `empty`, which all three libraries already return (the dependency study's notes, section 6). |
 | 3 | Labels are cast to `uint16` (`:63`) and wrap above 65,535. | The label dtype rule of the contract (recommended: `uint32` always), with an explicit, checked conversion of the library's int32, uint16 or uint32 result ({doc}`segmentation-contract`, "Label image"). |
 | 4 | Parameters are read from the Snakemake configuration inside the script, with no types or defaults. | Frozen config dataclasses registered in `SEGMENTATION_METHODS`; the workflow adapter translates the legacy `rules.stardist_segmentation.parameters` keys ({doc}`segmentation-contract`, "Workflow configuration"). |
-| 5 | The fixed 0.5 rescale (`:32`, `:52`) computes outlines on the shrunk grid and changes the grid for odd sizes. | An explicit, recorded input scale per model call, applied inside the library (StarDist `scale=`, Cellpose `diameter`), which returns labels on the input grid (W-306 section 6); no default is carried between models. The script's round trip is pinned only by the golden test and the W-306 parity outputs. |
-| 6 | Label expansion is applied per slice (`:40-42`), and again in `reads_assignment.py:55-57` and `:66-67` with its own `dilation_distance`. | One label operation, `expand_labels`, with an explicit mode (`planar`, the legacy per-plane behavior, or `volumetric` in physical units), applied once in the segmentation entry and recorded in the label provenance; the assignment entry reads the record and never expands again (W-308). |
+| 5 | The fixed 0.5 rescale (`:32`, `:52`) computes outlines on the shrunk grid and changes the grid for odd sizes. | An explicit, recorded input scale per model call, applied inside the library (StarDist `scale=`, Cellpose `diameter`), which returns labels on the input grid (the dependency study, section 6); no default is carried between models. The script's round trip is pinned only by the golden test and the dependency study's parity outputs. |
+| 6 | Label expansion is applied per slice (`:40-42`), and again in `reads_assignment.py:55-57` and `:66-67` with its own `dilation_distance`. | One label operation, `expand_labels`, with an explicit mode (`planar`, the legacy per-plane behavior, or `volumetric` in physical units), applied once in the segmentation entry and recorded in the label provenance; the assignment entry reads the record and never expands again ({doc}`assignment-contract`, "Label expansion"). |
 | 7 | The composite assumes 3D inputs (`create_nuclei_amplicon_overlay.py:33`) and checks no grid. | The composite function takes ZYX images (Z=1 for a plane) and requires both on one grid with equal `ImageMetadata` ({doc}`segmentation-contract`, "Input preparation and label functions"). |
 | 8 | The DAPI file is found by an unchecked glob (`registration-py.smk:88-90`). | The nuclear stain is a declared channel of a loaded round (`Dataset.channel_labels`); the workflow adapter requires exactly one matching file and raises naming the matches. |
 | 9 | No record of the model's identity. | Pretrained models from a known-models table with file SHA-256 values, user-trained models by explicit path with each file's SHA-256 recorded; both in the provenance entry's `artifacts` ({doc}`segmentation-contract`, "Models"). |
-| 10 | The thresholds come only from YAML; the model's stored `thresholds.json` is ignored. | The stored thresholds are the default; any other value is recorded as an override (the W-305 rule). |
+| 10 | The thresholds come only from YAML; the model's stored `thresholds.json` is ignored. | The stored thresholds are the default; any other value is recorded as an override (the rule set after the survey). |
 | 11 | Normalization (1–99.8 percent over the whole image) and tiling (`n_tiles` 1×4×4 or 2×2) are fixed and not recorded. | Explicit StarDist parameters with these values as defaults, recorded in the provenance entry. |
 | 12 | `rotate_nuclei` reads the raw `dapi_round` image and rotates with `reshape=True` and cubic interpolation, so for angles other than multiples of 90°, and when `dapi_round` is not the reference round, the DAPI image is not on the reference grid. | The nuclear stain comes from the reference round or from a round registered by `FOV.register`, both on the reference grid after `FOV.run`'s rotation. |
-| 13 | The registered morphology images of `nuclei_registration` are not declared rule outputs. | A §2.13 rule change ({doc}`segmentation-contract`, "Workflow configuration"). |
-| 14 | The Flamingo enhancement assumes 3D inputs (plane loop) and its inputs are not connected to a producing rule. | The function takes ZYX (Z=1 for a plane); the rule wiring is §2.13. |
-| 15 | The culture extension through z exists only as a MATLAB example on the stitched sample, in pixels, and its `Cyto` subtraction operates on label values. | A Python label function `extend_labels_through_z` per FOV with physical parameters and geometry `extended`; compartments belong to W-308. |
-| 16 | `create_segmentation_preview.py` has no rule and cannot run (`compress=`), and its boundary mode is misspelled. | Replaced by an on-demand label overlay in the segmentation diagnostics; the script's removal is §2.13. |
+| 13 | The registered morphology images of `nuclei_registration` are not declared rule outputs. | A rule change of the workflow integration ({doc}`segmentation-contract`, "Workflow configuration"). |
+| 14 | The Flamingo enhancement assumes 3D inputs (plane loop) and its inputs are not connected to a producing rule. | The function takes ZYX (Z=1 for a plane); the rule wiring belongs to the workflow integration. |
+| 15 | The culture extension through z exists only as a MATLAB example on the stitched sample, in pixels, and its `Cyto` subtraction operates on label values. | A Python label function `extend_labels_through_z` per FOV with physical parameters and geometry `extended`; compartments belong to assignment ({doc}`assignment-contract`). |
+| 16 | `create_segmentation_preview.py` has no rule and cannot run (`compress=`), and its boundary mode is misspelled. | Replaced by an on-demand label overlay in the segmentation diagnostics; the script's removal belongs to the workflow integration. |
 | 17 | The label TIFF carries no axes, geometry, target or provenance. | The saved format of the contract: ZYX with `ImageMetadata` in the description and a JSON record beside it. |
 | 18 | The rule runs in a separate conda environment that lacks Starfinder. | The project environment with the `stardist` and `cellpose` extras ({doc}`segmentation-contract`, "Device and environments"). |
 | 19 | No Cellpose backend, no seeded watershed and no external-mask import. | Registered `cellpose` and `seeded_watershed` methods and an `import_labels` function. |
 | 20 | The model's `details` (probabilities, polygons) are discarded. | Recorded counts and parameters only; the per-object probabilities are an open choice of the worker notes. |
+
+% (W-306 notes section 6); (W-306 section 6); the W-306 parity outputs; never expands again (W-308); (the W-305 rule); A §2.13 rule change; the rule wiring is §2.13; compartments belong to W-308; the script's removal is §2.13
 
 ## Golden test
 
@@ -237,24 +258,28 @@ and a Flamingo stain (larger ellipsoids around the nuclei), plus a DAPI image ho
 only the small blobs. It pins, with exact SHA-256 digests for the uint8 images and the
 labels, and for the float64 shrunk image of (c) as an explicit expected array within the
 float64 tolerance of [contributing](contributing.md), "Expected values and tolerances"
-(W-574; it replaced that image's digest and reproduces it):
+(since 2026-10-25; it replaced that image's digest and reproduces it):
 
 * (a) the composite, run unchanged through a stub `snakemake` object, with and without
   `maximum_projection`, and the Flamingo enhancement, run the same way; both also on
   constant and all-zero inputs, where the constant passes through the quantile stretch
-  unchanged (added in the W-307 repair);
+  unchanged (added in the repair of the segmentation specification);
 * (b) the foreground gate decision (Otsu threshold, component count, largest area,
   decision and the digest of the area list) on the 3D DAPI image, its Z maximum and the
   small-blob image, which closes the gate and gives an all-zero `uint16` image;
 * (c) the nearest-neighbour rescale of labels back to the input grid after the 0.5
   shrink: the shrunk image, the labels on the shrunk grid, the restored int32 labels
   and their equality with a 2×2 block repetition;
-* (d) the per-slice expansion (distance 4, the W-306 parity value) and the `uint16`
-  cast, for every combination of `rescale` and `expand_labels`, in 3D and in 2D.
+* (d) the per-slice expansion (distance 4, the dependency study's parity value) and the
+  `uint16` cast, for every combination of `rescale` and `expand_labels`, in 3D and in 2D.
 
-W-574 deleted the pins that no test read since W-535: the digests of the area lists of
-(b), and of (d) all but the expanded label images (3D without and with the rescale, 2D
-without it).
+% (W-574; it replaced that image's digest; (added in the W-307 repair); the W-306 parity value
+
+On 2026-10-25 the pins that no test had read since 2026-10-21 were deleted: the digests of
+the area lists of (b), and of (d) all but the expanded label images (3D without and with
+the rescale, 2D without it).
+
+% W-574 deleted the pins that no test read since W-535
 
 The StarDist script cannot be imported in the locked environment (StarDist is absent
 and `tifffile.imsave` was removed), so (b) to (d) run one helper,
@@ -262,22 +287,27 @@ and `tifffile.imsave` was removed), so (b) to (d) run one helper,
 the 16 cited lines are still in the script. The model call is replaced by a stand-in
 (Otsu threshold and connected components, int32). A digest-change test shows that
 changing the expansion distance, the gate's minimum area, the rescale factor or the
-composite projection changes a digest. Four tests document legacy behavior that §2.9
-changes: the gate raises on an all-zero image, the composite raises on 2D inputs, the
-round trip turns 61×63 into 60×64, and the cast maps 65,536 to 0.
+composite projection changes a digest. Four tests document legacy behavior that the
+segmentation work changes: the gate raises on an all-zero image, the composite raises on
+2D inputs, the round trip turns 61×63 into 60×64, and the cast maps 65,536 to 0.
+
+% legacy behavior that §2.9 changes
 
 Three separate single-thread processes (`taskset -c 0`, every thread variable 1)
 recomputed every pinned value with byte-identical output
-(`scripts/w307_compute_pins.py` and `scripts/pins-run{1,2,3}.json` in the W-307 run
-directory; 1.34–1.37 s and 122–125 MB peak RSS each), so the test uses exact equality.
+(`scripts/w307_compute_pins.py` and `scripts/pins-run{1,2,3}.json` in the run directory
+of the segmentation specification, kept outside the repository; 1.34–1.37 s and 122–125 MB
+peak RSS each), so the test uses exact equality.
 After the repair added the constant and all-zero cases, three more such runs
 (`scripts/pins-repair-run{1,2,3}.json`) were again byte-identical and left every earlier
 value unchanged. The 28 test cases take about 0.3 s together.
 
-**What the default tier cannot run, and how W-306 pins it.** Model inference
-(normalization with csbdeep, `predict_instances` with a real model, tiling) needs
-StarDist, TensorFlow and model files, which the default tier does not have. W-306 pins
-it instead: `parity/parity_expected.npz` in its run directory (357 KB, sha256
+% in the W-307 run directory
+
+**What the default tier cannot run, and how the dependency study pins it.** Model
+inference (normalization with csbdeep, `predict_instances` with a real model, tiling) needs
+StarDist, TensorFlow and model files, which the default tier does not have. The dependency
+study pins it instead: `parity/parity_expected.npz` in its run directory (357 KB, sha256
 `4a5df997…`) holds the three parity inputs (P1 a 16×128×128 LN DAPI window with
 `3D_spleen`, P2 a 512×512 tissue PI window and P3 a 61×67 hand-built image with
 `2D_versatile_fluo`) and the script's label image for every combination of `rescale`
@@ -287,3 +317,5 @@ the script with the same library calls reproduced all 12 exactly in the spike
 environment (StarDist 0.9.2, TensorFlow 2.20.0) on CPU. The contract names the test
 that keeps this pin once the StarDist method exists ({doc}`segmentation-algorithms`,
 "Golden and parity tests").
+
+% how W-306 pins it; W-306 pins it instead

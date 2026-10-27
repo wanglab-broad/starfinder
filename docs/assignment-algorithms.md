@@ -1,30 +1,36 @@
-# Assignment algorithm specification and §2.9 validation design
+# Assignment algorithm specification and validation design
 
-Status: Accepted (W-309, 2026-10-05, at 3550723)
+% heading: Assignment algorithm specification and §2.9 validation design
 
-This page specifies the numerical rules of §2.9 assignment (sampling, expansion, overlap
+% Status: Accepted (W-309, 2026-10-05, at 3550723)
+
+This page specifies the numerical rules of assignment (sampling, expansion, overlap
 correspondence, compartment partition and count accounting), each with its parameters,
 units, defaults, failure behavior and resource estimate. It then gives the task-group-6
-engineering validation design for the whole of §2.9, segmentation and assignment, and the
-plan for the bounded real examples. The entry, records and files are in
-{doc}`assignment-contract`; the behavior before §2.9 is history, in
+engineering validation design for segmentation and assignment together, and the plan for
+the bounded real examples. The entry, records and files are in {doc}`assignment-contract`;
+the behavior before the package's segmentation and assignment work is history, in
 {doc}`assignment-baseline`; the segmentation methods and label functions are specified in {doc}`segmentation-algorithms`.
 The rules are implemented in `starfinder.assignment` ({doc}`api/assignment`) and the
-validation design's checks in the tests that "Implemented checks (W-318)" lists, and
+validation design's checks in the tests that "Implemented checks" lists, and
 nothing here ranks a method, sets a default model or makes an accuracy claim.
+
+% the numerical rules of §2.9 assignment; the whole of §2.9; the behavior before §2.9; "Implemented checks (W-318)"
 
 ## Evidence
 
-Assignment has no model and W-308 ran nothing but the golden test and its pin script, so
-every resource figure below is a **code-derived estimate** (memory from array sizes and
-dtypes, time from the operations' complexity), not a measurement. The whole-FOV reference
-size is the W-306 estimate's 50×1496×1496 grid (111.9 million voxels; one `uint32` label
-volume is 448 MB). Segmentation figures quoted in the real-example plan are W-306's
-(`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-306/20261004T194036Z-74e12949`,
-`tables/cost-summary.csv`; per-call wall time, one CPU thread unless stated, model loaded
-before the call), with the qualifications listed in {doc}`segmentation-contract`
-("Limitations of the evidence") and {doc}`segmentation-algorithms` ("How to read the
-resource figures").
+Assignment has no model and the assignment specification ran nothing but the golden test
+and its pin script, so every resource figure below is a **code-derived estimate** (memory
+from array sizes and dtypes, time from the operations' complexity), not a measurement. The
+whole-FOV reference size is the 50×1496×1496 grid of the dependency study's estimate
+(111.9 million voxels; one `uint32` label volume is 448 MB). Segmentation figures quoted in
+the real-example plan are the dependency study's (its `tables/cost-summary.csv`, kept with
+the run records outside the repository; per-call wall time, one CPU thread unless stated,
+model loaded before the call), with the qualifications listed in
+{doc}`segmentation-contract` ("Limitations of the evidence") and
+{doc}`segmentation-algorithms` ("How to read the resource figures").
+
+% W-308 ran nothing but the golden test; the W-306 estimate's 50×1496×1496 grid; are W-306's (`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-306/20261004T194036Z-74e12949`, `tables/cost-summary.csv`)
 
 ## What each element addresses
 
@@ -75,17 +81,21 @@ be in pixels. The legacy translation is `planar`, `pixel`, `dilation_distance`, 
 **Failure behavior.** A cell run whose record lists `expand_labels` is refused, with or
 without an assign expansion, because its original mask was not kept (`ValueError`,
 contract check 7). `unit="um"` on an uncalibrated grid raises; `unit="pixel"` on a
-calibrated grid raises unless `legacy_pixel_expansion=True`. An empty label image stays empty; distance 0 changes nothing (W-307 probe).
+calibrated grid raises unless `legacy_pixel_expansion=True`. An empty label image stays empty; distance 0 changes nothing (a probe of the segmentation specification).
 Two successive planar expansions are not one: 4 then 2 pixels differs from 6 pixels by 585
 voxels on the assignment golden fixture (`test_two_expansions_are_not_one`), which is why
 the legacy pair cannot be folded silently.
 
-**Resources** (code-derived; W-307's estimate for the function). `planar`: about 22 bytes
+% (W-307 probe)
+
+**Resources** (code-derived; the segmentation specification's estimate for the function). `planar`: about 22 bytes
 per pixel of one plane in temporaries (about 50 MB for a 1496² plane) plus the output
 volume, 4 bytes per voxel (448 MB for the whole FOV). Keeping both territories doubles the
 label memory (896 MB). `volumetric`: about 26 bytes per voxel (2.9 GB for the whole FOV),
 which with the label volumes passes the 4 GiB stop target, so whole-FOV volumetric
-expansion needs blocks or the §2.10 tiling.
+expansion needs blocks or the tiling of stitching and assembly.
+
+% W-307's estimate for the function; the §2.10 tiling
 
 ## Overlap correspondence
 
@@ -117,10 +127,12 @@ equal to the derived matches reproduces the derived result.
 0.5, allowed [0.5, 1); strict `>`); `outside_tolerance` (dimensionless share, default 0.1,
 allowed [0, 1); strict `>`, so a nucleus with exactly a tenth outside its cell is not
 flagged). 0.5 is the smallest value that makes a match unique. 0.1 is contract option C2,
-chosen on 2026-10-05 as a provisional value from one culture crop of W-320 (largest outside
+chosen on 2026-10-05 as a provisional value from one culture crop of the bounded real-example run (largest outside
 share of a matched nucleus 0.073), not fitted and not an accuracy statement; 0.0 is exact
 containment (option C1). Shares are voxel counts, so anisotropic spacing does not change
 them.
+
+% one culture crop of W-320
 
 **Failure behavior.** No nucleus image: no correspondence, every cell `unavailable`. A
 nucleus image with no object: every cell is `no_nucleus` (all excluded by default, and the
@@ -183,12 +195,14 @@ deterministic.
 
 Task group 6 of the outline, "Validation and inspection", has three parts: this
 engineering validation, the bounded real examples below and the usage documentation (the
-tour notebook, since W-587 the [multi-FOV / sample demo](get-started/multi-fov-demo.md)).
-The engineering validation is, as in §2.7 and §2.8, known-answer fixtures with pass/fail tolerances fixed before the run, in default-tier pytest modules, plus
+tour notebook, since 2026-10-26 the [multi-FOV / sample demo](get-started/multi-fov-demo.md)).
+The engineering validation is, as in spot finding and readout, known-answer fixtures with pass/fail tolerances fixed before the run, in default-tier pytest modules, plus
 `learned`-tier modules for the checks that need StarDist or Cellpose. It has no
 comparison matrix, no parameter sweep, no ranking of methods, no default chosen from
 comparative data and no accuracy claim. Two fixed settings of one parameter in a check
 (A7, A8) test the rule at its boundary; they are not a sweep.
+
+% since W-587; as in §2.7 and §2.8
 
 Rules:
 
@@ -198,41 +212,45 @@ Rules:
   pinned golden or parity output that the row names; never from the output of the code
   under test.
 * **Seeds.** The two golden fixtures keep their own: `seg_golden` uses seed 20261005 (the
-  W-307 golden test) and `assign_golden` uses no random numbers. The new fixtures use seed
+  segmentation golden test) and `assign_golden` uses no random numbers. The new fixtures use seed
   101 for the noise of the `seeded` stain, seed 102 for the noise of the L11 stains, and
   seed 100 for the row permutation of A20. No other seed and no other random number is
   used.
-* **The §2.12 molecular fixtures are not cellular truth.** The calibrated synthetic scenes
-  of §2.12 (and §2.8's `cal` scenes) place amplicons, not cells, nuclei or membranes: no
+* **The molecular fixtures of the synthetic data are not cellular truth.** The calibrated
+  synthetic scenes of the synthetic data (and readout's `cal` scenes) place amplicons, not cells, nuclei or membranes: no
   check derives a cell, a territory, a nucleus or a correspondence from them, and none uses
   them to judge a segmentation.
 * **Tolerances.** Exact equality for every label image, status, count, identity and hash;
-  1e-12 relative for physical sizes (a product of three spacings); the W-306 CPU-against-GPU
-  tolerances for the learned methods (label count within max(1, 1 %), at least 99 % of
+  1e-12 relative for physical sizes (a product of three spacings); the dependency study's
+  CPU-against-GPU tolerances for the learned methods (label count within max(1, 1 %), at least 99 % of
   labels matched at IoU ≥ 0.5, median matched IoU at least 0.99), which are engineering
   bounds from one host, not accuracy. A tolerance is not adjusted during the run; a correct
   implementation that cannot meet one goes to Jiahao.
 * Every test runs on CPU with one thread in the routine gate; L12 runs only in a batch whose
-  guidance grants the GPU (D6).
+  guidance grants the GPU (the GPU decision).
 * Each run records wall time and peak RSS with `/usr/bin/time -v` against the 4 GiB stop
   target.
+
+% (the W-307 golden test); The §2.12 molecular fixtures; of §2.12 (and §2.8's `cal` scenes); the W-306 CPU-against-GPU tolerances; (D6)
 
 ### Fixtures
 
 | Fixture | Construction | Used by |
 | --- | --- | --- |
-| `seg_golden` | The W-307 segmentation golden fixture (16×64×64 uint8 DAPI, amplicon, Flamingo; seed 20261005). | L4, L6, L7 |
-| `assign_golden` | The W-308 assignment golden fixture (16×64×64 `uint16` labels with cells 3, 7, 12, 20, 25; 19 molecules; five genes), on an uncalibrated grid (`ImageMetadata("assign_golden")`); its Z maximum as a plane on the projection of that grid. | A2, A3, A4, A19 |
+| `seg_golden` | The segmentation golden fixture (16×64×64 uint8 DAPI, amplicon, Flamingo; seed 20261005). | L4, L6, L7 |
+| `assign_golden` | The assignment golden fixture (16×64×64 `uint16` labels with cells 3, 7, 12, 20, 25; 19 molecules; five genes), on an uncalibrated grid (`ImageMetadata("assign_golden")`); its Z maximum as a plane on the projection of that grid. | A2, A3, A4, A19 |
 | `boxes` | 8×32×32 grid, spacing (0.35, 0.1, 0.1) µm, unit `micrometer`. Cells are boxes; nuclei are boxes; every box includes the plane z = 4 and the shares below hold in 3D: cell 1 with one nucleus inside; cell 2 with two nuclei inside; cells 3 and 4 adjacent, with nucleus 31 of 100 voxels split 50 / 50 across their border; cell 5 with nucleus 51 of 10 voxels, 6 inside and 4 in the background; cells 6 and 7 adjacent, with nucleus 61 of 10 voxels, 8 in cell 6 and 2 in cell 7; cell 8 without a nucleus; nucleus 91 entirely in the background. Nucleus 91 lies at least 4 voxels in Y and X from every cell box. Molecules: in every cell two molecules outside every nucleus, and two inside each nucleus part that lies in the cell (nucleus 31's halves in cells 3 and 4, nucleus 61's parts in cells 6 and 7; none in cell 8); one in the background; one in nucleus 91; one in the background part of nucleus 51; three off the grid. | A2, A5–A13, A15, A20 |
 | `boxes_51_49` | `boxes` with nucleus 31 split 51 / 49 (51 of its 100 voxels in cell 3). | A7 |
 | `boxes_nocal` | `boxes` with metadata `ImageMetadata("boxes")` (no spacing, no unit). | A13 |
 | `bounds` | 8×8×8 labels, value 1 everywhere except a 0 at voxel (2, 3, 3); molecules at `c ∈ {−0.5, −0.5 − 1e−9, 2.5, 3.5, n − 0.5 − 1e−9, n − 0.5, 1e6}` on each axis in turn (`n` that axis's size), the other two at 1.0, and one molecule at (2.0, 3.0, 3.0). | A1 |
 | `plane` | `boxes` reduced to its plane z = 4 (1×32×32), on the projection of the `boxes` grid; molecules of `boxes` with `z` from 0 to 7, and one at z = 1000 (off the 8-plane molecule grid). | A16 |
-| `culture` | 8×32×32 culture layer, spacing (0.35, 0.1, 0.1) µm: 2D cell and nucleus labels (1×32×32 boxes, each nucleus inside its cell) and a noise-free stain of 200 in z 2–4 and 10 elsewhere; extension with a numeric `threshold` strictly between the two stain levels on the scale `ZExtensionConfig` documents (W-307 leaves the scale open; 10 < t < 200 in grey levels, 10/255 < t < 200/255 on the [0, 1] scale), `median_um` 0.1, `min_area_um2` 0.01, `dilation_um` 0 and one hole filling. Every plane is constant, so the median keeps it, and the threshold separates the levels whether the comparison is `>` or `≥`: the extended labels are the 2D labels in z 2–4 and 0 elsewhere. Molecules inside the layer, above it and below it. | L5, A17 |
+| `culture` | 8×32×32 culture layer, spacing (0.35, 0.1, 0.1) µm: 2D cell and nucleus labels (1×32×32 boxes, each nucleus inside its cell) and a noise-free stain of 200 in z 2–4 and 10 elsewhere; extension with a numeric `threshold` strictly between the two stain levels on the scale `ZExtensionConfig` documents (the segmentation specification leaves the scale open; 10 < t < 200 in grey levels, 10/255 < t < 200/255 on the [0, 1] scale), `median_um` 0.1, `min_area_um2` 0.01, `dilation_um` 0 and one hole filling. Every plane is constant, so the median keeps it, and the threshold separates the levels whether the comparison is `>` or `≥`: the extended labels are the 2D labels in z 2–4 and 0 elsewhere. Molecules inside the layer, above it and below it. | L5, A17 |
 | `seeded` | The `boxes` grid; the `boxes` nuclei as seeds (nucleus 91 among them, in the background); a stain of 200 inside the `boxes` cells and 20 elsewhere plus Gaussian noise of standard deviation 5 (seed 101); `SeededWatershedConfig(sigma_um=0.1)` (one pixel in Y and X), other fields at their defaults. | L9, L13 |
 | `imports` | TIFF files written in the test: big-endian `uint16` labels with the values 4, 9 and 30, `int32`, `float32` and `bool` masks, a YX file, a file with `starfinder_metadata` that differs from the grid, a file of another shape. | L3 |
 | `many_labels` | 32×64×64 `int32` labels whose first 70,000 voxels in C order hold the values 1 to 70,000 and the rest 0. | L2 |
-| `parity` | The W-306 parity outputs, copied as `test/data/segmentation_parity.npz` (357 KB, sha256 `4a5df997…`), {doc}`segmentation-algorithms` ("Golden and parity tests"). | L10 |
+| `parity` | The parity outputs of the dependency study, copied as `test/data/segmentation_parity.npz` (357 KB, sha256 `4a5df997…`), {doc}`segmentation-algorithms` ("Golden and parity tests"). | L10 |
+
+% The W-307 segmentation golden fixture; The W-308 assignment golden fixture; (W-307 leaves the scale open; The W-306 parity outputs
 
 ### Checks
 
@@ -241,15 +259,15 @@ Rules:
 | L1 | Label contract | hand-built arrays | `SegmentationResult.__post_init__` and `ReferenceGrid` | A `uint32` ZYX array on its grid constructs; each violation (a dtype other than `uint32`, among them an `int32` array with a negative value; a 2D array; `labels.shape ≠ grid.shape_zyx`; a target other than `nucleus` or `cell`; `plane` with Z>1; `volume` or `extended` with Z=1) raises at construction (the contract names no error type for these checks). Exact. |
 | L2 | Label dtype rule | `many_labels`; int32, uint16 and uint32 versions of `assign_golden`'s labels | Converted array and values | All 70,000 values survive the conversion to `uint32` (none wraps; label 65,536 stays 65,536); the three dtypes give identical `uint32` arrays; a negative value raises `ValueError`. Exact. |
 | L3 | Import | `imports` | `import_labels` result and record | Big-endian data read with native values; a YX file becomes 1×Y×X and needs a Z=1 grid; `float32` and `bool` raise `TypeError`; the file of another shape raises `IncompatibleGeometryError`; differing metadata raises `ValueError`; missing metadata is recorded as `declared`; `relabel=True` maps 4, 9, 30 to 1, 2, 3 with the map recorded; the file and array SHA-256 are recorded. Exact. |
-| L4 | `expand_labels` | `seg_golden` stand-in labels; single-voxel label in 9×21×21 with spacing (0.3, 0.1, 0.1) | Labels | `planar`, `pixel`, distance 4, cast to `uint16`, equals W-307's `LABELS_3D[(False, True)]`, and on the 1×Y×X form of the 2D stand-in labels, reshaped to Y×X, `LABELS_2D[(False, True)]`; `volumetric`, `um`, distance 0.5 labels exactly the voxels whose physical distance to the seed is ≤ 0.5 µm (computed in the test); distance 0 is the identity; an empty image stays empty; `um` without spacing raises. Exact. |
+| L4 | `expand_labels` | `seg_golden` stand-in labels; single-voxel label in 9×21×21 with spacing (0.3, 0.1, 0.1) | Labels | `planar`, `pixel`, distance 4, cast to `uint16`, equals the segmentation golden test's `LABELS_3D[(False, True)]`, and on the 1×Y×X form of the 2D stand-in labels, reshaped to Y×X, `LABELS_2D[(False, True)]`; `volumetric`, `um`, distance 0.5 labels exactly the voxels whose physical distance to the seed is ≤ 0.5 µm (computed in the test); distance 0 is the identity; an empty image stays empty; `um` without spacing raises. Exact. |
 | L5 | `extend_labels_through_z` | `culture` | Extended labels | Equals the 2D labels in z 2–4 and 0 in the other planes; geometry `extended`; labels with Z>1 raise; a stain of 10 everywhere with the same threshold gives an all-zero image with outcome `empty`. Exact. **Provisional**: no MATLAB parity (MATLAB not run). |
-| L6 | `resample_labels` | `seg_golden` | Labels | The W-307 shrunk stand-in labels, 16×32×32 → 16×64×64, equal the values of W-307's `RESTORED_LABELS` array (its 2×2 block repetition) after a cast to `int32`; a 1×30×32 image → exactly 1×61×63 by the index rule ⌊(i + 0.5) × n_s / n_t⌋, computed in the test. Exact. |
-| L7 | Input functions | `seg_golden`; constant and zero images | Digests and values | `composite_nuclei_amplicon` and `enhance_with_flamingo` equal W-307's `COMPOSITE_DIGESTS`, `FLAMINGO_DIGEST` and `CONSTANT_DIGESTS`; `normalize_percentile_unclipped` equals `(x − p_low) / (p_high − p_low + 1e-20)` with NumPy's linear percentiles (the formula of {doc}`segmentation-algorithms`), within 1e-6 relative and 1e-6 absolute (float32), and a constant image gives zeros; `rescale_input` divides the spacing by the factors and records the rescale in `frame_id`, and on `seg_golden` gives W-307's shrunk image within the float64 tolerance of {doc}`contributing` (an explicit expected array since W-574). Exact except the stated float32 and float64 bounds. |
+| L6 | `resample_labels` | `seg_golden` | Labels | The shrunk stand-in labels of the segmentation golden test, 16×32×32 → 16×64×64, equal the values of its `RESTORED_LABELS` array (its 2×2 block repetition) after a cast to `int32`; a 1×30×32 image → exactly 1×61×63 by the index rule ⌊(i + 0.5) × n_s / n_t⌋, computed in the test. Exact. |
+| L7 | Input functions | `seg_golden`; constant and zero images | Digests and values | `composite_nuclei_amplicon` and `enhance_with_flamingo` equal the segmentation golden test's `COMPOSITE_DIGESTS`, `FLAMINGO_DIGEST` and `CONSTANT_DIGESTS`; `normalize_percentile_unclipped` equals `(x − p_low) / (p_high − p_low + 1e-20)` with NumPy's linear percentiles (the formula of {doc}`segmentation-algorithms`), within 1e-6 relative and 1e-6 absolute (float32), and a constant image gives zeros; `rescale_input` divides the spacing by the factors and records the rescale in `frame_id`, and on `seg_golden` gives that golden test's shrunk image within the float64 tolerance of {doc}`contributing` (an explicit expected array since 2026-10-25). Exact except the stated float32 and float64 bounds. |
 | L8 | Every method at contract level: the stage wrapper | a test-only method registered for the test; `seg_golden` | Raised errors and the record | Each raising check of the 11 wrapper checks of {doc}`segmentation-contract` (config, target, input, device, dependencies, model, dimensionality, seeds; output after the run) raises, with the error the contract names where it names one (config `TypeError`, target `ValueError`, input shape `IncompatibleGeometryError`, dependencies `SegmentationBackendUnavailableError`, model `MissingModelError`, dimensionality and seed grid `IncompatibleGeometryError`, output `ValueError` for a negative value), and an input violating two checks raises the earlier one; the test-only spec declares a missing dependency and `models=True` where checks 5 and 6 need them; a method returning another shape, a negative value or a float array is refused by the output check; a dropped Z axis for one plane is restored; the record (check 11) holds the uniform provenance entry; `segment` refuses `LabelImportConfig` with `TypeError`. Exact. |
-| L9 | `seeded_watershed` at contract level | `seeded` | Labels and record | As {doc}`segmentation-algorithms` ("`seeded_watershed`") and the W-306 prototype `scripts/seeded_watershed.py` (lines 43–45: the mask is the foreground united with every seed voxel, and the seeds are the markers) state: the set of output values equals the set of all seed values; every seed voxel keeps its seed's value; nucleus 91, in the background and at least 4 voxels from every stained cell, gives a cell equal to its seed exactly; no seeds give an all-zero image with outcome `empty`; a grid without spacing raises `ValueError`; the result is on the input grid. Exact. |
+| L9 | `seeded_watershed` at contract level | `seeded` | Labels and record | As {doc}`segmentation-algorithms` ("`seeded_watershed`") and the dependency study's prototype `scripts/seeded_watershed.py` (lines 43–45: the mask is the foreground united with every seed voxel, and the seeds are the markers) state: the set of output values equals the set of all seed values; every seed voxel keeps its seed's value; nucleus 91, in the background and at least 4 voxels from every stained cell, gives a cell equal to its seed exactly; no seeds give an all-zero image with outcome `empty`; a grid without spacing raises `ValueError`; the result is on the input grid. Exact. |
 | L10 | `stardist` at contract level (`learned`) | `parity` | Labels | The six `rescale0` arrays of P1 to P3, recomputed on CPU with `scale` 1.0, the stored thresholds and, for `expand1`, planar expansion by 4, equal the saved arrays after a cast to `uint16`; a 3D model on Z=1 and a 2D model on Z>1 raise `IncompatibleGeometryError` at check 7 of {doc}`segmentation-contract`, that is after the dependency import (check 5) and the model-file resolution (check 6) and before the method's `run` is called, so no model object is built; `threshold_source` is `stored`. Exact on CPU. |
 | L11 | `cellpose` at contract level (`learned`) | Z=1 stains of the `boxes` geometry (its plane z = 4; 200 in cells, 20 elsewhere, noise of standard deviation 5 with seed 102); a missing model path | Labels and errors | A missing model path raises `MissingModelError` before any library call; a Z=1 input returns 1×Y×X; the result is `uint32`; two calls in one process give identical labels (the normalization mapping is not mutated); `diameter` is required. Exact on CPU. |
-| L12 | CPU against GPU (`learned`, GPU batches only) | `parity` P1, P2 | Label count, matched fraction, median matched IoU | Within max(1, 1 %); at least 99 % at IoU ≥ 0.5; median at least 0.99 (W-306 tolerances, one host). |
+| L12 | CPU against GPU (`learned`, GPU batches only) | `parity` P1, P2 | Label count, matched fraction, median matched IoU | Within max(1, 1 %); at least 99 % at IoU ≥ 0.5; median at least 0.99 (the dependency study's tolerances, one host). |
 | L13 | Segmentation persistence | an imported run of the `seg_golden` stand-in labels; a `seeded_watershed` run on `seeded` | Files and record | `labels.tif` and `segmentation.json` written for both runs, and `input.ome.tif` for the `seeded_watershed` run (an import has no segmentation input; {doc}`segmentation-contract`, "Method input" and "External-mask import"); `FOV.load_segmentation` returns an equal result (array equality, record equality); a changed label file raises naming the hash. Exact. |
 | L14 | Model resolution (`learned` for the files) | the cached `2D_versatile_fluo` files; a copy with one byte changed | Hashes and errors | Known-model hashes equal `KNOWN_MODELS`; the changed copy raises `ModelHashMismatchError` naming both hashes; with the network disabled nothing is fetched. Exact. |
 | A1 | Sampling at the bounds | `bounds` | Sampled voxel and status | On each axis: −0.5 → voxel 0; −0.5 − 1e−9 → `outside_grid`; 2.5 → 3; 3.5 → 4; n − 0.5 − 1e−9 → n − 1; n − 0.5 and 1e6 → `outside_grid`; every in-grid molecule of these is `assigned` to cell 1; the molecule at (2.0, 3.0, 3.0) is `unassigned`. Exact. |
@@ -273,6 +291,8 @@ Rules:
 | A19 | Determinism | `assign_golden` (without gene `Z`, as A2), `boxes` | SHA-256 of every result table, three single-thread processes | Identical. |
 | A20 | Row order | `boxes` with the molecule rows permuted by `numpy.random.default_rng(100).permutation` | Per-key results and `MoleculeTable.sha256` | Identical per `(spot_namespace, spot_id)` and the same hash. Exact. |
 
+% W-307's `LABELS_3D[(False, True)]`; The W-307 shrunk stand-in labels; W-307's `RESTORED_LABELS`; W-307's `COMPOSITE_DIGESTS`; W-307's shrunk image (an explicit expected array since W-574); the W-306 prototype; (W-306 tolerances, one host)
+
 ### What the default tier covers and what it does not
 
 L1–L9, L13, A1–A17, A19 and A20 run in the default tier, and A18 there except its
@@ -289,8 +309,8 @@ A2 and A3):
 
 * `test/test_assignment_golden.py`: every pinned digest stays. `legacy_assignment` stays
   as the frozen legacy reference of `reads_assignment.py` at `6b384cd`, with its cited
-  lines; the tests that ran only that reference were removed at W-535, and the pins no
-  test read were deleted at W-574. Named edits, all additions: tests that build a
+  lines; the tests that ran only that reference were removed on 2026-10-21, and the pins no
+  test read were deleted on 2026-10-25. Named edits, all additions: tests that build a
   `MoleculeTable` from the golden CSV without the gene-`Z` molecule (unknown genes now
   raise), run `assign_molecules` on the fixture's uncalibrated grid with
   `ExpandLabelsConfig(distance=4, unit="pixel", mode="planar")` or no expansion, and assert that the `cell_id` of every
@@ -302,7 +322,11 @@ A2 and A3):
   fixture (cells kept when no molecule is assigned, `outside_grid` for one-based 0 and
   beyond the grid, float coordinates accepted).
 
-### Implemented checks (W-318)
+% removed at W-535; deleted at W-574
+
+### Implemented checks
+
+% heading: Implemented checks (W-318)
 
 The checks are in the modules of `src/python/test/` listed below. The task groups added
 most of them with the code they check; `test_segmentation_validation.py` and
@@ -313,8 +337,10 @@ the `boxes` FOV. Each of the two modules also checks that every row of the table
 names tests that exist. A test named for a row but built on another fixture (the `boxes`
 cases of `test_l4_*` in `test_assignment.py`, the ramp of `test_l7_rescaling_*`, the ring
 of `test_l5_hole_filling_*`, the plane of `test_l9_the_plane_z4_*`, and the development
-preset of `test_fov_run_and_segmentation_files_are_untouched_by_assign`, a W-315
-integration test) is an additional check and is not listed.
+preset of `test_fov_run_and_segmentation_files_are_untouched_by_assign`, an integration
+test of the persistence step of 2026-10-05) is an additional check and is not listed.
+
+% a W-315 integration test
 
 The identities of A2 are checked by `check_accounting` (`test_assignment.py`), which
 recomputes every count row from the `molecules` table (whole per kept cell and gene,
@@ -382,23 +408,29 @@ models (L10's P1 and L12 also `STARFINDER_STARDIST_3D_SPLEEN`) and skip without 
 ## Bounded real examples
 
 These run after the segmentation methods (task group 3) and assignment (task group 4)
-exist and inspect the three contexts on the W-305 crops, volumetric first. They are inspections, not comparisons: no annotation exists
-(W-123), the culture reference labels are earlier workflow results, and nothing is ranked
-or called accurate. Every input is a W-305 crop listed in
-`runs/W-305/20261004T0630Z-summary/examples.md` with its SHA-256 in the run's
-`metrics.json` and `manifest.json`.
+exist and inspect the three contexts on the crops of the model and environment survey,
+volumetric first. They are inspections, not comparisons: no annotation exists, the culture
+reference labels are earlier workflow results, and nothing is ranked or called accurate.
+Every input is a crop of the survey, listed in its `examples.md` with its SHA-256 in the
+survey run's `metrics.json` and `manifest.json`.
 
-**Molecules.** W-305 staged morphology only. Each example needs the molecule table of the
-same FOV window: the existing goodSpots of that FOV cut to the crop window, or a `FOV.run`
-of the window. Neither is a W-305 crop, so the issue that runs the examples needs an
-authorization naming those files; without it, the examples run segmentation, correspondence
+% on the W-305 crops; (W-123); a W-305 crop listed in `runs/W-305/20261004T0630Z-summary/examples.md`
+
+**Molecules.** The survey staged morphology only. Each example needs the molecule table of
+the same FOV window: the existing goodSpots of that FOV cut to the crop window, or a
+`FOV.run` of the window. Neither is a crop of the survey, so the run of the examples needs
+an authorization naming those files; without it, the examples run segmentation, correspondence
 and the territory statistics only, and report the molecule outputs as not run.
 
-| Order | Context | Crop (W-305 run) | Runs | Resources |
+% W-305 staged morphology only; Neither is a W-305 crop, so the issue that runs the examples
+
+| Order | Context | Crop (survey run) | Runs | Resources |
 | --- | --- | --- | --- | --- |
-| 1 | Volumetric tissue (LN, `Position020`) | `20261004T0530Z-ln-3d-spleen/crop_dapi_round4.tif` (50×512×512 uint8), and `crop_dapi_enhanced_with_flamingo.tif` for the Flamingo-assisted nuclei | Nuclei: `stardist`, `3D_spleen`, `scale` 1.0, stored thresholds. Territories: (a) assign's planar expansion of the nuclei by 0.7776 µm (4 pixels at 0.1944 µm, the legacy parity distance), with the original nuclei and the expanded territories both kept, (b) `seeded_watershed` on `crop_flamingo.tif`. Assign with nuclei, C1 thresholds, exclusion on and off. Spacing 0.3463 × 0.1944 × 0.1944 µm (TIFF tags). | StarDist 226 s per call on one CPU thread (W-306 `ln_dapi_round4@1.0`; 58 s on four threads, 55 s on the GPU), 2,245 MiB peak RSS per call including the loaded model; assignment code-derived: two `uint32` volumes of 52 MB plus the expanded one, under 0.5 GB, seconds. |
-| 2 | 2D tissue (tissue-2D, `round1/tile_1`) | `20261004T0600Z-tissue2d-watershed/crop_PI.tif` and `crop_amplicon_merged.tif` (1024×1024 uint8) | Nuclei: `stardist`, `2D_versatile_fluo`, `scale` 0.25. Cells: `seeded_watershed` on the PI–amplicon composite (`composite_nuclei_amplicon` of `crop_PI.tif` and `crop_amplicon_merged.tif` with the default `CompositeConfig`, role `composite`), seeds the nuclei, `sigma_um` 1.5, spacing 0.0946 µm (corrected 2026-10-05, W-321 review; W-320 ran it on the amplicon signal alone). Assign as a `plane` (Z=1 grid), with nuclei, C2 thresholds (the default since W-334; W-320 ran C1, which gives the same result here because every nucleus lies wholly inside its cell), exclusion on and off. | StarDist 1.2 s per call on one CPU thread, 868 MiB peak RSS including the loaded model (W-306 `tissue_pi@0.25`); watershed 0.25 s (W-306 `tissue2d_amplicon`); assignment code-derived: 4 MB per label image, under 1 s. |
-| 3 | Single-layer culture (stitched sample) | `20261004T0615Z-culture-fused-crop/crop_DAPI_3d_42x512x512.tif`, `crop_Flamingo_3d_42x512x512.tif`, the projections `crop_DAPI_max_2d.tif`, `crop_Flamingo_max_2d.tif`, and the references `reference_Cell_label_2d.tif`, `reference_DAPI_label_2d.tif`, `reference_Cell_3d_42x512x512.tif` (big-endian; imported) | (a) The imported 2D references, extended through z with `extend_labels_through_z` on the 3D crops; (b) Cellpose `cpsam_v2` on the projections, cells at `diameter` 240 and nuclei at an explicit recorded diameter (W-306 ran 60 and 240 on the DAPI projection), then extended the same way. Assign with nuclei and compartments, C1, exclusion on and off. The 2D projections are 1024×1024 and the 3D crops their 512×512 centre, so the extension uses the matching centre window. | Cellpose 203 s per call on one CPU thread for the two-channel cells, 1,718 MiB peak RSS including the loaded model, or 1.5 s on the GPU (W-306 `culture_cells_2d@d240`); nuclei 229 s on one CPU thread at diameter 60 (`culture_nuclei_2d@d60`; diameter 240 was measured on the GPU only, 0.38 s); import and extension code-derived: 42×512×512 `uint32` is 44 MB per volume; assignment seconds. |
+| 1 | Volumetric tissue (LN, `Position020`) | `20261004T0530Z-ln-3d-spleen/crop_dapi_round4.tif` (50×512×512 uint8), and `crop_dapi_enhanced_with_flamingo.tif` for the Flamingo-assisted nuclei | Nuclei: `stardist`, `3D_spleen`, `scale` 1.0, stored thresholds. Territories: (a) assign's planar expansion of the nuclei by 0.7776 µm (4 pixels at 0.1944 µm, the legacy parity distance), with the original nuclei and the expanded territories both kept, (b) `seeded_watershed` on `crop_flamingo.tif`. Assign with nuclei, C1 thresholds, exclusion on and off. Spacing 0.3463 × 0.1944 × 0.1944 µm (TIFF tags). | StarDist 226 s per call on one CPU thread (the dependency study's `ln_dapi_round4@1.0`; 58 s on four threads, 55 s on the GPU), 2,245 MiB peak RSS per call including the loaded model; assignment code-derived: two `uint32` volumes of 52 MB plus the expanded one, under 0.5 GB, seconds. |
+| 2 | 2D tissue (tissue-2D, `round1/tile_1`) | `20261004T0600Z-tissue2d-watershed/crop_PI.tif` and `crop_amplicon_merged.tif` (1024×1024 uint8) | Nuclei: `stardist`, `2D_versatile_fluo`, `scale` 0.25. Cells: `seeded_watershed` on the PI–amplicon composite (`composite_nuclei_amplicon` of `crop_PI.tif` and `crop_amplicon_merged.tif` with the default `CompositeConfig`, role `composite`), seeds the nuclei, `sigma_um` 1.5, spacing 0.0946 µm (corrected on 2026-10-05 at the review of the bounded real examples; the bounded real-example run ran it on the amplicon signal alone). Assign as a `plane` (Z=1 grid), with nuclei, C2 thresholds (the default since 2026-10-05; the bounded real-example run used C1, which gives the same result here because every nucleus lies wholly inside its cell), exclusion on and off. | StarDist 1.2 s per call on one CPU thread, 868 MiB peak RSS including the loaded model (the dependency study's `tissue_pi@0.25`); watershed 0.25 s (its `tissue2d_amplicon`); assignment code-derived: 4 MB per label image, under 1 s. |
+| 3 | Single-layer culture (stitched sample) | `20261004T0615Z-culture-fused-crop/crop_DAPI_3d_42x512x512.tif`, `crop_Flamingo_3d_42x512x512.tif`, the projections `crop_DAPI_max_2d.tif`, `crop_Flamingo_max_2d.tif`, and the references `reference_Cell_label_2d.tif`, `reference_DAPI_label_2d.tif`, `reference_Cell_3d_42x512x512.tif` (big-endian; imported) | (a) The imported 2D references, extended through z with `extend_labels_through_z` on the 3D crops; (b) Cellpose `cpsam_v2` on the projections, cells at `diameter` 240 and nuclei at an explicit recorded diameter (the dependency study ran 60 and 240 on the DAPI projection), then extended the same way. Assign with nuclei and compartments, C1, exclusion on and off. The 2D projections are 1024×1024 and the 3D crops their 512×512 centre, so the extension uses the matching centre window. | Cellpose 203 s per call on one CPU thread for the two-channel cells, 1,718 MiB peak RSS including the loaded model, or 1.5 s on the GPU (the dependency study's `culture_cells_2d@d240`); nuclei 229 s on one CPU thread at diameter 60 (`culture_nuclei_2d@d60`; diameter 240 was measured on the GPU only, 0.38 s); import and extension code-derived: 42×512×512 `uint32` is 44 MB per volume; assignment seconds. |
+
+% Crop (W-305 run); (W-306 `ln_dapi_round4@1.0`; (corrected 2026-10-05, W-321 review; W-320 ran it on the amplicon signal alone); (the default since W-334; W-320 ran C1; (W-306 `tissue_pi@0.25`); (W-306 `tissue2d_amplicon`); (W-306 ran 60 and 240; (W-306 `culture_cells_2d@d240`)
 
 **Outputs to inspect**, per example and per territory option, written to the run directory
 (at most ten PNGs in total):
@@ -419,9 +451,11 @@ Budget: one CPU process at a time within 4 GiB RSS; the whole plan is about 15 m
 one CPU thread, dominated by the StarDist 3D calls (two LN inputs at about 226 s) and the
 Cellpose projection calls (203 s and 229 s); on a GPU batch, a few minutes.
 
-**Whole-FOV measurement** (authorized once at W-309 on 2026-10-05; outside the budget
-above). After the three examples, one whole volumetric field of view is segmented
+**Whole-FOV measurement** (authorized once at the acceptance review on 2026-10-05; outside
+the budget above). After the three examples, one whole volumetric field of view is segmented
 block-wise, to replace the estimate of {doc}`segmentation-algorithms` by a measurement:
+
+% (authorized once at W-309 on 2026-10-05
 
 * Input: the whole `round4` `ch04` (DAPI) image of LN `Position020`, 50×1496×1496, the
   image `crop_dapi_round4.tif` was cut from, with its SHA-256 recorded.
@@ -442,9 +476,12 @@ accuracy statement.
 
 * Every assignment resource figure is code-derived; nothing was measured on a whole FOV.
 * The correspondence thresholds are not fitted to data. Exact containment (0.0) withheld
-  the compartments of nearly every cell of the W-320 culture crop; the default 0.1 (option
+  the compartments of nearly every cell of the culture crop of the bounded real-example run; the default 0.1 (option
   C2) is provisional, from that one crop without annotation, and is not claimed to suit
   other samples.
 * The validation design checks that rules are implemented as written; it measures no
-  segmentation or assignment quality, which needs annotation (W-123) and E04.
-* The bounded examples need molecule tables that W-305 did not stage.
+  segmentation or assignment quality, which needs annotation and an answer to whether a mask
+  is one biological cell, both left to later work.
+* The bounded examples need molecule tables that the survey did not stage.
+
+% the W-320 culture crop; needs annotation (W-123) and E04; that W-305 did not stage

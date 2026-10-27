@@ -1,9 +1,11 @@
 starfinder.segmentation
 =======================
 
-Segmentation (§2.9) gives every label image one contract, whether a method computed it
+Segmentation gives every label image one contract, whether a method computed it
 or a mask was imported; see :doc:`../segmentation-contract` and
 :doc:`../segmentation-algorithms`.
+
+.. Segmentation (§2.9)
 
 A :py:class:`~starfinder.segmentation.SegmentationResult` holds a ``uint32`` ZYX label
 image (a plane is 1×Y×X; 0 is background and each positive value one object, never
@@ -131,7 +133,7 @@ No segmentation entry downloads a model.
 SHA-256, and the documented properties) for the pretrained models Starfinder can verify,
 ``("stardist", "2D_versatile_fluo")`` and ``("cellpose", "cpsam_v2")``; it sets no default
 model. :py:func:`~starfinder.segmentation.resolve_model` finds a known model in the
-weights cache (``<root>/<method>/<model>/``, the §2.7 cache) or a user-trained model by
+weights cache (``<root>/<method>/<model>/``, the cache of the learned spot detectors) or a user-trained model by
 path (a StarDist folder with ``config.json``, ``thresholds.json`` and ``weights_best.h5``,
 such as ``3D_spleen``; a Cellpose model file), recomputes each file's SHA-256 and returns
 the path with the provenance artifacts; a missing file raises
@@ -140,6 +142,8 @@ one :py:class:`~starfinder.segmentation.ModelHashMismatchError` naming both hash
 ``segment`` calls it before any library call. ``starfinder weights fetch stardist
 2D_versatile_fluo`` (or ``cellpose cpsam_v2``) is the explicit download, and ``starfinder
 weights list`` and ``verify`` cover the segmentation models with the detector weights.
+
+.. the §2.7 cache
 
 ``FOV.segment(plan, device="cpu")`` runs a
 :py:class:`~starfinder.segmentation.SegmentationPlan` of

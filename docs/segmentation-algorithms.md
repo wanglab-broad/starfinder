@@ -1,41 +1,50 @@
 # Segmentation algorithm specification
 
-Status: Accepted (W-309, 2026-10-05, at 3550723)
+% Status: Accepted (W-309, 2026-10-05, at 3550723)
 
-This page specifies, for each §2.9 segmentation method and each reusable function, the
+This page specifies, for each segmentation method and each reusable function, the
 problem it addresses, its parameters with units and defaults, its failure behavior
 (including an image with no foreground) and its resource estimate. The registry,
 configs, label contract and records they plug into are in {doc}`segmentation-contract`;
-the behavior before §2.9 is history, in {doc}`segmentation-baseline`. The methods and functions
-specified here are implemented in `starfinder.segmentation` ({doc}`api/segmentation`),
-with the engineering checks of {doc}`assignment-algorithms` ("Implemented checks (W-318)"),
-and nothing here ranks the methods, sets a default model or makes an accuracy claim.
-The validation design for the whole section is W-308's.
+the behavior before the package's segmentation and assignment work is history, in
+{doc}`segmentation-baseline`. The methods and functions specified here are implemented in
+`starfinder.segmentation` ({doc}`api/segmentation`), with the engineering checks of
+{doc}`assignment-algorithms` ("Implemented checks"), and nothing here ranks the methods,
+sets a default model or makes an accuracy claim. The validation design for segmentation
+and assignment together is in the assignment specification ({doc}`assignment-algorithms`).
+
+% each §2.9 segmentation method; the behavior before §2.9; "Implemented checks (W-318)"; The validation design for the whole section is W-308's
 
 ## Evidence
 
-Every measured number comes from W-306, run directory
-`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-306/20261004T194036Z-74e12949`
-(found with `timeout 30 find …/runs/W-306 -maxdepth 2 -name segmentation-manifest.json`;
-`notes.md` sections 3 to 7; tables `segmentation-calls.csv`, `cost-summary.csv`,
-`comparisons.csv`, `fov-memory-estimate.json`, `label-dtype-probe.json`), or from W-305
-(`runs/W-305/20261004T0630Z-summary/models.md` and `examples.md`). W-307 repeats no
-measurement. The measurements ran on GP099-29C (one RTX A5000, driver 580) with StarDist
-0.9.2, TensorFlow 2.20.0 and Cellpose 4.2.1.1 with torch 2.7.1; one CPU thread unless
-stated. Where W-306 did not measure a function, the estimate below is derived from the code
-and labelled as such. The W-306 and W-305 limitations apply throughout; the full list is
-in {doc}`segmentation-contract` ("Limitations of the evidence").
+Every measured number comes from the dependency study of 2026-10-04, whose run directory
+is kept with the run records outside the repository (`notes.md` sections 3 to 7; tables
+`segmentation-calls.csv`, `cost-summary.csv`, `comparisons.csv`,
+`fov-memory-estimate.json`, `label-dtype-probe.json`), or from the model and environment
+survey of 2026-10-04 (`models.md` and `examples.md`). The segmentation specification
+repeats no measurement. The measurements ran on GP099-29C (one RTX A5000, driver 580) with
+StarDist 0.9.2, TensorFlow 2.20.0 and Cellpose 4.2.1.1 with torch 2.7.1; one CPU thread
+unless stated. Where the dependency study did not measure a function, the estimate below is
+derived from the code and labelled as such. The limitations of the dependency study and of
+the survey apply throughout; the full list is in {doc}`segmentation-contract`
+("Limitations of the evidence").
 
-Each statement of failure or edge behavior below names what supports it: a W-306 row or
-section (measured with the library), the W-307 golden test (`test_segmentation_golden.py`,
-run on the unchanged scripts), a probe in the locked environment recorded in the W-307
-worker notes, or the code (read, not run). Statements about functions that do not exist
-yet are marked as proposed rules.
+% W-306, run directory `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-306/20261004T194036Z-74e12949` (found with `timeout 30 find …/runs/W-306 -maxdepth 2 -name segmentation-manifest.json`); W-305 (`runs/W-305/20261004T0630Z-summary/models.md` and `examples.md`); W-307 repeats no measurement; Where W-306 did not measure; The W-306 and W-305 limitations
+
+Each statement of failure or edge behavior below names what supports it: a row or section
+of the dependency study (measured with the library), the golden test of the segmentation
+specification (`test_segmentation_golden.py`, run on the unchanged scripts), a probe in the
+locked environment recorded in the specification's worker notes, or the code (read, not
+run). Statements about functions that do not exist yet are marked as proposed rules.
+
+% a W-306 row or section; the W-307 golden test; the W-307 worker notes
 
 ### How to read the resource figures
 
-W-306 measured calls inside job processes (notes section 4). Every figure below says which
-of these kinds it is:
+The dependency study measured calls inside job processes (notes section 4). Every figure
+below says which of these kinds it is:
+
+% W-306 measured calls
 
 * **Wall** and **CPU**: per-call wall time, and the whole process's CPU time over the call
   (all threads), both measured. Process start-up, imports and the model load are outside
@@ -51,12 +60,17 @@ of these kinds it is:
   includes the allocator caches and the memory that earlier calls grew (TensorFlow keeps
   what it grows to), so it is per job, not per call, and not interchangeable with the
   framework peak.
-* **Projected**: a CPU cost W-306 did not measure, with its basis.
-* **Code-derived estimate**: W-307's reading of the code, for functions W-306 did not run.
+* **Projected**: a CPU cost the dependency study did not measure, with its basis.
+* **Code-derived estimate**: the segmentation specification's reading of the code, for
+  functions the dependency study did not run.
 
-The one W-306 call without a CPU time (the stopped pilot Cellpose CPU call at diameter
+% a CPU cost W-306 did not measure; W-307's reading of the code, for functions W-306 did not run
+
+The one call of the dependency study without a CPU time (the stopped pilot Cellpose CPU call at diameter
 None, whose wall time and peak RSS come from the orchestrator and the watchdog) is not
 used on this page.
+
+% The one W-306 call
 
 ## What each element addresses
 
@@ -83,7 +97,8 @@ used on this page.
 n_tiles=…, prob_thresh=…, nms_thresh=…)`. StarDist resamples the input by `scale`
 (`ndi.zoom`, order 1), predicts object probabilities and ray distances, runs non-maximum
 suppression on the CPU and renders the surviving polygons or polyhedra on the original
-grid, so the labels are on the input grid at every scale (W-306 notes section 6). A Z=1
+grid, so the labels are on the input grid at every scale (the dependency study's notes,
+section 6). A Z=1
 input to a 2D model is squeezed to YX and the axis restored. With the block fields set,
 the call is `predict_instances_big(image, axes=…, block_size=…, min_overlap=…,
 context=…, n_tiles=…, prob_thresh=…, nms_thresh=…)`: each block is predicted with
@@ -91,54 +106,64 @@ context=…, n_tiles=…, prob_thresh=…, nms_thresh=…)`: each block is predi
 block are dropped, and the block's labels are renumbered after those already written
 ({doc}`segmentation-contract`, "Block-wise prediction").
 
+% (W-306 notes section 6)
+
 **Parameters** (`StarDistConfig`):
 
 | Parameter | Unit | Default | Notes |
 | --- | --- | --- | --- |
 | `model` or `model_path` | | required (one) | known `2D_versatile_fluo`; user-trained `3D_spleen` by path |
-| `scale` | factor (Y, X, or ZYX) | required | W-305 observations, not settings: 1.0 for `3D_spleen` on LN, 0.25 for `2D_versatile_fluo` on tissue-2D PI. `3D_spleen` stores anisotropy (2.286, 1, 1) but has no spacing parameter; a per-axis scale is the only route (spacing (1, 2, 2) fixture: nothing at scale 1, 2 labels at (1/2.286, 2, 2)). |
+| `scale` | factor (Y, X, or ZYX) | required | Observations of the survey, not settings: 1.0 for `3D_spleen` on LN, 0.25 for `2D_versatile_fluo` on tissue-2D PI. `3D_spleen` stores anisotropy (2.286, 1, 1) but has no spacing parameter; a per-axis scale is the only route (spacing (1, 2, 2) fixture: nothing at scale 1, 2 labels at (1/2.286, 2, 2)). |
 | `prob_thresh` | probability | `None` = stored | `3D_spleen` 0.6429, `2D_versatile_fluo` 0.4791 |
 | `nms_thresh` | overlap | `None` = stored | `3D_spleen` 0.5, `2D_versatile_fluo` 0.3 |
 | `normalize_percentiles` | percent | (1.0, 99.8) | the current script's values |
-| `n_tiles` | tiles per axis | `None` = 1×4×4 (volume), 2×2 (plane) | csbdeep may use fewer tiles than requested (W-306 `seam-tiles.json`) |
-| `block_size`, `min_overlap`, `context` | voxels per axis | `None` = whole-image prediction | given together; `min_overlap + 2 × context < block_size`; rounded by the library to multiples of the model's grid; objects must be smaller than `min_overlap`; not run in W-305 or W-306 |
+| `n_tiles` | tiles per axis | `None` = 1×4×4 (volume), 2×2 (plane) | csbdeep may use fewer tiles than requested (the dependency study's `seam-tiles.json`) |
+| `block_size`, `min_overlap`, `context` | voxels per axis | `None` = whole-image prediction | given together; `min_overlap + 2 × context < block_size`; rounded by the library to multiples of the model's grid; objects must be smaller than `min_overlap`; not run in the survey or the dependency study |
 
-**How outputs move with the parameters** (W-306 GPU rows; boundaries, not tuning):
+% W-305 observations; (W-306 `seam-tiles.json`); not run in W-305 or W-306
+
+**How outputs move with the parameters** (the dependency study's GPU rows; boundaries, not tuning):
 `3D_spleen` on LN `dapi_round4` gives 3, 253 and 426 labels at scale 0.5, 0.75 and 1.0,
 and 535, 426 and 60 at prob 0.5, the stored 0.643 and 0.8; `2D_versatile_fluo` on the
 tissue PI crop gives 39, 62 and 56 labels at scale 0.25, 0.5 and 1.0, and 39, 39 and 15
 at prob 0.3, the stored 0.479 and 0.8.
 
+% (W-306 GPU rows
+
 **Failure behavior.**
 
 * No foreground: an all-zero image gives an empty label image without error, on CPU and
-  GPU (W-306 `f2:empty`, `f3:empty` rows); the result has `outcome` `empty` (proposed
-  rule). `3D_spleen` returns uint16 when it finds nothing and int32 otherwise (W-306
-  section 14, all rows); the wrapper converts both to `uint32` (proposed rule).
+  GPU (the dependency study's `f2:empty`, `f3:empty` rows); the result has `outcome` `empty`
+  (proposed rule). `3D_spleen` returns uint16 when it finds nothing and int32 otherwise
+  (the dependency study, section 14, all rows); the wrapper converts both to `uint32` (proposed rule).
 * Background noise: `2D_versatile_fluo` returns one spurious object along the image
-  border, `3D_spleen` none (W-306 `f2:noise`, `f3:noise` rows). No filter is applied; the
+  border, `3D_spleen` none (the dependency study's `f2:noise`, `f3:noise` rows). No filter is applied; the
   worker notes keep object filtering open.
-* The current script on an image with no Otsu component raises at `areas.max()` (W-306
-  parity probe `probe_zeros_64x64_2d`; W-307 golden test); the method has no gate.
+* The current script on an image with no Otsu component raises at `areas.max()` (the
+  dependency study's parity probe `probe_zeros_64x64_2d`; the segmentation golden test);
+  the method has no gate.
 * Wrong dimensionality and Z=1: rejected by the stage wrapper before the model loads
   (proposed rule). Unwrapped, StarDist 2D on 1×64×64 raises a bare `ValueError`
-  (W-306 `f2:z1`) and `3D_spleen` on one plane returns nothing where it finds the same
-  blobs in a volume (W-306 `f3:z1`), which is why Z=1 is refused for 3D models.
+  (the dependency study's `f2:z1`) and `3D_spleen` on one plane returns nothing where it
+  finds the same blobs in a volume (its `f3:z1`), which is why Z=1 is refused for 3D models.
 * Small inputs: no minimum is enforced by the library; inputs from 8×8 run and may be
-  empty (W-306 `probe:2d_8x8` and the other `probe:` minimum rows). `min_shape_zyx` stays
+  empty (the dependency study's `probe:2d_8x8` and the other `probe:` minimum rows). `min_shape_zyx` stays
   (1, 1, 1).
 * Missing or changed model files: `MissingModelError` or `ModelHashMismatchError` before
   loading (proposed rule). Loading a model with the wrong class raises the library's
-  `ValueError` about the grid (W-306 `loading-probes.json`); the dimensionality check runs
+  `ValueError` about the grid (the dependency study's `loading-probes.json`); the dimensionality check runs
   first, so it is not reached.
 * Low thresholds slow the CPU non-maximum suppression: on the GPU, prob 0.5 took 72 s of
   per-call wall time against 54.6 s at the stored value, and the un-normalized 16×64×64
-  fixture took 176–180 s on either device (W-306 section 4; the cause was not measured).
+  fixture took 176–180 s on either device (the dependency study, section 4; the cause was
+  not measured).
   The method sets no time limit; the cost is the caller's.
 * Tiling: on the CPU, tiled and untiled labels are identical; on the GPU, seam-crossing
   labels keep IoU ≥ 0.9996 on the tissue crop, and all 135 seam-crossing LN labels are
-  identical to the untiled GPU run (W-306 seam tables). The 3D seam fixture found no
-  object, so the 3D statement rests on one LN crop.
+  identical to the untiled GPU run (the dependency study's seam tables). The 3D seam
+  fixture found no object, so the 3D statement rests on one LN crop.
+
+% W-306 `f2:empty`, `f3:empty`; (W-306 section 14; W-306 `f2:noise`, `f3:noise`; (W-306 parity probe; W-307 golden test); (W-306 `f2:z1`); (W-306 `f3:z1`); (W-306 `probe:2d_8x8`; (W-306 `loading-probes.json`); (W-306 section 4; (W-306 seam tables)
 
 **Resources** (measured per call, `cost-summary.csv` and `segmentation-calls.csv`; the
 kinds are defined under "How to read the resource figures"):
@@ -157,10 +182,13 @@ for four dense arrays (leaving out the process baseline, tile activations, works
 copies, and assuming dense distances), and a linear extrapolation of the 50×512×512 CPU
 call's peak RSS gives about 12,500 MiB and 1,930 s; both are estimates, not bounds
 (`fov-memory-estimate.json`). A whole FOV is therefore run with StarDist's block-wise
-prediction (W-306 choice 7, decided at W-309 on 2026-10-05), which W-306 did not call: its
+prediction (the dependency study's choice 7, decided at the acceptance review on
+2026-10-05), which the dependency study did not call: its
 cost, its memory and its agreement with whole-image prediction are measured by the
 implementation and by the whole-FOV measurement of the bounded real examples
 ({doc}`assignment-algorithms`).
+
+% (W-306 choice 7, decided at W-309 on 2026-10-05), which W-306 did not call
 
 ### `cellpose`
 
@@ -171,40 +199,49 @@ channels in role order (`cytoplasm` then `nuclear`, or `nuclear` alone) with
 `anisotropy`. Cellpose rescales the image by 30/`diameter`, pads it by 8 pixels a side,
 cuts it into 256-pixel tiles whose count per axis is ceil((1 + 2 × `tile_overlap`) ×
 size / 256), blends the network outputs over the overlaps, resizes the flows back and
-computes masks at the input size (W-306 section 6). 3D mode runs the 2D network on the
-YX, ZY and ZX planes.
+computes masks at the input size (the dependency study, section 6). 3D mode runs the 2D
+network on the YX, ZY and ZX planes.
+
+% (W-306 section 6)
 
 **Parameters** (`CellposeConfig`):
 
 | Parameter | Unit | Default | Notes |
 | --- | --- | --- | --- |
 | `model` or `model_path` | | required (one) | known `cpsam_v2` |
-| `diameter` | pixels | required | W-305 observation, not a setting: 240 for culture cells; W-306 also ran 60 for nuclei. `None` (explicit) means no rescale and is refused in 3D mode, where diameter None on 14-pixel objects gave 85 fragments (W-306). |
+| `diameter` | pixels | required | An observation of the survey, not a setting: 240 for culture cells; the dependency study also ran 60 for nuclei. `None` (explicit) means no rescale and is refused in 3D mode, where diameter None on 14-pixel objects gave 85 fragments (the dependency study). |
 | `do_3d`, `anisotropy` | -, Z/YX spacing ratio | `False`, `None` | 3D mode needs both; `anisotropy=0.5` recovered the 4 objects of the spacing (1, 2, 2) fixture |
-| `flow_threshold`, `cellprob_threshold` | -, logit | 0.4, 0.0 | library defaults; W-306 sensitivity rows at diameter 240: cellprob −1 gives 31 labels, the defaults 34, flow 0.8 gives 41 |
+| `flow_threshold`, `cellprob_threshold` | -, logit | 0.4, 0.0 | library defaults; the dependency study's sensitivity rows at diameter 240: cellprob −1 gives 31 labels, the defaults 34, flow 0.8 gives 41 |
 | `tile_overlap` | fraction | 0.1 | clipped to [0.05, 0.5] by Cellpose; 0.1 against 0.5 changed outlines (median matched IoU 0.954, 131,716 pixels) |
 | `bfloat16` | | `True` | library default on CPU and GPU |
 | `min_size` | pixels | 15 | library default |
 | `normalize_percentiles` | percent | (1.0, 99.0) | per channel, over the whole stack in 3D mode |
 
+% W-305 observation; W-306 also ran 60; 85 fragments (W-306); W-306 sensitivity rows
+
 **Failure behavior.**
 
 * No foreground: an all-zero image gives an empty label image without error; background
-  noise gives none (W-306 `f2:empty`, `f2:noise` rows).
+  noise gives none (the dependency study's `f2:empty`, `f2:noise` rows).
 * A missing model path: Cellpose itself silently loads the default `cpsam_v2` (and would
-  download it) (W-306 `loading-probes.json` and code reading of `cellpose/models.py`); the
+  download it) (the dependency study's `loading-probes.json` and code reading of
+  `cellpose/models.py`); the
   wrapper's model check raises first (proposed rule).
-* More than 65,535 masks: Cellpose switches from uint16 to uint32 with a warning (W-306
-  code reading of `cellpose/dynamics.py` and `label-dtype-probe.json`); the wrapper
+* More than 65,535 masks: Cellpose switches from uint16 to uint32 with a warning (the
+  dependency study's code reading of `cellpose/dynamics.py` and `label-dtype-probe.json`); the wrapper
   converts to `uint32` either way (proposed rule).
-* One plane: the Z axis is dropped by Cellpose (W-306 `f2:z1`, `f3:z1` rows) and restored by
+* One plane: the Z axis is dropped by Cellpose (the dependency study's `f2:z1`, `f3:z1` rows)
+  and restored by
   the wrapper (proposed rule).
-* `normalize=False` gives no labels (W-306 `iso_unnormalized` row); Starfinder always passes
+* `normalize=False` gives no labels (the dependency study's `iso_unnormalized` row);
+  Starfinder always passes
   its normalization.
-* Seams on dense images: isolated objects on tile edges stay whole (49 of 49, W-306
-  `seam-summary.csv`), but moving the tile grid by half a tile changed 3 of 22 interior
-  culture cells beyond IoU 0.5, and every interior cell lay on a seam in both layouts
-  (W-306 `seam-shift.csv`, choice 10, open).
+* Seams on dense images: isolated objects on tile edges stay whole (49 of 49, the
+  dependency study's `seam-summary.csv`), but moving the tile grid by half a tile changed 3
+  of 22 interior culture cells beyond IoU 0.5, and every interior cell lay on a seam in both
+  layouts (its `seam-shift.csv`, choice 10, open).
+
+% (W-306 `f2:empty`, `f2:noise`; (W-306 `loading-probes.json`; (W-306 code reading; (W-306 `f2:z1`, `f3:z1`; (W-306 `iso_unnormalized`; (49 of 49, W-306 `seam-summary.csv`); (W-306 `seam-shift.csv`, choice 10, open)
 
 **Resources:**
 
@@ -216,39 +253,50 @@ YX, ZY and ZX planes.
 | any input within one 256-pixel tile | 22–25 s wall | | 0.04–0.08 s wall |
 | 3D mode, 42×512×512 × 2, diameter 240 | not run; projected 3,015–3,833 s per call (129–164 tiles at the 23.4 s median single-tile CPU call, 3D flow dynamics not included) | | 6.2 s wall; framework GPU peak 1,504 MiB; peak RSS 2,430 MiB (1,855 MiB before) |
 
-On the CPU, flow dynamics take 200/rescale iterations (1,600 at diameter 240), which
-W-306 estimates at about 180 s of the 203 s call (the call minus one tile's 23 s, not a
-separate measurement). Cellpose 3D mode is GPU-only in practice.
+On the CPU, flow dynamics take 200/rescale iterations (1,600 at diameter 240), which the
+dependency study estimates at about 180 s of the 203 s call (the call minus one tile's
+23 s, not a separate measurement). Cellpose 3D mode is GPU-only in practice.
+
+% which W-306 estimates
 
 ### `seeded_watershed`
 
-**Algorithm** (the W-306 prototype `scripts/seeded_watershed.py`). Convert the stain with
+**Algorithm** (the dependency study's prototype `scripts/seeded_watershed.py`). Convert the stain with
 `img_as_float`; smooth it with a Gaussian of `sigma_um / spacing` pixels per axis (an axis
 of length 1 is not smoothed); threshold it (Otsu or a number); run
 `skimage.segmentation.watershed(-smooth, markers=seeds, mask=(smooth > threshold) or
 (seeds > 0), connectivity, compactness)`. The output carries the seed labels, so cell k
 contains nucleus k, and it runs on the full-resolution grid with seeds and stain on that
-grid (the W-305 rule).
+grid (the rule set after the survey).
+
+% (the W-306 prototype; (the W-305 rule)
 
 **Parameters** (`SeededWatershedConfig`): `sigma_um` [µm], default 1.5 (provisional; the
-W-305 tissue-2D run used 16 pixels × 0.094635 µm = 1.514 µm); `threshold`, default
+survey's tissue-2D run used 16 pixels × 0.094635 µm = 1.514 µm); `threshold`, default
 `"otsu"`, or a number on the `img_as_float` scale ([0, 1] for unsigned integers);
 `compactness` 0.0; `connectivity` 1. The spacing comes from the input metadata and is
 required.
 
-**Failure behavior** (W-306 section 7, measured on the prototype):
+% the W-305 tissue-2D run
 
-* No seeds: an empty label image, no error (W-306 `no_seeds_2d` rows).
+**Failure behavior** (the dependency study, section 7, measured on the prototype):
+
+% (W-306 section 7
+
+* No seeds: an empty label image, no error (the dependency study's `no_seeds_2d` rows).
 * No foreground (an all-zero stain): the threshold is 0, the mask holds only the seeds,
-  and every cell equals its seed (W-306 `empty_stain_2d`).
+  and every cell equals its seed (its `empty_stain_2d`).
 * A seed outside the foreground is always kept and becomes a cell equal to the seed
-  (W-306 `seed_outside_foreground_2d`); on tissue-2D, 3 of 39 nuclei lie entirely outside
+  (its `seed_outside_foreground_2d`); on tissue-2D, 3 of 39 nuclei lie entirely outside
   the Otsu foreground and 5 cells equal their nucleus (`tissue2d_amplicon`).
-* Different shapes, a spacing of the wrong length or non-integer seeds raise (W-306
-  prototype code, `scripts/seeded_watershed.py`); missing spacing raises (proposed rule).
+* Different shapes, a spacing of the wrong length or non-integer seeds raise (the
+  dependency study's prototype code, `scripts/seeded_watershed.py`); missing spacing raises
+  (proposed rule).
 * Repeats are identical (11 cases, each twice); the function has no random state. Giving
   the spacing (1, 2, 2) instead of ignoring it raised the matched IoU against the
   construction cells from 0.964 to 0.980, a geometry check, not accuracy.
+
+% (W-306 `no_seeds_2d`; (W-306 `empty_stain_2d`); (W-306 `seed_outside_foreground_2d`); (W-306 prototype code
 
 **Resources.** Measured per call on CPU, one thread: 0.22–0.25 s wall and 157–161 MiB
 peak RSS (121–141 MiB before the call) on a 1024² tissue image; at most 5 ms on the
@@ -278,21 +326,26 @@ uint8 ZYX.
   of stretching it (code: `skimage/exposure/exposure.py`, scikit-image 0.26), so its grey
   level passes through unchanged: a constant nuclear image of 50 and a constant amplicon
   image of 80 give an all-80 composite, and a constant nuclear image of 50 with the fixture
-  amplicon gives the amplicon composite floored at 50 (W-307 golden test
+  amplicon gives the amplicon composite floored at 50 (the segmentation golden test
   `test_constant_and_zero_inputs`, `CONSTANT_DIGESTS`).
 * An all-zero nuclear image is the constant 0: the composite is the stretched amplicon
   alone; two all-zero images give an all-zero image; neither raises (golden test).
-* Mismatched shapes raise a broadcasting `ValueError` today (W-307 probe, worker notes);
+* Mismatched shapes raise a broadcasting `ValueError` today (a probe of the segmentation
+  specification, worker notes);
   the function raises `IncompatibleGeometryError` instead, before any computation, and
   `FOV.segment` checks the metadata (proposed rule).
 * YX inputs raise `AxisError` today (golden test `test_composite_needs_3d_inputs`); the
   function takes Z=1 for a plane (proposed rule).
 
-**Resources.** Not measured by W-306. Code-derived estimate: two float64 copies and their
+% (W-307 golden test; (W-307 probe, worker notes)
+
+**Resources.** Not measured by the dependency study. Code-derived estimate: two float64 copies and their
 maximum, about 24 bytes per voxel beyond the uint8 inputs, so about 2.7 GB for a
 50×1496×1496 field of view (the current script's stacked copy adds 16 bytes per voxel,
 about 4.5 GB in total, above the 4 GiB target). Measured on the golden fixture (16×64×64,
 CPU, one thread): about 10 ms per call (pytest durations).
+
+% Not measured by W-306
 
 ### `enhance_with_flamingo`
 
@@ -312,31 +365,43 @@ ZYX on one grid; a plane is Z=1 (today a YX input raises).
   all-34 image (golden test `test_constant_and_zero_inputs`).
 * An all-zero Flamingo image leaves the stretched nuclear image, and an all-zero nuclear
   image gives zeros; neither raises (golden test, `CONSTANT_DIGESTS`).
-* YX inputs raise `RuntimeError` in the per-plane median today (W-307 probe, worker notes);
+* YX inputs raise `RuntimeError` in the per-plane median today (a probe of the segmentation
+  specification, worker notes);
   the function takes Z=1 for a plane (proposed rule).
 * Mismatched shapes raise `IncompatibleGeometryError` (proposed rule).
 
-**Resources.** Not measured by W-306. Code-derived estimate: about three float64 arrays of
+% (W-307 probe, worker notes)
+
+**Resources.** Not measured by the dependency study. Code-derived estimate: about three float64 arrays of
 the volume, about 2.7 GB for 50×1496×1496; the per-plane median adds one plane. Measured
 on the golden fixture (CPU, one thread): about 20 ms per call.
+
+% Not measured by W-306
 
 ### `normalize_percentile_unclipped`
 
 **Algorithm.** `(x − p_low) / (p_high − p_low + 1e-20)` in float32 with the two
 percentiles (NumPy, linear) over `axes`, unclipped: csbdeep's `normalize`, which the
-`stardist` method calls for the W-306 parity.
+`stardist` method calls for the dependency study's parity.
+
+% the W-306 parity
 
 **Parameters.** `p_low` 1.0 and `p_high` 99.8 [percent of the intensity distribution];
 `axes` all spatial axes of one channel.
 
 **Failure behavior.** A constant image maps to zeros: x − p_low is 0 everywhere (code;
-csbdeep 0.8.2 `normalize` on a constant image returns float32 zeros, W-307 probe in the
-locked environment). Without normalization StarDist gives different objects (2D: 3 labels,
-none matching; 3D: 1 label) and Cellpose none; a scaled image (×10) gives identical
-results after normalization (W-306 `iso_unnormalized` and `iso_x10*` rows, section 6).
+csbdeep 0.8.2 `normalize` on a constant image returns float32 zeros, a probe of the
+segmentation specification in the locked environment). Without normalization StarDist gives
+different objects (2D: 3 labels, none matching; 3D: 1 label) and Cellpose none; a scaled
+image (×10) gives identical results after normalization (the dependency study's
+`iso_unnormalized` and `iso_x10*` rows, section 6).
+
+% W-307 probe in the locked environment; (W-306 `iso_unnormalized` and `iso_x10*` rows, section 6)
 
 **Resources.** One float32 copy: 427 MiB for 50×1496×1496, a code-derived estimate from
-the model configuration (W-306 `fov-memory-estimate.json`).
+the model configuration (the dependency study's `fov-memory-estimate.json`).
+
+% (W-306 `fov-memory-estimate.json`)
 
 ### `rescale_input` and `resample_labels`
 
@@ -345,15 +410,19 @@ anti-aliasing when shrinking) and returns metadata whose spacing is divided by t
 factors (when it has a spacing) and whose `frame_id` records the rescale. `resample_labels`
 maps a label image back by nearest neighbour by pixel centres (source index ⌊(i + 0.5) ×
 n_source / n_target⌋ per axis) onto exactly the target shape, so an odd size keeps its grid
-(the current round trip turns 61×67 into 60×68: W-306 P3; and 61×63 into 60×64: golden
-test `test_rescale_round_trip_changes_an_odd_grid`).
+(the current round trip turns 61×67 into 60×68: the dependency study's P3; and 61×63 into
+60×64: golden test `test_rescale_round_trip_changes_an_odd_grid`).
+
+% W-306 P3
 
 **Parameters.** `scale_zyx`, dimensionless factors > 0; the target shape.
 
 **Rules and failure behavior** (proposed rules). For direct callers detecting nuclei; a
 seeded run rejects seeds whose grid differs from its input's, so a cell run never uses a
 shrunk grid. Factors ≤ 0 raise. An axis that would shrink below one pixel keeps one
-(scikit-image's `rescale` already does this, W-307 probe).
+(scikit-image's `rescale` already does this, a probe of the segmentation specification).
+
+% W-307 probe
 
 **Resources.** Not measured. Code-derived estimate: one float copy of the rescaled image
 and one label array of the target grid.
@@ -371,13 +440,18 @@ distance transform resolves them.
 
 **Parameters** (`ExpandLabelsConfig`): `distance` (no default), `unit` `pixel` or `um`,
 `mode` `planar` or `volumetric`. The legacy translation is `planar`, `pixel`, the YAML
-`distance` (W-306 parity used 4).
+`distance` (the dependency study's parity used 4).
+
+% (W-306 parity used 4)
 
 **Failure behavior.** An empty label image stays empty, and distance 0 changes nothing
-(scikit-image 0.26 `expand_labels`, W-307 probe in the locked environment); expansion is
-per plane in 3D today (golden test `test_expansion_is_per_slice`). `unit="um"` without
-spacing raises (proposed rule). Applied once per run; the assignment never expands again
-(W-308).
+(scikit-image 0.26 `expand_labels`, a probe of the segmentation specification in the locked
+environment); expansion is per plane in 3D today (golden test
+`test_expansion_is_per_slice`). `unit="um"` without spacing raises (proposed rule). Applied
+once per run; the assignment never expands again ({doc}`assignment-contract`, "Label
+expansion").
+
+% W-307 probe in the locked environment; (W-308)
 
 **Resources.** Not measured. Code-derived estimate from scikit-image 0.26's implementation: float64 distances,
 int32 indices per axis, two masks and the output, about 22 bytes per pixel of one plane in
@@ -405,7 +479,10 @@ translation; MATLAB was not run in this batch, so there is no parity with the ex
 **Failure behavior** (proposed rules; the function does not exist yet and MATLAB was not
 run). Labels with Z>1 raise (the function takes a plane label image, shape (1, Y, X), and a
 ZYX stain with the same Y, X); an empty mask gives an empty label image with `outcome`
-`empty`. The MATLAB `Cyto = Cell − Nuclei` is not reproduced (W-308 defines compartments).
+`empty`. The MATLAB `Cyto = Cell − Nuclei` is not reproduced (assignment defines
+compartments, {doc}`assignment-contract`).
+
+% (W-308 defines compartments)
 
 **Resources.** Not measured. Code-derived estimate: per-plane filters on one plane at a
 time; the output is one `uint32` volume (448 MB for 50×1496×1496, or 4 bytes per voxel).
@@ -417,9 +494,11 @@ validates dtype, sign, shape against the given `ReferenceGrid` and the metadata,
 records the file and array hashes and the grid ({doc}`segmentation-contract`, "External-mask
 import"). Failure behavior (proposed rules): a float or boolean mask raises `TypeError`; a
 negative value, a shape different from `grid.shape_zyx` or a metadata mismatch raises; an
-all-zero mask is a valid `empty` result. The W-305 culture references are big-endian
-(W-306 section 6), which the byte-order conversion handles. Resources (code-derived
-estimate): one copy of the file's array and its `uint32` conversion.
+all-zero mask is a valid `empty` result. The survey's culture references are big-endian
+(the dependency study, section 6), which the byte-order conversion handles. Resources
+(code-derived estimate): one copy of the file's array and its `uint32` conversion.
+
+% The W-305 culture references; (W-306 section 6)
 
 ## Golden and parity tests
 
@@ -427,7 +506,7 @@ Two tests pin the input and label functions and the `stardist` method to the leg
 outputs (rows L4, L6, L7 and L10 of {doc}`assignment-algorithms`), with these obligations:
 
 * `test/test_segmentation_golden.py`: every pinned digest stays (the float64 shrunk image is
-  an explicit expected array since W-574, compared with the float64 tolerance of
+  an explicit expected array since 2026-10-25, compared with the float64 tolerance of
   [contributing](contributing.md), "Expected values and tolerances", and equal to the digest
   pinned before). Named edits: tests are
   added that compute the composite and the Flamingo enhancement with
@@ -437,10 +516,11 @@ outputs (rows L4, L6, L7 and L10 of {doc}`assignment-algorithms`), with these ob
   `LABELS_3D[(False, True)]` and `LABELS_2D[(False, True)]`; and that `resample_labels` on
   the even 16×32×32 → 16×64×64 case gives the values of `RESTORED_LABELS`.
   `legacy_stardist_steps` stays as the frozen legacy reference of the script at `6b384cd`;
-  the tests that ran only that reference were removed at W-535.
+  the tests that ran only that reference were removed on 2026-10-21.
   `test_constant_and_zero_inputs` keeps its assertions and
   `CONSTANT_DIGESTS` with the package functions in place of the scripts.
-* A new `learned` parity test copies `parity/parity_expected.npz` of the W-306 run into
+* A new `learned` parity test copies `parity/parity_expected.npz` of the dependency study's
+  run into
   `src/python/test/data/segmentation_parity.npz` (357 KB, sha256 `4a5df997…`) and runs the
   `stardist` method on CPU with `scale` 1.0, `normalize_percentiles` (1, 99.8), the
   script's tiling, the stored thresholds and, for the `expand1` arrays, planar expansion
@@ -449,13 +529,15 @@ outputs (rows L4, L6, L7 and L10 of {doc}`assignment-algorithms`), with these ob
   `3D_spleen` from a path in an environment variable. The `rescale1` arrays are not
   reproduced (the package has no legacy round trip) and stay records.
 
+% since W-574; removed at W-535; of the W-306 run
+
 ## Limitations
 
 * Every number is from one host, one field of view per context and few images; the
   synthetic fixtures are outside the models' training data (`3D_spleen` finds nothing in
   the touching fixture).
 * There is no annotation, so nothing here measures accuracy; agreement with the legacy
-  culture labels only shows two results agree (W-306 section 12).
+  culture labels only shows two results agree (the dependency study, section 12).
 * The CPU costs of GPU-only calls, Cellpose 3D mode on the CPU and whole fields of view are
   projections or estimates; the composite, Flamingo, expansion, extension and rescale
   estimates above come from the code, not from measurements.
@@ -464,3 +546,5 @@ outputs (rows L4, L6, L7 and L10 of {doc}`assignment-algorithms`), with these ob
   memory one call needs on its own ("How to read the resource figures").
 * The Cellpose seam behavior on dense images and the 3D StarDist seam behavior beyond one
   LN crop are open.
+
+% (W-306 section 12)

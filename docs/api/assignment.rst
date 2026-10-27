@@ -1,9 +1,11 @@
 starfinder.assignment
 =====================
 
-Assignment (§2.9) places the molecules of one FOV in cells; it is the third of the three
+Assignment places the molecules of one FOV in cells; it is the third of the three
 calls per FOV (``FOV.run``, ``FOV.segment``, ``FOV.assign_molecules``). See
 :doc:`../assignment-contract` and :doc:`../assignment-algorithms`.
+
+.. Assignment (§2.9)
 
 A :py:class:`~starfinder.assignment.MoleculeTable` holds the molecules: ``spot_namespace``,
 ``spot_id``, ``z``, ``y``, ``x`` (float64, zero-based voxel coordinates of the molecule

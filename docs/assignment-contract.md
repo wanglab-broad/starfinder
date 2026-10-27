@@ -1,11 +1,13 @@
 # Assignment guide: molecules to cells, correspondence, compartments and counts
 
-Status: Accepted (W-309, 2026-10-05, at 3550723)
+% Status: Accepted (W-309, 2026-10-05, at 3550723)
 
-This page is the maintained guide to the assignment stage (§2.9) and its contract. It
+This page is the maintained guide to the assignment stage and its contract. It
 builds on the label contract of {doc}`segmentation-contract` ("Label image", "What assign
 receives from segment") and does not redefine it: the label image, its dtype, grid,
 target, geometry, namespace, record and saved files are as specified there.
+
+% the assignment stage (§2.9)
 
 * **What assignment does.** It places each molecule of one FOV in the cell territory that
   holds its sampled voxel, with exactly one status per molecule and none dropped; with
@@ -19,8 +21,8 @@ target, geometry, namespace, record and saved files are as specified there.
   (`molecule_table`, `load_molecules` or `import_legacy_molecules_csv`), a cell
   `SegmentationResult`, the molecule run's `ReferenceGrid`, optional nuclei and an
   `AssignmentConfig` (with `CorrespondenceConfig` and an optional `ExpandLabelsConfig`);
-  `FOV.assign_molecules` is the third of D1's three calls per FOV, after `FOV.run` and
-  `FOV.segment` ([Names](#names), [The assign entry](#the-assign-entry),
+  `FOV.assign_molecules` is the third of the three calls per FOV that the separate-entries
+  decision sets, after `FOV.run` and `FOV.segment` ([Names](#names), [The assign entry](#the-assign-entry),
   [Inputs](#inputs), [Checks the entry applies](#checks-the-entry-applies),
   [The grid rule](#the-grid-rule), [Coordination per FOV](#coordination-per-fov)).
 * **What it produces.** An `AssignmentResult` with the molecule, cell, count and nucleus
@@ -31,16 +33,22 @@ target, geometry, namespace, record and saved files are as specified there.
   [Cell table](#cell-table), [Count accounting](#count-accounting),
   [Persistence](#persistence), [Diagnostics](#diagnostics)).
 * **Where the configuration goes.** The `AssignmentConfig` passed to
-  `FOV.assign_molecules` (`PipelineConfig` has no assignment field, D1); in the workflow,
-  the Python-only `assignment` block or the translated `rules.reads_assignment.parameters`
+  `FOV.assign_molecules` (`PipelineConfig` has no assignment field: assign is its own
+  entry, as settled below); in the workflow, the Python-only `assignment` block or the
+  translated `rules.reads_assignment.parameters`
   ([Workflow configuration](#workflow-configuration)).
 
+% the third of D1's three calls per FOV; no assignment field, D1
+
 Beneath this guide, {doc}`assignment-algorithms` gives the numerical rules and their
-resources, and the engineering validation design for the whole of §2.9 with its
-implemented checks; {doc}`assignment-baseline` is history (`6b384cd`, before §2.9). The
-contract is implemented by `starfinder.assignment` and `FOV.assign_molecules`
-({doc}`api/assignment`), with the checks listed in {doc}`assignment-algorithms`
-("Implemented checks (W-318)"); as decided, nothing is renamed.
+resources, and the engineering validation design for segmentation and assignment together
+with its implemented checks; {doc}`assignment-baseline` is history (`6b384cd`, before the
+package's segmentation and assignment work). The contract is implemented by
+`starfinder.assignment` and `FOV.assign_molecules` ({doc}`api/assignment`), with the checks
+listed in {doc}`assignment-algorithms` ("Implemented checks"); as decided, nothing is
+renamed.
+
+% the whole of §2.9; before §2.9; "Implemented checks (W-318)"
 
 Assignment has no model. Its behavior is fully determined by the label images, the
 molecule table and the config, so every rule on this page can be pinned by hand-built
@@ -48,36 +56,42 @@ fixtures in the default test tier.
 
 ## Settled decisions this page follows
 
-From the W-152 comment "§2.9 planning decisions (2026-10-03)", quoted in full in
+From the planning comment of 2026-10-03 on segmentation and assignment, quoted in full in
 {doc}`segmentation-contract` ("Settled decisions this page follows"):
 
-* **D1 Separate entries.** Assign is its own entry, not a field of `PipelineConfig` and
+% the W-152 comment "§2.9 planning decisions (2026-10-03)"
+
+* **Separate entries.** Assign is its own entry, not a field of `PipelineConfig` and
   not a stage of `FOV.run`. Per FOV there are three calls: `FOV.run` (molecules), segment
   (label mask), assign (cell table and counts). Coordination may live on `FOV`. Assign
   checks the grid and records the hashes of the mask and the molecule table, and the
   documentation gives a notebook example of the three calls.
-* **D3 External masks.** Masks from other tools reach assign through `import_labels`, as
+* **External masks.** Masks from other tools reach assign through `import_labels`, as
   any other `SegmentationResult`.
-* **D4 Reusable functions.** Label expansion is a plain function (`expand_labels`), not
+* **Reusable functions.** Label expansion is a plain function (`expand_labels`), not
   a method; assign calls it and does not reimplement it.
-* **D7 Two specification issues.** Segmentation is specified by W-307 up to the label
-  contract; this page takes over from there.
-* **D2, D5 and D6** concern segmentation methods, their environments and the GPU. Assign
-  is not a method and has no registry, needs only the base dependencies (no separate
-  environment) and runs on CPU.
+* **Two specifications.** Segmentation is specified by {doc}`segmentation-contract` up to
+  the label contract; this page takes over from there.
+* **The method registry, the conflicting environments and the GPU** concern segmentation
+  methods, their environments and the GPU. Assign is not a method and has no registry,
+  needs only the base dependencies (no separate environment) and runs on CPU.
+
+% The decisions above are D1, D3, D4 and D7 ("D7 Two specification issues": specified by W-307), and D2, D5 and D6
 
 Proposed in the same comment and not objected to, and followed here: nucleus and cell
 masks come from two runs; nucleus–cell correspondence belongs to assignment; the second
 expansion of `reads_assignment.py` folds into one recorded expansion; the configuration
 is a plan, not a recipe.
 
-The development outline §2.9 (the Linear document "Chapter II development outline and
-priorities", copied by the operator session on 2026-10-05) is settled scope. Its task
+The development outline of segmentation and assignment (a planning document, copied by
+the operator session on 2026-10-05) is settled scope. Its task
 group 4, "Assignment and compartments" (default direct territory assignment, optional
 recorded expansion, explicit unassigned molecules, validated nucleus–cell correspondence,
 optional whole-cell/nuclear/cytoplasmic counts and the agreed configurable exclusion), and
 the assignment part of task group 5, "Persistence and downstream outputs", are what this
 page specifies. Its rules, and where this page follows each:
+
+% The development outline §2.9 (the Linear document "Chapter II development outline and priorities")
 
 * Direct assignment uses supplied cell territories and keeps molecules outside them as
   unassigned ("Direct assignment and statuses").
@@ -99,9 +113,12 @@ page specifies. Its rules, and where this page follows each:
   has all its molecules classified as cytoplasmic ("Exclusion of cells without a nucleus",
   "Compartments").
 
-The issue adds: there is no size or count filter, no probabilistic or transcript-based
-assignment and no second exporter; assignment is FOV-local, and stitching, global
-coordinates, overlap ownership and cross-FOV matching are §2.10's.
+The specification adds: there is no size or count filter, no probabilistic or
+transcript-based assignment and no second exporter; assignment is FOV-local, and
+stitching, global coordinates, overlap ownership and cross-FOV matching belong to
+stitching and assembly ({doc}`stitching-contract`, {doc}`assembly-contract`).
+
+% are §2.10's
 
 ## Terms
 
@@ -127,12 +144,16 @@ coordinates, overlap ownership and cross-FOV matching are §2.10's.
 | Option | Names | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
 | **N1. A `starfinder.assignment` module (recommended)** | Module `starfinder.assignment`; function `assign_molecules`; result `AssignmentResult`; config `AssignmentConfig` with `CorrespondenceConfig`; input `MoleculeTable` built by `molecule_table`; coordination `FOV.assign_molecules(config, *, cells, nuclei, …)`, `FOV.assignment_results`, `FOV.load_assignment(name)`; status vocabularies `ASSIGNMENT_STATUSES`, `CELL_STATUSES`. | None: the names are new. `test_assignment_golden.py` keeps every digest; its named edits ({doc}`assignment-algorithms`, "Golden test") add package calls beside the frozen helper. | None from the names: the files keep the names of "Persistence". `docs/api/` gains an `assignment.rst` page whose autosummary list holds the exports of `__all__`, which `docs/check_reference.py` requires. |
-| N2. Inside `starfinder.segmentation` | `starfinder.segmentation.assign` returning `CellTable`; `FOV.assign_molecules`. | None. | The same files. One module would hold the label contract and the counts, which D7 split, and `assign` sits next to §2.8's `starfinder.readout.decode_direct` (direct readout), a different meaning of "assign". |
-| N3. A `starfinder.cells` module | `count_molecules` returning `CellCounts`; `FOV.count_cells`. | None. | The same files. The D1 call is named "assign"; a different verb in the API breaks the three-call vocabulary of the notebook. |
+| N2. Inside `starfinder.segmentation` | `starfinder.segmentation.assign` returning `CellTable`; `FOV.assign_molecules`. | None. | The same files. One module would hold the label contract and the counts, which the decision on two specifications split, and `assign` sits next to readout's `starfinder.readout.decode_direct` (direct readout), a different meaning of "assign". |
+| N3. A `starfinder.cells` module | `count_molecules` returning `CellCounts`; `FOV.count_cells`. | None. | The same files. The separate-entries decision names the call "assign"; a different verb in the API breaks the three-call vocabulary of the notebook. |
 
-**Recommendation: N1.** It mirrors the D7 split (one module per specification), keeps
-D1's verb on `FOV`, and `assign_molecules` cannot be confused with direct readout's
-`decode_direct`.
+% which D7 split; §2.8's `starfinder.readout.decode_direct`; The D1 call is named "assign"
+
+**Recommendation: N1.** It mirrors the split into two specifications (one module per
+specification), keeps the verb of the separate-entries decision on `FOV`, and
+`assign_molecules` cannot be confused with direct readout's `decode_direct`.
+
+% the D7 split; D1's verb
 
 New names under N1:
 
@@ -198,7 +219,7 @@ with `expansion`. The record says how the territories were obtained
     names the result types, the filter config and the population.
   * `load_molecules(path, *, genes, spot_namespace=None)` reads the `molecules.csv` that
     `FOV.export_spots` writes (the typed, zero-based columns `spot_namespace, spot_id, z,
-    y, x, gene_id, entry_id, qc_score`; since W-562), keeps the six molecule columns with
+    y, x, gene_id, entry_id, qc_score`; since 2026-10-23), keeps the six molecule columns with
     their identities, in file order, as population `final`; `spot_namespace`, when given,
     must be every row's (an empty file needs it); its source record names the namespace,
     the path and the file's SHA-256.
@@ -224,6 +245,8 @@ with `expansion`. The record says how the territories were obtained
   below.
 * **Correspondence.** An optional supplied table with the columns `nucleus_id` and
   `cell_id` ("Nucleus–cell correspondence").
+
+% since W-562
 
 ### Checks the entry applies
 
@@ -360,8 +383,8 @@ are an illustration of the layout, not results.
 ### Coordination per FOV
 
 `FOV.assign_molecules(config=AssignmentConfig(), *, cells="cell", nuclei=None, name="default",
-population="final", correspondence=None, checkpoints=None)` is the third of D1's three
-calls. `cells` and `nuclei` name segmentation runs, taken from `FOV.segmentation_results`
+population="final", correspondence=None, checkpoints=None)` is the third of the three
+calls of the separate-entries decision. `cells` and `nuclei` name segmentation runs, taken from `FOV.segmentation_results`
 or loaded with `FOV.load_segmentation`, or are `SegmentationResult` objects the caller
 made (an `import_labels` result, for example). It takes the molecules from
 `FOV.spot_result` and
@@ -377,14 +400,18 @@ there. `FOV.assign_molecules` calls `assign_molecules`; stores the result in
 "Persistence", including every label image it used that is not already saved under its run
 there ("Label images of a checkpointed assignment"). Without `checkpoints` it writes
 nothing. It never runs registration, detection, decoding or segmentation, and
-`PipelineConfig` gains no field (D1).
+`PipelineConfig` gains no field (the separate-entries decision).
+
+% the third of D1's three calls; (D1)
 
 ```python
 fov.run(pipeline, checkpoints=checkpoints)                   # molecules
-fov.segment(plan, checkpoints=checkpoints)                   # label masks (W-307)
+fov.segment(plan, checkpoints=checkpoints)                   # label masks
 fov.assign_molecules(AssignmentConfig(), cells="cell", nuclei="nucleus",
            checkpoints=checkpoints)                          # cell table and counts
 ```
+
+% The comment of the second line was "# label masks (W-307)"
 
 ### Result
 
@@ -415,8 +442,10 @@ not `available` are absent, never zero. `cells="all"` adds the excluded cells to
 
 A molecule's `z, y, x` are zero-based voxel coordinates of the reference grid: voxel `i`
 on an axis has its centre at `i` and covers `[i − 0.5, i + 0.5)`. This is the convention of
-the spot table ({doc}`checkpoints`) and of the W-168 sample-export contract. The sampled
-voxel is chosen per axis:
+the spot table ({doc}`checkpoints`) and of the reference branch's sample-export contract.
+The sampled voxel is chosen per axis:
+
+% the W-168 sample-export contract
 
 | Option | Rule per axis | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
@@ -505,9 +534,9 @@ contract allows, in memory and, for a checkpointed assignment, on disk by the on
 Rules:
 
 * **No expansion in segmentation for assignment.** A cell run whose record lists
-  `expand_labels` is refused (check 7), because W-307's saved format keeps only the label
-  image after its operations, so its original mask would be lost. W-307's `expand_labels`
-  operation stays available for other uses of a label image; its results are not
+  `expand_labels` is refused (check 7), because the saved format of segmentation keeps only
+  the label image after its operations, so its original mask would be lost. Segmentation's
+  `expand_labels` operation stays available for other uses of a label image; its results are not
   assignment territories. An imported mask is a supplied territory as it stands; if another
   tool expanded it, that is the import's provenance, recorded with the import.
 * **Units.** On a calibrated grid (the cell grid's metadata with `spacing_zyx` and
@@ -528,6 +557,8 @@ Rules:
   `size_voxels` and the centroid of the original territory, and `expanded_size_voxels` and
   `expanded_centroid_*` of the expanded one. Nuclei are never expanded. Without
   `expansion`, the territories are the cell run's labels and the expanded columns are null.
+
+% because W-307's saved format; W-307's `expand_labels`
 
 `expand_labels(mode="planar", unit="pixel", distance=d)` reproduces today's
 `reads_assignment.py` expansion, and the golden digests with expansion stay. The legacy
@@ -587,16 +618,18 @@ and always carries `ambiguous_nucleus`, so its compartments are withheld.
 | Option | `match_fraction`, `outside_tolerance` | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
 | C1. Majority and containment | 0.5 (strict majority), 0.0 (any voxel outside flags) | None: the golden test has no nuclei, and the legacy path has no correspondence. | None of today's files has correspondence. In a new two-run plan, compartment counts are withheld for every cell touched by a nucleus that leaves its cell, even by one voxel; the bounded real examples report how many. |
-| **C2. Majority with a tolerance (chosen, 2026-10-05; provisional)** | 0.5, 0.1 (a share strictly greater than 0.1 outside flags) | None. | As C1, with fewer withheld cells: up to a tenth of a nucleus may lie in the background without flagging its own cell. A part inside another cell still raises `foreign_nucleus` on that cell. Its basis is one culture crop of W-320, below. |
+| **C2. Majority with a tolerance (chosen, 2026-10-05; provisional)** | 0.5, 0.1 (a share strictly greater than 0.1 outside flags) | None. | As C1, with fewer withheld cells: up to a tenth of a nucleus may lie in the background without flagging its own cell. A part inside another cell still raises `foreign_nucleus` on that cell. Its basis is one culture crop of the bounded real-example run of 2026-10-05, below. |
 | C3. By label value for seeded runs | none: when the cell run's record shows a seeded method whose label rule gives each cell its seed's value, nucleus `k` is matched to cell `k`. | None. | Cheaper and exact for `seeded_watershed`; it says nothing for imported or independently segmented masks, so overlap would still be needed for them, and a seed masked out of the foreground gives a cell without its nucleus silently. |
 
-**Decision: C2, provisional (Jiahao, W-321 review, 2026-10-05).** The default
-`outside_tolerance` was raised from 0.0 (C1, the option this page recommended at W-309) to
-0.1; `match_fraction` stays 0.5, the strict rule and the flags are unchanged. A matched
+% one culture crop of W-320
+
+**Decision: C2, provisional (Jiahao, at the review of the bounded real examples,
+2026-10-05).** The default `outside_tolerance` was raised from 0.0 (C1, the option this
+page recommended at its acceptance review) to 0.1; `match_fraction` stays 0.5, the strict rule and the flags are unchanged. A matched
 nucleus is flagged `outside` only when its share outside its cell is strictly greater
 than 0.1, and a part of a nucleus inside another cell still raises `foreign_nucleus` on
-that cell, whatever the tolerance. The evidence is the bounded culture example of W-320
-(one crop, 11 matched nuclei with the reference labels and 8 with the Cellpose labels, cells
+that cell, whatever the tolerance. The evidence is the culture example of the bounded
+real-example run (one crop, 11 matched nuclei with the reference labels and 8 with the Cellpose labels, cells
 and nuclei segmented independently): with 0.0, 10 of
 the 11 matched nuclei of the reference labels and 7 of the 8 of the Cellpose labels were
 flagged `nucleus_outside_cell`, so the compartment counts of nearly every cell were
@@ -606,6 +639,8 @@ provisional: it rests on one crop without annotation, is not an accuracy stateme
 is not claimed to suit other samples. 0.5 remains the smallest share that makes the match
 unique. With C2, the value agreement of a seeded run (C3) is recorded as a diagnostic
 (`seed_value_agrees`), not used.
+
+% (Jiahao, W-321 review, 2026-10-05); recommended at W-309; the bounded culture example of W-320
 
 **Supplied.** A table with columns `nucleus_id` and `cell_id` (unsigned integers):
 every value must exist in its image (`ValueError` naming the missing values), a nucleus
@@ -651,7 +686,8 @@ Because a cell without `foreign_nucleus` contains no voxel of another cell's nuc
 nuclear voxel inside an `available` cell belongs to one of its own nuclei, so the partition
 is exact.
 
-**Not available is never zero** (W-168: missing expression is never a measured zero):
+**Not available is never zero** (as in the reference branch's sample-export contract,
+missing expression is never a measured zero):
 
 * In `counts`, an `available` cell has `nucleus` and `cytoplasm` rows for its nonzero
   entries, so a gene without a row there is a measured zero. A cell whose `compartments` is
@@ -664,6 +700,8 @@ is exact.
   `correspondence` obs columns say why.
 * Per molecule, `compartment` holds the cell's state (`withheld`, `no_nucleus`,
   `unavailable`) instead of `nucleus` or `cytoplasm`.
+
+% (W-168: missing expression is never a measured zero)
 
 `withheld` and `no_nucleus` stay apart: `withheld` follows a correspondence problem (an
 ambiguous nucleus, a nucleus outside its cell, a foreign nucleus) that a later resolution
@@ -756,16 +794,22 @@ on every fixture of the validation design. With `M` the input molecules:
 
 | Option | Layout | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
-| **L1. Tables and a JSON record beside the segmentation runs (recommended)** | `<checkpoint dir>/<fov_id>/assignment/<name>/`: `molecules.<fmt>`, `cells.<fmt>` (every cell, kept and excluded), `counts.<fmt>`, `nuclei.<fmt>` (with nuclei), `territories.tif` (with an expansion), `cell_labels.tif` and `nucleus_labels.tif` (each only when that input is not saved under its run; see the table below) and `assignment.json`. Label images are `uint32` ZYX with `ImageMetadata`, written by `save_volume`. `<fmt>` is CSV or Parquet through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), so tables round-trip exactly. | None: the golden test pins arrays and tables, not files. | `run.json`, the `FOV.run` checkpoints and W-307's `segmentation/<run>/` folders are untouched (linked, never written). The workflow keeps `expr/{fovID}/raw.h5ad` and `expr/{fovID}/reads_assignment.csv`, written by the adapter from the result, with the changes listed under "Workflow configuration". |
+| **L1. Tables and a JSON record beside the segmentation runs (recommended)** | `<checkpoint dir>/<fov_id>/assignment/<name>/`: `molecules.<fmt>`, `cells.<fmt>` (every cell, kept and excluded), `counts.<fmt>`, `nuclei.<fmt>` (with nuclei), `territories.tif` (with an expansion), `cell_labels.tif` and `nucleus_labels.tif` (each only when that input is not saved under its run; see the table below) and `assignment.json`. Label images are `uint32` ZYX with `ImageMetadata`, written by `save_volume`. `<fmt>` is CSV or Parquet through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), so tables round-trip exactly. | None: the golden test pins arrays and tables, not files. | `run.json`, the `FOV.run` checkpoints and the `segmentation/<run>/` folders of segmentation are untouched (linked, never written). The workflow keeps `expr/{fovID}/raw.h5ad` and `expr/{fovID}/reads_assignment.csv`, written by the adapter from the result, with the changes listed under "Workflow configuration". |
 | L2. Per-FOV AnnData as the store | `assignment/<name>/assignment.h5ad`: `X` whole-cell counts, `layers` `nucleus` and `cytoplasm`, `obs` the cell table, `uns` the record; molecules and nuclei as CSV beside it. | None. | One file per FOV for cells, but `anndata` becomes a dependency of the assign entry (today it is locked only through the `spatialdata` extra), and the H5AD duplicates what `raw.h5ad` already carries. |
-| L3. Per-FOV SpatialData | A Zarr store with the territories, points and table. | None. | `spatialdata` becomes a dependency of the assign entry, and the W-168 sample-export contract rules out a per-FOV SpatialData API and export fan-out. |
+| L3. Per-FOV SpatialData | A Zarr store with the territories, points and table. | None. | `spatialdata` becomes a dependency of the assign entry, and the reference branch's sample-export contract rules out a per-FOV SpatialData API and export fan-out. |
 
-Note (W-564): the folder is now `fovs/<fov_id>/assignment/<name>/`, beside `segmentation/<run>/` in the FOV folder ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+% W-307's `segmentation/<run>/` folders; the W-168 sample-export contract
+
+Note: since 2026-10-24 the folder is `fovs/<fov_id>/assignment/<name>/`, beside `segmentation/<run>/` in the FOV folder ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
+% Note (W-564)
 
 **Recommendation: L1.** It needs only the base dependencies, reuses the checkpoint table
-format and the W-307 label files, and leaves AnnData and SpatialData to the outputs that
-already own them. `FOV.load_assignment(name)` reads the folder and the linked
+format and the label files of segmentation, and leaves AnnData and SpatialData to the
+outputs that already own them. `FOV.load_assignment(name)` reads the folder and the linked
 segmentation files, checks every recorded SHA-256 and returns the `AssignmentResult`.
+
+% the W-307 label files
 
 **Label images of a checkpointed assignment.** One rule: a checkpointed assignment
 (`FOV.assign_molecules(checkpoints=…)`) keeps every label image it used. A label image that is
@@ -812,25 +856,30 @@ reload raise `ValueError` naming the path and both hashes.
 
 **AnnData and SpatialData.** Assignment adds no exporter:
 
-* The only AnnData file §2.9 writes is the existing per-FOV `expr/{fovID}/raw.h5ad` of
+* The only AnnData file assignment writes is the existing per-FOV `expr/{fovID}/raw.h5ad` of
   the `reads_assignment` rule, written by the workflow adapter from `AssignmentResult`
   (`anndata` is imported there, in the workflow environment). `create_sample_h5ad.py`
-  keeps aggregating it unchanged. (W-568: with an `assembly` block that names an
+  keeps aggregating it unchanged. (Since 2026-10-24, with an `assembly` block that names an
   assignment, the rule writes the saved assignment folder alone and no `raw.h5ad`.)
-* The §2.4 sample export is the W-168 contract `starfinder.sample_export/1`. Its
-  partial exporter (W-169/W-170) is on commit `4748a7d`, which is not on this branch, so
+* The sample export of the reference branch is its sample-export contract
+  `starfinder.sample_export/1`. Its partial exporter, with the shared raster preparation,
+  is on commit `4748a7d`, which is not on this branch, so
   the connection below is a mapping of vocabularies, not code that runs here. The saved
   tables are exactly what that contract asks for: "Assignment links" are the molecule
   table's `(spot_namespace, spot_id) → (cell_namespace, cell_id)`, with its
-  `assignment_status` (`assigned`; `unassigned` and `outside_grid` become W-168's
+  `assignment_status` (`assigned`; `unassigned` and `outside_grid` become that contract's
   `unassigned` with the status as the reason; `excluded_cell` becomes `unassigned` with
   the reason `excluded_cell`, and its cell a mask-only cell); "Cells and expression" are
   `raw.h5ad` joined by the explicit cell key; "Mask/table relation" is `(label
   namespace, local label)` from the label files of the table above; "Zero-count cells" are kept cells
-  with zero rows; "Mask-only cells" are excluded cells. W-168's `unavailable` means that
-  no assignment was supplied and is never written by assign.
+  with zero rows; "Mask-only cells" are excluded cells. That contract's `unavailable` means
+  that no assignment was supplied and is never written by assign.
 
-## Boundary with §2.10
+% The only AnnData file §2.9 writes; (W-568: with an `assembly` block; The §2.4 sample export is the W-168 contract; (W-169/W-170), that is W-169 and W-170; W-168's `unassigned`; W-168's `unavailable`
+
+## Boundary with stitching and assembly
+
+% Boundary with §2.10
 
 Assignment is FOV-local: it reads one FOV's molecules and label images on that FOV's
 reference grid, and nothing else. The function stays as it is; the route after fusion
@@ -839,24 +888,28 @@ sample's molecules in one sample-level namespace. It reads no tile configuration
 coordinate, decides no overlap ownership, matches no cell across FOVs and filters nothing
 by position.
 
-What §2.10 receives from assign, per FOV:
+What stitching and assembly receive from assign, per FOV:
 
 * the cell table: `(cell_namespace, cell_id)`, `centroid_z/y/x` (and
   `expanded_centroid_*`) in zero-based index coordinates of the FOV's reference grid, sizes,
   `status` and `exclusion_reason`, `correspondence`, `n_nuclei`, the flags and
   `compartments`;
 * the grid (`ReferenceGrid`: shape and `ImageMetadata`, whose origin, spacing and
-  direction place the FOV), with which §2.10 maps centroids and territories into sample
+  direction place the FOV), with which assembly maps centroids and territories into sample
   coordinates;
 * the original and expanded territory label files and their SHA-256, for overlap and
   cross-FOV matching;
 * the molecule table with each molecule's status and cell key, and the count tables.
 
-What stays in the legacy script until §2.10 replaces it: the tile-configuration read
+% What §2.10 receives from assign; with which §2.10 maps centroids
+
+What stays in the legacy script until stitching and assembly replace it: the tile-configuration read
 (`reads_assignment.py:39-42`), the global coordinates (`:78-80`, `:141-149`), the
 overlap filter of cells and molecules (`:155-165`) and the tile rectangle in the plots.
 The workflow adapter applies them to the package result exactly as the script does today
 ("Workflow configuration"), outside the package.
+
+% until §2.10 replaces it
 
 ## Diagnostics
 
@@ -873,7 +926,7 @@ On demand, never by `FOV.assign_molecules`:
   1. `image` in grey scale with the territory outlines in green and one dot per cell
      centre. The outlines are lines 0.8 points wide around each territory, and each centre
      is a dot of 30 points² with a thin black edge; both keep their size when a large image
-     is shown small (W-341). The dot is coloured by the cell's status: `kept` blue and
+     is shown small (since 2026-10-05). The dot is coloured by the cell's status: `kept` blue and
      `excluded_no_nucleus` orange,
      with the legend entries `kept` and `excluded` (the excluded centres drawn and in the
      legend only when the result has an excluded cell);
@@ -892,9 +945,10 @@ On demand, never by `FOV.assign_molecules`:
   it. A plane or Z=1 result has the `z_max` view only, and asking it for the other raises
   `ValueError`. The figure replaces the four legacy PNGs and their hard-coded plane; the
   workflow adapter writes both views of a ZYX label image ({doc}`workflow-downstream`),
-  on the route of a saved assignment only with `assembly.previews` (W-568).
+  on the route of a saved assignment only with `assembly.previews` (since 2026-10-24).
 
-  `plot_assignment` also takes the keyword `ownership=None` (W-330, added after §2.10): a
+  `plot_assignment` also takes the keyword `ownership=None` (added on 2026-10-08, after
+  stitching and assembly): a
   `FOVOwnership` of `starfinder.assignment`, plain data that
   `starfinder.assembly.fov_ownership` builds for one FOV of an assembled sample: a boolean
   Y, X mask of the pixels whose centres the FOV owns ({doc}`assembly-contract`, "Ownership
@@ -912,6 +966,8 @@ On demand, never by `FOV.assign_molecules`:
   have, raises `ValueError`, and a value that is not a `FOVOwnership` `TypeError`, before
   any figure is made. Without `ownership` the figure is as described above.
 
+% is shown small (W-341); `assembly.previews` (W-568); `ownership=None` (W-330, added after §2.10)
+
 ## Workflow configuration
 
 A Python-only top-level `assignment` block:
@@ -928,8 +984,10 @@ assignment:
 
 Its keys are the fields of `AssignmentConfig` and of the `FOV.assign_molecules` call; a
 default-tier test keeps the schema equal to them. The block is rejected unless
-`backend: python`. It is executed by the §2.13 rule that runs the three calls; until then
-it serves the adapter.
+`backend: python`. It is executed by the rule of the workflow integration that runs the
+three calls; until then it serves the adapter.
+
+% the §2.13 rule
 
 **Translation of the legacy keys.** When the block is absent, the adapter
 (`dataset/workflow.py`, a new `_reads_assignment`) turns the `reads_assignment` rule's
@@ -938,14 +996,16 @@ name, inputs and outputs.
 
 | Legacy input or key | Translation |
 | --- | --- |
-| `images/stardist_segmentation/{fovID}.tif` | `import_labels` with the target the segmentation adapter infers (W-307: `cell` for the `overlay` input, else `nucleus`); its grid is declared from the file's shape and the configured `voxel_size_z`, `voxel_size_xy`, recorded as declared. When `rules.stardist_segmentation.parameters.expand_labels` is true, the file was expanded in segmentation and no original mask exists: the adapter raises `ValueError` naming that key and the replacement (set it to false and give the distance as `reads_assignment.parameters.dilation_distance` with `expand_labels: true`, so assign expands once and keeps both masks). |
-| The FOV's molecule table ({doc}`workflows`, "Molecule tables") | `fovs/{fovID}/molecules.csv` of the Python `rsf_single_fov`: `load_molecules` with the FOV's `spot_namespace` and the codebook's genes, the identities kept (since W-562). The legacy route's `signal/{fovID}_goodSpots.csv` (MATLAB's `rsf_single_fov`, `stitch_subtile`): `import_legacy_molecules_csv` with the same arguments; integer and float coordinates are both accepted. |
-| The codebook (the rule's codebook input: `INPUT/genes.csv`, or the file `codebook` or `direct_panel` names) | Loaded as the sequencing rules load it; its genes in its order (`Codebook.genes`, or `DirectPanel.genes` with `readout_mode: direct`) are the gene universe of the molecule reader and the matrix columns (W-567; before it, a second gene list in OUTPUT's `documents` folder gave the order, {doc}`migration`). |
+| `images/stardist_segmentation/{fovID}.tif` | `import_labels` with the target the segmentation adapter infers ({doc}`segmentation-contract`: `cell` for the `overlay` input, else `nucleus`); its grid is declared from the file's shape and the configured `voxel_size_z`, `voxel_size_xy`, recorded as declared. When `rules.stardist_segmentation.parameters.expand_labels` is true, the file was expanded in segmentation and no original mask exists: the adapter raises `ValueError` naming that key and the replacement (set it to false and give the distance as `reads_assignment.parameters.dilation_distance` with `expand_labels: true`, so assign expands once and keeps both masks). |
+| The FOV's molecule table ({doc}`workflows`, "Molecule tables") | `fovs/{fovID}/molecules.csv` of the Python `rsf_single_fov`: `load_molecules` with the FOV's `spot_namespace` and the codebook's genes, the identities kept (since 2026-10-23). The legacy route's `signal/{fovID}_goodSpots.csv` (MATLAB's `rsf_single_fov`, `stitch_subtile`): `import_legacy_molecules_csv` with the same arguments; integer and float coordinates are both accepted. |
+| The codebook (the rule's codebook input: `INPUT/genes.csv`, or the file `codebook` or `direct_panel` names) | Loaded as the sequencing rules load it; its genes in its order (`Codebook.genes`, or `DirectPanel.genes` with `readout_mode: direct`) are the gene universe of the molecule reader and the matrix columns (since 2026-10-24; before, a second gene list in OUTPUT's `documents` folder gave the order, {doc}`migration`). |
 | `parameters.expand_labels: false` | `expansion: null`; `dilation_distance` is ignored and recorded. |
 | `parameters.expand_labels: true`, `dilation_distance: d` | `expansion: {distance: d, unit: pixel, mode: planar}` with `legacy_pixel_expansion=True` (the declared grid is calibrated), when `rules.stardist_segmentation.parameters.expand_labels` is false. |
 | both `expand_labels` keys true | `ValueError` naming both keys (the row of the label file above): the legacy pair of expansions is not one expansion (golden test), and a label image is expanded once, by assign. |
 | `images/DAPI/{fovID}.tif` | Read only for the diagnostic plots. |
-| `output/tile_config_{sample}.csv` | Not read by the package; the adapter applies the legacy overlap filter and global coordinates to the result (§2.10 boundary). |
+| `output/tile_config_{sample}.csv` | Not read by the package; the adapter applies the legacy overlap filter and global coordinates to the result (the boundary with stitching and assembly). |
+
+% (W-307: `cell` for the `overlay` input; (since W-562); (W-567; before it; (§2.10 boundary)
 
 The outputs keep their names. `raw.h5ad` keeps its legacy `obs` columns with their
 legacy meaning, computed on the territories assign samples (the expanded ones when assign
@@ -957,23 +1017,31 @@ expanded, as today): `sample`, `fov_id`, `volume` = `expanded_size_voxels` (or
 `cytoplasm` (float64; 0.0 for a measured zero, NaN rows for cells whose compartments are
 not available) when nuclei are given, and the record in `uns["assignment"]`. `X` stays
 float64 whole-cell counts of the kept cells, one column per gene of the codebook in its
-order (W-567). `reads_assignment.csv` keeps its columns and
+order (since 2026-10-24). `reads_assignment.csv` keeps its columns and
 gains `spot_id`, `assignment_status`, `cell_id`, `in_expansion`, `original_cell_id`,
 `nucleus_id` and `compartment`.
 
+% order (W-567)
+
 These are the outputs without an `assembly` block, and with one in molecules only. With an
-`assembly` block that names an assignment (the route of a saved assignment, W-568), the
+`assembly` block that names an assignment (the route of a saved assignment, since 2026-10-24), the
 rule writes and declares the FOV's assignment folder `fovs/{fovID}/assignment/<name>/`
 alone: no `raw.h5ad`, `reads_assignment.csv` or `log.txt` (the record holds the counts),
 and the two figures only with `assembly.previews: true`, in `fovs/{fovID}/previews/`
 ({doc}`workflow-configuration`, "`assembly`").
 
+% (the route of a saved assignment, W-568)
+
 ## Exclusions
 
-No segmentation and no change to the label contract (W-307); no stitching, global
-coordinates, overlap ownership or cross-FOV matching (§2.10); no probabilistic or
-transcript-based assignment; no size or count filter; no automatic compartment repair; no
-new exporter (§2.4's are reused); no real data and no accuracy claim (E04, W-123).
+No segmentation and no change to the label contract ({doc}`segmentation-contract`); no
+stitching, global coordinates, overlap ownership or cross-FOV matching (stitching and
+assembly); no probabilistic or transcript-based assignment; no size or count filter; no
+automatic compartment repair; no new exporter (the existing exporters are reused); no real
+data and no accuracy claim (both need annotation and an answer to whether a mask is one
+biological cell, which are left to later work).
+
+% (W-307); (§2.10); (§2.4's are reused); (E04, W-123)
 
 ```{toctree}
 :hidden:
