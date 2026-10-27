@@ -171,11 +171,6 @@ real example under its own authorization (real data, the GPU): both routes on th
 culture's 2 × 2 block of W-382 and W-376, compared with `compare_routes`. It would report,
 not decide, and would not be an accuracy.
 
-## Implementation order
-
-The checks above are assigned to implementation issues in the W-401 worker notes, each
-naming the checks it must pass.
-
 ## Implemented checks
 
 One line per implemented check: its identifier and the test that implements it, under

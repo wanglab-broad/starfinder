@@ -1,6 +1,46 @@
-# Sample segmentation contract: segmentation after fusion for projection samples, the route setting and the consistency check of the two routes
+# Sample segmentation guide: segmentation after fusion for projection samples, the route setting and the consistency check of the two routes
 
 Status: Accepted (W-377, 2026-10-09, at 779ea77)
+
+This page is the maintained guide to sample segmentation, the route after fusion to a
+sample's cells (§2.10), and its contract.
+
+* **What the stage does.** For a projection sample it segments the fused Z maximum once,
+  on the segmentation grid at the dataset's `scale_yx`, and assigns the sample's
+  molecules, the `molecules_only` assembly of the per-FOV molecule tables, to those cells
+  by Y and X; one route setting chooses this route or the route per FOV, and
+  `compare_routes` checks the two routes against each other and decides nothing
+  ([Settled decisions this page follows](#settled-decisions-this-page-follows),
+  [Terms](#terms), [The stains and the scale](#the-stains-and-the-scale),
+  [The consistency check of the two routes](#the-consistency-check-of-the-two-routes)).
+* **The entry and its configs.** The part `segment` of `Dataset.export`, which on this
+  route runs `fuse`, `segment`, `assemble`, `fuse_labels` and `export_spatialdata` in that
+  order; alone, `segment_fused` on a folder whose `fuse` ran, then
+  `assemble(..., segmentation=…)`. Its settings are a `SampleSegmentationConfig` of
+  `SampleSegmentationRun`s in the §2.9 run format, with pixel lengths given for the
+  acquired grid, and check 7 refuses a wrong setting before anything is written
+  ([Names](#names), [The entry](#the-entry),
+  [The parts on each route](#the-parts-on-each-route),
+  [Lengths in pixels](#lengths-in-pixels), [Where the settings live](#where-the-settings-live)).
+* **What it produces.** In the export folder `export/<sample>/`: one
+  `segmentation_<run>.ome.tif` per run, `territories.ome.tif` when the assignment expands
+  the cells, the `segmentation` section of `export.json`, and the same four sample tables,
+  `sample.h5ad` and files as the route per FOV, with the content stated column by column;
+  `check_export` checks them by T1 to T5
+  ([Outputs, column by column](#outputs-column-by-column),
+  [The label images](#the-label-images), [The record](#the-record)).
+* **Where the configuration goes.** `ExportConfig.route`, `ExportConfig.segment` and
+  `ExportConfig.segmentation`, passed to `Dataset.export`; in the workflow, the keys
+  `route`, `segment` and `segmentation` of the `export` block, which the rule
+  `export_sample` reads; without `route` the default follows `dimensionality` (RD1)
+  ([Where the settings live](#where-the-settings-live),
+  [The route setting](#the-route-setting)).
+
+Beneath this guide, {doc}`sample-segmentation-validation` is the validation design of the
+route after fusion, the route setting and `compare_routes`, with its fixtures, its checks
+and the tests that implement them. The stage has no separate algorithm page and no
+baseline: its rules are on this page, which cites its measurements from
+{doc}`cells-across-fovs-proposal`.
 
 ## Amendments after acceptance
 
@@ -30,16 +70,15 @@ Status: Accepted (W-377, 2026-10-09, at 779ea77)
   stated", because the cells do not exist before the segmentation. Found by W-428 and its
   review. Operator decision, confirmed by Jiahao on 2026-10-10.
 
-This page specifies the second route to a sample's cells, so that it can be implemented
-after Jiahao approves it: the fused Z maximum of a projection sample is segmented once,
-and the sample's molecules are assigned to those cells. It states how the route is called,
+This page specifies the second route to a sample's cells: the fused Z maximum of a
+projection sample is segmented once, and the sample's molecules are assigned to those cells. It states how the route is called,
 which images and settings it takes, how the sample's molecules reach `assign_molecules`,
 what every column, key and file of the outputs holds on this route, what the record says,
 how a dataset chooses its route, and how the two routes are checked against each other.
 The validation design is {doc}`sample-segmentation-validation`. The route is implemented
 in the package and the workflow (W-425 to W-430), with the checks that {doc}`sample-segmentation-validation` lists
-("Implemented checks"); this page changes no accepted page and names, in "What changes in
-the accepted pages", the sentences an implementation would change.
+("Implemented checks"). The pages it builds on state the route's part of their own rules
+and cite this page.
 
 It builds on these pages and redefines none of them: {doc}`sample-output-contract` (the
 export entry, `export/<sample>/`, the fused image, the label export, the SpatialData
@@ -894,99 +933,6 @@ fusion of the stains (part of the default export, W-354), one segmentation call 
 projection and one assignment; the projection's size scales with `k⁻²`. The export rule
 needs the segmentation methods' device and memory; for a learned model on `cuda` that is
 a GPU node, which is a §2.13 resource of the rule.
-
-## What changes in the accepted pages
-
-Named here sentence by sentence, not edited. An implementation issue changes each
-sentence as described and nothing else.
-
-{doc}`sample-output-contract`:
-
-1. Introduction and "Settled decisions this page follows", the "Excluded" paragraph:
-   "reassignment of molecules or recomputation of counts from a fused image or a label
-   raster" is excluded. The route after fusion assigns the sample's molecules to the cells
-   of a segmentation of the fused image; the exclusion stays for the route per FOV.
-   The same words in "Exclusions" likewise.
-2. "Names": the table of new names under N1 gains the names of "Names" above.
-3. "The export entry", "The parts, in order": the table of four parts gains `segment`
-   and the order of the route after fusion ("The parts on each route"); the paragraph
-   after it, "each section records the SHA-256 of the sections it was computed from",
-   gains the file hashes of the route after fusion ("What the segmentation was made
-   from").
-4. "Checks before anything is written": check 7.
-5. "When a part cannot run": rows for `segment`; "The statuses of a part … `reused`
-   (assemble only)" becomes "assemble and segment".
-6. "The export folder and the output profiles": a profile "Route after fusion" with
-   `segmentation_<run>.ome.tif` and `territories.ome.tif`; the rows "3D stack alone" and
-   "Sum projection" gain that the route after fusion refuses them.
-7. "Assembled label export", first paragraph: "it shows the retained cells of the sample,
-   each drawn whole as its FOV segmented it" gains the route after fusion, whose cells are
-   drawn as the sample segmentation holds them; "Inputs" gains the sample's territories.
-8. "Read-back checks": R1 (the part `segment`), L3 and L5 by the rule `segmentation`, S2
-   (the column `cell_namespace`), and T1 to T5.
-9. "SpatialData export", "Identities and source lookup": "returns its FOV, the FOV's
-   assignment folder, its `assignment.json` SHA-256 and the row's position in the §2.9
-   table" gains the cell of the route after fusion ("Readers that change").
-10. "Configuration": `ExportConfig` gains `route`, `segment` and `segmentation`.
-11. "Workflow configuration": the `export` block gains `route`, `segment` and
-    `segmentation`; "runs `Dataset.export` after the placement exists and after
-    `reads_assignment` of every FOV of the sample" holds for the route per FOV; on the
-    route after fusion the rule needs the molecule tables and the source images, and the
-    assignment figures are not redrawn.
-
-{doc}`assembly-contract`:
-
-12. "Settled decisions this page follows", **Retention**: "a cell is retained by its
-    centroid; all molecules of a retained cell are kept wherever they lie" holds for the
-    route per FOV; on the route after fusion every cell of the sample segmentation is
-    retained and molecules are retained by their position.
-13. "The assemble entry", "Function": `assemble` gains `segmentation=None`; "It never
-    reads or writes files except to load a saved assignment named by path, never runs
-    stitch, assign or any per-FOV stage" gains: with a segmentation it calls
-    `assign_molecules` once on the sample.
-14. "Inputs", "Per FOV, one of two kinds": with a segmentation the inputs are molecule
-    tables.
-15. "Sample-level identities", **Cells**: "`cell_namespace` already names `[dataset_id,
-    sample_id, fov_id, subtile_id, run]`, so the key … traces back to the FOV" gains the
-    namespace with a null FOV of the route after fusion.
-16. "Count accounting", identities 1, 3 and 4: keyed by the cell key; identity 1 against
-    the sample segmentation's labels and identity 3 by position on the route after
-    fusion.
-17. "Sample tables": `cells` "one row per cell of every input FOV" gains the cells of the
-    sample segmentation; the meaning of `fov_id` on that route; `molecules` gains
-    `cell_namespace` (both routes).
-18. "What assemble records": the keys `route`, `route_source`, `segmentation_files` and
-    `assignment`.
-19. "Sample-level AnnData": "`layers` When the inputs gave nuclei" gains the nucleus run
-    of the sample segmentation.
-20. "Workflow configuration": "It runs once per sample, after `reads_assignment` of every
-    FOV of the sample" holds for the route per FOV.
-
-{doc}`assignment-contract`:
-
-21. "Boundary with §2.10": "Assignment is FOV-local: it reads one FOV's molecules and
-    label images on that FOV's reference grid, and nothing else." The function stays as it
-    is; the route after fusion calls it once on the segmentation grid with the sample's
-    molecules in one sample-level namespace.
-22. "Inputs", **Molecules**: "one FOV identity (the `spot_namespace` list `[dataset_id,
-    sample_id, fov_id, subtile_id]`)" gains the sample identity with null `fov_id` and
-    `subtile_id`, which the constructor already accepts (call C1).
-
-{doc}`segmentation-contract`:
-
-23. "The segment entry", the parameter `label_namespace`: "a JSON list `[dataset_id,
-    sample_id, fov_id, subtile_id, run name]` for a FOV run" gains the sample run with
-    null `fov_id` and `subtile_id`, which `segment` already accepts (call C6).
-
-{doc}`stitching-assembly-validation`:
-
-24. Introduction: "This page is the task-group-6 validation design for the whole of
-    §2.10" gains a pointer to {doc}`sample-segmentation-validation` for the route after
-    fusion.
-
-`docs/migration.md` gains entries for the new names, the `export` keys, the column
-`cell_namespace` and the route default (RD1). The status lines of the accepted pages stay
-`Accepted`.
 
 ## Exclusions
 
