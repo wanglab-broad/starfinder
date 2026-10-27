@@ -4,7 +4,7 @@ A docs-contract module (docs/contributing.md, "Test markers"): it holds the test
 ``slow`` test of the report reads it, and it finds each part by its label (``docs_pages``), not by its heading:
 
 * ``(report-algorithms-checks)=`` and ``(report-algorithms-implemented-checks)=``: the tables "Checks" and
-  "Implemented checks (W-459)". ``test_every_check_names_collected_tests`` keeps the second true; it was in
+  "Implemented checks". ``test_every_check_names_collected_tests`` keeps the second true; it was in
   ``test_report_chain.py``.
 * ``(report-algorithms-figure-sizes)=``: the section "Figure sizes", with its table of slots, its rules and its
   table of figures. Its two tests are the page's part of ``test_slots_are_the_page_columns_and_the_table``
@@ -29,7 +29,7 @@ ROW = r"(?:RC|DF|PR|EF|RP|PG|CH|RT|Z|A|CP|RR|WF|DT)\d+"
 TIERS = {"default": (False,), "slow": (True,), "default and slow": (False, True)}
 
 
-# --- The table "Implemented checks (W-459)" -------------------------------------------------------------------------
+# --- The table "Implemented checks" ---------------------------------------------------------------------------------
 
 def design_rows():
     """The row ids of the table "Checks" of the validation design."""
@@ -72,7 +72,7 @@ def collected(session, module):
 
 
 def test_every_check_names_collected_tests(request):
-    """Every row of the table "Checks" has a row in "Implemented checks (W-459)", in the same order, naming tests that
+    """Every row of the table "Checks" has a row in "Implemented checks", in the same order, naming tests that
     pytest collects, none an expected failure, each with a subsystem marker and the tier the row states."""
     rows, expected = implemented_checks(), design_rows()
     assert len(expected) == len(set(expected)) == 54

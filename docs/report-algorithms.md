@@ -1,8 +1,8 @@
 # Processing-report algorithms, layout and validation design
 
-Status: Accepted (W-387, 2026-10-12, at c0aa8b0; the grid-edge mark of the reads along Z written on at 06466ec)
+% Status: Accepted (W-387, 2026-10-12, at c0aa8b0; the grid-edge mark of the reads along Z written on at 06466ec)
 
-This page fixes how every value and figure of the §2.11 processing report is computed and
+This page fixes how every value and figure of the processing report is computed and
 drawn, how the page is laid out and built, how the delivery is validated, and the plan of
 the real example. The entries, inputs, tables, reasons and records are in
 {doc}`report-contract`; the source of every value and every gap, as they were before the
@@ -10,8 +10,10 @@ report, are recorded as history in {doc}`report-baseline`. This page redefines n
 reason, part and record is used as {doc}`report-contract` gives it, and where this page
 needs a rule that page leaves open ("Open points for the algorithms page") it states it
 here. The algorithms, layout and validation design are implemented in
-`starfinder.report` ({doc}`api/report`) and the tests that "Implemented checks (W-459)"
+`starfinder.report` ({doc}`api/report`) and the tests that "Implemented checks"
 lists.
+
+% §2.11, W-459
 
 ## What this design is and is not
 
@@ -26,21 +28,24 @@ lists.
   compares methods, sweeps a parameter or claims accuracy, and none shows that a sample is
   well processed: a report that passes every check shows that the records were read and
   combined as this page states.
-* **The contamination diagnostics stay with E08.** The report's MECR is a descriptive count
+* **The contamination diagnostics stay with the separate evidence work on contamination.** The report's MECR is a descriptive count
   of the marker pairs the user supplies (numerator, denominator, ratio). The interpretation
   of MECR as contamination, the neighbour-associated incompatible-marker burden, paired
-  retention and every comparison of correction methods stay with E08, as the scope
-  (W-152) and the survey of W-383 place them.
+  retention and every comparison of correction methods stay with that evidence work, as the scope
+  of 2026-10-07 and the inputs survey place them.
 * **No new dependency.** Everything below uses the standard library, NumPy, pandas,
   SciPy, scikit-image, h5py, tifffile and matplotlib, which the package already requires
   (`src/python/pyproject.toml`, `dependencies`).
 
+% E08, W-152, W-383
+
 ## Evidence
 
-Cited by path under the benchmark root
-`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/`:
+Cited by file in run directories kept with the run records outside the repository:
 
-* W-384, `W-384/20261012T065105Z-18876aac/`: `results/distributions/candidate_limits.csv`
+% /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/
+
+* The source-inventory run of 2026-10-12: `results/distributions/candidate_limits.csv`
   (the candidate limits of every rule on the earlier pipeline's logs of three samples, with
   the FOVs each marks), the per-sample tables beside it, `w376_placement_status.csv`,
   `results/figures/figure_sizes.csv` (the bytes of a whole-sample figure at three widths),
@@ -48,12 +53,14 @@ Cited by path under the benchmark root
   the estimate for 64), `results/replay/replay.csv` (the replay bit-identical in every round),
   `results/frame/frame_dihedral.csv` (the frame of a Python run of LN sample1) and
   `worker-notes.md` (sections 7 to 9 and 11).
-* The agreed layout mockup `W-152/20261007T1939Z-s211-report-scope/processing-report-layout.html`
+* The agreed layout mockup `processing-report-layout.html` of the report scope of 2026-10-07
   (SHA-256 `b07a0efd…5462`). Its values are placeholders; its sections, blocks and
   interactions are the agreed layout.
-* W-383, `W-383/20261008T0240Z-inputs/`: `inputs.md` (the inputs of the real example),
+* The inputs survey of 2026-10-08: `inputs.md` (the inputs of the real example),
   `markers.yaml`, and `survey-spatial-omics-post-processing.md` (SHA-256 `c8de6ff6…5db`),
   whose section "Practical metrics for contamination and signal preservation" defines MECR.
+
+% W-384/20261012T065105Z-18876aac/, W-384, W-152/20261007T1939Z-s211-report-scope/processing-report-layout.html, W-383/20261008T0240Z-inputs/, W-383
 
 ## What Jiahao decides
 
@@ -115,8 +122,10 @@ Each column of each table of {doc}`report-contract` ("The tables") is defined he
 formula over named fields of the records, with its unit and its result for an empty or
 undefined input. A column that the contract defines as a copy of one field (`status`,
 `started_at`, `placement_status`, …) is listed with that field; it needs no formula. The
-worker notes of W-386 map every column to its definition here and to the implementation
+worker notes of the algorithms specification map every column to its definition here and to the implementation
 issue that computes it.
+
+% W-386
 
 ### `fovs.csv`
 
@@ -300,8 +309,10 @@ null:
 | `overlaps_counted_per_fov` | `L != "reads_in_cells"`. | — | never null |
 
 The levels above `reads_in_cells` are sums over FOVs and count a read in an overlap once per
-FOV that saw it (D5); `reads_in_cells` is after the overlaps are removed. The figure shows
+FOV that saw it (settled decision 5); `reads_in_cells` is after the overlaps are removed. The figure shows
 this ("Readout").
+
+% D5
 
 ### Reads assigned to cells
 
@@ -394,9 +405,11 @@ mecr    = both / either
 
 `either = 0` gives `mecr` null with reason `undefined`, for that pair only; the four counts
 are written (0). No cell: every count 0 and `mecr` undefined. This is the definition of the
-W-383 survey (`n(A+ and B+) / n(A+ or B+)`, an observed count of at least one positive by
-default), with the threshold configurable (D5). It is a description of the supplied pairs;
+inputs survey (`n(A+ and B+) / n(A+ or B+)`, an observed count of at least one positive by
+default), with the threshold configurable (settled decision 5). It is a description of the supplied pairs;
 the report states no expected value and draws no conclusion from it.
+
+% W-383, D5
 
 ### `reads_along_z.csv`
 
@@ -404,10 +417,12 @@ Rows and key, as {doc}`report-contract` states them: one row per FOV of the expo
 
 The FOVs of the export are the entries of `export.json` `assembly.fovs`, in list order;
 `n_z = assembly.fovs[f].grid.shape_zyx[0]` is the number of planes of FOV `f`'s grid. A
-molecule's plane is `floor(z + 0.5)` of its `tables/molecules.csv` `z` (float64; the §2.9
+molecule's plane is `floor(z + 0.5)` of its `tables/molecules.csv` `z` (float64; the assignment
 sampling rule of {doc}`assignment-algorithms`, "Sampling"). Every molecule of the table,
 retained or not, is counted on its own plane, whether or not that plane lies in the FOV's
 grid, so that a projected sample whose spots were found in 3D shows where its reads lie:
+
+% §2.9
 
 ```text
 P(f)        = {plane(m) : m.fov_id = f}
@@ -420,7 +435,9 @@ The rows of a FOV run without a gap, with 0 where no molecule lies; a FOV whose 
 lie in `[0, n_z − 1]`, or that has none, has the `n_z` rows 0 to `n_z − 1`. `Σ_k reads(f, k)`
 equals the FOV's molecules of the table. A row outside `[0, n_z − 1]` is not marked in the
 table; the figure of the reads along Z marks the edges of each FOV's grid (decided at the gate
-W-387 on 2026-10-12: a mark in the figure, no new column).
+of 2026-10-12: a mark in the figure, no new column).
+
+% W-387
 
 A molecule whose plane lies outside its FOV's grid is not for that reason excluded
 `outside_grid`: in `assembly/_assemble.py`: `assemble`, a FOV whose grid has one plane gives
@@ -428,16 +445,18 @@ every molecule the index z 0 before any test (`positions[:, 0] = 0.0`; the colum
 the recorded value), so on a one-plane grid no route excludes a molecule by its `z`. On a grid
 of several planes, a `molecules_only` export excludes `outside_grid` the molecule whose
 `floor(z + 0.5)` lies outside `[0, n_z − 1]` (`assemble` tests every axis against the FOV's
-grid); on the route per FOV a molecule is `outside_grid` when its §2.9 status is
+grid); on the route per FOV a molecule is `outside_grid` when its assignment status is
 (`assignment/_assign.py`: `assign_molecules`, which tests `z` against a grid of several
 planes for volume and for plane labels); the route after fusion starts from the
 `molecules_only` assembly, with its test, and `assembly/_fused.py`:
 `assemble_after_fusion` adds the retained molecules that `assign_molecules` places outside
-the segmentation grid, a grid of one plane, so by Y or X only. The tissue-2D export of W-391,
+the segmentation grid, a grid of one plane, so by Y or X only. The tissue-2D export of the saved-files run,
 a `molecules_only` export of 56 FOVs of grid 1 × 3072 × 3072 whose molecule tables span 30
 planes ({doc}`stitching-assembly-validation`, "Results of the real examples"), has 5,353,714
 molecules in its `export.json` `assembly.counts`, 4,703,832 retained, 649,882 `not_owner` and
 none `outside_grid`.
+
+% §2.9, W-391
 
 ### `intensity.csv`
 
@@ -559,10 +578,12 @@ can drift from `ownership_map`; OA3, the footprint's area, which counts an overl
 
 ## Problematic FOVs
 
-**The numbers below are provisional.** They come from W-384's candidate limits on the logs
+**The numbers below are provisional.** They come from the source-inventory run's candidate limits on the logs
 of the earlier pipeline, whose quantities are defined differently from the Python records
 ({doc}`report-baseline`, discrepancy 6), and they stay provisional until Jiahao sets them at
-the §2.11 gate ({doc}`report-contract`, choice 14).
+the report's gate ({doc}`report-contract`, choice 14).
+
+% W-384, §2.11
 
 ### The one form of a rule on values
 
@@ -597,9 +618,11 @@ Which FOVs a rule marks does not depend on these columns.
 evaluated, the FOVs that entered (per round and axis for the residual), and the number of
 FOVs it marks.
 
-What the form gives in the edge cases, as `results/check_rule_form.py` of the W-386 run
+What the form gives in the edge cases, as `results/check_rule_form.py` of the algorithms specification's run
 directory evaluates it (output `check_rule_form.txt`; low and high side; `k = 3`, floor 0.05;
 `k = 0`, floor 0; absolute 0.6):
+
+% W-386
 
 * **One FOV.** `m = v` and `s = 0`, so `d = 0`: no relative form marks it, whatever `k` and
   the floor. An absolute limit marks it when its value is beyond the limit on the rule's side
@@ -625,51 +648,57 @@ directory evaluates it (output `check_rule_form.txt`; low and high side; `k = 3`
 ### The rules of the first delivery
 
 `PROBLEM_RULES` in order. The counts are the FOVs each rule marks on the logs of the three
-samples (W-384 `results/distributions/candidate_limits.csv`, the row whose `rule` and
-`setting` are named; "edge" and "interior" as W-384 places them). LN sample1 has 64 FOVs,
+samples (the source-inventory run's `results/distributions/candidate_limits.csv`, the row whose `rule` and
+`setting` are named; "edge" and "interior" as the source-inventory run places them). LN sample1 has 64 FOVs,
 cell-culture-3D 70, tissue-2D 56 (the Snakemake run of 2026-01-22; its 2023 logs are a
 second configuration of the same sample and are given in brackets where they differ).
 
-| Rule | Section | Value and side | Provisional limit (default) | Unit | W-384 row (`rule`; `setting`) | LN sample1 | cell-culture-3D | tissue-2D |
+% W-384
+
+| Rule | Section | Value and side | Provisional limit (default) | Unit | Source-inventory row (`rule`; `setting`) | LN sample1 | cell-culture-3D | tissue-2D |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `fov_failed` | Workflow overview | `status` in (`failed`, `interrupted`); `running` is not marked | categorical | — | "workflow: FOV failed or expected and not run (log incomplete or missing)"; "log without the read counts" (the logs hold no status; an incomplete log is the nearest) | 0 | 0 | 0 [2023: 1, tile_1] |
-| `fov_not_run` | Workflow overview | No run record, while at least one FOV of the list has one | categorical | — | the same row (every FOV of the three samples has a log, W-383 `inputs.md`) | 0 | 0 | 0 |
+| `fov_not_run` | Workflow overview | No run record, while at least one FOV of the list has one | categorical | — | the same row (every FOV of the three samples has a log, the inputs survey's `inputs.md`) | 0 | 0 | 0 |
 | `shift_residual` | Registration | The residual per round and axis, both sides; every moving round of `registration.csv` | `k = 5`, floor 5 | voxels | "registration: shift residual above limit on any axis (sequencing rounds)"; "\|residual\| > max(5 x 1.4826 MAD, 5 vox)" | 1 (edge: Position001, Z residuals 17–19 in every moving round) | 0 | 0 [2023: 0] |
-| `alignment_score` | Registration | `alignment_score`, low side | none: not evaluated by default | dimensionless | no row: no log holds a registration quality value (W-384 notes, section 7) | not evaluated | not evaluated | not evaluated |
+| `alignment_score` | Registration | `alignment_score`, low side | none: not evaluated by default | dimensionless | no row: no log holds a registration quality value (the source-inventory run's notes, section 7) | not evaluated | not evaluated | not evaluated |
 | `registration_rejected` | Registration | Some estimation entry of the round has `outcome` `rejected` (a configured QC criterion refused an attempt, whether or not a recovery then succeeded) | categorical | — | no row: no log holds a registration outcome (`<sample>_reads_stats.csv`, row "registration outcome or fallback") | not countable from the logs | not countable | not countable |
 | `registration_fallback` | Registration | `fallback` true on a succeeded round | categorical | — | as `registration_rejected` | not countable from the logs | not countable | not countable |
 | `correct_form_fraction` | Readout | `correct_form_fraction`, low side | `k = 3`, floor 0.05 | fraction | "readout: correct-form fraction deviating (low)"; "median - fraction > max(3 x 1.4826 MAD, 0.05)" | 1 (edge: Position002) | 0 | 2 (edge tile_1, interior tile_29) [2023: 2, interior tile_29, tile_30] |
 | `matched_fraction` | Readout | `matched_fraction`, low side | `k = 3`, floor 0.05 | fraction | "readout: matched fraction deviating (low)"; "median - fraction > max(3 x 1.4826 MAD, 0.05)" | 1 (edge: Position002) | 0 | 2 (edge tile_1, interior tile_29) [2023: 2, interior tile_29, tile_30] |
 | `spots_near_zero` | Readout | `spots < spots_near_zero × median(spots)` | 0.05 | reads | "readout: spot count close to zero"; "spots < 0.05 x sample median" | 0 (lowest FOV at 0.07 × median; 0.1 × median marks 2 edge FOVs, Position006 and Position059) | 0 | 0 |
-| `not_placed` | Segmentation and assembly | `placement_status` in (`missing`, `failed`) | categorical | — | `w376_placement_status.csv` (every LN and culture FOV `image_supported`; no tissue-2D placement in W-376) | 0 | 0 | not countable from W-384 (the accepted {doc}`stitching-assembly-validation`, "Results of the real examples", places all 56 `image_supported` in W-388/W-389: 0) |
+| `not_placed` | Segmentation and assembly | `placement_status` in (`missing`, `failed`) | categorical | — | `w376_placement_status.csv` (every LN and culture FOV `image_supported`; no tissue-2D placement in the first stitching run) | 0 | 0 | not countable from the source-inventory run (the accepted {doc}`stitching-assembly-validation`, "Results of the real examples", places all 56 `image_supported` in the tissue-2D run: 0) |
 | `stage_position_fallback` | Segmentation and assembly | The placement's `fovs.csv` `flags` holds `fallback` (`metadata_only` at the nominal position; a `supplied` placement is not a fallback) | categorical | — | as `not_placed` | 0 | 0 | as `not_placed` (0) |
-| `reads_no_cell` | Segmentation and assembly | An owning FOV with `n_molecules_retained > 0` and `n_cells_retained = 0` | categorical | — | no row: no log holds cells, and the W-398 exports are `molecules_only` | not countable from the logs | not countable | not countable |
+| `reads_no_cell` | Segmentation and assembly | An owning FOV with `n_molecules_retained > 0` and `n_cells_retained = 0` | categorical | — | no row: no log holds cells, and the own-folder run's exports are `molecules_only` | not countable from the logs | not countable | not countable |
+
+% W-384, W-383, W-376, W-388, W-389, W-398
 
 Notes on the rules:
 
-* **Counts are judged only near zero** (D5): `spots_near_zero` is the one rule on a count,
+* **Counts are judged only near zero** (settled decision 5): `spots_near_zero` is the one rule on a count,
   and its limit is a fraction of the sample's median, so a FOV at the edge of the tissue
   with fewer spots is not marked unless it is close to zero. With `median(spots) = 0` the
   limit is 0 and nothing is marked.
 * **Sides (choice A4).** No high-side deviation of either fraction is marked at any setting
-  on the three samples (W-384 `candidate_limits.csv`, the rows "(high)"). Options: **SD1
+  on the three samples (the source-inventory run's `candidate_limits.csv`, the rows "(high)"). Options: **SD1
   (recommended)**, the low side only, as `ReportLimits` states it; SD2, both sides, which
   marks a FOV that decodes better than its neighbours. The shift residual is judged on both
   sides because a shift has no good direction.
 * **Rounds and axes of the residual rule.** Every moving round that `FOV.run` registered,
   every axis; one row per (FOV, round, axis) marked. The earlier pipeline also registered the
-  morphology rounds (`flamingo`, `organelle`, `protein`), which W-384 tabled apart; a Python
+  morphology rounds (`flamingo`, `organelle`, `protein`), which the source-inventory run tabled apart; a Python
   run records only the rounds `FOV.run` registers, so no such round enters.
-* **Alignment score.** Without a default (W-384, section 11): a user who sets a limit gets
+* **Alignment score.** Without a default (the source-inventory run's notes, section 11): a user who sets a limit gets
   the low side, `median − score > max(k' × s, floor')` or `score < absolute`. The first
   Python run of a real sample (the real example) gives the distribution of `ncc_after` from
-  which Jiahao can set it; the two LN FOVs of W-384 have 0.695 to 0.754.
-* **The A2 sample.** A sample with no run record does not evaluate `fov_failed`,
+  which Jiahao can set it; the two LN FOVs of the source-inventory run have 0.695 to 0.754.
+* **The sample of amendment 2.** A sample with no run record does not evaluate `fov_failed`,
   `fov_not_run`, the registration rules or the readout rules: one `rule:<rule>` row each,
   `no_run_record` ({doc}`report-contract`, "A FOV without a run record").
 * **Section.** The section column is the rule's section in this table; the Summary table
   lists the rows in the contract's order (FOVs in list order, then the rule order, then
   rounds and axes).
+
+% D5, W-384, A2
 
 ### The reason texts
 
@@ -735,7 +764,7 @@ what is drawn.
   round but changes with the values; RD3, every round, which costs four times the reading
   and memory of RD1 on LN (16 files, one round at a time, 447 MB per round as uint8).
 * **Cost.** The replay holds one round of the main example at a time in the dtype of its
-  step outputs; for an LN FOV 447 MB per round as uint8 (W-384 `real_fovs.csv`), and the
+  step outputs; for an LN FOV 447 MB per round as uint8 (the source-inventory run's `real_fovs.csv`), and the
   rebuilt chain's resampling as `FOV._register_round` does it. Each file read is checked
   against its SHA-256 ({doc}`report-contract`, "The replay", step 1).
 * **The displayed signal.** Each image of an example is the maximum over Z of one channel of
@@ -746,6 +775,8 @@ what is drawn.
   tile's displayed values (`lo`, `hi`), clipped; `lo = hi` draws the tile at mid-grey. Each
   tile has its own range, written beside its colour bar, because a step can change the range
   by orders of magnitude.
+
+% W-384
 
 ## How the two routes differ
 
@@ -762,7 +793,9 @@ same columns on both routes; only these elements differ:
 | Time of the segmentation | `not_recorded` | `export.json` `segmentation.wall_s` |
 
 Cell density, reads assigned to cells and the rule "reads but no cell" are the same formulas
-on both routes (A1).
+on both routes (amendment 1).
+
+% A1
 
 ## A FOV without a run record
 
@@ -781,23 +814,29 @@ values null, each named by its own row of `unavailable.csv` with `no_run_record`
   says "n of N FOVs".
 * **Later sections.** Made from the export, which holds the FOV when it was exported.
 
-A sample with no run record at all (A2) shows, in each of these four sections, the blocks
+A sample with no run record at all (amendment 2) shows, in each of these four sections, the blocks
 of the section each replaced by the unavailable box with the reason `no_run_record`, except
 the FOV status map, which shows every FOV as "no run record".
+
+% A2
 
 ## Layout of the page
 
 The page follows the agreed mockup section by section. Where the mockup and the settled
-decisions differ, the decisions win: the Files section has no marker file (D4), the
-page has a light theme only (D3; the mockup's dark-scheme rules are left out), the
+decisions differ, the decisions win: the Files section has no marker file (settled decision 4), the
+page has a light theme only (settled decision 3; the mockup's dark-scheme rules are left out), the
 Summary names the route ({doc}`report-contract`, "The two routes"), and the cell values
-and the segmentation preview follow the route (A1). The page header is the heading
+and the segmentation preview follow the route (amendment 1). The page header is the heading
 "Processing report" alone (Jiahao's review of 2026-10-14): the Summary's facts name the
 dataset and the sample, and the page's title stays "Processing report · `<sample>`".
 
+% D4, D3, A1
+
 ### How the page is built
 
-No new dependency and no lock change (D3):
+No new dependency and no lock change (settled decision 3):
+
+% D3
 
 * **Template.** `starfinder/report/templates/report.html`, shipped in the package (the wheel
   target `packages = ["starfinder"]` of `src/python/pyproject.toml` already includes every
@@ -836,7 +875,9 @@ No new dependency and no lock change (D3):
 
 ### Style rules and how they are applied
 
-From Jiahao's review of the mockup (the outline's §2.11 style rules):
+From Jiahao's review of the mockup (the outline's style rules for the report):
+
+% §2.11
 
 | Rule | How the page applies it |
 | --- | --- |
@@ -1038,7 +1079,7 @@ the residual map uses arrows and colour as below.
      `export.json` `fusion.outputs` (the configuration's first `images` entry,
      `reference_stain` by default), its projection file when it exists, else the maximum
      over Z of its stack file, read plane by plane (the stack of LN sample1 at scale 0.5 is
-     66 × 6,167 × 5,435 uint8, W-398's `export.json`; one plane is 34 MB). The image is
+     66 × 6,167 × 5,435 uint8, the own-folder run's `export.json`; one plane is 34 MB). The image is
      reduced to `config.figure_width_px` by the mean over blocks; grey from its 0.5th to
      99.8th percentile of the nonzero pixels, with its colour bar. Over it, one point per
      retained molecule (`tables/molecules.csv` with `assembly_status == "retained"`) of the
@@ -1100,12 +1141,16 @@ the residual map uses arrows and colour as below.
    its row. A row outside a FOV's grid is drawn like the others, and each FOV's row carries a
    thin line at the two edges of its grid, between the columns of `z = −1` and 0 and between
    those of `n_z − 1` and `n_z`, wherever the figure has a column on both sides (decided at the
-   gate W-387 on 2026-10-12; the lines need only the grid shape the part already reads). With `Z = 1` and every molecule on plane 0, one
+   gate of 2026-10-12; the lines need only the grid shape the part already reads). With `Z = 1` and every molecule on plane 0, one
    column; a projected sample whose molecules lie on several planes has a column per plane.
+
+% W-398, W-387
 
 ### Files
 
-Three tables of two columns, as the mockup, without the marker row (D4):
+Three tables of two columns, as the mockup, without the marker row (settled decision 4):
+
+% D4
 
 * **Input.** Images: the common folder of `run.json` `inputs` paths and the number of
   files; Codebook: `codebook.path` (R2) with its SHA-256 (the first 12 characters, the whole
@@ -1212,9 +1257,11 @@ screen.
 
 ### Size budget
 
-From W-384's `figure_sizes.csv` (a whole-sample projection at the LN pixel size: 1.1 MB as
+From the source-inventory run's `figure_sizes.csv` (a whole-sample projection at the LN pixel size: 1.1 MB as
 JPEG at 1,600 px, 1.4 MB with three marker genes; base64 adds a third), the parts of a page
 of a 64-FOV sample with two marker groups, before base64:
+
+% W-384
 
 | Part | Bytes, estimate |
 | --- | --- |
@@ -1225,12 +1272,14 @@ of a 64-FOV sample with two marker groups, before base64:
 | Per marker group: whole-sample view and six zoom-in tiles (JPEG) | ≤ 1.5 MiB + 0.5 MiB |
 
 With base64 on every figure, about 6.5 MiB for the sample and 2.7 MiB per marker group:
-about 12 MiB for LN sample1 with the two groups of W-383's `markers.yaml`. The budget
+about 12 MiB for LN sample1 with the two groups of the inputs survey's `markers.yaml`. The budget
 (choice A9) is **SB1 (recommended)**: `report.html ≤ 6 MiB + 16 KiB × FOVs + 3 MiB × marker
 figures` (one marker figure without markers), 13 MiB for LN sample1; SB2, a fixed 20 MiB;
 SB3, no budget. A page above the budget is still written, and `report.json` records its
 bytes and the budget; the validation checks the budget on the synthetic pages and the real
 example reports it.
+
+% W-383
 
 ## The comparison page
 
@@ -1253,12 +1302,14 @@ one data block holding `samples` and, per present sample, the three per-FOV colu
 
 ## Validation design
 
-Engineering validation only (D7): known answers with pass or fail conditions fixed before
+Engineering validation only (settled decision 7): known answers with pass or fail conditions fixed before
 the run, in default-tier pytest modules, plus `slow` modules for the synthetic chains. No
 check compares methods, sweeps a parameter or claims accuracy; the checks establish that
 the records are read and combined as this page and {doc}`report-contract` state, not that a
 sample is biologically sound. `Z = 1` and the comparison page are validated on synthetic
-data only (D7).
+data only (settled decision 7).
+
+% D7
 
 Rules:
 
@@ -1295,13 +1346,15 @@ Rules:
 | Fixture | Construction | Seeds | Needs |
 | --- | --- | --- | --- |
 | `report_records` | A hand-written output root of one sample, `s1`, with four FOVs `F1` to `F4` on a 2 × 2 grid. Each FOV's grid is 4 × 16 × 16 voxels at spacing (0.5, 0.25, 0.25) µm (footprint 4 × 4 µm in Y and X), nominal step 3 µm. Run records written as JSON in the form `dataset/_run_record.py` writes them, with R1 to R4 ({doc}`report-contract`, "Records added to run.json"), status `succeeded`, the steps of loading, preprocessing, registration and detection to filtering with stated `seconds`, the recipe `min_max_normalization` then `white_tophat`, one translation step, deduplication and a filter with `end_bases`. Reference round `round1`, moving rounds `round2`, `round3`; translations (z, y, x) in round2 F1 (0, 1, 2), F2 (0, 1, 3), F3 (0, 2, 2), F4 (0, 1, 2), in round3 F1 (0, −1, 0), F2 (0, −1, 0), F3 (1, −1, 0), F4 (0, −1, 8); `ncc_after` of the application entries round2 0.9, 0.9, 0.85, 0.9, round3 0.88, 0.88, 0.87, 0.3. Counts: `spots` 1000, 1200, 800, 1000; `endpoint_valid` 800, 960, 400, 800; `assigned` 700, 840, 560, 700; `merged_reads` 10, 20, 0, 10; `accepted` 650, 800, 500, 640. A placement saved with `save_placement`: every FOV `image_supported` at origins (z, y, x) F1 (0, 0, 0), F2 (0, 0, 3.25), F3 (0, 3, 0), F4 (0, 3, 3) µm (F2 corrected by +0.25 µm in X), review `not_needed`. | none | hand-built |
-| `report_records` variants | `failed`: F3 `failed` with `error` `{step: register, round: round3}`, no round3 entries and no counts. `not_run`: F4's run record removed. `stage_off`: deduplication null in every `config` and no `merged_reads`; and a copy with `config.pipeline.registration` null and no `registration`, `transforms` or `register` steps. `no_placement`: the `stitching/` folder removed. `one`: F1 alone. `equal`: four FOVs with F1's counts, translations and scores. `no_spot`: F2's counts all 0. `older`: R1 to R4 removed from every run record, once without and once with F1's `registered/transforms.json` (`format_version` 3 since W-565, 2 before; the entries of `_checkpoint.py`: `_transform_json`). `placement_states`: F3 `metadata_only` flagged `fallback`, F4 `failed`; and a copy whose four FOVs are `metadata_only` flagged `supplied`. | none | hand-built |
+| `report_records` variants | `failed`: F3 `failed` with `error` `{step: register, round: round3}`, no round3 entries and no counts. `not_run`: F4's run record removed. `stage_off`: deduplication null in every `config` and no `merged_reads`; and a copy with `config.pipeline.registration` null and no `registration`, `transforms` or `register` steps. `no_placement`: the `stitching/` folder removed. `one`: F1 alone. `equal`: four FOVs with F1's counts, translations and scores. `no_spot`: F2's counts all 0. `older`: R1 to R4 removed from every run record, once without and once with F1's `registered/transforms.json` (`format_version` 3 since 2026-10-24, 2 before; the entries of `_checkpoint.py`: `_transform_json`). `placement_states`: F3 `metadata_only` flagged `fallback`, F4 `failed`; and a copy whose four FOVs are `metadata_only` flagged `supplied`. | none | hand-built |
 | `report_cells` | `report_records` with an export folder written in the test: `export/s1/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `counts.csv` and `sample.h5ad` (through `assignment.write_h5ad`), with `export.json` written through `export/_record.py` so that `verify_section_hashes` passes; route `per_fov`. Five genes `G1` to `G5`; `n_cells_retained` F1 21, F2 0, F3 7, F4 14, with F2 holding retained molecules (reads but no cell); one retained cell `excluded_no_nucleus` (not counted) and one `not_owner` cell, each with molecules; molecule `z` values that include −0.6, −0.5, 0.4999, 0.5 and 3.5 on a grid of 4 planes. Variants: `nocal`, whose cells have `size_physical` NaN and `calibration` `unknown`; `mismatch`, whose `sample.h5ad` holds one count more than its molecules (written with its own hash, so the file agrees with its record); `no_markers`, with `ReportConfig()`. | none | hand-built; `anndata` |
 | `hand_tables` | DataFrames and dicts built in each test for the definitions: read counts; chains of results (translation `(0, 1, 2)`; affine with `A = diag(1, 1, 1.1)`, `b = (0, 0.5, −0.75)` on a 4 × 16 × 16 grid, centre (1.5, 7.5, 7.5); a dense last step); count matrices for MECR; molecule `z` values; step outputs of the dtypes uint8, uint16, float32 and bool for the bins. | none | hand-built |
-| `scene_chain` | `sample_scene_preset("sample-tiny-v1")` (2 × 2 FOVs of 5 × 36 × 36, four rounds of four channels): the FOV round images written as OME-TIFFs in the dataset layout, `FOV.run` with W-384's synthetic recipe (W-384 `scripts/synthetic_run.py`: min–max normalization to uint8 and a white top-hat of radius 3, one translation step on the channel maximum, local maxima, extraction, WTA decoding, scoring, deduplication and a filter with `end_bases`) and checkpoint stages `candidates` and `pre_qc`; the rule outputs; the truth labels imported with `import_labels(…, relabel=False)` and `FOV.assign_molecules`; the truth placement (`placement_from_table` of `placement_truth.csv`, approved) saved; `Dataset.export` on the route per FOV with `dimensionality: both`. `scene_chain_registered`: the same with the stage `registered` too. | 42 | generator addition; `anndata`; `multiview-stitcher`; `slow` |
+| `scene_chain` | `sample_scene_preset("sample-tiny-v1")` (2 × 2 FOVs of 5 × 36 × 36, four rounds of four channels): the FOV round images written as OME-TIFFs in the dataset layout, `FOV.run` with the source-inventory run's synthetic recipe (the source-inventory run's `scripts/synthetic_run.py`: min–max normalization to uint8 and a white top-hat of radius 3, one translation step on the channel maximum, local maxima, extraction, WTA decoding, scoring, deduplication and a filter with `end_bases`) and checkpoint stages `candidates` and `pre_qc`; the rule outputs; the truth labels imported with `import_labels(…, relabel=False)` and `FOV.assign_molecules`; the truth placement (`placement_from_table` of `placement_truth.csv`, approved) saved; `Dataset.export` on the route per FOV with `dimensionality: both`. `scene_chain_registered`: the same with the stage `registered` too. | 42 | generator addition; `anndata`; `multiview-stitcher`; `slow` |
 | `scene_chain_plane` | The same chain on `scene_plane` ({doc}`stitching-assembly-validation`, "Fixtures": one-plane FOVs of 1 × 36 × 36), exported twice: on the route per FOV, and on the route after fusion with the truth nuclei projection imported and cells by `seeded_watershed` on the fused image, as `per_fov_routes` and `seeded_runs` of {doc}`sample-segmentation-validation` build them. | 42 | as `scene_chain` |
-| `scene_no_run_json` | `scene_chain`'s output root with every `fovs/<fov>/run.json` removed, and a second root exported with `assignment=None` from the rule outputs `fovs/<fov>/molecules.csv` alone (no checkpoint folder), as W-398 exported LN sample1. | 42 | as `scene_chain` |
+| `scene_no_run_json` | `scene_chain`'s output root with every `fovs/<fov>/run.json` removed, and a second root exported with `assignment=None` from the rule outputs `fovs/<fov>/molecules.csv` alone (no checkpoint folder), as the own-folder run exported LN sample1. | 42 | as `scene_chain` |
 | `scene_two_samples` | `scene_chain` as sample `s1` with its report, and `scene_chain_plane`'s route per FOV saved as sample `s2` under the same output root, without a report. | 42 | as `scene_chain` |
+
+% W-565, W-384, W-398
 
 ### Checks
 
@@ -1323,10 +1376,10 @@ Rules:
 | RC12 | Null cells and the closed lists | every `report_records` and `report_cells` case of RC1 to RC11 | Each null cell of each table and each null `summary` key | Each is either n/a by its column's null rule or named by exactly one row of `unavailable.csv` (table, column, row key), with a reason its part can have ({doc}`report-contract`, "Parts, their inputs and their reasons"); no row names two values; every reason is in `UNAVAILABLE_REASONS` and every part in `REPORT_PARTS` or `rule:<rule>`. Exact. |
 | RC13 | Collection, a round that did not finish ("Outcome", choice A13) | `report_records` `failed`, three copies, in each of which the test writes F3's `registration.round3` as `FOV._register_round` leaves it and no `transforms.round3`: `applying`, a `succeeded` estimation entry with its QC (`ncc_after` 0.8) and then the application entry left `applying` with `qc` null, F3 `status` `failed`; `estimating`, one estimation entry left `estimating` with `qc` null, F3 `status` `interrupted`; `succeeded`, one `succeeded` estimation entry with its QC (`ncc_after` 0.8) as the last entry, F3 `status` `failed`; `error` `{step: register, round: round3}` in each (none) | F3's round3 `outcome` and `alignment_score` and their rows of `unavailable.csv`; the round3 residual medians | `outcome` `application_failed`, `failed` and `failed`, each non-null and named by no row of `unavailable.csv`; `alignment_score` null with `step_failed` in each copy, named by exactly one row (`registration.csv`, `alignment_score`, (F3, `round3`)): the round's `outcome` is not `succeeded` ("Alignment score"), so neither the leftover `applying` entry's null QC (not `undefined`) nor the estimation entry's 0.8 is read; round3 medians over F1, F2 and F4 only, F3 in no median, F4's residual `x` 8. The strings and reasons exact; the residual within 1e-9 absolute. |
 | DF1 | Read levels | `hand_tables` (none) | Counts and fractions | Each fraction equals `count / spots`; `matched > correct_form` is kept (not nested); `spots = 0` gives four nulls with `undefined`; a null count gives a null fraction with the count's reason. Exact. |
-| DF2 | Shift | `hand_tables` (none) | `shift_z/y/x` | Translations `(0, 1, 2)` and `(0, −1, 0)` give `(0, 0, 2)`; the affine alone gives `(0, 0.5, 0.0)`; the translation as `T₁` and the affine as `T₂` give `(0, 1.5, 2.0)`, the reverse order `(0, 1.5, 2.2)`; a chain whose last step is dense gives the global steps' shift; a dense step alone gives n/a. The translations exact; every value that involves the affine within 1e-12 absolute, because its float64 bits depend on the order of the operations (in the order of `results/check_expectations.py` of the W-386 run directory the reverse order gives x = 2.200000000000001). |
+| DF2 | Shift | `hand_tables` (none) | `shift_z/y/x` | Translations `(0, 1, 2)` and `(0, −1, 0)` give `(0, 0, 2)`; the affine alone gives `(0, 0.5, 0.0)`; the translation as `T₁` and the affine as `T₂` give `(0, 1.5, 2.0)`, the reverse order `(0, 1.5, 2.2)`; a chain whose last step is dense gives the global steps' shift; a dense step alone gives n/a. The translations exact; every value that involves the affine within 1e-12 absolute, because its float64 bits depend on the order of the operations (in the order of `results/check_expectations.py` of the algorithms specification's run directory the reverse order gives x = 2.200000000000001). |
 | DF3 | Shift residual | `hand_tables` (none) | `residual_*` | Medians of an odd and an even count as stated; one succeeded FOV gives 0; two give `±d/2`; a FOV whose round is `rejected`, `failed` or `application_failed` has no residual and is not in the median; no succeeded FOV gives every residual null with `undefined`. Exact. |
 | DF4 | Alignment score | `hand_tables` (none) | `alignment_score` | Equals the application entry's `qc.values.ncc_after`, not the estimation entry's (they differ in the fixture); a null QC gives null with `undefined` and the QC's reason in the detail; a round without an application entry gives `step_failed`. Exact. |
-| DF5 | Area a FOV owns | `report_records` placement and grids; `placement_states` (none) | `owned_area_um2` | F1 210, F2 200, F3 196, F4 194 pixels of 0.0625 µm² (13.125, 12.5, 12.25 and 12.125 µm²): the counts `ownership_map(…).owner` gives over each FOV's pixel centres for this placement (centres at (y, x) = (1.875, 1.875), (1.875, 5.125), (4.875, 1.875) and (4.875, 4.875) µm, ties to the first FOV in table order, T1), computed with the package's function by `results/check_expectations.py` of the W-386 run directory; the test counts them with the same function and the report's `owned_area_um2` equals count × 0.0625; F4 `failed` gives null with `fov_not_placed`; a `placeholder` gives n/a. Exact. |
+| DF5 | Area a FOV owns | `report_records` placement and grids; `placement_states` (none) | `owned_area_um2` | F1 210, F2 200, F3 196, F4 194 pixels of 0.0625 µm² (13.125, 12.5, 12.25 and 12.125 µm²): the counts `ownership_map(…).owner` gives over each FOV's pixel centres for this placement (centres at (y, x) = (1.875, 1.875), (1.875, 5.125), (4.875, 1.875) and (4.875, 4.875) µm, ties to the first FOV in table order, T1), computed with the package's function by `results/check_expectations.py` of the algorithms specification's run directory; the test counts them with the same function and the report's `owned_area_um2` equals count × 0.0625; F4 `failed` gives null with `fov_not_placed`; a `placeholder` gives n/a. Exact. |
 | DF6 | Cell density | `report_cells` (none) | `cell_density_per_mm2` | `n_cells_retained / owned_area_um2 × 10⁶` for each FOV (F1: 21 / 13.125 × 10⁶ = 1.6 × 10⁶); an area of 0 gives `undefined`. Exact in float64. |
 | DF7 | Reads assigned to cells | `report_cells`, `report_cells` `mismatch` (none) | `reads_in_cells` per FOV and in total; the `summary` check | Per FOV, the retained `assigned` molecules of counted cells as the test counts them from `molecules.csv` and `cells.csv` (the molecules of the retained `excluded_no_nucleus` cell and of the `not_owner` cell left out); the total equals `Σ X` (two integers); with `mismatch` the two sums differ by 1, `reads_in_cells_equal` is false, and the report is written without an error. Exact. |
 | DF8 | MECR | `hand_tables`: a count matrix of six cells and genes A, B, C, D, with A = (2, 1, 0, 0, 0, 0), B = (0, 3, 1, 1, 0, 0) and C = D = 0 (none) | `mecr.csv` | With threshold 1, pair (A, B): `cells_a` 2, `cells_b` 3, `both` 1, `either` 4, `mecr` 0.25; with threshold 2, pair (A, B): `cells_a` 1, `cells_b` 1, `both` 0, `either` 2, `mecr` 0.0; with threshold 1, pair (A, C): `cells_a` 2, `cells_b` 0, `both` 0, `either` 2, `mecr` 0.0; pair (C, D): four zeros and `mecr` null with `undefined`, the other pairs unaffected. Exact. |
@@ -1341,15 +1394,15 @@ Rules:
 | PR5 | Spots close to zero | `hand_tables` spots (1000, 1200, 40, 1000); (0, 0, 0) (none) | Rows | The third FOV (40 < 0.05 × 1000 = 50); with every count 0 the limit is 0 and nothing is marked. Exact. |
 | EF1 | Automatic example choice | `report_records`; `report_cells`; a 10-FOV table with `passed_filter` 100, 200, …, 1000 (none) | `report.json` `examples`; `fovs.csv` `example` | Before a segmentation: `example_1` F1 (median 645, distances 5, 155, 145, 5, the tie of F1 and F4 broken by list order, `q = 1`), `example_2` F3 (`fewest_reads`, 500), `example_3` F2 (`most_reads`, 800); with cells: `example_2` F2 (`fewest_cells`, 0), `example_3` F4 (`most_cells`, 14); for the 10-FOV table `N` holds the FOVs of 500 and 600 (`q = 2`) and `example_1` is `N[default_rng(0).integers(2)]`, recorded with `seed` 0. Exact. |
 | EF2 | Coinciding, named and unavailable examples | `report_records` `one`; a two-FOV copy; `example_fovs` given; `scene_no_run_json` (none; 42 for the scene) | Roles and rows | One FOV: three roles on F1; two FOVs: the third role on the FOV its rule gives over both; named: the roles in the given order with `chosen_by` `configuration`; no read count: the choice unavailable with `no_run_record`, the example parts each named by a row. Exact. |
-| RP1 | The replay against the saved registered image | `scene_chain_registered`, FOV `FOV_001` (42) | Largest absolute difference per round between the replayed image and `dataset.load_checkpoint(…, "registered")` | 0 in every round (bit-identical, every voxel compared, as W-384 `replay.csv`): the two rounds the report replays, and for the test all four; the replayed fitted values equal the recorded ones. Exact. |
+| RP1 | The replay against the saved registered image | `scene_chain_registered`, FOV `FOV_001` (42) | Largest absolute difference per round between the replayed image and `dataset.load_checkpoint(…, "registered")` | 0 in every round (bit-identical, every voxel compared, as the source-inventory run's `replay.csv`): the two rounds the report replays, and for the test all four; the replayed fitted values equal the recorded ones. Exact. |
 | RP2 | Replay failures | `scene_chain_registered` copies: one recorded `fitted` maximum raised by 1 in `run.json`; one input byte changed; one input removed; a recipe with a `demons` step and a `post_registration` entry run without the stage `registered` (42) | `report.json` `replay`; rows | `replay_differs`; `input_changed`; `input_missing`; `field_not_saved` for the Registration example and, for the moving round, the two rows of the `post_registration` outputs with `field_not_saved`, the round's `input` and `steps` rows of `intensity.csv` written. Exact. |
 | RP3 | The two sources of the transforms | `scene_chain_registered` and its copy with R1 removed (42) | Replayed images | The replayed images equal bit for bit, nothing left out; `transform_source` is `run.json` for the first and `transforms.json` for the copy (a field the comparison of images does not read). Exact. |
 | PG1 | Embedded data equal the saved tables | every page the RC, CH, RT, Z1 and A2 checks write | The data block parsed with `json`, read back with the dtypes `report.json` lists | Each embedded table equals its CSV cell by cell, every column and row compared, null for a missing value; `cells` and `intensity` are not embedded. Exact. |
 | PG2 | Every section and block present | as PG1 | Element ids of `report.html` | The eight sections in the order of "Layout of the page" and, in each, the blocks listed there in order (each id written in the test from this page). Exact. |
 | PG3 | Every unavailable part carries its reason | as PG1 | Placeholders and tooltips | For each row of `unavailable.csv` with `table` null, the page has, in the part's place, a placeholder with "Unavailable:" and the reason's text of "How an unavailable part is shown"; each null cell named by a row has "—" and its reason in the cell's tooltip data; the reason texts of the template's script equal that table, and the page holds no `application/json` block other than `report-data`. Exact. |
 | PG4 | No external resource | as PG1, and `index.html` of CP1 | The text of each page | No match of `https?:`, of `(src\|href)="//`, of `<link`, `<iframe`, `<object` or `@import`; every `src` attribute starts with `data:`; every `url(` is followed by `data:`; every `href` is `#…` or, on `index.html`, a relative `<sample>/report.html`; no `prefers-color-scheme` rule (light theme only). Exact. |
-| PG5 | Size budget | as PG1 | Bytes of `report.html` | At most `6 MiB + 16 KiB × FOVs + 3 MiB × marker figures`, and equal to the bytes `report.json` records for it (both taken from the same written file); every static figure decodes and has the pixel size of "Figure sizes". The rules of "Figure sizes" (W-475), on the figures as drawn, of these pages, the comparison page, a hand-written sample of 64 FOVs and hand-written examples: no text below 11 px as shown, each PNG twice the width of its slot and the slots those of the page's CSS and table, no text over another, another axes or the edge, heatmaps of at most 64 labelled rows of at least 14 px as shown chosen by the rule of "Registration" with the tables unsampled, white gaps of at least 8 px as shown between tiles, the yellow marks of the zoomed quarter and of the regions with their numbers, readout labels never clipped to their bar, and the Summary's Version, Run time and Generated in UTC and in the viewer's time zone. After the second review (W-478): the page header is the heading "Processing report" alone, with the dataset and the sample in the Summary's facts and the title unchanged; the axes of Time per step, as shown, start within 4 px of the top of the FOV rectangles of the map the page's script draws (FOVs on grids of 2 × 2, 8 × 8 and 1 × 4 with the step names of a workflow run record) and end within 4 px of their bottom where 26 px per step name fit, else are at least 26 px per step name high, and a sample without placement draws the figure as before; no figure of `report.html` or `index.html` is shown wider than two thirds of its drawn width; every legend is a row below every axes and tile of its figure, at its left margin, over nothing; the table of figure sizes equals the code's constants. Exact; a width as shown compared as a float, an alignment within 4 px. |
-| PG6 | No verdict and no score | as PG1 | Column names of every table and keys of `report.json` | Equal to the lists of {doc}`report-contract` exactly, as sets and in order: no added column or key, so none holds a verdict or a score; `alignment_score` is the quantity of D5. Exact. |
+| PG5 | Size budget | as PG1 | Bytes of `report.html` | At most `6 MiB + 16 KiB × FOVs + 3 MiB × marker figures`, and equal to the bytes `report.json` records for it (both taken from the same written file); every static figure decodes and has the pixel size of "Figure sizes". The rules of "Figure sizes" (Jiahao's first review of the real block report, 2026-10-14), on the figures as drawn, of these pages, the comparison page, a hand-written sample of 64 FOVs and hand-written examples: no text below 11 px as shown, each PNG twice the width of its slot and the slots those of the page's CSS and table, no text over another, another axes or the edge, heatmaps of at most 64 labelled rows of at least 14 px as shown chosen by the rule of "Registration" with the tables unsampled, white gaps of at least 8 px as shown between tiles, the yellow marks of the zoomed quarter and of the regions with their numbers, readout labels never clipped to their bar, and the Summary's Version, Run time and Generated in UTC and in the viewer's time zone. After the second review (2026-10-14): the page header is the heading "Processing report" alone, with the dataset and the sample in the Summary's facts and the title unchanged; the axes of Time per step, as shown, start within 4 px of the top of the FOV rectangles of the map the page's script draws (FOVs on grids of 2 × 2, 8 × 8 and 1 × 4 with the step names of a workflow run record) and end within 4 px of their bottom where 26 px per step name fit, else are at least 26 px per step name high, and a sample without placement draws the figure as before; no figure of `report.html` or `index.html` is shown wider than two thirds of its drawn width; every legend is a row below every axes and tile of its figure, at its left margin, over nothing; the table of figure sizes equals the code's constants. Exact; a width as shown compared as a float, an alignment within 4 px. |
+| PG6 | No verdict and no score | as PG1 | Column names of every table and keys of `report.json` | Equal to the lists of {doc}`report-contract` exactly, as sets and in order: no added column or key, so none holds a verdict or a score; `alignment_score` is the quantity of settled decision 5. Exact. |
 | PG7 | Output folder and entry checks | `report_records` (none) | Raised errors; the folder | Checks 1 to 7 of {doc}`report-contract` each raise their error, in that order, with the folder unchanged (a marker gene not in the codebook among them); a second report replaces the first; a file the first `report.json` does not list stops the entry with `FileExistsError` before anything is written. Exact. |
 | CH1 | The chain after the per-FOV processing | `scene_chain` with the export and assignment folders removed, once also without the placement (42) | Parts present and unavailable | As the first two rows of {doc}`report-contract` ("The report at each stage of a sample's processing"): without the placement the maps `no_placement`; with it the maps and the placement block; Segmentation and assembly and Sample measurements `no_export`; RC12's condition holds. Exact. |
 | CH2 | The chain after the assignment | `scene_chain` without the export (42) | Parts | The third row of that table: the segmentation examples and the per-FOV lane's segmentation and assignment present; cells, accounting and per-cell values `no_export`. Exact. |
@@ -1364,32 +1417,40 @@ Rules:
 | WF1 | The workflow block and rules | the repository's test configurations with and without a `report` block, through a stub `snakemake` object (none) | Schema, adapter, rules | The block's keys equal the fields of `ReportConfig` (`MarkerGroup`, `RuleLimit`, `ReportLimits`); an unknown key raises naming it; `report: {}` gives `ReportConfig()`; the rules' declared inputs and outputs are those of {doc}`report-contract` (WR1); a configuration without the block has no new rule. Exact. |
 | DT1 | Determinism | `report_cells` and `scene_chain`, each built once; the report made by two single-thread processes, one after the other, into the same default output folder, the first report's files copied aside before the second runs (none; 42) | Bytes of every table; `report.json`; `report.html` | Every table byte-identical. `report.json` identical after leaving out `generated_at`, `wall_s`, `cpu_s`, `peak_rss_kib` and the `files` entry of `report.html` (its `sha256` and `bytes`, which depend on the generation time the page shows). `report.html` identical after leaving out the text of the Summary's Generated fact (`generated_at`). No field left in depends on one left out: the tables, the other `files` entries, `inputs`, `summary`, `rules`, `examples`, `replay` and `unavailable` are computed from the records alone, and the page's data blocks hold no time. Exact. |
 
+% W-386, W-384, W-475, W-478, D5
+
 ### What the default tier covers and what it does not
 
 RC1 to RC13, DF1 to DF12, PR1 to PR5, EF1, EF2 (without its `scene_no_run_json` part),
 PG1 to PG7 on the hand-written pages, RR1, RR2 and WF1 run in the routine tier on
 hand-written records, except PG7's entry on `report_cells` (5.4 s) and DT1 on
-`report_cells` (6.4 s, two processes), which are `slow` by the 5-s rule (W-530). RP1 to
+`report_cells` (6.4 s, two processes), which are `slow` by the 5-s rule (the test-tier rule of 2026-10-20). RP1 to
 RP3, CH1 to CH3, RT1, RT2, Z1, A2, CP1 and DT1 on `scene_chain` run the synthetic chain and
 are `slow`. The cases with an export need
 the `anndata` extra; the chains also need `multiview-stitcher` for the fused image; RP2's
 `demons` step needs `local-registration`. Nothing here measures how well a sample was
 processed, and nothing shows that a marker pattern is biologically right.
 
+% W-530
+
 ### Resource plan
 
 The hand-written fixtures are a few kilobytes each and every routine check takes well under a
 second. The synthetic chain of `sample-tiny-v1` took 48 to 84 s wall and 22 to 32 s CPU at one
-thread per run, export with the SpatialData store included, within 4 GiB (W-384
+thread per run, export with the SpatialData store included, within 4 GiB (the source-inventory run's
 `results/tables/resources.csv`, rows `synthetic_cp` and `synthetic_reg`); the replay of one
 synthetic FOV took 0.8 to 1.2 s. Each chain fixture is built once per module (a module-scoped
 fixture) and every `slow` test stays within one CPU, 4 GiB and 1800 s. Each run records wall
 time and peak RSS with `/usr/bin/time -v`.
 
-### Implemented checks (W-459)
+% W-384
 
-The checks are in the modules of `src/python/test/` listed below. The issues that delivered
-the report (W-451 to W-458) added most of them with their code; `test_report_chain.py` adds
+### Implemented checks
+
+% Implemented checks (W-459)
+
+The checks are in the modules of `src/python/test/` listed below. The implementation issues that delivered
+the report added most of them with their code; `test_report_chain.py` adds
 CH1 to CH3, RT1 and RT2 through `Dataset.report`, Z1, A2, CP1 on the chain, DT1 on
 `scene_chain`, PG1 to PG6 with RC12 on every page it writes, DF12's Z size from a reference
 image when no record holds a grid (at the place of the `Dataset`'s `reference_image`
@@ -1400,6 +1461,8 @@ that every row names at least one test of its module that pytest collects (a nam
 failure; and that a row whose tier is `default` names no `slow` test, a row whose tier is
 `slow` names only `slow` tests, and a row whose tier is `default and slow` names both. A test
 of a module that is not named here is an additional check of the code it tests.
+
+% W-451 to W-458
 
 Every tolerance is the one of the table "Checks", unchanged. Where a row says "Exact" for a
 number that is not an integer, its tests compare it within an absolute 1e-9 (the project's
@@ -1478,67 +1541,79 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 | WF1 | `test_report_workflow.py`, `test_wf1_*` | default | none compared |
 | DT1 | `test_report_collection.py`, `test_dt1_two_single_thread_processes`; `test_report_chain.py`, `test_dt1_the_chain_in_two_single_thread_processes` | slow | exact (bytes) |
 
-### Tour notebook (W-460)
+### Tour notebook
 
-W-460 added an executed introductory notebook on the report, on `sample-tiny-v1` and
-`scene_plane`. W-587 retired it with the other six tours; Git history keeps it. The
+% Tour notebook (W-460)
+
+The tour notebook's issue of 2026-10-13 added an executed introductory notebook on the report, on `sample-tiny-v1` and
+`scene_plane`. It was retired on 2026-10-26 with the other six tours; Git history keeps it. The
 [multi-FOV / sample demo](get-started/multi-fov-demo.md) now shows `Dataset.report` after the
 per-FOV runs, the stitching and the export of `sample-tiny-v1`, with the report's key numbers
 and its FOV table. Like the tour, it is an introduction, not a check of this design.
 
+% W-460, W-587
+
 ## The real example
 
-The real example runs as a batch of its own after the implementation (D7), under its own
+The real example runs as a batch of its own after the implementation (settled decision 7), under its own
 authorization for real data and resources, with records as the project guidance defines
 them. It has two parts. Neither compares methods or claims accuracy: the reports describe
 the runs, and Jiahao inspects them.
+
+% D7
 
 ### Part 1: LN sample1 through the Python per-FOV pipeline
 
 **Inputs** (read only):
 
-* Raw images: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/LN/`, the 64 FOVs
+* Raw images: `<data root>/Processed/sample-dataset/LN/`, the 64 FOVs
   Position001 to Position064 of `round1` to `round4` (sequencing `ch00` to `ch03`; DAPI is
   `round4` `ch04`), each `(50, 1496, 1496)` uint8, 1,024 sequencing files of the 1,280
-  (W-383 `inputs.md`, section 4).
+  (the inputs survey's `inputs.md`, section 4).
 * Codebook: `genes.csv` of the same folder (SHA-256 `2131fd29…5e786`), 61 genes.
-* Configuration: W-384's `results/real/ln_config.yaml`, the earlier pipeline's settings that
+* Configuration: the source-inventory run's `results/real/ln_config.yaml`, the earlier pipeline's settings that
   Jiahao chose on 2026-10-08 (min–max normalization only; global registration only with
   reference `round4`; local maxima at 0.2 of the channel maximum, on `round4`, the nearest
   setting to the earlier `round1`; extraction 1 × 1 × 1; one segment `A…C`; channel order
   `ch00, ch02, ch01, ch03`), with `rotate_angle: -90` (below), the checkpoint stages
   `candidates` and `pre_qc` through `rules.rsf_single_fov.parameters.checkpoints` (R5 of
-  {doc}`report-contract`), and a `report` block holding W-383's `markers.yaml` (two groups,
+  {doc}`report-contract`), and a `report` block holding the inputs survey's `markers.yaml` (two groups,
   four pairs).
-* Placement: the LN BigStitcher import of the 2024 `dataset.xml`, as W-376 made it and
-  W-391 and W-398 reused it ({doc}`stitching-assembly-validation`, "Results of the real
+* Placement: the LN BigStitcher import of the 2024 `dataset.xml`, as the first stitching run made it and
+  the saved-files run and the own-folder run reused it ({doc}`stitching-assembly-validation`, "Results of the real
   examples"), saved under the run's `stitching/ln_sample1/`.
-* Cells: the W-382 nucleus labels of the block Position048, Position049, Position057 and
-  Position058 (`W-382/20261008T023258Z-e2618af4/results/checkpoints/ln_sample1/<fov>/segmentation/nucleus_dapi/labels.tif`),
-  imported with the §2.9 mask import and assigned with the settings of W-382's
+* Cells: the block segmentation's nucleus labels of the block Position048, Position049, Position057 and
+  Position058 (`results/checkpoints/ln_sample1/<fov>/segmentation/nucleus_dapi/labels.tif` in its run directory),
+  imported with the segmentation mask import and assigned with the settings of the block segmentation's
   `expanded_nuclei` assignment (its `assignment.json`). No new segmentation and no model.
 * Fused DAPI: `dapi=file:images/flamingo/DAPI/{fov_id}.tif` of the earlier analysis root
-  `D/Analyzed/2024-03-08-Hongyu-Covid_LN/`, as W-398 fused it.
+  `D/Analyzed/2024-03-08-Hongyu-Covid_LN/`, as the own-folder run fused it.
 
-**The frame.** W-384 found that a Python run with `rotate_angle: 0` lies in the raw TIFF
-frame, and that the W-382 labels, the earlier molecule tables and the 2024 placement lie in
+% /home/unix/jiahao/wanglab/Data/Processed/sample-dataset/LN/, W-383, W-384, W-376, W-391, W-398, W-382, W-382/20261008T023258Z-e2618af4/results/checkpoints/ln_sample1/<fov>/segmentation/nucleus_dapi/labels.tif, §2.9
+
+**The frame.** The source-inventory run found that a Python run with `rotate_angle: 0` lies in the raw TIFF
+frame, and that the block segmentation's labels, the earlier molecule tables and the 2024 placement lie in
 that frame rotated by −90° in YX: under `np.rot90(k=-1)`, 80.7 % and 80.8 % of the Python
 reads of Position048 and Position049 lie within 3 voxels of an earlier read
 (`results/frame/frame_dihedral.csv`; section 9 of its notes). The plan therefore runs with
 `rotate_angle: -90` and confirms it on the first two FOVs before the others.
 
+% W-384, W-382
+
 **Steps**, each in its own process under `/usr/bin/time -v` and a watchdog:
 
 | # | Step | What it writes | Stop rule |
 | --- | --- | --- | --- |
-| 1 | Inventory of the inputs of both parts, before step 2: path, size and SHA-256 of every file a later step reads (the 1,024 raw images, the codebook, the configuration and `markers.yaml`, the placement import, the W-382 labels and assignment record, the 64 DAPI source images of step 6, and the files of Part 2's exports that a report reads: `export.json`, `sample.h5ad`, `tables/` and the fused image); a file found later to have been read is added with the time of the addition. The SHA-256 that `hash_inputs` writes into `run.json` are a second record, not a replacement | `results/inventory/` | — |
-| 2 | Position048 and Position049 through the workflow's processing rule, side by side; then the frame check of W-384 on their reads | two FOVs' records (kept: they are two of the 64) | Fewer than 50 % of a FOV's reads within 3 voxels of an earlier read, or a share of reads inside a W-382 nucleus label more than 0.02 from the earlier table's (0.129, 0.125; W-384 `frame_check.csv`): stop before step 3 and report |
+| 1 | Inventory of the inputs of both parts, before step 2: path, size and SHA-256 of every file a later step reads (the 1,024 raw images, the codebook, the configuration and `markers.yaml`, the placement import, the block segmentation's labels and assignment record, the 64 DAPI source images of step 6, and the files of Part 2's exports that a report reads: `export.json`, `sample.h5ad`, `tables/` and the fused image); a file found later to have been read is added with the time of the addition. The SHA-256 that `hash_inputs` writes into `run.json` are a second record, not a replacement | `results/inventory/` | — |
+| 2 | Position048 and Position049 through the workflow's processing rule, side by side; then the frame check of the source-inventory run on their reads | two FOVs' records (kept: they are two of the 64) | Fewer than 50 % of a FOV's reads within 3 voxels of an earlier read, or a share of reads inside a nucleus label of the block segmentation more than 0.02 from the earlier table's (0.129, 0.125; the source-inventory run's `frame_check.csv`): stop before step 3 and report |
 | 3 | The other 62 FOVs, three at a time | 64 run records and the rule outputs | A FOV that reaches a limit is `resource_stop`, not retried larger, and is a failed FOV of the report |
 | 4 | **Report after the per-FOV processing**: `Dataset.report("ln_sample1", <the 64 FOVs>, assignment=None, config=<the report block>)`, with the run records and the placement | `report/ln_sample1/` | — |
 | 5 | The block: the four FOVs' labels imported and assigned | `fovs/<fov>/segmentation/`, `assignment/expanded_nuclei/` | — |
-| 6 | The DAPI images copied uncompressed with axes ZYX to local scratch (below); then the exports: `ln_sample1`, `molecules_only` (`assignment=None`), `dimensionality: stack`, `scale_yx` 0.5, the DAPI image read from the copies; `ln_sample1_block`, the block's four placement rows, `assignment="expanded_nuclei"`, route per FOV, the same image; then the copies deleted | `export/ln_sample1/`, `export/ln_sample1_block/` | Less than 10 GB free on the scratch disk before the copy: no copy is made and the fusion reads the images from the share (route B below, 5,903 s, W-398); this is not a stop |
+| 6 | The DAPI images copied uncompressed with axes ZYX to local scratch (below); then the exports: `ln_sample1`, `molecules_only` (`assignment=None`), `dimensionality: stack`, `scale_yx` 0.5, the DAPI image read from the copies; `ln_sample1_block`, the block's four placement rows, `assignment="expanded_nuclei"`, route per FOV, the same image; then the copies deleted | `export/ln_sample1/`, `export/ln_sample1_block/` | Less than 10 GB free on the scratch disk before the copy: no copy is made and the fusion reads the images from the share (route B below, 5,903 s, the own-folder run); this is not a stop |
 | 7 | **Reports after the export**: `ln_sample1` (replacing the report of step 4) and `ln_sample1_block`; then `Dataset.compare_samples(["ln_sample1", "ln_sample1_block"])` | `report/` | — |
 | 8 | The manifest, last | `results/manifest.json` | — |
+
+% W-382, W-384, W-398
 
 The report of step 4 is kept as a copy (`report_after_fovs/`) before step 7 replaces it, so
 Jiahao sees both stages.
@@ -1547,9 +1622,9 @@ Jiahao sees both stages.
 
 * After the per-FOV processing (step 4): the FOV status and the time per step; the shift maps
   and the heatmap, against the earlier logs' Z residual of 17 to 19 voxels at Position001
-  (W-384, section 7); the distribution of `ncc_after` over the 64 FOVs and three moving
+  (the source-inventory run's notes, section 7); the distribution of `ncc_after` over the 64 FOVs and three moving
   rounds, from which the alignment-score limit can be set; the readout totals and the
-  per-FOV fractions beside W-384's `LN_sample1_reads_per_fov.csv` of the earlier logs (two
+  per-FOV fractions beside the source-inventory run's `LN_sample1_reads_per_fov.csv` of the earlier logs (two
   definitions, read side by side, not compared as one quantity); the Problematic FOVs table
   under the provisional limits; the replayed preprocessing and registration examples.
 * After the export (step 7): the placement block; the marker patterns of the two groups on
@@ -1561,40 +1636,48 @@ Jiahao sees both stages.
 * The page: opens offline in a browser of Jiahao's choice; its bytes against the budget; the
   time and memory each report took.
 
-**Resources and the bounds.** Jiahao decided the bounds on 2026-10-12, with W-384's
+% W-384
+
+**Resources and the bounds.** Jiahao decided the bounds on 2026-10-12, with the source-inventory run's
 measurement before him: the 64 FOVs run **three at a time, each FOV's process under a limit
-of 32 GiB RSS**, about 68 GiB on the host together, and 20 GiB of new artifacts. W-384
+of 32 GiB RSS**, about 68 GiB on the host together, and 20 GiB of new artifacts. The source-inventory run
 measured a complete `FOV.run` of an LN FOV at 618 to 634 s wall and 22.5 GiB peak RSS with
 the registration QC as it is (`results/tables/real_fovs.csv`); three at once are 67.5 GiB,
 and `sizing_64.csv` gives 3.82 h for the 64 FOVs three at a time. Reducing the memory of the
-registration QC (W-384: 6.4 GiB per FOV without it) was not chosen; it stays possible as
-later work outside §2.11. **The time bound** is **9 hours** for the whole batch, Part 1 and
+registration QC (the source-inventory run: 6.4 GiB per FOV without it) was not chosen; it stays possible as
+later work outside the report. **The time bound** is **9 hours** for the whole batch, Part 1 and
 Part 2 together, as Jiahao decided on 2026-10-12; both routes below are within it, the slower
 in 7.9 h.
 
+% W-384, §2.11
+
 **Two routes for the fused DAPI stack.** Route A fuses from uncompressed local copies, as
-W-376 did in 1,468 s (W-398 notes, the table of fusion runs); route B fuses from the share,
-as W-398 did in 5,903 s, and is taken when step 6 finds less than 10 GB free on the scratch
+the first stitching run did in 1,468 s (the own-folder run's notes, the table of fusion runs); route B fuses from the share,
+as the own-folder run did in 5,903 s, and is taken when step 6 finds less than 10 GB free on the scratch
 disk (not a stop). What route A copies: the pixels of the 64 files
 `D/Analyzed/2024-03-08-Hongyu-Covid_LN/images/flamingo/DAPI/Position<NNN>.tif` (4,721,387,720
-bytes as saved, W-398), each written uncompressed with axes ZYX by the method of W-376
+bytes as saved, the own-folder run), each written uncompressed with axes ZYX by the method of the first stitching run's
 `scripts/zyx_copies.py`, with each copy's pixel SHA-256 checked equal to the original's; in
-W-376 the 64 copies took 7,162,193,280 bytes (6.7 GiB) and 129.5 s. Where: the batch's local
+the first stitching run the 64 copies took 7,162,193,280 bytes (6.7 GiB) and 129.5 s. Where: the batch's local
 scratch folder `/tmp/linear-runner/<batch>/zyx/`, never the artifact mount. They are scratch,
 not new artifacts: listed with their SHA-256 in the manifest and deleted when the export step
 ends. They fit the disk: the root filesystem had 44 GB free on 2026-10-12 (batch guidance of
-§2.11), and step 6 checks for at least 10 GB free before it copies.
+the report batch), and step 6 checks for at least 10 GB free before it copies.
+
+% W-376, W-398, §2.11
 
 | Step | Parallel | Limit per process | Estimate and its basis | New artifacts |
 | --- | --- | --- | --- | --- |
-| 1: inventory of the inputs | 1 | 1 CPU, 4 GiB, 3600 s | 122,412,640,023 bytes: the 1,024 raw images of 112,014,708 bytes (the size of each of the 32 W-384 hashed, W-384 `results/inventory/inputs.csv`; one shape for all, W-383 `inputs.md`), the DAPI source images 4,721,387,720 bytes (W-398), the files of Part 2's exports 2,961,471,379 bytes (W-384 `inputs.csv`, W-391 `results/manifest.json`), the labels of four FOVs and the small files about 27 MB (Position057 and 058 at the size of the larger label file, and 10 MB for the small files, both assumed); at the rate of W-384's inventory step, 5,486,212,411 bytes from the share in 71.82 s at one CPU (76.39 MB/s; `results/inventory/inputs.json`): 1,603 s, with 10 % for the listing and the share's variation 1,770 s | below 1 MB |
-| 2, 3: the 64 FOVs | 2 in step 2, then 3 | 1 CPU, 32 GiB RSS, 3600 s | one wave of two and 21 waves of three (62 FOVs), about 634 s each (W-384 `real_fovs.csv`, the slower FOV): 22 × 634 s = 13,948 s; about 68 GiB on the host (W-384 `sizing_64.csv`, three in parallel: 67.5 GiB, 3.82 h) | records with `candidates` and `pre_qc` 4.25 GiB; rule outputs 6.8 GiB (W-384 `sizing_64.csv`) |
+| 1: inventory of the inputs | 1 | 1 CPU, 4 GiB, 3600 s | 122,412,640,023 bytes: the 1,024 raw images of 112,014,708 bytes (the size of each of the 32 files that the source-inventory run hashed, the source-inventory run's `results/inventory/inputs.csv`; one shape for all, the inputs survey's `inputs.md`), the DAPI source images 4,721,387,720 bytes (the own-folder run), the files of Part 2's exports 2,961,471,379 bytes (the source-inventory run's `inputs.csv`, the saved-files run's `results/manifest.json`), the labels of four FOVs and the small files about 27 MB (Position057 and 058 at the size of the larger label file, and 10 MB for the small files, both assumed); at the rate of the source-inventory run's inventory step, 5,486,212,411 bytes from the share in 71.82 s at one CPU (76.39 MB/s; `results/inventory/inputs.json`): 1,603 s, with 10 % for the listing and the share's variation 1,770 s | below 1 MB |
+| 2, 3: the 64 FOVs | 2 in step 2, then 3 | 1 CPU, 32 GiB RSS, 3600 s | one wave of two and 21 waves of three (62 FOVs), about 634 s each (the source-inventory run's `real_fovs.csv`, the slower FOV): 22 × 634 s = 13,948 s; about 68 GiB on the host (the source-inventory run's `sizing_64.csv`, three in parallel: 67.5 GiB, 3.82 h) | records with `candidates` and `pre_qc` 4.25 GiB; rule outputs 6.8 GiB (the source-inventory run's `sizing_64.csv`) |
 | 4: report after the FOVs | 1 | 1 CPU, 16 GiB, 3600 s | 64 run records of about 43 kB; the replay of two rounds of one FOV, 447 MB per round as uint8: about 600 s, below 4 GiB (code-derived) | below 50 MB |
 | 5: block import and assignment | 1 | 1 CPU, 16 GiB, 3600 s per FOV | a 50 × 1496 × 1496 uint32 label image is 448 MB ({doc}`assignment-algorithms`, "Evidence"): about 120 s per FOV, 480 s | labels and territories, about 3.6 GB |
-| 6: copies and exports | 1 | 4 CPU threads, 32 GiB, 10,800 s | route A: the ZYX copies 130 s (W-376) and the fusion from the copies 1,468 s (W-376); route B: no copy and the fusion from the share 5,903 s (W-398); both: the rest of the export run 239 s (W-398: run 6,142 s less fusion 5,903 s) and the block about 180 s | stack 0.66 GB, `molecules.csv` 0.74 GB (W-398), block below 0.2 GB; route A's copies (6.7 GiB) are scratch, deleted |
+| 6: copies and exports | 1 | 4 CPU threads, 32 GiB, 10,800 s | route A: the ZYX copies 130 s (the first stitching run) and the fusion from the copies 1,468 s (the first stitching run); route B: no copy and the fusion from the share 5,903 s (the own-folder run); both: the rest of the export run 239 s (the own-folder run: run 6,142 s less fusion 5,903 s) and the block about 180 s | stack 0.66 GB, `molecules.csv` 0.74 GB (the own-folder run), block below 0.2 GB; route A's copies (6.7 GiB) are scratch, deleted |
 | 7: reports after the export | 1 | 1 CPU, 16 GiB, 3600 s | `molecules.csv` of 3.8 million rows in memory (about 2 GiB with pandas) and the stack read plane by plane (34 MB per plane): about 900 s each, two reports and the comparison page (about 120 s) | below 50 MB each |
 | Part 2: five reports and their comparison page | 1 | 1 CPU, 16 GiB, 3600 s each | the rate of step 7, 900 s for LN's 3,782,580 molecules with its stack, scaled by each export's molecules and at least 120 s (code-derived): `ln_sample1` 900 s, `tissue_2d` 1,274 s (5,353,714 molecules), `cell_culture_3d` 585 s (2,458,865), the two blocks 120 s each, the comparison page 120 s; molecule counts of {doc}`stitching-assembly-validation`, "Results of the real examples" | below 0.3 GiB in all |
-| 8: manifest, last | 1 | 1 CPU, 4 GiB, 1800 s | about 120 s (W-384's manifest step: 120.0 s) | below 10 MB |
+| 8: manifest, last | 1 | 1 CPU, 4 GiB, 1800 s | about 120 s (the source-inventory run's manifest step: 120.0 s) | below 10 MB |
+
+% W-384, W-383, W-398, W-391, W-376
 
 The total of the wall time, step by step, for each route:
 
@@ -1623,17 +1706,21 @@ needs only the run records first, so a stop at a later step still leaves it.
 
 ### Part 2: the three real samples from their exports, with no run record
 
-As soon as the report is implemented, without processing an image (A2): a report of each
+As soon as the report is implemented, without processing an image (amendment 2): a report of each
 existing whole-sample export and of the two cellular blocks, read where they are saved and
 written to the new run directory (`output_dir`), never into the run directory of the export.
 
-| Sample | Export (read only, under the benchmark root) | Cells | Fused image | `ReportConfig` |
+% A2
+
+| Sample | Export (read only, in the run directory of the run named) | Cells | Fused image | `ReportConfig` |
 | --- | --- | --- | --- | --- |
-| `ln_sample1` | `W-398/20261009T045906Z-2d4054c3/results/export/ln_sample1/` | `molecules_only` | `dapi_stack.ome.tif` | `markers.yaml` groups; `example_fovs` named (below) |
-| `ln_sample1_block` | `W-391/20261008T203138Z-905169ae/results/export/ln_sample1_block/` | W-382 `expanded_nuclei` | none (marker patterns `part_not_written`) | `markers.yaml` groups and pairs; `example_fovs` named |
-| `cell_culture_3d` | `W-391/20261008T203138Z-905169ae/results/export/cell_culture_3d/` | `molecules_only` | `reference_merged_projection.ome.tif` | no markers; `example_fovs` named |
-| `cell_culture_3d_block` | `W-391/…/results/export/cell_culture_3d_block/` | W-382 `cellpose` | none | no markers; `example_fovs` named |
-| `tissue_2d` | `W-391/…/results/export/tissue_2d/` | `molecules_only` | its projection | no markers; `example_fovs` named |
+| `ln_sample1` | the own-folder run's `results/export/ln_sample1/` | `molecules_only` | `dapi_stack.ome.tif` | `markers.yaml` groups; `example_fovs` named (below) |
+| `ln_sample1_block` | the saved-files run's `results/export/ln_sample1_block/` | the block segmentation's `expanded_nuclei` | none (marker patterns `part_not_written`) | `markers.yaml` groups and pairs; `example_fovs` named |
+| `cell_culture_3d` | the saved-files run's `results/export/cell_culture_3d/` | `molecules_only` | `reference_merged_projection.ome.tif` | no markers; `example_fovs` named |
+| `cell_culture_3d_block` | the saved-files run's `results/export/cell_culture_3d_block/` | the block segmentation's `cellpose` | none | no markers; `example_fovs` named |
+| `tissue_2d` | the saved-files run's `results/export/tissue_2d/` | `molecules_only` | its projection | no markers; `example_fovs` named |
+
+% W-398/20261009T045906Z-2d4054c3/results/export/ln_sample1/, W-391/20261008T203138Z-905169ae/results/export/ln_sample1_block/, W-382, W-391/20261008T203138Z-905169ae/results/export/cell_culture_3d/, W-391/…/results/export/cell_culture_3d_block/, W-391/…/results/export/tissue_2d/
 
 * Every section up to the readout names `no_run_record`; the correction from the stage
   position is `no_placement` where the export's root has no `stitching/<sample>/`; the
@@ -1656,8 +1743,10 @@ written to the new run directory (`output_dir`), never into the run directory of
   and the three most abundant genes of the others; the reads along Z of tissue-2D, whose
   molecules span 30 planes over a one-plane grid ({doc}`stitching-assembly-validation`,
   "Results of the real examples"), so that its rows run over the planes its molecules have,
-  beyond the grid's plane 0 (the rule of `reads_along_z.csv`, amended by W-449); cells, MECR and the per-cell distributions of the blocks;
+  beyond the grid's plane 0 (the rule of `reads_along_z.csv`, as amended on 2026-10-12); cells, MECR and the per-cell distributions of the blocks;
   the comparison page.
+
+% W-449
 
 ## Limitations
 
@@ -1669,9 +1758,11 @@ written to the new run directory (`output_dir`), never into the run directory of
 * The owned area is a count of pixel centres (OA1); its error is bounded by the pixels the
   region's boundary crosses, not zero.
 * The sizes, times and memory of the report itself are estimates from code and from
-  W-384's figure sizes; the first implementation measures them.
+  the source-inventory run's figure sizes; the first implementation measures them.
 * The layout was reviewed as a static mockup; no browser check of the implemented page is
   part of the validation (the real example's inspection is Jiahao's).
+
+% W-384
 
 ## Exclusions
 

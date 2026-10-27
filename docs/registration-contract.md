@@ -1,9 +1,11 @@
 # Registration guide
 
-Status: Accepted (W-246, 2026-09-30, at 47057aa)
+% Status: Accepted (W-246, 2026-09-30, at 47057aa)
 
-This page is the maintained guide to the registration stage (§2.6) and its contract:
+This page is the maintained guide to the registration stage and its contract:
 `starfinder.registration` and `FOV.register` implement it ({doc}`api/registration`).
+
+% §2.6
 
 * **What registration does.** It aligns each moving round of a FOV with the
   reference round. It estimates a transform from one registration signal per round,
@@ -24,15 +26,19 @@ This page is the maintained guide to the registration stage (§2.6) and its cont
   recipe. In the workflow, the Python backend reads the `registration` key of a Python
   rule ([Workflow configuration](#workflow-configuration), {doc}`workflow-configuration`).
 
-The recipe follows the shared {doc}`method-registry` design and reads the §2.5
+The recipe follows the shared {doc}`method-registry` design and reads the preprocessing
 snapshots of the {doc}`preprocessing-contract`. Beneath this guide,
 {doc}`registration-algorithms` specifies the numerical methods and the engineering
-validation (V1 to V11 and "Implemented checks (W-258)"). {doc}`registration-baseline`
-is history: the behavior at `2e48d3f`, before §2.6, kept with its golden test.
+validation (V1 to V11 and "Implemented checks"). {doc}`registration-baseline`
+is history: the behavior at `2e48d3f`, before the registration work, kept with its golden test.
+
+% §2.5, W-258, §2.6
 
 ## Terms
 
-The page uses the terms decided on 2026-09-29 (W-152):
+The page uses the terms decided in the registration planning on 2026-09-29:
+
+% W-152
 
 * a **stage** is a pipeline stage: preprocessing, registration, spot finding;
 * a **method** is a registrable algorithm of a stage, such as `affine`;
@@ -42,7 +48,9 @@ The page uses the terms decided on 2026-09-29 (W-152):
 
 ## Settled decisions this page follows
 
-Decided by Jiahao on 2026-09-28 and 2026-09-29 (W-152):
+Decided by Jiahao in the registration planning on 2026-09-28 and 2026-09-29:
+
+% W-152
 
 1. One public module, `starfinder.registration`, with private method modules.
 2. `RegistrationRecipe` whose ordered entries keep the existing name
@@ -53,10 +61,12 @@ Decided by Jiahao on 2026-09-28 and 2026-09-29 (W-152):
 5. Rigid, affine and B-spline are estimated in physical space.
 6. "Other-round and external-reference registration" replaces a morphology
    namespace.
-7. The backend is chosen from the W-244 evidence: SimpleITK is already locked;
+7. The backend is chosen from the evidence of the backend comparison: SimpleITK is already locked;
    elastix is added only where the evidence justifies it
    ({doc}`registration-algorithms`).
 8. YAML keys and saved formats keep `steps` and `step`.
+
+% W-244
 
 ## RegistrationRecipe
 
@@ -134,7 +144,7 @@ class RegistrationSignalConfig:
     moving_channel: int | str | None = None    # "channel": None means reference_channel
 ```
 
-* **Source.** The signal of each round is built from the §2.5
+* **Source.** The signal of each round is built from the preprocessing
   `registration_source` snapshot of the preprocessing recipe, or from the
   detection image when it is `None` or there is no preprocessing recipe, as
   today ({doc}`preprocessing-contract`).
@@ -157,6 +167,8 @@ class RegistrationSignalConfig:
   for that step only; it exists for the legacy mapping, in which the global and
   local blocks may name different representations.
 
+% §2.5
+
 ## Registry entries
 
 Registration methods are registered in `REGISTRATION_METHODS`, a public
@@ -176,8 +188,10 @@ stage-specific capabilities"). `RegistrationSpec` adds:
 `min_shape_zyx` applies to 3D inputs; a Z=1 input is checked against its last
 two entries. An input with 1 < Z < `min_shape_zyx[0]`, or with Z=1 for a method
 without `2` in `dimensions`, raises `IncompatibleGeometryError` before the
-estimator runs. The W-240 field `application_backend` is not used: the recipe's
+estimator runs. The method-registry design's field `application_backend` is not used: the recipe's
 single `warp` replaces per-method application backends.
+
+% W-240
 
 | Name | Config | `step_kind` | `dimensions` | `min_shape_zyx` | `transform_kind` | `space` | `requires` (extra) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -190,9 +204,11 @@ single `warp` replaces per-method application backends.
 | `cpd` | `CpdConfig` (exists) | local | 3 | (2, 2, 2) | dense | index | none |
 
 The names, fields and defaults of the four existing configs do not change. The
-demons variants stay one method, `demons`, with `variant` (W-240 choice 6).
+demons variants stay one method, `demons`, with `variant` (choice 6 of the method-registry design).
 The `registration-elastix` extra is optional and imported only when a recipe selects
 an elastix method; see {doc}`registration-algorithms`.
+
+% W-240
 
 ## Transform types
 
@@ -304,7 +320,7 @@ After every step of a moving round has been estimated, the round is resampled
 **once**:
 
 * **What is resampled.** The moving round's detection image and every snapshot
-  that §2.5 keeps for it, each from its own pre-registration array, with the
+  that preprocessing keeps for it, each from its own pre-registration array, with the
   same composite transform. The reference round is not resampled. Nothing is
   resampled per step: step signals are resampled in float64 only for
   estimation and are discarded.
@@ -334,9 +350,13 @@ After every step of a moving round has been estimated, the round is resampled
   translation step does not round or quantize the transforms of later steps,
   and no step's output is rounded to the dtype before the next step.
 
+% §2.5
+
 The records keep, per image, the ordered results that were composed
-(`preprocessing_record["transforms"][round][image]`, as in §2.5, with the
+(`preprocessing_record["transforms"][round][image]`, as in preprocessing, with the
 new kinds), and the round's single application policy.
+
+% §2.5
 
 ## Physical-space estimation
 
@@ -360,7 +380,7 @@ space (the B-spline additionally in its physical grid):
    transform keeps the control grid and coefficients, and
    `BSplineTransform.dense()` evaluates it on the reference grid with SimpleITK
    (`BSplineTransform` and `TransformToDisplacementField`), so reloading and
-   applying a stored B-spline never needs elastix. W-244 did not validate this
+   applying a stored B-spline never needs elastix. The backend comparison did not validate this
    route: it converted elastix B-splines with ITK's own
    `TransformToDisplacementFieldFilter` on the elastix transform and compared
    the result with the transformix deformation field (at most 1.2e-7 voxels
@@ -372,6 +392,8 @@ space (the B-spline additionally in its physical grid):
    estimation uses unit spacing and records `spacing_source="unknown_unit"`
    with a warning in `RegistrationDiagnostics.warnings`; the index-space result
    is then the physical one. This is an open choice for Jiahao (worker notes).
+
+% W-244
 
 Demons, TPS and CPD keep estimating in index space (`space="index"`); their
 behavior does not change.
@@ -386,7 +408,7 @@ interface:
 * for a method with `2` in `dimensions`, the estimator receives the YX plane
   and runs the backend's 2D form: `Euler2DTransform` or 2D affine, a 2D
   B-spline, SimpleITK 2D demons (pyramid in YX only). A 3D estimate on a Z=1
-  volume is never attempted; W-244 found that both backends fail on it;
+  volume is never attempted; the backend comparison found that both backends fail on it;
 * the result is embedded in 3D with no Z motion: a translation with zero Z
   displacement, an affine with Z row and column `(1, 0, 0)` and `b_z = 0`, a
   B-spline of dimension 2, or a dense field of shape (1, Y, X, 3) whose Z
@@ -394,6 +416,8 @@ interface:
 * TPS and CPD declare `dimensions={3}` and keep rejecting Z=1 with
   `IncompatibleGeometryError`;
 * example 3 above is the composition check for Z=1.
+
+% W-244
 
 ## Persistence
 
@@ -428,22 +452,24 @@ signal, warp, QC config).
   `candidates` and `pre_qc` checkpoints. A
   version-1 registered checkpoint loads its `translation` and `dense` results
   with their per-result `application_config` and is marked `sequential`, the
-  pre-§2.6 semantics; nothing converts it silently to a recipe. Its translation entries
+  semantics from before the registration work; nothing converts it silently to a recipe. Its translation entries
   store the correction `c = −d`, which the reader converts to the displacement
   `d` (see {doc}`migration`).
-* **Shift tables.** The Python backend writes none since W-563: the detected
+* **Shift tables.** The Python backend writes none since 2026-10-23: the detected
   displacement (`displacement_zyx`) of each translation result is in `run.json`
   `transforms` and in the estimation attempt's `qc.details.transform`
   ({doc}`migration`, "Sequencing logs and the morphology record"). The MATLAB
   backend keeps its own.
-* **`run.json`.** Its `format_version` stays 1 (W-240 choice 3); the
+* **`run.json`.** Its `format_version` stays 1 (choice 3 of the method-registry design); the
   registration records gain the fields below and `config.pipeline.registration`
   becomes the recipe's fields.
-* **Rounds written (W-337).** The registered checkpoint holds the reference round
+* **Rounds written.** The registered checkpoint holds the reference round
   and the sequencing rounds only, with their transforms and attempts; its header
   gains the channel information per written round (`channels`) as an additive key,
   and `FORMAT_VERSION` stays 2. A registered other round has its own saved form
   ("Other rounds and the reference stain" below).
+
+% §2.6, W-563, W-240, W-337
 
 ## Other-round and external-reference registration
 
@@ -464,9 +490,11 @@ FOV.register(recipe: RegistrationRecipe, *, rounds: Sequence[str] | None = None,
              checkpoints: CheckpointConfig | None = None) -> FOV
 ```
 
-`FOV.register` is the one registration entry of a FOV (since W-560, which merged the
+`FOV.register` is the one registration entry of a FOV (since the renames of 2026-10-23, which merged the
 other-round entry into it; {doc}`migration`). It routes by the rounds' category before any estimator
 runs, and each route keeps its own rules:
+
+% W-560
 
 | `rounds` | Route | Parameters | Record |
 | --- | --- | --- | --- |
@@ -497,16 +525,20 @@ other-round route.
   reference stain as the MATLAB script does (the reference round's `ch04`
   image, rotated by `rotate_angle`) and the `additional_round` entries with
   their `channel_order`, and writes `fovs/<fov>/nuclei_registration.json`
-  (`FOV.save_registration_record`, since W-563) and the registered images under
+  (`FOV.save_registration_record`, since 2026-10-23) and the registered images under
   the MATLAB file names. It is added as a Python rule of the Python backend; the
   MATLAB backend is unchanged.
 * **Out of scope.** Different grids (`scale`, plane-to-volume), stitching and
   segmentation.
 
+% W-563
+
 ### Other rounds and the reference stain
 
-W-337 separates the two kinds of round, as the MATLAB workflow does ({doc}`coordination`,
+The morphology-round change of 2026-10-05 separates the two kinds of round, as the MATLAB workflow does ({doc}`coordination`,
 "Sequencing rounds and other rounds"):
+
+% W-337
 
 * **Sequencing rounds.** `FOV.run` and `FOV.register` handle the reference round and
   the sequencing rounds only. `FOV.register` registers the sequencing rounds other
@@ -553,13 +585,15 @@ for every successful step and for the round's whole chain, on signals only.
 | Truth metrics | Only when the caller supplies a truth pull field (for example `forward_displacement` of a synthetic pair): `evaluate_displacement_field(estimated, truth, *, mask, spacing_zyx=None)` gives the median, 95th percentile and maximum of `|u − u*|` over the valid overlap, in voxels and, with spacing, in physical units. Never computed from images alone. |
 | Rejection | `RegistrationQcConfig(min_coverage=None, min_ncc_gain=None, max_fold_fraction=None, max_translation_voxels=None, projections=False)`. Every criterion is `None` by default, so nothing is rejected unless the recipe sets it. A step that fails a configured criterion raises `RegistrationRejectedError`, a subclass of `RegistrationEstimationError`, naming the criterion, the value and the bound; recovery may allow it. |
 
-**Memory (W-461).** `registration_qc` reads the signals and the pull field one Z plane at a time and never copies
+**Memory.** `registration_qc` reads the signals and the pull field one Z plane at a time and never copies
 a signal whole: the valid overlap, the NCC sums and the Jacobian determinants are computed plane by plane, the
 Z maximum projections are taken in the signals' own dtype and then converted to float64, and a chain's pull
 field is evaluated plane by plane as `TransformChain.pull_field` evaluates it. Only `|u|` of every voxel is held whole, for the median and the 95th percentile. Each voxel gets
 the arithmetic of the whole-volume computation, so every value is that of the earlier implementation, except
 that the NCC sums of the planes are added in Z order, which can change NCC in the last digits. An affine or
 B-spline transform is still evaluated whole by `dense()`.
+
+% W-461
 
 ## Failure and recovery records
 
@@ -580,9 +614,11 @@ current keys. Each **estimation** entry has:
 After the last step the round gets one **application** entry:
 `record: "application"`, `outcome` (`succeeded` or `application_failed`),
 `application_config` and `failure`. Application failures never recover, as
-today. E01 (W-94) reads the executed backend per round from the succeeded
+today. The separate evidence work on registration methods reads the executed backend per round from the succeeded
 estimation entries and sees every fallback through `fallback` and
 `actual_method`.
+
+% E01, W-94
 
 ## Workflow configuration
 
@@ -591,13 +627,15 @@ estimation entries and sees every fallback through `fallback` and
 The shared MATLAB keys (`global_registration`, `local_registration` and their
 existing fields) keep their names and MATLAB meaning. Under `backend: python`
 they raise `ValueError` naming `registration.steps`, and the schema refuses them
-(W-569): the Python backend reads the [Python-only key](#python-only-key) alone.
+(since 2026-10-25): the Python backend reads the [Python-only key](#python-only-key) alone.
 For MATLAB-backend configurations, which the adapters of the shared rules read,
 `dataset/_legacy_config.py` translates them to one recipe, and the table is also
 the native form a migrated configuration writes out ({doc}`migration`, "One
 Python configuration dialect"):
 
-| Legacy key | Python meaning after §2.6 |
+% W-569
+
+| Legacy key | Python meaning after the registration work |
 | --- | --- |
 | `global_registration.run` / `local_registration.run` | One global step, then one local step, when enabled; neither enabled → `registration=None`. |
 | `method` | Global default `translation`, local default `demons` (unchanged). Names are `REGISTRATION_METHODS` names plus the adapter aliases `diffeomorphic`, `symmetric` and `fast_symmetric` (→ `demons` with `variant`). A method whose step kind does not match its block is rejected. |
@@ -612,7 +650,9 @@ Python configuration dialect"):
 | `ref_round` | Must equal the dataset reference round (unchanged). |
 | Method-specific MATLAB names (`detection_threshold`, `match_distance`, `tps_smoothing`, `grid_spacing`, `beta`, `lmbda`, `cpd_w`, `candidate_radius`, `k_neighbors`) and the CPD adapter defaults | Unchanged. The CPD defaults are `detection_noise_sigma=3.0` and `grid_spacing_voxels=32` (the config's defaults are 5.0 and 16); a native `cpd` step states them. |
 | `ref_img: single-channel` in `rsf_single_fov` with the global block alone | The rule's reference image is that channel (`WorkflowConfig.reference_image` `single-channel`); natively the rule parameter `reference_image_view: {mode: channel, channel: c}`. |
-| `local_registration.method` enum in the schema | Widened to the registered names plus the legacy aliases, kept equal by a default-tier test (W-240 choice 4). |
+| `local_registration.method` enum in the schema | Widened to the registered names plus the legacy aliases, kept equal by a default-tier test (choice 4 of the method-registry design). |
+
+% §2.6, W-240
 
 ### Python-only key
 
@@ -645,9 +685,11 @@ or label>}`, default `max`) selects the reference image the rule writes
 ## Exclusions
 
 No unequal-grid conversion, plane-to-volume registration, subpixel translation
-estimator, stitching (§2.10), TPS or CPD performance study, or new default
-beyond the agreed translation-only default. Method comparisons belong to E01
-(W-94).
+estimator, stitching, TPS or CPD performance study, or new default
+beyond the agreed translation-only default. Method comparisons belong to the separate evidence
+work on registration methods.
+
+% §2.10, E01, W-94
 
 ```{toctree}
 :hidden:

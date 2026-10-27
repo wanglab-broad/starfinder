@@ -39,7 +39,9 @@ matching units. ``classify_detections`` counts matched, duplicate (an unmatched
 detection within ``radius`` of a matched truth point) and spurious detections; with
 ``groups`` (for example the channel of each detection) it splits the duplicates into
 those in the group of the truth point's matched detection and those in another group,
-the W-218 classification of :doc:`../spot-finding-baseline`.
+the duplicate classification of :doc:`../spot-finding-baseline`.
+
+.. W-218
 
 Image policies
 --------------
@@ -99,7 +101,9 @@ Replaced benchmark exports have no aliases. Reports remain in benchmark.
 Intentional corrections: exact centered NCC without epsilon bias, undefined
 zero denominators and missing shifts, and float-preserving shift errors. Matching
 policies and historical thresholds remain unchanged. These checks do not qualify
-scientific truth/calibration or define an E01 protocol. MATLAB is excluded.
+scientific truth/calibration or define a protocol of the separate evidence work on registration methods. MATLAB is excluded.
+
+.. E01
 
 .. currentmodule:: starfinder.evaluation
 

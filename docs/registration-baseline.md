@@ -1,14 +1,18 @@
 # Registration baseline
 
-Status: Accepted (W-246, 2026-09-30, at 47057aa)
+% Status: Accepted (W-246, 2026-09-30, at 47057aa)
 
-Note (W-583): {doc}`registration-contract` and {doc}`registration-algorithms` were accepted at W-246 (2026-09-30) and are implemented in `starfinder.registration`; this page keeps the text of its revision.
+Note: {doc}`registration-contract` and {doc}`registration-algorithms` were accepted at the acceptance review of 2026-09-30 and are implemented in `starfinder.registration`; this page keeps the text of its revision.
 
-Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+% Note (W-583); accepted at W-246
+
+Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
+% Note (W-564)
 
 This page records how registration behaves at revision `2e48d3f` (branch
 `runner/s26-spec-20260929`, on `dev` at `1b4db5a`; the registration source is
-unchanged since `1b4db5a`), before the Chapter II §2.6 work changes it. It is
+unchanged since `1b4db5a`), before the package's registration work changes it. It is
 the reference that the golden test
 `src/python/test/test_registration_golden.py` pins. The proposed replacement is
 described in {doc}`registration-contract` and {doc}`registration-algorithms`;
@@ -16,7 +20,11 @@ neither is accepted yet. Paths are relative to `src/python/starfinder/` unless
 they start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 `2e48d3f`.
 
-Since W-262, `TranslationTransform` stores `displacement_zyx = −correction_zyx`; see "Translation displacement" in {doc}`migration`.
+% Chapter II, §2.6
+
+Since 2026-09-30, `TranslationTransform` stores `displacement_zyx = −correction_zyx`; see "Translation displacement" in {doc}`migration`.
+
+% W-262
 
 ## Methods
 
@@ -52,8 +60,10 @@ tuple of steps.
 | Records | `FOV.registration_attempts[round]` gets one entry per attempt: `requested_method`, `actual_method`, `config`, `outcome` (`estimating`, `failed`, `application_failed` or `succeeded`), `failure` (`type`, `message`) and, on success, `application_config` (`dataset/fov.py:418-446`). The backend is not recorded in the attempt; it is in `RegistrationDiagnostics.backend` of the result. |
 | Persistence | `transforms.json` entry `kind: "translation"` with `correction_zyx` inline; `log/gr_shifts/<fov>.txt` rows (`fov_id, round, row, col, z` = the detected displacement, `-correction`), written by `save_processing_log` for translation results only (`dataset/fov.py:463-474`). |
 
-Note (W-563): the Python backend no longer writes the shift tables; each translation is in `run.json`
+Note: the Python backend no longer writes the shift tables; each translation is in `run.json`
 `transforms` and in its estimation attempt ({doc}`migration`, "Sequencing logs and the morphology record").
+
+% Note (W-563)
 
 ### Demons
 
@@ -117,7 +127,9 @@ Note (W-563): the Python backend no longer writes the shift tables; each transla
 | Records | The `WarpConfig` used is stored in the successful attempt (`application_config`) and in the `RegistrationResult`. |
 | Persistence | `application_config` is saved with each result in `transforms.json`; the registered checkpoint stores the resampled image and snapshots as TIFFs. The transforms are reloaded with `load_checkpoint`; nothing re-applies them on reload. |
 
-## How registration steps resample the image and the §2.5 snapshots
+## How registration steps resample the image and the preprocessing snapshots
+
+% How registration steps resample the image and the §2.5 snapshots
 
 `FOV.register` (`dataset/fov.py:399-447`) estimates one transform per moving
 round and step, then applies it at once:
@@ -127,7 +139,7 @@ round and step, then applies it at once:
    (`dataset/fov.py:432-435`). The results replace the images; the transform
    is appended to `registration_results[round]`.
 2. With two steps, the image and every snapshot are resampled twice, and
-   integer outputs are rounded to the dtype after each step. The W-232 test
+   integer outputs are rounded to the dtype after each step. The recipe-snapshot test
    `test_two_registration_steps_resample_every_snapshot_in_the_same_sequence`
    (`test/test_recipe_sources.py:182-202`) pins exactly this: each snapshot
    equals its pre-registration image with the stored results re-applied in
@@ -137,6 +149,8 @@ round and step, then applies it at once:
    and each snapshot, the results applied in order, with `result` (the index
    in `registration_results[round]`), `method` and `kind` (`translation` or
    `dense`) (`dataset/fov.py:449-461`). The reference round's lists are empty.
+
+% W-232
 
 ## Morphology registration runs only through MATLAB
 
@@ -166,7 +180,9 @@ reference image input.
 The registration benchmark task (`benchmark/_adapters.py:25-120`) evaluates
 `ncc`, `ssim` and `translation` from these functions on full arrays.
 
-## Discrepancies with the agreed §2.6 scope
+## Discrepancies with the agreed registration scope
+
+% Discrepancies with the agreed §2.6 scope
 
 | # | Discrepancy | Proposed resolution |
 | --- | --- | --- |
@@ -182,8 +198,10 @@ The registration benchmark task (`benchmark/_adapters.py:25-120`) evaluates
 | 10 | Estimation ignores physical spacing; SimpleITK demons runs with unit spacing. | New global and B-spline methods estimate in physical space; demons, TPS and CPD keep index space (declared per method). |
 | 11 | Persistence knows only `translation` and `dense`; `FORMAT_VERSION` is 1; `gr_shifts` holds translations only. | New `transforms.json` kinds and `FORMAT_VERSION = 2` with a version-1 reader ({doc}`registration-contract`, "Persistence"). `gr_shifts` keeps its columns and translation rows. |
 | 12 | Metrics have no valid-overlap mask, no coverage and no displacement-field truth metric; attempts do not record the backend or optimizer diagnostics. | A routine QC helper and `evaluate_displacement_field` in `starfinder.evaluation`, and richer attempt records ({doc}`registration-contract`, "Routine QC"). |
-| 13 | The schema's `local_registration.method` enum (`demons`, `tps`, `cpd`) is narrower than the adapter (also `translation` and the three demons variants). | Widen the schema to the registered names plus the legacy aliases, kept equal by a test (W-240 choice 4, accepted). |
-| 14 | MATLAB demons defaults (`Iterations=10`, `floor(log2(Z))` levels) differ from Python's (`(100, 50, 25)`, three levels). | Recorded only; no default changes (defaults beyond translation-only are E01's, W-94). |
+| 13 | The schema's `local_registration.method` enum (`demons`, `tps`, `cpd`) is narrower than the adapter (also `translation` and the three demons variants). | Widen the schema to the registered names plus the legacy aliases, kept equal by a test (choice 4 of the method-registry design, accepted). |
+| 14 | MATLAB demons defaults (`Iterations=10`, `floor(log2(Z))` levels) differ from Python's (`(100, 50, 25)`, three levels). | Recorded only; no default changes (defaults beyond translation-only belong to the separate evidence work on registration methods). |
+
+% W-240, E01, W-94
 
 ## Golden test
 
@@ -202,7 +220,7 @@ The reference round and the fixture inputs are pinned too. Every configuration
 is built by one helper, `registration_config`, which is the only part of the
 test that refers to `RegistrationStep` or `PipelineConfig.registration`. The
 pinned runs use each config's defaults, so a changed `DemonsConfig` default
-changes a digest. The §2.6 refactor replaces that helper; its one other named
+changes a digest. The registration refactor replaces that helper; its one other named
 edit is the translation → demons image digest, which one final resampling
 changes ({doc}`registration-contract`, "One final resampling").
 Two further tests show that a changed demons iteration count and the
@@ -211,10 +229,14 @@ and move the demons field outside the float64 tolerance. The translation-only
 digests do not depend on the signal on this fixture, because every signal gives
 the same integer peak.
 
+% §2.6
+
 Three single-thread runs (ITK, OpenMP, BLAS threads 1) gave bit-identical
 digests. The uint16 images keep their exact digests and the correction is
 exact (whole voxels). The demons field, a computed float64 array, is an
 explicit expected array (`src/python/test/data/expected/test_registration_golden/`)
 compared with the float64 tolerance of [contributing](contributing.md),
-"Expected values and tolerances" (W-574; it replaced the field's digest and
+"Expected values and tolerances" (since 2026-10-25; it replaced the field's digest and
 reproduces it).
+
+% W-574

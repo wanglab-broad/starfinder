@@ -1,8 +1,10 @@
 starfinder.report
 =================
 
-The processing report (§2.11): what the records of one sample's processing hold. See
+The processing report: what the records of one sample's processing hold. See
 :doc:`../report-contract` and :doc:`../report-algorithms`.
+
+.. §2.11
 
 The report describes a run and judges nothing: it gives no pass or fail verdict and no
 composite score, and it filters, corrects or rewrites nothing. It reads the records at their

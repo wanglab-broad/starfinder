@@ -1,18 +1,24 @@
 # Processing-report baseline: the legacy QC notebook, today's diagnostics, the records the report reads and their gaps
 
-Status: Accepted (W-387, 2026-10-12, at c0aa8b0)
+% Status: Accepted (W-387, 2026-10-12, at c0aa8b0)
 
-Note (W-583): {doc}`report-contract` and {doc}`report-algorithms` were accepted at W-387 (2026-10-12) and are implemented in `starfinder.report`, `Dataset.report` and `Dataset.compare_samples`; this page keeps the text of its revision.
+Note: {doc}`report-contract` and {doc}`report-algorithms` were accepted at the acceptance review of 2026-10-12 and are implemented in `starfinder.report`, `Dataset.report` and `Dataset.compare_samples`; this page keeps the text of its revision.
 
-Note (W-564): the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+% Note (W-583); accepted at W-387
 
-This page records what exists for the §2.11 processing report before {doc}`report-contract`
+Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+
+% Note (W-564)
+
+This page records what exists for the processing report before {doc}`report-contract`
 specifies it: the legacy QC notebook and the logs it reads, the diagnostics and figures each
 stage already writes, the summary writer of the reference branch, the printing helpers of
 the benchmark, and, value by value, the record and field each value of the report comes
 from today. For each gap and each discrepancy it gives the options and one recommended
-resolution. The recommendations are choices for Jiahao at the gate (W-387); nothing here is
+resolution. The recommendations are choices for Jiahao at the gate of 2026-10-12; nothing here is
 implemented, copied or renamed.
+
+% §2.11, W-387
 
 **The report describes a run and judges nothing.** It shows what the records of a sample's
 processing hold, lists the FOVs whose values lie outside a stated limit with the measured
@@ -22,27 +28,29 @@ nothing: no table, image or record of the sample is rewritten by it.
 
 Sources, read on 2026-10-12:
 
-* `dev` at `dc5fc3c` (pull request 35, the §2.10 work merged), on the batch branch
+* `dev` at `dc5fc3c` (pull request 35, the stitching and assembly work merged), on the batch branch
   `runner/s211-spec-20261012`. Paths are relative to `src/python/starfinder/` unless they
   start with `src/`, `workflow/` or `docs/`.
-* The reference branch `codex/chapter-ii-m1-m2` at `17e8dda` (2026-09-23), read with
+* The reference branch at `17e8dda` (2026-09-23), read with
   `git show 17e8dda:<path>`; it is not checked out or merged.
-* The run directory of W-384 under the benchmark root,
-  `runs/W-384/20261012T065105Z-18876aac/`: `worker-notes.md`;
+* The run directory of the source-inventory run of 2026-10-12, kept with the run records
+  outside the repository: `worker-notes.md`;
   `results/inventory/report_values.csv` (the 61 values of the report, block by block, from
-  the eight sections of the 2026-10-07 scope, the agreed mockup and the inputs of the D4 and
-  D5 rules); `results/inventory/source_inventory.csv` (161 rows, one per value and route,
+  the eight sections of the 2026-10-07 scope, the agreed mockup and the inputs of the rules of
+  settled decisions 4 and 5 ({doc}`report-contract`, "Settled decisions this page follows")); `results/inventory/source_inventory.csv` (161 rows, one per value and route,
   with record, field, writer and setting); `results/inventory/lookup.csv` and
   `lookup.json` (314 lookups of those fields in the files of two synthetic runs and of two
-  W-398 exports, none off its prediction); `results/replay/replay.csv`;
+  own-folder exports of 2026-10-09, none off its prediction); `results/replay/replay.csv`;
   `results/distributions/candidate_limits.csv`; `results/figures/figure_sizes.csv`;
   `results/tables/real_fovs.csv` and `sizing_64.csv`. Nothing was measured again for this
   page.
 * The agreed layout mockup
-  `runs/W-152/20261007T1939Z-s211-report-scope/processing-report-layout.html` (its sections,
-  blocks and controls; its numbers are placeholders) and the W-383 inputs
-  `runs/W-383/20261008T0240Z-inputs/` (`inputs.md`, `markers.yaml`, and the survey that
-  defines MECR).
+  `processing-report-layout.html` of the report scope of 2026-10-07 (its sections,
+  blocks and controls; its numbers are placeholders) and the inputs survey of 2026-10-08
+  (`inputs.md`, `markers.yaml`, and the survey that
+  defines MECR), each in its run directory outside the repository.
+
+% §2.10, codex/chapter-ii-m1-m2, W-384, runs/W-384/20261012T065105Z-18876aac/, D4, D5, W-398, runs/W-152/20261007T1939Z-s211-report-scope/processing-report-layout.html, W-383, runs/W-383/20261008T0240Z-inputs/
 
 ## What exists today
 
@@ -66,7 +74,9 @@ are those of the MATLAB backend (`src/matlab/STARMapDataset.m`, lines 926 to 940
 `correctform_1` and `correctform_2`, `good_spots`); the Python backend writes JSON to the
 same file name (below). The notebook is the only per-sample QC view today. Its shift heatmap
 and its per-sample box plots are the ancestors of the report's registration heatmap and of
-the comparison page (D2).
+the comparison page (settled decision 2).
+
+% D2
 
 ### Logs and records each stage writes
 
@@ -81,15 +91,19 @@ the comparison page (D2).
 | Workflow logs | `log/<fov>_rsf.txt` | `dataset/fov.py`: `FOV.save_processing_log` | rule `rsf_single_fov` (`_run_workflow`), or a caller of the method | The registration attempts with their QC; `detected`; the filter counts. |
 | | `log/gr_shifts/<fov>.txt` | `dataset/fov.py`: `FOV._save_shift_log` | the same; translation results only | `fov_id`, `round`, `row`, `col`, `z`, which are dy, dx, dz of each translation. |
 | | `log/sf_scores/<fov>.txt` | `dataset/fov.py`: `FOV.save_diagnostics` | the same | `detected`; the filter `counts` and `fractions` (with `endpoint_valid`); the read summary of `summarize_reads`; the registration attempts. |
-| | `fovs/<fov>/molecules.csv` (since W-562; `signal/<fov>_goodSpots.csv` before), `images/ref_merged/<fov>.tif` | `dataset/fov.py`: `FOV.export_spots`, `FOV.save_reference_image` | the same | The accepted reads; the reference image whose grid stitching reads. |
+| | `fovs/<fov>/molecules.csv` (since 2026-10-23; `signal/<fov>_goodSpots.csv` before), `images/ref_merged/<fov>.tif` | `dataset/fov.py`: `FOV.export_spots`, `FOV.save_reference_image` | the same | The accepted reads; the reference image whose grid stitching reads. |
 | Placement | `stitching/<sample>/placement.json`, `fovs.csv`, `links.csv` | `stitching/_persist.py`: `save_placement`, through `Dataset.stitch(output_dir=…)` | rule `stitch_sample` | The method; the positions source with its SHA-256; per FOV the status, origin, nominal position and correction ({doc}`stitching-contract`). |
 | Export | `export/<sample>/export.json` | `export/_record.py`: `write_export` and `update_section`, through `dataset/_export.py`: `export_sample` (`Dataset.export`) | rule `export_sample` | The parts and their status; the `assembly` section (route, ownership rule, population counts); the `fusion` section (grid, outputs, `wall_s`); `segmentation`; `labels`; `spatialdata` ({doc}`sample-output-contract`, {doc}`sample-segmentation-contract`). |
 | | `export/<sample>/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `counts.csv`, `sample.h5ad` | `assembly/_persist.py`: `save_assembly` (the AnnData by `assembly/_anndata.py`: `write_sample_h5ad`) | the assemble part written or reused | Per FOV the placement status, footprint, cells and molecules with their retained counts; per cell and molecule the assembly status; the counted cells' counts ({doc}`assembly-contract`, "Sample tables"). |
 | | `export/<sample>/<image>_projection.ome.tif`, `<image>_stack.ome.tif` | `export/_fuse.py`: `fuse_images` | the fuse part | The fused image the marker patterns are drawn on. |
 | | `export/<sample>/segmentation_<run>.ome.tif` | `export/_segment.py`: `segment_fused` | route after fusion, part `segment` | The sample's label image. |
 
-Note (W-563): the Python backend no longer writes the three workflow logs above; their fields are in
+% W-562
+
+Note: the Python backend no longer writes the three workflow logs above; their fields are in
 `run.json` ({doc}`migration`, "Sequencing logs and the morphology record").
+
+% Note (W-563)
 
 Figures the stages already draw: the assignment figures `expr/<fov>/assignment.png` and
 `assignment_single_layer.png` (`_snakemake.py`: `_write_assignment_figures`), drawn by
@@ -97,8 +111,10 @@ Figures the stages already draw: the assignment figures `expr/<fov>/assignment.p
 per FOV; the benchmark's inspection images (below). None is a per-sample view of the
 processing.
 
-Note (W-568): with an `assembly` block that names an assignment, the two figures are opt-in
+Note: with an `assembly` block that names an assignment, the two figures are opt-in
 (`assembly.previews`), in `fovs/<fov>/previews/` and `export/<sample>/previews/<fov>/`.
+
+% Note (W-568)
 
 Diagnostics that exist but that `FOV.run` does not save: the read filter's
 `diagnostics["endpoint_valid_count"]` and `endpoint_valid_segment_counts`
@@ -121,7 +137,7 @@ Not on `dev`. It writes a standalone HTML summary of a saved run:
 
 ### The printing helpers of `src/python/starfinder/benchmark/_reporting.py` on `dev`
 
-W-546 removed `_e2e_summary` and `generate_overview_grid` because neither has an in-tree
+The removal of code with no in-tree caller on 2026-10-22 took out `_e2e_summary` and `generate_overview_grid` because neither has an in-tree
 caller; their definitions are preserved at the audited source revision
 [`c30ed2e`](https://github.com/wanglab-broad/starfinder/blob/c30ed2e/src/python/starfinder/benchmark/_reporting.py).
 `_print_quality_report` remains as a test helper used by `test_evaluation.py`; it prints the
@@ -129,26 +145,30 @@ values of an `EvaluationResult` with their units and reasons, writes "undefined"
 value and adds no threshold. `generate_inspection_image` remains in use by the `synthetic`
 command and writes a green–magenta composite of a reference and a moving volume.
 
+% W-546
+
 ### What to bring over
 
 | Part | Proposal | Why |
 | --- | --- | --- |
-| The notebook's shift heatmap and per-sample box plots | **Keep the views, leave the notebook.** The registration heatmap (all FOVs and rounds) and the comparison page's three box plots (D2) take their place, read from the Python records. | The notebook reads files nothing writes, MATLAB quantities and a hard-coded path, and stops at cell 10. |
-| `embed_figure` and `render_table` | **Keep the rules, rewrite the code**: figures embedded as base64 images, every text escaped, no external resource. | D3 asks for one offline page filled with the standard library; the functions are small, and their module needs `starfinder.provenance`, which `dev` lacks. |
+| The notebook's shift heatmap and per-sample box plots | **Keep the views, leave the notebook.** The registration heatmap (all FOVs and rounds) and the comparison page's three box plots (settled decision 2) take their place, read from the Python records. | The notebook reads files nothing writes, MATLAB quantities and a hard-coded path, and stops at cell 10. |
+| `embed_figure` and `render_table` | **Keep the rules, rewrite the code**: figures embedded as base64 images, every text escaped, no external resource. | Settled decision 3 asks for one offline page filled with the standard library; the functions are small, and their module needs `starfinder.provenance`, which `dev` lacks. |
 | `write_run_summary` | **Leave.** | Its record is not `run.json`. Its two rules, an existing destination is never overwritten and a missing metric stays unavailable, are kept by {doc}`report-contract` ("The output folder", "Unavailable parts"). |
-| `_e2e_summary`, `generate_overview_grid` | **Delete in W-546.** | Neither has an in-tree caller; the historical definitions are linked at [`c30ed2e`](https://github.com/wanglab-broad/starfinder/blob/c30ed2e/src/python/starfinder/benchmark/_reporting.py). |
+| `_e2e_summary`, `generate_overview_grid` | **Delete in the removal of code with no in-tree caller.** | Neither has an in-tree caller; the historical definitions are linked at [`c30ed2e`](https://github.com/wanglab-broad/starfinder/blob/c30ed2e/src/python/starfinder/benchmark/_reporting.py). |
 | `_print_quality_report`'s "undefined" with a reason | **Keep the test helper.** | The report's unavailable rule is the same idea with a closed list of reasons. |
 | `generate_inspection_image` (green–magenta) | **Keep the helper.** | The `synthetic` command uses it; its input is a benchmark volume pair, and the report's example is replayed from the raw input ({doc}`report-contract`, "The replay"). |
 
+% D2, D3, W-546
+
 ## The source inventory
 
-The value list is W-384's `report_values.csv`: every value of the eight sections of the
-2026-10-07 scope (the outline's §2.11 content), block by block as the mockup draws them,
-and the inputs of the D4 example choice and of the D5 rules: 61 values. Each row below is a
+The value list is the source-inventory run's `report_values.csv`: every value of the eight sections of the
+2026-10-07 scope (the outline's content for the processing report), block by block as the mockup draws them,
+and the inputs of the example choice of settled decision 4 and of the rules of settled decision 5: 61 values. Each row below is a
 row of `source_inventory.csv`, one per value and route. Route "every" holds on both routes
 to a sample's cells; "per FOV" and "after fusion" are the two routes
 ({doc}`workflow-downstream`, "Two routes to a sample's cells"); "export only" is a sample
-with an export folder and no `run.json` (the W-398 exports). W-384 kept its second export
+with an export folder and no `run.json` (the own-folder exports). The source-inventory run kept its second export
 in a folder `export_after_fusion/` of its own; a sample has one `export/<sample>/`, written
 on its route, and the rows below name that folder. Status: **source** (the field holds the
 value), **partial** (it holds part of the value, or holds it only under the setting the
@@ -157,9 +177,13 @@ holds it). The writer and the setting of each record are in "Logs and records ea
 writes" above; a field is a JSON key path (`*` for every key or item), a column of a table,
 or an image. A gap or a partial row is resolved in "Gaps" or "Discrepancies" below.
 
-Every row was looked up in the files of W-384's synthetic runs (stages `candidates` and
-`pre_qc`, and with `registered` as well; both routes) and in the two W-398 exports
+% W-384, §2.11, D4, D5, W-398
+
+Every row was looked up in the files of the source-inventory run's synthetic runs (stages `candidates` and
+`pre_qc`, and with `registered` as well; both routes) and in the two own-folder exports
 (`lookup.csv`); every lookup matched its prediction.
+
+% W-384, W-398
 
 ### Summary
 
@@ -179,22 +203,24 @@ Every row was looked up in the files of W-384's synthetic runs (stages `candidat
 |  |  | per FOV | `export/{sample}/export.json` | `assembly.software.code.git_commit` | source |  |
 |  |  | export only | `export/{sample}/export.json` | `assembly.software.code.git_commit` | source |  |
 | S06 | Time (generated; time of the processing) | every | `checkpoints/{fov}/run.json` | `started_at` | source | started_at, ended_at per FOV |
-|  |  | every | — | — | gap | no record holds it today: it is the report's own value, to be written in its record report.json (D1), which does not exist yet |
-| S07 | FOVs succeeded of FOVs expected | every | `checkpoints/{fov}/run.json` | `status` | source | succeeded per FOV; the FOVs expected are the entry's explicit FOV list (D1) |
+|  |  | every | — | — | gap | no record holds it today: it is the report's own value, to be written in its record report.json (settled decision 1), which does not exist yet |
+| S07 | FOVs succeeded of FOVs expected | every | `checkpoints/{fov}/run.json` | `status` | source | succeeded per FOV; the FOVs expected are the entry's explicit FOV list (settled decision 1) |
 | S08 | Median spots per FOV | every | `checkpoints/{fov}/run.json` | `counts.spots` | derived | median over FOVs of counts.spots |
 | S09 | Spots matched to the codebook (sample fraction) | every | `checkpoints/{fov}/run.json` | `counts.call_status.assigned` | derived | sum of counts.call_status.assigned / sum of counts.spots |
 | S10 | Counted cells | per FOV | `export/{sample}/sample.h5ad` | `X` | source | the rows of X (counted cells) |
 |  |  | after fusion | `export/{sample}/sample.h5ad` | `X` | source | the rows of X (counted cells) |
-|  |  | export only | `export/{sample}/sample.h5ad` | `X` | partial | X has no row: the W-398 exports are molecules_only (no segmentation) |
+|  |  | export only | `export/{sample}/sample.h5ad` | `X` | partial | X has no row: the own-folder exports are molecules_only (no segmentation) |
 | S11 | Median reads per cell | per FOV | `export/{sample}/sample.h5ad` | `X` | derived | median of the row sums |
 |  |  | after fusion | `export/{sample}/sample.h5ad` | `X` | derived | median of the row sums |
 |  |  | export only | `export/{sample}/sample.h5ad` | `X` | partial | no cell |
 | S12 | Median genes per cell | per FOV | `export/{sample}/sample.h5ad` | `X` | derived | median of the nonzero entries per row |
 |  |  | after fusion | `export/{sample}/sample.h5ad` | `X` | derived | median of the nonzero entries per row |
 |  |  | export only | `export/{sample}/sample.h5ad` | `X` | partial | no cell |
-| S13 | Table: FOV, section, measured, sample median, reason (collected from every section) | every | — | — | gap | no record holds the collected table today: the report collects it (D1: report.json and tables/, which do not exist yet) from the rule rows S14, R01, R03, R07, D02, D03, D01, G06, G09 and their limits |
-| S14 | Rule input: FOV that failed or was expected and not run | every | `checkpoints/{fov}/run.json` | `error` | source | status failed or interrupted with error.step; a FOV of the list without run.json is not run or not recorded (A2: shown as having none) |
-| X01 | Choice of the three example FOVs: read count per FOV near the median, fewest and most cells | every | `checkpoints/{fov}/run.json` | `counts.filtering.accepted` | derived | read count per FOV near the median (D4); cells per FOV from tables/fovs.csv n_cells_retained |
+| S13 | Table: FOV, section, measured, sample median, reason (collected from every section) | every | — | — | gap | no record holds the collected table today: the report collects it (settled decision 1: report.json and tables/, which do not exist yet) from the rule rows S14, R01, R03, R07, D02, D03, D01, G06, G09 and their limits |
+| S14 | Rule input: FOV that failed or was expected and not run | every | `checkpoints/{fov}/run.json` | `error` | source | status failed or interrupted with error.step; a FOV of the list without run.json is not run or not recorded (amendment 2: shown as having none) |
+| X01 | Choice of the three example FOVs: read count per FOV near the median, fewest and most cells | every | `checkpoints/{fov}/run.json` | `counts.filtering.accepted` | derived | read count per FOV near the median (settled decision 4); cells per FOV from tables/fovs.csv n_cells_retained |
+
+% D1, W-398, A2, D4
 
 ### Workflow overview
 
@@ -261,7 +287,7 @@ Every row was looked up in the files of W-384's synthetic runs (stages `candidat
 |  |  | export only | `export/{sample}/export.json` | `counts.spots` | gap | an export holds the accepted reads only |
 | D02 | Correct barcode form | every | `checkpoints/{fov}/run.json` | none (`counts.filtering.endpoint_valid_count` absent) | gap | gap 3 confirmed: counts.filtering holds total, accepted, rejected; the count is in the filter result's diagnostics (endpoint_valid_count) |
 |  |  | every | `log/sf_scores/{fov}.txt` | `fractions.endpoint_valid` | partial | the fraction over all reads, written by the rule's save_diagnostics, not by FOV.run |
-|  |  | every | `checkpoints/{fov}/pre_qc.csv` | column `observed_color_sequence` | partial | recomputable from the color sequences and the filter config; D6: not recomputed by the report |
+|  |  | every | `checkpoints/{fov}/pre_qc.csv` | column `observed_color_sequence` | partial | recomputable from the color sequences and the filter config; settled decision 6: not recomputed by the report |
 |  |  | export only | `export/{sample}/tables/molecules.csv` | column `endpoint_valid` | gap | an export holds the accepted reads only, without their form |
 | D03 | Matched to the codebook | every | `checkpoints/{fov}/run.json` | `counts.call_status.assigned` | source |  |
 |  |  | export only | `export/{sample}/tables/molecules.csv` | column `call_status` | gap | every molecule of an export is matched (it has a gene); the reads that were not matched are not in it, so no fraction |
@@ -277,6 +303,8 @@ Every row was looked up in the files of W-384's synthetic runs (stages `candidat
 | D07 | Each read level as a fraction | every | `checkpoints/{fov}/run.json` | `counts` | derived | fractions and tables from D01 to D05 (D02 from the gap's eventual record) |
 | D08 | Distributions: spots per FOV, fraction with correct form, fraction matched | every | `checkpoints/{fov}/run.json` | `counts` | derived | fractions and tables from D01 to D05 (D02 from the gap's eventual record) |
 | D09 | Per-FOV table: FOV, spots, correct form, in codebook, passed QC, in codebook % | every | `checkpoints/{fov}/run.json` | `counts` | derived | fractions and tables from D01 to D05 (D02 from the gap's eventual record) |
+
+% D6
 
 ### Segmentation and assembly
 
@@ -304,7 +332,7 @@ Every row was looked up in the files of W-384's synthetic runs (stages `candidat
 |  |  | export only | `export/{sample}/tables/fovs.csv` | column `placement_status` | source |  |
 | G07 | Segmentation outlines on three example FOVs (nucleus and cell outlines) | per FOV | `checkpoints/{fov}/assignment/{run}/cell_labels.tif` | the label image | source | or ../../segmentation/<run>/labels.tif (linked) when FOV.segment saved the run |
 |  |  | per FOV | `checkpoints/{fov}/assignment/{run}/nucleus_labels.tif` | the label image | source |  |
-|  |  | after fusion | `export/{sample}/segmentation_cell.ome.tif` | the label image | source | cut to the example FOV's footprint (A1) |
+|  |  | after fusion | `export/{sample}/segmentation_cell.ome.tif` | the label image | source | cut to the example FOV's footprint (amendment 1) |
 |  |  | after fusion | `export/{sample}/segmentation_nucleus.ome.tif` | the label image | source |  |
 |  |  | export only | `export/{sample}/segmentation_cell.ome.tif` | the label image | gap | no segmentation |
 | G08 | Population accounting: input, retained, excluded not owner, excluded FOV not placed, counted cells; cells and molecules | per FOV | `export/{sample}/export.json` | `assembly.counts.cells.excluded.not_owner` | source | cells and molecules: input, retained, excluded by reason |
@@ -315,6 +343,8 @@ Every row was looked up in the files of W-384's synthetic runs (stages `candidat
 | G09 | Reads but no cell (per FOV) | per FOV | `export/{sample}/tables/fovs.csv` | column `n_molecules_retained` | derived | reads but no cell: n_molecules_retained > 0 and n_cells_retained = 0 |
 |  |  | after fusion | `export/{sample}/tables/fovs.csv` | column `n_molecules_retained` | derived | reads but no cell: n_molecules_retained > 0 and n_cells_retained = 0 |
 |  |  | export only | `export/{sample}/tables/fovs.csv` | column `n_molecules_retained` | partial | every FOV has reads and no cell: the rule does not apply without segmentation |
+
+% A1
 
 ### Sample measurements
 
@@ -357,36 +387,44 @@ Every row was looked up in the files of W-384's synthetic runs (stages `candidat
 |  |  | every | `checkpoints/{fov}/pre_qc.json` | `encoding` | partial | the encoding, not the file |
 | F03 | Tile positions (stage file or positions table) | every | `stitching/{sample}/placement.json` | `table.path` | source | with table.sha256 and table.converter |
 |  |  | export only | `export/{sample}/export.json` | `fusion.placement.method` | partial | the method and table hashes only; the positions source is in the placement folder |
-| F07 | Markers (the mockup names a marker file; D4: the markers are in the report configuration, no separate file) | every | — | — | gap | no record holds it today: the markers belong to the report configuration (D4, no separate file), which does not exist yet |
+| F07 | Markers (the mockup names a marker file; settled decision 4: the markers are in the report configuration, no separate file) | every | — | — | gap | no record holds it today: the markers belong to the report configuration (settled decision 4, no separate file), which does not exist yet |
 | F04 | Workflow configuration path and hash | every | `checkpoints/{fov}/run.json` | none (`config.config_path` absent) | gap | run.json holds the typed configurations, not the workflow file or its hash |
-| F05 | Report settings | every | — | — | gap | no record holds it today: the report settings are the report block of the workflow configuration (D4), which does not exist yet |
-| F06 | Checkpoints, placement, sample export, report and report tables locations | every | `checkpoints/{fov}/run.json` | `checkpoint_directory` | source | the placement and export folders are the entry's fixed places (D1); the report's own folder is its output |
+| F05 | Report settings | every | — | — | gap | no record holds it today: the report settings are the report block of the workflow configuration (settled decision 4), which does not exist yet |
+| F06 | Checkpoints, placement, sample export, report and report tables locations | every | `checkpoints/{fov}/run.json` | `checkpoint_directory` | source | the placement and export folders are the entry's fixed places (settled decision 1); the report's own folder is its output |
+
+% D4, D1
 
 ## Gaps
 
-Note (W-563): G1's "The logs stay as they are" no longer holds: the Python processing rules write
+Note: G1's "The logs stay as they are" no longer holds: the Python processing rules write
 `run.json` instead of the logs, which also gained the filter's fractions, the read summary of every
 decoded run and the round roles ({doc}`migration`, "Sequencing logs and the morphology record").
 
+% Note (W-563)
+
 Each gap is a value, or part of one, that no record holds where the report looks. The
-three gaps D6 named were confirmed or refuted from W-384's run with stages `candidates` and
+three gaps settled decision 6 named were confirmed or refuted from the source-inventory run's synthetic run with stages `candidates` and
 `pre_qc` only (`worker-notes.md`, section 4); the others were found by the inventory.
+
+% D6, W-384
 
 | # | Gap | Rows | Options | Recommended resolution |
 | --- | --- | --- | --- | --- |
-| G1 | **The workflow writes no `run.json`.** `_run_workflow` calls `fov.run(adapted.pipeline, execution=adapted.execution)` without a `CheckpointConfig`, so a sample processed by the rule `rsf_single_fov` has no run record: every row whose record is `run.json` is absent for it. What it has are the three logs of `FOV.save_processing_log` and `FOV.save_diagnostics`. | every `run.json` row | (a) The report also reads `log/<fov>_rsf.txt`, `log/gr_shifts/<fov>.txt` and `log/sf_scores/<fov>.txt` as a second source. (b) The workflow writes `run.json`: `_run_workflow` passes `CheckpointConfig(stages=<the workflow's stages, default none>, overwrite=True)`. (c) Both. | **(b)**, in the implementation issue of D6 ({doc}`report-contract`, "Records added to run.json", R5). One record holds every value with one meaning; the logs hold a subset (no steps, no times, no preprocessing record, translations only) and the MATLAB backend writes other columns to the same file names. `stages=()` writes `run.json` alone (43 kB for an LN FOV with the registration attempts, W-384 `real_fovs.csv`); `overwrite=True` because a rerun of the rule replaces its record, and it leaves `other_rounds/`, `segmentation/` and `assignment/` as they are ({doc}`checkpoints`, "Layout"). The logs stay as they are. |
+| G1 | **The workflow writes no `run.json`.** `_run_workflow` calls `fov.run(adapted.pipeline, execution=adapted.execution)` without a `CheckpointConfig`, so a sample processed by the rule `rsf_single_fov` has no run record: every row whose record is `run.json` is absent for it. What it has are the three logs of `FOV.save_processing_log` and `FOV.save_diagnostics`. | every `run.json` row | (a) The report also reads `log/<fov>_rsf.txt`, `log/gr_shifts/<fov>.txt` and `log/sf_scores/<fov>.txt` as a second source. (b) The workflow writes `run.json`: `_run_workflow` passes `CheckpointConfig(stages=<the workflow's stages, default none>, overwrite=True)`. (c) Both. | **(b)**, in the implementation issue of settled decision 6 ({doc}`report-contract`, "Records added to run.json", R5). One record holds every value with one meaning; the logs hold a subset (no steps, no times, no preprocessing record, translations only) and the MATLAB backend writes other columns to the same file names. `stages=()` writes `run.json` alone (43 kB for an LN FOV with the registration attempts, the source-inventory run's `real_fovs.csv`); `overwrite=True` because a rerun of the rule replaces its record, and it leaves `other_rounds/`, `segmentation/` and `assignment/` as they are ({doc}`checkpoints`, "Layout"). The logs stay as they are. |
 | G2 | **The global transforms outside the stage `registered`.** Refuted for global steps, confirmed for dense and B-spline steps: `run.json` holds no `transforms` key, but each estimation attempt's QC record holds its step's transform summary, `registration.<round>[i].qc.details.transform` (a translation's `displacement_zyx`; an affine's 3 × 3 `matrix`, `offset` and `det`), written by `evaluation/registration.py`: `_transform_summary` through `dataset/fov.py`: `_qc_record`. A dense or B-spline step holds displacement statistics only. The application entry summarises a chain of one translation as `kind: dense` with statistics. | R01, R02, R05, R06 | (a) The report reads the QC records' transform summaries. (b) `run.json` gains the transforms of every round in the form of `transforms.json`, the global ones with their parameters, a dense or B-spline step by its kind and the file that holds it, if any. (c) The stage `registered` writes `transforms.json` always, without the images. | **(b)** (R1 of {doc}`report-contract`). The QC summary is a QC value whose form the registration contract does not fix as a record, it is null for an attempt that failed before its QC, and an affine's offset there is not the 4 × 4 index matrix the chain is rebuilt from. (c) changes what a stage writes. For an older `run.json` the report reads `registered/transforms.json` when it exists and shows the shifts as unavailable otherwise. |
-| G3 | **The codebook file.** No key of `run.json`, `pre_qc.json`, `candidates.json` or the three logs names it; `config.encoding` holds the encoding, not the file. {doc}`checkpoints` says so: "`Dataset.load_codebook` does not keep its path". | F02 | (a) `run.json` records the file's path and SHA-256 (`Dataset.load_codebook` keeps them). (b) The report takes the codebook path from its configuration. (c) The report takes the genes from the export or `pre_qc`. | **(a)** (R2). The Files section shows the codebook a run used, and the marker check (D4) needs the gene list of that codebook. (b) would show what the user typed, not what the run read. |
-| G4 | **The correct-form count per FOV.** `counts.filtering` holds `total`, `accepted`, `rejected`; the count is the filter result's `diagnostics["endpoint_valid_count"]`, which `_RunRecord.write` does not copy. It reaches `log/sf_scores/<fov>.txt` only as a fraction. | D02 | (a) `run.json` copies the count (and the per-segment counts) into `counts.filtering`. (b) The report recomputes it from `pre_qc` and the filter configuration. (c) The report reads the log's fraction. | **(a)** (R3). D6 settles that missing records are added, not recomputed; (b) needs the `pre_qc` stage and the codebook; (c) needs G1's logs. |
+| G3 | **The codebook file.** No key of `run.json`, `pre_qc.json`, `candidates.json` or the three logs names it; `config.encoding` holds the encoding, not the file. {doc}`checkpoints` says so: "`Dataset.load_codebook` does not keep its path". | F02 | (a) `run.json` records the file's path and SHA-256 (`Dataset.load_codebook` keeps them). (b) The report takes the codebook path from its configuration. (c) The report takes the genes from the export or `pre_qc`. | **(a)** (R2). The Files section shows the codebook a run used, and the marker check (settled decision 4) needs the gene list of that codebook. (b) would show what the user typed, not what the run read. |
+| G4 | **The correct-form count per FOV.** `counts.filtering` holds `total`, `accepted`, `rejected`; the count is the filter result's `diagnostics["endpoint_valid_count"]`, which `_RunRecord.write` does not copy. It reaches `log/sf_scores/<fov>.txt` only as a fraction. | D02 | (a) `run.json` copies the count (and the per-segment counts) into `counts.filtering`. (b) The report recomputes it from `pre_qc` and the filter configuration. (c) The report reads the log's fraction. | **(a)** (R3). Settled decision 6 settles that missing records are added, not recomputed; (b) needs the `pre_qc` stage and the codebook; (c) needs G1's logs. |
 | G5 | **The workflow configuration file and its hash** (Files, Configuration). `run.json` holds the typed configurations, not the file they came from. | F04 | (a) `run.json` records the workflow configuration file's path and SHA-256 when the run comes from the workflow (the top-level `config_path` key names the file). (b) The report takes it from its own configuration. (c) Unavailable. | **(a)** (R4), written by `_run_workflow`; null for a run outside the workflow. |
-| G6 | **The area each FOV owns** (cell density on both routes, A1). `export.json` records the ownership rule and tie (`assembly.ownership`), not the regions. | G02 | (a) The report computes the area from the placement, the FOVs' grids and the assembly configuration, with `assembly.ownership_map`. (b) The export records the area per FOV (a new column of `tables/fovs.csv`). | **(a)**: the report computes it, as it computes the shift residual. (b) changes an accepted §2.10 table. The geometry of the area is specified on the algorithms page (W-386, `docs/report-algorithms.md`). |
-| G7 | **Time of the sample steps and of the per-FOV segmentation and assignment.** Only the fuse part records its time (`export.json` `fusion.wall_s`; also `labels.wall_s` and `spatialdata.wall_s`); `placement.json`, the `assembly` and `segmentation` sections and the per-FOV `segmentation.json` and `assignment.json` record none (`segmentation.wall_s` exists only on the route after fusion). | W05 | (a) Show these times as unavailable. (b) Add `wall_s` to `placement.json`, to the `assembly` section and to the per-FOV records, as additive keys. | **(a)** now, with reason `not_recorded`; (b) changes records of accepted §2.9 and §2.10 pages and is left to Jiahao at the gate as a later addition. |
-| G8 | **The report's own values**: the time the report is made (S06), the collected table of problematic FOVs (S13), the report settings (F05) and the markers (F07). No record holds them because the report and its configuration do not exist yet. | S06, S13, F05, F07 | (a) The report's record `report.json` and its configuration (D1, D4). (b) A separate settings file beside the report. | **(a)** ({doc}`report-contract`, "report.json", "Configuration"). The mockup's marker file is dropped (D4). |
-| G9 | **A sample with an export and no `run.json`** (A2; the W-398 exports, `molecules_only`). It lacks every value up to the readout (steps, methods, times, status, inputs, preprocessing, registration and its QC, spots detected, correct form, matched, deduplication), the correction from the stage position, and every cell value. | D01, D02, D03, D05, D06, G03, G05, G07 and the "export only" partial rows | (a) Unavailable with a reason (`no_run_record` per FOV; `no_segmentation` for cells), the later sections made from the export. (b) Read the earlier pipeline's logs where they exist. | **(a)**. The earlier logs define their quantities differently (W-384 `worker-notes.md` section 7: shift axes and sign, spots found on another round, good reads, correct form as a subset of good reads), so one page would mix two definitions under one name. The correction from the stage position is read from `stitching/<sample>/fovs.csv` when the placement folder exists. |
-| G10 | **The intensity distribution after each preprocessing step** (P02). No histogram is recorded; `fitted` holds each step's fitted values only. | P02 | (a) The replay computes it on the example FOV (D1). (b) `run.json` records a histogram per round, channel and step. | **(a)**. It is the distribution of the example FOV the page shows, which the replay already makes; (b) would add a record for every FOV that the page does not draw. |
+| G6 | **The area each FOV owns** (cell density on both routes, amendment 1). `export.json` records the ownership rule and tie (`assembly.ownership`), not the regions. | G02 | (a) The report computes the area from the placement, the FOVs' grids and the assembly configuration, with `assembly.ownership_map`. (b) The export records the area per FOV (a new column of `tables/fovs.csv`). | **(a)**: the report computes it, as it computes the shift residual. (b) changes an accepted assembly table. The geometry of the area is specified on the algorithms page (`docs/report-algorithms.md`). |
+| G7 | **Time of the sample steps and of the per-FOV segmentation and assignment.** Only the fuse part records its time (`export.json` `fusion.wall_s`; also `labels.wall_s` and `spatialdata.wall_s`); `placement.json`, the `assembly` and `segmentation` sections and the per-FOV `segmentation.json` and `assignment.json` record none (`segmentation.wall_s` exists only on the route after fusion). | W05 | (a) Show these times as unavailable. (b) Add `wall_s` to `placement.json`, to the `assembly` section and to the per-FOV records, as additive keys. | **(a)** now, with reason `not_recorded`; (b) changes records of the accepted segmentation, assignment, stitching and assembly pages and is left to Jiahao at the gate as a later addition. |
+| G8 | **The report's own values**: the time the report is made (S06), the collected table of problematic FOVs (S13), the report settings (F05) and the markers (F07). No record holds them because the report and its configuration do not exist yet. | S06, S13, F05, F07 | (a) The report's record `report.json` and its configuration (settled decisions 1 and 4). (b) A separate settings file beside the report. | **(a)** ({doc}`report-contract`, "report.json", "Configuration"). The mockup's marker file is dropped (settled decision 4). |
+| G9 | **A sample with an export and no `run.json`** (amendment 2; the own-folder exports, `molecules_only`). It lacks every value up to the readout (steps, methods, times, status, inputs, preprocessing, registration and its QC, spots detected, correct form, matched, deduplication), the correction from the stage position, and every cell value. | D01, D02, D03, D05, D06, G03, G05, G07 and the "export only" partial rows | (a) Unavailable with a reason (`no_run_record` per FOV; `no_segmentation` for cells), the later sections made from the export. (b) Read the earlier pipeline's logs where they exist. | **(a)**. The earlier logs define their quantities differently (the source-inventory run's `worker-notes.md` section 7: shift axes and sign, spots found on another round, good reads, correct form as a subset of good reads), so one page would mix two definitions under one name. The correction from the stage position is read from `stitching/<sample>/fovs.csv` when the placement folder exists. |
+| G10 | **The intensity distribution after each preprocessing step** (P02). No histogram is recorded; `fitted` holds each step's fitted values only. | P02 | (a) The replay computes it on the example FOV (settled decision 1). (b) `run.json` records a histogram per round, channel and step. | **(a)**. It is the distribution of the example FOV the page shows, which the replay already makes; (b) would add a record for every FOV that the page does not draw. |
 | G11 | **The XZ view of the marker patterns** (M05) needs a fused stack; a projection export (`dimensionality: projection`) has only the molecules' `sample_z`. | M05 | (a) The XZ view of the molecules only (no image) for a projection export. (b) Unavailable without a stack. | **(b)**, with reason `no_stack`: the scope draws molecules on the fused image, and a view without it would be another figure. |
 | G12 | **The dataset ID and the acquisition of a sample without `run.json`** (S01, S03): an export records no dataset ID (only inside a declared grid's `frame_id`) and no rounds or channels. | S01, S03 | (a) The dataset ID from the `Dataset` the entry is called on; the rounds and channels unavailable. (b) Both from the `Dataset`'s configuration. (c) Parse the `frame_id`. | **(a)**. The entry is a method of `Dataset`, whose `dataset_id` names the dataset; a `run.json` whose `dataset_id` differs raises ({doc}`report-contract`, "Checks before anything is written"). The rounds and channels the run used are recorded only in `run.json`; the configuration states what is configured now, not what was run. |
 | G13 | **The segmentation method of an imported mask** (W01): `segmentation/<run>/segmentation.json` exists only for a run `FOV.segment` saved; an imported mask is recorded in `assignment.json` `inputs.cells`. | W01 | (a) The method from `segmentation.json` when it exists, else from `assignment.json` `inputs.cells` (named "imported"). (b) Unavailable for an imported mask. | **(a)**. |
+
+% D6, W-384, D4, A1, §2.10, W-386, §2.9, D1, A2, W-398
 
 ## Discrepancies
 
@@ -396,14 +434,16 @@ it, and what the records hold or how they define it.
 | # | Discrepancy | Options | Recommended resolution |
 | --- | --- | --- | --- |
 | 1 | The levels of the readout are not nested in the Python records. "Correct barcode form" (`endpoint_valid`) is over all reads and independent of the codebook match (`call_status == "assigned"`), so a read can be matched without the correct form and the reverse; in the earlier logs correct form is a subset of the good reads. | (a) Each level a count and a fraction of the spots detected, drawn as bars side by side, not as a funnel. (b) A nested level "correct form and matched", which needs one more count in `run.json`. | **(a)**. The page says the levels are not nested; "passed the read QC filter" is a subset of "matched" with the default `call_statuses=("assigned",)`, and the page states the filter's configuration. |
-| 2 | D5 lists "Passed the read QC filter" before "Deduplication", but the pipeline deduplicates before it filters, and the filter rejects the duplicates (`exclude_duplicates`, default true). | (a) Pipeline order: spots, correct form, matched, merged away by deduplication, passed the filter, assigned to cells. (b) D5's order. | **(a)**, so the sample totals follow the steps the workflow overview shows. |
+| 2 | Settled decision 5 lists "Passed the read QC filter" before "Deduplication", but the pipeline deduplicates before it filters, and the filter rejects the duplicates (`exclude_duplicates`, default true). | (a) Pipeline order: spots, correct form, matched, merged away by deduplication, passed the filter, assigned to cells. (b) The order of settled decision 5. | **(a)**, so the sample totals follow the steps the workflow overview shows. |
 | 3 | `run.json` exists only with a `CheckpointConfig` (G1), while the scope assumes a run record per FOV. | See G1. | See G1. |
-| 4 | The application entry's QC record summarises a chain of one translation as `kind: dense` with displacement statistics (W-384 finding 7). | (a) The report reads no transform from QC records. (b) Read the estimation entries' summaries. | **(a)**: the shifts come from the transforms record (G2); the alignment score is the application entry's `qc.values.ncc_after`, which is the score D5 names ("for the whole chain of a round"). |
-| 5 | The mockup's Files section names a marker file; D4 puts the markers in the report configuration. | (a) The Files section lists the report configuration (the `report` block), with its markers, and no marker file. (b) A separate marker file beside the report, as the mockup draws it; D4 set this aside. | **(a)**, settled by D4; recorded here, not reopened. |
-| 6 | The earlier pipeline's quantities differ from the Python records: its three shift numbers are (−dx, +dy, −dz) of the Python displacement (W-384 `tables/shift_compare.csv`), its spots are found on another round, its good reads are what is left after two drops. | (a) The report reads the Python records only; the earlier logs serve the provisional limits of W-384 only. (b) The report also shows the earlier logs. | **(a)**. A sample analysed before enters through its export (A2). |
-| 7 | The scope's per-FOV lane names segmentation and assignment, which are not steps of `FOV.run`: they are `FOV.segment` and `FOV.assign_molecules` with their own records (`segmentation.json`, `assignment.json`), on the route per FOV only; on the route after fusion segmentation is a part of the export. | (a) The per-FOV lane shows them from their records on the route per FOV, and the per-sample lane shows `segment` on the route after fusion. (b) Leave them out. | **(a)**, as A1 requires. |
-| 8 | The sample totals end with the reads assigned to cells, which equal the sum of `sample.h5ad`'s whole counts; the levels above are sums over FOVs that count a read in an overlap once per FOV that saw it (D5). | (a) The levels above as sums over the FOVs, each read in an overlap counted once per FOV that saw it, the figure saying so, and the last level checked against `sample.h5ad`. (b) Remove the reads of overlaps from the levels above before summing, which needs a cross-FOV duplicate rule for reads that no record holds; D5 set this aside. (c) No sample total for the levels above, per-FOV values only; D5 set this aside. | **(a)**, settled by D5; recorded here, not reopened. The report records both numbers of the check. |
-| 9 | The route after fusion's population accounting has no `duplicate_observation` reasons and null flags (`export.json` `assembly.counts`; W-384 synthetic run: 9 cells in, 9 retained), and its `fovs.csv` `n_cells` is the sample cells attributed to the FOV by its ownership centroid ({doc}`sample-segmentation-contract`, "The FOVs"). | (a) Follow the assembly record of the route the export records: the reasons that do not exist on the route after fusion are absent, not zero. (b) One accounting form for both routes, with zero for the reasons the route does not have; A1 set this aside, and D1 forbids showing a missing value as zero. | **(a)**, settled by A1; recorded here, not reopened ({doc}`report-contract`, "The two routes"). |
-| 10 | The mockup's colour control "Cells per mm²" shows a density; A1 defines it as the retained cells attributed to a FOV divided by the area of the region it owns, which no record holds (G6). | See G6 for where the area comes from. For the unit: (a) cells per mm², as the mockup labels it; (b) cells per µm², the unit of the sample frame. | **(a)**: cells per mm², computed from the area of G6 (the numbers per µm² are below 0.01 for tissue). |
-| 11 | The comparison of the two routes (`compare_routes`, {doc}`sample-segmentation-contract`) writes a record of its own. | (a) The report does not read it. (b) The report reads and shows its record when one exists; A3 set this aside. | **(a)**, settled by A3; recorded here, not reopened. |
+| 4 | The application entry's QC record summarises a chain of one translation as `kind: dense` with displacement statistics (the source-inventory run's finding 7). | (a) The report reads no transform from QC records. (b) Read the estimation entries' summaries. | **(a)**: the shifts come from the transforms record (G2); the alignment score is the application entry's `qc.values.ncc_after`, which is the score settled decision 5 names ("for the whole chain of a round"). |
+| 5 | The mockup's Files section names a marker file; settled decision 4 puts the markers in the report configuration. | (a) The Files section lists the report configuration (the `report` block), with its markers, and no marker file. (b) A separate marker file beside the report, as the mockup draws it; settled decision 4 set this aside. | **(a)**, as settled decision 4 decides; recorded here, not reopened. |
+| 6 | The earlier pipeline's quantities differ from the Python records: its three shift numbers are (−dx, +dy, −dz) of the Python displacement (the source-inventory run's `tables/shift_compare.csv`), its spots are found on another round, its good reads are what is left after two drops. | (a) The report reads the Python records only; the earlier logs serve the provisional limits of the source-inventory run only. (b) The report also shows the earlier logs. | **(a)**. A sample analysed before enters through its export (amendment 2). |
+| 7 | The scope's per-FOV lane names segmentation and assignment, which are not steps of `FOV.run`: they are `FOV.segment` and `FOV.assign_molecules` with their own records (`segmentation.json`, `assignment.json`), on the route per FOV only; on the route after fusion segmentation is a part of the export. | (a) The per-FOV lane shows them from their records on the route per FOV, and the per-sample lane shows `segment` on the route after fusion. (b) Leave them out. | **(a)**, as amendment 1 requires. |
+| 8 | The sample totals end with the reads assigned to cells, which equal the sum of `sample.h5ad`'s whole counts; the levels above are sums over FOVs that count a read in an overlap once per FOV that saw it (settled decision 5). | (a) The levels above as sums over the FOVs, each read in an overlap counted once per FOV that saw it, the figure saying so, and the last level checked against `sample.h5ad`. (b) Remove the reads of overlaps from the levels above before summing, which needs a cross-FOV duplicate rule for reads that no record holds; settled decision 5 set this aside. (c) No sample total for the levels above, per-FOV values only; settled decision 5 set this aside. | **(a)**, as settled decision 5 decides; recorded here, not reopened. The report records both numbers of the check. |
+| 9 | The route after fusion's population accounting has no `duplicate_observation` reasons and null flags (`export.json` `assembly.counts`; the source-inventory run's synthetic run: 9 cells in, 9 retained), and its `fovs.csv` `n_cells` is the sample cells attributed to the FOV by its ownership centroid ({doc}`sample-segmentation-contract`, "The FOVs"). | (a) Follow the assembly record of the route the export records: the reasons that do not exist on the route after fusion are absent, not zero. (b) One accounting form for both routes, with zero for the reasons the route does not have; amendment 1 set this aside, and settled decision 1 forbids showing a missing value as zero. | **(a)**, settled by amendment 1; recorded here, not reopened ({doc}`report-contract`, "The two routes"). |
+| 10 | The mockup's colour control "Cells per mm²" shows a density; amendment 1 defines it as the retained cells attributed to a FOV divided by the area of the region it owns, which no record holds (G6). | See G6 for where the area comes from. For the unit: (a) cells per mm², as the mockup labels it; (b) cells per µm², the unit of the sample frame. | **(a)**: cells per mm², computed from the area of G6 (the numbers per µm² are below 0.01 for tissue). |
+| 11 | The comparison of the two routes (`compare_routes`, {doc}`sample-segmentation-contract`) writes a record of its own. | (a) The report does not read it. (b) The report reads and shows its record when one exists; amendment 3 set this aside. | **(a)**, settled by amendment 3; recorded here, not reopened. |
 | 12 | The legacy notebook stays in `workflow/notebook/` and reads files nothing writes. | (a) Leave it, and say in `docs/migration.md` that the report replaces it. (b) Remove it with the implementation. | **(a)**; its removal is a later choice. |
+
+% D5, W-384, D4, A2, A1, D1, A3
