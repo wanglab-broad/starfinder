@@ -1,15 +1,18 @@
 # Synthetic sample scene: multi-FOV acquisition and a minimal cellular scene
 
-Status: Accepted (W-329, 2026-10-07, at 9033d46)
+% Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page specifies a bounded, opt-in addition to the synthetic generator of
 {doc}`synthetic-specification`: one scene of sample size in continuous coordinates, a
 nominal grid of FOVs acquired from it at true offsets with a known fractional jitter, a
 minimal cellular scene (nucleus and cell label volumes and a nuclear stain), cell truth for
-every molecule, per-FOV truth, and the path by which per-FOV truth labels enter the §2.9
-mask import. It gives §2.10 the two kinds of truth that real data cannot give: the true
-offset of every FOV, in 3D and with a fractional part, and the knowledge of which FOVs see
-each true cell and molecule. It is also a fixture that §2.11 measurement QC can use later.
+every molecule, per-FOV truth, and the path by which per-FOV truth labels enter the
+segmentation's mask import. It gives stitching and assembly the two kinds of truth that
+real data cannot give: the true offset of every FOV, in 3D and with a fractional part, and
+the knowledge of which FOVs see each true cell and molecule. It is also a fixture that the
+processing report's measurement QC can use later.
+
+% the §2.9 mask import; It gives §2.10; §2.11 measurement QC
 
 It builds on these pages and redefines none of them:
 
@@ -26,35 +29,39 @@ It builds on these pages and redefines none of them:
 
 It is implemented in `starfinder.synthetic`, no existing generator behavior changes and
 nothing is renamed. The validation designs that use the scene are
-{doc}`stitching-assembly-validation` and {doc}`synthetic-cellular-scene-validation`; this page
+{doc}`stitching and assembly validation design <stitching-assembly-validation>` and {doc}`synthetic-cellular-scene-validation`; this page
 states the identities a test can check, not the validation plan.
 
 ## What this addition is not
 
-* It does **not establish the accuracy of a segmenter.** The §2.9 methods, learned ones
+* It does **not establish the accuracy of a segmenter.** The segmentation methods, learned ones
   included, run on the cellular scene of {doc}`synthetic-cellular-scene` as an engineering
-  check of the chain (D1 of the §2.12 planning decisions), never as a measure of a method's
-  quality, and no segmentation accuracy is claimed from it.
+  check of the chain (the first of the synthetic data's planning decisions), never as a
+  measure of a method's quality, and no segmentation accuracy is claimed from it.
 * It is **not a calibrated tissue model.** In this scene nuclei are smooth ellipsoids,
   cells are power-diagram territories and molecules are uniform within them; the cellular
   scene of {doc}`synthetic-cellular-scene` adds lobed and touching nuclei, cell types and
   placement by compartment; its real-appearance scene places real nuclei and culture cells
-  instead. Sizes and densities are development targets, set there from W-393's
-  measurements of method labels, not fitted to tissue and not a D04 calibration.
+  instead. Sizes and densities are development targets, set there from the context
+  measurements of method labels, not fitted to tissue and not a calibration.
 * It does **not use microsim** or any other new rendering dependency (Jiahao,
   2026-10-05). Everything is rendered by the existing analytic model or by closed-form
   functions evaluated at voxel centres, with NumPy and SciPy, which are already locked.
 * It does not model stage drift, rotation, illumination differences between FOVs,
   photobleaching in overlaps or cross-FOV cell matching.
 
+% The §2.9 methods; D1 of the §2.12 planning decisions; W-393's measurements; not a D04 calibration
+
 ## Settled decisions this page follows
 
-* **The §2.12 scope is amended** for multi-FOV and cellular synthetic truth, without
-  microsim (D7 of the W-152 comment "§2.10 planning decisions (2026-10-05)"). The §2.12
+* **The synthetic data's scope is amended** for multi-FOV and cellular synthetic truth,
+  without microsim (the stitching planning decisions of 2026-10-05). The synthetic data's
   milestone had excluded cellular masks and assignment truth; this page is the bounded
-  addition. W-93 keeps canonical responsibility for synthetic truth and reproducibility.
+  addition. Canonical responsibility for synthetic truth and reproducibility stays with the
+  synthetic truth work.
 * **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
-  and `Dataset.export` (D3, as amended at the W-329 review of 2026-10-06);
+  and `Dataset.export` (a stitching planning decision, as amended at this page's review of
+  2026-10-06);
   `Dataset.export` calls `assemble`, `fuse_images`, `fuse_labels` and `export_spatialdata` in
   order ({doc}`sample-output-contract`, "The export entry"); ownership regions are
   computed in assemble. The scene feeds those entries; it adds no entry of its own to the
@@ -63,6 +70,9 @@ states the identities a test can check, not the validation plan.
   translations; no rotation or deformation of a FOV against the sample is generated.
 * **Retention** (2026-09-27, {doc}`assembly-contract`): cells by centroid, no cross-FOV
   matching. The scene provides truth to measure that policy, not a replacement for it.
+
+% The §2.12 scope is amended (D7 of the W-152 comment "§2.10 planning decisions (2026-10-05)"); the §2.12 milestone;
+% W-93 keeps canonical responsibility; (D3, as amended at the W-329 review of 2026-10-06)
 
 ## Terms
 
@@ -84,11 +94,13 @@ states the identities a test can check, not the validation plan.
 * A FOV's **footprint** is that of {doc}`assembly-contract`: per axis
   `[origin − s/2, origin + (n − ½)·s)`. In index units, a position `p` is in the
   footprint exactly when `−0.5 ≤ p < n − 0.5` on every axis, which is the "inside" test of
-  §2.9 coordinate sampling (`0 ≤ floor(p + 0.5) < n`).
+  the assignment's coordinate sampling (`0 ≤ floor(p + 0.5) < n`).
 * A **seed** is one generated cell: an ordinary cell has one nucleus, a binucleate cell
   two, an empty cell none.
 * A **site** is one sphere of the power diagram: one per nucleus, and one virtual sphere
   per empty cell.
+
+% §2.9 coordinate sampling
 
 ## Opt-in, and what stays as it is
 
@@ -120,8 +132,10 @@ The implementation must keep, by construction:
   module (`test_old_generator_api_is_removed`,
   `test_package_imports_no_persistence_or_checkpoint_modules`), and the synthetic sources
   name no issue or artifact contract (`test_no_artifact_contract_or_issue_references`). The
-  no-segmenter path therefore writes plain files, and the consumer builds the §2.9 inputs
-  from them.
+  no-segmenter path therefore writes plain files, and the consumer builds the segmentation
+  and assignment inputs from them.
+
+% the §2.9 inputs
 
 **Existing tests that must pass unchanged** (no edit to any assertion, fixture or pinned
 value):
@@ -140,10 +154,12 @@ value):
   `test_preprocessing_synthetic_evaluation.py`,
   `test_preprocessing_calibrated_evaluation.py`, `test_image_statistics.py`,
   `test_segmentation_labels.py`, `test_segmentation_segment.py` and
-  `test_dataset_channels.py`; (W-573 later replaced R6's `PINNED_CAL_141C093` and that
-  folder with the equal explicit expected values of `test/data/expected/test_readout_validation/`.)
+  `test_dataset_channels.py`; (on 2026-10-25 R6's `PINNED_CAL_141C093` and that folder
+  were replaced with the equal explicit expected values of `test/data/expected/test_readout_validation/`.)
 * the session fixture `small_dataset` of `conftest.py` with its recorded
   `SMALL_DATASET_GENERATOR` (`generator_version` 6, `benchmark-presets-v1`).
+
+% (W-573 later replaced R6's `PINNED_CAL_141C093`)
 
 **Preset outputs whose digests stay bit-identical**, for the same seed, NumPy build and
 CPU (the repeatability limit of {doc}`synthetic-specification`, "Random streams"):
@@ -326,16 +342,20 @@ The true origin of FOV `f` is `true_f = nominal_f + j_f ⊙ s` with `j_f` in vox
 
 | Option | Rule | Cost | What it tests |
 | --- | --- | --- | --- |
-| **J1. Bounded uniform, independent per FOV and axis (recommended)** | `j_{f,a} = J_a · (2u − 1)`, `u ~ U[0, 1)` from the stream `sample.jitter` of FOV `f`, drawn z, y, x in order. Continuous draws have a fractional part on every axis with probability 1; a preset test checks that every axis of every FOV has a non-integer jitter. | Three draws per FOV; the bound makes the overlap rule above a guarantee. | Sub-voxel recovery in every axis, independent of the grid structure; the corrections W-324 compared ("removing the mean translation"). |
+| **J1. Bounded uniform, independent per FOV and axis (recommended)** | `j_{f,a} = J_a · (2u − 1)`, `u ~ U[0, 1)` from the stream `sample.jitter` of FOV `f`, drawn z, y, x in order. Continuous draws have a fractional part on every axis with probability 1; a preset test checks that every axis of every FOV has a non-integer jitter. | Three draws per FOV; the bound makes the overlap rule above a guarantee. | Sub-voxel recovery in every axis, independent of the grid structure; the corrections the stitching parity runs compared ("removing the mean translation"). |
 | J2. Truncated Gaussian | `j ~ N(0, σ_a²)` truncated at `±J_a` by redrawing | As J1, plus a redraw loop; the same bound. | As J1, with most offsets small and a few near the bound. |
-| J3. Linear trend plus J1 residual | `j_f = g ⊙ (col_f, row_f, 0) + J1 residual` with a supplied per-column and per-row slope `g` | Two more parameters; the bound applies to the total. | A systematic per-column drift like the 1.7 px per column trend W-324 measured between the backends on LN (notes section 2.2); a gauge that removes only the mean leaves the trend visible. |
+| J3. Linear trend plus J1 residual | `j_f = g ⊙ (col_f, row_f, 0) + J1 residual` with a supplied per-column and per-row slope `g` | Two more parameters; the bound applies to the total. | A systematic per-column drift like the 1.7 px per column trend the stitching parity runs measured between the backends on LN (their notes, section 2.2); a gauge that removes only the mean leaves the trend visible. |
+
+% J1: the corrections W-324 compared; J3: the trend W-324 measured (notes section 2.2)
 
 **Recommendation: J1**, with `jitter="supplied"` always available for hand-chosen cases
-(for example an integer jitter against the nominal grid, as the W-324 cut fixtures used,
+(for example an integer jitter against the nominal grid, as the stitching parity runs' cut fixtures used,
 or a known trend). J1 is the simplest law whose bound
 guarantees the overlap rule, it isolates sub-voxel placement error from systematic error,
 and its truth is three numbers per FOV. J3 is the natural next step if the validation
 design needs a trend; it can be written as a supplied table today.
+
+% as the W-324 cut fixtures used
 
 ### Rendering each FOV at its true offset
 
@@ -426,8 +446,10 @@ which is what `placed_metadata` returns for a placement holding the true origins
 tolerance covers float64 rounding: the generator computes `p` with one subtraction and one
 division and the test inverts them with one multiplication and one addition, each with
 relative error at most 2⁻⁵³, on positions below 10⁴ µm, so the error is below 1e-11 µm;
-1e-9 µm is 1e-8 of the smallest spacing in use (0.0946 µm, W-323 `inputs.md`), so no
-voxel-level error can hide inside it.
+1e-9 µm is 1e-8 of the smallest spacing in use (0.0946 µm, the stitching input
+inventory's `inputs.md`), so no voxel-level error can hide inside it.
+
+% W-323 `inputs.md`
 
 Two further identities tie the rendered images to the truth, with noise disabled and
 float64 accumulation:
@@ -521,17 +543,21 @@ volumes.
 | --- | --- | --- | --- |
 | **L1. Ellipsoidal nuclei, power-diagram territories with a reach (recommended)** | As above. | Brute force over sites: one `(points × sites)` power-distance evaluation in blocks of 2¹⁸ points; about 4.3·10⁷ point-site pairs for the `slow` preset. Closed form, exact, no new dependency. | A label is defined at every point, so labels at fractional offsets need no resampling; cells have flat shared faces and rounded outer edges; a nucleus is always inside its cell. |
 | L2. Ellipsoidal nuclei, Voronoi territories of the centres | `j*` by `‖σ − c_j‖` instead of the power distance | As L1. | A large nucleus beside a small one can cross the bisector, so the gap rule must grow to `2 · max R`, which wastes space; otherwise the same. |
-| L3. Raster on the sample grid, then `expand_labels` | Rasterize the nuclei on the sample grid and grow territories with the §2.9 `expand_labels` | Imports `starfinder.segmentation` into the generator; cost of one distance transform of the sample grid. | Labels exist only at sample-grid voxels: a FOV at a fractional offset would need a resampled label image, which breaks "the per-FOV labels are the sample labels restricted to the FOV", and the truth would depend on the code it is meant to check. |
+| L3. Raster on the sample grid, then `expand_labels` | Rasterize the nuclei on the sample grid and grow territories with the segmentation's `expand_labels` | Imports `starfinder.segmentation` into the generator; cost of one distance transform of the sample grid. | Labels exist only at sample-grid voxels: a FOV at a fractional offset would need a resampled label image, which breaks "the per-FOV labels are the sample labels restricted to the FOV", and the truth would depend on the code it is meant to check. |
+
+% L3: the §2.9 `expand_labels`
 
 **Recommendation: L1.** It is the only option whose labels are exact at every FOV offset,
 it keeps the generator independent of the segmentation code it validates, and its
 guarantees (one cell per point, nucleus inside cell) are proved by the construction
 rather than tested after the fact.
 
-**Optional cases.** `empty` (default 0) gives cells without a nucleus, which §2.9 assign
+**Optional cases.** `empty` (default 0) gives cells without a nucleus, which assignment
 reports as `excluded_no_nucleus`; `binucleate` (default 1 in the library, as in the tiny
-preset) gives cells with two nuclei, which §2.9 counts with `n_nuclei` 2. Both are
+preset) gives cells with two nuclei, which assignment counts with `n_nuclei` 2. Both are
 ordinary seeds otherwise: the same territory rule, molecules and truth.
+
+% which §2.9 assign reports; which §2.9 counts
 
 ### Label volumes
 
@@ -572,8 +598,10 @@ the reference round takes this role.
 | Option | Pre-noise signal | Cost | Consequence |
 | --- | --- | --- | --- |
 | **St1. Analytic soft-edged ellipsoid per nucleus (recommended)** | `S(σ) = Σ_n A_n · ½ erfc((ρ_n(σ) − 1) · r̄_n / (√2 · w))`, `r̄_n` the geometric mean of the semi-axes, `w = edge_width`; exactly 0 where `ρ_n > 1 + 4w / min(a)`. Evaluated at each FOV voxel centre `true_f + p ⊙ s`, then the existing observation stages (tissue background, baseline, dependent and read noise, optional correlated noise, cast; stages 8 to 11 of {doc}`synthetic-specification`) with the stain's own streams. | One new closed-form kernel (`scipy.special.erfc`, locked) over each nucleus's bounding box; per FOV a few nuclei times their box voxels. | The stain plateau coincides with the nucleus label up to the edge width, so a threshold of the stain reproduces the labels to within the edge width for nuclei much larger than it; exact at fractional offsets. |
-| St2. One Gaussian per nucleus through the amplicon kernel | Each nucleus is a formed molecule with `sz = a_z / 2`, `sl = a_l / 2`, elongation and angle of the nucleus, rendered by stage 7 into a one-channel image, then the same observation stages | No new kernel at all. | Nuclei are blobs without an edge; the label boundary is not visible in the stain, so stain-derived masks disagree with the truth by construction. Enough for stitching, not for §2.11 measurement QC. |
+| St2. One Gaussian per nucleus through the amplicon kernel | Each nucleus is a formed molecule with `sz = a_z / 2`, `sl = a_l / 2`, elongation and angle of the nucleus, rendered by stage 7 into a one-channel image, then the same observation stages | No new kernel at all. | Nuclei are blobs without an edge; the label boundary is not visible in the stain, so stain-derived masks disagree with the truth by construction. Enough for stitching, not for the processing report's measurement QC. |
 | St3. Partial-volume raster and blur per FOV | Average the indicator of each nucleus over `k³` sub-voxel points of every FOV voxel, then convolve with a Gaussian on a grid padded by the kernel radius | `k³` evaluations per voxel (27 at `k = 3`) and one padded convolution per FOV. | The closest to an optical image; exact at fractional offsets because the raster is per FOV, but the blur's padding must reach beyond the FOV and costs more than the rest of the stain. |
+
+% St2: not for §2.11 measurement QC
 
 **Recommendation: St1.** It renders the stain from the same nuclei as the labels, with
 one closed-form expression evaluated at voxel centres, and it reuses the observation
@@ -661,7 +689,7 @@ molecule keeps its ID in every FOV that renders it (the FOV namespace differs).
   * `z`, `y`, `x`: the reference-round index position `p`;
   * `in_footprint`: `−0.5 ≤ p < n − 0.5` on every axis;
   * `fov_cell_label` and `fov_nucleus_label` (uint32 or null): the value of the FOV's
-    cell and nucleus label image at the voxel `floor(p + 0.5)`, which is what §2.9 assign
+    cell and nucleus label image at the voxel `floor(p + 0.5)`, which is what assignment
     samples. The value 0 is kept as 0: the voxel is in the grid and in no cell (no
     nucleus). Null means that nothing was sampled: the voxel is outside the grid, or the
     scene has no cellular scene and so no label image. With a cellular scene,
@@ -675,7 +703,7 @@ molecule keeps its ID in every FOV that renders it (the FOV namespace differs).
   `true_nucleus_id` where `N(σ) = 0`, "Cell truth for molecules"). A sampled value `v` is
   compared with a truth ID by this rule, the same for the cell and the nucleus label:
 
-  | Sampled value `v` | Meaning | §2.9 assign (without expansion) | Compared with the truth ID |
+  | Sampled value `v` | Meaning | Assignment (without expansion) | Compared with the truth ID |
   | --- | --- | --- | --- |
   | `k > 0` | in the grid, in cell (nucleus) `k` | cell label: `assigned` or `excluded_cell` with `cell_id` `k`; nucleus label: `nucleus_id` `k` | agrees exactly when the truth ID is `k`; a null truth ID disagrees |
   | `0` | in the grid, in no cell (no nucleus) | cell label: `unassigned`, `cell_id` null; nucleus label: `nucleus_id` 0 | agrees exactly when the truth ID is null |
@@ -696,6 +724,8 @@ molecule keeps its ID in every FOV that renders it (the FOV namespace differs).
   in that FOV's footprint. `molecules.csv` and `cells.csv` have `fov_ids` (`;`-joined,
   table order) and `n_fovs` by these rules, for sample and halo content alike.
   `cells.csv` also has `label_fov_ids`: the FOVs whose label image holds the cell.
+
+% which is what §2.9 assign samples; the column "§2.9 assign (without expansion)"
 
 ### Identities a test can check
 
@@ -788,13 +818,17 @@ identity 3 applies: there are no label images, no `nuclei.csv` and no cell rows,
    `fov_cell_label` 0 and a null `true_cell_id`, and `label_agrees` is true. The number of
    rows with `label_agrees` false is reported per FOV. On the other rows (rendered in the
    margin, outside the grid) nothing is sampled: `fov_cell_label` and `label_agrees` are
-   null, and these rows are excluded from the count. It separates the §2.9 sampling rule
-   from assignment and assembly errors in the validation.
+   null, and these rows are excluded from the count. It separates the assignment's
+   sampling rule from assignment and assembly errors in the validation.
+
+% the §2.9 sampling rule
 
 ## The path that needs no segmenter
 
-Per FOV, the truth labels enter through the §2.9 mask import, so that assignment and
+Per FOV, the truth labels enter through the segmentation's mask import, so that assignment and
 assembly can be compared with sample-level truth without running a segmenter:
+
+% the §2.9 mask import
 
 1. **Labels.** `import_labels(fovs/<f>/labels/cells.tif, grid=ReferenceGrid(n,
    fov_metadata[f], source="declared"), target="cell",
@@ -813,7 +847,7 @@ assembly can be compared with sample-level truth without running a segmenter:
    unchanged; its `spot_id` `csv:<row>` maps to `amplicon_id` through `csv_row`. The
    synthetic package writes the CSV and never imports `starfinder.assignment`. This is
    a different, one-based file from the zero-based `fovs/<fov_id>/molecules.csv` that
-   `FOV.export_spots` writes under an output root (W-562; {doc}`migration`).
+   `FOV.export_spots` writes under an output root ({doc}`migration`).
 3. **Assign and assemble.** `assign_molecules` per FOV, then `assemble(placement,
    inputs)`: with the placement from `stitch` on the stain images (the full chain), or with
    one built from the placement truth by `placement_from_table` (assembly alone; see
@@ -822,6 +856,8 @@ assembly can be compared with sample-level truth without running a segmenter:
    `molecule_fovs.csv` by cell ID and amplicon ID. The sample truth is the rows with
    `in_sample` true. Halo rows are observations at the edge of the acquisition that the
    FOVs may or may not see, and they are reported separately.
+
+% (W-562; {doc}`migration`)
 
 The validation itself (which comparisons, which numbers) belongs to the validation
 design; this page fixes only the inputs and their identities. The placement from the
@@ -891,7 +927,7 @@ are off (required), and the per-round geometry is a translation only.
 | --- | --- | --- |
 | Grid | 2 × 2 FOVs | 3 × 3 FOVs |
 | FOV shape (voxels) | 5 × 36 × 36 | 14 × 96 × 96 |
-| Spacing (µm) | 1.0, 0.5, 0.5 | 0.346255, 0.194398, 0.194398 (the raw LN calibration, W-323 `inputs.md`) |
+| Spacing (µm) | 1.0, 0.5, 0.5 | 0.346255, 0.194398, 0.194398 (the raw LN calibration, the stitching input inventory's `inputs.md`) |
 | Overlap | 1/3 (12 voxels) | 0.25 (24 voxels) |
 | Jitter bound (voxels, J1) | 0.4, 1.5, 1.5 | 0.8, 4.5, 4.5 |
 | Per-round translation bound (voxels) | 0, 1, 1 | 1, 2, 2 |
@@ -906,6 +942,8 @@ are off (required), and the per-round geometry is a translation only.
 | Amplicon appearance | constant A 100, sz = sl = 1, no readout effect, no background, Gaussian read noise σ 1; float64 accumulation (for the oracle identities) | the benchmark appearance of `benchmark-presets-v1` (`_appearance` at float32: lognormal brightness and widths, trend 0.95, 5 % crosstalk, baseline, gradient and regions placed by fractions of the sample grid, Poisson and read noise); float32 accumulation |
 | Stain | `StainConfig()` | `StainConfig()` |
 | Voxel values rendered | 440,640 (4 FOVs × 6,480 voxels × 17 images) | 19,740,672 (9 × 129,024 × 17) |
+
+% W-323 `inputs.md`
 
 **Resource estimate** (from array sizes and the existing peak formula
 `_estimate_peak_bytes` of `_presets.py`; nothing here is a measurement):
@@ -923,11 +961,11 @@ are off (required), and the per-round geometry is a translation only.
   implementation measures it with `--durations=0` and `/usr/bin/time -v`; if a test that
   generates it takes 5 s or more, that test is marked `slow`, and the routine tier uses
   the same grid with 3 × 36 × 36 FOVs.
-* **`sample-small-v1`, inside the `slow` bound of the §2.10 exceptions.** Its sample grid
+* **`sample-small-v1`, inside the `slow` bound of the stitching exceptions.** Its sample grid
   of 16 × 249 × 249 is within the bound of one scene of at most 16 × 256 × 256 cut into at
   most a 3 × 3 grid of overlapping tiles, the synthetic cut-fixture bound of the batch
-  (the W-324 fixture used one 16 × 256 × 256 scene and 3 × 3 tiles of 14 × 120 × 120,
-  W-324 notes section 2.5). Peak working memory per FOV and round: 153 MiB by the formula;
+  (the stitching parity runs' fixture used one 16 × 256 × 256 scene and 3 × 3 tiles of
+  14 × 120 × 120, their notes, section 2.5). Peak working memory per FOV and round: 153 MiB by the formula;
   label volumes 7.6 MiB (sample) plus 1 MiB per FOV; the power-diagram evaluation in
   blocks of 2¹⁸ points holds about 0.2 GiB of temporaries; all FOV images held in memory
   (without `on_fov`) are 71 MiB in float32. Estimated peak RSS below 1 GiB beside the
@@ -941,6 +979,8 @@ are off (required), and the per-round geometry is a translation only.
   {doc}`synthetic-cellular-scene` use 3 × 3 FOVs of 16 × 256 × 256, under their own
   resource grant; the generator sets no upper bound, as today, and the caller owns memory
   and time.
+
+% the §2.10 exceptions; the W-324 fixture (W-324 notes section 2.5)
 
 ## Truth schema
 
@@ -986,7 +1026,9 @@ schema per table, and versions the addition independently of generator version 6
 ```
 
 This scene file is one-based and differs from the zero-based `molecules.csv` that
-`FOV.export_spots` writes (W-562).
+`FOV.export_spots` writes.
+
+% `FOV.export_spots` writes (W-562)
 
 Units are in the column names' tables above: µm in the sample frame, voxel indices in
 the FOV frame, radians for angles; IDs are strings except the uint32 label values
@@ -1027,6 +1069,8 @@ the ellipsoid columns null, versioned by `APPEARANCE_TRUTH_VERSION` in `appearan
 No implementation and no change to the generator, its presets or its tests; no microsim
 or other new rendering dependency, no calibration to real tissue (the development targets
 of {doc}`synthetic-cellular-scene` are not one); no claim about segmentation accuracy, and
-no segmenter run on this scene as a measure of its quality; no change to the §2.9 or §2.10 contracts (the need of the
+no segmenter run on this scene as a measure of its quality; no change to the segmentation, assignment, stitching or assembly contracts (the need of the
 no-segmenter path that they still do not meet is listed in the worker notes); no rotation, illumination model, stage
 drift (beyond a supplied jitter table) or cross-FOV cell matching.
+
+% the §2.9 or §2.10 contracts

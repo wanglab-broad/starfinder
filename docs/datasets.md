@@ -2,9 +2,11 @@
 
 This is the human-readable inventory of STARfinder development and historical
 benchmark inputs. Register IDs D01–D08, experiment readiness and scientific
-qualification are owned by the Chapter II benchmark register, which is maintained
+qualification are owned by the benchmark register, which is maintained
 outside this repository. Availability does **not** qualify an input for an
 experiment. In particular, no entry here qualifies D04.
+
+% the Chapter II benchmark register
 
 ## Identity, versions and verification
 
@@ -39,13 +41,15 @@ Python rounds are **ZYXC**. “2D” in a dataset name does not mean Z=1.
 
 ## Real sequencing inputs
 
-Local root `R = /home/unix/jiahao/wanglab/Data/Processed/sample-dataset`.
+Local root `R`, a private location on the lab machine.
 Historical common accession: **10.5281/zenodo.11176779**. Its association with each
 local file/version has not been verified; do not treat that citation as a checked
 archive-to-file lineage. These are real STARmap-related sequencing inputs; the
 precise assay/specimen and upstream processing provenance remain unverified.
 Filenames include `cmle`, but the exact restoration recipe/version is unknown.
 They are inputs to STARfinder, not established raw acquisition data.
+
+% Local root `R = /home/unix/jiahao/wanglab/Data/Processed/sample-dataset`.
 
 | Register / local version | State; location | FOVs and rounds | Sampled shape / dtype | Codebook and channels | Intended use / limits |
 | --- | --- | --- | --- | --- | --- |
@@ -110,33 +114,41 @@ to `benchmark-presets-v1/small` is a register decision.
 
 ### Calibrated development preset
 
-`calibrated-development-v1` (`calibrated_scene_preset`, W-241) is a development
-calibration against the W-238 processed-image statistics
+`calibrated-development-v1` (`calibrated_scene_preset`) is a development
+calibration against the measured processed-image statistics
 ([image statistics](image-statistics.md)); it is **not D04**, not a benchmark
 calibration and qualifies no dataset. Scenes are generated on demand; nothing is
 stored in the repository.
 
+% (`calibrated_scene_preset`, W-241); the W-238 processed-image statistics
+
 | Version | ZYX / dtype | Amplicons per FOV | Conditions | Codebooks |
 | --- | --- | --- | --- | --- |
-| `calibrated-development-v1` | `(8,64,64)`, uint8 or uint16 | 80, lognormal brightness | The 13 §2.5 evaluation conditions (`CALIBRATED_CONDITIONS`) | `balanced` (16 genes) or `unbalanced` |
+| `calibrated-development-v1` | `(8,64,64)`, uint8 or uint16 | 80, lognormal brightness | The 13 preprocessing evaluation conditions (`CALIBRATED_CONDITIONS`) | `balanced` (16 genes) or `unbalanced` |
+
+% The 13 §2.5 evaluation conditions
 
 Every condition, including `clean`, carries the calibrated baseline: a uniform
 pedestal, Poisson, white and spatially correlated noise, non-uniform channel
 gains and a mild round trend. uint8 is the measured scale. uint16 uses the same
 calibrated shape with every intensity multiplied by 16 (the ratio of the
 benchmark presets); **the uint16 scale is unverified against real data**,
-because W-238 measured only 8-bit exports. The side-by-side comparison with the
-W-238 targets is a run record outside the repository.
+because the processed-image statistics measured only 8-bit exports. The side-by-side
+comparison with those targets is a run record outside the repository.
+
+% because W-238 measured only 8-bit exports; the W-238 targets
 
 ## Historical synthetic sequencing inputs
 
 These are synthetic Gaussian **processed-image** scenes from the historical
 generator (`SyntheticConfig`, removed from the package), not simulated original
 RNA populations, raw microscopy, cell masks or calibrated tissue. Local benchmark
-root `B = /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark`. All listed
+root `B`, a private location on the lab machine. All listed
 stored sequencing versions declare four rounds/four channels, two FOVs
 (`FOV_001`, `FOV_002`) and seed 42 unless marked unknown. Physical spacing and
 units are unknown; use voxel-index geometry, not invented micrometres.
+
+% Local benchmark root `B = /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark`.
 
 | Stable catalog version / register | Location and state | ZYX / dtype | Identity/configuration and limits |
 | --- | --- | --- | --- |

@@ -1,6 +1,6 @@
 # Synthetic real-appearance guide: nuclei and culture cells sampled from real images
 
-Status: Accepted (W-515, 2026-10-16, at 71ef8a1)
+% Status: Accepted (W-515, 2026-10-16, at 71ef8a1)
 
 This page is the maintained guide to the real-appearance scene of `starfinder.synthetic`:
 the cellular scene whose nuclei and culture cells are sampled from real images.
@@ -41,7 +41,7 @@ chain checks and the execution conditions. The scene builds on
 {doc}`synthetic guide <synthetic-specification>`.
 
 This page specifies an appearance model for the cellular scene of
-{doc}`synthetic-cellular-scene` (Accepted at W-396, implemented by W-483 to W-486). In that
+{doc}`synthetic-cellular-scene` (accepted at its review gate and implemented since). In that
 scene every stain is a closed form. On the `slow` presets its nuclei are smooth, its
 texture stays below the real variation within a nucleus, its backgrounds miss the real
 ones and its shapes are too regular. On 2026-10-16 Jiahao judged the scenes too unlike
@@ -52,22 +52,25 @@ synthetic layout on a background assembled from real patches. The placed masks a
 truth. An operator prototype built such scenes for the three contexts, and Jiahao judged
 its round 10 good on the same day.
 
+% Accepted at W-396, implemented by W-483 to W-486
+
 The page builds on {doc}`synthetic-cellular-scene` and {doc}`synthetic-sample-scene` and
 edits neither. Every statement of {doc}`synthetic-cellular-scene` and
 {doc}`synthetic-cellular-scene-validation` that the scene changes is stated on those pages,
 as "Implementation" records. The validation design (target definitions, generator checks,
-consequences for the chain checks) belongs to W-514 and is
+consequences for the chain checks) belongs to the validation design and is
 {doc}`synthetic-real-appearance-validation`; where this page needs it, it names the open
-point. The gate W-515 accepted both pages on 2026-10-16, before any implementation.
+point. The review gate accepted both pages on 2026-10-16, before any implementation.
+
+% The validation design: W-514; the review gate: W-515
 
 **Sources.**
 
 * **Existing behaviour.** Statements cite the file and function at the batch's starting
   revision `eb333bc` as `<file>::<function>`, with files under `src/python/starfinder/`
   (for example `synthetic/_context.py::generate_cellular_scene`).
-* **The prototype.** "The prototype" is the operator's record
-  `runs/W-485/20261016T1714Z-operator-prototype/` under the artifact root
-  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/`:
+* **The prototype.** "The prototype" is the operator's record of the prototype, kept with
+  the run records outside the repository:
   * round 10, the reference result, is `round10/scripts/proto.py`, with its logs
     `round10/logs/<context>.log.json` (keys `proto` for the synthetic scene and `real_crop`
     for the held-out crop) and `round10/logs/<context>.run.log` (its timestamps and
@@ -77,36 +80,48 @@ point. The gate W-515 accepted both pages on 2026-10-16, before any implementati
     and round 2's are `logs/<context>.log.json` at the top of the folder;
   * `<context>` is `ln` (dense 3D), `tissue2d` or `culture`. A function of the prototype is
     cited as `proto.py::<function>`.
-* **This issue's measurements.** They are in the W-513 run directory
-  `runs/W-513/20261016T204608Z-f983442a/`, cited as "W-513" followed by a file under
-  `results/` and its row, for example W-513 `tables/visible_share_ln.csv` row
-  `ln/Position048/whole/DAPI-3D/nuclei-3D`. The definitions are in the docstring of its
-  `scripts/measure.py`.
-* **Other measurements.** W-393 is cited as {doc}`synthetic-cellular-scene` cites it
-  ("Sources").
+* **The appearance measurements.** The measurements made for this page are in their run
+  directory, kept with the run records outside the repository, and are cited as "measured"
+  followed by a file under `results/` and its row, for example measured
+  `tables/visible_share_ln.csv` row `ln/Position048/whole/DAPI-3D/nuclei-3D`. The
+  definitions are in the docstring of its `scripts/measure.py`.
+* **Other measurements.** The context measurements are named as
+  {doc}`synthetic-cellular-scene` names them ("Sources"); on this page "measured" always
+  means the appearance measurements.
+
+% The prototype: the operator's record `runs/W-485/20261016T1714Z-operator-prototype/` under the artifact root
+% `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/`.
+% The appearance measurements ("This issue's measurements"): the W-513 run directory
+% `runs/W-513/20261016T204608Z-f983442a/`, cited as "W-513" followed by a file, for example
+% W-513 `tables/visible_share_ln.csv`; "measured <file>" on this page is "W-513 <file>".
+% The context measurements: W-393.
 
 ## What this scene is not
 
 * It is **not a calibrated tissue model.** It is a collage of real nuclei and cells,
   augmented and placed by a synthetic rule. Their density, spacing and background are
   development choices, matched to measured targets. They are not fitted to tissue and they
-  are not a D04 calibration (D6). The **parameters are development targets.**
+  are not a calibration (the settled decisions below). The **parameters are development targets.**
 * **Its masks come from method labels.** The placed masks, which are the truth, are the
   labels a method made on the source images: StarDist `3D_spleen` in LN, StarDist via the
   legacy pipeline (`PI_label.tif`) in tissue-2D, and Cellpose `cpsam_v2` extended through z
   in the culture. They are neither annotation nor ground truth of the real images.
   StarDist's labels are star-convex and sit inside the visible nucleus: in the LN FOVs,
   0.93 to 0.97 of the label voxels are visible stain, while 0.75 to 0.85 of the visible
-  stain lies outside every label (W-513 `tables/visible_share_ln.csv`, rows
+  stain lies outside every label (measured `tables/visible_share_ln.csv`, rows
   `ln/<FOV>/whole/DAPI-3D/nuclei-3D`, columns `label_voxels_visible` and
   `visible_outside_labels`).
-* It **establishes no segmentation accuracy.** The §2.9 methods run on it as an
-  engineering check of the chain (D1), never as a measure of a method's quality. No
-  accuracy is claimed, no methods are compared and nothing is trained (D7). A method that
-  segments the scene well has segmented a collage of its own kind of labels; how W-514's
-  chain checks read that is W-514's claim boundary (open point).
+* It **establishes no segmentation accuracy.** The segmentation methods run on it as an
+  engineering check of the chain (the settled decisions below), never as a measure of a
+  method's quality. No accuracy is claimed, no methods are compared and nothing is trained
+  (the settled decisions below). A method that segments the scene well has segmented a
+  collage of its own kind of labels; how the validation design's chain checks read that is
+  its claim boundary (open point).
 * It is **not a learned generative model.** Nothing is trained, no GPU is used and no
   dependency is added. NumPy, SciPy and scikit-image, which are locked, do the work.
+
+% not a D04 calibration (D6); W-513 `tables/visible_share_ln.csv`; the §2.9 methods; chain (D1); trained (D7);
+% W-514's chain checks; W-514's claim boundary
 
 ## Settled decisions this page follows
 
@@ -117,14 +132,18 @@ point. The gate W-515 accepted both pages on 2026-10-16, before any implementati
   of the prototype is the reference result.
 * **Augmentation (Jiahao: rotations and small scaling).** Rotation about Z by any angle,
   flips, a scale of 0.9 to 1.1 and a gain of 0.9 to 1.1.
-* **Real data stays outside the repository (Jiahao, W-329).** No real-data record, bank
+* **Real data stays outside the repository (Jiahao, at the sample scene's review).** No real-data record, bank
   file or array derived from real images is committed, not even a small text file. Which
   images and labels a bank comes from is configuration per dataset, not code. The routine
   tier and the CI environment read no real data.
 * **Libraries over in-house code.** NumPy, SciPy and scikit-image functions are preferred
   to new in-house algorithms. There is no new dependency and no lock change.
-* **Unchanged from W-396.** D1, D6 and D7 as above. The resource grant RG1 covers scenes
-  up to 3 × 3 FOVs of 16 × 256 × 256, with one CPU, 16 GiB and 3,600 s per step.
+* **Unchanged from the cellular scene's review gate.** The engineering check of the chain,
+  the development targets that are not a calibration, and no accuracy, comparison or
+  training, as above. The resource grant RG1 covers scenes up to 3 × 3 FOVs of
+  16 × 256 × 256, with one CPU, 16 GiB and 3,600 s per step.
+
+% (Jiahao, W-329); Unchanged from W-396: D1, D6 and D7 as above
 
 ## Choices for the gate
 
@@ -154,9 +173,11 @@ and the prototype's choice named among the options. This list is the index.
 | RA19 | 2D tissue entries in a stack | TZ1, each 2D entry a column through the planes of the monolayer | not applicable (one plane) | "Layout" |
 | RA20 | Truth schema | AT2, new files beside the context layout, the ellipsoid columns null | not applicable | "Truth" |
 | RA21 | The morphology round | MO1, both rounds from the entry's own channels | not applicable | "The morphology round" |
-| RA22 | Target ranges and the visible stain | TG2, visible-stain targets for density and background, the other W-393 ranges kept | TG1 (measured beside the real crop) | "Target ranges" |
+| RA22 | Target ranges and the visible stain | TG2, visible-stain targets for density and background, the other ranges of the context measurements kept | TG1 (measured beside the real crop) | "Target ranges" |
 | RA23 | Presets | PR1, new appearance presets beside the six accepted ones, which stay closed-form | not applicable | "Presets" |
-| RA24 | The W-485 amendment on TR7 | AM1, it stands for the closed-form presets and does not apply to the appearance presets | not applicable | "The W-485 amendment on TR7" |
+| RA24 | The amendment of 2026-10-15 on TR7 | AM1, it stands for the closed-form presets and does not apply to the appearance presets | not applicable | "The amendment of 2026-10-15 on TR7" |
+
+% RA22: the other W-393 ranges kept; RA24: The W-485 amendment on TR7 (section "The W-485 amendment on TR7")
 
 ## Terms
 
@@ -196,9 +217,11 @@ and the prototype's choice named among the options. This list is the index.
   above the Otsu threshold of that smoothed image (`proto.py::vis_share`;
   `skimage.filters.threshold_otsu`).
 * The **plateau** of an image is the median over its labels of each label's median stain
-  (W-393's definition; `proto.py::plateau_of`).
+  (the context measurements' definition; `proto.py::plateau_of`).
 * The sample position `σ`, a FOV's voxel centres `true_f + p ⊙ s` and a point function are
   as in {doc}`synthetic-cellular-scene` ("Terms").
+
+% W-393's definition
 
 ## Opt-in
 
@@ -215,9 +238,11 @@ fields and values.
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
-| **E1. A new entry and configuration (recommended)** | `generate_appearance_scene(codebook, *, config=AppearanceSceneConfig(...), on_fov=None)`; `AppearanceSceneConfig` holds an unchanged `CellularSceneConfig` and the new parts. | One more entry; shared private functions, as W-483 shared those of the sample scene. | The accepted presets' outputs stay unchanged by construction; the new truth lives in new files ("Truth"). |
+| **E1. A new entry and configuration (recommended)** | `generate_appearance_scene(codebook, *, config=AppearanceSceneConfig(...), on_fov=None)`; `AppearanceSceneConfig` holds an unchanged `CellularSceneConfig` and the new parts. | One more entry; shared private functions, as the cellular scene's implementation shared those of the sample scene. | The accepted presets' outputs stay unchanged by construction; the new truth lives in new files ("Truth"). |
 | E2. A new optional field `appearance` on `CellularSceneConfig`, left out of the payload when None | As named. | A special case in `_payload`. | With `_payload` changed to write the field only when it is set, the accepted presets' `context.json` stays as it is, but `requested_config` holds the field for some configurations and not for others; every reader must know the case. |
 | E3. A new field and a new context truth version | As named. | Least code. | With `_payload` changed to write the field for every configuration, every accepted preset's `context.json` gains a key and a new version, against the exclusions of this batch. |
+
+% E1: as W-483 shared those of the sample scene
 
 **Recommendation: E1.**
 
@@ -249,7 +274,7 @@ class AppearanceScene:
     record: dict                           # versions, bank SHA-256, configuration, reached density, streams
 ```
 
-**What stays of W-483 to W-486.** The acquisition layout, `Ω`, `K` and the FOV jitter
+**What stays of the cellular scene's implementation.** The acquisition layout, `Ω`, `K` and the FOV jitter
 (`synthetic/_sample.py::_layout`, `generate_sample_scene`) stay. So do the cell types and
 molecules, placed by rejection with the label functions of this page
 (`synthetic/_context.py::_Context.molecules`), the morphology round's translation and
@@ -261,6 +286,8 @@ Under PL2 the packing (`synthetic/_context.py::_Context._place`), the nucleus sh
 background (`synthetic/_observation.py::_prepare_background`) are not used by a real
 bank. A closed-form bank uses them to render its entries.
 
+% What stays of W-483 to W-486
+
 ## The appearance bank
 
 **What an entry is (RA2).**
@@ -268,23 +295,32 @@ bank. A closed-form bank uses them to render its entries.
 | Option | Entry | Cost | Consequence |
 | --- | --- | --- | --- |
 | **EN1. A nucleus; in the culture a cell with its nucleus and both stains (recommended; prototype)** | Dense 3D: one StarDist nucleus with its DAPI. 2D tissue: one nucleus with its PI. Culture: one Cellpose cell (extended through z) with its largest nucleus label inside it, and its DAPI and Flamingo of the organelle round (`proto.py::extract_sprites`, called with `nucleus_labels`). | One kind of entry per context. | The culture keeps the real relation between its nucleus and cytoplasm stains; the dense contexts need territories from a rule (RA14). |
-| EN2. A nucleus with its expanded territory in every context | Entries carry a cell mask in the dense contexts too (LN's W-382 expanded territories; tissue-2D's `labeled_cells.tif`). | Larger entries; these cell masks are themselves a rule (expansion, legacy watershed). | Cells of an unreal shape cut out of a packed tissue; their neighbours' stain inside the box has to be removed. |
+| EN2. A nucleus with its expanded territory in every context | Entries carry a cell mask in the dense contexts too (the LN route's expanded territories; tissue-2D's `labeled_cells.tif`). | Larger entries; these cell masks are themselves a rule (expansion, legacy watershed). | Cells of an unreal shape cut out of a packed tissue; their neighbours' stain inside the box has to be removed. |
+
+% EN2: LN's W-382 expanded territories
 
 **Recommendation: EN1.**
 
-**Bank sources and held-out images (RA3).** The inputs are those W-393 inventoried (W-392
-`inventory/`, by the paths of W-393 `scripts/common.py`): four LN FOVs, four culture FOVs,
-and three crops of 2048 × 2048 pixels of the tissue-2D sample images. W-513 checked the
-SHA-256 of all 34 files against W-392's inventory, and all are equal (W-513
+**Bank sources and held-out images (RA3).** The inputs are those the context measurements
+inventoried (the input spike's `inventory/`, by the paths of the context measurements'
+`scripts/common.py`): four LN FOVs, four culture FOVs, and three crops of 2048 × 2048 pixels
+of the tissue-2D sample images. The appearance measurements checked the SHA-256 of all 34
+files against the input spike's inventory, and all are equal (measured
 `inventory/inputs.csv`, column `equal_to_w392`). The sources of a bank are configuration
 per dataset ("Storage and the build step").
+
+% The inputs are those W-393 inventoried (W-392 `inventory/`, by the paths of W-393 `scripts/common.py`);
+% W-513 checked the SHA-256 of all 34 files against W-392's inventory (W-513 `inventory/inputs.csv`)
 
 | Option | Sources (held-out image) | Cost | Consequence |
 | --- | --- | --- | --- |
 | SRC1. The prototype's (prototype) | LN Position049, Position057, Position058 (Position048); tissue-2D crops `crop_y20480_x2048`, `crop_y20480_x4096` (`crop_y18432_x0`); culture Position398 (Position397) (`round10/logs/<context>.log.json`, keys `held_out`, `bank`). | None. | A culture bank of 27 cells (below). |
-| **SRC2. SRC1 with the culture FOVs Position407 and Position408 added (recommended)** | As SRC1; the culture bank takes Position398, Position407 and Position408. | Two more FOVs read by the build. | A culture bank of 91 cells. The two FOVs were set aside because W-393 measured plateaus of 13 and 19 against 79 and 83. W-513 shows that this comes from their 2D nucleus labels, which cover 0.47 and 0.33 of the Z projection while the visible DAPI covers 0.14 and 0.13. On the labels the entries are cut from (extended through z) the four plateaus are 46, 48, 46 and 45, and the median DAPI over the visible stain of the Z projection is 79, 80, 87 and 82 (W-513 `tables/bank_selection_culture.csv` columns `plateau`, `plateau_DAPI_zmax_2D_labels`; `tables/visible_share_culture.csv` rows `culture/<FOV>/whole/DAPI-2D/nuclei-2D`, columns `visible_share`, `label_share`, `median_raw_visible`). |
-| SRC3. SRC2 and further crops of the same tissue-2D images, or the culture's fused sample images with their legacy labels | More crops of `PI.tif` and `PI_label.tif` (inventoried whole); `fused/DAPI.tif`, `Flamingo.tif`, `DAPI_label.tif`, `Cell_label.tif` of the culture (inventoried by W-392, not read by W-393). | A measurement of each new source before use; the legacy culture labels are another method's. | More entries in the two small banks; not measured by this issue. |
+| **SRC2. SRC1 with the culture FOVs Position407 and Position408 added (recommended)** | As SRC1; the culture bank takes Position398, Position407 and Position408. | Two more FOVs read by the build. | A culture bank of 91 cells. The two FOVs were set aside because the context measurements gave plateaus of 13 and 19 against 79 and 83. The appearance measurements show that this comes from their 2D nucleus labels, which cover 0.47 and 0.33 of the Z projection while the visible DAPI covers 0.14 and 0.13. On the labels the entries are cut from (extended through z) the four plateaus are 46, 48, 46 and 45, and the median DAPI over the visible stain of the Z projection is 79, 80, 87 and 82 (measured `tables/bank_selection_culture.csv` columns `plateau`, `plateau_DAPI_zmax_2D_labels`; `tables/visible_share_culture.csv` rows `culture/<FOV>/whole/DAPI-2D/nuclei-2D`, columns `visible_share`, `label_share`, `median_raw_visible`). |
+| SRC3. SRC2 and further crops of the same tissue-2D images, or the culture's fused sample images with their legacy labels | More crops of `PI.tif` and `PI_label.tif` (inventoried whole); `fused/DAPI.tif`, `Flamingo.tif`, `DAPI_label.tif`, `Cell_label.tif` of the culture (inventoried by the input spike, not read by the context measurements). | A measurement of each new source before use; the legacy culture labels are another method's. | More entries in the two small banks; not measured by the appearance measurements. |
 | SRC4. No held-out image | Every image is a source. | None. | Comparisons are made on images the bank was cut from, so a match says less. |
+
+% SRC2: W-393 measured plateaus of 13 and 19; W-513 shows; W-513 `tables/bank_selection_culture.csv`;
+% SRC3: inventoried by W-392, not read by W-393; not measured by this issue (W-513)
 
 **Recommendation: SRC2**, the held-out images as in the prototype, never a source of any
 bank, for comparisons only. SRC3 is the route if the 2D tissue bank proves too small
@@ -304,8 +340,10 @@ order (`proto.py::extract_sprites`):
 
 The prototype kept at most 350 entries per LN FOV and 400 otherwise, in a random order, and
 counted rule 4 only until it reached that cap (`round10/logs/ln.run.log`: "sprites kept
-350 left out as squashed ... 43", 20 and 29). W-513 applies the four rules to every label
-(W-513 `tables/bank_selection_<context>.csv`, one row per image):
+350 left out as squashed ... 43", 20 and 29). The appearance measurements apply the four
+rules to every label (measured `tables/bank_selection_<context>.csv`, one row per image):
+
+% W-513 applies the four rules to every label (W-513 `tables/bank_selection_<context>.csv`)
 
 | Image | Labels | Left out by rule 1 (Z end alone) | by rule 2 | by rule 3 | by rule 4 | Kept | Plateau |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -332,9 +370,11 @@ rules 1 and 2 has a median of 0 to 0.008, and 6 to 8 % lie above 0.25 (columns
 
 | Option | Rules | Cost | Consequence |
 | --- | --- | --- | --- |
-| **SEL1. The prototype's four rules, no cap (recommended; the prototype with a cap)** | As above, on every label. | The build processes every label (LN about 3,000 per bank; W-513's step `measure_ln` measured the rules on all four FOVs in 69 s). | 3,033 LN entries instead of the prototype's 1,050. Shapes are more regular than real (limit L2), because squashed labels are left out. |
+| **SEL1. The prototype's four rules, no cap (recommended; the prototype with a cap)** | As above, on every label. | The build processes every label (LN about 3,000 per bank; the appearance measurements' step `measure_ln` measured the rules on all four FOVs in 69 s). | 3,033 LN entries instead of the prototype's 1,050. Shapes are more regular than real (limit L2), because squashed labels are left out. |
 | SEL2. SEL1 without the Z-end rule in LN | Keep labels cut by a Z end of the 50-plane stack. | None. | About 2,800 more LN entries, each a nucleus with a flat face where the stack ended, placed anywhere in depth. |
 | SEL3. SEL1 keeping squashed labels, their shared faces given the synthetic fall-off | Rule 4 off. | None. | The shapes of packed nuclei come back (the held-out share not described by one ellipsoid is 0.047 against 0.009 in round 10, `round10/logs/ln.log.json`, `real_crop` and `proto` `non_ellipsoid_share`), along with flattened faces whose neighbour is gone. |
+
+% SEL1: W-513's step `measure_ln`
 
 **Recommendation: SEL1**, with the squash threshold as the control of limit L2.
 
@@ -344,8 +384,10 @@ source image's plateau. The target is the held-out image's plateau: 37 in LN and
 tissue-2D. The culture is not scaled (`proto.py`, the lines that multiply by
 `P_T / plat[...]`). Within an image, the kept entries' medians over its plateau have p5–p95
 0.64–1.31 in LN, 0.54–1.46 in tissue-2D and 0.65–1.73 in the culture (nucleus DAPI)
-(W-513 `tables/bank_selection_<context>.csv` columns `kept_median_over_plateau_p5`,
+(measured `tables/bank_selection_<context>.csv` columns `kept_median_over_plateau_p5`,
 `_p95`): the spread between nuclei is kept.
+
+% W-513 `tables/bank_selection_<context>.csv`
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
@@ -362,7 +404,9 @@ once in a scene. With a bank of `N` entries and `n` placements drawn with replac
 expected share of placements that reuse an entry is `1 − N (1 − (1 − 1/N)^n) / n`.
 Without replacement it is `max(0, n − N) / n`. At the prototype's reached density a
 `slow` preset holds about 738 dense 3D nuclei, 337 2D tissue nuclei and 32 culture cells
-(W-513 `tables/resource_estimates.csv`, column `objects_at_prototype_density`):
+(measured `tables/resource_estimates.csv`, column `objects_at_prototype_density`):
+
+% W-513 `tables/resource_estimates.csv`
 
 | Context | Bank | Entries | Reused share with replacement | Without replacement |
 | --- | --- | --- | --- | --- |
@@ -372,8 +416,10 @@ Without replacement it is `max(0, n − N) / n`. At the prototype's reached dens
 | Culture | prototype's | 27 | 0.406 | 0.148 |
 | Culture | SRC2 | 91 | 0.152 | 0 |
 
-These are rows `<context>/context-<context>-slow-v1/<bank>` of W-513
+These are rows `<context>/context-<context>-slow-v1/<bank>` of measured
 `tables/bank_repetition.csv`, with `<context>` `ln`, `tissue2d` or `culture`.
+
+% W-513 `tables/bank_repetition.csv`
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
@@ -388,8 +434,10 @@ These are rows `<context>/context-<context>-slow-v1/<bank>` of W-513
 | Option | Where | Cost | Consequence |
 | --- | --- | --- | --- |
 | **ST1. One file per bank outside the repository, found by an environment variable (recommended)** | `<STARFINDER_APPEARANCE_BANKS>/<bank name>.npz` (NumPy's archive, locked), master copy under the artifact root, with its build record. The preset names the bank and its SHA-256; the scene refuses a file whose SHA-256 differs. The build configuration (sources, held-out images, rules, patch sizes) is a file kept with the bank, outside the repository. | One build step per bank, on the lab machine. | No real-derived array or record enters the repository. A test that needs a real bank skips with a reason where the variable or the file is missing, as `src/python/test/test_segmentation_learned.py` skips without its model. |
-| ST2. The configuration in the repository's `config/`, the file outside | As ST1, with the source paths in the repository. | None. | The repository names lab paths and FOVs of real data: a record of real data, against W-329. |
+| ST2. The configuration in the repository's `config/`, the file outside | As ST1, with the source paths in the repository. | None. | The repository names lab paths and FOVs of real data: a record of real data, against the decision that real data stays outside the repository. |
 | ST3. No stored bank; the scene reads the real images | The generator cuts entries at each run. | Every scene reads three FOVs (the prototype's bank stage, 96.8 s in LN, `round10/logs/ln.run.log`). | Scenes depend on the network share; slower; the bank is not one identified object. |
+
+% ST2: against W-329
 
 **Recommendation: ST1.** The build is one named step,
 `build_appearance_bank(config, path)`, run once per bank in its own process with
@@ -411,9 +459,11 @@ entries with two float32 arrays each holds about 0.9 GB before compression (an e
 **What a bank holds per stain, and the prototype's stages.** The prototype built its bank
 inside the scene's process (`proto.py`, the loops over `bank_fovs` and `extract_sprites`).
 In round 10 that stage took 96.8 s in LN, 43.5 s in tissue-2D and 35.8 s in the culture,
-within steps of peak RSS 3,987,588, 1,970,664 and 3,442,840 KiB (W-513
+within steps of peak RSS 3,987,588, 1,970,664 and 3,442,840 KiB (measured
 `tables/prototype_steps.csv`, columns `bank_stage_s`, `peak_rss_kib`, from
 `round10/logs/<context>.run.log`).
+
+% W-513 `tables/prototype_steps.csv`
 
 ## The bank without real data
 
@@ -425,9 +475,11 @@ instead of real images.
 | --- | --- | --- | --- |
 | **CF1. Entries rendered by the accepted closed-form generator (recommended)** | `generate_closed_form_bank(preset, n)` generates an accepted `context-*-v1` preset (`synthetic/_context.py::generate_cellular_scene`) with noise off, and runs the build step on its stain and truth labels as if they were a source image, in memory, with no file. Its record names the preset and seed instead of the SHA-256 of inputs. | One small accepted scene per bank; the build code is exercised on it. | The routine tier, the CI environment and the golden tests read no real data, and every code path of the bank, placement, composition and truth is tested on it. Its appearance is the closed form's, so it checks the machinery, not the realism. |
 | CF2. A bank of hand-made arrays | Ellipsoids with a constant excess, written in the test. | Least. | The build step is not exercised. |
-| CF3. A small real bank committed as a fixture | As named. | None. | Against W-329: no array derived from real images enters the repository. |
+| CF3. A small real bank committed as a fixture | As named. | None. | Against the decision that real data stays outside the repository: no array derived from real images enters the repository. |
 
-**Amendment of 2026-10-17 (W-516; operator decision, confirmed by Jiahao on 2026-10-18).** CF1
+% CF3: against W-329
+
+**Amendment of 2026-10-17 (operator decision at the bank's implementation, confirmed by Jiahao on 2026-10-18).** CF1
 as written (noise off) conflicts with BR4. With the accepted unevenness field U1 kept, the
 routine culture preset `context-culture-v1` has plateaus of 31, 4 and 53 grey levels at the
 seeds 42, 43 and 44: its field scales a whole routine scene. BR4 refuses a source whose
@@ -436,6 +488,8 @@ are refused and no closed-form culture bank can be built. The closed-form bank's
 are therefore rendered with **noise and unevenness off**; BR4 stays as it is. The
 closed-form bank exercises the bank's machinery in the routine tier; the real banks keep
 the real images' own variation.
+
+% Amendment of 2026-10-17 (W-516)
 
 **Recommendation: CF1.** **No real-data record, bank file or array derived from real
 images enters the repository.** The real banks live outside it (ST1), only `slow` tests on
@@ -525,11 +579,13 @@ spacing, never on a FOV's offset, so it keeps every object a point function.
 
 ## Layout
 
-**How entries meet the accepted layout (RA12).** The accepted layout of W-483 places
+**How entries meet the accepted layout (RA12).** The accepted layout of the cellular scene places
 sites by the shape-aware contact distance K1 and by random sequential addition with
 contact proposals P1. It clips nuclei to their power cells, gives cells territories by
 T1 to T3, and assigns types and molecules by cell
 (`synthetic/_context.py::_Context._place`, `_Context.cellular`, `_Context.molecules`).
+
+% The accepted layout of W-483
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
@@ -556,27 +612,33 @@ placements (30 in LN, 1 in the culture). It also stops at 40,000 proposals or af
 refused proposals in a row (`max_attempts`, `max_fail`). In round 10 dense 3D stopped at
 the cap of 40,000 proposals, with 0.508 against 0.628. 2D tissue stopped after 4,000
 refusals in a row, at 37,804 proposals, with 0.566 against 0.667. The culture stopped at
-its target, 0.271 against 0.263, after 125 proposals (W-513 `tables/prototype_steps.csv`,
+its target, 0.271 against 0.263, after 125 proposals (measured `tables/prototype_steps.csv`,
 columns `proposals`, `visible_share`, `target_visible_share`; `round10/logs/<context>.log.json`,
 `attempts`).
 
+% W-513 `tables/prototype_steps.csv`
+
 The method labels miss nuclei, which is why a label-based density fails. On the held-out
 LN centre crop (50 × 512 × 512) the StarDist labels cover 0.163 of the volume, while the
-visible stain covers 0.628 (W-513 `tables/visible_share_ln.csv` row
+visible stain covers 0.628 (measured `tables/visible_share_ln.csv` row
 `ln/Position048/centre512/DAPI-3D/nuclei-3D`; the prototype's 0.16 and 0.63). In round 10
 the truth labels covered 0.46 of the volume and the visible stain 0.51 (`proto`,
 `volume_fraction`; `visible`). In tissue-2D the labels and the visible stain agree: the
 label shares of the whole crops are 0.29 to 0.45 and their visible shares 0.29 to 0.44
-(W-513 `tables/visible_share_tissue2d.csv`, rows `tissue2d/<crop>/whole/PI-2D/nuclei-2D`).
+(measured `tables/visible_share_tissue2d.csv`, rows `tissue2d/<crop>/whole/PI-2D/nuclei-2D`).
 In the culture the 2D nucleus labels cover more than the visible DAPI, 0.17 against 0.12
 in Position397 (`tables/visible_share_culture.csv` row
 `culture/Position397/whole/DAPI-2D/nuclei-2D`).
 
+% W-513 `tables/visible_share_ln.csv`; W-513 `tables/visible_share_tissue2d.csv`
+
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
-| **DN1. The visible-stain share, its target from the bank's own images (recommended; prototype with the held-out target)** | Place until the composed stain's visible share, with a fixed threshold relative to the plateau, reaches the target; the target and the threshold are the medians over the bank's source images on the region matching the preset's Z extent (LN: the middle 16 planes, visible 0.681, 0.539, 0.472 for Position049, 057, 058, W-513 `tables/visible_share_ln.csv` rows `ln/<FOV>/slab16_z17/DAPI-3D/nuclei-3D`). Placement stops as "When placement stops" states. | A rendering of the stain on the sample grid every `m` placements. | Density matched on what the eye and the methods see, measured the same way on real and synthetic images; the held-out image stays out of the scene. |
-| DN2. The label volume fraction (TR2) | Place until the truth labels reach W-393's fraction (0.13 in LN). | None beyond counting. | A scene as sparse as StarDist's labels: about a quarter of the visible density in LN. |
+| **DN1. The visible-stain share, its target from the bank's own images (recommended; prototype with the held-out target)** | Place until the composed stain's visible share, with a fixed threshold relative to the plateau, reaches the target; the target and the threshold are the medians over the bank's source images on the region matching the preset's Z extent (LN: the middle 16 planes, visible 0.681, 0.539, 0.472 for Position049, 057, 058, measured `tables/visible_share_ln.csv` rows `ln/<FOV>/slab16_z17/DAPI-3D/nuclei-3D`). Placement stops as "When placement stops" states. | A rendering of the stain on the sample grid every `m` placements. | Density matched on what the eye and the methods see, measured the same way on real and synthetic images; the held-out image stays out of the scene. |
+| DN2. The label volume fraction (TR2) | Place until the truth labels reach the context measurements' fraction (0.13 in LN). | None beyond counting. | A scene as sparse as StarDist's labels: about a quarter of the visible density in LN. |
 | DN3. A fixed count per preset | Place `n` objects, `n` set once from DN1's reached count. | None. | Cheapest and reproducible; the density follows whatever the bank's sizes give. Suited to the routine fixtures on the closed-form bank. |
+
+% DN1: W-513 `tables/visible_share_ln.csv`; DN2: W-393's fraction
 
 **Recommendation: DN1** for the `slow` presets, and DN3 for the routine presets, whose
 closed-form bank has no visible-stain target.
@@ -599,11 +661,13 @@ culture cells are the entries' own cell masks.
 
 | Option | Territory of placed nucleus `k` | Cost | Consequence |
 | --- | --- | --- | --- |
-| **CT1. The nearest placed nucleus within a growth (recommended for dense 3D and 2D tissue)** | Where a nucleus label holds `σ`, `C(σ) = N(σ)`: the cell of the nucleus that owns the voxel by placement order ("Truth"). Elsewhere `C(σ) = k` where `k` minimizes `δ_k(σ)` ("Terms"; positive there, the distance to the placed mask), ties to the smaller index, and `δ_k(σ) ≤ g_k`, with `g_k` the accepted growth law (`synthetic/_context.py::TerritoryConfig`, `growth`: 0.78 µm dense 3D, 0.5 µm 2D tissue); else 0. | One more interpolation per object near a point. | The cells of `skimage.segmentation.expand_labels`, the LN route's rule (W-382's expansion by 0.7776 µm); a point function. A nucleus lies inside its own cell by construction (below). |
+| **CT1. The nearest placed nucleus within a growth (recommended for dense 3D and 2D tissue)** | Where a nucleus label holds `σ`, `C(σ) = N(σ)`: the cell of the nucleus that owns the voxel by placement order ("Truth"). Elsewhere `C(σ) = k` where `k` minimizes `δ_k(σ)` ("Terms"; positive there, the distance to the placed mask), ties to the smaller index, and `δ_k(σ) ≤ g_k`, with `g_k` the accepted growth law (`synthetic/_context.py::TerritoryConfig`, `growth`: 0.78 µm dense 3D, 0.5 µm 2D tissue); else 0. | One more interpolation per object near a point. | The cells of `skimage.segmentation.expand_labels`, the LN route's rule (its expansion by 0.7776 µm); a point function. A nucleus lies inside its own cell by construction (below). |
 | CT2. Power cells of the placed objects | The accepted T2 with sites at the anchors and the equivalent radii. | As T2. | Flat faces cut through the gaps; the nucleus can cross its power face, breaking "a nucleus lies inside its own cell". |
 | CT3. No territories | Cells equal nuclei. | None. | The nuclear fraction of reads is 1; the assignment's expansion is not checked. |
 | **CU1. The culture cells' own masks (recommended; prototype)** | The placed cell entry's mask is the cell; its nucleus mask, cut to the cell, the nucleus. | None. | Real cell shapes with their real Flamingo. |
 | CU2. Culture cells by CT1 from the nuclei | Cells grown from placed nuclei. | As CT1. | Loses the real cytoplasm stain's shape. |
+
+% CT1: the LN route's rule (W-382's expansion by 0.7776 µm)
 
 **One ownership rule for nuclei and cells.** Placement allows masks to overlap by up to
 1 % of a mask's volume (PL2), and the earlier object owns the overlap. Inside such an
@@ -634,8 +698,10 @@ presets are monolayers of 8 or 16 planes projected by the route after fusion.
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
-| **TZ1. A column through the planes (recommended)** | The entry's mask and signal are the same in every plane of the monolayer's stack; placement runs in one plane. | None; placement in 2D (W-513 `tables/resource_estimates.csv` column `r_v_one_plane`). | The Z maximum equals the 2D composition, so the projection truth `P` of PT1 is the placed 2D masks exactly. Planes away from the middle are as bright as the middle, which no route reads. |
+| **TZ1. A column through the planes (recommended)** | The entry's mask and signal are the same in every plane of the monolayer's stack; placement runs in one plane. | None; placement in 2D (measured `tables/resource_estimates.csv` column `r_v_one_plane`). | The Z maximum equals the 2D composition, so the projection truth `P` of PT1 is the placed 2D masks exactly. Planes away from the middle are as bright as the middle, which no route reads. |
 | TZ2. An axial profile from the accepted laws | Signal times the accepted soft edge in Z with an axial semi-axis drawn per object; mask where inside. | One law per object. | A more plausible stack; the Z maximum differs from the entry where the profile dims it. |
+
+% W-513 `tables/resource_estimates.csv`
 
 **Recommendation: TZ1.**
 
@@ -674,10 +740,12 @@ background of the placed objects, the level each excess was taken over
 tissue-2D and 0 in the culture, whose local background is 0 (`round10/logs/<context>.log.json`,
 `trace`, `haze_kappa`). The local background at the label rims is, over the plateau, a
 median of 0.33 to 0.40 in the LN FOVs (p95 0.69 to 0.82), 0.125 to 0.130 in the tissue-2D
-crops, and 0 in every culture FOV (W-513 `tables/rim_background_<context>.csv`, rows
+crops, and 0 in every culture FOV (measured `tables/rim_background_<context>.csv`, rows
 `<context>/<image>/<stain>`, columns `local_bg_over_plateau_median`, `_p95`). This is the
-level the light is matched to. The background W-393 measured farther than 2 µm from every
-label (0.34 in Position048) contains the unlabelled nuclei.
+level the light is matched to. The background the context measurements gave farther than
+2 µm from every label (0.34 in Position048) contains the unlabelled nuclei.
+
+% W-513 `tables/rim_background_<context>.csv`; the background W-393 measured
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
@@ -721,9 +789,11 @@ clips to `[0, 255]`, as `synthetic/_sample.py::_cast` does: the 8-bit output.
 
 | Option | `g` | Cost | Consequence |
 | --- | --- | --- | --- |
-| **O8. The median plateau of the bank's source images (recommended)** | LN 45 (45, 39, 50), tissue-2D 86 (80, 92.5), culture 46 (48, 46, 45 on the extended labels) (W-513 `tables/bank_selection_<context>.csv`, `plateau`) | None. | Scale factors near 1 for every source, so the sources' 8-bit steps stay as they were. |
+| **O8. The median plateau of the bank's source images (recommended)** | LN 45 (45, 39, 50), tissue-2D 86 (80, 92.5), culture 46 (48, 46, 45 on the extended labels) (measured `tables/bank_selection_<context>.csv`, `plateau`) | None. | Scale factors near 1 for every source, so the sources' 8-bit steps stay as they were. |
 | O8-H. The held-out image's plateau (prototype) | 37 LN, 59 tissue-2D (`round10/logs/<context>.run.log`, "held-out ... plateau") | None. | Ties the scene to the comparison image. |
-| O8-A. The accepted presets' `g` | 42, 78, 20 | None. | The culture's 20 came from W-393's 2D-label plateaus, which W-513 shows are low in two FOVs. |
+| O8-A. The accepted presets' `g` | 42, 78, 20 | None. | The culture's 20 came from the context measurements' 2D-label plateaus, which the appearance measurements show are low in two FOVs. |
+
+% O8: W-513 `tables/bank_selection_<context>.csv`; O8-A: W-393's 2D-label plateaus, which W-513 shows are low
 
 **Recommendation: O8.**
 
@@ -794,7 +864,7 @@ it differs and expects 0.
    ownership rule for nuclei and cells").
 4. **Composition.** With the output cast off and float64, each stain image equals `I(σ)`
    recomputed from `placements.csv`, the bank, `background_patches.csv` and `κ` at the
-   voxel centres, within a rounding tolerance W-514 states (open point). Rendered again at
+   voxel centres, within a rounding tolerance the validation design states (open point). Rendered again at
    `true_f + k ⊙ s` for an integer vector `k`, it equals the first image shifted by `k` on
    the common voxels (the no-resampling identity).
 5. **Output.** The 8-bit image equals `clip(rint(g · J), 0, 255)` of the float64 image `J`
@@ -813,7 +883,11 @@ it differs and expects 0.
    cells keep their own depths, the columns holding two nucleus IDs are counted and
    reported. The culture's route compares the FOVs' 3D labels, not `P`.
 
-The comparisons, tolerances and which tier runs each are W-514's (open point).
+% Identity 4: a rounding tolerance W-514 states
+
+The comparisons, tolerances and which tier runs each are the validation design's (open point).
+
+% The comparisons, tolerances and which tier runs each are W-514's
 
 ## The morphology round
 
@@ -830,22 +904,28 @@ dataset layout of `save_cellular_dataset` are unchanged.
 
 ## Target ranges
 
-**Which W-393 ranges stay (RA22).** The ranges are TR1 to TR12 of
+**Which ranges of the context measurements stay (RA22).** The ranges are TR1 to TR12 of
 {doc}`synthetic-cellular-scene-validation`. Those measured on the truth labels assume
 that real labels and truth labels mean the same. Under this page the truth labels are
 method labels at the visible stain's density, so a label-based quantity of a real image
 undercounts what is there. That makes TR1 (touching) and TR2 (volume fraction) of dense 3D
 incomparable.
 
+% Which W-393 ranges stay (RA22)
+
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
 | TG1. Keep TR1 to TR12, compare with the held-out crop beside them (prototype) | As round 10 measured (`proto` against `real_crop`). | None. | TR1, TR2 and TR8 of dense 3D fail by construction (touching 0.99 against 0.44–0.57 and labels 0.46 against 0.07–0.16, since the truth is placed at the visible stain's density; background against unlabelled nuclei), and TR3 misses by limit L2 (0.009 against 0.064–0.074). |
-| **TG2. Visible-stain targets for density and background; the rest kept (recommended)** | TR2 is replaced in every context by the visible-stain share per image, and TR8's background by the median stain outside the visible stain, over the plateau; both measured the same way on real and synthetic images (the definitions of W-513 `scripts/measure.py`). TR4 to TR7 and TR9 to TR12 stay as written. TR1 is reported on the truth labels and, as like for like, compared on a method's labels of the scene against its labels of the real image in the chain checks (W-514). TR3 is measured on the truth labels; a miss caused by leaving out squashed sources (limit L2) is reported with the squash threshold, its control, and W-514 states whether it is asserted. | One measure added to the generator check. | Density and background targets that do not depend on what a method missed. |
+| **TG2. Visible-stain targets for density and background; the rest kept (recommended)** | TR2 is replaced in every context by the visible-stain share per image, and TR8's background by the median stain outside the visible stain, over the plateau; both measured the same way on real and synthetic images (the definitions of the appearance measurements' `scripts/measure.py`). TR4 to TR7 and TR9 to TR12 stay as written. TR1 is reported on the truth labels and, as like for like, compared on a method's labels of the scene against its labels of the real image in the chain checks (the validation design). TR3 is measured on the truth labels; a miss caused by leaving out squashed sources (limit L2) is reported with the squash threshold, its control, and the validation design states whether it is asserted. | One measure added to the generator check. | Density and background targets that do not depend on what a method missed. |
 | TG3. Targets from the held-out images only | Each target the held-out image's value. | None. | One image per context; no range. |
 
-**Recommendation: TG2.** The visible-stain measurements per real image are W-513's:
+% TG2: the definitions of W-513 `scripts/measure.py`; the chain checks (W-514); W-514 states whether it is asserted
 
-| Context | Image (region) | Visible share | Label share | Median outside the visible stain over the plateau | W-513 row |
+**Recommendation: TG2.** The visible-stain measurements per real image are the appearance measurements':
+
+% The visible-stain measurements per real image are W-513's
+
+| Context | Image (region) | Visible share | Label share | Median outside the visible stain over the plateau | Measured row |
 | --- | --- | --- | --- | --- | --- |
 | Dense 3D | Position048 (whole; held out) | 0.590 | 0.161 | 0.086 | `ln/Position048/whole/DAPI-3D/nuclei-3D` |
 | Dense 3D | Position049 (whole) | 0.535 | 0.130 | 0 | `ln/Position049/whole/DAPI-3D/nuclei-3D` |
@@ -859,14 +939,18 @@ incomparable.
 | Culture | Position398, DAPI Z max | 0.139 | 0.183 | 0.036 | `culture/Position398/whole/DAPI-2D/nuclei-2D` |
 | Culture | Position397, Flamingo Z max (centre 1024; held out) | 0.263 | 0.328 (cells) | — | `culture/Position397/centre1024/Flamingo-2D/cells-2D` |
 
-The rows are in W-513 `tables/visible_share_<context>.csv`, columns `visible_share`,
+% The last column is headed "W-513 row"
+
+The rows are in measured `tables/visible_share_<context>.csv`, columns `visible_share`,
 `label_share` and `not_visible_over_plateau`. The last row reproduces the prototype's
 culture target (`round10/logs/culture.run.log`, "visible share 0.2634..., cell label
 share 0.3276..."). LN's median outside the visible stain is 0 where the tile holds empty
-regions. Whether TR8 then needs a block-wise background (as W-393's per-block row) is an
-open point of W-514. The middle 16 planes give 0.47 to 0.68 in the three LN bank FOVs (rows
-`ln/<FOV>/slab16_z17/DAPI-3D/nuclei-3D`). The ranges, their thresholds and the checks
-that assert them are W-514's.
+regions. Whether TR8 then needs a block-wise background (as the context measurements'
+per-block row) is an open point of the validation design. The middle 16 planes give 0.47 to
+0.68 in the three LN bank FOVs (rows `ln/<FOV>/slab16_z17/DAPI-3D/nuclei-3D`). The ranges,
+their thresholds and the checks that assert them are the validation design's.
+
+% W-513 `tables/visible_share_<context>.csv`; W-393's per-block row; an open point of W-514; are W-514's
 
 ## Presets
 
@@ -880,7 +964,7 @@ that assert them are W-514's.
 
 **Recommendation: PR1**, on the accepted grids.
 
-**Amendment of 2026-10-17 (W-519; operator decision, confirmed by Jiahao on 2026-10-18).** The
+**Amendment of 2026-10-17 (operator decision at the presets' implementation, confirmed by Jiahao on 2026-10-18).** The
 culture's whole cell masks saturate below DN1's target. Its target, the median over the
 bank's sources of the Flamingo visible share on the middle 16 planes, is 0.501 (0.291,
 0.505 and 0.501 for Position398, 407 and 408). With at most 1 % overlap per mask, placement
@@ -895,21 +979,25 @@ places 65 cells in 2,419 proposals, reaches 0.480 (above its floor, 0.9 · 0.501
 and records that share without raising, in 11 min 19 s with a peak RSS of 13,424,852 KiB.
 The other presets keep 4,000.
 
+% Amendment of 2026-10-17 (W-519)
+
 **Resources.** These are estimates, not measurements. The basis is the prototype's
 measured steps (one CPU, `/usr/bin/time -v`, `round10/logs/<context>.run.log`): LN
 669.5 s and 3,987,588 KiB; tissue-2D 228.5 s and 1,970,664 KiB; culture 235.8 s and
 3,442,840 KiB. The prototype's placement is not optimized: it stopped at its cap of 40,000
-proposals in dense 3D (W-513 `tables/prototype_steps.csv`). Each preset's objects are the
+proposals in dense 3D (measured `tables/prototype_steps.csv`). Each preset's objects are the
 prototype's reached density times the preset's `|Ω|`, quoted on
 {doc}`synthetic-cellular-scene` ("Presets"). The placement time is the prototype's
 placement stage times the object ratio `r_n`, times `max(1, r_v)` with `r_v` the ratio of
 the voxels each density check evaluates. The bank build is the prototype's bank stage
 (once per bank; a scene loads the stored bank). The peak RSS is bounded by the
-prototype's step, which also held three source FOVs. W-513's measurement steps read and
-processed whole FOVs, as a build does, within 69 s and 2,127,600 KiB in LN, 40 s and
-1,954,536 KiB in tissue-2D, and 90 s and 2,870,856 KiB in the culture (W-513
+prototype's step, which also held three source FOVs. The appearance measurements' steps
+read and processed whole FOVs, as a build does, within 69 s and 2,127,600 KiB in LN, 40 s
+and 1,954,536 KiB in tissue-2D, and 90 s and 2,870,856 KiB in the culture (measured
 `tables/resources.csv`, the final attempts of `measure_ln`, `measure_tissue2d` and
 `measure_culture`).
+
+% W-513 `tables/prototype_steps.csv`; W-513's measurement steps; W-513 `tables/resources.csv`
 
 | Preset | Objects (estimate) | Placement estimate | Whole scene, upper estimate | Peak RSS bound | Within RG1 |
 | --- | --- | --- | --- | --- | --- |
@@ -920,7 +1008,7 @@ processed whole FOVs, as a build does, within 69 s and 2,127,600 KiB in LN, 40 s
 | `appearance-tissue2d-v1` | 45 | 39 s (upper) | not estimated | as above | yes |
 | `appearance-culture-v1` | 5 | 51 s (upper) | not estimated | as above | yes |
 
-The columns are W-513 `tables/resource_estimates.csv` rows `context-<context>-...`:
+The columns are measured `tables/resource_estimates.csv` rows `context-<context>-...`:
 `objects_at_prototype_density`, `placement_estimate_s_low` / `_high`,
 `scene_estimate_s_high`, `peak_rss_kib_bound` and `within_rg1`. They are rounded. The
 routine estimates scale the prototype's per-proposal cost, which its whole-scene density
@@ -930,6 +1018,8 @@ generation stays below the routine tier's 5 s. The implementation measures every
 with `/usr/bin/time -v`. A generator test of 5 s or more is `slow`
 ({doc}`contributing`, "Test markers"), and DN3 with a small closed-form bank is the
 control.
+
+% W-513 `tables/resource_estimates.csv`
 
 ## Random streams
 
@@ -964,122 +1054,150 @@ Each is either a control or accepted as a limit:
 | L1 | The gaps of dense 3D are hazier than real and hold fewer distinct dim nuclei | Round 10's background over plateau 0.212 against the held-out crop's 0.432, which contains unlabelled dim nuclei (`round10/logs/ln.log.json`, `background_rel`) | **Control:** the fall-off length `λ` and `κ`. **Accepted** for the dim nuclei: StarDist did not label them, so no entry holds one. TG2's background measure shows it. |
 | L2 | Shapes are more regular once squashed sources are dropped | Share not described by one ellipsoid 0.009 against 0.047 on the held-out crop (`proto`, `real_crop`, `non_ellipsoid_share`) | **Control:** the squash threshold of rule 4 (SEL3 at its end). **Accepted** at 0.25 for the first delivery. |
 | L3 | Edges are narrower | Dense 3D 0.82 µm against 1.54 µm (`proto`, `real_crop`, `edge_width_p5_med_p95`) | **Control:** `λ` (1.2 µm gave 1.115 µm in round 9) against L1. **Accepted** at 0.6 µm, within TR4's 0.20–2.20. |
-| L4 | The masks come from method labels: StarDist's are star-convex and sit inside the visible nucleus | 0.93 to 0.97 of LN label voxels visible; 0.75 to 0.85 of visible stain outside labels (W-513, "What this scene is not") | **Accepted**; the claim boundary of W-514 says how truth from a method's labels is read. |
-| L5 | A culture bank from one FOV holds 27 cells | W-513 `tables/bank_selection_culture.csv` | **Control:** SRC2 (91 cells) and BS2. |
+| L4 | The masks come from method labels: StarDist's are star-convex and sit inside the visible nucleus | 0.93 to 0.97 of LN label voxels visible; 0.75 to 0.85 of visible stain outside labels (the appearance measurements, "What this scene is not") | **Accepted**; the claim boundary of the validation design says how truth from a method's labels is read. |
+| L5 | A culture bank from one FOV holds 27 cells | Measured `tables/bank_selection_culture.csv` | **Control:** SRC2 (91 cells) and BS2. |
 | L6 | Occasional one-pixel specks and notches | Seen in round 10's figures (`round10/figures/zoom_v10.png`) | **Control:** IN2 removes the specks of mask interpolation. The notches where an earlier mask owns a voxel are **accepted** (at most 1 % per mask). |
 | L7 | Noise is fixed in the sample frame, so overlapping FOVs agree | By construction (OB1) | **Control:** OB2. **Accepted** in the first delivery. |
 | L8 | The 2D tissue stack is a column (TZ1) | By construction | **Accepted:** no route reads planes other than through the projection. |
 
-## The W-485 amendment on TR7
+% L4: W-513; the claim boundary of W-514; L5: W-513 `tables/bank_selection_culture.csv`
 
-The amendment of 2026-10-15 (W-485) on {doc}`synthetic-cellular-scene-validation` records
+## The amendment of 2026-10-15 on TR7
+
+% Heading until 2026-10-27: "The W-485 amendment on TR7"
+
+The amendment of 2026-10-15 on {doc}`synthetic-cellular-scene-validation` records
 TR7 of dense 3D tissue as a known limit of the closed-form presets. Choice RA24 decides how
 it reads beside the appearance presets; its wording AM1 is applied on that page
 ("Thresholds and where they come from").
 
-| Option for the W-485 amendment (RA24) | Cost | Consequence |
+% The amendment of 2026-10-15 (W-485)
+
+| Option for the amendment of 2026-10-15 (RA24) | Cost | Consequence |
 | --- | --- | --- |
 | **AM1. It stands for the closed-form presets; it does not apply to the appearance presets (recommended)** | One sentence. | The accepted presets keep their recorded limit, and the appearance presets meet TR7 (round 10: 0.317, 0.285, 0.218 against 0.348, 0.266, 0.343 real; `round10/logs/<context>.log.json`, `within_cv_p5_med_p95`). |
 | AM2. Withdraw it | Edits the accepted page's record. | GN23 on the closed-form dense 3D preset fails again, for a known reason. |
 | AM3. Leave it as written | None. | It names "a later issue" for a texture control that this page is. |
 
+% Option for the W-485 amendment (RA24)
+
 ## Implementation
 
-This page's scene is implemented in `starfinder.synthetic` by W-516 to W-519 and checked by
-the generator checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation` (W-516 to W-520). The
-three real banks `ln-sample1-v1`, `tissue2d-v1` and `culture3d-v1` were built by W-519
+This page's scene is implemented in `starfinder.synthetic` and checked by the generator
+checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation`. The three real banks
+`ln-sample1-v1`, `tissue2d-v1` and `culture3d-v1` were built in the presets' stage
 outside the repository ("Execution conditions" of {doc}`synthetic-real-appearance-validation`); the
 presets name each by its name and SHA-256, and only `slow` tests on the lab machine read
 them, through `STARFINDER_APPEARANCE_BANKS`.
 
-**Issues.** The cellular scene was implemented by W-483 (geometry and molecules), W-484
-(stains and the morphology round) and W-485 (the six context presets); W-486 completed its
-generator checks. The real appearance was implemented by W-516 (the bank), W-517
-(augmentation, placement, territories and labels), W-518 (composition, output, the
-morphology round and truth), W-519 (the six appearance presets and the three real banks)
-and W-520 (the remaining generator checks, GA23 and the table of implemented checks). W-487
-ran the chain checks on the appearance presets. W-488 applied the lists of accepted
-statements, W-483's four findings and the confirmations of the dated amendments, and added
-these sections and the example `docs/examples/cellular_scene.py` ({doc}`api/examples`), run
-by `test_synthetic_context_example.py`.
+% Implemented by W-516 to W-519 and checked by GA1 to GA27 (W-516 to W-520); the real banks built by W-519
+
+**Stages.** The cellular scene was implemented in three stages: geometry and molecules,
+stains and the morphology round, and the six context presets; a fourth completed its
+generator checks. The real appearance was implemented in five stages: the bank;
+augmentation, placement, territories and labels; composition, output, the morphology round
+and truth; the six appearance presets and the three real banks; and the remaining
+generator checks, GA23 and the table of implemented checks. A further stage ran the chain
+checks on the appearance presets. A last stage, the completion, applied the lists of
+accepted statements, the four findings of the cellular scene's first stage and the
+confirmations of the dated amendments, and added these sections and the example
+`docs/examples/cellular_scene.py` ({doc}`api/examples`), run by
+`test_synthetic_context_example.py`.
+
+% The stages, in order: W-483 (geometry and molecules), W-484 (stains and the morphology round), W-485 (the six
+% context presets), W-486 (generator checks); W-516 (the bank), W-517 (augmentation, placement, territories and
+% labels), W-518 (composition, output, the morphology round and truth), W-519 (the six appearance presets and the
+% three real banks), W-520 (the remaining generator checks); W-487 (the chain checks); the completion: W-488
+% (W-483's four findings).
 
 **Modules** (all in `src/python/starfinder/synthetic/`, exported by `starfinder.synthetic`
 and listed on the API page `docs/api/synthetic.rst`):
 
-* `_cellular.py` (W-483): the shape functions of lobed nuclei and harmonics, extents,
+* `_cellular.py`: the shape functions of lobed nuclei and harmonics, extents,
   contact distances and the label functions;
-* `_context.py` (W-483, W-484): `CellularSceneConfig` and its parts (`NucleusShapeConfig`,
+* `_context.py`: `CellularSceneConfig` and its parts (`NucleusShapeConfig`,
   `PackingConfig`, `TerritoryConfig`, `CellTypeConfig`, `MoleculeConfig`),
   `generate_cellular_scene`, `CellularScene`, `save_cellular_scene` and `save_cellular_dataset`;
-* `_stains.py` (W-484): `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`,
+* `_stains.py`: `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`,
   `OutputScaleConfig`, `MorphologyRoundConfig` and the stain functions;
-* `_context_presets.py` (W-485): `CELLULAR_PRESETS`, `CELLULAR_PRESET_VERSION` and
+* `_context_presets.py`: `CELLULAR_PRESETS`, `CELLULAR_PRESET_VERSION` and
   `cellular_scene_preset`;
-* `_appearance_bank.py` (W-516): `BankReference`, `build_appearance_bank`,
+* `_appearance_bank.py`: `BankReference`, `build_appearance_bank`,
   `generate_closed_form_bank` and `load_appearance_bank`;
-* `_appearance_layout.py` (W-517): `AugmentationConfig`, `LayoutConfig`, placement by PL2
+* `_appearance_layout.py`: `AugmentationConfig`, `LayoutConfig`, placement by PL2
   with DN1 and DN3, territories, ownership and the point evaluator;
-* `_appearance.py` (W-518): `AppearanceSceneConfig`, `CompositionConfig`,
+* `_appearance.py`: `AppearanceSceneConfig`, `CompositionConfig`,
   `generate_appearance_scene`, `AppearanceScene`, `save_appearance_scene` and
   `APPEARANCE_TRUTH_VERSION`;
-* `_appearance_presets.py` (W-519): `APPEARANCE_PRESETS`, `APPEARANCE_PRESET_VERSION` and
+* `_appearance_presets.py`: `APPEARANCE_PRESETS`, `APPEARANCE_PRESET_VERSION` and
   `appearance_scene_preset`;
 * `_sample.py`: the hooks by which the sample scene's generation runs with the cellular
-  scene's and the appearance scene's cells (W-483, W-484, W-518); a scene without the new
-  settings is the accepted sample scene.
+  scene's and the appearance scene's cells; a scene without the new settings is the
+  accepted sample scene.
+
+% The modules' stages: `_cellular.py` (W-483); `_context.py` (W-483, W-484); `_stains.py` (W-484);
+% `_context_presets.py` (W-485); `_appearance_bank.py` (W-516); `_appearance_layout.py` (W-517); `_appearance.py`
+% (W-518); `_appearance_presets.py` (W-519); `_sample.py` hooks (W-483, W-484, W-518)
 
 **Tests** (in `src/python/test/`):
 
 * the generator checks GN1 to GN24 (GN25 retired) of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
-  `test_synthetic_cellular_scene.py` (W-483), `test_synthetic_cellular_stains.py`,
-  `test_synthetic_cellular_stains_contract.py` (W-484), `test_synthetic_cellular_presets.py`,
-  `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
-  and `test_synthetic_cellular_checks.py` (W-486), with the helpers `cellular_oracle.py`,
+  `test_synthetic_cellular_scene.py`, `test_synthetic_cellular_stains.py`,
+  `test_synthetic_cellular_stains_contract.py`, `test_synthetic_cellular_presets.py`,
+  `test_synthetic_cellular_presets_contract.py`, `test_synthetic_cellular_routine.py`
+  and `test_synthetic_cellular_checks.py`, with the helpers `cellular_oracle.py`,
   `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
   named in that page's "Implemented checks";
 * the generator checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation`:
-  `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py` (W-516),
-  `test_synthetic_appearance_scene.py` (W-517), `test_synthetic_appearance_stains.py`,
-  `test_synthetic_appearance_contract.py` (W-518), `test_synthetic_appearance_presets.py`,
-  `test_synthetic_appearance_presets_contract.py` (W-519, GA23 added by W-520),
-  `test_synthetic_appearance_coverage.py` and `test_synthetic_appearance_checks.py` (W-520),
+  `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py`,
+  `test_synthetic_appearance_scene.py`, `test_synthetic_appearance_stains.py`,
+  `test_synthetic_appearance_contract.py`, `test_synthetic_appearance_presets.py`,
+  `test_synthetic_appearance_presets_contract.py` (GA23 added with the remaining checks),
+  `test_synthetic_appearance_coverage.py` and `test_synthetic_appearance_checks.py`,
   with the helpers `cellular_appearance_oracle.py`, `cellular_appearance_scenes.py` and
   `cellular_appearance_measures.py`; each row's tests are named in that page's "Implemented
   checks";
 * the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
-  `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
+  `test_integration_cellular_chain.py`, marked `integration` and `validation`; the
   chains with a model are `slow` and `learned`, the truth-label chains `slow`; the suite
-  runs them on the routine presets, and on the `slow` presets they run in the Chapter II
-  evidence project as `benchmarks/cellular_chain_evidence.py` (W-603);
-* the example's test `test_synthetic_context_example.py` (W-488), `slow`.
+  runs them on the routine presets, and on the `slow` presets they run in the evidence
+  project as `benchmarks/cellular_chain_evidence.py` (moved there on 2026-10-27);
+* the example's test `test_synthetic_context_example.py`, `slow`.
 
-**Amendments during the implementation**, each with its date, its issue and its reason;
+% The tests' stages: `test_synthetic_cellular_scene.py` (W-483), `test_synthetic_cellular_stains_contract.py` (W-484),
+% `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_checks.py` (W-486),
+% `test_synthetic_appearance_golden.py` (W-516), `test_synthetic_appearance_scene.py` (W-517),
+% `test_synthetic_appearance_contract.py` (W-518), `test_synthetic_appearance_presets_contract.py` (W-519, GA23 added
+% by W-520), `test_synthetic_appearance_checks.py` (W-520), `test_integration_cellular_chain.py` (W-487), the Chapter II
+% evidence project (W-603), `test_synthetic_context_example.py` (W-488)
+
+**Amendments during the implementation**, each with its date, its stage and its reason;
 each is written where it applies:
 
-* **2026-10-15, W-485** ({doc}`synthetic-cellular-scene-validation`, after the table of target
+* **2026-10-15, the context presets** ({doc}`synthetic-cellular-scene-validation`, after the table of target
   ranges). TR7 of dense 3D tissue is reported, not asserted, on `context-dense3d-slow-v1`:
   the bright regions of Tx1, within TR5's ranges, do not reach the real within-nucleus
   variation (0.168 against 0.25–0.41). Operator decision, confirmed by Jiahao on 2026-10-16;
-  it applies to the closed-form presets only (W-515, AM1).
-* **2026-10-17, W-516** ({doc}`synthetic-real-appearance`, after CF1's options table). The
+  it applies to the closed-form presets only (the review gate of 2026-10-16, AM1).
+* **2026-10-17, the bank** ({doc}`synthetic-real-appearance`, after CF1's options table). The
   closed-form bank's sources are rendered with noise and unevenness off: with the field
   kept, BR4 refuses two of the three culture sources and no closed-form culture bank can be
   built. Operator decision, confirmed by Jiahao on 2026-10-18.
-* **2026-10-17, W-516** ({doc}`synthetic-real-appearance-validation`, GA6's row). The stored
+* **2026-10-17, the bank** ({doc}`synthetic-real-appearance-validation`, GA6's row). The stored
   field outside a mask is compared within `max(1e-6 · r, 1e-9)` of the value over the
   plateau: an entry whose rim level `r` is 0 still carries the blurred inside excess
   outside its mask, and float32 storage cannot meet a bound of 0. Operator decision,
   confirmed by Jiahao on 2026-10-18.
-* **2026-10-17, W-519** ({doc}`synthetic-real-appearance`, "Presets"). `appearance-culture-slow-v1`
+* **2026-10-17, the appearance presets** ({doc}`synthetic-real-appearance`, "Presets"). `appearance-culture-slow-v1`
   stops after 500 refused proposals in a row: the culture's cell masks saturate below DN1's
   target of 0.501, and a stop after 4,000 took 27 min 41 s per generation. At seed 42 it
   places 65 cells and reaches 0.480. Operator decision, confirmed by Jiahao on 2026-10-18.
-* **2026-10-18, W-520** ({doc}`synthetic-real-appearance-validation`, after "Target
+* **2026-10-18, the remaining generator checks** ({doc}`synthetic-real-appearance-validation`, after "Target
   definitions"). TR2v of dense 3D (0.385) and TR8r of dense 3D (0.238) and of 2D tissue
   (0.034) are reported beside their ranges, not asserted: DN1 places with a fixed threshold
   while TR2v takes the scene's own Otsu threshold, and the real rim level holds unlabelled
   stain that no entry carries. Operator decision, confirmed by Jiahao on 2026-10-18.
-* **2026-10-18, W-487** ({doc}`synthetic-real-appearance-validation`, "Consequences for the
+* **2026-10-18, the chain checks** ({doc}`synthetic-real-appearance-validation`, "Consequences for the
   chain checks"). CD1's TH1 on `appearance-dense3d-slow-v1` (0.570 against at least 0.9)
   and CU1's TH3 on `appearance-culture-slow-v1` (2 splits against 0, the seeds 42 and 43
   pooled) are reported beside their thresholds, not asserted: the dense 3D scene holds
@@ -1087,13 +1205,13 @@ each is written where it applies:
   culture splits come from a mask with a detached piece and a two-lobed mask at the FOV
   border. Every other threshold stays asserted. Operator decision, confirmed by Jiahao on
   2026-10-18.
-* **2026-10-18, W-488** ({doc}`synthetic-cellular-scene-validation`). W-483's four findings are
+* **2026-10-18, the completion** ({doc}`synthetic-cellular-scene-validation`). The four findings of the cellular scene's first stage are
   applied with the options its notes recommend: the fixture `ctx_crowded` at `density=0.9`,
   so that it raises as the page says; GN6's anchors strict in the label function's
   arithmetic, as K1 states; the unreachable monolayer refusal dropped from GN3 and kept in
   the generator as a guard; and GN9 stating that `ctx_types` holds three sample cells. The
-  rows as written could not be tested as written (W-483 notes, "Findings for Jiahao").
-* **2026-10-18, W-488** (`docs/examples/cellular_scene.py`, {doc}`api/examples`). The example
+  rows as written could not be tested as written (that stage's notes, "Findings for Jiahao").
+* **2026-10-18, the completion** (`docs/examples/cellular_scene.py`, {doc}`api/examples`). The example
   keeps the two presets the issue names, `context-tissue2d-v1` and `appearance-tissue2d-v1`,
   and its test `test_synthetic_context_example.py` is `slow` instead of routine: generating
   and saving the two presets takes more than 5 s on one CPU, the bound of a routine test,
@@ -1102,9 +1220,14 @@ each is written where it applies:
   in `pytest-slow-synthetic` and in the CI environment. Operator decision, confirmed by Jiahao on
   2026-10-18.
 
-No threshold, tolerance, target range, preset or bank was changed by W-488.
+% The amendments' stages, in order: W-485 (W-515, AM1); W-516; W-516; W-519; W-520; W-487; W-488 (W-483's four
+% findings; W-483 notes, "Findings for Jiahao"); W-488
 
-**Accepted statements applied (W-488, 2026-10-18).** The fourteen entries of
+No threshold, tolerance, target range, preset or bank was changed by the completion.
+
+% No threshold, tolerance, target range, preset or bank was changed by W-488.
+
+**Accepted statements applied (the completion, 2026-10-18).** The fourteen entries of
 {doc}`synthetic-cellular-scene`'s "Accepted statements this addition changes" are applied to
 {doc}`synthetic-sample-scene`, with the completions of entry 32 of {doc}`synthetic-real-appearance`'s list; entries
 1 to 34 of {doc}`synthetic-real-appearance`'s "Accepted statements this page changes" are
@@ -1112,6 +1235,8 @@ applied to {doc}`synthetic-cellular-scene`; and entries 1 to 38 of {doc}`synthet
 which take the place of entries 35 to 43 of {doc}`synthetic-real-appearance`, are applied to
 {doc}`synthetic-cellular-scene-validation`. Each is applied with its proposed wording; the lists
 stay on their pages as the record of what changed.
+
+% Accepted statements applied (W-488, 2026-10-18)
 
 **Lists removed (2026-10-27).** The two lists of accepted statements of the
 real-appearance pages are no longer on those pages: every entry is stated on the page it
@@ -1122,7 +1247,7 @@ changed, and the lists remain in the repository's history. The list of
 
 * **A learned generative model, the GPU and new dependencies**: Jiahao chose sampled
   appearance, and the prototype needed only NumPy, SciPy and scikit-image.
-* **Real data in the repository** (Jiahao, W-329): no bank, record, configuration of
+* **Real data in the repository** (Jiahao, at the sample scene's review): no bank, record, configuration of
   sources or array derived from real images.
 * **A bank as a deliverable of this batch**: banks are built by the implementation.
 * **Rotations out of the acquired plane** (AU3): they need resampling across the
@@ -1130,12 +1255,15 @@ changed, and the lists remain in the repository's history. The list of
 * **A membrane stain with real appearance**: no inventoried image holds one, and the
   boundary source stays closed-form and unused by presets (O2 of
   {doc}`synthetic-cellular-scene`).
-* **An ER stain** (D2), **an optical model, raw acquisition and depth attenuation**: as on
+* **An ER stain**, **an optical model, raw acquisition and depth attenuation**: as on
   {doc}`synthetic-cellular-scene`.
-* **Calibration, accuracy claims, comparisons of methods, training and annotation** (D6,
-  D7; W-93 keeps synthetic truth and calibration, W-123 annotation).
+* **Calibration, accuracy claims, comparisons of methods, training and annotation** (the
+  settled decisions; synthetic truth and calibration, and annotation, are kept for later
+  work).
 * **Any change to an accepted page or preset**: the changes the gate accepted are stated
   on those pages ("Implementation").
+
+% (Jiahao, W-329); An ER stain (D2); (D6, D7; W-93 keeps synthetic truth and calibration, W-123 annotation)
 
 ```{toctree}
 :hidden:

@@ -358,12 +358,14 @@ development calibration against the processed-image development targets
 target). Every condition, including ``clean``, carries a uniform pedestal,
 Poisson, white and spatially correlated noise (``NoiseConfig.correlated_enabled``),
 non-uniform channel gains and a mild round trend. ``CALIBRATED_CONDITIONS``
-maps each §2.5 evaluation condition name to the factors it adds on top.
+maps each preprocessing evaluation condition name to the factors it adds on top.
 ``dtype`` is ``uint8`` or ``uint16`` (every intensity × 16, unverified against
 real data). Conditions and dtypes share the scene key, so one seed gives the
 same amplicons and noise draws throughout. Integer outputs clip 10–21 % of the
 voxel values at zero, so generation warns about clipping by design; in uint8 the
 brightest lognormal puncta also saturate a few voxels at 255.
+
+.. each §2.5 evaluation condition name
 
 ``development_codebook("balanced")`` has 16 genes over four rounds and
 channels, each color exactly four times per round and any two codewords at

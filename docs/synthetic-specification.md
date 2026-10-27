@@ -247,11 +247,13 @@ lognormal brightness, and seed and scene key `calibrated-development-v1` shared
 by every condition and dtype. Every condition carries the calibrated baseline:
 a uniform pedestal, Poisson, white and correlated noise, non-uniform channel
 gains and a mild round trend. `CALIBRATED_CONDITIONS` names the factors each
-§2.5 evaluation condition adds on top (stronger gains or trend, weakening,
+preprocessing evaluation condition adds on top (stronger gains or trend, weakening,
 crosstalk, per-channel offsets, gradient, regions, texture, translation and a
 local deformation). The parameters are a development calibration against the
 measured development targets, derived on the {doc}`image statistics <image-statistics>` page;
-they are not a D04 or benchmark calibration.
+they are not a calibration of the benchmark's synthetic dataset or any other benchmark calibration.
+
+% each §2.5 evaluation condition; not a D04 or benchmark calibration
 
 ```{toctree}
 :hidden:
