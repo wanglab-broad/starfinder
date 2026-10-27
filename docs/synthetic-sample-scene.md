@@ -25,8 +25,9 @@ It builds on these pages and redefines none of them:
   sampling").
 
 It is implemented in `starfinder.synthetic`, no existing generator behavior changes and
-nothing is renamed. The validation design that uses the scene belongs to the next issue of the §2.10
-batch (W-331); this page states the identities a test can check, not the validation plan.
+nothing is renamed. The validation designs that use the scene are
+{doc}`stitching-assembly-validation` and {doc}`synthetic-cellular-scene-validation`; this page
+states the identities a test can check, not the validation plan.
 
 ## What this addition is not
 
@@ -997,26 +998,17 @@ its `context.json` names `CELLULAR_TRUTH_VERSION`, which versions those rules, a
 `sample.json` keeps `sample_truth_version` `"1"`; a real-appearance scene writes them with
 the ellipsoid columns null, versioned by `APPEARANCE_TRUTH_VERSION` in `appearance.json`.
 
-## Tests the implementation keeps and adds
+## The tests of the scene
 
 * **Keeps**: every test named in "Opt-in, and what stays as it is", unchanged.
-* **Adds** (marker `synthetic`; `slow` where measured at 5 s or more; no test reads the
-  network share): config validation (overlap rule, Z=1 rule, template population fields,
-  stochastic readout refused); the nominal grid equal to `positions_from_grid` values;
-  the placement identity and its tolerance on `sample-tiny-v1`; the rendering and
-  no-interpolation identities; cellular identities 1 to 5, with identity 3 also on a
-  `sample-tiny-v1` variant whose supplied jitter moves every FOV by the bound towards the
-  grid centre in Y and X and by `+J_z` in Z, a case that leaves the halo least covered (all sample molecules still seen, halo
-  molecules allowed unseen); `in_sample` unchanged between two jitter draws; nucleus inside cell on every
-  label voxel; stream isolation (redrawing the jitter moves no molecule; adding a FOV
-  leaves the draws of the other FOVs as they were, which the test checks for an added
-  column on the jitter and per-FOV draws of every existing FOV, and does not compare their
-  images); a successful single-plane scene (below); the save and reload round trip with
-  SHA-256 checks;
-  `import_labels` and `import_legacy_molecules_csv` accepting the saved files of one FOV;
-  cross-process repeatability of `sample-tiny-v1`; and one `slow` test that generates
-  `sample-small-v1` under `/usr/bin/time -v` and records its time and peak RSS, as
-  `test_medium_cli_both_modes_time_and_peak_rss` does for the benchmark presets.
+* The scene's own tests are in `src/python/test/test_synthetic_sample_scene.py`
+  (marker `synthetic`; `slow` where measured at 5 s or more; no test reads the network share):
+  the configuration rules, the nominal grid and placement truth, the rendering identities,
+  the cellular identities, stream isolation, the single-plane case below, the saved files
+  read without a segmenter and cross-process repeatability; among them is
+  one `slow` test that generates `sample-small-v1` under `/usr/bin/time -v` and records its
+  time and peak RSS, as `test_medium_cli_both_modes_time_and_peak_rss` does for the
+  benchmark presets.
 * **The single-plane case.** No preset has Z=1, and none is added. The test supplies the
   configuration it generates from, built in the test with `dataclasses.replace` from
   `sample_scene_preset("sample-tiny-v1")`: that configuration with

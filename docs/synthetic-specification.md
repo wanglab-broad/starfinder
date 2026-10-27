@@ -1,4 +1,40 @@
-# Amplicon scene: the formed-amplicon synthetic model
+# Synthetic guide: the formed-amplicon synthetic model
+
+This page is the maintained guide to the synthetic generator, `starfinder.synthetic`, and
+defines its amplicon scene.
+
+* **What the generator does.** It renders processed-image scenes with their truth. The
+  amplicon scene holds formed amplicons in one FOV, read out in every round through the
+  readout effects, spectral mixing, geometry, background and noise of a closed-form
+  model, each draw from its own random stream; the sample scene and the cellular scene
+  build on it ([Scope](#scope), [Stages and effect order](#stages-and-effect-order),
+  [Random streams](#random-streams)).
+* **The entry and its configs.** `generate_amplicon_scene(codebook, config=...,
+  metadata=...)` renders one scene from a validated `barcode.Codebook` and an
+  `AmpliconSceneConfig`, whose parts are `ReadoutEffectsConfig`, `BackgroundConfig`,
+  `NoiseConfig` and `GeometryConfig`; `development_scene_preset` and
+  `calibrated_scene_preset` return the codebook and configuration of the packaged
+  fixtures and presets ([Inputs and conventions](#inputs-and-conventions),
+  [Development fixtures](#development-fixtures),
+  [Calibrated development presets](#calibrated-development-presets)).
+* **What it produces and where it is saved.** An `AmpliconScene` in memory: ZYXC images
+  per round, the truth tables `formed` and `round_truth`, the signal tensors and the
+  provenance record. Generation writes no file; `save_amplicon_scene` writes the ZYXC
+  OME-TIFF images `images/<round>.ome.tif` and the CSV truth ([Truth](#truth),
+  [Development fixtures](#development-fixtures)).
+* **Where the configuration goes.** The `AmpliconSceneConfig` passed to
+  `generate_amplicon_scene` as `config`, or the one a preset returns, adjusted with
+  `dataclasses.replace`. The generator has no workflow key; the command
+  `starfinder synthetic generate` writes the dataset of a benchmark preset to a new
+  directory ({doc}`synthetic API page <api/synthetic>`).
+
+Beneath this guide, {doc}`synthetic-sample-scene` gives the multi-FOV sample scene with a
+minimal cellular scene, its placement, cell and per-FOV truth;
+{doc}`synthetic-cellular-scene` gives the cellular scene of three contexts (nucleus
+shapes, packing, cell types, stains, the morphology round and its presets); and
+{doc}`synthetic-cellular-scene-validation` gives the cellular scene's generator checks and
+chain checks. The real-appearance scene, {doc}`synthetic-real-appearance`, builds on the
+cellular scene and has its own pages.
 
 This page defines the model behind the amplicon scene,
 `starfinder.synthetic.generate_amplicon_scene`: its stages, the order of the
@@ -214,3 +250,11 @@ crosstalk, per-channel offsets, gradient, regions, texture, translation and a
 local deformation). The parameters are a development calibration against the
 measured development targets, derived on the {doc}`image statistics <image-statistics>` page;
 they are not a D04 or benchmark calibration.
+
+```{toctree}
+:hidden:
+
+Synthetic sample scene <synthetic-sample-scene>
+Synthetic cellular scene <synthetic-cellular-scene>
+Synthetic cellular scene validation <synthetic-cellular-scene-validation>
+```

@@ -8,10 +8,11 @@ stain to segmentation, assignment, assembly and report is checked against truth 
 the W-152 comment "§2.12 planning decisions (2026-10-08)"). It builds on
 {doc}`synthetic-sample-scene` (Accepted at W-329) and {doc}`synthetic-specification`,
 and redefines nothing in them. Every statement of {doc}`synthetic-sample-scene` that the
-addition would change is listed, with its old and proposed wording, in "Accepted
-statements this addition changes"; that page is not edited. The validation design (the
-chain checks and their thresholds) and the draft implementation issues belong to the next
-issue of the batch (W-395); where this page needs one of them, it names the open point.
+addition changes is listed, with its old and proposed wording, in "Accepted statements this
+addition changes", which stays as the record of what changed; each is applied to that page
+("Implementation"). The validation design (the chain checks and their thresholds) belongs
+to the next issue of the batch (W-395) and is {doc}`synthetic-cellular-scene-validation`;
+where this page needs it, it names the open point.
 
 **Sources.** Statements about existing behaviour cite the file and function at the
 batch's starting revision 943bb6b as `<file>::<function>`, with files under
