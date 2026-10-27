@@ -1,14 +1,18 @@
 # Readout guide: extraction, decoding and read QC
 
-Status: Accepted (W-280, 2026-10-02, at b1c7261)
+% Status: Accepted (W-280, 2026-10-02, at b1c7261)
 
-Amendment W-304, on the authority of the W-299 review comment (2026-10-04): the
+Amendment of 2026-10-04, on the authority of a review comment of that day: the
 `two_base` pair-to-color table is visible, configurable and recorded
 (`EncodingConfig.pair_to_color`; "Encoding registry", "Names", "Checkpoints and
 reruns", "Workflow configuration").
 
-This page is the maintained guide to the readout stage (§2.8) and its contract:
+% W-304, W-299
+
+This page is the maintained guide to the readout stage and its contract:
 extraction, decoding and read QC.
+
+% §2.8
 
 * **What readout does.** It reads every detected candidate: it sums a neighbourhood in
   each round and channel and measures a local background and noise beside the sums,
@@ -49,71 +53,85 @@ The contract builds on {doc}`method-registry`, whose registry fields, lookup,
 dependency and provenance rules it uses unchanged, and on the option-A multi-round
 candidate set of {doc}`spot-finding-contract`, which "Direct readout" amends. Beneath
 this guide, {doc}`readout-algorithms` specifies the numerical methods, the worked
-examples and the engineering validation (R1 to R19, "Implemented checks (W-296)" and
+examples and the engineering validation (R1 to R19, "Implemented checks" and
 "Limitations"). {doc}`readout-baseline` is history: the behavior at `141c093`, before
-§2.8, kept with its golden test. The contract is implemented by `starfinder.readout` and
+the package's readout work, kept with its golden test. The contract is implemented by `starfinder.readout` and
 the FOV readout methods ({doc}`api/readout`), with the checks that
 {doc}`readout-algorithms` lists; as
 decided, nothing here renames anything: the existing names
 (`starfinder.barcode`, `BarcodeDecodingResult`, `PipelineConfig.decoding`) stay.
 
-Later note: W-556 renamed the module `starfinder.barcode` to `starfinder.readout`
-(W-526, NM-12); the decision text above is kept as written.
+% W-296, §2.8
 
-Later note: W-557 renamed `BarcodeDecodingResult` to `ReadDecodingResult` and
-`decode_barcodes` to `decode_reads` (W-526, NC-01 and NM-16); the decision text above
+Later note: the package rename of 2026-10-23, decided in the design review of 2026-10-19, renamed the module
+`starfinder.barcode` to `starfinder.readout`; the decision text above is kept as written.
+
+% W-556, W-526, NM-12
+
+Later note: the member renames of 2026-10-23, decided in the design review of 2026-10-19, renamed
+`BarcodeDecodingResult` to `ReadDecodingResult` and `decode_barcodes` to `decode_reads`; the decision text above
 and option N1 below are kept as written.
 
-The measured evidence comes from W-278, run directory
-`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-278/20261002T011718Z-0cfc7de7`
+% W-557, W-526, NC-01, NM-16
+
+The measured evidence comes from the readout design study of 2026-10-02, below "the design
+study", whose run directory is kept with the run records outside the repository
 (handoff `worker-notes.md`; tables `estimators.csv`, `scores.csv`, `direct.csv`,
 `duplicates.csv`, `extraction-cost.csv`; `readout-manifest.json`,
 `selection.json`). The algorithm page cites the table rows behind each number.
 
+% W-278, /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-278/20261002T011718Z-0cfc7de7
+
 ## Settled decisions this page follows
 
-Decided by Jiahao in the §2.8 planning session (W-152 comment "§2.8 planning
-decisions (2026-10-01)"):
+Decided by Jiahao in the readout planning session (the planning comment of
+2026-10-01), numbered here as settled decisions 1 to 10:
 
-1. **D1** Two readout modes at the top level, `multiplexed` (sequencing with a
+% §2.8, W-152
+
+1. Two readout modes at the top level, `multiplexed` (sequencing with a
    codebook) and `direct` (a round and channel identify a gene), in the existing
    package. One- and two-segment barcodes are layouts within `multiplexed`. This page
-   proposes the names of results and configuration keys; W-280 decides any rename.
-2. **D2** Barcode encodings are registered on the W-240 mechanism: `two_base` (the
-   current behavior) and `one_base`, which §2.8 implements and validates on
+   proposes the names of results and configuration keys; the acceptance review decides any rename.
+2. Barcode encodings are registered on the shared method-registry mechanism: `two_base` (the
+   current behavior) and `one_base`, which the readout work implements and validates on
    hand-built known answers, with no real one-base data.
-3. **D3** The segment layout is a typed description, not a registry: the number of
+3. The segment layout is a typed description, not a registry: the number of
    segments, each segment's length, the acquisition order, the junction treatment and
    the allowed end bases, with several first/last pairs per segment. `split_index`
    stays the shared MATLAB-facing key and is translated at the workflow boundary.
-4. **D4** The `split_index` index-base defect is fixed by an implementation issue;
-   W-279 demonstrates it and drafts the fix.
-5. **D5** A codebook entry is not a gene: the entry identifier is separate from the
+4. The `split_index` index-base defect is fixed by an implementation issue;
+   the readout baseline and specification demonstrate it and draft the fix.
+5. A codebook entry is not a gene: the entry identifier is separate from the
    gene identifier (aging: 14,242 entries for 2,044 genes).
-6. **D6** MATLAB's two-segment path matches the complete concatenated color string;
+6. MATLAB's two-segment path matches the complete concatenated color string;
    its per-segment end-base checks are diagnostic ({doc}`readout-baseline`).
-7. **D7** Direct readout: each round is detected (option A of the §2.7 multi-round
+7. Direct readout: each round is detected (option A of the spot-finding multi-round
    candidate set), each candidate is extracted in its own round, the other rounds are
    unavailable in `valid`, and the barcode rules (codeword competition, rescue,
    required rounds) do not apply.
-8. **D8** A binary on/off code is not a segment layout; §2.8 states the extension
+8. A binary on/off code is not a segment layout; the readout stage states the extension
    point and delivers no binary entry, decoder or example.
-9. **D9** Every encoding and layout has a worked example checked by a test, the
+9. Every encoding and layout has a worked example checked by a test, the
    two-segment one on the 11-base 5 + 4 design, and direct readout a mapping example
    ({doc}`readout-algorithms`, "Worked examples").
-10. **D10** Left to this specification, with evidence, and decided at W-280: the
+10. Left to this specification, with evidence, and decided at the acceptance review: the
     background and noise estimator; the score components and ranking design; the
     duplicate distance, signal compatibility, grouping and representative ranking;
     the `pre_qc` content and any `FORMAT_VERSION` change; the golden-test scope; and
     whether extraction must be vectorized. This page proposes each of them.
 
-The W-279 issue and the W-152 scope comments of 2026-09-27 add the rest of the
+% D1, D2, D3, D4, D5, D6, D7, D8, D9, D10: settled decisions 1 to 10 above; W-280 in decisions 1 and 10, W-240 and §2.8 in decision 2, W-279 in decision 4, §2.7 in decision 7, §2.8 in decision 8
+
+The readout specification issue and the planning scope comments of 2026-09-27 add the rest of the
 agreed scope: complete retained outputs with three kinds of diagnostics (read
 inspection, population summaries, decision inspection); the runtime order extract →
 decode or assign → score → deduplicate → filter, with the defaults WTA, rescue off,
 deduplication off, and assigned calls kept with no score cutoff; and bounded
 engineering validation only, with no score cutoff, calibrated probability or
-recommended default filter (W-152 §2.14 decision, 2026-09-29).
+recommended default filter (planning decision of 2026-09-29).
+
+% W-279, W-152, §2.14
 
 Facts about the two-segment assay (Jiahao, 2026-10-01): the two segments are
 separate barcodes in the experiment and are stored joined in the codebook; the
@@ -150,8 +168,10 @@ existing read table (its identity columns are the same), and N2 costs a format
 version and alias tests for a rename alone. "Barcode" in a direct-mode result is
 the price of N1.
 
-Later note: W-556 renamed the module `starfinder.barcode` of N1 to `starfinder.readout`
-(W-526, NM-12), with its member names unchanged; N1 is kept as decided.
+Later note: the package rename of 2026-10-23, decided in the design review of 2026-10-19, renamed the module
+`starfinder.barcode` of N1 to `starfinder.readout`, with its member names unchanged; N1 is kept as decided.
+
+% W-556, W-526, NM-12
 
 New names under N1:
 
@@ -159,7 +179,7 @@ New names under N1:
 | --- | --- | --- |
 | Readout mode | `Dataset.readout_mode`, `"multiplexed"` (default) or `"direct"`; YAML top-level `readout_mode` | Dataset field |
 | Encoding registry | `ENCODINGS: dict[type, EncodingSpec]` in `starfinder.readout`; entries `two_base` (`EncodingConfig`, which gains `method="two_base"`) and `one_base` (`OneBaseEncodingConfig`) | registry |
-| Encoding table (W-304) | `EncodingConfig.pair_to_color`; `EncodingSpec.table`; `Codebook.encoding_table()`, `Dataset.encoding_table()`, `FOV.encoding_table()`; YAML `load_codebook.encoding.pair_to_color` | config field, spec field, methods |
+| Encoding table (amendment of 2026-10-04) | `EncodingConfig.pair_to_color`; `EncodingSpec.table`; `Codebook.encoding_table()`, `Dataset.encoding_table()`, `FOV.encoding_table()`; YAML `load_codebook.encoding.pair_to_color` | config field, spec field, methods |
 | Decoding registry | `DECODING_METHODS: dict[type, DecodingSpec]` in `starfinder.readout`; entries `wta`, `codebook_aware`, `direct` | registry (the first version of the registry decision record named it `DECODERS`; this page uses the `*_METHODS` pattern of that record's decision 2, {doc}`method-registry`, "History") |
 | Segment layout | `BarcodeLayout`, `Segment`; `Codebook.layout` | frozen dataclasses |
 | Codebook entries | `Codebook.table` column `entry_id`; `n_entries`, `seq_to_entry`, `entry_to_seq` | codebook |
@@ -170,6 +190,8 @@ New names under N1:
 | Deduplication | `DeduplicationConfig`, `deduplicate_reads`, `ReadDeduplicationResult`; `PipelineConfig.deduplication` | config, function, result |
 | Diagnostics | `inspect_read`, `summarize_reads`, `explain_read` | functions |
 | Evaluation | `ranking_quality`, `evaluate_deduplication` in `starfinder.evaluation` | functions |
+
+% W-304
 
 Where the mode lives:
 
@@ -224,7 +246,7 @@ discriminator equal to its spec name. `EncodingSpec` adds:
 | `two_base` | `EncodingConfig(reverse_bases=True, pair_to_color=<default table>)`; the legacy `split_index` stays as a field, translated into a two-segment layout and mutually exclusive with `Codebook.layout` | `pair_to_color` of each adjacent pair of `bases[::-1] if reverse_bases else bases` (with the default table, `bases_to_colors`) | from `first_base`, each color gives the one next base through `pair_to_color` (with the default table, `colors_to_bases(colors, first_base)`), reversed back when `reverse_bases` | `n − 1` | yes | 1 |
 | `one_base` | `OneBaseEncodingConfig(base_to_color, reverse_bases=False)`: `base_to_color` maps `A`, `C`, `G`, `T` to distinct colors `1`–`4` and has no default | `"".join(base_to_color[b] for b in bases)`, reversed first when `reverse_bases` | the inverse mapping | `n` | no | 0 |
 
-**The `two_base` table (W-304).** `EncodingConfig.pair_to_color` maps each of the
+**The `two_base` table (amendment of 2026-10-04).** `EncodingConfig.pair_to_color` maps each of the
 16 ordered base pairs, in read orientation, to a color `"1"` to `"4"`. Its default is
 the active table of `src/matlab/EncodeBases.m`: `AA`, `CC`, `GG`, `TT` → 1; `AC`,
 `CA`, `GT`, `TG` → 2; `AG`, `CT`, `GA`, `TC` → 3; `AT`, `CG`, `GC`, `TA` → 4, so
@@ -249,6 +271,8 @@ a codebook or in readout mode `direct`. `repr(codebook)` and `repr(dataset)` nam
 encoding method and the segment layout (for example `two_base, two segments of 5
 and 4 colors`) and say when the table is not the default. MATLAB is unchanged:
 `EncodeBases.m` keeps its active table, and a changed table is Python-only.
+
+% W-304
 
 **What a decoder declares.** `DecodingSpec` (registry `DECODING_METHODS`, same
 shared fields) adds `modes` (above), `encodings` (the encoding `symbols` kinds it
@@ -379,15 +403,19 @@ the rounds that `direct` mode does not extract; in `multiplexed` mode it stays a
 true. A new `box_voxels` (N×R int64) records how many voxels each box summed, so
 clipping is visible.
 
-**Added per (spot, channel, round)**, from the W-278 recommendation (estimator
+**Added per (spot, channel, round)**, from the design study's recommendation (estimator
 `local_ring`):
+
+% W-278
 
 | Field | Units | Definition |
 | --- | --- | --- |
 | `background` | grey levels per voxel of the extraction image | Median over the ring: the voxels within the outer box `outer_radius_zyx=(1, 6, 6)` and outside the inner box `inner_radius_zyx=(1, 3, 3)` around the rounded centre (the box's own z-planes at lateral Chebyshev distance 4 to 6; 360 voxels unclipped). |
 | `noise` | grey levels per voxel | 1.4826 × the median absolute deviation over the same ring. |
 | `background_voxels` (per spot and round) | count | Ring voxels inside the image. |
-| `image_background`, `image_noise` (per round and channel) | grey levels per voxel | Median and 1.4826 × MAD of the whole round and channel, the §2.7 noise record, kept beside the local estimate. |
+| `image_background`, `image_noise` (per round and channel) | grey levels per voxel | Median and 1.4826 × MAD of the whole round and channel, the spot-finding noise record, kept beside the local estimate. |
+
+% §2.7
 
 A box's background in sum units is `background × box_voxels`. The measurement is
 configured by `NeighborhoodSumConfig.background = LocalBackgroundConfig(
@@ -398,20 +426,20 @@ box.
 * **Next to other spots.** The ring is not masked. A neighbor whose centre lies in
   the ring raises the background median by about 2 grey levels (p90 +5) at the
   calibrated density and 3 (p90 +6) in the dense scene, and the noise estimate by
-  33 % (50 % dense); a neighbor in the excluded centre raises it by about 1 (W-278
+  33 % (50 % dense); a neighbor in the excluded centre raises it by about 1 (design study
   `estimators.csv`; {doc}`readout-algorithms`). This bias is recorded, not removed:
   masking neighbors would be a new extraction algorithm.
 * **At the border.** The ring is clipped to the image and the estimate uses the
   remaining voxels: a median of 207 of 360 voxels when the box itself is clipped,
-  282 when only the ring is (W-278).
-* **Evidence and limits.** W-278 chose the ring on its design seeds (`selection.json`:
+  282 when only the ring is (design study).
+* **Evidence and limits.** The design study chose the ring on its design seeds (`selection.json`:
   realized-error median 2.22 grey levels against 2.41 and 3.39); held out, it is 2.28
   (p90 5.87), 2.16 to 2.48 per condition (`estimators.csv`, `local_ring`,
-  `stratum=all`). W-278 lists these limits: the ring tracks the realized, not the
+  `stratum=all`). The design study lists these limits: the ring tracks the realized, not the
   latent background; its MAD underestimates the analytic noise by about 12 % on
   clipped uint8 data; synthetic data only. The row-level citations are in
   {doc}`readout-algorithms` ("Background and noise").
-* **Vectorization (D10).** Not required. W-278 measured the current per-spot loop on
+* **Vectorization (settled decision 10).** Not required. The design study measured the current per-spot loop on
   `medium` (32×512×512, 587 candidates) at a median of 0.0586 s, 25 µs per spot and
   round, while a full-image box-filter prototype took 3.26 s for the same sums
   (`extraction-cost.csv`). The `large` and `tissue` tiers were not measured.
@@ -419,6 +447,8 @@ box.
   `background` and `noise` are NaN for that (spot, round), and the score of a read
   that uses that round is NaN with reason `background_unavailable`. `values` stay
   finite and `valid` is not changed by it.
+
+% W-278, D10
 
 ## Shared read-QC score
 
@@ -429,25 +459,29 @@ added; every row is kept and no identity column changes.
 | Element | Specification |
 | --- | --- |
 | Inputs | The read table (any mode and decoder); the extraction result with `values`, `background`, `box_voxels` and `valid`; the reference (codebook or panel) for the assigned channels. |
-| Ranking score `qc_score` | W-278 design D1: the decoder's probability NLL of the assigned entry recomputed on background-subtracted sums. Per used round r: `v'_c = max(v_c − box_voxels × background_c, 0)`, `p = (v'_a + 1e-6) / Σ_c (v'_c + 1e-6)` for the assigned channel `a`; `qc_score = Σ_r −log max(p, 1e-12)`. Lower ranks as more reliable. |
-| Components kept | `qc_ambiguity_max` (the largest, over used rounds, of the strongest other channel's background-subtracted sum over the assigned channel's, both clipped at 0), `qc_signal_to_background` (mean over used rounds of `(v_a − box_voxels × background_a) / (box_voxels × background_a)`, with the **signed**, unclipped numerator, as W-278 measured `sbr_mean__local_ring`), `qc_rounds` (rounds used). The ambiguity component and `qc_score` use the clipped `v'`, also as W-278 measured them. |
-| Used rounds | `multiplexed`: every sequencing round. `direct`: the own round only. The weakest-round and codeword-support components do not apply in `direct` mode and are not computed (W-278 `direct.csv`, `not_applicable`). |
+| Ranking score `qc_score` | The design study's design D1: the decoder's probability NLL of the assigned entry recomputed on background-subtracted sums. Per used round r: `v'_c = max(v_c − box_voxels × background_c, 0)`, `p = (v'_a + 1e-6) / Σ_c (v'_c + 1e-6)` for the assigned channel `a`; `qc_score = Σ_r −log max(p, 1e-12)`. Lower ranks as more reliable. |
+| Components kept | `qc_ambiguity_max` (the largest, over used rounds, of the strongest other channel's background-subtracted sum over the assigned channel's, both clipped at 0), `qc_signal_to_background` (mean over used rounds of `(v_a − box_voxels × background_a) / (box_voxels × background_a)`, with the **signed**, unclipped numerator, as the design study measured `sbr_mean__local_ring`), `qc_rounds` (rounds used). The ambiguity component and `qc_score` use the clipped `v'`, also as the design study measured them. |
+| Used rounds | `multiplexed`: every sequencing round. `direct`: the own round only. The weakest-round and codeword-support components do not apply in `direct` mode and are not computed (the design study's `direct.csv`, `not_applicable`). |
 | Decoders and call types | One score for `wta`, `codebook_aware` and `direct`, and for exact and rescued calls. It is computed on the assigned entry's channels, so a rescued round is scored at the codeword's channel. Exact and rescued calls are distinguished by `call_type` (`exact`, `rescued_unknown`, `rescued_h<k>`), which the score keeps; summaries report scores per `call_type`. |
 | Reads without an identity | `qc_score` and the components are NaN with `qc_reason` `no_assignment` (`unmatched`, `ambiguous`, `no_signal`), or `background_unavailable`. |
 | What it is not | A ranking of calls, not an error probability: it is not calibrated, sets no cutoff, recommends no filter and never changes or rescues an identity (`gene_id`, `entry_id`, `call_status`, `call_type`). |
 
+% W-278
+
 `ReadScoreConfig` has `method="bgcorr_probability"` and no tunable parameter; the
 constants 1e-6 and 1e-12 are the decoder's.
 
-Evidence and limits: W-278 chose D1 on its design seeds (`selection.json`, mean
+Evidence and limits: the design study chose D1 on its design seeds (`selection.json`, mean
 exact-call AUROC 0.874 against 0.714 for the decoder score). On its held-out seeds
 D1 ranks exact calls at AUROC 0.897 against 0.782 (WTA) and 0.743 (codebook-aware)
 and rescued calls at 0.851 against 0.670 (`scores.csv`, `heldout`,
-`all_calibrated`, pooled), and direct-readout calls at 0.930 (`direct.csv`). W-278
+`all_calibrated`, pooled), and direct-readout calls at 0.930 (`direct.csv`). The design study
 lists these limits: synthetic data only; few incorrect calls (46 exact, 12 rescued),
 so no per-condition tolerance; no score separates unmatched detections from correct
 calls; scores are rankings, not calibrated probabilities; no cutoff. The row-level
 citations are in {doc}`readout-algorithms` ("Shared read-QC score").
+
+% W-278
 
 ## Optional deduplication
 
@@ -457,33 +491,39 @@ citations are in {doc}`readout-algorithms` ("Shared read-QC score").
 
 | Element | Specification |
 | --- | --- |
-| Pairs | Candidates of the same detection round in different channels (`channel` column). Same-channel pairs are never grouped here (that is the §2.7 within-channel `merge_radius_zyx`). |
-| Distance | Euclidean distance between candidate coordinates in zero-based voxel index space, inclusive: `≤ distance_voxels`, default 1.0 voxel (W-278 design choice). At the repository example voxel size (0.094 µm in XY, 0.35 µm in Z) 1 voxel is 0.094 µm laterally or 0.35 µm along Z; the rule uses index space, not microns. |
-| Signal compatibility | `compatibility="same_sequence"`: both reads have identical WTA observed color sequences (the W-278 rule, which tested sequence equality and distance only) and neither sequence contains `M` or `N`. The `M`/`N` exclusion is a proposal **W-278 did not measure**: its `duplicate_pairs` and `rule_merges` compared sequences without excluding them. The exclusion only removes links, so the proposed rule links a subset of the measured rule's pairs. |
-| Grouping | Connected components of the graph of compatible pairs. **Not measured by W-278**, which scored pairs only (below). |
-| Representative | One original candidate per group, never a new or averaged one: among the members with an `assigned` call (all members if none is assigned), the one with the largest extracted sum in its own detection channel in the detection round; ties go to the earliest row of the spot table. Its coordinates, values and identity are unchanged. {doc}`readout-algorithms` states the same rule. **Not measured by W-278.** |
-| Conflicting or ambiguous calls | A group whose assigned members do not all share one `entry_id` is not merged: every member stays a representative, with reason `conflicting_calls`. Reads with `M` or `N` in their sequence are never compatible (the unmeasured exclusion above). Unassigned members of a merged group are marked duplicates of its assigned representative. **Not measured by W-278.** |
+| Pairs | Candidates of the same detection round in different channels (`channel` column). Same-channel pairs are never grouped here (that is the spot-finding within-channel `merge_radius_zyx`). |
+| Distance | Euclidean distance between candidate coordinates in zero-based voxel index space, inclusive: `≤ distance_voxels`, default 1.0 voxel (the design study's choice). At the repository example voxel size (0.094 µm in XY, 0.35 µm in Z) 1 voxel is 0.094 µm laterally or 0.35 µm along Z; the rule uses index space, not microns. |
+| Signal compatibility | `compatibility="same_sequence"`: both reads have identical WTA observed color sequences (the design study's rule, which tested sequence equality and distance only) and neither sequence contains `M` or `N`. The `M`/`N` exclusion is a proposal **the design study did not measure**: its `duplicate_pairs` and `rule_merges` compared sequences without excluding them. The exclusion only removes links, so the proposed rule links a subset of the measured rule's pairs. |
+| Grouping | Connected components of the graph of compatible pairs. **Not measured by the design study**, which scored pairs only (below). |
+| Representative | One original candidate per group, never a new or averaged one: among the members with an `assigned` call (all members if none is assigned), the one with the largest extracted sum in its own detection channel in the detection round; ties go to the earliest row of the spot table. Its coordinates, values and identity are unchanged. {doc}`readout-algorithms` states the same rule. **Not measured by the design study.** |
+| Conflicting or ambiguous calls | A group whose assigned members do not all share one `entry_id` is not merged: every member stays a representative, with reason `conflicting_calls`. Reads with `M` or `N` in their sequence are never compatible (the unmeasured exclusion above). Unassigned members of a merged group are marked duplicates of its assigned representative. **Not measured by the design study.** |
 | Direct mode | Not available: `deduplicate_reads` raises `ValueError` in `direct` mode, because different channels and rounds are different genes there and no direct-mode read is merged or reassigned automatically. The population summary still counts cross-channel candidate pairs within `distance_voxels` in one round. |
 | Retained | Every row, with `duplicate_group` (the representative's `spot_id`, or missing when not grouped), `duplicate_of` (the representative's `spot_id` for a merged member), `is_representative` (true for representatives and for ungrouped reads) and `duplicate_reason` (`""`, `same_sequence_within_distance`, `conflicting_calls`); `counts` holds groups, merged reads and conflicting groups. |
 | Filter | `ReadFilterConfig.exclude_duplicates=True` (default) rejects reads with `is_representative` false, with reason `duplicate`; it has no effect on a result that was not deduplicated. |
 
-Evidence and limits: W-278 chose `same_sequence` at d = 1 on its design seeds
+% §2.7, W-278
+
+Evidence and limits: the design study chose `same_sequence` at d = 1 on its design seeds
 (`selection.json`; 6 false merges against 26 at d = 2). On its held-out seeds it
 makes 5 false merges among 763 distinct cross-channel pairs within 5 voxels (0.66 %;
-`duplicates.csv`, `heldout`, `all_calibrated`, `row_type=rule`). W-278 lists these
+`duplicates.csv`, `heldout`, `all_calibrated`, `row_type=rule`). The design study lists these
 limits: the held-out scenes hold no detectable crosstalk copy, so there is no
 held-out missed-duplicate evidence; outside the split, d = 1 misses 9 of the 22
-W-218 copies and d = 2 none (`reference_case`). The distance is an open choice
-recorded with W-279. Row-level citations are in {doc}`readout-algorithms`
+crosstalk copies of the scene in the local-maxima duplicate report and d = 2 none (`reference_case`).
+The distance is an open choice recorded with the readout specification. Row-level citations are in {doc}`readout-algorithms`
 ("Deduplication").
 
-What W-278 measured is the pairwise rule only: for each pair of candidates in
-different channels, whether `same_sequence` within d links them (W-278
+% W-278, W-218, W-279
+
+What the design study measured is the pairwise rule only: for each pair of candidates in
+different channels, whether `same_sequence` within d links them (the design study's
 `scripts/w278_lib.py`, `rule_merges`), with missed duplicates and false merges
 counted over pairs. The grouping into connected components, the representative
-choice and the conflicting-call rule above are additions that W-278 did not measure;
+choice and the conflicting-call rule above are additions that the design study did not measure;
 on scenes where every group is a single pair they give the same merges as the pairwise
 rule, and the validation design marks the checks that depend on them as provisional.
+
+% W-278
 
 ## Runtime order and defaults
 
@@ -533,7 +573,7 @@ header keys:
 * `pre_qc.json`: `decoding_config` holds the decoder's fields as today (`direct`
   configs carry only `method`); the new top-level keys are `scoring_config`,
   `deduplication_config` (`null` when the stage did not run), `layout`,
-  `readout_mode` and `stages_applied`, and, since W-304, `encoding` beside `layout`:
+  `readout_mode` and `stages_applied`, and, since the amendment of 2026-10-04, `encoding` beside `layout`:
   the codebook's encoding config as `method`, `reverse_bases` and the table
   (`pair_to_color` for `two_base`, `base_to_color` for `one_base`; `split_index` is
   left out, the layout records it), `null` in readout mode `direct`. No saved config
@@ -543,8 +583,10 @@ header keys:
 * The new reader rebuilds the decoder config through `DECODING_METHODS` and treats a
   missing key as its `141c093` meaning: no `background_config` is `background=None`,
   no `layout` is one segment, no `readout_mode` is `multiplexed`, no `encoding`
-  (a checkpoint written before W-304) is not checked, and no `scoring_config` or
+  (a checkpoint written before the amendment of 2026-10-04) is not checked, and no `scoring_config` or
   `deduplication_config` means the stage did not run.
+
+% W-304
 
 **Reruns without images.**
 
@@ -559,11 +601,15 @@ header keys:
   rerun (extraction).
 * Loading a `pre_qc` checkpoint whose recorded `encoding` differs from the loaded
   codebook's (method, `reverse_bases` or table) raises `ValueError` naming both
-  (W-304); without a loaded codebook or without the key nothing is checked.
+  (amendment of 2026-10-04); without a loaded codebook or without the key nothing is checked.
+
+% W-304
 
 `run.json` keeps `format_version` 1 and records the mode, each stage's config, the
-codebook's encoding (`config.encoding`, as in `pre_qc.json`, since W-304) and the
+codebook's encoding (`config.encoding`, as in `pre_qc.json`, since the amendment of 2026-10-04) and the
 population summary under `counts`.
+
+% W-304
 
 ## Diagnostics
 
@@ -578,7 +624,7 @@ population summary under `counts`.
 | Key | Rule |
 | --- | --- |
 | `readout_mode` (top level) | Python-only, `multiplexed` (default) or `direct`; the schema accepts `direct` only with `backend: python`. |
-| `load_codebook.encoding` | Python-only; `method` (an `ENCODINGS` name, default `two_base`) and that config's fields. `pair_to_color` (`two_base`, W-304) maps the 16 ordered pairs to colors 1–4 and gives the same codebook and the same `ValueError` as the Python call; without it the default table. The schema accepts `pair_to_color` only with `backend: python`; MATLAB keeps its own table. |
+| `load_codebook.encoding` | Python-only; `method` (an `ENCODINGS` name, default `two_base`) and that config's fields. `pair_to_color` (`two_base`, amendment of 2026-10-04) maps the 16 ordered pairs to colors 1–4 and gives the same codebook and the same `ValueError` as the Python call; without it the default table. The schema accepts `pair_to_color` only with `backend: python`; MATLAB keeps its own table. |
 | `load_codebook.split_index` | Shared; MATLAB's one-based position `s`; translated into the two-segment layout (equal to zero-based `EncodingConfig.split_index = s − 1`). |
 | `reads_filtration.n_barcode_segments`, `reads_filtration.split_index` | Shared; accepted. `n_barcode_segments` must equal the number of segments of the layout and `reads_filtration.split_index` must equal `load_codebook.split_index`, else `ValueError`. |
 | `reads_filtration.end_base` | Shared; a string or a list. With one segment, every listed pair is an allowed end of that segment. With two segments, item k gives the allowed ends of segment k in acquisition order, as `FilterReadsMultiSegment.m` reads it. `start_base` is no longer needed when the ends are given and is kept for one-segment compatibility. |
@@ -586,6 +632,8 @@ population summary under `counts`.
 | `decoding` | Python-only; `method` (`wta`, `codebook_aware`, `direct`) and that config's fields. |
 | `scoring`, `deduplication` | Python-only; `run` and the config fields. |
 | Codebook input | In `direct` mode the rule's codebook input file is the panel CSV (`round,channel,gene_id`). |
+
+% W-304
 
 The schema lists of `decoding.method` and of the encodings are kept equal to the
 registries by a default-tier test, as for the other stages ({doc}`method-registry`,
@@ -598,7 +646,9 @@ background-subtracted extraction, spot fitting, trace summing, consolidated-posi
 re-extraction or incomplete-barcode inference; no external decoder; no automatic
 direct-mode reassignment or merging; no score cutoff, calibrated probability or
 recommended default filter; no real data. Comparisons and real-data cutoffs belong
-to E03.
+to separate evidence work on readout methods.
+
+% E03
 
 ```{toctree}
 :hidden:

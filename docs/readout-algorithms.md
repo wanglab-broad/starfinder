@@ -1,25 +1,29 @@
 # Readout algorithm specification
 
-Status: Accepted (W-280, 2026-10-02, at b1c7261)
+% Status: Accepted (W-280, 2026-10-02, at b1c7261)
 
-This page specifies the numerical methods of §2.8: the `two_base` and `one_base`
+This page specifies the numerical methods of the readout stage: the `two_base` and `one_base`
 encodings, the WTA and codebook-aware decoders, direct assignment, the local
 background and noise estimator, the shared read-QC score and the deduplication rule.
 It gives worked examples and the engineering validation design of task group 6. The
 registries, configs, modes and records they plug into are in {doc}`readout-contract`;
-the behavior before §2.8 is history, in {doc}`readout-baseline`. The encodings, decoders, estimator,
+the behavior before the package's readout work is history, in {doc}`readout-baseline`. The encodings, decoders, estimator,
 score and deduplication rule are implemented in `starfinder.readout` ({doc}`api/readout`),
-with the checks that "Implemented checks (W-296)" lists, and nothing here sets a score
+with the checks that "Implemented checks" lists, and nothing here sets a score
 cutoff, a calibrated probability or a default filter.
+
+% §2.8, W-296
 
 ## Evidence
 
-Every measured number comes from W-278, run directory
-`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-278/20261002T011718Z-0cfc7de7`
+Every measured number comes from the readout design study of 2026-10-02, below "the design
+study", whose run directory is kept with the run records outside the repository
 (found with `find … -maxdepth 2 -name readout-manifest.json`; handoff
 `worker-notes.md`). It is design selection for a development contract on synthetic
-data, not a method comparison. W-279 repeats no measurement; it reads the tables
+data, not a method comparison. The readout specification repeats no measurement; it reads the tables
 with `scripts/w279_cite_w278.py` in its own run directory. The tables cited are:
+
+% W-278, /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-278/20261002T011718Z-0cfc7de7, W-279
 
 * `estimators.csv`: background and noise estimators per condition and stratum;
 * `scores.csv`: score components and designs per condition, decoder and call class;
@@ -52,7 +56,9 @@ match are a separate population, unmatched detections.
 | Direct assignment | One gene per (round, channel) panels. | Each round images up to four genes; a candidate's channel is its identity. |
 | Local background | A background that varies over the field and across channels and rounds. | Broad and regional background, gain and trend differ per channel and round; a global median misses them. |
 | Shared score | Ranking calls by reliability across decoders and modes. | A read's correctness depends on how clearly its assigned channel stands above the others once background is removed. |
-| Deduplication | One amplicon read twice, as a candidate in its own channel and as a crosstalk copy in the next. | 5 % crosstalk into the next channel makes a weaker copy that local maxima detects correctly (W-218 re-measurement, {doc}`spot-finding-baseline`). |
+| Deduplication | One amplicon read twice, as a candidate in its own channel and as a crosstalk copy in the next. | 5 % crosstalk into the next channel makes a weaker copy that local maxima detects correctly (re-measurement in {doc}`spot-finding-baseline`). |
+
+% W-218
 
 ## Encodings
 
@@ -72,8 +78,10 @@ when every segment with declared ends is valid.
 
 ## Decoders
 
-The algorithms are unchanged from {doc}`readout-baseline`; §2.8 changes what they
+The algorithms are unchanged from {doc}`readout-baseline`; the readout work changes what they
 receive and report (entries, layout, modes).
+
+% §2.8
 
 | Field | WTA | Codebook-aware |
 | --- | --- | --- |
@@ -81,7 +89,9 @@ receive and report (entries, layout, modes).
 | Entries | Exact lookup of the observed sequence among entries; reports the entry and its gene. | Candidates are entries; two entries of one gene compete as two candidates. |
 | Encodings | Any `"color"` encoding; the decoder never reads bases. | The same. |
 | Failure | Statuses and reasons as in the baseline; invalid labels or negative sums raise. | The same, plus the gate reasons. |
-| Resources | Vectorized, O(N·C·R). Not measured by W-278. | The one-error index costs O(entries × R × C) to build and each read a dictionary lookup; a read with `M`/`N` rounds scans the entries. Not measured by W-278; the aging codebook gives an index of 14,242 × 9 × 3 ≈ 384,000 keys. |
+| Resources | Vectorized, O(N·C·R). Not measured by the design study. | The one-error index costs O(entries × R × C) to build and each read a dictionary lookup; a read with `M`/`N` rounds scans the entries. Not measured by the design study; the aging codebook gives an index of 14,242 × 9 × 3 ≈ 384,000 keys. |
+
+% W-278
 
 ## Direct assignment
 
@@ -92,12 +102,14 @@ receive and report (entries, layout, modes).
 | Failure | A panel with a repeated gene or a repeated (round, channel) raises at load; a candidate table without `round` raises; a round or channel label outside the dataset raises. |
 | Resources | O(N); extraction reads one round per candidate, so it costs 1/R of the multiplexed extraction. |
 
-W-278 measured the direct-readout ranking with each sequencing round of a
+The design study measured the direct-readout ranking with each sequencing round of a
 calibrated scene as one four-gene panel, detecting and extracting that round only
 (`direct.csv`). Its calls came from the decoders on a one-round panel, not from the
 detection channel, so its counts describe the prototype, not this assignment: 7616
 assigned exact calls, 411 incorrect and 458 unmatched detections (`direct.csv`,
 `call_class=exact`, `decoder=wta`).
+
+% W-278
 
 ## Background and noise
 
@@ -105,15 +117,19 @@ assigned exact calls, 411 incorrect and 458 unmatched detections (`direct.csv`,
 | --- | --- |
 | Problem | A per-spot background and noise next to the extracted sums, so that the score sees signal above the local background. |
 | Algorithm | For each candidate and round, take the voxels of the outer box `outer_radius_zyx=(1, 6, 6)` that lie outside the inner box `inner_radius_zyx=(1, 3, 3)` around the rounded centre, clipped to the image; per channel, `background` is their median and `noise` is 1.4826 × their median absolute deviation. Unclipped, that is the box's own three z-planes at lateral Chebyshev distance 4 to 6: 360 voxels. Per round and channel, the image median and 1.4826 × MAD are kept beside it. |
-| Parameters (units, defaults) | `inner_radius_zyx` (1, 3, 3) and `outer_radius_zyx` (1, 6, 6) voxels; `min_voxels` 16 (**provisional**: W-278 measured no ring below 99 voxels, so the failure path is unmeasured). |
+| Parameters (units, defaults) | `inner_radius_zyx` (1, 3, 3) and `outer_radius_zyx` (1, 6, 6) voxels; `min_voxels` 16 (**provisional**: the design study measured no ring below 99 voxels, so the failure path is unmeasured). |
 | Units | Grey levels per voxel of the extraction image; × `box_voxels` for sum units. |
 | Failure | Fewer than `min_voxels` ring voxels: NaN background and noise for that spot and round, and reason `background_unavailable` in the score. |
-| Resources | 24.6 µs per spot, channel and round in the W-278 prototype (`estimators.csv`, `estimator=local_ring`, `stratum=all`, `cost_us_per_estimate`, which divides the time by N×C×R estimates), so about 98.6 µs per spot and round across four channels: about four times the extraction loop itself (25 µs per spot and round on `medium`, `extraction-cost.csv`). |
+| Resources | 24.6 µs per spot, channel and round in the design study's prototype (`estimators.csv`, `estimator=local_ring`, `stratum=all`, `cost_us_per_estimate`, which divides the time by N×C×R estimates), so about 98.6 µs per spot and round across four channels: about four times the extraction loop itself (25 µs per spot and round on `medium`, `extraction-cost.csv`). |
 
-**Why this estimator.** W-278 chose it on the design seeds by the smallest median
+% W-278
+
+**Why this estimator.** The design study chose it on the design seeds by the smallest median
 absolute error against the realized box background (`selection.json`: 2.22 grey
 levels against 2.41 for the 3D shell and 3.39 for the image estimate). Held-out rows
 (`estimators.csv`, `estimator=local_ring`):
+
+% W-278
 
 | Row | Value |
 | --- | --- |
@@ -125,7 +141,7 @@ levels against 2.41 for the 3D shell and 3.39 for the image estimate). Held-out 
 | `stratum=at_border_box_clipped` (7,488) | realized error 2.37, region median 207 of 360 voxels (minimum 99), noise −13.8 %. |
 | `stratum=near_border_region_clipped` (7,216) | realized error 2.21, region median 282 voxels. |
 
-Known limits from W-278: the ring follows the local correlated noise, so it tracks
+Known limits from the design study: the ring follows the local correlated noise, so it tracks
 the realized background, not the latent one; the image estimate is closer to the
 latent background for uniform backgrounds (median error 1.0 against 2.83). The ring's
 MAD underestimates the analytic noise by about 12 % on clipped uint8 data (and the
@@ -133,21 +149,27 @@ image MAD overestimates it by 9.5 %); both are estimates for ranking, not calibr
 noise. On uint8 data a median moves in half-grey-level steps. About 19 % of the
 calibrated voxels are clipped at 0.
 
+% W-278
+
 ## Shared read-QC score
 
 | Field | Specification |
 | --- | --- |
 | Problem | One ranking of call reliability for both decoders, exact and rescued calls, and both modes. |
-| Algorithm | For each used round r and channel c: `v'_c = max(v_c − box_voxels_r × background_{c,r}, 0)`; `p_r = (v'_a + 1e-6) / Σ_c (v'_c + 1e-6)` for the assigned channel `a` of round r; `qc_score = Σ_r −log max(p_r, 1e-12)`. Components: `qc_ambiguity_max = max_r max(v'_{other}, 0) / v'_a` (strongest other channel), `qc_signal_to_background = mean_r (v_a − box_voxels_r × background_{a,r}) / (box_voxels_r × background_{a,r})` with the signed, unclipped numerator, `qc_rounds`. Every formula is the form W-278 measured (`scripts/w278_lib.py`, `components`: `bgcorr_probability_nll__local_ring`, `ambiguity_max__local_ring`, `sbr_mean__local_ring`). |
+| Algorithm | For each used round r and channel c: `v'_c = max(v_c − box_voxels_r × background_{c,r}, 0)`; `p_r = (v'_a + 1e-6) / Σ_c (v'_c + 1e-6)` for the assigned channel `a` of round r; `qc_score = Σ_r −log max(p_r, 1e-12)`. Components: `qc_ambiguity_max = max_r max(v'_{other}, 0) / v'_a` (strongest other channel), `qc_signal_to_background = mean_r (v_a − box_voxels_r × background_{a,r}) / (box_voxels_r × background_{a,r})` with the signed, unclipped numerator, `qc_rounds`. Every formula is the form the design study measured (`scripts/w278_lib.py`, `components`: `bgcorr_probability_nll__local_ring`, `ambiguity_max__local_ring`, `sbr_mean__local_ring`). |
 | Parameters | None tunable; the constants are the decoder's 1e-6 and 1e-12. |
 | Orientation and meaning | Lower `qc_score` ranks as more reliable. It is a ranking, not an error probability, and is not calibrated. |
 | Failure | NaN with `no_assignment` for reads without an assigned identity, and with `background_unavailable` when a used round has no background. |
 | Resources | Vectorized, O(N·C·R); negligible beside extraction. |
 
-**Why this score.** W-278 chose design D1 (`D1_bgcorr_probability`) on the design
+% W-278
+
+**Why this score.** The design study chose design D1 (`D1_bgcorr_probability`) on the design
 seeds by the highest mean exact-call AUROC over conditions and decoders
 (`selection.json`: 0.874 against 0.714 for the decoder score D0). Held-out rows
 (`scores.csv`, `score_kind=design`, pooled):
+
+% W-278
 
 | Row | D1 | Reference D0 (decoder score) |
 | --- | --- | --- |
@@ -159,36 +181,44 @@ seeds by the highest mean exact-call AUROC over conditions and decoders
 
 `ambiguity_max__local_ring` matches D1 on exact calls (0.900) and direct readout
 (0.944), but is weaker on rescued calls (0.697), so it is kept as a component, not
-as the score (W-278 choice 3). The signal-strength components rank weakly on exact
+as the score (the design study's choice 3). The signal-strength components rank weakly on exact
 calls (`snr_mean__local_ring` 0.505, `sbr_mean__local_ring` 0.533,
 `weakest_round_snr__local_ring` 0.576). In direct readout the weakest-round and
 codeword-support components do not apply (`direct.csv`, outcome `not_applicable`).
 
-Known limits from W-278: incorrect calls are few (46 exact and 12 rescued held-out
+% W-278
+
+Known limits from the design study: incorrect calls are few (46 exact and 12 rescued held-out
 calls pooled), so per-condition cells (2 to 18 incorrect, SE 0.016 to 0.160) support
 no per-condition tolerance; rescued calls are not uniform per condition
 (`weakening` 0.60 against 0.90 on one incorrect call); no score separates unmatched
 detections from correct calls (`auroc_correct_vs_unmatched` 0.44 to 0.50), because
 all 120 held-out unmatched calls are same-channel second maxima of amplicons that
-already have a candidate (the W-218 within-channel case, whose merge was off); the
+already have a candidate (the within-channel case of the local-maxima duplicate report, whose merge was off); the
 z-components scale noise as white despite correlated noise; the repair run
 re-selected after the run-1 held-out results had been read (protocol caveat).
+
+% W-278, W-218
 
 ## Deduplication
 
 | Field | Specification |
 | --- | --- |
 | Problem | Remove the second read of one amplicon detected in two channels. |
-| Algorithm | Among candidates of one detection round in different channels, link two when their Euclidean distance in voxel index space is at most `distance_voxels` (inclusive) and their WTA observed sequences are identical (W-278's measured rule) and contain no `M` or `N` (a proposed exclusion W-278 did not measure). Groups are the connected components; a group with assigned members of different entries is not merged (`conflicting_calls`); otherwise one original candidate represents the group: among the members with an `assigned` call (all members if none is assigned), the one with the largest extracted sum in its own detection channel in the detection round, ties going to the earliest row of the spot table. The others are marked duplicates of it. This is the rule of {doc}`readout-contract`. The pairwise link is what W-278 measured; the grouping, the representative and the conflict rule are additions it did not measure. |
+| Algorithm | Among candidates of one detection round in different channels, link two when their Euclidean distance in voxel index space is at most `distance_voxels` (inclusive) and their WTA observed sequences are identical (the design study's measured rule) and contain no `M` or `N` (a proposed exclusion the design study did not measure). Groups are the connected components; a group with assigned members of different entries is not merged (`conflicting_calls`); otherwise one original candidate represents the group: among the members with an `assigned` call (all members if none is assigned), the one with the largest extracted sum in its own detection channel in the detection round, ties going to the earliest row of the spot table. The others are marked duplicates of it. This is the rule of {doc}`readout-contract`. The pairwise link is what the design study measured; the grouping, the representative and the conflict rule are additions it did not measure. |
 | Parameters (units, defaults) | `distance_voxels` 1.0 voxel (index space; 0.094 µm laterally or 0.35 µm along Z at the repository example voxel size); `compatibility` `"same_sequence"`. Off by default. |
 | Failure | `ValueError` in `direct` mode; a result without decoding raises. Nothing iterates. |
 | Resources | A KD-tree pair query, O(N log N) per round; negligible at the calibrated density. |
 
-**Why this rule.** W-278 chose it on the design seeds by the fewest missed
+% W-278
+
+**Why this rule.** The design study chose it on the design seeds by the fewest missed
 duplicates plus false merges (`selection.json`); the design seeds hold no detectable
 crosstalk copy, so the false merges decided alone: 6 at d = 1 against 26 at d = 2
 (`duplicates.csv`, `split=design`, `rule=same_sequence`). Held-out rows
 (`duplicates.csv`, `row_type=rule`):
+
+% W-278
 
 | Row | Value |
 | --- | --- |
@@ -196,14 +226,16 @@ crosstalk copy, so the false merges decided alone: 6 at d = 1 against 26 at d = 
 | `rule=same_sequence`, `distance_voxels=2` | 13 (1.7 %), against 31 for `distance_only`, 21 for `trace_cosine` and 17 for `channel_consistency`. |
 | Missed duplicates | Undefined: `n_true_duplicate_pairs` 0; the held-out scenes hold no detectable crosstalk copy. |
 
-Outside the seed split (not the basis of the choice): on the W-218 case
+Outside the seed split (not the basis of the choice): on the case of the local-maxima duplicate report
 (`split=reference_case`, `condition=w218_small`, benchmark `small`, seed 42) there
 are 22 crosstalk copies, all within 2.0 voxels (|dz| ≤ 2, |dy|, |dx| ≤ 1), all with
 the same sequence; every rule misses 9 of 22 at d = 1 and none at d = 2 or 3, with
 no false merge. The `mixing` development fixtures (`split=fixture`) each hold one
 copy at distance 0, merged by every rule.
 
-**Measured against proposed.** W-278 measured the pairwise rule: each cross-channel
+% W-218
+
+**Measured against proposed.** The design study measured the pairwise rule: each cross-channel
 pair is linked or not (`scripts/w278_lib.py`, `rule_merges`), and missed duplicates
 and false merges are counted over pairs. It did not measure connected-component
 grouping, representative selection or the conflicting-call rule, and its sequence
@@ -215,9 +247,13 @@ merge pairs the pairwise rule did not link. Checks R13 to R15 therefore gate the
 grouped behavior as provisional, and R14 gates the pairwise links separately: the
 measured metric, for links that the `M`/`N` exclusion can only make fewer.
 
-Known limits from W-278: no held-out missed-duplicate evidence; the 5 % crosstalk at
+% W-278
+
+Known limits from the design study: no held-out missed-duplicate evidence; the 5 % crosstalk at
 the calibrated noise produced no detected copy in any calibrated scene; the choice
-of d = 1 against d = 2 is open (W-278 choice 1).
+of d = 1 against d = 2 is open (the design study's choice 1).
+
+% W-278
 
 ## Worked examples
 
@@ -282,75 +318,85 @@ brightest channel.
 
 ## Engineering validation design (task group 6)
 
-Task group 6 is engineering validation only (W-152 §2.14 decision, 2026-09-29):
+Task group 6 is engineering validation only (planning decision of 2026-09-29):
 known-answer fixtures with pass/fail tolerances fixed before the run, in
 default-tier pytest modules, and extended-tier modules (`-m extended`, one thread,
 CPU) for the checks on calibrated scenes. It has no comparison matrix, no parameter
 sweep, no cutoff selection, no benefit flag and no default chosen from comparative
-data; comparisons and real-data cutoffs belong to E03. The checks follow the §2.7
-S-table ({doc}`spot-finding-algorithms`).
+data; comparisons and real-data cutoffs belong to separate evidence work on readout methods.
+The checks follow the S-table of the spot-finding validation ({doc}`spot-finding-algorithms`).
+
+% W-152, §2.14, E03, §2.7
 
 Rules:
 
 * Every image is at most 32×64×64 voxels, four channels and four rounds, generated in
   the test. Hand-built fixtures use seeds 100, 101 and 102. The checks whose
-  tolerance is derived from W-278 held-out rows run on the same scenes, seeds 103,
-  104 and 105, with W-278's conditions, pipeline and matching policy ("Evidence").
-* Each tolerance either cites the W-278 row it is derived from or is marked
+  tolerance is derived from the design study's held-out rows run on the same scenes, seeds 103,
+  104 and 105, with the design study's conditions, pipeline and matching policy ("Evidence").
+* Each tolerance either cites the design-study row it is derived from or is marked
   **provisional** with a one-line reason. A tolerance is not adjusted in the run; a
   correct implementation that cannot meet one goes to Jiahao.
 * An ordering check ("A above B") compares the shared score with the decoder score on
-  the same calls, as W-278's rows support; it is a pass/fail engineering check, not a
+  the same calls, as the design study's rows support; it is a pass/fail engineering check, not a
   benefit claim, and its margin is the one the rows support.
+
+% W-278
 
 Fixtures:
 
 | Fixture | Construction | Density |
 | --- | --- | --- |
 | `golden` | The golden fixture of `test_readout_golden.py` (12×48×48, 4 rounds, 10 candidates). | 10 candidates |
-| `cal` | `calibrated_scene_preset` in the W-278 conditions `noise`, `mixing`, `weakening`, `gain`, `trend`, `round_effect_only`, `background_only`, `combined` (8×64×64, 4 rounds, 80 amplicons), seeds 103–105, built as in the W-278 manifest (`conditions`). | 2.44 per 1000 voxels |
-| `dense` | `cal` with `count=160` (W-278 `dense`). | 4.88 per 1000 |
+| `cal` | `calibrated_scene_preset` in the design-study conditions `noise`, `mixing`, `weakening`, `gain`, `trend`, `round_effect_only`, `background_only`, `combined` (8×64×64, 4 rounds, 80 amplicons), seeds 103–105, built as in the design study's manifest (`conditions`). | 2.44 per 1000 voxels |
+| `dense` | `cal` with `count=160` (the design study's `dense`). | 4.88 per 1000 |
 | `two_seg` | 16×64×64, 4 rounds: 24 amplicons of a codebook of 6-base barcodes in two 3-base segments (`load_codebook.split_index: [3]`, 2 + 2 colors), with allowed ends `CC` and `TT`; 4 reads planted one color from an entry, and 4 reads off the codebook whose segment A colors equal an entry's and whose segment B colors decode to ends outside `TT`. | 0.37 per 1000 |
 | `one_base` | The `golden` geometry with a `one_base` codebook of 4-base barcodes (mapping `A→1, C→2, G→3, T→4`). | 10 candidates |
 | `entries` | `cal` seed 103 with its 16-entry codebook relabeled to 6 genes (entries `e1`–`e16`, genes `g1`–`g6`, 2 to 3 entries each). | as `cal` |
 | `dropout` | `golden` with (i) round 3 set to 0 in a 9×20×20 region covering 3 candidates, (ii) `valid` set false for round 2 of 2 candidates (as a caller mask), (iii) a 4-voxel-wide zero band at the x=47 face in round 4 (registration fill). | 10 candidates |
 | `direct2` | The direct-readout worked example (2 rounds, 6×24×24). | 4 candidates |
-| `cal_direct` | `cal` with each sequencing round as a four-gene panel (genes `color-1` to `color-4`), detected in that round only, as W-278 `direct.csv`. | as `cal` |
+| `cal_direct` | `cal` with each sequencing round as a four-gene panel (genes `color-1` to `color-4`), detected in that round only, as the design study's `direct.csv`. | as `cal` |
 | `bg_const` | 12×48×48, 4 channels, constant 37 in every voxel except one spot; candidates at the centre, on each face and in a corner. | — |
 | `bg_neighbor` | `bg_const` with a second spot of known amplitude centred in the ring (lateral distance 5) and one in the excluded centre (distance 3). | — |
 | `crosstalk` | 16×64×64, 4 rounds: 20 amplicons, each with a 5 % copy in the next channel at a known offset: 8 at 0, 4 at 1, 4 at √2 and 4 at 2 voxels; 6 pairs of different genes 1 voxel apart in different channels; one copy whose read is rescued to a different entry than its source (a conflicting group). | 0.31 amplicons per 1000 |
+
+% W-278
 
 Checks:
 
 | # | Check | Fixture | Metric (source) | Pass/fail tolerance |
 | --- | --- | --- | --- | --- |
-| R1 | Encodings | 1,000 random 6- to 11-base barcodes per seed (100–102); `one_base` | `decode(encode(b))`; the 16 two-base pairs against `src/matlab/EncodeBases.m` | Round trip exact for both entries; the pair table equals MATLAB's; a non-bijective `base_to_color` raises. **Provisional**: contract rules; no W-278 row. |
+| R1 | Encodings | 1,000 random 6- to 11-base barcodes per seed (100–102); `one_base` | `decode(encode(b))`; the 16 two-base pairs against `src/matlab/EncodeBases.m` | Round trip exact for both entries; the pair table equals MATLAB's; a non-bijective `base_to_color` raises. **Provisional**: contract rules; no design-study row. |
 | R2 | One and two segments | worked example 2; every valid `split_index` of an 11-base barcode with and without `reverse_bases`; `two_seg` | Codebook equality; `decode_reads` table; per-segment `endpoint_valid` | The layout codebook equals `EncodingConfig(split_index=s − 1)` for every case; the workflow adapter with `load_codebook.split_index: [5]` gives `242324242` (the `split_index` fix); on `two_seg`, gene calls equal those of the same colors in a one-segment codebook, every read equal to an entry passes both segments' end checks, and the 4 planted wrong-end reads pass segment A and fail segment B. **Provisional**: known answers of the layout rules. |
-| R3 | `one_base` decoding | `one_base` | `evaluate_decoding` (gene accuracy) with the golden spot positions as truth | Every clean read assigned to its gene (accuracy 1.0) and statuses equal to the `golden` two-base run of the same color sequences. **Provisional**: no W-278 row; the decoders do not read the encoding. |
+| R3 | `one_base` decoding | `one_base` | `evaluate_decoding` (gene accuracy) with the golden spot positions as truth | Every clean read assigned to its gene (accuracy 1.0) and statuses equal to the `golden` two-base run of the same color sequences. **Provisional**: no design-study row; the decoders do not read the encoding. |
 | R4 | Entries sharing a gene | `entries` | Decoding table; `summarize_reads` per gene | Per-entry rows (status, entry, scores) equal the run with unique genes; each gene's count equals the sum of its entries' counts; repeated `color_sequence`, `entry_id` or `base_sequence` raise naming both rows. **Provisional**: bookkeeping. |
 | R5 | Required rounds and acquisition-local failures | `dropout`, both decoders | Statuses and reasons; table equality elsewhere | (i) exactly the 3 covered candidates `no_signal` / `zero_signal_round`; (ii) the 2 masked candidates `unmatched` / `invalid_measurement`, never rescued; (iii) candidates whose round-4 box lies in the band `no_signal`; every other row equal to the unperturbed run; the score NaN with `no_assignment` for all of them. **Provisional**: the golden test pins today's zero-round status. |
-| R6 | Multiplexed regression | `golden`; `cal` seed 103 | Tables after dropping the new columns, compared with explicit expected values | Equal to the golden expected values and to the `141c093` output on `cal` (since W-573 explicit expected values, which reproduce the digests pinned before). The computed float columns of the decoding tables are compared within the float64 tolerance of [contributing](contributing.md) ("Expected values and tolerances": `rtol=1e-9`, `atol=1e-12`) and every other column exactly, because the last bit of `log` and `sqrt` depends on the CPU. **Provisional**: no W-278 row covers it; the bound is today's behavior, pinned by the W-279 golden test. |
+| R6 | Multiplexed regression | `golden`; `cal` seed 103 | Tables after dropping the new columns, compared with explicit expected values | Equal to the golden expected values and to the `141c093` output on `cal` (since 2026-10-25 explicit expected values, which reproduce the digests pinned before). The computed float columns of the decoding tables are compared within the float64 tolerance of [contributing](contributing.md) ("Expected values and tolerances": `rtol=1e-9`, `atol=1e-12`) and every other column exactly, because the last bit of `log` and `sqrt` depends on the CPU. **Provisional**: no design-study row covers it; the bound is today's behavior, pinned by the golden test of the readout baseline. |
 | R7 | Direct assignment, known answer | `direct2` | Read table | Genes `Gfap`, `Gad1`, `Sst`, `Aqp4`; other rounds `valid=False` with values 0; an unmapped (round, channel) gives `unmatched` / `unmapped_channel`; a zero own round gives `no_signal`; a repeated gene or (round, channel) raises; deduplication raises. **Provisional**: new interface. |
-| R8 | Direct assignment on calibrated scenes (extended) | `cal_direct` | `ranking_quality` (new) of `qc_score` and of the decoder `probability_nll` on the same direct calls | `qc_score` AUROC above the decoder score's, pooled over conditions and seeds. **Provisional**: W-278 `direct.csv` (D1 0.930 ± 0.004 against 0.878 and 0.849) measured calls made by the decoders on a one-round panel, while this assignment takes the detection channel, so the row motivates the ordering but does not establish it for these calls. |
+| R8 | Direct assignment on calibrated scenes (extended) | `cal_direct` | `ranking_quality` (new) of `qc_score` and of the decoder `probability_nll` on the same direct calls | `qc_score` AUROC above the decoder score's, pooled over conditions and seeds. **Provisional**: the design study's `direct.csv` (D1 0.930 ± 0.004 against 0.878 and 0.849) measured calls made by the decoders on a one-round panel, while this assignment takes the detection channel, so the row motivates the ordering but does not establish it for these calls. |
 | R9 | Background analytic | `bg_const`, `bg_neighbor` | `background`, `noise`, `background_voxels`, `box_voxels` | On `bg_const`: background exactly 37 and noise exactly 0 away from the spot; 360 ring voxels in the interior and the exact clipped counts on faces and in the corner; NaN and `background_unavailable` below `min_voxels`. On `bg_neighbor`: the ring neighbor raises the background, the centre neighbor does not. **Provisional**: analytic expectations. |
-| R10 | Background on calibrated scenes (extended) | `cal`, `dense`, at truth positions | Median absolute error against the realized background (the spot-free twin, as W-278); latent bias; noise relative error; contamination (W-278 strata) | Realized-error median ≤ 2.5 grey levels in every condition (`estimators.csv`, `local_ring`, `stratum=all`: 2.16 to 2.48); latent bias median in [0, +1] in every condition except `dense`, [0, +2] there (+0.87 to +1.0; dense +2.0); noise relative error median in [−15 %, +10 %] in the strata without a shell neighbor and at the border (−12.4 % to −13.8 %); contamination median ≤ +2 (p90 ≤ +5) with a shell neighbor, ≤ +3 (p90 ≤ +6) in `dense` (`stratum=neighbor_in_shell`). |
-| R11 | Score definition | `golden`; `cal` seed 103 | `qc_score` and components against the W-278 formula computed in the test; identity columns | Maximum absolute difference ≤ 1e-12; NaN with the stated reasons for reads without identity; `gene_id`, `entry_id`, `call_status` and `call_type` equal before and after scoring. **Provisional**: a formula identity, exact up to float rounding. |
+| R10 | Background on calibrated scenes (extended) | `cal`, `dense`, at truth positions | Median absolute error against the realized background (the spot-free twin, as in the design study); latent bias; noise relative error; contamination (design-study strata) | Realized-error median ≤ 2.5 grey levels in every condition (`estimators.csv`, `local_ring`, `stratum=all`: 2.16 to 2.48); latent bias median in [0, +1] in every condition except `dense`, [0, +2] there (+0.87 to +1.0; dense +2.0); noise relative error median in [−15 %, +10 %] in the strata without a shell neighbor and at the border (−12.4 % to −13.8 %); contamination median ≤ +2 (p90 ≤ +5) with a shell neighbor, ≤ +3 (p90 ≤ +6) in `dense` (`stratum=neighbor_in_shell`). |
+| R11 | Score definition | `golden`; `cal` seed 103 | `qc_score` and components against the design study's formula computed in the test; identity columns | Maximum absolute difference ≤ 1e-12; NaN with the stated reasons for reads without identity; `gene_id`, `entry_id`, `call_status` and `call_type` equal before and after scoring. **Provisional**: a formula identity, exact up to float rounding. |
 | R12 | Score ranking (extended) | `cal`, both decoders | `ranking_quality` (new): AUROC with Hanley–McNeil SE and error at 50, 80, 90 and 100 % retention, per `call_type` | Exact calls, pooled: `qc_score` AUROC ≥ decoder-score AUROC + 0.05 for each decoder (`scores.csv`, `call_class=exact`: 0.897 against 0.782 and 0.743, SE 0.015 to 0.030). Rescued calls (codebook-aware): `qc_score` AUROC above `probability_nll`'s (`call_class=rescued`: 0.851 against 0.670, 12 incorrect; ordering only). Per condition: reported, not gated (2 to 18 incorrect per cell). Unmatched detections: reported, not gated. |
-| R13 | Deduplication, known answer | `crosstalk` | `evaluate_deduplication` (new): missed duplicates, false merges, groups; representatives | With d = 1: the 12 copies at ≤ 1 voxel merged (missed 0); the 8 copies at √2 and 2 voxels not merged (missed 8, as planted); the 6 different-gene pairs not merged (false merges 0); the conflicting group kept with `conflicting_calls`; every representative is the source amplicon's own-channel candidate. **Provisional**: known answers; the W-218 case (9 of 22 copies beyond 1 voxel, `duplicates.csv`, `reference_case`) motivates the √2 and 2 offsets. |
-| R14 | Deduplication on calibrated scenes (extended) | `cal`, `dense` | `evaluate_deduplication` | (a) Pairwise links, the metric W-278 measured (its rule had no `M`/`N` exclusion; the proposed exclusion only removes links, so W-278's rate bounds them from above): falsely linked distinct cross-channel pairs within 5 voxels ≤ 0.7 %, pooled (`duplicates.csv`, `heldout`, `same_sequence`, d = 1: 5 of 763, 0.66 %). (b) After grouping, representative selection and the conflict rule: false merges ≤ 0.7 % of the same pairs, **provisional**, because W-278 did not measure grouping. Missed duplicates: reported, not gated (no held-out true duplicates; W-278 limitation). |
+| R13 | Deduplication, known answer | `crosstalk` | `evaluate_deduplication` (new): missed duplicates, false merges, groups; representatives | With d = 1: the 12 copies at ≤ 1 voxel merged (missed 0); the 8 copies at √2 and 2 voxels not merged (missed 8, as planted); the 6 different-gene pairs not merged (false merges 0); the conflicting group kept with `conflicting_calls`; every representative is the source amplicon's own-channel candidate. **Provisional**: known answers; the case of the duplicate report (9 of 22 copies beyond 1 voxel, `duplicates.csv`, `reference_case`) motivates the √2 and 2 offsets. |
+| R14 | Deduplication on calibrated scenes (extended) | `cal`, `dense` | `evaluate_deduplication` | (a) Pairwise links, the metric the design study measured (its rule had no `M`/`N` exclusion; the proposed exclusion only removes links, so the design study's rate bounds them from above): falsely linked distinct cross-channel pairs within 5 voxels ≤ 0.7 %, pooled (`duplicates.csv`, `heldout`, `same_sequence`, d = 1: 5 of 763, 0.66 %). (b) After grouping, representative selection and the conflict rule: false merges ≤ 0.7 % of the same pairs, **provisional**, because the design study did not measure grouping. Missed duplicates: reported, not gated (no held-out true duplicates; the design study's limitation). |
 | R15 | Deduplication defaults and direct mode | `golden`; `direct2` | Table equality; raised error | Without a `deduplication` config the tables equal a run without the stage; `direct` mode raises `ValueError`. **Provisional**: contract rules. |
 | R16 | Checkpoint round trips | `golden`, `two_seg` and `direct2` runs; CSV and Parquet | `pd.testing.assert_frame_equal(check_exact=True)`; configs and header keys | Reloaded `candidates` (with background) and `pre_qc` (with score and deduplication) equal the originals; a `141c093` checkpoint written by the golden helper loads with no background and no score. **Provisional**: the golden test shows today's CSV round trip is exact. |
 | R17 | Rerun without images | `golden`, `crosstalk` | Table equality | From `candidates`: decode, score, deduplicate and filter equal the full run; from `candidates` and `pre_qc`: rescoring and deduplication equal; from `pre_qc`: filtering equals. **Provisional**: a contract rule. |
 | R18 | Filtering | `golden`, `two_seg`, `crosstalk` | Filter table | Bounds on `qc_score` and on any declared score column; `exclude_duplicates`; per-segment end bases; the default keeps every `assigned` read with no score bound. **Provisional**: contract rules. |
-| R19 | Determinism | `golden`; `cal` seed 103 | SHA-256 of every table, three single-thread processes | Identical. **Provisional**: no W-278 row covers it; the W-279 golden test gave byte-identical pins in three processes. |
+| R19 | Determinism | `golden`; `cal` seed 103 | SHA-256 of every table, three single-thread processes | Identical. **Provisional**: no design-study row covers it; the golden test of the readout baseline gave byte-identical pins in three processes. |
+
+% W-278, W-573, W-279, W-218
 
 `starfinder.evaluation.readout` holds the two metrics these checks use
 ({doc}`api/evaluation.registration`): `ranking_quality` gives the AUROC (correct ranked
 above incorrect), its Hanley–McNeil standard error and the error at each retention
-level (the W-278 `scores.csv` columns), and `evaluate_deduplication` the missed
-duplicates, false merges and their rates over the stated pair population (the W-278
+level (the design study's `scores.csv` columns), and `evaluate_deduplication` the missed
+duplicates, false merges and their rates over the stated pair population (the design study's
 `duplicates.csv` columns); both report an undefined value with a reason when a class is
 empty.
+
+% W-278
 
 `match_points` and `evaluate_decoding` are used as they are.
 
@@ -364,7 +410,7 @@ The golden test and the worked-example checks keep their values:
   decoding, filtering and `pre_qc` tables computed after dropping `entry_id` and the
   score columns, plus new pins for the extended tables; `candidates.csv` re-pinned,
   with an assertion that the table without the background columns, written by the
-  same writer, has today's digest. Since W-573 the pins of the tensor and of the
+  same writer, has today's digest. Since 2026-10-25 the pins of the tensor and of the
   decoding, filtering and `pre_qc` tables and files are explicit expected values with
   the tolerances of [contributing](contributing.md) ("Expected values and
   tolerances"), equal to the digests pinned before; the inputs and the codebook keep
@@ -376,7 +422,11 @@ The golden test and the worked-example checks keep their values:
   and direct-readout behavior are replaced by calls to `ENCODINGS` and
   `decode_direct`; every asserted value stays.
 
-### Implemented checks (W-296)
+% W-573
+
+### Implemented checks
+
+% Implemented checks (W-296)
 
 The checks are in the modules of `src/python/test/` listed below, each marked
 `validation` (subsystem `readout`). The task groups added most of them with the code
@@ -392,13 +442,15 @@ seeds 100, 101 and 102:
 
 The `golden` checks also keep the fixture's own pinned seed, where its pins are checked.
 The design names the pinned `golden` alone for R6 and R19. `bg_const` and `bg_neighbor`
-(R9) have no noise, so no seed applies. The W-278-derived checks use seeds 103 to 105 with
-W-278's conditions, pipeline and matching (`readout_scenes.py`). R4 (`entries`), R6 and
+(R9) have no noise, so no seed applies. The checks derived from the design study use seeds 103 to 105 with
+the design study's conditions, pipeline and matching (`readout_scenes.py`). R4 (`entries`), R6 and
 R11 on `cal`, and R19 use seed 103, as the design names. R8, R10, R12 and R14
 are in the extended tier (`-m extended`; also `slow`), and R19 is `slow` in the
 default tier. Every tolerance is the one in the table above, unchanged. No check is
 skipped or marked as an expected failure. The values were measured at one thread on
 one CPU.
+
+% W-278
 
 | # | Module and tests | Measured value | Tolerance |
 | --- | --- | --- | --- |
@@ -411,18 +463,20 @@ one CPU.
 | R7 | `test_readout_direct.py`, `test_r7_*` (seeds 100 to 102); `test_readout_deduplication.py`, `test_r15_deduplication_raises_in_direct_mode` | `Gfap`, `Gad1`, `Sst`, `Aqp4` at every seed; other round 0 and `valid=False`; `unmapped_channel`; `no_signal`; repeated gene and (round, channel) raise; deduplication raises | exact (provisional) |
 | R8 | `test_readout_validation.py`, `test_r8_*` (extended) | `qc_score` AUROC 0.790 (SE 0.029) against `probability_nll` 0.731 over the nine conditions (7,158 calls, 34 incorrect); 0.730 against 0.651 over the eight `cal` conditions (5,847, 13) | above (provisional) |
 | R9 | `test_readout_background.py`, `test_r9_*` | background 37 and noise 0; ring voxels 360 (interior), 240, 189 (faces), 66 (corner); NaN / `background_unavailable` below `min_voxels`; ring neighbor background 87, centre neighbor 37 | exact (provisional) |
-| R10 | `test_readout_background.py`, `test_r10_*` (extended) | realized-error median 2.16 to 2.48; latent bias 0.87 to 1.0, `dense` 2.0; noise relative error −13.05 % (no neighbor), −13.80 % (border); shell contamination median ≤ 2 (p90 ≤ 5), `dense` 3 (p90 6) | W-278 `estimators.csv` |
+| R10 | `test_readout_background.py`, `test_r10_*` (extended) | realized-error median 2.16 to 2.48; latent bias 0.87 to 1.0, `dense` 2.0; noise relative error −13.05 % (no neighbor), −13.80 % (border); shell contamination median ≤ 2 (p90 ≤ 5), `dense` 3 (p90 6) | design study `estimators.csv` |
 | R11 | `test_readout_scoring.py`, `test_r11_*` | maximum absolute difference 0 on golden (pinned seed and seeds 100 to 102), `direct2` (seeds 100 to 102) and the 8 `cal` conditions of seed 103, both decoders; NaN / `no_assignment`; identity columns equal | ≤ 1e-12 (provisional) |
-| R12 | `test_readout_scoring.py`, `test_r12_*` (extended) | exact, nine conditions: 0.897 against 0.782 (WTA) and 0.743 (codebook-aware), 1,589 calls, 46 incorrect; rescued 0.851 against 0.670 (97, 12); the eight `cal` conditions 0.897 against 0.795 and 0.758, rescued 0.866 against 0.749. Reported, not gated: SE 0.015 (`qc_score`) against 0.027 (WTA) and 0.030 (codebook-aware) on exact calls; error at 50, 80, 90 and 100 % retention 0.003, 0.006, 0.013, 0.029 (`qc_score`), 0.005, 0.016, 0.021, 0.029 (WTA); rescued SE 0.046 against 0.075, error at 90 % 0.091 against 0.114; per-condition rescued cells with 0 to 6 incorrect calls; 120 unmatched exact detections, correct against unmatched AUROC 0.473 (`qc_score`), 0.466 (WTA) and 0.460 (codebook-aware) | W-278 `scores.csv` |
+| R12 | `test_readout_scoring.py`, `test_r12_*` (extended) | exact, nine conditions: 0.897 against 0.782 (WTA) and 0.743 (codebook-aware), 1,589 calls, 46 incorrect; rescued 0.851 against 0.670 (97, 12); the eight `cal` conditions 0.897 against 0.795 and 0.758, rescued 0.866 against 0.749. Reported, not gated: SE 0.015 (`qc_score`) against 0.027 (WTA) and 0.030 (codebook-aware) on exact calls; error at 50, 80, 90 and 100 % retention 0.003, 0.006, 0.013, 0.029 (`qc_score`), 0.005, 0.016, 0.021, 0.029 (WTA); rescued SE 0.046 against 0.075, error at 90 % 0.091 against 0.114; per-condition rescued cells with 0 to 6 incorrect calls; 120 unmatched exact detections, correct against unmatched AUROC 0.473 (`qc_score`), 0.466 (WTA) and 0.460 (codebook-aware) | design study `scores.csv` |
 | R13 | `test_readout_deduplication.py`, `test_r13_*` | 12 copies at ≤ 1 voxel merged; 8 at √2 and 2 voxels not merged; 0 false merges of 6 pairs; the conflicting group kept; every representative is the source | exact (provisional) |
-| R14 | `test_readout_deduplication.py`, `test_r14_*` (extended) | (a) 5 of 763 distinct pairs linked (0.655 %); (b) 5 of 763 false merges for each decoder (0.655 %); 0 true duplicate pairs, so missed duplicates are undefined | (a) W-278 `duplicates.csv`; (b) provisional |
+| R14 | `test_readout_deduplication.py`, `test_r14_*` (extended) | (a) 5 of 763 distinct pairs linked (0.655 %); (b) 5 of 763 false merges for each decoder (0.655 %); 0 true duplicate pairs, so missed duplicates are undefined | (a) design study `duplicates.csv`; (b) provisional |
 | R15 | `test_readout_deduplication.py`, `test_r15_*` | golden tables (pinned seed and seeds 100 to 102) equal a run without the stage, and the golden pins at the pinned seed; direct mode raises `ValueError` (`direct2`, seeds 100 to 102) | exact (provisional) |
 | R16 | `test_readout_scoring.py`, `test_r16_*`; `test_readout_direct.py`, `test_r16_*`; `test_readout_validation.py`, `test_r16_two_seg_*` | golden (pinned seed and seeds 100 to 102), `direct2` and `two_seg` (with deduplication and two segments; seeds 100 to 102) round-trip exactly in CSV and Parquet; the emulated `141c093` checkpoint loads without background or score at every golden seed | exact (provisional) |
 | R17 | `test_readout_scoring.py`, `test_r17_*`; `test_readout_deduplication.py`, `test_r17_*` | every rerun from `candidates`, `candidates` + `pre_qc` and `pre_qc` equals the full run (golden at its pinned seed and seeds 100 to 102, `crosstalk` at seeds 100 to 102) | exact (provisional) |
 | R18 | `test_readout_deduplication.py`, `test_r18_*` | score bounds on `qc_score` and every declared column; `exclude_duplicates` rejects the 12 copies; per-segment ends on `two_seg`; the default keeps every assigned read (golden at its pinned seed and seeds 100 to 102; `crosstalk` and `two_seg` at seeds 100 to 102) | exact (provisional) |
 | R19 | `test_readout_validation.py`, `test_r19_*` | 164 table digests (golden, both decoders; 8 `cal` conditions of seed 103 through deduplication and filtering) identical in three single-thread processes | identical (provisional) |
 
-The W-278 limitations bound these values: synthetic data only, one 8×64×64 uint8
+% W-278
+
+The design study's limitations bound these values: synthetic data only, one 8×64×64 uint8
 field of view per seed; few incorrect calls (46 exact and 12 rescued held-out calls,
 and 34 direct calls in R8); no held-out crosstalk copy, so missed duplicates on the
 calibrated scenes stay unmeasured; fixed pipeline settings; and every score is an
@@ -431,14 +485,18 @@ uncalibrated ranking with no cutoff. R8 measures this assignment's direct calls
 comparable with that row. The checks are engineering validation only: they compare no
 methods and set no cutoff or default.
 
+% W-278
+
 ## Limitations
 
-These come from W-278 and apply to every number above: synthetic data only, one
+These come from the design study and apply to every number above: synthetic data only, one
 8×64×64 uint8 field of view per seed with about 19 % of voxels clipped at 0; one
-thread, one CPU, no GPU; no real data and no E03 evidence; no cutoff and no default
+thread, one CPU, no GPU; no real data and no evidence from the separate readout comparison; no cutoff and no default
 filter, so error at fixed retention describes a ranking only; every score is a
 ranking, none is calibrated; few incorrect calls (46 exact and 12 rescued held-out);
 fixed pipeline settings (detection 5 MAD, box (1, 2, 2), matching at 3 voxels); no
 held-out crosstalk copy, so no held-out missed-duplicate evidence; extraction cost
 measured on `medium` only; z-components that treat correlated noise as white; and
 the repair re-selection after the run-1 held-out results had been read.
+
+% W-278, E03

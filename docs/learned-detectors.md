@@ -1,13 +1,16 @@
 # Learned detectors: install, weights, run and tests
 
-This page collects the steps for running the two learned spot detectors of §2.7,
+This page collects the steps for running the two learned spot detectors of the spot-finding stage,
 Spotiflow (`SpotiflowConfig`) and Piscis (`PiscisConfig`). It covers installing
 their extras, fetching their pretrained weights, configuring a run and running
 their tests. The rules behind these steps are in {doc}`spot-finding-contract`
 ("Pretrained weights", "Execution device" and "Workflow configuration"), and the
 methods are described in {doc}`spot-finding-algorithms`. This page does not
 recommend a method or a model. The model names in the examples are placeholders
-for any row of the table below; method comparisons belong to E02.
+for any row of the table below; method comparisons belong to separate evidence work on
+spot-finding methods.
+
+% §2.7, E02
 
 ## Install
 
@@ -38,7 +41,7 @@ example `--extra local-registration`, on the same command and on every later
 * **CPU-only torch.** On Linux, `[tool.uv.sources]` takes torch and torchvision from
   the explicit `pytorch-cpu` index (`https://download.pytorch.org/whl/cpu`), so the
   environment holds the CPU build `torch 2.7.1+cpu`. On other platforms uv takes
-  them from PyPI. The only execution device in §2.7 is `cpu`
+  them from PyPI. The only execution device for spot finding is `cpu`
   (`ExecutionConfig.device` and the `device` keyword of `find_spots`, default
   `"cpu"`). Any other value raises `ValueError("device must be 'cpu'; §2.7 runs on
   CPU only")`.
@@ -47,6 +50,8 @@ example `--extra local-registration`, on the same command and on every later
   `SpotFindingBackendUnavailableError`, an `ImportError`, for example
   `spot-finding method 'spotiflow' requires spotiflow; install the 'spotiflow'
   extra (starfinder[spotiflow])`.
+
+% §2.7
 
 ## Weights
 
@@ -115,7 +120,7 @@ uv run starfinder weights verify piscis 20251212
   file:
   `extracted=tuple(f.path for f in KNOWN_MODELS[(method, model)].extracted)`
   (empty for Piscis, whose `.pt` file is already checked).
-* The segmentation models of `segmentation.KNOWN_MODELS` (`starfinder.segmentation`, §2.9;
+* The segmentation models of `segmentation.KNOWN_MODELS` (`starfinder.segmentation`;
   {doc}`segmentation-contract`, "Models") share the cache and the three commands:
   `starfinder weights fetch stardist 2D_versatile_fluo` downloads the StarDist
   archive and `starfinder weights fetch cellpose cpsam_v2` the Cellpose file, with
@@ -125,6 +130,8 @@ uv run starfinder weights verify piscis 20251212
   download. A model folder staged without `starfinder-weights.json` is kept when
   its files verify, so `list` shows it as `present`. `verify` re-hashes the
   listed files with `segmentation.resolve_model`, the check every segmentation call runs.
+
+% §2.9
 
 ### Cache location
 
@@ -268,24 +275,31 @@ two run its Piscis cases, one model at a time. Starfinder does not change thread
 settings: the exports give one numerical thread and no GPU, as in the recorded
 runs, and the extended tests also set them in the test process. Some validation
 cases are strict expected failures recorded
-in W-274, and pytest reports them as `xfailed`. The
+in the validation run of 2026-10-01, and pytest reports them as `xfailed`. The
 [Known limits](spot-finding-algorithms.md#known-limits) section of
 {doc}`spot-finding-algorithms` lists them, with the provisional tolerances and the
 limits of each method.
+
+% W-274
 
 Approximate run times:
 
 | Selection | Approximate time | Recorded run |
 | --- | --- | --- |
-| `test_spotiflow.py -m extended` | 1.5 minutes | 1:21 wall clock, 42 passed (W-272) |
-| `test_piscis.py -m extended` | 9 minutes | 8:42 wall clock, 44 passed (W-272) |
-| Validation, Spotiflow cases | 3 minutes | about 165 s of test time (W-274) |
-| Validation, `20230905` cases | 18 minutes | 17:42 wall clock, 58 passed, 5 xfailed (W-274 check) |
-| Validation, `20251212` cases | 18 minutes | 17:46 wall clock, 59 passed, 5 xfailed (W-274 check) |
-| The extended tier without the two Piscis validation selections | 16 minutes | 15:59 wall clock, 248 passed, 4 xfailed (W-274 check) |
+| `test_spotiflow.py -m extended` | 1.5 minutes | 1:21 wall clock, 42 passed (implementation run) |
+| `test_piscis.py -m extended` | 9 minutes | 8:42 wall clock, 44 passed (implementation run) |
+| Validation, Spotiflow cases | 3 minutes | about 165 s of test time (validation run) |
+| Validation, `20230905` cases | 18 minutes | 17:42 wall clock, 58 passed, 5 xfailed (validation check) |
+| Validation, `20251212` cases | 18 minutes | 17:46 wall clock, 59 passed, 5 xfailed (validation check) |
+| The extended tier without the two Piscis validation selections | 16 minutes | 15:59 wall clock, 248 passed, 4 xfailed (validation check) |
 
-These times come from single recorded runs in the W-272 and W-274 records; they
+% W-272, W-274
+
+These times come from single recorded runs in the records of the learned-detector
+implementation and of the validation run (both 2026-10-01); they
 were not measured again for this page. They are approximate one-thread values
 from one host (GP099-29C, Linux, Python 3.12, torch 2.7.1+cpu), measured with
 `taskset -c 0`, the thread variables at 1 and no GPU. They will differ on other
 machines and as the tests change.
+
+% W-272, W-274

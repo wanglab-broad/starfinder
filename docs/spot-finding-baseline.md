@@ -1,21 +1,27 @@
 # Spot-finding baseline
 
-Status: Accepted (W-268, 2026-10-01, at b5fcb7f); amended at the W-276 review, 2026-10-01
+% Status: Accepted (W-268, 2026-10-01, at b5fcb7f); amended at the W-276 review, 2026-10-01
 
-Note (W-583): {doc}`spot-finding-contract` and {doc}`spot-finding-algorithms` were accepted at W-268 (2026-10-01) and are implemented in `starfinder.spot_finding`; this page keeps the text of its revision.
+Note: {doc}`spot-finding-contract` and {doc}`spot-finding-algorithms` were accepted at the acceptance review of 2026-10-01 and are implemented in `starfinder.spot_finding`; this page keeps the text of its revision.
+
+% Note (W-583); accepted at W-268
 
 This page records how spot finding behaves at revision `42f652d` (branch
-`runner/s27-spec-20260930`, on `dev` after the §2.6 work), before the Chapter II
-§2.7 work changes it. It is the reference that the golden test
+`runner/s27-spec-20260930`, on `dev` after the registration work), before the package's
+spot-finding work changes it. It is the reference that the golden test
 `src/python/test/test_spot_finding_golden.py` pins. The proposed replacement is
 described in {doc}`spot-finding-contract` and {doc}`spot-finding-algorithms`;
 neither is accepted yet. Paths are relative to `src/python/starfinder/` unless
 they start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 `42f652d`.
 
-Note: this page keeps the field name of `42f652d`. The W-276 review (2026-10-01)
+% §2.6, Chapter II, §2.7
+
+Note: this page keeps the field name of `42f652d`. A review of 2026-10-01
 renamed `PipelineConfig.detection` to `PipelineConfig.spot_finding`, and
 `run.json` now records `config.pipeline.spot_finding`; see {doc}`migration`.
+
+% W-276
 
 ## Local maxima
 
@@ -39,8 +45,10 @@ landmark detectors share the module (below).
 | `PipelineConfig.detection` | `LocalMaximaConfig` or `None`; any other type raises `TypeError("detection requires its typed operation config")` (`dataset/config.py:207`, `:213-222`). |
 | YAML keys and translation | The `spot_finding` block of a Python rule: `run`, `ref_round` (must equal the dataset reference round, else `ValueError`), `intensity_estimation` → `threshold_mode` (default `noise`), `intensity_threshold` → `threshold_value` (default 5.0), `min_distance` or `min_distance_voxels` → `min_distance_voxels` (default 1; when both are given `min_distance_voxels` wins without notice) (`dataset/workflow.py:279`, `:308-309`, `:319`). `exclude_border` and `measure_peak_intensity` are not accepted (unknown keys raise), so YAML runs always exclude the border. The schema (`workflow/schemas/config.schema.yaml:814-827`) declares `run`, `ref_round`, `intensity_threshold` and `intensity_estimation` with the enum `local`, `global`, `noise`, `adaptive`, `adaptive_round`; `local` is accepted by the schema and rejected by Python (`unknown threshold_mode`) and by MATLAB (no such case). |
 | `candidates` checkpoint | `write_candidates` (`_checkpoint.py:456-469`) writes `candidates.<csv|parquet>`, the wide table of `candidates_frame` (`:196-220`: `spot_namespace`, `spot_id`, the spot columns, then `sig_<round>_<channel>` and `valid_<round>` when extracted), and `candidates.json` with `format_version` 2 (`FORMAT_VERSION`, `:20`; readers accept 1 and 2, `:22`), the dtype map, `spot_namespace`, `spot_columns`, `metadata`, `detection_config`, the JSON-representable `detection_diagnostics` and the extraction header. `_read_candidates` (`:472-492`) rebuilds the config through `_detectors()` (`:450-453`), a hard-coded map from the saved `method` (`local_maxima`, `noise_landmark`, `percentile_centroid`) to the three config types, and requires one namespace for every row. See {doc}`checkpoints`. |
-| Provenance | `run.json` stores the pipeline config and the spot count (`dataset/_run_record.py`). The registry's `provenance()` entry exists (`_registry.py:112-122`) with an `artifacts` list reserved for §2.7 weights, but nothing calls it for detection. |
+| Provenance | `run.json` stores the pipeline config and the spot count (`dataset/_run_record.py`). The registry's `provenance()` entry exists (`_registry.py:112-122`) with an `artifacts` list reserved for spot-finding weights, but nothing calls it for detection. |
 | MATLAB counterpart | `STARMapDataset.SpotFinding` (`src/matlab/STARMapDataset.m:708-758`) selects the channels whose name contains `seq` in `ref_layer` (default the reference round) and calls `SpotFindingMax3D` (`src/matlab/SpotFindingMax3D.m`): `imregionalmax` (connected regional maxima, 26-connectivity in 3D) above `intensity_threshold × channel maximum` (`adaptive`, MATLAB default with 0.2) or `× 255 / 65535` (`global`), strictly above; `regionprops3` centroids cast to `int16`, 1-based `x, y, z`, with `MaxIntensity` and `Channel`. A plateau is one regional maximum and so one spot at its rounded centroid; there is no `noise` mode, no border exclusion and no minimum distance. |
+
+% §2.7
 
 ## Registration landmark detectors in the same module
 
@@ -59,16 +67,22 @@ calls `match_points(truth, detected, policy, threshold, units, ...)`
 (`evaluation/matching.py`): `greedy` or `nearest_candidate` one-to-one matching
 with an inclusive or exclusive threshold, optional eligibility masks, and recall,
 precision and mean matched distance. It reports no per-axis localization error, no
-percentile of the matched distance and no duplicate classification; W-266 computed
-per-axis errors and the W-218 classification below from the matched pairs in its
-own scripts.
+percentile of the matched distance and no duplicate classification; the learned-detector
+dependency study of 2026-09-30 computed per-axis errors and the duplicate classification
+below from the matched pairs in its own scripts.
 
-## W-218 re-measurement on current code
+% W-266, W-218
 
-W-218 reported 68 candidates on one FOV of the `small` benchmark preset in the
-W-217 notebook: 45 matched, 22 duplicates, 1 spurious and 5 missed amplicons, and
+## Re-measurement of the reported duplicates on current code
+
+% W-218 re-measurement on current code
+
+An earlier report on local maxima found 68 candidates on one FOV of the `small` benchmark preset
+in the foundation tour notebook: 45 matched, 22 duplicates, 1 spurious and 5 missed amplicons, and
 attributed the duplicates to tied or split maxima of one multi-voxel amplicon.
 This issue re-measured it on the current code.
+
+% W-218, W-217
 
 * **Commit and environment.** `42f652d`, source unchanged; the locked project
   environment (Python 3.12.12, NumPy 2.2.6, SciPy 1.17.0, scikit-image 0.26.0,
@@ -87,11 +101,14 @@ This issue re-measured it on the current code.
   unmatched and lies within 5 voxels of a matched amplicon with the same decoded
   color sequence; *spurious* otherwise (the notebook's classification).
 * **Script and record.** `w218/w218_remeasure.py` and `w218/w218-remeasure.json`
-  in the run directory
-  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-267/20261001T014815Z-af149185`.
+  in this issue's run directory, kept with the run records outside the repository.
   The four runs took 12.8 s and 429 MB peak RSS in all (`/usr/bin/time -v`).
 
-Note (W-587): the foundation tour notebook named under **Pipeline** was retired with the other tours of `example/introduction/`; Git history keeps it.
+% /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-267/20261001T014815Z-af149185
+
+Note: the foundation tour notebook named under **Pipeline** was retired with the other tours of `example/introduction/`; Git history keeps it.
+
+% Note (W-587)
 
 | Run (one change each) | Candidates | Matched | Duplicate (same channel / other channel) | Spurious | Missed | Precision | Recall |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -102,12 +119,12 @@ Note (W-587): the foundation tour notebook named under **Pipeline** was retired 
 
 Findings:
 
-* The W-218 counts reproduce exactly on current code.
+* The reported counts reproduce exactly on current code.
 * **Every duplicate is a cross-channel candidate.** Each of the 22 lies in the
   channel next to its amplicon's matched candidate (at most 1.0 voxel away in Y
   and X and 2.0 in Z), and 19 of them have peak values of 196–256 against
   1152–2347 for the amplicon in its own channel. In the other 3 the greedy match
-  went to the dim copy and the bright one counts as the duplicate. The §2.12
+  went to the dim copy and the bright one counts as the duplicate. The synthetic
   generator mixes 5 % of each channel into the next (`crosstalk=0.05`). With the
   mixing switched off (`ReadoutEffectsConfig.mixing_enabled=False`; disabled
   effects consume no random draws, so nothing else changes), all 22 disappear.
@@ -129,29 +146,37 @@ Findings:
   duplicates: in the uint8 run, both same-channel ties and 6 copies that fall in
   the same other channel. No matched candidate is removed.
 
-The proposed W-218 option and its validation are in {doc}`spot-finding-algorithms`
+% W-218, §2.12
+
+The proposed merge option and its validation are in {doc}`spot-finding-algorithms`
 ("Local maxima" and check S16).
 
-## Discrepancies with the agreed §2.7 scope
+% W-218
+
+## Discrepancies with the agreed spot-finding scope
+
+% Discrepancies with the agreed §2.7 scope
 
 | # | Discrepancy | Proposed resolution |
 | --- | --- | --- |
 | 1 | Method dispatch by `isinstance` and hard-coded method sets: `SpotFindingResult.__post_init__` (`spot_finding/__init__.py:126`), `find_spots` (`:176`, dispatch `:186-228`), `_detectors()` (`_checkpoint.py:450-453`), `PipelineConfig.detection` (`dataset/config.py:207`, `:214`), `FOV.find_spots` (`dataset/fov.py:775`) and the YAML adapter (`dataset/workflow.py:319`). `isinstance` also accepts subclasses. | `SPOT_FINDING_METHODS` (registry move 4, {doc}`method-registry`): exact-type lookup, one private run function per method, every place derived from the registry ({doc}`spot-finding-contract`, "Registry entries"). |
 | 2 | Only local maxima is accepted by `FOV.find_spots` and `PipelineConfig.detection`. | Every method with `pipeline=True` is accepted: `local_maxima`, `starfish_log`, `spotiflow`, `piscis`. The landmark detectors stay `pipeline=False`. |
-| 3 | Detection runs on the reference round only, while direct readout needs candidates in each relevant round. | A named set of detection rounds, default the reference round only (unchanged), with an explicit `round` column and unchanged barcode-mode identities; proposed to §2.8 ({doc}`spot-finding-contract`, "Detection in several rounds"). |
-| 4 | W-218 duplicate maxima. Re-measured above: the 22 duplicates on the `small` scene are cross-channel crosstalk copies; same-channel ties appear after uint8 quantization; the 5 misses are border exclusion. | An explicit, opt-in within-channel merge `merge_radius_zyx` in `LocalMaximaConfig` (off by default, so the golden test is unchanged) resolves tied and split maxima; `exclude_border` becomes reachable from YAML for the border misses. The cross-channel copies are left to §2.8, because this issue excludes cross-channel deduplication; that split is an open choice for Jiahao ({doc}`spot-finding-algorithms`, "Local maxima"). |
+| 3 | Detection runs on the reference round only, while direct readout needs candidates in each relevant round. | A named set of detection rounds, default the reference round only (unchanged), with an explicit `round` column and unchanged barcode-mode identities; proposed to the readout stage ({doc}`spot-finding-contract`, "Detection in several rounds"). |
+| 4 | The reported duplicate maxima. Re-measured above: the 22 duplicates on the `small` scene are cross-channel crosstalk copies; same-channel ties appear after uint8 quantization; the 5 misses are border exclusion. | An explicit, opt-in within-channel merge `merge_radius_zyx` in `LocalMaximaConfig` (off by default, so the golden test is unchanged) resolves tied and split maxima; `exclude_border` becomes reachable from YAML for the border misses. The cross-channel copies are left to the readout stage, because this issue excludes cross-channel deduplication; that split is an open choice for Jiahao ({doc}`spot-finding-algorithms`, "Local maxima"). |
 | 5 | `exclude_border` (and `measure_peak_intensity`) cannot be set from YAML. | The `spot_finding` block accepts every init field of the selected method's config; the legacy aliases stay for `local_maxima` ({doc}`spot-finding-contract`, "Workflow configuration"). |
 | 6 | A noise-mode MAD of 0 (more than half the voxels equal to the median, for example zeros after background removal) makes the threshold equal to the median and passes silently (golden test: channel 2, 861 maxima in 3D). | Record the zero fraction, median, MAD and threshold per channel and round, and warn when MAD is 0 or more than half the voxels are zero; the threshold itself does not change ({doc}`preprocessing-algorithms`, "Interaction with noise-mode detection"). |
 | 7 | There is no spot-finding dependency error; spot finding has no optional dependency today. | `SpotFindingBackendUnavailableError(ImportError)`, raised through the registry's `require()` naming the module and the extra. |
 | 8 | No weights provenance: the `artifacts` list of the provenance entry is empty and nothing records model files. | A known-weights table with SHA-256, an explicit fetch command, hash-checked loading from explicit paths, and `artifacts` entries ({doc}`spot-finding-contract`, "Pretrained weights"). |
 | 9 | `min_distance` and `min_distance_voxels` together are accepted, and `min_distance` is ignored without notice. | Reject the pair with `ValueError`, as a duplicate setting. |
 | 10 | The schema's `intensity_estimation` enum contains `local`, which neither Python nor MATLAB accepts; the schema has no `method` and no `min_distance` keys. | Drop `local` from the enum; declare `method` (kept equal to the pipeline methods by a default-tier test) and the Python-only keys. |
-| 11 | Python returns every voxel of a plateau, while MATLAB `imregionalmax` returns one spot per plateau at its rounded centroid. | Recorded. The opt-in merge of item 4 removes plateau ties; MATLAB parity is not a goal of §2.7. |
-| 12 | The noise threshold uses the whole channel, so at high spot density it rises above the spot peaks (W-266: empty result on the 1×64×64 isolated-spot plane at 0.024 spots per voxel). | Flagged (W-266 choice 8, accepted); no change in §2.7. The diagnostics of item 6 make it visible, and validation fixtures for local maxima on Z=1 use a stated lower density. |
+| 11 | Python returns every voxel of a plateau, while MATLAB `imregionalmax` returns one spot per plateau at its rounded centroid. | Recorded. The opt-in merge of item 4 removes plateau ties; MATLAB parity is not a goal of the spot-finding work. |
+| 12 | The noise threshold uses the whole channel, so at high spot density it rises above the spot peaks (dependency study: empty result on the 1×64×64 isolated-spot plane at 0.024 spots per voxel). | Flagged (the dependency study's choice 8, accepted); no change in the spot-finding work. The diagnostics of item 6 make it visible, and validation fixtures for local maxima on Z=1 use a stated lower density. |
 | 13 | Diagnostics have no per-channel counts, no effective settings, no software or model identity and do not distinguish an empty success from a skipped channel. | The diagnostics of {doc}`spot-finding-contract` ("Diagnostics"). |
-| 14 | There is no device or thread record for detection. | The cross-stage `ExecutionConfig.device` (only `"cpu"` in §2.7) and an execution record with the framework build and thread settings. |
+| 14 | There is no device or thread record for detection. | The cross-stage `ExecutionConfig.device` (only `"cpu"` for spot finding) and an execution record with the framework build and thread settings. |
 | 15 | Coordinates are integer-valued; nothing reports a native score or size. | Unchanged for local maxima; the new methods add fractional coordinates and native scores or sizes as declared `output_columns`. |
 | 16 | Evaluation has no per-axis localization error and no duplicate classification. | Add two metrics to `starfinder.evaluation.spot_finding` for the validation design ({doc}`spot-finding-algorithms`). |
+
+% §2.8, W-218, §2.7, W-266
 
 ## Golden test
 
@@ -171,10 +196,12 @@ behavior on its own seeded fixture of 12×48×48 voxels and four uint16 channels
   `adaptive_round` differ) and has spots on the x=47 face and at x=1.
 
 It pins, as explicit expected values with the tolerances of
-[contributing](contributing.md) ("Expected values and tolerances") (W-573; they replaced
+[contributing](contributing.md) ("Expected values and tolerances") (since 2026-10-25; they replaced
 the exact SHA-256 digests pinned at first and reproduce them; every column of a spot
 table holds integers and compares exactly, and the thresholds compare within the
 float64 tolerance):
+
+% W-573
 
 * (a) the `find_spots` table and threshold diagnostics for the four threshold
   modes (`noise` 5.0, `adaptive` 0.2, `adaptive_round` 0.2, `global` 0.01), with
@@ -188,12 +215,14 @@ float64 tolerance):
 
 Three tests show that changing `threshold_value` (5 → 4), `min_distance_voxels`
 (1 → 2) or `exclude_border` (true → false) moves the noise-mode table outside
-that comparison, in 3D and Z=1. Two tests document legacy behavior that §2.7
+that comparison, in 3D and Z=1. Two tests document legacy behavior that the spot-finding work
 changes or keeps: the MAD-0 channel's threshold is 0 and no warning is emitted, and the saturated
 plateau gives more than one candidate. Every detection configuration is built by
 one helper, `detection_config`, which holds the only imports of detection config
 types and the only `PipelineConfig(detection=...)`. Learned methods and LoG are
 not in the golden test.
+
+% §2.7
 
 Three single-thread runs (`OMP_NUM_THREADS` and the other thread variables 1,
 `taskset -c 0`) each passed all 59 tests. In three further processes, every pinned

@@ -33,7 +33,7 @@ mode ``direct`` (:doc:`../readout-contract`).
 :py:func:`~starfinder.spot_finding.plot_detections` draws one channel's detections on one
 slice or crop; nothing plots unless a caller asks.
 
-:py:class:`~starfinder.spot_finding.LocalMaximaConfig` has the opt-in W-218 within-channel
+:py:class:`~starfinder.spot_finding.LocalMaximaConfig` has the opt-in within-channel
 merge ``merge_radius_zyx`` (default ``None``, the legacy result): of the maxima of one channel
 within the given ZYX ellipsoid only the brightest is kept (ties broken by z, y, x), and
 ``diagnostics["merged"]`` records the number removed per channel. Channels are never merged
@@ -42,6 +42,8 @@ with each other. :py:class:`~starfinder.spot_finding.StarfishLogConfig` selects
 ``is_volume=True``, no reference image) that reproduces starfish's tables exactly; it scales
 integer images by their dtype maximum, adds the ``radius`` column and records its scale-space
 memory estimate in ``diagnostics["geometry"]``. See :doc:`../spot-finding-algorithms`.
+
+.. W-218
 
 :py:class:`~starfinder.spot_finding.SpotiflowConfig` and
 :py:class:`~starfinder.spot_finding.PiscisConfig` select the learned detectors ``spotiflow``
