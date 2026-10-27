@@ -1,9 +1,11 @@
 starfinder.export
 =================
 
-Sample outputs (§2.10): the one sample-level export entry, its record, the fused
+Sample outputs: the one sample-level export entry, its record, the fused
 sample image, the assembled label image and the SpatialData export. See
 :doc:`../sample-output-contract`.
+
+.. Sample outputs (§2.10)
 
 :py:meth:`~starfinder.dataset.Dataset.export` writes everything to the sample's export
 folder ``<OUTPUT>/export/<sample>/``. After the checks before anything is written (the
@@ -63,7 +65,7 @@ with more than 2^24 = 16,777,216 cell rows is refused before anything is written
 second source: nothing is filtered, reassigned or recounted. One coordinate system, named
 after the sample (whose name must satisfy spatialdata's element naming rule), in the
 sample frame's axes and µm. The points ``molecules`` hold every molecule with finite
-sample coordinates (the §2.9 ``z, y, x`` renamed ``fov_index_z/y/x``, ``sample_x/y/z``
+sample coordinates (the assignment ``z, y, x`` renamed ``fov_index_z/y/x``, ``sample_x/y/z``
 the coordinate columns ``x, y, z``, ``cell_instance_id`` added); the shapes
 ``cell_centroids`` one circle per cell with a finite ownership centroid, at that centroid,
 with the equivalent radius of the original territory (a sphere for ``volume``, a disc for
@@ -83,10 +85,12 @@ written into a staging folder and renamed into place; the ``spatialdata`` sectio
 store file. A table that already has ``uns["spatialdata_attrs"]`` is refused by
 spatialdata and no store is written. Without the ``spatialdata`` extra the part is
 recorded ``not_run``. :py:func:`~starfinder.export.lookup_source` traces a molecule
-or a cell of an export folder back to its FOV, its §2.9 assignment folder and the row's
-position in the §2.9 table, after verifying the record's hashes.
+or a cell of an export folder back to its FOV, its assignment folder and the row's
+position in the assignment table, after verifying the record's hashes.
 :py:func:`~starfinder.export.check_export` reads the store back and evaluates the
 SpatialData conditions S1 to S8.
+
+.. the §2.9 ``z, y, x``; its §2.9 assignment folder; the §2.9 table
 
 The route to a sample's cells is ``ExportConfig.route``, a value of
 :py:data:`~starfinder.export.ROUTES` (``per_fov``: segmentation per FOV followed by

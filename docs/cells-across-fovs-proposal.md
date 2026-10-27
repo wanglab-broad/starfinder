@@ -1,14 +1,20 @@
 # Cells seen by two FOVs: measurements and a proposal
 
-Status: Proposed (W-399, 2026-10-09)
+% Status: Proposed (W-399, 2026-10-09)
 
-At the implementation review W-377 (2026-10-08) Jiahao saw that a cell at a seam can be in
+This page is a proposal of 2026-10-09; where Jiahao has decided a question, the decision is recorded under it.
+
+At the implementation review of 2026-10-08 Jiahao saw that a cell at a seam can be in
 the sample twice, and decided that this has to be handled. A cell is retained by the FOV
 that owns its ownership centroid ({doc}`assembly-contract`, "Retention"); a cell cut by a
 FOV edge is seen in part by each FOV, the two centroids differ, and both observations can
-be retained. This page answers, with measurements on the two cellular 2 × 2 blocks of
-W-382 and W-376, the five questions W-399 asks, and makes one recommendation for each.
+be retained. This page answers, with measurements on the two cellular 2 × 2 blocks of the
+real examples of stitching and assembly (the real-example segmentation and the real-example run of
+{doc}`stitching-assembly-validation`), the five questions its measurement was asked to answer, and
+makes one recommendation for each.
 It proposes; it changes no accepted page, no default and no rule. Jiahao decides.
+
+% the implementation review W-377 (2026-10-08); the real-example segmentation: W-382; the real-example run: W-376; the five questions W-399 asks
 
 Three ways were discussed at the review: a rule in the assembly that keeps one of two
 observations of a cell; merging observations across FOVs; and segmenting the fused image
@@ -23,7 +29,7 @@ want two orders of processing if one can do.
   (N − 1)·M + (M − 1)·N inner seams of one FOV side each, which is 2 − 1/N − 1/M per FOV:
   1 for a 2 × 2 block, about 1.76 for the cell-culture-3D sample (7 × 10 FOVs, 123 inner
   seams) and 1.73 for LN sample1 (64 FOVs on an 8 × 9 grid with blank cells, 111 inner
-  seams, counted from W-376's placement), and up to 2 for a large grid. For the same
+  seams, counted from the real-example run's placement), and up to 2 for a large grid. For the same
   tissue, FOV size and overlap, the share of cells near a seam in a whole sample is
   therefore expected to be larger than in a block, by a factor of up to about 1.8 for
   these samples. This factor is an expectation from the geometry, not a measurement; the
@@ -37,20 +43,22 @@ want two orders of processing if one can do.
   cells, nuclei, molecules, overlaps and times. No annotation exists, so no number on this
   page is an accuracy, and no segmentation method or scale is ranked. The nucleus labels
   of the cell culture are known to be faulty (one label over the nuclei of two cells,
-  W-382 comment of 2026-10-08); they are used as they are.
-* **One method per sample, unchanged.** The methods, models and parameters are W-382's:
+  a comment on the real-example segmentation, 2026-10-08); they are used as they are.
+* **One method per sample, unchanged.** The methods, models and parameters are those of the real-example segmentation:
   StarDist `3D_spleen` block by block for LN, Cellpose `cpsam_v2` on Z maxima extended
   through Z for the cell culture. What differs is only the image (the fused block instead
   of one FOV) and, in the reduced runs, its scale. Nothing was tuned.
 
+% W-376; W-382
+
 ## Evidence
 
-The run directory of W-399 is
-`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-399/20261009T073706Z-367758c2`
-(found with `timeout 30 find …/runs/W-399 -maxdepth 2 -name notes.md`). This page cites
-its files as "`results/<path>`", relative to that directory. `notes.md` there describes
+The run directory of this measurement is kept with the run records outside the
+repository. This page cites its files as "`results/<path>`", relative to that directory. `notes.md` there describes
 how each step ran; `results/manifest.json` holds the SHA-256 of every file read and
 written; `results/tables/resources.csv` the time, memory and GPU memory of every step.
+
+% The run directory of W-399 is `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-399/20261009T073706Z-367758c2` (found with `timeout 30 find …/runs/W-399 -maxdepth 2 -name notes.md`)
 
 | Measurement | Tables | Figures |
 | --- | --- | --- |
@@ -60,21 +68,25 @@ written; `results/tables/resources.csv` the time, memory and GPU memory of every
 | 3. LN sample1 after fusion | `results/tables/routes_ln.csv` and `.json`, `results/tables/m3_nuclei_seams_ln.csv`, `results/tables/m3_nuclei_seam_profile_ln.csv` | `results/figures/fig2_ln_nuclei_two_routes.png`, `results/figures/fig4_ln_nuclei_seam_density.png` |
 | 4. Molecules in the overlaps | `results/tables/m4a_strips_{ln,culture}.csv`, `results/tables/m4a_strips_by_line_{ln,culture}.csv`, `results/tables/m4bc_matches_{ln,culture}.csv` | `results/figures/fig5_ln_molecule_seam_density.png`, `results/figures/fig6_culture_molecule_seam_density.png` |
 
-The inputs are the files W-382 and W-376 used, each checked against its record before
+The inputs are the files the real-example segmentation and the real-example run used, each checked against its record before
 the first model call: the DAPI images of the four LN FOVs (`Position048`, `049`, `057`,
 `058`), the DAPI and Flamingo images of the four culture FOVs (`Position397`, `398`, `407`,
-`408`), their molecule tables, the two models, W-382's tables, and W-376's placements,
+`408`), their molecule tables, the two models, the real-example segmentation's tables, and the real-example run's placements,
 block assemblies, label images and pair lists. The LN placement is BigStitcher's, the
-culture placement `multiview_stitcher`'s, as W-376 used them.
+culture placement `multiview_stitcher`'s, as the real-example run used them.
+
+% W-382; W-376
 
 The terms are those of the two routes this page compares:
 
 * **The route per FOV** is the present one: each FOV is segmented and assigned on its own
-  (W-382), and the assembly retains each cell by its ownership centroid (W-376).
+  (the real-example segmentation), and the assembly retains each cell by its ownership centroid (the real-example run).
 * **The route after fusion** fuses the block's stain images with the package's `fuse_images`,
   segments the fused image once, takes the block's molecules from a `molecules_only`
   assembly (so that each position comes from one FOV) and assigns them to the cells of the
   fused image with `assign_molecules` on the fused grid.
+
+% W-382; W-376
 
 ## What the four measurements show
 
@@ -83,8 +95,10 @@ The terms are those of the two routes this page compares:
 For each pair of retained cells of different FOVs whose territories share a voxel on the
 sample grid, `results/tables/m1_pairs_{culture,ln}.csv` gives the shared voxels as a share
 of the smaller territory and of the union, the distance of the two ownership centroids,
-the flags and the molecule counts. The pairs equal W-376's lists, 34 in the culture block
+the flags and the molecule counts. The pairs equal the real-example run's lists, 34 in the culture block
 and 93 in the LN block (`pairs_equal_w376` in the `.json`).
+
+% W-376
 
 | Block | Pairs | Above 0.25 of the smaller territory | Above 0.5 | Above 0.75 | Cells of `sample.h5ad` in pairs above 0.5 | Their counts |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -117,13 +131,15 @@ and 93 in the LN block (`pairs_equal_w376` in the `.json`).
 
 The DAPI and Flamingo images of the four FOVs were fused with the block's saved placement
 at full resolution (33 × 2,844 × 2,842 voxels) and at 1/4 in Y and X (33 × 711 × 711).
-Cellpose ran on the Z maxima of the fused stacks with W-382's diameters (240 and 60
-pixels), divided by 4 at 1/4; the labels were extended through Z with W-382's settings,
+Cellpose ran on the Z maxima of the fused stacks with the real-example segmentation's diameters (240 and 60
+pixels), divided by 4 at 1/4; the labels were extended through Z with the real-example segmentation's settings,
 which are lengths in µm, so their pixel values fall by the same factor (median window 10
 → 3 pixels, dilation 10 and 5 → 2.5 and 1.25 pixels, areas 200 and 10 → 13 and 1 pixels).
 The block's 190,541 retained molecules were assigned on the fused grid.
 
-| | After fusion, 1/1 | After fusion, 1/4 | Per FOV (W-382, W-376) |
+% W-382
+
+| | After fusion, 1/1 | After fusion, 1/4 | Per FOV (real-example segmentation and run) |
 | --- | --- | --- | --- |
 | Cells | 173 | 168 | 226 in the four FOVs; 185 retained |
 | Cells without a matched nucleus (excluded) | 27 | 22 | 37 in the four FOVs; 27 of the retained |
@@ -136,9 +152,13 @@ The block's 190,541 retained molecules were assigned on the fused grid.
 | GPU memory (nvidia-smi peak; torch peak) | 4,144 and 3,056 MiB; 2,095 and 1,760 MiB | 2,214 and 2,906 MiB; 1,760 MiB | 2,548 to 2,904 MiB; 1,760 MiB |
 | Extension through Z (CPU, one thread) | 201 s and 154 s | 3.3 s and 2.4 s | 95 s to 192 s per FOV |
 
+% W-382; W-376
+
 Source: `results/tables/routes_culture.csv` and `.json`; the call records under
-`results/calls/` (tags `21_` to `24_`, `32_`, `34_`); W-382 `notes.md` ("Segmentation")
+`results/calls/` (tags `21_` to `24_`, `32_`, `34_`); the real-example segmentation's `notes.md` ("Segmentation")
 for the route per FOV.
+
+% W-382 `notes.md`
 
 **Times measured beside other work.** The steps did not all run one after another: the
 Cellpose calls at 1/4 (`23_`, `24_`) ran while the extension `32_culture_extend_k1` ran on
@@ -168,22 +188,26 @@ shared, so these times can differ by some percent from a run alone.
 The DAPI images of the four FOVs were fused with the block rows of the saved BigStitcher
 placement as a stack at full resolution (52 × 2,855 × 2,837 voxels, 421 million) and at
 1/2 in Y and X (52 × 1,428 × 1,419, 105 million). StarDist `3D_spleen` ran block by block
-on each with W-382's stored thresholds and block fields, the block covering all 52 planes
+on each with the real-example segmentation's stored thresholds and block fields, the block covering all 52 planes
 and the block size kept at 256 × 256 voxels at 1/2. Territories are the nuclei expanded by
-0.7776 µm, as in W-382. To compare times like for like, `Position057` was segmented again
-as W-382 did, with the 4 threads of the fused runs: its labels equal W-382's byte for byte.
+0.7776 µm, as in the real-example segmentation. To compare times like for like, `Position057` was segmented again
+as the real-example segmentation did, with the 4 threads of the fused runs: its labels equal the real-example segmentation's byte for byte.
 
-| | After fusion, 1/1 | After fusion, 1/2 | Per FOV (W-382, W-376) |
+% W-382
+
+| | After fusion, 1/1 | After fusion, 1/2 | Per FOV (real-example segmentation and run) |
 | --- | --- | --- | --- |
 | Nuclei (= cells) | 8,932 | 1,695 | 9,102 in the four FOVs; 8,194 retained |
 | Molecules assigned | 76,807 of 306,106 | 47,939 of 306,106 | 71,881 counts in `sample.h5ad` |
 | Counts per cell, median (mean) | 8 (8.6) | 26 (28.3) | 8 (8.8) |
 | Cells touching the outer border of the block | 91 | 25 | 98 retained; none touches an inner FOV edge |
 | Nuclei per 1000 µm² within 20 µm of a boundary / in the rest of the block | 29.5 / 29.2 (ratio 1.01) | 5.1 / 5.6 (0.92) | 27.5 / 26.7 (1.03) |
-| Model call: `segment` wall, CPU time, threads | 2,727 s, 4,930 s, 4 | 507 s, 750 s, 4 | `Position057` again: 659 s, 1,141 s, 4; W-382: 805 s to 1,309 s per FOV at 1 thread |
-| Time per million voxels (`segment` wall) | 6.5 s | 4.8 s | 5.9 s (`Position057`, 4 threads); 9.4 s (W-382, 1 thread) |
+| Model call: `segment` wall, CPU time, threads | 2,727 s, 4,930 s, 4 | 507 s, 750 s, 4 | `Position057` again: 659 s, 1,141 s, 4; the real-example segmentation: 805 s to 1,309 s per FOV at 1 thread |
+| Time per million voxels (`segment` wall) | 6.5 s | 4.8 s | 5.9 s (`Position057`, 4 threads); 9.4 s (the real-example segmentation, 1 thread) |
 | Peak RSS of the call | 7.7 GB | 3.3 GB | 3.4 GB |
 | GPU memory (nvidia-smi peak; TensorFlow peak) | 8,666 MiB; 2,707 MiB | 8,666 MiB; 2,707 MiB | 8,666 MiB; 2,707 MiB |
+
+% W-382; W-376
 
 Source: `results/tables/routes_ln.csv` and `.json`, `results/tables/m3_nuclei_seams_ln.csv`,
 `results/tables/m3_nuclei_seam_profile_ln.csv` and the call records (tags
@@ -208,7 +232,7 @@ columns `cpus_bound`, `ran_beside`, `shared_cpus_with`).
   can explain). The block's four FOVs hold 448
   million voxels against the fused block's 421 million, because each overlap is segmented
   twice per FOV; the two routes took about the same time for the block. The CPU time was 1.8
-  times the wall time with 4 threads; W-382 found most of a call's time to be CPU work.
+  times the wall time with 4 threads; the real-example segmentation found most of a call's time to be CPU work.
 * **At 1/2 the model finds far fewer nuclei**: 1,695 against 8,932. With the block size kept
   in voxels, the nuclei are half as large in voxels as at full resolution, and the model
   does not find most of them (the window in `fig2` shows large outlines over groups of
@@ -224,6 +248,8 @@ columns `cpus_bound`, `ran_beside`, `shared_cpus_with`).
 * **10 molecules fall outside the fused grid** (`outside_grid`): their sample Z lies outside
   the 52 planes the fusion grid spans. The route per FOV has none.
 * **Memory grows with the image**: 7.7 GB for the fused block against 3.4 GB for one FOV.
+
+% W-382
 
 ### 4. Molecules in the overlaps
 
@@ -262,8 +288,10 @@ no status is changed.
 
 **Decided on 2026-10-09** (Jiahao): both routes stay, segmentation per FOV followed by
 assembly and segmentation of the fused image (option C, not the recommendation A); the
-route after fusion is built for projection samples, specified by W-401
+route after fusion is built for projection samples, specified by the sample-segmentation specification
 ({doc}`sample-segmentation-contract`), and the 3D block-wise route is not built now.
+
+% W-401
 
 **Options.**
 
@@ -298,10 +326,12 @@ voxel, and no finer statement rests on these times.
 
 | | Time per million voxels | Block | Whole LN sample (extrapolation) |
 | --- | --- | --- | --- |
-| StarDist after fusion, 1/1, 4 threads | 6.5 s | 2,727 s for 421 M voxels | 8,849 M voxels (66 × 12,334 × 10,870, the grid of W-376's LN stack): about 57,000 s (16 h) on one GPU |
+| StarDist after fusion, 1/1, 4 threads | 6.5 s | 2,727 s for 421 M voxels | 8,849 M voxels (66 × 12,334 × 10,870, the grid of the real-example run's LN stack): about 57,000 s (16 h) on one GPU |
 | StarDist per FOV, 4 threads (`Position057`) | 5.9 s | about 2,640 s for 448 M voxels (four FOVs at 659 s; only `Position057` measured) | 64 FOVs × 112 M = 7,162 M voxels: about 42,000 s (12 h), in independent jobs |
 | Cellpose after fusion, culture projection 1/1 | 23 s and 18 s for 8.1 M pixels | 41 s for the two calls; extension 355 s | — |
 | Cellpose after fusion, culture projection 1/4 | 13 s and 14 s for 0.5 M pixels | 27 s; extension 6 s | — |
+
+% W-376
 
 * The fused LN grid is larger than the sum of the FOVs (8,849 against 7,162 million voxels)
   because its bounding box holds the blank cells of the LN grid; the fused route pays for
@@ -316,7 +346,9 @@ voxel, and no finer statement rests on these times.
   voxel count times a rate, nothing more.
 * Memory, not time, is the limit of the fused route for 3D: the fused block's call peaked
   at 7.7 GB RSS; a whole LN stack has 21 times its voxels, so it cannot be segmented as one
-  array in memory (W-376's whole LN stack was written at 1/2 only).
+  array in memory (the real-example run's whole LN stack was written at 1/2 only).
+
+% W-376
 
 **Not measured.** A whole sample by either route; block-by-block segmentation with a
 chunked label file; the per-FOV times of the other three LN FOVs at 4 threads; the
@@ -335,8 +367,10 @@ interim for 3D samples, not a second route kept for good.
 ## Question 2: how to segment after fusion
 
 **Decided on 2026-10-09** (Jiahao): for projection samples, the fused Z maximum reduced
-in Y and X is segmented in one call (specified by W-401); the block-by-block segmentation
+in Y and X is segmented in one call (specified by {doc}`sample-segmentation-contract`); the block-by-block segmentation
 of a fused 3D stack with a chunked label file is not built now.
+
+% W-401
 
 **Options and measurements.**
 
@@ -355,7 +389,7 @@ of a fused 3D stack with a chunked label file is not built now.
   and a context of 52 voxels, about 12.4 µm and 10 µm, against nuclei of 5 µm to 8 µm). The
   whole fused LN block took 7.7 GB; a whole LN stack in one array would need about 21
   times that. A whole culture projection at full resolution is about 13,636 × 9,576 pixels
-  (130 million, from W-376's projection at 1/2), 16 times the block's, which one call is
+  (130 million, from the real-example run's projection at 1/2), 16 times the block's, which one call is
   expected to take; this is not measured.
 * **Block overlap.** Larger than the largest object, as StarDist requires (`min_overlap`
   above the object size): the present 64 voxels (12.4 µm) for LN nuclei; for culture cells
@@ -365,8 +399,10 @@ of a fused 3D stack with a chunked label file is not built now.
   format 3, the format the store already uses), `uint32`, chunks of 16 × 512 × 512 voxels as
   the standalone fused OME-Zarr, written block by block. A whole LN stack at full
   resolution is 8,849 million voxels, 35 GB uncompressed; the saved per-FOV label files of
-  W-382 compress about 100 times (4.4 MB for 450 MB). A single OME-TIFF is not proposed for
+  the real-example segmentation compress about 100 times (4.4 MB for 450 MB). A single OME-TIFF is not proposed for
   3D: it cannot be written by blocks of a segmentation running out of order.
+
+% W-376; W-382
 
 **What it changes.** For projections: none beyond question 1 (the segmentation input is the
 fused projection at a configured scale). For 3D: a block-wise segmentation driver over a
@@ -389,7 +425,9 @@ fused stack, block by block with StarDist's present blocks (all planes × 256 ×
 ## Question 3: if cells of several FOVs stay a route, the rule that keeps one observation
 
 **Decided on 2026-10-09** (Jiahao): option (b), as a part of the route per FOV for good;
-implemented by W-400 ({doc}`assembly-contract`, "Retention", rule 8).
+implemented on 2026-10-09 ({doc}`assembly-contract`, "Retention", rule 8).
+
+% W-400
 
 **Options.**
 
@@ -401,14 +439,14 @@ implemented by W-400 ({doc}`assembly-contract`, "Retention", rule 8).
   a new reason.
 * **(c) Merge the two observations** into one cell (union of territories, molecules of
   both). Not proposed: it needs a new cell key across FOVs, a rule for molecules seen by
-  both FOVs and a new label image, and the issue excludes prototyping it.
+  both FOVs and a new label image, and the request for this measurement excludes prototyping it.
 
 **The measure, the threshold and which observation stays (option b).**
 
 * **Measure:** shared voxels on the sample grid divided by the smaller territory, as
   `results/tables/m1_pairs_*.csv` computes it. The union share gives the same split here
   but is smaller for a cut cell, whose part is much smaller than the whole.
-* **Threshold:** *t* = 0.5, one of the three values the issue fixed before the
+* **Threshold:** *t* = 0.5, one of the three values the request fixed before the
   measurement. **The choice among them is informed by the result**, and this page says so:
   in the culture no pair lies between 0.03 and 0.63, so 0.25, 0.5 and 0.75 would give 8, 8
   and 5 pairs; in LN 0.5 keeps the 4 pairs whose centroids are at most 2.2 µm apart,
@@ -427,7 +465,7 @@ implemented by W-400 ({doc}`assembly-contract`, "Retention", rule 8).
   territory stays excluded; this is counted in the record.
 
 **What it changes.** In the package: `assemble` gains the pair computation (the territory
-images placed on the sample grid, as W-376's `scripts/overlap.py` and W-399's
+images placed on the sample grid, as the real-example run's `scripts/overlap.py` and this measurement's
 `scripts/analysis.py` do), a configuration value for *t*, an assembly reason and a count
 in the record; `check_identities` and the accounting gain the reason. In the outputs of
 these blocks (`rule_reading` in `results/tables/m1_pairs_*.json`, read from the table, not
@@ -438,6 +476,8 @@ cells. These shares are a 2 × 2 block's. A whole sample has more seam per FOV, 
 share of candidate duplicates, and of the counts they hold, is expected to be larger, by a
 factor of up to about 1.76 (cell culture, 7 × 10 FOVs) and 1.73 (LN, 64 FOVs on 8 × 9),
 from the seam count of the first limit; this is an expectation, not a measurement.
+
+% W-376's `scripts/overlap.py`; W-399
 
 **What it leaves wrong.** The kept observation of a culture cell cut by its FOV's edge is
 still the part that FOV saw: the rule removes the candidate second observation, it does
@@ -482,7 +522,9 @@ sample.
 
 **Recommendation.** Keep (a), "a position belongs to one FOV".
 
-## Question 5: what becomes of the parts of §2.10 for cells of several FOVs
+## Question 5: what becomes of the parts of stitching and assembly for cells of several FOVs
+
+% heading: Question 5: what becomes of the parts of §2.10 for cells of several FOVs
 
 The parts that exist for cells of several FOVs are the cellular assembly (`assemble` with
 assignment inputs, mode `cells`, retention by ownership centroid), the flags `fov_edge`,
@@ -549,19 +591,22 @@ These are named, not edited:
 * The behaviour of the after-fusion route where FOVs differ in brightness or focus, beyond
   what the two blocks show.
 
-## Cells retained by no FOV, measured (this issue)
+## Cells retained by no FOV, measured on 2026-10-10
 
-W-434 (2026-10-10) measured, on the same two blocks, the cells that their own FOV
+% heading: Cells retained by no FOV, measured (this issue); the measurement of 2026-10-10: W-434
+
+A measurement of 2026-10-10 counted, on the same two blocks, the cells that their own FOV
 excludes `not_owner` and whether any FOV retains them. It measures; it decides and
-implements no rule. Its run directory is
-`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-434/20261010T234018Z-ca5cf87f`;
-its worker notes, tables (`results/tables/`), figures (`results/figures/`) and manifest
-(`results/manifest.json`) are there.
+implements no rule. Its run directory, kept with the run records outside the repository,
+holds its notes, tables (`results/tables/`), figures (`results/figures/`) and manifest
+(`results/manifest.json`).
 
-**Method.** The present `assemble` was run on W-376's block inputs and placements, once
-with the duplicate rule off (every cell then has the status, reason and flags of W-376's
-block export, which W-399 measured) and once at its default 0.5, which excludes 8 culture
-and 4 LN observations `duplicate_observation`, one per candidate pair of W-399. Every cell
+% W-434 (2026-10-10) measured; its run directory is `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-434/20261010T234018Z-ca5cf87f`; its worker notes
+
+**Method.** The present `assemble` was run on the real-example run's block inputs and placements, once
+with the duplicate rule off (every cell then has the status, reason and flags of the real-example run's
+block export, which this page measured) and once at its default 0.5, which excludes 8 culture
+and 4 LN observations `duplicate_observation`, one per candidate pair of this measurement. Every cell
 excluded `not_owner` in the second assembly is put in one class by the owner FOV's
 territory at its ownership centroid, read as the package reads it for `unclaimed`: the
 owner retains a cell there; the owner has no cell there; the owner's cell there is
@@ -571,6 +616,8 @@ the `unclaimed` flag in both blocks, with no disagreement. A cell has **no count
 when it shares less than 0.5 of the smaller territory, the duplicate rule's measure, with
 every retained cell of any FOV. A synthetic pair of FOVs with a known answer gave the
 expected class and counterpart for each of its cells.
+
+% W-376; W-399
 
 | Class (assembly with the duplicate rule on) | Culture: excluded | Culture: no counterpart (0.3 / 0.5 / 0.7) | LN: excluded | LN: no counterpart (0.3 / 0.5 / 0.7) |
 | --- | --- | --- | --- | --- |
@@ -588,7 +635,7 @@ expected class and counterpart for each of its cells.
   excluded cells that have a counterpart (9% against 12%, and 30% against 41%). What
   distinguishes them is that the owner's segmentation has no
   nucleus there; in the panels the owner's stain often shows one. The segmentation of
-  the fused block (W-399, scale 1/1) has a cell sharing at least 0.5 with 114 of the 383,
+  the fused block (this measurement, scale 1/1) has a cell sharing at least 0.5 with 114 of the 383,
   against 464 of the 525 excluded LN cells that have a counterpart. That segmentation is
   a second observation, not a truth.
 * **Molecules and counts.** Every molecule a FOV assigned to such a cell is excluded with
@@ -609,6 +656,8 @@ expected class and counterpart for each of its cells.
   377 and 342 cells back, and 9 and 5 pairs at or above 0.5 would remain among them.
   Of the 383 LN cells without a counterpart, 27 are one of two excluded observations of
   the same place, and 356 were seen by one FOV only. In the culture the figures are 2 and 4.
+
+% W-399
 
 **Limits of these numbers.**
 

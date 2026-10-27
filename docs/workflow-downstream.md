@@ -47,8 +47,10 @@ and `FOV.segment` then runs with no sequencing round resident
 ({doc}`segmentation-contract`, "Coordination per FOV"). For the Python rule to write
 that saved form, set
 `rules.nuclei_registration.parameters.checkpoints` (for example `{}`; `null` or absent
-writes none). The Python-only `segmentation` block is not wired to a rule yet (§2.13),
-and `rotate_nuclei` and the legacy segmentation rules are unchanged.
+writes none). The Python-only `segmentation` block is not wired to a rule yet (that is
+left to the workflow integration), and `rotate_nuclei` and the legacy segmentation rules are unchanged.
+
+% left to the workflow integration: §2.13
 
 `stardist_segmentation` runs the package's `stardist` method in the environment that
 runs Snakemake, which needs the `stardist` extra (StarDist, CSBDeep and TensorFlow); it
@@ -115,7 +117,9 @@ before assignment, and a codebook gene no molecule carries is a zero column. The
 tile config supplies integer `id,x,y,z` and
 `start_x_norm,end_x_norm,start_y_norm,end_y_norm` columns; the adapter applies the
 global offsets and the non-overlap filter to the package result as the script did,
-outside the package (§2.10).
+outside the package (sample positions belong to the stitching and assembly stages).
+
+% outside the package (§2.10)
 
 `raw.h5ad` keeps its legacy `obs` columns (`sample`, `fov_id`, `volume`,
 `fov_x/y/z`, `seg_label`, `global_x/y/z`, computed on the expanded territories when
@@ -136,7 +140,7 @@ ZYX, not for a YX one, and `log.txt`: one line of totals, then the assignment ra
 assigned molecules over all molecules of the table with both counts
 (`assignment ratio: 61.11% (11 of 18 molecules assigned)`), or
 `assignment ratio: none (no molecule)` when the FOV has none. With an `assembly` block
-that names an assignment (the route of a saved assignment, W-568), the rule writes the
+that names an assignment (the route of a saved assignment, since 2026-10-24), the rule writes the
 saved folder alone, and the figures only with `previews: true`, into
 `fovs/{fovID}/previews/`; then, on the route per FOV (below), the sample's `export_sample`
 rule draws the two figures once the sample is assembled into
@@ -144,6 +148,8 @@ rule draws the two figures once the sample is assembled into
 cells and molecules the assembly excluded in grey and, as each panel's x-axis label, how
 many of those drawn it retained ({doc}`assignment-contract`, "Diagnostics"). Without the
 block the figures stay as `reads_assignment` draws them.
+
+% the route of a saved assignment: W-568
 
 Assignment needs the `anndata` extra for `raw.h5ad`; sample H5AD aggregation uses
 Scanpy, which the base package does not install. The matrix counts decoded genes

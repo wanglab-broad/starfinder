@@ -1,9 +1,11 @@
 # Sample segmentation guide: segmentation after fusion for projection samples, the route setting and the consistency check of the two routes
 
-Status: Accepted (W-377, 2026-10-09, at 779ea77)
+% Status: Accepted (W-377, 2026-10-09, at 779ea77)
 
 This page is the maintained guide to sample segmentation, the route after fusion to a
-sample's cells (§2.10), and its contract.
+sample's cells in stitching and assembly, and its contract.
+
+% the route after fusion to a sample's cells (§2.10)
 
 * **What the stage does.** For a projection sample it segments the fused Z maximum once,
   on the segmentation grid at the dataset's `scale_yx`, and assigns the sample's
@@ -17,7 +19,7 @@ sample's cells (§2.10), and its contract.
   route runs `fuse`, `segment`, `assemble`, `fuse_labels` and `export_spatialdata` in that
   order; alone, `segment_fused` on a folder whose `fuse` ran, then
   `assemble(..., segmentation=…)`. Its settings are a `SampleSegmentationConfig` of
-  `SampleSegmentationRun`s in the §2.9 run format, with pixel lengths given for the
+  `SampleSegmentationRun`s in the segmentation run format, with pixel lengths given for the
   acquired grid, and check 7 refuses a wrong setting before anything is written
   ([Names](#names), [The entry](#the-entry),
   [The parts on each route](#the-parts-on-each-route),
@@ -36,6 +38,8 @@ sample's cells (§2.10), and its contract.
   ([Where the settings live](#where-the-settings-live),
   [The route setting](#the-route-setting)).
 
+% §2.9
+
 Beneath this guide, {doc}`sample-segmentation-validation` is the validation design of the
 route after fusion, the route setting and `compare_routes`, with its fixtures, its checks
 and the tests that implement them. The stage has no separate algorithm page and no
@@ -47,28 +51,32 @@ baseline: its rules are on this page, which cites its measurements from
 * 2026-10-09: `segment_fused` gains the keyword-only `identity=None`, the pair
   `(dataset_id, sample_id)` of its label namespaces ("Names", "The parts on each route"),
   because nothing the function was given holds the dataset's identity; without it the
-  labels do not carry that identity. Found by W-426. Operator decision, confirmed by Jiahao on
-  2026-10-10.
+  labels do not carry that identity. Found while implementing the route settings. Operator
+  decision, confirmed by Jiahao on 2026-10-10.
 * 2026-10-09: check 7 states that `cells` may name a run of either target and `nuclei`
   only a run of the target `nucleus` ("The entry"), in so many words, as the row RS4 of
-  {doc}`sample-segmentation-validation` now refuses. Found by W-426. Operator decision,
-  confirmed by Jiahao on 2026-10-10.
+  {doc}`sample-segmentation-validation` now refuses. Found while implementing the route
+  settings. Operator decision, confirmed by Jiahao on 2026-10-10.
 * 2026-10-10: the status `empty` of `segment` is recorded when the part is called alone;
   through `Dataset.export` with the assemble part on, a placement without an included FOV
   is refused before anything is written, as the accepted "No included FOV" of
   {doc}`sample-output-contract` settles for `fuse`; the `molecules_only` fallback with
   `complete` false is about `not_run`, and `complete` keeps its one rule ("The entry").
-  Found by W-427 and its review. Operator decision, confirmed by Jiahao on 2026-10-10.
+  Found while implementing the route after fusion in the entry, and in that review.
+  Operator decision, confirmed by Jiahao on 2026-10-10.
 * 2026-10-10: the `segmentation` section holds `assignment`, the assignment settings the
   sample's tables are made with, set to the current export's when the segmentation is
   reused ("The record"), because `assemble(..., segmentation=…)` has no other argument
-  that holds them. Found by W-427 and its review. Operator decision, confirmed by Jiahao on
-  2026-10-10.
+  that holds them. Found while implementing the route after fusion in the entry, and in
+  that review. Operator decision, confirmed by Jiahao on 2026-10-10.
 * 2026-10-10: L6 on the route after fusion is checked when the number of cells is first
   known, after `segment` and before `assemble` writes on a fresh export, before anything
   is written with a reused segmentation ("The label images"), in place of "L6 holds as
-  stated", because the cells do not exist before the segmentation. Found by W-428 and its
-  review. Operator decision, confirmed by Jiahao on 2026-10-10.
+  stated", because the cells do not exist before the segmentation. Found while implementing
+  the readers and the label export, and in that review. Operator decision, confirmed by
+  Jiahao on 2026-10-10.
+
+% Found by: the route settings, W-426 (two amendments of 2026-10-09); the route after fusion in the entry, W-427 (two); the readers and the label export, W-428; each with its review
 
 This page specifies the second route to a sample's cells: the fused Z maximum of a
 projection sample is segmented once, and the sample's molecules are assigned to those cells. It states how the route is called,
@@ -76,7 +84,7 @@ which images and settings it takes, how the sample's molecules reach `assign_mol
 what every column, key and file of the outputs holds on this route, what the record says,
 how a dataset chooses its route, and how the two routes are checked against each other.
 The validation design is {doc}`sample-segmentation-validation`. The route is implemented
-in the package and the workflow (W-425 to W-430), with the checks that {doc}`sample-segmentation-validation` lists
+in the package and the workflow (in six steps, 2026-10-09 to 2026-10-10), with the checks that {doc}`sample-segmentation-validation` lists
 ("Implemented checks"). The pages it builds on state the route's part of their own rules
 and cite this page.
 
@@ -89,15 +97,16 @@ export, the read-back checks), {doc}`assembly-contract` (`assemble`, the sample 
 sample frame). The measurements it uses are those of {doc}`cells-across-fovs-proposal`,
 cited there with their limits.
 
-Evidence, cited by path:
+% in six steps: W-425 to W-430
 
-* W-399, run directory
-  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-399/20261009T073706Z-367758c2`:
+Evidence, cited by path; the run directories are kept with the run records outside the
+repository:
+
+* The two-FOV cell measurement ({doc}`cells-across-fovs-proposal`):
   `notes.md` section 4 (how the block's molecules were assigned on the fused grid and
   where the scripts worked around the package) and `scripts/w399.py` (functions
   `step_fuse`, `step_culture_cellpose`, `fused_molecules`, `step_assign`).
-* W-401, run directory
-  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-401/20261009T212422Z-b4380edb`:
+* The grounding calls of this specification:
   `scripts/grounding_calls.py` and its record `calls/grounding_calls.json`. Every statement
   on this page about what a present function accepts was checked by one of these calls on
   a small synthetic input (two FOVs of 3 × 24 × 24 voxels, and `Dataset.export` on a
@@ -111,6 +120,9 @@ Evidence, cited by path:
   `src/python/starfinder/segmentation/_segment.py:261` and `:262`;
   `src/python/starfinder/_registry.py:84–88` imports each dependency), and call C15c
   showed Cellpose and torch imported after a refused `segment` call.
+
+% The two-FOV cell measurement: W-399, run directory `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-399/20261009T073706Z-367758c2`
+% The grounding calls: W-401, run directory `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-401/20261009T212422Z-b4380edb`
 
 ## What Jiahao decides
 
@@ -126,14 +138,16 @@ options further down and one recommendation:
 | 1 | How the route is called | E1: one new part `segment` in `Dataset.export` and one keyword `segmentation` of `assemble`; on this route the parts run `fuse`, `segment`, `assemble`, `fuse_labels`, `export_spatialdata` | "The entry" |
 | 2 | The scale the route segments at | SC1: the fused projection the `fuse` part writes, at the dataset's `scale_yx` | "The stains and the scale" |
 | 3 | How pixel lengths of the method settings are given | LS2: in pixels of the acquired grid, as for the route per FOV, converted by the route to the segmentation grid by the table of "Lengths in pixels", both values recorded | "Lengths in pixels" |
-| 4 | Where the method settings live | G2: a `segmentation` block inside the `export` block, in the run format of §2.9 with fused image names as inputs | "Where the settings live" |
-| 5 | How the sample's molecules reach `assign_molecules` | MT1: a private conversion to one `MoleculeTable` on the segmentation grid; no §2.9 type changes | "The sample's molecule table" |
+| 4 | Where the method settings live | G2: a `segmentation` block inside the `export` block, in the segmentation run format with fused image names as inputs | "Where the settings live" |
+| 5 | How the sample's molecules reach `assign_molecules` | MT1: a private conversion to one `MoleculeTable` on the segmentation grid; no segmentation or assignment type changes | "The sample's molecule table" |
 | 6 | What `fov_id` of a cell holds on this route | F1: the owning FOV of the cell's ownership centroid (options F1 to F3) | "The cells" |
 | 7 | How a molecule names its cell | CK1: a new column `cell_namespace` in the sample molecule table on both routes, and every reader links by the cell key | "The molecules" |
 | 8 | Which label files the route writes | K1: one OME-TIFF per segmentation run in `export/<sample>/`, and the expanded territories when assign expands | "The label images" |
 | 9 | The cell flags on this route | FL1: none applies; `assembly_flags` is empty and the record says so | "The cells" |
 | 10 | The default of the route setting | RD1: by `dimensionality`, unconditional; a projection dataset without the segmentation settings is refused, naming them | "The route setting" |
 | 11 | Where the consistency check lives | CC1: a package function `compare_routes` that reads two export folders and decides nothing | "The consistency check of the two routes" |
+
+% §2.9
 
 The defaults the operator proposed and this page recommends for Jiahao to confirm: a
 sample exported as a projection is segmented after fusion; a sample exported as a 3D stack
@@ -150,7 +164,7 @@ They are stated as settled and not reopened:
   thick section cannot be fused on the hardware at hand, and earlier samples were
   processed that way.
 * **The route per FOV keeps the duplicate rule** of question 3, option (b), for good
-  ({doc}`assembly-contract`, "Retention", rule 8; W-400).
+  ({doc}`assembly-contract`, "Retention", rule 8; decided on 2026-10-09).
 * **A dataset chooses its route by one setting with a default.** The two routes give the
   same outputs: the same files of `export/<sample>/`, the same tables and the same
   `sample.h5ad`, so that what reads them need not know the route. The two routes are
@@ -164,14 +178,16 @@ They are stated as settled and not reopened:
   `projection` and `route`: one file cannot be both the sum the dataset asked for and the
   maximum the route segments, and a second projection file would be a new output. The
   option that writes no new file and refuses nothing is in "The route setting".
-* **A projection sample is assigned by Y and X only** (W-390): the labels are a plane on a
+* **A projection sample is assigned by Y and X only** (since 2026-10-08): the labels are a plane on a
   grid of one plane, and a molecule's z does not select a label (call C7b).
 * **The molecules keep their rule**: a position belongs to one FOV. The route after fusion
   takes the sample's molecules from the assembly of the molecule tables (`molecules_only`).
 * **No merging of cells across FOVs.**
-* Standing preferences (W-329, 2026-10-06): reuse what a library or the package already
+* Standing preferences (the review gate, 2026-10-06): reuse what a library or the package already
   does; one `Dataset.export` and one `export/<sample>/`, no new output folder; choices that
   differ by dataset are configuration; no real-data record in the repository.
+
+% the duplicate rule: W-400; assigned by Y and X only: W-390; standing preferences: W-329
 
 Excluded: segmentation of a fused 3D stack, a block-wise driver, a chunked label file,
 merging of cells, any change to the rule for molecules, any change to the route per FOV
@@ -192,9 +208,11 @@ beyond the one column of choice 7, a model call or a real-data run in the valida
   `k = 2` and recorded `(1, 12, 20)`, spacing `(3.0, 1.0, 1.0)` and origin
   `(1.0, 0.25, 0.25)` µm; call C5 read the same grid back from the file alone.
 * A **segmentation run** is one `segment` call (or one import) of the route after fusion,
-  named as the §2.9 runs are named.
+  named as the segmentation runs are named.
 * The **sample segmentation** is the result of the runs: one label image per run on the
   segmentation grid, the run records and the `segmentation` section of `export.json`.
+
+% §2.9
 
 ## Names
 
@@ -219,10 +237,12 @@ when they are implemented, which `docs/check_reference.py` requires.
 ## The entry
 
 How the route is called from Python and from the workflow, in the conventions of
-`Dataset.export` and the §2.9 entries. Today `ExportConfig` has no route field (call C11), and
+`Dataset.export` and the segmentation and assignment entries. Today `ExportConfig` has no route field (call C11), and
 `Dataset.export` called on a synthetic dataset runs the four parts `assemble`, `fuse`,
 `fuse_labels` and `export_spatialdata` and writes no route and no `segmentation` section
 (calls C11b, C12).
+
+% §2.9
 
 ### Options
 
@@ -242,11 +262,13 @@ for a learned model on `cuda`); with E2 only the segmentation rule would.
 
 | Order | Route per FOV (as today) | Route after fusion |
 | --- | --- | --- |
-| 1 | `assemble` from the saved §2.9 assignment folders | `fuse`: the fused images, the segmentation's stains among them (`images`) |
+| 1 | `assemble` from the saved assignment folders | `fuse`: the fused images, the segmentation's stains among them (`images`) |
 | 2 | `fuse` | `segment`: `segment_fused` segments the fused projection and writes the label images and the `segmentation` section |
 | 3 | `fuse_labels` | `assemble`: the `molecules_only` assembly of the molecule tables, then `assign_molecules` of its retained molecules to the sample segmentation, then `save_assembly`: the four tables, `sample.h5ad` and the `assembly` section |
 | 4 | `export_spatialdata` | `fuse_labels`: `cell_labels.ome.tif` from the sample's territories ("The label images") |
 | 5 | — | `export_spatialdata`, as on the route per FOV |
+
+% §2.9
 
 On the route per FOV the part `segment` is recorded `off` with the reason `route_per_fov`.
 The order differs because the cells of the route after fusion exist only after the fused
@@ -362,11 +384,13 @@ of "What Jiahao decides" depends on it.
 **Which images.** The runs name fused images by role: for the cell culture, cells from
 `cytoplasm: flamingo` with `nuclear: dapi`, nuclei from `nuclear: dapi`, where `dapi`
 and `flamingo` are image names of `images` (for example
-`dapi=file:images/organelle/DAPI/{fov_id}.tif`), as W-399 fused them. The file of each
+`dapi=file:images/organelle/DAPI/{fov_id}.tif`), as the two-FOV cell measurement fused them. The file of each
 FOV is the one `fuse` reads for that name ({doc}`sample-output-contract`, "Fused image
 inputs"). The input of `segment` is the fused projection itself, so the segmentation input
-is a saved artifact with its SHA-256, as a §2.9 run's `input.ome.tif` is
+is a saved artifact with its SHA-256, as a segmentation run's `input.ome.tif` is
 ({doc}`segmentation-contract`, "Method input").
+
+% W-399; §2.9
 
 **Which projection.** The fused Z maximum (`projection: max`, the default), as settled. A
 dataset on this route that sets `projection: sum` is refused before anything is written
@@ -380,12 +404,14 @@ dataset on this route that sets `projection: sum` is refused before anything is 
 | SC2. A separate `segmentation_scale_yx` | `fuse` writes the segmentation's stains also at that scale, as `<image>_segmentation.ome.tif`. | A second output level per stain in `fuse`. | One more file per stain; the written image and the segmented image can differ in scale. It buys a fine fused image beside a coarse segmentation. |
 
 **Recommendation: SC1.** One setting decides the scale of the image and of the cells, and
-the segmented image is a file of the folder. On the culture block W-399 found 146 kept
+the segmented image is a file of the folder. On the culture block the two-FOV cell measurement found 146 kept
 cells at 1/1 and at 1/4, with about the same counts per cell, and the 1/4 calls took 13 s
 to 14 s against 18 s to 23 s ({doc}`cells-across-fovs-proposal`, measurement 2: one 2 × 2
 block; that they are the same cells is not measured; no accuracy). For another projection
 sample, the proposal's rule is the largest whole factor that keeps the cell diameter at
 30 pixels or more, Cellpose's working size, a rule not measured on tissue-2D (question 2).
+
+% W-399
 
 The whole culture projection at full resolution is about 13,636 × 9,576 pixels, which one
 call is expected to take; this is not measured ({doc}`cells-across-fovs-proposal`,
@@ -394,12 +420,14 @@ specified.
 
 ### Lengths in pixels
 
-The method settings of §2.9 hold some lengths in pixels of the input grid. On the
+The segmentation method settings hold some lengths in pixels of the input grid. On the
 segmentation grid a pixel is `k` acquired pixels wide, so a setting given for the
-acquired grid has to be divided by `k`. W-399 divided Cellpose's diameters by 4 by hand
+acquired grid has to be divided by `k`. The two-FOV cell measurement divided Cellpose's diameters by 4 by hand
 (240 and 60 became 60 and 15), and its settings in µm needed nothing
 ({doc}`cells-across-fovs-proposal`, measurement 2). The pixel fields of the two learned
 configs (call C14), and what `StarDistConfig` accepts (call C14b):
+
+% §2.9; W-399
 
 | Method | Field | Unit | Value used at factor `k` |
 | --- | --- | --- | --- |
@@ -423,8 +451,10 @@ configs (call C14), and what `StarDistConfig` accepts (call C14b):
 
 | Option | Settings | What it changes | Consequence |
 | --- | --- | --- | --- |
-| G1. The per-FOV `segmentation` block, with a map from roles to fused image names | The runs of the §2.9 plan, their `projection` and `operations` dropped. | A map key; rules for dropping what does not apply. | One block for both routes, but a run of the route per FOV (a Z maximum extended through Z, as W-382's culture runs) silently becomes another run. |
-| **G2. A `segmentation` block inside `export` (recommended)** | Runs in the format of §2.9 (`name`, `target`, `seeds`, `method` and its keys, LS2 lengths), `inputs` as `{role, image}`; `cells`, `nuclei`, `device`. The assignment settings (`expansion`, `correspondence`, `exclude_cells_without_nucleus`) are those of the dataset's `assignment` block. | One sub-block. | The route's settings are explicit; the assignment settings are shared by both routes. |
+| G1. The per-FOV `segmentation` block, with a map from roles to fused image names | The runs of the segmentation plan, their `projection` and `operations` dropped. | A map key; rules for dropping what does not apply. | One block for both routes, but a run of the route per FOV (a Z maximum extended through Z, as the culture's real-example segmentation runs) silently becomes another run. |
+| **G2. A `segmentation` block inside `export` (recommended)** | Runs in the segmentation run format (`name`, `target`, `seeds`, `method` and its keys, LS2 lengths), `inputs` as `{role, image}`; `cells`, `nuclei`, `device`. The assignment settings (`expansion`, `correspondence`, `exclude_cells_without_nucleus`) are those of the dataset's `assignment` block. | One sub-block. | The route's settings are explicit; the assignment settings are shared by both routes. |
+
+% §2.9; W-382
 
 **Recommendation: G2.**
 
@@ -474,8 +504,10 @@ export:
         diameter: 240          # 60 at 1/4
 ```
 
-The values illustrate the layout (W-382's diameters for the culture, which W-399 used);
+The values illustrate the layout (the diameters of the culture's real-example segmentation, which the two-FOV cell measurement used);
 they are not recommended settings.
+
+% W-382; W-399
 
 ## The sample's molecule table
 
@@ -492,14 +524,18 @@ refuses labels whose namespace does not begin with the molecules' identity (call
 
 | Option | How `assign_molecules` takes the sample's molecules | What it changes in the package | What it changes in the outputs |
 | --- | --- | --- | --- |
-| **MT1. A private conversion (recommended)** | The retained rows become one `MoleculeTable`: `spot_namespace` `[dataset_id, sample_id, null, null]` (accepted, call C1), `spot_id` the row's position in the sample molecule table, `z, y, x = (sample_zyx − O) ⊘ S` on the segmentation grid in float64, not rounded, `gene_id` and the sample's genes. `assign_molecules` runs unchanged (call C7) and returns one row per input in input order ({doc}`assignment-contract`, "Molecule table"), which the route maps back to the original keys by position. | One private function in the route. No §2.9 type or check changes. | None: the written tables keep every molecule's original `spot_namespace`, `spot_id` and `fov_id`; the temporary keys never leave memory, and the record names the conversion and its table's SHA-256. |
-| MT2. A public `SampleMoleculeTable` | A new type whose rows keep their own namespaces, and an `assign_molecules` that accepts it. | A new type and a changed §2.9 entry ({doc}`assignment-contract`, "Inputs", check 6). | None beyond MT1. It buys a public sample-level molecule type for other sample-level callers. |
+| **MT1. A private conversion (recommended)** | The retained rows become one `MoleculeTable`: `spot_namespace` `[dataset_id, sample_id, null, null]` (accepted, call C1), `spot_id` the row's position in the sample molecule table, `z, y, x = (sample_zyx − O) ⊘ S` on the segmentation grid in float64, not rounded, `gene_id` and the sample's genes. `assign_molecules` runs unchanged (call C7) and returns one row per input in input order ({doc}`assignment-contract`, "Molecule table"), which the route maps back to the original keys by position. | One private function in the route. No segmentation or assignment type or check changes. | None: the written tables keep every molecule's original `spot_namespace`, `spot_id` and `fov_id`; the temporary keys never leave memory, and the record names the conversion and its table's SHA-256. |
+| MT2. A public `SampleMoleculeTable` | A new type whose rows keep their own namespaces, and an `assign_molecules` that accepts it. | A new type and a changed assignment entry ({doc}`assignment-contract`, "Inputs", check 6). | None beyond MT1. It buys a public sample-level molecule type for other sample-level callers. |
 | MT3. A relaxed `MoleculeTable` | `MoleculeTable` accepts several namespaces when its source says so. | A changed accepted validation. | None beyond MT1. |
 
-**Recommendation: MT1.** It is what W-399 did (`fused_molecules`, with `<fov_id>|<spot_id>`
+% §2.9
+
+**Recommendation: MT1.** It is what the two-FOV cell measurement did (`fused_molecules`, with `<fov_id>|<spot_id>`
 as the identity, which works as well), and call C7 confirms it on the package: the four
 retained molecules of two FOVs were assigned on the fused grid, and the cell across the
 seam received the retained molecule of FOV1 and the one of FOV2.
+
+% W-399
 
 **Coordinates.** On a grid of one plane `assign_molecules` samples `y` and `x` only
 (`sampled_axes` `yx`), so a molecule's `z` index never makes it `outside_grid`: the same
@@ -532,7 +568,7 @@ one.
 | `obs_name` | The same format, `<sample>_<fov_id>_<cell_id>`; unique because `cell_id` is. |
 | `status`, `exclusion_reason` | The same, from the sample assignment (`excluded_no_nucleus` with nuclei and the default exclusion). |
 | `size_voxels`, `expanded_size_voxels` | Pixels of the segmentation grid (at `1/k`), not of a FOV's grid. |
-| `size_physical`, `expanded_size_physical` | The same meaning: µm² for the plane (call C7: 35 pixels of 1 µm² gave 35.0). On the route per FOV a cell extended through Z (the culture of W-382) has µm³; a projection sample's cells are planes on this route. |
+| `size_physical`, `expanded_size_physical` | The same meaning: µm² for the plane (call C7: 35 pixels of 1 µm² gave 35.0). On the route per FOV a cell extended through Z (the culture's real-example segmentation) has µm³; a projection sample's cells are planes on this route. |
 | `centroid_z/y/x`, `expanded_centroid_z/y/x` | Mean pixel index on the segmentation grid (0.0 in Z for the plane), not on a FOV's grid. |
 | `n_molecules`, `n_nuclei`, `correspondence`, `correspondence_flags`, `compartments` | The same, from the sample assignment. |
 | `sample_centroid_z/y/x` | The same rule: the original territory's centroid in sample coordinates, through the segmentation grid's `index_to_world` (call C23); `sample_centroid_z` NaN for the plane. |
@@ -545,6 +581,8 @@ one.
 | `assembly_flags` | Empty on every row (choice 9, FL1). |
 | `conflict_with` | Empty on every row. |
 | `duplicate_of` | Null on every row: the duplicate rule does not apply. |
+
+% W-382
 
 **What `fov_id` holds (choice 6).** On the route per FOV `fov_id` is the FOV that
 observed the cell. After fusion no single FOV observed it, but the column is a key that
@@ -581,7 +619,7 @@ One row per molecule of every FOV, in placement table order, then input order, a
 
 | Column | Route after fusion |
 | --- | --- |
-| `fov_id`, `spot_namespace`, `spot_id`, `z`, `y`, `x`, `gene_id` | The same: the observing FOV, the §2.9 keys and the index position on the FOV's grid. |
+| `fov_id`, `spot_namespace`, `spot_id`, `z`, `y`, `x`, `gene_id` | The same: the observing FOV, the per-FOV keys and the index position on the FOV's grid. |
 | `voxel_z/y/x` | The sampled pixel on the segmentation grid (`voxel_z` 0), not on the FOV's grid; null for an excluded molecule, which is not assigned. |
 | `assignment_status` | The sample assignment's status for a retained molecule; null for an excluded one, as in a `molecules_only` assembly. |
 | `cell_id`, `in_expansion`, `original_cell_id`, `nucleus_id`, `compartment` | The same meaning, on the sample segmentation; null for an excluded molecule. |
@@ -589,6 +627,8 @@ One row per molecule of every FOV, in placement table order, then input order, a
 | `sample_z/y/x`, `owner_fov_id` | The same. |
 | `assembly_status`, `assembly_reason` | The molecules' rule, unchanged: retained when its position's owner is its FOV, else `not_owner`; `outside_grid` (outside its FOV's grid, or outside the segmentation grid in Y or X) and `fov_not_placed` as today. A molecule of a cell is not retained "with its cell" (rule 2 of the route per FOV): each position has one observation. |
 | `assembly_flags` | Empty: `outside_owner_region` and `cell_unclaimed` cannot arise. |
+
+% §2.9
 
 **How a molecule names its cell.** Today the readers find a molecule's cell by the
 molecule's own `fov_id` and its `cell_id`: the SpatialData export's `cell_links` (call C9)
@@ -599,8 +639,10 @@ cell table does not hold", and call C16 failed at identity 3.
 
 | Option | Rule | What it changes in the package | What it changes in the outputs |
 | --- | --- | --- | --- |
-| **CK1. A column `cell_namespace` on both routes (recommended)** | The sample molecule table gains `cell_namespace`; every reader links a molecule to its cell by the §2.9 key `(cell_namespace, cell_id)`. On the route per FOV the column holds the FOV's cell namespace. | `assemble`, `check_identities` (identities 3 and 4 keyed by the cell key), `cell_links`, `check_export`. | One column more in `tables/molecules` on both routes; its SHA-256 changes on the route per FOV, and every pinned value of a test that hashes that table changes. A reader that names columns does not fail. |
+| **CK1. A column `cell_namespace` on both routes (recommended)** | The sample molecule table gains `cell_namespace`; every reader links a molecule to its cell by the cell key `(cell_namespace, cell_id)`. On the route per FOV the column holds the FOV's cell namespace. | `assemble`, `check_identities` (identities 3 and 4 keyed by the cell key), `cell_links`, `check_export`. | One column more in `tables/molecules` on both routes; its SHA-256 changes on the route per FOV, and every pinned value of a test that hashes that table changes. A reader that names columns does not fail. |
 | CK2. No new column, readers by route | On the route after fusion readers link by `cell_id` alone (one namespace). | The same readers, each with a branch. | No column. A reader outside the package that joins on `(fov_id, cell_id)` gives no cell, without an error, to the molecules of a cell whose `fov_id` is another FOV. |
+
+% §2.9
 
 **Recommendation: CK1.** The link becomes the key the contracts already name, on both
 routes.
@@ -624,7 +666,7 @@ cell equal its retained `assigned` molecules.
 
 | Part | Route after fusion |
 | --- | --- |
-| `obs` rows | The counted cells, the same rule (`retained` and §2.9 `kept`), in the cell table's order. |
+| `obs` rows | The counted cells, the same rule (`retained` and segmentation `kept`), in the cell table's order. |
 | `obs` columns | The same names, with the values of "The cells". |
 | `var`, `X` | The same. |
 | `layers` | `nucleus` and `cytoplasm` when the sample segmentation has a nucleus run. Today `write_sample_h5ad` decides this from the FOV entries of the record (`fovs[*].nuclei`: call C20 gave no layer with every entry false and both with every entry true), which are false for molecule inputs, so it reads the `segmentation` record on this route. |
@@ -632,17 +674,21 @@ cell equal its retained `assigned` molecules.
 | `uns["assembly"]` | The record, with `route` and `segmentation_files`. |
 | `uns["spatial_unit"]`, `uns["frame_id"]`, `uns["spatial_centroid"]` | The same. |
 
+% §2.9
+
 ### `export.json`
 
 | Key | Route after fusion |
 | --- | --- |
 | `format_version`, `stage`, `sample`, `frame_id`, `complete`, `viewer_qualification` | The same. |
 | `parts` | The same keys and `segment` (on both routes; `off` on the route per FOV). |
-| `assembly` | The same layout ({doc}`assembly-contract`, "What assemble records"), with `mode` `cells`, `route` `after_fusion`, `route_source`, `segmentation_files` (the SHA-256 of each label file it read), the sample assignment's §2.9 record as `assignment`, `config.duplicate_threshold` null and `flags` as FL1; `fovs[*].kind` `molecules`, `assignment` null, `territories` null. On the route per FOV `route` is `per_fov`. |
+| `assembly` | The same layout ({doc}`assembly-contract`, "What assemble records"), with `mode` `cells`, `route` `after_fusion`, `route_source`, `segmentation_files` (the SHA-256 of each label file it read), the sample assignment's record as `assignment`, `config.duplicate_threshold` null and `flags` as FL1; `fovs[*].kind` `molecules`, `assignment` null, `territories` null. On the route per FOV `route` is `per_fov`. |
 | `fusion` | The same. |
 | `segmentation` | New ("The record"). |
 | `labels` | The same layout, with the rule `segmentation` and `segmentation_files` ("The label images"). |
 | `spatialdata` | The same. |
+
+% §2.9
 
 ### The files of `export/<sample>/`
 
@@ -678,7 +724,9 @@ Each reader the package has of these outputs, and what it does on the route afte
 | `equivalent_radii` (SpatialData shapes) | `size_voxels` with the cell's FOV spacing | With the segmentation grid's spacing: with a FOV's spacing a cell counted at 1/2 would get half its radius (call C10: 2.82 µm against 5.64 µm). |
 | `lookup_source(cell=…)` | The FOV's assignment folder and the row's position among the cells of its FOV (read from the source, `src/python/starfinder/export/_spatialdata.py:755–762`); `lookup_source(spot=…)` of a `molecules_only` export returns the FOV, no assignment folder and the row (call C11c) | `assignment_folder` null, `row` the cell's position in the sample cell table, and two added keys, `label_file` (the cell run's file) and `label_value` (`cell_id`). `lookup_source(spot=…)` is the same as for a `molecules_only` sample. |
 | `check_export` | R1 to R3, F, L, S | R1 with the part `segment`, L3 and L5 by the rule `segmentation`, S2 with the new column, and the conditions T1 to T5 of "The record". |
-| `fov_ownership`, the assignment figures of `export_sample` (W-330) | Redrawn for each FOV whose `fovs.kind` is `assignment` and whose saved assignment is an input (read from the source, `src/python/starfinder/_snakemake.py:794`) | Not drawn: every FOV's `kind` is `molecules` on this route. |
+| `fov_ownership`, the assignment figures of `export_sample` (added on 2026-10-08) | Redrawn for each FOV whose `fovs.kind` is `assignment` and whose saved assignment is an input (read from the source, `src/python/starfinder/_snakemake.py:794`) | Not drawn: every FOV's `kind` is `molecules` on this route. |
+
+% W-330
 
 A reader outside the package that reads a column by name does not fail. One that maps
 `centroid_*` or `voxel_*` through a FOV's grid, or that joins molecules to cells on
@@ -692,7 +740,9 @@ On the route after fusion the label image is the segmentation itself.
 | Option | Files in `export/<sample>/` | What it changes | Consequence |
 | --- | --- | --- | --- |
 | **K1. One OME-TIFF per run (recommended)** | `segmentation_<run>.ome.tif` per run (uint32, the run's label values, the segmentation grid's geometry, the OME-TIFF layout of {doc}`sample-output-contract`, written by the package's OME-TIFF writer `write_ome_tiff`, which call C18 used for a uint32 label plane read back equal in values and metadata); with an expansion, `territories.ome.tif` (the territories assign sampled, values `cell_id`), written by the `assemble` part. | One writer call per file. | Every label image the tables refer to is a file of the folder with its SHA-256; nothing is duplicated. |
-| K2. The §2.9 folders inside the export folder | `segmentation/<run>/` and `assignment/<name>/`, written by the §2.9 writers `write_run` and `write_assignment`, as W-399 did (read from the source, `src/python/starfinder/segmentation/_persist.py:95`, `src/python/starfinder/assignment/_persist.py:53`; `read_assignment` at `:120`). | No writer of its own. | Two folders, and the assignment folder repeats the molecule, cell and count tables of `tables/` in other keys. It buys `read_assignment` and the §2.9 records as files. |
+| K2. The segmentation and assignment folders inside the export folder | `segmentation/<run>/` and `assignment/<name>/`, written by the segmentation and assignment writers `write_run` and `write_assignment`, as the two-FOV cell measurement did (read from the source, `src/python/starfinder/segmentation/_persist.py:95`, `src/python/starfinder/assignment/_persist.py:53`; `read_assignment` at `:120`). | No writer of its own. | Two folders, and the assignment folder repeats the molecule, cell and count tables of `tables/` in other keys. It buys `read_assignment` and the segmentation and assignment records as files. |
+
+% §2.9; W-399
 
 **Recommendation: K1.** No `segmentation_<run>.ome.tif` file name can equal
 `cell_labels.ome.tif` or a fused image's name, because only these files begin with
@@ -742,8 +792,10 @@ The `segmentation` section of `export.json`, written by `segment_fused`:
   `SampleSegmentationConfig`) that the sample's tables are made with, which `assemble`
   reads; with `segment: false` it holds the settings of the current export, because the
   labels do not depend on them and the tables do. The `assembly` section's `assignment`
-  stays the §2.9 record of the assignment that was made;
+  stays the record of the assignment that was made;
 * `software` as in `run.json` ({doc}`checkpoints`), wall and CPU time and peak RSS.
+
+% §2.9
 
 The `assembly` section records `route`, `route_source` and, on this route,
 `segmentation_files`: per run the label file's name and SHA-256 that it read (and
@@ -782,9 +834,11 @@ One setting of the dataset: `route` in the `export` block, `ExportConfig.route`.
 
 | Value | Route |
 | --- | --- |
-| `per_fov` | The route per FOV: `assemble` of the saved §2.9 assignment folders, with retention by ownership centroid, the flags and the duplicate rule of W-400 (`duplicate_threshold` 0.5), as `Dataset.export` does today. |
+| `per_fov` | The route per FOV: `assemble` of the saved assignment folders, with retention by ownership centroid, the flags and the duplicate rule of 2026-10-09 (`duplicate_threshold` 0.5), as `Dataset.export` does today. |
 | `after_fusion` | The route after fusion of this page. |
 | null (not set) | The default by `dimensionality` below. |
+
+% §2.9; W-400
 
 **Default by `dimensionality`**: `projection` → `after_fusion`; `stack` → `per_fov`;
 `both` → `per_fov`, because a dataset that asks for the stack is treated as a 3D sample.
@@ -857,8 +911,10 @@ folders; then it writes the tables below as CSV and the summary as JSON there.
 | Option | Where | What it changes | Consequence |
 | --- | --- | --- | --- |
 | **CC1. A package function (recommended)** | `compare_routes` in `starfinder.export`, called by hand on a block or a sample; no workflow rule. | One function and its result type. | Repeatable on any two folders; tested on fixtures. |
-| CC2. A validation script only | Scripts in a run directory, as W-399's. | Nothing in the package. | Not repeatable by a user; not tested. |
+| CC2. A validation script only | Scripts in a run directory, as the two-FOV cell measurement's. | Nothing in the package. | Not repeatable by a user; not tested. |
 | CC3. Both routes inside one export | `Dataset.export` runs both routes. | A second order of processing in every export. | Doubles the cost of every export; Jiahao does not want two orders of processing where one can do. |
+
+% W-399
 
 **Recommendation: CC1.**
 
@@ -915,24 +971,28 @@ grid of the route after fusion, and the shared pixels of a pair of cells are cou
   `different_cells`; the summary's count of such cells says why
   ({doc}`sample-segmentation-validation`, `fused_pair_seams`).
 
-W-399's comparison of the culture block is an example of what the report holds: 146 kept
+The two-FOV cell measurement's comparison of the culture block is an example of what the report holds: 146 kept
 cells after fusion against 158 counted cells per FOV, of which 8 are candidate second
 observations by the overlap measure ({doc}`cells-across-fovs-proposal`, measurement 2:
 one 2 × 2 block; candidates inferred from geometry; no accuracy). Those numbers came from
 labels extended through Z and assigned in 3D; the route of this page assigns the
 projection's plane labels by Y and X, so its counts on that block are not measured.
 
+% W-399
+
 ## Resources
 
-What W-399 measured on 2 × 2 blocks is in {doc}`cells-across-fovs-proposal`; nothing
+What the two-FOV cell measurement recorded on 2 × 2 blocks is in {doc}`cells-across-fovs-proposal`; nothing
 here is a new measurement. A whole sample has more seam per FOV than a 2 × 2 block
 (`2 − 1/N − 1/M` side lengths per FOV against 1), so the share of cells near a seam is
 expected to be larger there, by up to about 1.8 for the two samples measured; this is an
 expectation from the geometry, not a measurement. The route after fusion's cost is the
-fusion of the stains (part of the default export, W-354), one segmentation call on the
+fusion of the stains (part of the default export, as the fusion measurement found), one segmentation call on the
 projection and one assignment; the projection's size scales with `k⁻²`. The export rule
 needs the segmentation methods' device and memory; for a learned model on `cuda` that is
-a GPU node, which is a §2.13 resource of the rule.
+a GPU node, which is a resource of the workflow rule.
+
+% W-399; W-354; §2.13
 
 ## Exclusions
 
@@ -942,7 +1002,9 @@ to the rule for molecules; no change to the route per FOV beyond the column
 `cell_namespace` (choice 7) and the readers' link; no new output folder; no model call, no
 GPU and no real data in the validation (every number is cited from
 {doc}`cells-across-fovs-proposal` with its limits, and every statement about a present
-function from W-401's call record).
+function from the grounding calls' record).
+
+% W-401
 
 ```{toctree}
 :hidden:
