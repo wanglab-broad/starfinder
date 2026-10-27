@@ -9,6 +9,11 @@ writes, stay unchanged. Otherwise the Python package follows its own design: MAT
 compatibility alone is no reason to keep a Python name, key, layout or format
 (W-526, 2026-10-19).
 
+Specifications, validation designs, baselines and proposals are design records in
+[design/](design/README.md), which the documentation site does not build. `docs/` holds
+the site's short guides and references, written from the implemented code once an
+implementation lands; never publish a specification there (W-639, 2026-10-27).
+
 ## Scope and ownership
 
 Before work, read the live issue, dependencies and acceptance criteria, and the

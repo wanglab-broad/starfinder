@@ -1,6 +1,6 @@
-"""Contract checks of the appearance presets (docs/synthetic-real-appearance-validation.md, GA2's presets).
+"""Contract checks of the appearance presets (design/validation/synthetic-real-appearance-scene.md, GA2's presets).
 
-PR1 of docs/synthetic-real-appearance.md ("Presets"): six appearance presets, version ``appearance-presets-v1``, beside
+PR1 of design/specs/synthetic/real-appearance-scene.md ("Presets"): six appearance presets, version ``appearance-presets-v1``, beside
 the six accepted context presets, which stay unchanged; each takes the grid, spacing, jitter, overlap, seed, cell
 types and molecules of the accepted preset of its context and tier; the routine presets name the closed-form bank of
 their context (CF1, DN3) and the ``slow`` presets a real bank by name and SHA-256 (ST1, VA7, DN1). The names are

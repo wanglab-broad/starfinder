@@ -1,9 +1,10 @@
-"""The parts of a documentation page that a docs-contract test parses, found by their labels (W-602).
+"""The parts of a documentation page or design record that a docs-contract test parses, found by their labels (W-602).
 
 A table or passage that a test parses carries a MyST target label right before it, ``(label)=``
 (docs/contributing.md, "Test markers"). The tests find it by that label and never by heading text, so a
 page's headings may change freely; the label and the row shape of its table stay. This module names no
-page: the docs-contract modules pass the page's text.
+page: the docs-contract modules pass the page's text. Pages of the site are under ``docs/``; design
+records, which the site does not build, are under ``design/`` (design/README.md).
 """
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import re
 from pathlib import Path
 
 DOCS = Path(__file__).resolve().parents[3] / "docs"
+DESIGN = Path(__file__).resolve().parents[3] / "design"
 HEADING = re.compile(r"(#{1,6}) ")
 FENCE = re.compile(r"(`{3,}|~{3,})")
 
@@ -18,6 +20,11 @@ FENCE = re.compile(r"(`{3,}|~{3,})")
 def read(page: str) -> str:
     """The text of a page, by its path under docs/."""
     return (DOCS / page).read_text(encoding="utf-8")
+
+
+def design(record: str) -> str:
+    """The text of a design record, by its path under design/."""
+    return (DESIGN / record).read_text(encoding="utf-8")
 
 
 def _label(lines: list[str], label: str) -> int:
