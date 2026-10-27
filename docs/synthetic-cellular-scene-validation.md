@@ -17,8 +17,8 @@ It builds on {doc}`synthetic-cellular-scene`, {doc}`synthetic-sample-scene`,
 validation design of {doc}`report-algorithms`, and redefines nothing in them: every rule,
 identity, column and status a check names is used as those pages state it. The appearance
 presets of {doc}`synthetic-real-appearance` are validated by
-{doc}`synthetic-real-appearance-validation`, which amends this page as its section
-'Accepted statements this page changes' states.
+{doc}`synthetic-real-appearance-validation`, whose amendments of this page are applied
+here ("Implementation").
 
 It is a page beside {doc}`synthetic-cellular-scene` rather than a section of it, as the
 validation designs of §2.10 ({doc}`stitching-assembly-validation`) and of the route after
@@ -930,3 +930,8 @@ applied to {doc}`synthetic-cellular-scene`; and entries 1 to 38 of {doc}`synthet
 which take the place of entries 35 to 43 of {doc}`synthetic-real-appearance`, are applied to
 {doc}`synthetic-cellular-scene-validation`. Each is applied with its proposed wording; the lists
 stay on their pages as the record of what changed.
+
+**Lists removed (2026-10-27).** The two lists of accepted statements of the
+real-appearance pages are no longer on those pages: every entry is stated on the page it
+changed, and the lists remain in the repository's history. The list of
+{doc}`synthetic-cellular-scene` stays on its page.

@@ -1929,3 +1929,8 @@ applied to {doc}`synthetic-cellular-scene`; and entries 1 to 38 of {doc}`synthet
 which take the place of entries 35 to 43 of {doc}`synthetic-real-appearance`, are applied to
 {doc}`synthetic-cellular-scene-validation`. Each is applied with its proposed wording; the lists
 stay on their pages as the record of what changed.
+
+**Lists removed (2026-10-27).** The two lists of accepted statements of the
+real-appearance pages are no longer on those pages: every entry is stated on the page it
+changed, and the lists remain in the repository's history. The list of
+{doc}`synthetic-cellular-scene` stays on its page.

@@ -7,7 +7,7 @@ This page is the validation design of the appearance model of
 images, augmented, placed by a synthetic layout, with the placed masks as truth. It amends
 the accepted validation design {doc}`synthetic-cellular-scene-validation` (W-395, amended
 by W-482, Accepted at W-396) for the scenes of that appearance and edits no accepted page.
-It has five parts:
+It has four parts:
 
 * the **target definitions** of the appearance presets ("Target definitions");
 * the **generator checks**, GA1 to GA24 and GA26 to GA27, and how the cellular checks also
@@ -15,11 +15,10 @@ It has five parts:
 * the **consequences for the chain checks** CD, CT and CU of the accepted design
   ("Consequences for the chain checks");
 * the **execution conditions**, with where the banks live and the measured cost of each
-  tier ("Execution conditions");
-* the **accepted statements this page changes**, with the old and the proposed wording.
+  tier ("Execution conditions").
 
-The draft implementation issues are files of the W-514 run directory, not created in
-Linear ("Implementation order").
+The drafts A1 to A5 that this page names became the issues W-516 to W-520, which
+"Implementation" names with what each did.
 
 It is a page beside {doc}`synthetic-real-appearance` rather than a section of it, for the
 reason the accepted design gives for being a page beside {doc}`synthetic-cellular-scene`.
@@ -427,7 +426,7 @@ check that tests it or the reason it has none.
 | "Random streams" | The components and entities; no existing draw changes; no `context.nucleus.*` and similar stream drawn | GA20, GA1 |
 | "Known limits" | L1 to L8 | GA23 reports L1 (TR8r, TR8v), L2 (TR3), L3 (TR4); L4 is read by "The claim boundary"; L5 by GA26 (91 cells); L6 by GA8 (labels from `D_e`; the pieces per label reported; the page states no criterion for a speck, so none is asserted); L7 and L8 are accepted limits with nothing to compute |
 | "What stays excluded" | No learned model, no real data in the repository, no bank delivered, no out-of-plane rotation, no real membrane stain | GA22; GA7 (rotation about Z only); none for the rest (scope) |
-| "Accepted statements this page changes" | Entries 1 to 43 | None by a test: the documentation issue applies the wording and its review checks it against the list. For entries 35 to 43 (this design's page) the wording here supersedes W-513's where the two differ ("Accepted statements this page changes", below) |
+| "The W-485 amendment on TR7" | RA24, AM1 | None by a test: the wording is applied on {doc}`synthetic-cellular-scene-validation` ("Thresholds and where they come from") |
 
 ## Implemented checks
 
@@ -696,293 +695,6 @@ KiB in CD, below 16 GiB. The implementation measures each whole chain under
 **Models** are found and checked as {doc}`synthetic-cellular-scene-validation` states
 ("Models, by path, offline"). No GPU is used.
 
-## Accepted statements this page changes
-
-Each statement of {doc}`synthetic-cellular-scene-validation` that this design would change,
-with the old and the proposed wording, in the order of that page. The page is not edited
-here. An implementation issue (the amended W-488) applies each entry as written and
-nothing else. The statements not listed stay true, because the closed-form scene and its
-presets are unchanged (E1, PR1).
-
-{doc}`synthetic-real-appearance` already lists nine statements of that page (its entries 35
-to 43), with "W-514 states" where it left a point open. The entries below include all nine
-with the open points settled. Where the two lists differ, the wording here is the one to
-apply. Entries 3, 7, 22, 27, 28, 29, 30, 32 and 38 below are W-513's entries 35 to 43
-completed (named in each).
-
-1. **Opening paragraph, first sentence.**
-   *Old:* "This page is the validation design of the second delivery of §2.12, the cellular
-   scene of {doc}`synthetic-cellular-scene` (W-394, corrected by W-480, amended by W-481)."
-   *Proposed:* the same, followed by "The appearance presets of
-   {doc}`synthetic-real-appearance` are validated by
-   {doc}`synthetic-real-appearance-validation`, which amends this page as its section
-   'Accepted statements this page changes' states."
-2. **"The claim boundary", "Development targets, not a D04 calibration".**
-   *Old:* "The scene's parameters and the target ranges of the generator checks come from
-   W-393's measurements of method labels on the densest tiles of three samples (W-393
-   `notes.md` §12)."
-   *Proposed:* the same, followed by "The density and background targets of the appearance
-   presets come from W-513's measurements of the visible stain and of the background at
-   label rims; they are development targets too."
-3. **"The claim boundary", "No annotation"** (W-513 entry 35).
-   *Old:* "The real labels W-393 measured are method output, read as measurements of shape
-   and spacing, and nothing here is or replaces an annotation."
-   *Proposed:* the same, followed by "In the appearance presets the truth masks are
-   themselves method labels of real images. A chain check reads agreement with them as a
-   check of the chain and of the method's consistency with its own kind of labels, never as
-   accuracy ({doc}`synthetic-real-appearance-validation`, 'The claim boundary')."
-4. **"Conventions", "Tiers and markers", the generator checks' markers.**
-   *Old:* "the generator checks are `synthetic` (the package whose behaviour they assert),
-   kind `validation`, `contract` for configuration and interface checks, `golden` for
-   pinned outputs"
-   *Proposed:* the same, followed by "; the appearance checks GA1 to GA24 and GA26 to GA27 carry the same
-   markers, and those that read a bank built from real images are `slow`".
-5. **"Conventions", "Thresholds".**
-   *Old:* "each cites the W-393 table and row it comes from ("Thresholds and where they come
-   from"), and **the gate W-396 approves each one** before an implementation issue asserts
-   it."
-   *Proposed:* the same, followed by "On the appearance presets the same thresholds and the
-   target ranges of {doc}`synthetic-real-appearance-validation` are provisional again, and
-   the gate W-515 approves each one for those presets."
-6. **"Conventions", "Seeds".**
-   *Old:* "Every scene uses the preset seed 42, with one exception fixed in advance: the
-   culture chain check CU runs `context-culture-slow-v1` at the two seeds 42 and 43"
-   *Proposed:* "Every scene uses the preset seed 42, with one exception fixed in advance: the
-   culture chain check CU runs `appearance-culture-slow-v1` at the two seeds 42 and 43",
-   with the rest of the item unchanged.
-7. **"Conventions", "Fixtures"** (W-513 entry 36).
-   *Old:* "**Fixtures** are generated in the test session from the values stated here; no test
-   reads the network share, a run directory or a real image, and no generated image is
-   committed."
-   *Proposed:* "Fixtures are generated in the test session from the values stated here, and
-   no generated image is committed. No routine test and no test in the CI environment reads
-   the network share, a run directory or a real image. A `slow` test of an appearance preset
-   reads its bank file, derived from real images, by the path of
-   `STARFINDER_APPEARANCE_BANKS`, and skips, naming the variable or the file, without it."
-8. **"Conventions", "Extras".**
-   *Old:* "so the CI environment (extras `dev`, `local-registration`, `checkpoint`) runs
-   every generator check and skips every chain check, and fails none."
-   *Proposed:* "so the CI environment (extras `dev`, `local-registration`, `checkpoint`)
-   runs every generator check except those that read a bank built from real images, which
-   skip there naming `STARFINDER_APPEARANCE_BANKS`, skips every chain check, and fails
-   none."
-9. **"Fixtures", the rows `chain_dense3d`, `chain_tissue2d` and `chain_culture`, the scene
-   each is built on.**
-   *Old:* "`context_slow` (dense 3D) written by `save_cellular_dataset`"; "`context_slow` (2D
-   tissue, at 0.18927 µm in Y and X) written by `save_cellular_dataset`";
-   "`context-culture-slow-v1` (at 0.388796 µm in Y and X) generated at the two seeds 42 and
-   43"; and "`chain_dense3d_routine`: the same on `context-dense3d-v1`",
-   "`chain_tissue2d_routine`: the same on `context-tissue2d-v1`", "`chain_culture_routine`:
-   the same on `context-culture-v1` at seed 42 only".
-   *Proposed:* "`appearance-dense3d-slow-v1` on the bank `ln-sample1-v1`, written by
-   `save_cellular_dataset` of `scene.context`"; "`appearance-tissue2d-slow-v1` (at 0.18927 µm
-   in Y and X) on the bank `tissue2d-v1`, written by `save_cellular_dataset` of
-   `scene.context`"; "`appearance-culture-slow-v1` (at 0.388796 µm in Y and X) on the bank
-   `culture3d-v1`, generated at the two seeds 42 and 43"; and "`chain_dense3d_routine`: the
-   same on `appearance-dense3d-v1` and its closed-form bank", "`chain_tissue2d_routine`: the
-   same on `appearance-tissue2d-v1` and its closed-form bank", "`chain_culture_routine`: the
-   same on `appearance-culture-v1` and its closed-form bank at seed 42 only". Every other
-   part of the three rows unchanged.
-10. **"Fixtures", the row `chain_*_truth`, its truth on the segmentation grid.**
-    *Old:* "the truth nuclei and cells on the segmentation grid imported as `truth_import`
-    and `truth_runs` of `test/sample_segmentation_fixtures.py` build them, with the truth
-    of choice V3."
-    *Proposed:* the same, followed by "In the appearance presets the truth on the
-    segmentation grid is evaluated by the point evaluator of
-    {doc}`synthetic-real-appearance` ('Truth')."
-11. **"Two test helpers the implementation adds".**
-    *Old:* "(1) A *test oracle* in a helper module of `src/python/test/`, written from the
-    formulas of {doc}`synthetic-cellular-scene` and the truth tables alone ... (2) A *point
-    evaluator* in the generator"
-    *Proposed:* the same, followed by "The appearance scene adds its own oracle
-    (`cellular_appearance_oracle.py`) and point evaluator, written from
-    {doc}`synthetic-real-appearance` ({doc}`synthetic-real-appearance-validation`,
-    'Conventions')."
-12. **"Generator checks", the preamble.**
-    *Old:* "Routine tier unless the row says otherwise (see "Conventions" for the 5-s rule).
-    "Source" names the statement of {doc}`synthetic-cellular-scene` (by section) or of
-    another page that gives the expected result."
-    *Proposed:* the same, followed by "These rows check the closed-form scene and its six
-    presets. A scene of real appearance is checked by GA1 to GA24 and GA26 to GA27 of
-    {doc}`synthetic-real-appearance-validation`, whose table 'How the cellular checks apply'
-    says which of these rows applies to it."
-13. **Row GN13 (the stain identities), "Expected result".**
-    *Old:* "Identity 7: equal at any fractional offset and at `Z=1`, except at boundary
-    voxels (the cut-off surfaces included); on the plateau the image less the background is
-    `A_n U(σ) (1 + T_n(σ)) · E_n`, ..."
-    *Proposed:* the same, followed by "These stains are those of the closed-form presets. The
-    stains of an appearance scene are checked by the composition identity (GA12, GA13 of
-    {doc}`synthetic-real-appearance-validation`)."
-14. **Row GN14 (the band), "Expected result".**
-    *Old:* "`β_k = 0` on every boundary of `C = k` inside `Ω`, ..."
-    *Proposed:* the same, followed by "No appearance preset uses the boundary source (O2)."
-15. **Row GN15 (bright regions), "Expected result".**
-    *Old:* "`N(c_b) = n` exactly for its nucleus `n`; sizes and heights positive; regions
-    only in a `nucleus` stain with texture (identity 9, Tx1)."
-    *Proposed:* the same, followed by "An appearance scene draws no bright region, and its
-    `bright_regions.csv` is empty (GA21); its texture is compared by TR5 and TR7 in GA23."
-16. **Row GN16 (the unevenness field), "Expected result".**
-    *Old:* "U1: `U` is the recorded bumps' normalized log-Gaussian sum, the same at a sample
-    position in every FOV that images it; with no centre `U = 1`"
-    *Proposed:* the same, followed by "An appearance scene draws no field, and its
-    `unevenness.csv` is empty (GA21)."
-17. **Row GN17 (8-bit output), "Expected result".**
-    *Old:* "Identity 10; `k` exists and equals `g / m_A` for a FOV or a scene without a
-    nucleus (B1)"
-    *Proposed:* the same, followed by "In an appearance scene the cast is
-    `clip(rint(g · J), 0, 255)` with `g` the bank's median plateau (GA15)."
-18. **Row GN23, "Expected result".**
-    *Old:* "Inside the target range of each quantity, the p5–p95 of the W-393 row named in
-    "The four cases, their controls and their ranges" and in each preset table (PS1)"
-    *Proposed:* the same, followed by "The appearance presets are compared by GA23 with the
-    target definitions of {doc}`synthetic-real-appearance-validation`."
-19. **"Implemented checks", the finding "GN23, TR7 of dense 3D tissue".**
-    *Old:* "This is reported and not asserted (the amendment of 2026-10-15 after the TR
-    table)."
-    *Proposed:* "This is reported and not asserted on `context-dense3d-slow-v1` (the
-    amendment of 2026-10-15 after the TR table). On `appearance-dense3d-slow-v1` GA23
-    asserts it."
-20. **"Chain checks", the preamble.**
-    *Old:* "The thresholds of steps 1 and 2 apply to the `slow` preset of each context (for
-    the culture, to its two scenes pooled, "Seeds"); the routine preset of each context runs
-    the same chain with steps 3 and 4 asserted and steps 1 and 2 reported (choice V1)."
-    *Proposed:* "The thresholds of steps 1 and 2 apply to the appearance `slow` preset of
-    each context ({doc}`synthetic-real-appearance`, PR1), whose bank is built from real
-    images (for the culture, to its two scenes pooled, "Seeds"). The appearance routine
-    preset of each context, on its closed-form bank, runs the same chain with steps 3 and 4
-    asserted and steps 1 and 2 reported (choice V1). Each check adds a step 5, reported
-    ({doc}`synthetic-real-appearance-validation`, 'Consequences for the chain checks')."
-21. **"Chain checks", the tables CD, CT and CU.**
-    *Old:* the rows CD0 to CD4, CT0 to CT4 and CU0 to CU4.
-    *Proposed:* the same rows, each followed by the row CD5, CT5 or CU5 of
-    {doc}`synthetic-real-appearance-validation`.
-22. **"How many nuclei the thresholds count"** (W-513 entry 42).
-    *Old:* "By audit A of {doc}`synthetic-cellular-scene` (W-394; re-run by W-481 for the
-    two presets whose pixel changed), a `slow` scene holds about 150 nuclei in dense 3D
-    tissue, about 76 in 2D tissue ... and about 42 in the culture ...; the culture chain
-    check pools its two scenes, about 83 nuclei. A routine scene holds about 7, 11 and 8."
-    *Proposed:* the same for the closed-form presets, followed by "The appearance `slow`
-    presets, on which the chain checks run, hold about 738, 337 and 32 objects, about 63
-    for the culture's two scenes pooled, and the routine appearance presets about 24, 45 and
-    5: estimates at the prototype's reached density ({doc}`synthetic-real-appearance`,
-    'Presets'), not counts."
-23. **"Thresholds and where they come from", the first paragraph.**
-    *Old:* "Every threshold below is **provisional**: it was proposed by W-393 from runs of
-    the §2.9 methods on the *current* sample scene, it is approved or changed by Jiahao at
-    the gate W-396, and only then does an implementation issue assert it."
-    *Proposed:* the same, followed by "For the appearance presets each is provisional again
-    and approved at the gate W-515; W-393 measured it on neither scene."
-24. **Row TH1, "Applies to".**
-    *Old:* "about 150, 76 and 83 nuclei expected before the border rule"
-    *Proposed:* "about 738, 337 and 63 objects expected before the border rule in the
-    appearance presets (estimates; 'How many nuclei the thresholds count')".
-25. **Row TH-FP, "Why no threshold".**
-    *Old:* "W-393 withdrew its first bound of 20 %: three rows exceed it, from the 8-bit clip
-    and the wide edge, which the new presets change"
-    *Proposed:* the same, followed by "; in the culture appearance presets a source cell can
-    carry the unlabelled DAPI of a second nucleus, a further cause of false positives".
-26. **"Target ranges of the generator checks (TR)", the first sentence.**
-    *Old:* "GN23 compares the scene with the target ranges of {doc}`synthetic-cellular-scene`
-    ("The four cases, their controls and their ranges" and the preset tables)."
-    *Proposed:* the same, followed by "GA23 compares the appearance presets with the rows as
-    {doc}`synthetic-real-appearance-validation` defines them ('Target definitions'): TR1,
-    TR2 and TR11 reported on the truth and compared like for like in step 5 of the chain
-    checks, TR2v, TR8r and TR8v added, TR3 reported beside the source entries."
-27. **Row TR1** (W-513 entry 37).
-    *Old:* "TR1 | Share of touching nuclei, per image | 0.44–0.57; 0.76–0.82; 0.33–0.72 |
-    `geometry.csv` "share of touching nuclei, per image""
-    *Proposed:* the same for the closed-form presets; for the appearance presets "reported on
-    the truth labels, not compared: the truth is placed at the visible stain's density
-    (round 10: 0.99 against 0.56 on the held-out LN crop); compared like for like, on the
-    method's labels of the scene against W-393's range on the same method's labels of the
-    real images, in step 5 of the chain checks, reported".
-28. **Row TR2** (W-513 entry 38).
-    *Old:* "TR2 | Nucleus volume (area) fraction, per image | 0.07–0.16; 0.30–0.44;
-    0.17–0.45"
-    *Proposed:* the same for the closed-form presets; for the appearance presets "TR2v |
-    Visible-stain share, per scene (stain smoothed by one voxel above its Otsu threshold) |
-    0.47–0.68; 0.29–0.44; DAPI Z maximum 0.12–0.14 and Flamingo Z maximum 0.41–0.53 | W-513
-    `tables/visible_share_<context>.csv`, the rows of
-    {doc}`synthetic-real-appearance-validation`", with the truth label share reported beside
-    it and compared like for like in step 5 of the chain checks.
-29. **Row TR3** (W-513 entry 39).
-    *Old:* "TR3 | Share not described by one ellipsoid (IoU < 0.8), per image |
-    0.064–0.074; 0.027–0.060; 0.12–0.43"
-    *Proposed:* the same for the closed-form presets; for the appearance presets "reported,
-    not compared: the share on the placed truth labels beside the share on the entries they
-    come from and their difference, whose bound is not measured; the real range reported
-    with the squash threshold of rule 4, its control (limit L2; round 10: 0.009 against
-    0.047)".
-30. **Row TR8** (W-513 entry 40).
-    *Old:* "TR8 | Background over plateau, per image; noise over plateau, per 128-px block |
-    0.01–0.34, 0–0.063; 0.022–0.031, 0–0.033; 0.002–0.047, 0–0.24"
-    *Proposed:* the same for the closed-form presets; for the appearance presets the
-    background is reported, and two rows are added. "TR8r | Background at label rims, median
-    over the truth labels (cells in the culture, on the volume), over the plateau |
-    0.33–0.40; 0.125–0.130; 0 | W-513 `tables/rim_background_<context>.csv`, column
-    `local_bg_over_plateau_median`". "TR8v | Median stain outside the visible stain, over
-    the plateau (the culture on the Z maximum) | 0–0.54; 0.022–0.047; DAPI 0.036–0.038 and
-    Flamingo 0.022–0.074, reported | W-513 `tables/visible_share_<context>.csv`, column
-    `not_visible_over_plateau`, the rows of {doc}`synthetic-real-appearance-validation`".
-    The noise row unchanged.
-31. **Row TR11.**
-    *Old:* "TR11 | Cell volume (expanded nuclei, dense 3D) | 90–185 µm³ | `geometry.csv`
-    "cell volume""
-    *Proposed:* the same for the closed-form presets; for the appearance presets "reported on
-    the truth; compared like for like on the method's nuclei expanded by 0.7776 µm in step 5
-    of CD, reported".
-32. **The paragraph "Amendment of 2026-10-15 (W-485; operator decision pending Jiahao's
-    confirmation)"** (W-513 entry 41, AM1).
-    *Old:* "TR7 of dense 3D tissue is therefore a known limit of the scene: GN23 reports it
-    with its measured value, range and object count and does not assert it. A texture
-    control that reaches it is a candidate for a later issue."
-    *Proposed:* "TR7 of dense 3D tissue is therefore a known limit of the closed-form
-    presets: GN23 reports it with its measured value, range and object count and does not
-    assert it. The appearance presets of {doc}`synthetic-real-appearance` are the texture
-    control: round 10 of the prototype gave 0.317 against the real 0.348 on the held-out
-    crop, and GA23 of {doc}`synthetic-real-appearance-validation` asserts TR7 of
-    `appearance-dense3d-slow-v1` against 0.25–0.41."
-33. **The paragraph after the amendment.**
-    *Old:* "The tissue-2D ranges come from its densest tiles and every real label is method
-    output (W-393 `notes.md` §12)"
-    *Proposed:* the same, followed by "; the density and background ranges of the appearance
-    presets come from W-513's per-image measurements of three or four images per context,
-    each range the smallest to the largest value".
-34. **"Execution conditions", "Which gate runs what", the first two items.**
-    *Old:* "The routine test gate (`not slow and not learned`, every issue) runs the routine
-    generator checks: GN1 to GN22 on the tiny fixtures. They need no extra beyond
-    the base, so the CI environment runs them too." and "The controller's `slow` selections
-    run the `slow` generator checks (GN1(a) and (b) on `sample-small-v1`, the preset parts
-    of GN4 to GN7, GN23, GN24) ..."
-    *Proposed:* the same, followed by "The routine gate and the CI environment also run GA1
-    (routine presets) to GA22, on closed-form banks. The `slow` selection also runs
-    GA23, GA24, GA26 and GA27, which read the real banks through
-    `STARFINDER_APPEARANCE_BANKS` on the lab machine and skip elsewhere
-    ({doc}`synthetic-real-appearance-validation`, 'Execution conditions')."
-35. **"Execution conditions", "Bounds".**
-    *Old:* "The `slow` presets need the resource bound of C26 (RG1: one CPU, 16 GiB and
-    3,600 s per step)."
-    *Proposed:* the same, followed by "So do the appearance `slow` presets, their bank
-    builds and their chains; their estimated sums are about 1,200 s (CD), 1,955 s (CT) and
-    1,805 s (CU, two scenes) ({doc}`synthetic-real-appearance-validation`, 'Bounds')."
-36. **"Coverage of the cellular scene's page", the first sentence.**
-    *Old:* "Every identity and guarantee of {doc}`synthetic-cellular-scene`, by section, with
-    the check that tests it or the reason it has none."
-    *Proposed:* the same, followed by "Those of {doc}`synthetic-real-appearance` are covered
-    in {doc}`synthetic-real-appearance-validation` ('Coverage of the appearance page')."
-37. **"Implementation order".**
-    *Old:* "Six draft implementation issues ... I1 the scene ...; I2 the stains and the
-    morphology round; I3 the presets; I4 the generator checks; I5 the chain checks; I6 the
-    documentation with a short example."
-    *Proposed:* the same, followed by "I1 to I4 are implemented (W-483 to W-486). I5 (W-487)
-    and I6 (W-488) are amended, and the appearance scene is implemented by the drafts A1 to
-    A5 of W-514 before them ({doc}`synthetic-real-appearance-validation`, 'Implementation
-    order')."
-38. **"Exclusions", "No real data"** (W-513 entry 43).
-    *Old:* "**No real data, no new dependency, no lock change, no marker registration.**"
-    *Proposed:* "**No real data in the repository, the routine tier or the CI environment;
-    no new dependency, no lock change, no marker registration.**"
-
 ## Choices for the gate
 
 Each has its options and one recommendation in the W-514 worker notes; the design above
@@ -1001,37 +713,10 @@ follows the recommendation.
 | VA9 | The culture chain check's seeds | 42 and 43, as accepted (about 63 cells pooled, estimate) |
 | VA10 | Golden pins of the six accepted context presets | Added by A1 at the base revision before any change (GA1 (b)) |
 
-## Implementation order
-
-Five draft issues implement the appearance scene and its checks, and the drafts of W-487 and
-W-488 amend those two issues. All are files of the W-514 run directory
-(`runs/W-514/20261016T223616Z-d34e52d0/drafts/`), in the runner's issue-contract form. None
-is created in Linear.
-
-* **A1, the bank:** entries, selection, brightness, storage and the build step, the
-  closed-form bank, and the golden pins of the accepted presets.
-* **A2, augmentation, layout and labels:** transforms, placement, density, territories,
-  ownership and the point evaluator.
-* **A3, composition and truth:** composition, output, the morphology round, the truth
-  schema and the generation entry.
-* **A4, the presets and the real banks:** the six presets, the three real banks built
-  outside the repository, cost and the bank checks.
-* **A5, the generator and preset checks:** GA23, the coverage, and the table of
-  implemented checks with its test.
-
-The dependencies are:
-
-* A2 depends on A1, and A3 on A1 and A2;
-* A4 depends on A1 to A3, and A5 on A1 to A4;
-* the amended W-487 depends on A4 and A5;
-* the amended W-488 depends on A1 to A5 and the amended W-487.
-
-The work of W-483 to W-486 stays as it is. A1 to A5 add a scene beside it and replace none
-of it.
-
 ## Exclusions
 
-* **No implementation and no test code**: this page names checks; the drafts write them.
+* **No implementation and no test code**: this page names checks; the issues that
+  "Implementation" names write them.
 * **No new measurement**: every number is W-513's, the prototype's, W-393's or W-485's,
   cited; a number none of them measured is named as missing.
 * **No comparison of segmentation methods and no accuracy claim** ("The claim boundary").
@@ -1180,6 +865,11 @@ applied to {doc}`synthetic-cellular-scene`; and entries 1 to 38 of {doc}`synthet
 which take the place of entries 35 to 43 of {doc}`synthetic-real-appearance`, are applied to
 {doc}`synthetic-cellular-scene-validation`. Each is applied with its proposed wording; the lists
 stay on their pages as the record of what changed.
+
+**Lists removed (2026-10-27).** The two lists of accepted statements of the
+real-appearance pages are no longer on those pages: every entry is stated on the page it
+changed, and the lists remain in the repository's history. The list of
+{doc}`synthetic-cellular-scene` stays on its page.
 
 **Questions Jiahao closed on 2026-10-18.** Whether DN1 should place with the scene's own Otsu
 threshold, the threshold TR2v measures with, and whether TR8r gets a control: both stay known
