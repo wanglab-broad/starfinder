@@ -47,6 +47,11 @@ worker's record of a run); ``STARFINDER_CHAIN_OUTPUT`` names the folder of the p
 ``STARFINDER_APPEARANCE_BANKS`` with the SHA-256 their preset names; a test whose extra, model or bank is absent
 skips with its reason, and nothing is downloaded. The thresholds TH1 to TH5 are W-393's, approved for the appearance
 presets at W-515, unchanged; a miss is a finding ("What a failure means").
+
+The suite collects the routine tier only (``SUITE_TIERS``; W-603). The ``slow`` tier, the ``chain_*`` fixtures on the
+real banks above, runs in the Chapter II evidence project as ``benchmarks/cellular_chain_evidence.py``, which calls
+these tests with the tier ``"slow"`` on one ``Chains`` of its own, so that their assertions, printed rows and tables
+are the ones written here; the branches on ``tier == "slow"`` and ``checked_bank`` serve that script.
 """
 from __future__ import annotations
 
@@ -105,6 +110,9 @@ CONTEXTS = {
                     models=("cpsam_v2",), extras=("cellpose",)),
 }
 TIERS = ("slow", "routine")
+# The tier the suite runs (W-603): the `slow` tier, on the real banks, runs as benchmarks/cellular_chain_evidence.py,
+# which calls the tests below with the tier "slow" (and the culture's seeds 42 and 43).
+SUITE_TIERS = ("routine",)
 LN_EXPANSION_UM = 0.7776                  # W-382's LN setting (W-393 notes.md §4)
 STARDIST_2D_PIXEL_UM = 0.37854            # the pixel StarDist 2D sees on tissue-2D's route (scale 0.25 of 0.094635)
 W382_PIXEL_UM = 0.194398                  # the culture's acquired pixel, W-382's settings in pixels of it
@@ -1441,7 +1449,7 @@ def _print_step0(row, tier, scenes):
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cd0_placement(chains, tier):
     scenes = _step0_scenes(chains, "dense3d", tier)
     rows, _ = _step0_rows(scenes, "dense3d")
@@ -1454,7 +1462,7 @@ def test_cd0_placement(chains, tier):
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_ct0_stitch_on_the_projection_sample(chains, tier):
     scenes = _step0_scenes(chains, "tissue2d", tier)
     rows, _ = _step0_rows(scenes, "tissue2d")
@@ -1474,7 +1482,7 @@ def test_ct0_stitch_on_the_projection_sample(chains, tier):
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cu0_registration_and_placement(chains, tier):
     scenes = _step0_scenes(chains, "culture", tier)
     rows, registration = _step0_rows(scenes, "culture")
@@ -1511,21 +1519,21 @@ def _step1(chains, context, tier, row):
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cd1_nuclei_against_truth(chains, tier):
     _step1(chains, "dense3d", tier, "CD1")
 
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_ct1_nuclei_against_truth(chains, tier):
     _step1(chains, "tissue2d", tier, "CT1")
 
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cu1_nuclei_against_truth(chains, tier):
     _step1(chains, "culture", tier, "CU1")
 
@@ -1557,21 +1565,21 @@ def _step2(chains, context, tier, row):
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cd2_cell_of_each_molecule(chains, tier):
     _step2(chains, "dense3d", tier, "CD2")
 
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_ct2_cell_of_each_molecule(chains, tier):
     _step2(chains, "tissue2d", tier, "CT2")
 
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cu2_cell_of_each_molecule(chains, tier):
     _step2(chains, "culture", tier, "CU2")
 
@@ -1583,21 +1591,21 @@ def _truth_labels_ee1(chains, context, tier, row):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cd2_truth_labels_ee1(chains, tier):
     """CD2 on the truth labels: EE1 holds exactly."""
     _truth_labels_ee1(chains, "dense3d", tier, "CD2")
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cu2_truth_labels_ee1(chains, tier):
     """CU2 on the truth labels: EE1 holds exactly, on each scene."""
     _truth_labels_ee1(chains, "culture", tier, "CU2")
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_ct2_truth_labels_sa5(chains, tier):
     """CT2 on the truth labels: SA5 holds (T3 for every retained molecule; each molecule not in its true cell lies
     where the imported label is not its true cell)."""
@@ -1622,19 +1630,19 @@ def _step3(chains, context, tier, variant, seed):
     print(f"\n{context} {tier} {variant} {chain.scene.label}: the count identities hold; counts {counts}")
 
 
-SCENES = [(tier, seed) for tier in TIERS for seed in (42, 43) if seed in CONTEXTS["culture"]["seeds"][tier]]
+SCENES = [(tier, seed) for tier in SUITE_TIERS for seed in (42, 43) if seed in CONTEXTS["culture"]["seeds"][tier]]
 
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cd3_count_identities(chains, tier):
     _step3(chains, "dense3d", tier, "method", 42)
 
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_ct3_count_identities(chains, tier):
     _step3(chains, "tissue2d", tier, "method", 42)
 
@@ -1647,13 +1655,13 @@ def test_cu3_count_identities(chains, tier, seed):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cd3_count_identities_truth_labels(chains, tier):
     _step3(chains, "dense3d", tier, "truth", 42)
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_ct3_count_identities_truth_labels(chains, tier):
     _step3(chains, "tissue2d", tier, "truth", 42)
 
@@ -1708,14 +1716,14 @@ def _cells_per_fov(chains, context, tier, seed, row):
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cd4_report(chains, tier):
     _cells_per_fov(chains, "dense3d", tier, 42, "CD4")
 
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_ct4_report(chains, tier):
     _cells_per_fov(chains, "tissue2d", tier, 42, "CT4")
 
@@ -1728,13 +1736,13 @@ def test_cu4_report(chains, tier, seed):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cd4_report_truth_labels(chains, tier):
     _step4(chains, "dense3d", tier, "truth", 42, "CD4")
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_ct4_report_truth_labels(chains, tier):
     _step4(chains, "tissue2d", tier, "truth", 42, "CT4")
 
@@ -1823,21 +1831,21 @@ def _step5(chains, context, tier, row):
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cd5_scene_as_the_method_sees_it(chains, tier):
     _step5(chains, "dense3d", tier, "CD5")
 
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_ct5_scene_as_the_method_sees_it(chains, tier):
     _step5(chains, "tissue2d", tier, "CT5")
 
 
 @pytest.mark.slow
 @pytest.mark.learned
-@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize("tier", SUITE_TIERS)
 def test_cu5_scene_as_the_method_sees_it(chains, tier):
     _step5(chains, "culture", tier, "CU5")
 

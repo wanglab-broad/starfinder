@@ -409,7 +409,11 @@ Q and V share no test, and together they are R. R, slow (`slow and not (learned
 or extended)`), learned and extended hold each collected test exactly once, so
 a batch's end runs every test. The `learned` tests run in the controller's
 learned checks, split by model and chain; the `extended` tests that are
-`learned` run there too. A test that is both `contract` and `validation` runs in
+`learned` run there too. The chain selections and the slow group other hold
+the cellular chain checks on the routine presets only: their `slow` presets,
+built from real images, run outside the suite as
+`benchmarks/cellular_chain_evidence.py`, as the other real-data workloads run
+as `benchmarks/appearance_evidence.py` and `benchmarks/cellular_evidence.py`. A test that is both `contract` and `validation` runs in
 Q. To check the coverage, collect the node IDs of each selection (no test runs)
 and compare them:
 

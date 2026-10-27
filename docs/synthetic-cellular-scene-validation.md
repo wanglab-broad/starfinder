@@ -368,6 +368,13 @@ with steps 3 and 4 asserted and steps 1 and 2 reported (choice V1). Each check a
 nuclei matched, missed, merged and split, the false positives, and every molecule whose
 assigned cell is not its true cell), so a miss can be reported with its objects.
 
+**Where each tier runs.** The test suite runs every chain check on the routine presets. The
+`slow` presets, whose banks are built from real images, run in the Chapter II evidence
+project as `benchmarks/cellular_chain_evidence.py` (W-603), outside the test suite: about
+2 h on one CPU and up to 13 GiB per step ("Bounds"). The script calls the same tests with
+the `slow` tier, so each row below keeps its assertions and thresholds there ("Implemented
+chain checks").
+
 **How many nuclei the thresholds count.** By audit A of {doc}`synthetic-cellular-scene`
 (W-394; re-run by W-481 for the two presets whose pixel changed), a `slow` scene holds about
 150 nuclei in dense 3D tissue, about 76 in 2D tissue (at 0.18927 µm, twice the acquired
@@ -474,6 +481,41 @@ the scene defines them:
 | CU3 | Count identities | `chain_culture`, `chain_culture_truth` (42 and 43), `chain_culture_routine` (42) | As CD3, on each scene. | As CD3, on each scene; not pooled. | Exact. | as CD3. |
 | CU4 | The report | as CU3 | As CD4, on each scene's export. | As "The report (step 4)", on each scene; not pooled. | Exact for the identities; the rest reported. | as CD3. |
 | CU5 | As CD5 | `chain_culture` (42 and 43) | On Cellpose's nuclei extended through z, per scene and pooled: TR1 and TR2; the truth beside them. | As CD5, against W-393's culture ranges. | Reported. | as CD5. |
+
+### Implemented chain checks
+
+Each row's tests are in `test_integration_cellular_chain.py` (W-487), marked `integration`
+and `validation`. The chains with a model are `slow` and `learned`, and the truth-label
+chains are `slow`. The suite collects them on the routine presets only (the tier `routine`;
+the culture at seed 42). Each row's `slow` presets run in the Chapter II evidence project
+as the check of the same name in `benchmarks/cellular_chain_evidence.py` (W-603). The
+script calls these tests with the tier `slow` and runs one case per test and seed that the
+suite held before W-603, 31 in all; each case names that former node ID. The last column
+states the preset tier that the suite keeps. `test_synthetic_cellular_checks.py` keeps
+this table aligned with the collected tests and the script.
+
+(synthetic-cellular-scene-validation-implemented-chain-checks)=
+
+| # | Module and tests | Evidence project (the `slow` presets) | Tier in the suite |
+| --- | --- | --- | --- |
+| CD0 | `test_integration_cellular_chain.py`, `test_cd0_placement` | `benchmarks/cellular_chain_evidence.py`, check `CD0` (seed 42) | routine |
+| CD1 | `test_integration_cellular_chain.py`, `test_cd1_nuclei_against_truth` | `benchmarks/cellular_chain_evidence.py`, check `CD1` (seed 42) | routine |
+| CD2 | `test_integration_cellular_chain.py`, `test_cd2_cell_of_each_molecule`, `test_cd2_truth_labels_ee1` | `benchmarks/cellular_chain_evidence.py`, check `CD2` (seed 42) | routine |
+| CD3 | `test_integration_cellular_chain.py`, `test_cd3_count_identities`, `test_cd3_count_identities_truth_labels` | `benchmarks/cellular_chain_evidence.py`, check `CD3` (seed 42) | routine |
+| CD4 | `test_integration_cellular_chain.py`, `test_cd4_report`, `test_cd4_report_truth_labels` | `benchmarks/cellular_chain_evidence.py`, check `CD4` (seed 42) | routine |
+| CD5 | `test_integration_cellular_chain.py`, `test_cd5_scene_as_the_method_sees_it` | `benchmarks/cellular_chain_evidence.py`, check `CD5` (seed 42) | routine |
+| CT0 | `test_integration_cellular_chain.py`, `test_ct0_stitch_on_the_projection_sample` | `benchmarks/cellular_chain_evidence.py`, check `CT0` (seed 42) | routine |
+| CT1 | `test_integration_cellular_chain.py`, `test_ct1_nuclei_against_truth` | `benchmarks/cellular_chain_evidence.py`, check `CT1` (seed 42) | routine |
+| CT2 | `test_integration_cellular_chain.py`, `test_ct2_cell_of_each_molecule`, `test_ct2_truth_labels_sa5` | `benchmarks/cellular_chain_evidence.py`, check `CT2` (seed 42) | routine |
+| CT3 | `test_integration_cellular_chain.py`, `test_ct3_count_identities`, `test_ct3_count_identities_truth_labels` | `benchmarks/cellular_chain_evidence.py`, check `CT3` (seed 42) | routine |
+| CT4 | `test_integration_cellular_chain.py`, `test_ct4_report`, `test_ct4_report_truth_labels` | `benchmarks/cellular_chain_evidence.py`, check `CT4` (seed 42) | routine |
+| CT5 | `test_integration_cellular_chain.py`, `test_ct5_scene_as_the_method_sees_it` | `benchmarks/cellular_chain_evidence.py`, check `CT5` (seed 42) | routine |
+| CU0 | `test_integration_cellular_chain.py`, `test_cu0_registration_and_placement` | `benchmarks/cellular_chain_evidence.py`, check `CU0` (seeds 42 and 43) | routine |
+| CU1 | `test_integration_cellular_chain.py`, `test_cu1_nuclei_against_truth` | `benchmarks/cellular_chain_evidence.py`, check `CU1` (seeds 42 and 43) | routine |
+| CU2 | `test_integration_cellular_chain.py`, `test_cu2_cell_of_each_molecule`, `test_cu2_truth_labels_ee1` | `benchmarks/cellular_chain_evidence.py`, check `CU2` (seeds 42 and 43) | routine |
+| CU3 | `test_integration_cellular_chain.py`, `test_cu3_count_identities`, `test_cu3_count_identities_truth_labels` | `benchmarks/cellular_chain_evidence.py`, check `CU3` (seeds 42 and 43) | routine |
+| CU4 | `test_integration_cellular_chain.py`, `test_cu4_report`, `test_cu4_report_truth_labels` | `benchmarks/cellular_chain_evidence.py`, check `CU4` (seeds 42 and 43) | routine |
+| CU5 | `test_integration_cellular_chain.py`, `test_cu5_scene_as_the_method_sees_it` | `benchmarks/cellular_chain_evidence.py`, check `CU5` (seeds 42 and 43) | routine |
 
 ## Thresholds and where they come from
 
@@ -661,8 +703,9 @@ script `scripts/execution_costs.py` of W-482's run directory
 * The controller's `slow` selections run the `slow` generator checks (GN1(a) and (b) on
   `sample-small-v1`, the preset parts of GN4 to GN7, GN24 on the routine presets), which
   carry the subsystem marker `synthetic`, in its `pytest-slow-synthetic` selection, and the
-  truth-label chains (`slow`, not `learned`), which carry `integration`, in
-  `pytest-slow-other`; each runs when its paths change and at the last issue of a batch.
+  truth-label chains on the routine presets (`slow`, not `learned`), which carry
+  `integration`, in `pytest-slow-other`; each runs when its paths change and at the last
+  issue of a batch.
 * The routine tier and the CI environment also run GA1 (routine presets) to GA21,
   on closed-form banks (GA22 is `slow` since W-576). The `slow` selection also runs GA8 to GA18 and GA24 on the routine
   appearance presets.
@@ -670,17 +713,24 @@ script `scripts/execution_costs.py` of W-482's run directory
   `slow` and acquired cases of GN24 (`benchmarks/cellular_evidence.py`, "Implemented
   checks"), and GA23, the `slow` part of GA24, GA26 and GA27, which read the real banks
   through `STARFINDER_APPEARANCE_BANKS` (`benchmarks/appearance_evidence.py`;
-  {doc}`synthetic-real-appearance-validation`, 'Implemented checks').
-* The controller's `learned` selections run the chain checks with a model (`learned` and
-  `slow`) in `pytest-learned-slow-other`, when their inputs change and at the last issue of
-  a batch. The controller selects a check by the changed paths in the project
+  {doc}`synthetic-real-appearance-validation`, 'Implemented checks'). Since W-603 it also
+  runs every chain check on the `slow` presets, with a model and on the truth labels
+  (`benchmarks/cellular_chain_evidence.py`, "Implemented chain checks").
+* The controller's `learned` selections run the chain checks with a model on the routine
+  presets (`learned` and `slow`, with `integration`) in its two chain selections, the
+  culture's and the other contexts', when their inputs change and at the last issue of a
+  batch. The controller selects a check by the changed paths in the project
   configuration, which the operator keeps; the chain-check file must be among that
   selection's inputs (choice V10).
 * The CI environment skips every chain check, naming the missing extra.
 
 **Bounds.** The `slow` presets need the resource bound of C26 (RG1: one CPU, 16 GiB and
 3,600 s per step). So do the appearance `slow` presets, their bank builds and their
-chains; their estimated sums are about 1,200 s (CD), 1,955 s (CT) and 1,805 s (CU, two
+chains, which is why these run in the evidence project. W-542 measured the chain file in
+the suite on one CPU on 2026-10-26: its `slow` tier took 62.8 min with a 13.1 GiB peak in
+the culture's chain selection, 22.3 min and 6.8 GiB in the other chain selection, and
+35.6 min and 13.2 GiB for the truth-label chains; the routine tier took 4.4, 4.3 and
+1.4 min with peaks of 3.0, 3.5 and 1.0 GiB. Before that measurement, their estimated sums were about 1,200 s (CD), 1,955 s (CT) and 1,805 s (CU, two
 scenes) ({doc}`synthetic-real-appearance-validation`, 'Bounds'). The nearest dense 3D `slow` scene's generation peaked at 3,498,428 KiB
 and the `3D_spleen` call alone at 3,263,160 KiB; a chain check holds both in one test
 process, which can exceed the project's 4 GiB default and stays within RG1's 16 GiB. The
@@ -778,7 +828,7 @@ design above follows the recommendation.
 | V7 | The unassigned share | Reported, no bound, until the first measurement on the new scene |
 | V8 | The exclusive pair's MECR after segmentation | Reported with the mixing cells; exact only on the truth-label chain |
 | V9 | Identity 7's tolerance where a site was skipped | The bound of the site-skipping rule, `½ erfc(2√2)` of the local plateau, at the voxels the rule can affect |
-| V10 | Marker and selection of the chain-check file | `integration` with `validation`, `slow`, `learned`, file `test_integration_cellular_chain.py`; the operator adds it to the inputs of the `learned` selection |
+| V10 | Marker and selection of the chain-check file | `integration` with `validation`, `slow`, `learned`, file `test_integration_cellular_chain.py`; the operator adds it to the inputs of the `learned` selection. Since W-603 the file holds the routine tier only; the `slow` tier runs in the Chapter II evidence project as `benchmarks/cellular_chain_evidence.py` ("Implemented chain checks") |
 | V11 | The statistical tolerance of GN10 to GN12 | 4 SE |
 | V12 | Target ranges measured on few objects | Compared only where the scene holds at least 100 objects of the kind; reported otherwise. The rule stays: of the `slow` presets GN23 measures, dense 3D tissue (about 150 nuclei) reaches it, 2D tissue (about 76) and culture (about 42) do not, nor do the variants `context_slow_acquired` (about 20 and 12) |
 | V13 | The integer-shift tolerance of identities 7 and 8 | 1e-10 of the maximum, which covers the derived rounding bound of the full stains on the fixtures (7.3e-11 at a band of 0.01 µm, at most 1.3e-11 otherwise; 9.1e-11 and 1.6e-11 on grids of the two changed `slow` pixels, W-482); {doc}`synthetic-cellular-scene` now states 1e-10 for identities 7 and 8 (amended by W-481) |
@@ -860,7 +910,9 @@ and listed on the API page `docs/api/synthetic.rst`):
   project as `benchmarks/appearance_evidence.py` (W-536);
 * the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
   `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
-  chains with a model are `slow` and `learned`, the truth-label chains `slow`;
+  chains with a model are `slow` and `learned`, the truth-label chains `slow`; the suite
+  runs them on the routine presets, and on the `slow` presets they run in the Chapter II
+  evidence project as `benchmarks/cellular_chain_evidence.py` (W-603);
 * the example's test `test_synthetic_context_example.py` (W-488), `slow`.
 
 **Amendments during the implementation**, each with its date, its issue and its reason;

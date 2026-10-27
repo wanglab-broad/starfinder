@@ -1867,7 +1867,9 @@ and listed on the API page `docs/api/synthetic.rst`):
   checks";
 * the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
   `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
-  chains with a model are `slow` and `learned`, the truth-label chains `slow`;
+  chains with a model are `slow` and `learned`, the truth-label chains `slow`; the suite
+  runs them on the routine presets, and on the `slow` presets they run in the Chapter II
+  evidence project as `benchmarks/cellular_chain_evidence.py` (W-603);
 * the example's test `test_synthetic_context_example.py` (W-488), `slow`.
 
 **Amendments during the implementation**, each with its date, its issue and its reason;

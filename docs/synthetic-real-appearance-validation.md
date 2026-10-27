@@ -652,18 +652,19 @@ build configuration, outside the repository (ST1).
 | Routine (the fast tier R, `not (slow or learned or extended)`: the quick gate Q and V), and the CI environment | GA1 (routine presets) to GA21 (GA22 is `slow` since W-576) | closed-form banks built in the session, or hand-made arrays; **no real data** |
 | `slow`, `synthetic` (`pytest-slow-synthetic`) | GA1 (the `slow` context presets); the routine fixtures that measure 5 s or more | closed-form banks; no real data |
 | The Chapter II evidence project (`benchmarks/appearance_evidence.py`, W-536; not in the test suite) | GA23, GA24 (the `slow` presets, the acquired variants and the builds), GA26, GA27 | the three real banks |
-| `slow` and `learned`, `integration` (the `learned` selection) | CD, CT and CU with a model, on the `slow` presets | the three real banks |
-| `slow` and `learned`, `integration` | the routine chains (`chain_*_routine`) | closed-form banks; no real data |
-| `slow`, `integration` (`pytest-slow-other`) | the truth-label chains `chain_*_truth` on the `slow` presets | the three real banks |
+| The Chapter II evidence project (`benchmarks/cellular_chain_evidence.py`, W-603; not in the test suite) | CD, CT and CU on the `slow` presets, with a model and on the truth labels | the three real banks |
+| `slow` and `learned`, `integration` (the `learned` chain selections) | the routine chains (`chain_*_routine`) | closed-form banks; no real data |
+| `slow`, `integration` (`pytest-slow-other`) | the truth-label chains `chain_*_truth` on the routine presets | closed-form banks; no real data |
 
 **The CI environment never needs a bank.** It installs the extras `dev`,
 `local-registration` and `checkpoint` and has no `STARFINDER_APPEARANCE_BANKS`. Every
 routine check builds its bank in the session, and every real-bank check skips there,
 naming the variable. The chain checks skip there for their missing extras, as accepted. No
-check fails there for want of a bank. On the lab machine the variable must be set in the
-environment of the controller's `slow` and `learned` selections. Otherwise the real-bank
-checks skip there too (choice VA8), and the implementation issue's criterion asks for the
-selection log that shows them passed, not skipped.
+check fails there for want of a bank. Since W-603 no test of the suite reads a real bank:
+on the lab machine the variable must be set where the evidence project runs
+`benchmarks/appearance_evidence.py` and `benchmarks/cellular_chain_evidence.py`. Otherwise
+their real-bank cases are recorded as skipped, naming the variable (choice VA8), and the
+evidence issue's criterion asks for the run that shows them passed, not skipped.
 
 **Measured cost of each tier.** The appearance scene is now implemented (W-516 to W-519,
 "Implemented checks"), but no tier was measured as such when this design was written. Each row gives what the prototype record or W-513 measured on one CPU
@@ -729,7 +730,11 @@ follows the recommendation.
 
 The generator checks of this page are in the modules that "Implemented checks" names, by
 row. The chain checks of {doc}`synthetic-cellular-scene-validation`, amended as "Consequences for the
-chain checks" states, are `test_integration_cellular_chain.py` (W-487). The real-bank
+chain checks" states, are `test_integration_cellular_chain.py` (W-487). Their `slow`
+presets, on the real banks, run in the Chapter II evidence project as
+`benchmarks/cellular_chain_evidence.py` since W-603, one check per row, `CD0` to `CU5`;
+the suite keeps the routine presets ({doc}`synthetic-cellular-scene-validation`,
+"Implemented chain checks"). The real-bank
 checks GA23, GA24 (its `slow` part), GA26 and GA27 run in the Chapter II evidence project
 as `benchmarks/appearance_evidence.py` since W-536, with `STARFINDER_APPEARANCE_BANKS` set
 ("Implemented checks"); the script records a skip, naming the variable, where it is unset.
@@ -792,7 +797,9 @@ and listed on the API page `docs/api/synthetic.rst`):
   project as `benchmarks/appearance_evidence.py` (W-536);
 * the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
   `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
-  chains with a model are `slow` and `learned`, the truth-label chains `slow`;
+  chains with a model are `slow` and `learned`, the truth-label chains `slow`; the suite
+  runs them on the routine presets, and on the `slow` presets they run in the Chapter II
+  evidence project as `benchmarks/cellular_chain_evidence.py` (W-603);
 * the example's test `test_synthetic_context_example.py` (W-488), `slow`.
 
 **Amendments during the implementation**, each with its date, its issue and its reason;

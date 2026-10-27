@@ -29,6 +29,13 @@ Maintained source-derived configuration and adapters for the common
 - `cellular_evidence.py`: GN23 and the `slow` and acquired-pixel cases of GN24 of
   [the cellular validation page](../docs/synthetic-cellular-scene-validation.md), moved likewise
   (W-536). Reads no real data; within C26's bound per step.
+- `cellular_chain_evidence.py`: the chain checks CD, CT and CU of
+  [the cellular validation page](../docs/synthetic-cellular-scene-validation.md) on the appearance
+  `slow` presets, moved out of the test suite for the Chapter II evidence project (W-603); it calls
+  the tests of `test_integration_cellular_chain.py`, which the suite runs on the routine presets, with
+  the `slow` tier. Reads the real
+  banks through `STARFINDER_APPEARANCE_BANKS` and the models through `STARFINDER_WEIGHTS_DIR` and
+  `STARFINDER_STARDIST_3D_SPLEEN`; about 2 h on one CPU and up to 13 GiB per step.
 - `revision.py`: the source revision record that `preprocessing_synthetic.py` and `image_statistics.py`
   write into their manifests (W-288): HEAD, dirty state, the untracked paths and the sha256 of
   `git diff HEAD --binary` followed by each untracked path's name and bytes; an untracked directory
