@@ -163,8 +163,10 @@ class PlacementResult:
 
 
 def frame_metadata(metadata: ImageMetadata) -> ImageMetadata:
-    """The metadata as §2.10 checks a grid: a spelling of :data:`MICROMETRE` reads as ``µm`` and no direction as
-    the identity. Nothing written changes; only the checks compare this form."""
+    """The metadata as the stitching, assembly and export checks read a grid: a spelling of
+    :data:`MICROMETRE` reads as ``µm`` and no direction as the identity. Nothing written changes;
+    only the checks compare this form."""
+    # §2.10
     unit = "µm" if metadata.spatial_unit in MICROMETRE else metadata.spatial_unit
     direction = IDENTITY if metadata.direction_zyx is None else metadata.direction_zyx
     if (unit, direction) == (metadata.spatial_unit, metadata.direction_zyx):
@@ -173,7 +175,9 @@ def frame_metadata(metadata: ImageMetadata) -> ImageMetadata:
 
 
 def same_frame_grid(shape_a, metadata_a, shape_b, metadata_b) -> bool:
-    """Whether two grids are one grid for §2.10: equal shape and equal :func:`frame_metadata`."""
+    """Whether two grids are one grid for the assembly and fusion checks: equal shape and equal
+    :func:`frame_metadata`."""
+    # §2.10
     return tuple(shape_a) == tuple(shape_b) and frame_metadata(metadata_a) == frame_metadata(metadata_b)
 
 
@@ -219,7 +223,7 @@ def placed_metadata(result: PlacementResult, fov_id: str) -> ImageMetadata:
 
     ``dataclasses.replace(grid.metadata, frame_id="sample:<sample>",
     origin_zyx=origin)``, with the grid recorded in ``record["inputs"]`` and the
-    FOV's placement origin, read as §2.10 checks a grid (a spelling of the
+    FOV's placement origin, read as the stitching checks read a grid (a spelling of the
     micrometre as ``µm``, no direction as the identity), so that ``index_to_world(p)`` is ``origin + D · (p ⊙ spacing)`` for an index
     position ``p`` (integer or fractional) of the FOV's reference grid, also for
     a grid recorded without a direction. The record is not changed.
@@ -230,6 +234,7 @@ def placed_metadata(result: PlacementResult, fov_id: str) -> ImageMetadata:
         The FOV is not a row of the placement, or it has no origin (``missing``
         or ``failed``).
     """
+    # §2.10
     rows = result.fovs.index[result.fovs["fov_id"] == fov_id]
     if len(rows) != 1:
         raise ValueError(f"FOV {fov_id!r} is not a row of the placement of sample {result.sample!r}")

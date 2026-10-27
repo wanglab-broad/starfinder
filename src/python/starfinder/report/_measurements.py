@@ -170,7 +170,8 @@ def read_h5ad(path, obs_columns=("fov_id", "size_physical", "size_voxels")) -> A
 # --- Definitions on plain values (the tests compute them on hand tables) -------------------------------------------
 
 def plane_of(z) -> np.ndarray:
-    """A molecule's plane ``floor(z + 0.5)`` (the §2.9 sampling rule)."""
+    """A molecule's plane ``floor(z + 0.5)`` (the assignment's sampling rule)."""
+    # §2.9
     return np.floor(np.asarray(z, dtype=np.float64) + 0.5).astype(np.int64)
 
 

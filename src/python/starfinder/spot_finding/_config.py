@@ -65,7 +65,7 @@ class LocalMaximaConfig:
     Singleton Z is treated as a 2D plane, excluding only the YX border.
     Optional peak_intensity is the original pixel value, without normalization.
 
-    merge_radius_zyx (None: off, the legacy result) is the opt-in W-218
+    merge_radius_zyx (None: off, the legacy result) is the opt-in
     within-channel merge: after border exclusion a channel's maxima are
     ordered by decreasing pixel value, then increasing z, y, x, and a maximum
     is dropped when an earlier kept maximum of the same channel lies within
@@ -73,6 +73,7 @@ class LocalMaximaConfig:
     is unused for Z=1). Kept maxima are unchanged and nothing is averaged;
     diagnostics['merged'] holds the number removed per channel.
     """
+    # W-218
     threshold_mode: str = "noise"
     threshold_value: float = 5.0
     min_distance_voxels: int = 1

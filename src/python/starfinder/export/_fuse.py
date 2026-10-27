@@ -426,8 +426,10 @@ class _Reader:
                                shape=shape, dtype=dtype)
 
     def stack(self, source, stack):
-        """The ZYX dask array of a source file: one chunk per page when its pages are its Z planes (W-432), else
-        one task for the whole file in the chunks of tifffile's Zarr view (the reader before W-397)."""
+        """The ZYX dask array of a source file: one chunk per page when its pages are its Z planes, else
+        one task for the whole file in the chunks of tifffile's Zarr view (the chunks the fusion used
+        before it had its own reader)."""
+        # W-432; the reader before W-397
         import dask.array as da
         import tifffile
         import zarr

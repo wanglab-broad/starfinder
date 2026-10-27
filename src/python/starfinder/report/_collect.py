@@ -1111,7 +1111,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     dataset_id, sample_id : str
         The ``Dataset``'s IDs, which every run record must hold.
     assignment : str or None
-        The §2.9 assignment name of the route per FOV; None for a sample without cells.
+        The assignment name of the route per FOV; None for a sample without cells.
     segmentation : str or None
         The segmentation run the examples show; None for the runs the assignment or export read.
     config : ReportConfig or None
@@ -1140,6 +1140,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     FileExistsError
         The report folder holds a file that is not the report's own.
     """
+    # §2.9
     from starfinder._records import _write_table, jsonable, software, write_json
     from starfinder.export._record import Timer
     from ._page import budget_bytes, build_page, identity_facts

@@ -332,7 +332,7 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     them; when ``Dataset.export`` reuses the segmentation with ``segment:
     false`` it records the current export's settings there, because the
     labels do not depend on them and the tables do; the ``assembly``
-    section's ``assignment`` is the §2.9 record of the assignment made), the
+    section's ``assignment`` is the record of the assignment made), the
     software, the times and the peak RSS. The files of the earlier section are removed first.
 
     When ``fuse`` did not run, it writes no label file and records
@@ -378,6 +378,7 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     starfinder.segmentation.MissingModelError, starfinder.segmentation.ModelHashMismatchError
         Before anything is written: a model missing or with another SHA-256.
     """
+    # §2.9
     from starfinder._records import file_sha256
 
     from starfinder.io import _ome

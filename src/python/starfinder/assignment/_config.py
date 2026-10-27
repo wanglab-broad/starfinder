@@ -41,13 +41,14 @@ class CorrespondenceConfig:
     smallest value that makes the match unique). A matched nucleus whose share
     outside its cell is strictly greater than ``outside_tolerance`` (in [0, 1);
     0.0 is exact containment) is flagged ``outside``. The default 0.1 is
-    provisional, from one culture crop (W-320). Shares are voxel counts.
+    provisional, from one culture crop. Shares are voxel counts.
 
     Raises
     ------
     ValueError
         A value outside its range.
     """
+    # W-320
 
     match_fraction: float = 0.5
     outside_tolerance: float = 0.1

@@ -1,10 +1,11 @@
 """Optional cross-channel deduplication: one amplicon read in two channels keeps one read.
 
 docs/readout-contract.md, "Optional deduplication"; docs/readout-algorithms.md, "Deduplication".
-The pairwise link (same WTA observed sequence within a distance) is the rule W-278
-measured; the M/N exclusion, the grouping, the representative and the conflict rule are
-the accepted proposals it did not measure.
+The pairwise link (same WTA observed sequence within a distance) is the rule the
+readout design study of 2026-10-02 measured; the M/N exclusion, the grouping, the
+representative and the conflict rule are the accepted proposals that study did not measure.
 """
+# W-278
 
 from dataclasses import dataclass, field
 import math
@@ -34,10 +35,11 @@ class DeduplicationConfig:
     """Cross-channel duplicate rule; off unless a config is given (PipelineConfig.deduplication).
 
     distance_voxels is the inclusive Euclidean distance between candidate
-    coordinates in zero-based voxel index space (default 1.0, the W-278 design
-    choice; index space, not microns). compatibility "same_sequence" links two
-    reads whose WTA observed color sequences are identical and contain no M or N.
+    coordinates in zero-based voxel index space (default 1.0, the readout design
+    study's choice; index space, not microns). compatibility "same_sequence" links
+    two reads whose WTA observed color sequences are identical and contain no M or N.
     """
+    # W-278
 
     distance_voxels: float = 1.0
     compatibility: str = "same_sequence"
@@ -139,7 +141,7 @@ def deduplicate_reads(
 
     Pairs are candidates of the same detection round in different detection
     channels (the spot table's channel column); same-channel pairs are never
-    grouped (that is the §2.7 merge_radius_zyx). Two reads are linked when their
+    grouped (that is the spot-finding merge_radius_zyx). Two reads are linked when their
     Euclidean distance in voxel index space is at most config.distance_voxels
     and their WTA observed color sequences are identical and contain no M or N.
     Groups are the connected components of the links. A group whose assigned
@@ -166,6 +168,7 @@ def deduplicate_reads(
         Readout mode direct, candidates without a channel column, mismatched
         identities, or a detection round the intensities do not hold.
     """
+    # §2.7
     if not isinstance(result, (ReadDecodingResult, ReadScoringResult)):
         raise TypeError("deduplication needs decoded reads: a ReadDecodingResult or ReadScoringResult")
     if not isinstance(spots, SpotFindingResult) or not isinstance(intensity_result, IntensityExtractionResult):

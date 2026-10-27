@@ -1,6 +1,6 @@
 """Segmentation models: the known-models table, hash-checked resolution and the explicit fetch.
 
-Models live in the §2.7 weights cache (``STARFINDER_WEIGHTS_DIR``, default
+Models live in the shared weights cache (``STARFINDER_WEIGHTS_DIR``, default
 ``~/.cache/starfinder/weights``) as ``<root>/<method>/<model>/``; a user-trained
 model is given by path. Resolution never uses the network and never calls a
 library: it checks that the files exist and recomputes their SHA-256
@@ -8,6 +8,7 @@ library: it checks that the files exist and recomputes their SHA-256
 ``starfinder weights fetch`` command calls and no segmentation entry imports,
 downloads.
 """
+# §2.7
 from __future__ import annotations
 
 import json

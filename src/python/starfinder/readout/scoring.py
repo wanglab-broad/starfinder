@@ -24,11 +24,12 @@ NO_BACKGROUND = ("scoring needs the local background measured at extraction, and
 
 @dataclass(frozen=True)
 class ReadScoreConfig:
-    """The shared read-QC score bgcorr_probability (W-278 design D1); no tunable parameter.
+    """The shared read-QC score bgcorr_probability (design D1 of the readout design study); no tunable parameter.
 
     The constants 1e-6 (additive) and 1e-12 (probability floor) are the
     codebook-aware decoder's.
     """
+    # W-278 design D1
 
     method: str = field(default="bgcorr_probability", init=False)
 
@@ -77,16 +78,16 @@ class ReadScoringResult:
 
 
 def _components(values, background, box_voxels, assigned):
-    """W-278 D1 and its components over the used rounds.
+    """Design D1 of the readout design study and its components over the used rounds.
 
     values and background (N, C, U), box_voxels (N, U), assigned channel indices
     (N, U). v' = max(v - box_voxels x background, 0); p = (v'_a + 1e-6) /
     sum_c (v'_c + 1e-6); qc_score = sum_u -log max(p, 1e-12). ambiguity: max over
     u of the strongest other channel's clipped v' over the assigned channel's;
     signal-to-background: mean over u of the signed (v_a - box_voxels x
-    background_a) / (box_voxels x background_a) (W-278 scripts/w278_lib.py,
-    components).
+    background_a) / (box_voxels x background_a).
     """
+    # W-278 D1; W-278 scripts/w278_lib.py, components
     n, _, u = values.shape
     rows, rounds = np.arange(n)[:, None], np.arange(u)[None, :]
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
@@ -112,10 +113,10 @@ def score_reads(
 ) -> ReadScoringResult:
     """Score every assigned read; append the score columns without changing any identity.
 
-    The score of an assigned read (W-278 design D1, bgcorr_probability) is the
-    decoder's probability NLL of the assigned entry recomputed on background-
-    subtracted sums: per used round, v'_c = max(v_c - box_voxels x background_c,
-    0) and p = (v'_a + 1e-6) / sum_c (v'_c + 1e-6) at the assigned channel a;
+    The score of an assigned read (design D1 of the readout design study,
+    bgcorr_probability) is the decoder's probability NLL of the assigned entry
+    recomputed on background-subtracted sums: per used round,
+    v'_c = max(v_c - box_voxels x background_c, 0) and p = (v'_a + 1e-6) / sum_c (v'_c + 1e-6) at the assigned channel a;
     qc_score = sum of -log max(p, 1e-12). Used rounds are every sequencing round
     in readout mode multiplexed, where the assigned channels are the decoded
     entry's colors (a rescued round is scored at the codeword's channel), and
@@ -139,6 +140,7 @@ def score_reads(
         The intensities have no background measurements (rerun extraction), or
         identities or labels differ between the reads, intensities and reference.
     """
+    # W-278 design D1
     if not isinstance(decoding_result, ReadDecodingResult) or not isinstance(
             intensity_result, IntensityExtractionResult):
         raise TypeError("expected ReadDecodingResult and IntensityExtractionResult")

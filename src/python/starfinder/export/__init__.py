@@ -1,4 +1,4 @@
-"""Sample outputs (§2.10): the export entry, its record and the fused sample image.
+"""Sample outputs: the export entry, its record and the fused sample image.
 
 ``Dataset.export`` is the one sample-level export entry: it calls the parts ``assemble``
 (:mod:`starfinder.assembly`), ``fuse`` (:func:`fuse_images`), ``fuse_labels`` and
@@ -18,7 +18,7 @@ with the first positive view and never blended, at scale 0.25 by default (off by
 in the entry). :func:`export_spatialdata` writes the SpatialData store ``sample.zarr``
 (:class:`SpatialDataExportConfig`; off by default in the entry): the sample tables as
 points, shapes and tables, and each fused and label image once, read from its OME-TIFF,
-with one level; :func:`lookup_source` traces a molecule or cell back to its FOV's §2.9
+with one level; :func:`lookup_source` traces a molecule or cell back to its FOV's
 assignment. :func:`check_export` checks a folder against its record. :func:`segment_fused`
 segments the fused projection of a sample on the route after fusion (:data:`ROUTES`,
 :class:`SampleSegmentationConfig`, :class:`SampleSegmentationRun`) and writes one label
@@ -29,6 +29,7 @@ decides nothing; see docs/sample-segmentation-contract.md.
 Importing this module imports neither multiview-stitcher, zarr nor spatialdata. See
 docs/sample-output-contract.md.
 """
+# §2.10, §2.9
 from ._check import check_export
 from ._compare import RouteComparison, compare_routes
 from ._config import ROUTES as _ROUTES

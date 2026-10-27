@@ -145,7 +145,7 @@ def _maxima(image, config, context, mode, value, border):
 
 
 def _merge(table, radius, channels):
-    """The W-218 within-channel merge of the maxima rows; returns the kept rows (in their order) and removed counts.
+    """The within-channel merge of the maxima rows; returns the kept rows (in their order) and removed counts.
 
     Per channel, maxima are visited by decreasing pixel value (peak_intensity),
     then increasing z, y, x; one is dropped when an earlier kept maximum lies
@@ -153,6 +153,7 @@ def _merge(table, radius, channels):
     radius-scaled coordinates proposes neighbours, which the ellipsoid test
     then decides. Z=1 maxima all have z=0, so the Z radius has no effect.
     """
+    # W-218
     keep = np.ones(len(table), dtype=bool)
     removed = []
     for c in channels:

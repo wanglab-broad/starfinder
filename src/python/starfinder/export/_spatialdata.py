@@ -125,9 +125,10 @@ def cell_links(assembly) -> pd.array:
     """``cell_instance_id`` of each molecule: the ``instance_id`` of its ``(cell_namespace, cell_id)``.
 
     A molecule's cell key is its own ``(cell_namespace, cell_id)`` columns, the
-    §2.9 key of a row of the sample cell table; null without a cell (and for
+    assignment's key of a row of the sample cell table; null without a cell (and for
     every molecule of a ``molecules_only`` sample).
     """
+    # §2.9
     molecules, cells = assembly.molecules, assembly.cells
     if "cell_id" not in molecules.columns or not len(molecules):
         return pd.array([None] * len(molecules), dtype="UInt32")
@@ -588,7 +589,7 @@ def export_spatialdata(assembly, *, fused=None, labels=None,
     system, named after the sample, in the sample frame's axes and µm (identity
     for points and shapes). Elements, each written only when its population has
     a row or its image exists: points ``molecules`` (every molecule with finite
-    ``sample_z/y/x``; the §2.9 ``z, y, x`` renamed ``fov_index_z/y/x``,
+    ``sample_z/y/x``; the assignment's ``z, y, x`` renamed ``fov_index_z/y/x``,
     ``sample_x/y/z`` turned into ``x, y, z`` by ``PointsModel``,
     ``cell_instance_id`` added); shapes ``cell_centroids`` (a circle per cell
     with a finite ownership centroid, at ``(sample_ownership_centroid_x,
@@ -650,6 +651,7 @@ def export_spatialdata(assembly, *, fused=None, labels=None,
         library's refusals, among them a table that already has
         ``uns["spatialdata_attrs"]``.
     """
+    # §2.9
     timer = Timer()
     output_dir = Path(output_dir)
     record = _check(assembly, config, output_dir)
@@ -729,11 +731,11 @@ def lookup_source(folder, *, spot=None, cell=None) -> dict:
     returns, from the ``assembly`` section: ``fov_id``; ``assignment_folder``
     and ``assignment_record_sha256`` (the FOV's ``assignment.json``; None for a
     molecule table or an assignment in memory); ``row``, the row's zero-based
-    position in the FOV's §2.9 table (molecules in input order, cells in
+    position in the FOV's assignment table (molecules in input order, cells in
     increasing ``cell_id``); and ``kind``.
 
     On the route after fusion (an assembly with ``route`` ``after_fusion`` and
-    ``mode`` ``cells``) a cell has no §2.9 table of a FOV:
+    ``mode`` ``cells``) a cell has no assignment table of a FOV:
     ``assignment_folder`` and ``assignment_record_sha256`` are None, ``row``
     is the cell's position in the sample cell table, and two keys are added,
     ``label_file`` (the cell run's label file, relative to the folder, as the
@@ -760,6 +762,7 @@ def lookup_source(folder, *, spot=None, cell=None) -> dict:
         folder; the message names the section and the recording field); a file
         of the assembly whose SHA-256 differs; a key the sample does not hold.
     """
+    # §2.9
     from starfinder.assembly import load_assembly
     if (spot is None) == (cell is None):
         raise ValueError("give exactly one of spot=(spot_namespace, spot_id) or cell=(cell_namespace, cell_id)")

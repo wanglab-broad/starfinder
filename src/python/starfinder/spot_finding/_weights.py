@@ -32,7 +32,7 @@ class ModelFile:
 
 @dataclass(frozen=True)
 class KnownModel:
-    """One row of the known-weights table (W-266 known-weights.csv).
+    """One row of the known-weights table.
 
     url is the file Starfinder downloads, with its SHA-256 and size; md5 is
     the checksum the library registers for it (Spotiflow archives), or None.
@@ -46,6 +46,7 @@ class KnownModel:
     Piscis, whose download is the loaded file); resolve_model checks the ones
     a caller names.
     """
+    # W-266 known-weights.csv
     method: str
     model: str
     dimensionality: str

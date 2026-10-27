@@ -412,8 +412,8 @@ class AssemblyResult:
     every input FOV, in placement table order then increasing ``cell_id``;
     ``molecules`` one row per molecule of every input FOV, in placement table
     order then input order, naming its cell by ``(cell_namespace, cell_id)``
-    (null without a cell); ``counts`` the §2.9 long counts of the counted
-    cells (retained, §2.9 ``kept``) with ``fov_id`` and ``cell_namespace``.
+    (null without a cell); ``counts`` the assignment's long counts of the counted
+    cells (retained, assignment ``kept``) with ``fov_id`` and ``cell_namespace``.
     ``record`` is the ``assembly`` section of ``export.json``. See
     docs/assembly-contract.md ("Sample tables", "What assemble records").
 
@@ -425,6 +425,7 @@ class AssemblyResult:
         An identity of "Count accounting" fails, naming it and the first
         differing key.
     """
+    # §2.9
 
     sample: str
     fovs: pd.DataFrame
@@ -451,7 +452,8 @@ class AssemblyResult:
         return self.record.get("mode", "cells")
 
     def counted_cells(self) -> pd.DataFrame:
-        """The cell-table rows of the counted cells (retained, §2.9 ``kept``), in table order."""
+        """The cell-table rows of the counted cells (retained, assignment ``kept``), in table order."""
+        # §2.9
         cells = self.cells
         return cells[(cells["assembly_status"].eq("retained") & cells["status"].eq("kept")).to_numpy(dtype=bool)
                      ].reset_index(drop=True)
@@ -543,8 +545,9 @@ def _territory(fov: _Fov) -> np.ndarray:
     """The territory image assign sampled: the expanded labels when it expanded, else the cell labels.
 
     In memory for an AssignmentResult; read again from a saved folder, with
-    the SHA-256 of its labels checked as the §2.9 loader checks it.
+    the SHA-256 of its labels checked as the assignment loader checks it.
     """
+    # §2.9
     result = fov.result
     if not isinstance(result, _Saved):
         return result.cell_labels if result.territories is None else result.territories
@@ -673,7 +676,8 @@ def _check_inputs(placement, inputs, config):
 
 
 def _sample_territory(labels, plane, origin, spacing, points):
-    """The territory value at sample points by the §2.9 rule in another FOV; 0 outside its grid."""
+    """The territory value at sample points by the assignment's sampling rule in another FOV; 0 outside its grid."""
+    # §2.9
     index = np.floor((points - np.asarray(origin)) / np.asarray(spacing) + 0.5)
     values = np.zeros(len(points), np.int64)
     with np.errstate(invalid="ignore"):
@@ -738,14 +742,14 @@ def _duplicate_rule(placement, by_fov, state, order, threshold):
 
 def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
              config: AssemblyConfig = AssemblyConfig(), segmentation=None) -> AssemblyResult:
-    """Assemble a sample from its placement and its per-FOV §2.9 results, or on the route after fusion.
+    """Assemble a sample from its placement and its per-FOV assignment results, or on the route after fusion.
 
     Applies the checks of docs/assembly-contract.md ("Checks the entry
     applies") in order, then maps every observation into sample coordinates
     (``origin + p ⊙ spacing``, float64, never rounded), computes the ownership
     regions from the placement (:func:`ownership_map`), gives every cell and
     molecule one assembly status with its reason, applies the duplicate rule,
-    computes the flags, and copies the §2.9 counts of the counted cells. A cell
+    computes the flags, and copies the assignment counts of the counted cells. A cell
     is retained when the owner of its ownership centroid is its own FOV; the
     molecules of a cell follow it wherever they lie; an unassigned molecule is
     retained by its own position; ``outside_grid`` molecules and every
@@ -800,7 +804,7 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         assignment settings the tables are made with (``AssignmentConfig()``
         when it holds none); with a reused segmentation ``Dataset.export``
         sets them to the current export's. The result's record keeps the
-        §2.9 record of the assignment made as ``assignment``.
+        record of the assignment made as ``assignment``.
 
     Returns
     -------
@@ -826,6 +830,7 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         An input grid that is not the grid the placement (or the assignment)
         recorded, or one without known spacing, unit µm and identity direction.
     """
+    # §2.9
     if segmentation is not None:
         from ._fused import _check, assemble_after_fusion
         base = assemble(placement, inputs, config=config)

@@ -1,9 +1,10 @@
-"""The three §2.8 diagnostics: read inspection, population summaries and decision inspection.
+"""The three readout diagnostics: read inspection, population summaries and decision inspection.
 
 docs/readout-contract.md, "Diagnostics". Each reads retained results only (no image
 access and no rerun of a decision). inspect_read, plot_read and explain_read run on
 demand; FOV.run never calls them, and it stores summarize_reads in run.json.
 """
+# §2.8
 
 from collections.abc import Mapping
 from math import isfinite

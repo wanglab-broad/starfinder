@@ -1,4 +1,4 @@
-"""Assignment (§2.9): molecules to cells, nucleus–cell correspondence, compartments and counts.
+"""Assignment: molecules to cells, nucleus–cell correspondence, compartments and counts.
 
 :func:`assign_molecules`, the third of the three calls per FOV (``FOV.run``,
 ``FOV.segment``, ``FOV.assign_molecules``), places every molecule of a :class:`MoleculeTable`
@@ -17,6 +17,7 @@ writes it, for the workflow's per-FOV ``raw.h5ad`` and the sample-level AnnData 
 region and the cells and molecules the sample assembly excluded. See
 docs/assignment-contract.md and docs/assignment-algorithms.md.
 """
+# §2.9
 from ._anndata import write_h5ad
 from ._assign import AssignmentResult, assign_molecules, labels_at_positions
 from ._config import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, CELL_STATUSES, COMPARTMENT_STATES, NUCLEUS_STATUSES,

@@ -20,11 +20,12 @@ def _models(dimensionality):
 
 
 def check_geometry(entry, shape):
-    """Raise IncompatibleGeometryError where Spotiflow would return nothing or fail (W-266 probes).
+    """Raise IncompatibleGeometryError where Spotiflow would return nothing or fail (found by probing Spotiflow).
 
     A 3D model needs Z>1 and its minimum shape (Z >= 7, Y and X >= 8); a 2D
     model needs Z=1 and Y and X of at least its minimum (6).
     """
+    # W-266 probes
     model, minimum = entry.model, entry.min_shape_zyx
     if entry.dimensionality == "3D":
         if shape[0] == 1:

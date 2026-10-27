@@ -1,10 +1,11 @@
-"""A FOV's ownership region and excluded observations, for the §2.9 assignment figure (W-330).
+"""A FOV's ownership region and excluded observations, for the assignment figure.
 
 The region is the set of pixels of the FOV's Y, X grid whose centres the FOV owns, found with
 the ``owner`` test of the sample's ownership map, rebuilt from the placement and the grids the
 assembly records (docs/assembly-contract.md, "Ownership regions"). The excluded observations
 are read from the assembled tables; nothing here applies the retention rule again.
 """
+# §2.9, W-330
 from __future__ import annotations
 
 import numpy as np

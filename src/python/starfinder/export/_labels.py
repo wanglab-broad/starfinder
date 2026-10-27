@@ -152,12 +152,13 @@ def _territory_source(entry):
     """``(path, sha256, source)`` of the territory file the label export reads for one FOV of the assembly record.
 
     The path the assembly recorded beside its SHA-256 (``conflicts=True`` and a
-    saved assignment folder), else the file the §2.9 loader resolves from the
+    saved assignment folder), else the file the assignment loader resolves from the
     recorded assignment folder (the expanded territories when assign expanded,
     the cell labels otherwise) with the SHA-256 its record holds. ``path`` is
     None for an assignment given in memory. Raises FileNotFoundError, carrying
     the path, when the folder's ``assignment.json`` is missing.
     """
+    # §2.9
     from starfinder.assignment._persist import RECORD_FILE, _path
     from starfinder._records import file_sha256
     territories = entry.get("territories") or {}
@@ -308,7 +309,7 @@ def fuse_labels(placement: PlacementResult, assembly, *, config: LabelConfig = L
     included FOV in placement table order, its retained-cell image: the
     territory image assign sampled, read from the path the assembly record
     holds beside its SHA-256 (or, when that path is null, from the file the
-    §2.9 loader resolves from the recorded assignment folder), with each
+    assignment loader resolves from the recorded assignment folder), with each
     ``cell_id`` of a cell the cell table marks ``retained`` in that FOV mapped
     to its ``instance_id`` (``1..N`` in cell table order) and every other value
     to 0. A FOV without a retained cell is not read and contributes zeros. The
@@ -377,6 +378,7 @@ def fuse_labels(placement: PlacementResult, assembly, *, config: LabelConfig = L
         A grid without known spacing, unit µm and identity direction, or a
         territory of another shape than its FOV's grid.
     """
+    # §2.9
     timer = Timer()
     _check(placement, assembly, config)
     output_dir = Path(output_dir)

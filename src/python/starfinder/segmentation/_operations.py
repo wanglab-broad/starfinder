@@ -1,5 +1,6 @@
-"""Label functions that are not methods (D4): expand_labels, resample_labels, the culture extension through z and
+"""Label functions that are not methods: expand_labels, resample_labels, the culture extension through z and
 retained_image."""
+# D4
 from __future__ import annotations
 
 import math

@@ -1,4 +1,4 @@
-"""Segmentation (§2.9): the segment entry and its registry, the label contract, import, input and label functions.
+"""Segmentation: the segment entry and its registry, the label contract, import, input and label functions.
 
 Every segmentation result and every imported mask is a :class:`SegmentationResult`:
 a ``uint32`` ZYX label image (a plane is 1×Y×X) on a :class:`ReferenceGrid`, with
@@ -21,6 +21,7 @@ returns on the route after fusion: the segmentation grid, one
 (docs/sample-segmentation-contract.md). See docs/segmentation-contract.md and
 docs/segmentation-algorithms.md.
 """
+# §2.9
 from ._errors import MissingModelError, ModelHashMismatchError, SegmentationBackendUnavailableError
 from ._import import LabelImportConfig, import_labels
 from ._inputs import (CompositeConfig, FlamingoEnhancementConfig, composite_nuclei_amplicon, enhance_with_flamingo,

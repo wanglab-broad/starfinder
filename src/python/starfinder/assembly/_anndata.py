@@ -34,10 +34,10 @@ def _column(values):
 def write_sample_h5ad(result: AssemblyResult, path, *, annotation: Mapping | pd.Series | None = None) -> Path:
     """Write ``sample.h5ad`` of an assembled sample from its sample tables; return the path.
 
-    One row per counted cell (``assembly_status == "retained"`` and §2.9
+    One row per counted cell (``assembly_status == "retained"`` and the assignment's
     ``status == "kept"``), in the cell table's order, named by ``obs_name``.
     ``obs`` holds ``sample``, ``fov_id``, ``cell_namespace``, ``cell_id``, the
-    §2.9 cell columns ``raw.h5ad`` carries, every sample-coordinate column,
+    assignment cell columns ``raw.h5ad`` carries, every sample-coordinate column,
     ``ownership_centroid``, ``assembly_flags``, ``conflict_with`` and, with
     ``annotation``, the columns of the sample's annotation row. ``X`` is the
     float64 whole-cell counts in ``genes`` order; when some FOV gave nuclei (on
@@ -75,6 +75,7 @@ def write_sample_h5ad(result: AssemblyResult, path, *, annotation: Mapping | pd.
     ValueError
         An annotation column that is already an ``obs`` column.
     """
+    # §2.9
     _anndata("write_sample_h5ad")
     if not isinstance(result, AssemblyResult):
         raise TypeError("result must be an AssemblyResult")

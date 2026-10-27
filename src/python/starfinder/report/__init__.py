@@ -1,4 +1,4 @@
-"""The processing report (§2.11): what the records of one sample's processing hold.
+"""The processing report: what the records of one sample's processing hold.
 
 The report describes a run and judges nothing: no pass or fail verdict, no composite
 score, no filtering or correction. It reads the records at their fixed places under
@@ -17,6 +17,7 @@ report (the page ``report.html``, ``report.json`` and ``tables/``) and returns a
 (``<OUTPUT>/report/index.html`` and ``samples.csv``) from finished sample reports only and
 returns a :class:`ComparisonRecord`. See docs/report-contract.md and docs/report-algorithms.md.
 """
+# §2.11
 from ._config import MarkerGroup, ReportConfig, ReportLimits, RuleLimit
 from ._schema import PROBLEM_RULES as _PROBLEM_RULES
 from ._schema import REPORT_PARTS as _REPORT_PARTS

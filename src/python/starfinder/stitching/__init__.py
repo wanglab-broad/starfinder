@@ -1,4 +1,4 @@
-"""Stitching (§2.10): tile positions, neighbour pairs, the placement record, the stitch entry and the review policy.
+"""Stitching: tile positions, neighbour pairs, the placement record, the stitch entry and the review policy.
 
 A sample's FOVs are placed into one physical frame, ``sample:<sample>`` in µm. Their
 nominal positions are a :class:`TilePositionTable`, built by one of three converters
@@ -24,6 +24,7 @@ today's ``tile_config_{sample}.csv`` from the import.
 module imports no stitching backend. See docs/stitching-contract.md and
 docs/stitching-algorithms.md.
 """
+# §2.10
 from ._bigstitcher import BigStitcherConfig, export_bigstitcher, import_bigstitcher, legacy_tile_config_view
 from ._errors import PlacementReviewRequiredError, StitchingBackendUnavailableError
 from ._methods import STITCHING_METHODS as _STITCHING_METHODS

@@ -104,11 +104,12 @@ class SeededWatershedConfig:
 
     sigma_um is the standard deviation of the Gaussian smoothing of the stain
     in µm, converted per axis with the input's spacing (an axis of length 1 is
-    not smoothed; 1.5 µm is provisional, from the W-306 prototype). threshold
+    not smoothed; 1.5 µm is provisional, from the seeded-watershed prototype). threshold
     is ``"otsu"`` (Otsu's threshold of the smoothed stain) or a number on the
     ``img_as_float`` scale ([0, 1] for unsigned integers). compactness and
     connectivity are passed to ``skimage.segmentation.watershed``.
     """
+    # W-306
 
     sigma_um: float = 1.5
     threshold: str | float = "otsu"
@@ -130,7 +131,7 @@ class SeededWatershedConfig:
 
 def _seeded_watershed(image, config: SeededWatershedConfig,
                       context: MethodContext) -> tuple[np.ndarray, dict[str, Any]]:
-    """Grow one cell from each seed over the smoothed stain (the W-306 prototype, scripts/seeded_watershed.py).
+    """Grow one cell from each seed over the smoothed stain (after the seeded-watershed prototype).
 
     smooth = gaussian(img_as_float(stain), sigma_um / spacing per axis, 0 for an
     axis of length 1); foreground = smooth > threshold; the mask is the
@@ -138,6 +139,7 @@ def _seeded_watershed(image, config: SeededWatershedConfig,
     the foreground, keeps its value; cells = watershed(-smooth, markers=seeds,
     mask). The stain is the input's one channel.
     """
+    # the W-306 prototype, scripts/seeded_watershed.py
     from skimage.filters import gaussian, threshold_otsu
     from skimage.segmentation import watershed
     from skimage.util import img_as_float

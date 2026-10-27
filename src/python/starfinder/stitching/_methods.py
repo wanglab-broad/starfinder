@@ -36,7 +36,7 @@ class StitchingSpec:
     checked against its last two entries); ``dimensions`` holds 2 when Z=1 tiles
     are placed as planes and 3 when Z>1 tiles are placed as volumes; ``devices``
     is ``("cpu",)`` (placement is CPU only) and ``transform_kind`` is
-    ``"translation"``, the only kind §2.10 admits.
+    ``"translation"``, the only kind the stitching stage admits.
 
     Raises
     ------
@@ -45,6 +45,7 @@ class StitchingSpec:
         that are not a nonempty subset of {2, 3}, devices other than
         ``("cpu",)`` or another transform kind.
     """
+    # §2.10
 
     name: str
     run: Callable

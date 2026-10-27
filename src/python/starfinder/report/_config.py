@@ -112,7 +112,7 @@ class ReportLimits:
 
 @dataclass(frozen=True)
 class ReportConfig:
-    """What the user supplies to the sample report (D4).
+    """What the user supplies to the sample report.
 
     ``markers``: groups of one to four genes, each one figure, names unique;
     empty shows the three most abundant genes. ``marker_pairs``: pairs of two
@@ -132,6 +132,7 @@ class ReportConfig:
         not two distinct gene names, example FOVs that are not three distinct
         names.
     """
+    # D4
 
     markers: tuple[MarkerGroup, ...] = ()
     marker_pairs: tuple[tuple[str, str], ...] = ()

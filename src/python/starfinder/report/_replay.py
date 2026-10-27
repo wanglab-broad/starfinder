@@ -1,7 +1,7 @@
 """The replay of the examples (docs/report-contract.md, "The replay"; docs/report-algorithms.md, "The replay of
 the examples", ``intensity.csv``).
 
-The report rebuilds the images of the main example from its run record (D1): the raw input
+The report rebuilds the images of the main example from its run record: the raw input
 of the reference round and of the first moving round, checked against the SHA-256 the run
 recorded (step 1), loaded with ``config.pipeline.load`` through ``io.load_round`` and
 rotated with ``FOV.run``'s ``_rotated`` (``preprocessing/_rotation.py``; step 2); the recorded
@@ -23,6 +23,7 @@ package cannot rerun on the recorded input, which is ``replay_differs``), a movi
 Registration example (its transforms: ``step_failed``, ``not_recorded``,
 ``field_not_saved``, ``input_missing``, ``input_changed``; RE1 and PR1).
 """
+# D1
 from __future__ import annotations
 
 import json

@@ -76,9 +76,9 @@ class AssemblyConfig:
 class AssemblyInput:
     """One FOV's input of :func:`assemble`: its reference grid and one of two kinds.
 
-    ``assignment`` is the FOV's §2.9 :class:`~starfinder.assignment.AssignmentResult`
+    ``assignment`` is the FOV's :class:`~starfinder.assignment.AssignmentResult`
     or the path of its saved folder (``fovs/<fov_id>/assignment/<name>/``,
-    loaded with the §2.9 loader, which checks every recorded SHA-256);
+    loaded with the assignment loader, which checks every recorded SHA-256);
     ``molecules`` is a :class:`~starfinder.assignment.MoleculeTable` alone, for a
     sample without segmentation. :func:`assemble` checks that exactly one is
     given and that every input of a sample gives the same kind. ``grid`` is the
@@ -91,6 +91,7 @@ class AssemblyInput:
         An empty or non-string ``fov_id``, a ``grid`` that is not a
         ReferenceGrid, or ``assignment`` or ``molecules`` of another type.
     """
+    # §2.9
 
     fov_id: str
     grid: ReferenceGrid

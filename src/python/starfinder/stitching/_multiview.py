@@ -38,7 +38,7 @@ def _number(value, name, *, low=None, strict=False):
 
 @dataclass(frozen=True)
 class MultiviewStitcherConfig:
-    """multiview-stitcher's translation placement (D3), in the contract's starting configuration.
+    """multiview-stitcher's translation placement, in the contract's starting configuration.
 
     Phase correlation on each registered pair's overlap, mean-binned by
     ``binning_zyx`` voxels (z ignored for Z=1 tiles, which are registered as
@@ -66,6 +66,7 @@ class MultiviewStitcherConfig:
     TypeError
         ``drop_nan_quality`` is not Boolean.
     """
+    # D3
 
     binning_zyx: tuple[int, int, int] = (4, 4, 4)
     pairwise: str = "phase_correlation"

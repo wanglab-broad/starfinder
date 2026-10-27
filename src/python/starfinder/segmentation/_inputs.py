@@ -1,4 +1,4 @@
-"""Input functions that are not methods (D4): the composite, the Flamingo enhancement, normalization, rescaling.
+"""Input functions that are not methods: the composite, the Flamingo enhancement, normalization, rescaling.
 
 Each takes arrays, never changes them, and returns its result with a record mapping
 ``{"function", "config", "inputs", "output", ...}`` whose hashes are array SHA-256
@@ -6,6 +6,7 @@ values (docs/segmentation-contract.md, "Input preparation and label functions").
 None is registered in ``PREPROCESSING_METHODS``: the composite and the enhancement
 combine two images, normalization returns float32, and rescaling changes the grid.
 """
+# D4
 from __future__ import annotations
 
 import math
