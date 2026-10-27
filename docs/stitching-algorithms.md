@@ -6,7 +6,7 @@ This page specifies the numerical behavior of each element of {doc}`stitching-co
 the three converters into the tile position table, the neighbour derivation, the
 `multiview_stitcher` method, the import arithmetic of BigStitcher's `dataset.xml`, the
 supplied placement, and the placement-quality checks. Each has its parameters, units,
-defaults, failure behavior and a resource estimate. The current behavior is in {doc}`stitching-baseline`. Each element is
+defaults, failure behavior and a resource estimate. The behavior before §2.10 is history, in {doc}`stitching-baseline`. Each element is
 implemented in `starfinder.stitching`, and no default here is accepted.
 
 ## Evidence

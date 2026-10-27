@@ -1,6 +1,49 @@
-# Stitching contract: tile positions, placement, methods and BigStitcher
+# Stitching guide: tile positions, placement, methods and BigStitcher
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
+
+This page is the maintained guide to the stitching stage (§2.10) and its placement
+contract.
+
+* **What stitching does.** It places the FOVs of one sample in one physical frame,
+  `sample:<sample>` in µm: from each FOV's nominal position and saved stain image it
+  registers the neighbour pairs, gives every FOV an origin and exactly one status, and
+  flags what needs review before sample assembly; it runs on the CPU, translation only,
+  and reads only saved per-FOV files ([Terms](#terms), [Neighbour pairs](#neighbour-pairs),
+  [Placement record](#placement-record), [Link-quality rule](#link-quality-rule),
+  [Failure policy](#failure-policy), [Not the multi-FOV runner](#not-the-multi-fov-runner)).
+* **The entry and its configs.** `stitch` takes one `StitchingInput` per FOV, a
+  `TilePositionTable` from one of three converters (a stage file with its
+  `StageAxisMapping`, a regular grid or a supplied table) and a config registered in
+  `STITCHING_METHODS` (`MultiviewStitcherConfig`), with a `ReviewPolicy` and an opt-in
+  fallback; `Dataset.stitch` runs it for one sample from the saved files. BigStitcher, the
+  initial default, runs through Fiji as an engine task between `export_bigstitcher` and
+  `import_bigstitcher` (`BigStitcherConfig`), and a known placement enters through
+  `placement_from_table` ([Names](#names), [The stitch entry](#the-stitch-entry),
+  [Tile position table](#tile-position-table), [Input image](#input-image),
+  [Method registry](#method-registry), [BigStitcher](#bigstitcher),
+  [Supplied placement](#supplied-placement)).
+* **What it produces.** One `PlacementResult` for every backend: the per-FOV table
+  (status, origin, nominal position, correction, flags), the links with their quality and
+  residual, and the record with the frame, gauge, method provenance and review;
+  `save_placement` writes it to `<OUTPUT>/stitching/<sample>/` (`placement.json`,
+  `fovs.csv`, `links.csv`), which `load_placement` reads back, and assembly refuses it
+  while its review is required and not approved
+  ([Placement record](#placement-record), [Review criterion](#review-criterion),
+  [Persistence](#persistence)).
+* **Where the configuration goes.** The method config, `ReviewPolicy` and `fallback`
+  passed to `stitch` or `Dataset.stitch`, a sample-level entry outside `PipelineConfig`
+  (D3); in the workflow, the Python-only `stitching` block
+  ([Workflow configuration](#workflow-configuration)). The `multiview-stitcher` extra and
+  the package's Python bound are in [Dependency plan](#dependency-plan).
+
+Beneath this guide, {doc}`stitching-algorithms` gives the numerical behavior of each
+converter, the neighbour derivation, the `multiview_stitcher` method, the import
+arithmetic, the supplied placement and the placement-quality checks, with their
+resources; {doc}`stitching-assembly-validation` is the engineering validation design that
+stitching shares with assembly and the sample outputs, with its implemented checks and
+the results of the real examples; {doc}`stitching-baseline` is history (`8e7d256`, before
+§2.10).
 
 This page specifies the §2.10 placement contract: a sample-level stitch entry separate
 from `PipelineConfig` and `FOV.run`, one tile position table with three converters, an
@@ -11,8 +54,6 @@ policy, persistence and the workflow keys. Its registry fields, lookup, dependen
 provenance rules are those of {doc}`method-registry`, used unchanged. It uses the
 `ReferenceGrid` of {doc}`segmentation-contract` ("Coordination per FOV") and
 `ImageMetadata` (`src/python/starfinder/image.py`) as they are, and redefines neither.
-The current behavior is recorded in {doc}`stitching-baseline`; the numerical behavior of
-each converter, the method, the import and the checks is in {doc}`stitching-algorithms`.
 It is implemented in `starfinder.stitching`, and nothing is renamed. Sample coordinates of molecules and
 cells, overlap ownership, retained and excluded populations and the sample tables belong
 to W-326, which builds on the placement record below and does not redefine it; the fused
@@ -603,6 +644,12 @@ From the W-324 parity outputs (`parity/` in the W-324 run directory) and the 202
    use the reference grid's spacing. Relative origins agree with W-323's rerun within
    1.3e-06 px, the run-to-run variation of BigStitcher's optimization.
 
+The golden test holds item 3 on its own fixture.
+`test_workflow_stitching_golden.py` passes unchanged while the legacy scripts exist; when
+the implementation replaces a script, `legacy_tile_config` stays as the frozen reference,
+and the import's legacy view must reproduce its pinned `TILE_CONFIG` from the fixture's
+`dataset.xml` (item 3 above on the fixture).
+
 ### Where the record differs from `tile_config` on purpose
 
 | `tile_config_{sample}.csv` | Placement record | Why |
@@ -621,6 +668,8 @@ The legacy writer of `tile_config_{sample}.csv` stays for the rule chain that re
 its values from the record's raw translations and the view map, so its output is
 unchanged. (W-568: with an `assembly` block, where assemble has replaced that chain, the
 BigStitcher `stitch_sample` neither writes nor declares the file.)
+`test_assignment_workflow.py` and the other readers of `tile_config_{sample}.csv` pass
+unchanged, because the legacy writer's output is unchanged.
 
 ## Supplied placement
 
@@ -817,51 +866,6 @@ and every record that names a placement's tables hold the SHA-256 of these bytes
 computed from the tables in memory. A placement from `placement_from_table` is
 saved and loaded the same way ("Supplied placement").
 
-## Workflow configuration
-
-A Python-only `stitching` block (`backend: python`), read by `_run_stitching` in the
-workflow adapter and by the §2.13 rule that runs it:
-
-```yaml
-stitching:
-  method: bigstitcher            # or multiview_stitcher; bigstitcher is the initial default (D1)
-  input: reference_merged        # or reference_stain, or a file pattern
-  positions:
-    source: stage_file           # stage_file | regular_grid | table
-    stage_axes: {x: "+x", y: "+y"}   # required with stage_file; no default
-    snap_to_grid: {overlap: 0.1} # stage_file only: GridSnap with tile_shape_yx and spacing_yx below; null keeps stage positions
-    regular_grid: {columns: 7, rows: 10, order: column_major_down_right, overlap: 0.1}
-    tile_shape_yx: null          # px; null: from the FOVs' ReferenceGrid (shape_zyx[1:])
-    spacing_yx: null             # µm; null: from the FOVs' ReferenceGrid (metadata.spacing_zyx[1:])
-    table: null                  # a CSV path with source: table
-    stage_file: /data/acquisition/positions.maf   # required with source: stage_file; no default
-  config: {}                     # fields of MultiviewStitcherConfig or BigStitcherConfig
-  review: {max_correction_fraction: 0.5, max_residual_um: 1.0}
-  fallback: null                 # or nominal; for multiview_stitcher and the BigStitcher import alike
-  bigstitcher_save_dir: null     # a local folder; required with method: bigstitcher
-```
-
-* Without the block the four legacy rules run unchanged with `backend: matlab`, and the
-  adapter's legacy translation (`StageAxisMapping(x="+x", y="+y", source="legacy")`, the
-  YAML voxel sizes) applies only to the legacy writer. They run with the MATLAB backend
-  only: a Python configuration that enables one without the block raises when the rule
-  files are parsed, naming the block.
-* The sample's FOVs are its rows of `fovs.csv` in the input root, restricted by
-  `selected_fovs`. With `source: stage_file`, `stage_file` is required (no default: the
-  Python route writes no `documents/maf/<sample>.maf` copy) and `fovs.csv` must have the
-  `position_id` column; the file may hold every sample's positions, and the sample's are
-  selected by `position_id` before the conversion. A supplied table (`source: table`) may
-  also hold other FOVs: its rows of the sample's selected FOVs are kept. A regular grid is
-  laid out over the sample's FOVs of `fovs.csv` and its selected rows kept, so that a
-  selection keeps each FOV's cell.
-* `fiji_path` is read by the BigStitcher engine rule when it runs, not when the rule file
-  is parsed; the key stays required for that rule only.
-* With `method: bigstitcher`, `stitch_sample` writes and declares
-  `output/tile_config_{sample}.csv` only without an `assembly` block (W-568): with one,
-  nothing reads it.
-* The static schema lists the method names and is kept equal to `STITCHING_METHODS` plus
-  `bigstitcher` by a default-tier test, as for the other registries.
-
 ## Dependency plan
 
 Amended at the W-329 review of 2026-10-06, from W-323 (`20261005T2025Z-spike-environment/`),
@@ -938,14 +942,50 @@ trial (the 27 entries removed and the nine packages added); `uv sync --extra
 multiview-stitcher` in a fresh environment; the routine test gate. A difference beyond the
 trial returns to Jiahao, as the §2.9 lock change did.
 
-## Tests the implementation keeps
+## Workflow configuration
 
-* `test_workflow_stitching_golden.py` passes unchanged while the legacy scripts exist;
-  when the implementation replaces a script, `legacy_tile_config` stays as the frozen
-  reference, and the import's legacy view must reproduce its pinned `TILE_CONFIG` from the
-  fixture's `dataset.xml` (item 3 above on the fixture).
-* `test_assignment_workflow.py` and the other readers of `tile_config_{sample}.csv` pass
-  unchanged, because the legacy writer's output is unchanged.
+A Python-only `stitching` block (`backend: python`), read by `_run_stitching` in the
+workflow adapter and by the §2.13 rule that runs it:
+
+```yaml
+stitching:
+  method: bigstitcher            # or multiview_stitcher; bigstitcher is the initial default (D1)
+  input: reference_merged        # or reference_stain, or a file pattern
+  positions:
+    source: stage_file           # stage_file | regular_grid | table
+    stage_axes: {x: "+x", y: "+y"}   # required with stage_file; no default
+    snap_to_grid: {overlap: 0.1} # stage_file only: GridSnap with tile_shape_yx and spacing_yx below; null keeps stage positions
+    regular_grid: {columns: 7, rows: 10, order: column_major_down_right, overlap: 0.1}
+    tile_shape_yx: null          # px; null: from the FOVs' ReferenceGrid (shape_zyx[1:])
+    spacing_yx: null             # µm; null: from the FOVs' ReferenceGrid (metadata.spacing_zyx[1:])
+    table: null                  # a CSV path with source: table
+    stage_file: /data/acquisition/positions.maf   # required with source: stage_file; no default
+  config: {}                     # fields of MultiviewStitcherConfig or BigStitcherConfig
+  review: {max_correction_fraction: 0.5, max_residual_um: 1.0}
+  fallback: null                 # or nominal; for multiview_stitcher and the BigStitcher import alike
+  bigstitcher_save_dir: null     # a local folder; required with method: bigstitcher
+```
+
+* Without the block the four legacy rules run unchanged with `backend: matlab`, and the
+  adapter's legacy translation (`StageAxisMapping(x="+x", y="+y", source="legacy")`, the
+  YAML voxel sizes) applies only to the legacy writer. They run with the MATLAB backend
+  only: a Python configuration that enables one without the block raises when the rule
+  files are parsed, naming the block.
+* The sample's FOVs are its rows of `fovs.csv` in the input root, restricted by
+  `selected_fovs`. With `source: stage_file`, `stage_file` is required (no default: the
+  Python route writes no `documents/maf/<sample>.maf` copy) and `fovs.csv` must have the
+  `position_id` column; the file may hold every sample's positions, and the sample's are
+  selected by `position_id` before the conversion. A supplied table (`source: table`) may
+  also hold other FOVs: its rows of the sample's selected FOVs are kept. A regular grid is
+  laid out over the sample's FOVs of `fovs.csv` and its selected rows kept, so that a
+  selection keeps each FOV's cell.
+* `fiji_path` is read by the BigStitcher engine rule when it runs, not when the rule file
+  is parsed; the key stays required for that rule only.
+* With `method: bigstitcher`, `stitch_sample` writes and declares
+  `output/tile_config_{sample}.csv` only without an `assembly` block (W-568): with one,
+  nothing reads it.
+* The static schema lists the method names and is kept equal to `STITCHING_METHODS` plus
+  `bigstitcher` by a default-tier test, as for the other registries.
 
 ## Exclusions
 
@@ -957,6 +997,7 @@ measured number comes from W-323 and W-324 by reference).
 ```{toctree}
 :hidden:
 
-Stitching algorithms <stitching-algorithms>
-Stitching baseline <stitching-baseline>
+Stitching algorithms and validation <stitching-algorithms>
+Stitching and assembly validation (§2.10) <stitching-assembly-validation>
+Stitching baseline (history) <stitching-baseline>
 ```
