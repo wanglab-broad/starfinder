@@ -24,7 +24,7 @@ reads of one amplicon as duplicates of one representative, which
 :py:func:`~starfinder.readout.inspect_read`,
 :py:func:`~starfinder.readout.summarize_reads` and
 :py:func:`~starfinder.readout.explain_read` are the read inspection, population
-summary and decision inspection diagnostics. See :doc:`../readout-contract`.
+summary and decision inspection diagnostics. See :doc:`../readout-algorithms`.
 :py:func:`~starfinder.readout.export_spots` writes the joined spots as a typed,
 zero-based CSV with their identities: the accepted molecules (``molecules.csv``) or every
 read (``reads.csv``).

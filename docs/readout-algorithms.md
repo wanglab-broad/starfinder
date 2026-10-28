@@ -141,8 +141,8 @@ typed CSV:
 | `entry_id` | string | The called codebook entry |
 | `qc_score` | float64 | The shared read-QC score; `<NA>` for a read without a score |
 
-`FOV.export_spots("reads")` writes `reads.csv`: every decoded read joined to its
-candidate, with `spot_namespace`, `spot_id`, `z`, `y` and `x` first.
+After decoding, `FOV.export_spots("reads")` writes `reads.csv`: every decoded read
+joined to its candidate, with `spot_namespace`, `spot_id`, `z`, `y` and `x` first.
 
 ## Diagnostics
 

@@ -88,7 +88,7 @@ readout mode `direct`.
 * **On disk:** the `candidates` and `pre_qc` checkpoints (below), and `run.json` with
   each stage's config and, after decoding, a summary of the reads under `counts`.
   After the filter, `fov.export_spots()` writes `molecules.csv`, the accepted reads
-  with their positions, genes and scores; after decoding, `fov.export_spots("reads")`
+  with their positions, genes and `qc_score`; after decoding, `fov.export_spots("reads")`
   writes every decoded read.
 
 The reference lists every column.
