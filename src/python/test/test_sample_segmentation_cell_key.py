@@ -2,7 +2,7 @@
 table on the route per FOV (choice 7, CK1 of docs/sample-segmentation-contract.md), and the readers that
 link a molecule to its cell by the cell key ``(cell_namespace, cell_id)``.
 
-Fixtures: the assemblies of docs/stitching-assembly-validation.md (``assembly_golden`` 3D, 2D and
+Fixtures: the assemblies of design/validation/stitching-assembly.md (``assembly_golden`` 3D, 2D and
 expanded, ``own_cases`` with the duplicate rule on and off, ``empty_cases`` and ``status_cases``),
 built by ``assembly_fixtures.py``, and ``big_ids``: ``assembly_golden`` (3D) with two label values at
 and above 2^31.
@@ -10,7 +10,7 @@ and above 2^31.
 Until W-574, ``test_so3_the_column_on_the_route_per_fov`` also compared every other column of the four
 sample tables with the tables ``assemble`` gave at the base revision 725f24a, before the column
 existed. That comparison guarded the moment the column was added and is dropped as history. The
-values of the assembly tables are checked by the AS rows of docs/stitching-assembly-validation.md:
+values of the assembly tables are checked by the AS rows of design/validation/stitching-assembly.md:
 ``test_stitching_assembly_ownership.py`` (AS1 sample coordinates, AS2 owners),
 ``test_stitching_assembly_retention.py`` (AS3 to AS9: retained cells, rows, reasons and flags,
 identities, molecules-only, empty and status cases), ``test_stitching_assembly_accounting.py`` (the

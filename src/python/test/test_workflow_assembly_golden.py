@@ -29,8 +29,8 @@ order of the scene's cells. ``reads_assignment.py`` at 6b384cd is no longer in t
 they are checked against the blob in the W-326 notes. The values were produced in the
 locked project environment (Python 3.12.12, pandas 3.0.0, NumPy 2.2.6, scikit-image
 0.26.0, anndata 0.12.6) and are identical over repeated single-thread runs; see
-docs/assembly-baseline.md. When §2.10 replaces these steps, the helpers stay as the frozen
-legacy reference, and docs/assembly-contract.md names what the assemble entry must
+design/baselines/assembly.md. When §2.10 replaces these steps, the helpers stay as the frozen
+legacy reference, and design/specs/assembly.md names what the assemble entry must
 reproduce and what it changes on purpose. The tests that called only these helpers on the
 fixture, and no package or repository code, were removed (W-576, TM-19); the helpers stay
 the reference of the adapter and script tests.

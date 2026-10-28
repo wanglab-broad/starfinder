@@ -44,7 +44,7 @@ contract.
 Beneath this guide, [stitching-algorithms](stitching-algorithms.md) gives the numerical behavior of each
 converter, the neighbour derivation, the `multiview_stitcher` method, the import
 arithmetic, the supplied placement and the placement-quality checks, with their
-resources; [stitching-assembly-validation](../../docs/stitching-assembly-validation.md) is the engineering validation design that
+resources; [stitching-assembly-validation](../validation/stitching-assembly.md) is the engineering validation design that
 stitching shares with assembly and the sample outputs, with its implemented checks and
 the results of the real examples; [stitching-baseline](../baselines/stitching.md) is history (`8e7d256`, before
 the stitching stage).
@@ -62,7 +62,7 @@ provenance rules are those of [method-registry](../../docs/method-registry.md), 
 `ImageMetadata` (`src/python/starfinder/image.py`) as they are, and redefines neither.
 It is implemented in `starfinder.stitching`, and nothing is renamed. Sample coordinates of molecules and
 cells, overlap ownership, retained and excluded populations and the sample tables belong
-to sample assembly ([assembly-contract](../../docs/assembly-contract.md)), which builds on the placement record below and does not redefine it; the fused
+to sample assembly ([assembly-contract](assembly.md)), which builds on the placement record below and does not redefine it; the fused
 image and the exports belong to the sample outputs ([sample-output-contract](../../docs/sample-output-contract.md)).
 
 % The §2.10 placement contract; sample assembly: W-326; the sample outputs: W-328
@@ -163,7 +163,7 @@ default change.
 **Recommendation: N1.** The stage is called stitching in the chapter, registries are named
 after stages (`SEGMENTATION_METHODS`, `DECODING_METHODS`), and `stitch` reads as the verb
 next to `segment` and `assign`. Assemble and fuse keep their own modules or names, which
-[assembly-contract](../../docs/assembly-contract.md) and [sample-output-contract](../../docs/sample-output-contract.md) propose.
+[assembly-contract](assembly.md) and [sample-output-contract](../../docs/sample-output-contract.md) propose.
 
 % which W-326 and W-328 propose
 
@@ -717,7 +717,7 @@ and the import's legacy view must reproduce its pinned `TILE_CONFIG` from the fi
 | Shifted so each axis' minimum is 0 (a positive minimum moves further) | Gauge G1 | A stated frame that does not depend on the extreme FOV |
 | One row per grid cell, blanks included with offsets | One row per acquired FOV; padding views only in the method record | Placeholders stay inside the BigStitcher path |
 | FOV identity = the grid's `id` (Leica `PositionID`) | `fov_id` from the tile position table | `fovs.csv` names FOVs (`fov_id_pattern` for the MATLAB backend) |
-| Non-overlap rectangles from `img_col` and `img_row` | none | Ownership is assemble's ([assembly-contract](../../docs/assembly-contract.md)), from each grid's shape |
+| Non-overlap rectangles from `img_col` and `img_row` | none | Ownership is assemble's ([assembly-contract](assembly.md)), from each grid's shape |
 | Calibration from `voxel_size_xy`, `voxel_size_z` | From each FOV's reference grid | The files carry no calibration; the YAML values are rounded for LN |
 | No status, no links, no method record | Statuses, links with quality, provenance, review | The failure policy needs them |
 
@@ -810,7 +810,7 @@ part of what the caller approves: they are columns of `fovs`, whose SHA-256 the 
 records. `approve_placement` is required before assemble accepts the placement, with or
 without `origins` and whatever the corrections.
 
-**In assembly.** Assemble reads a supplied placement as any other ([assembly-contract](../../docs/assembly-contract.md)):
+**In assembly.** Assemble reads a supplied placement as any other ([assembly-contract](assembly.md)):
 sample coordinates and ownership come from `origin_*`, and check 8 ("One layer") reads
 `nominal_z`. A table with one common `nominal_z` therefore passes check 8 whatever the z
 of the supplied origins, and a table whose `nominal_z` differ is refused with or without
@@ -865,7 +865,7 @@ As agreed on 2026-09-27:
    never discards a result.
 2. **Unreliable or disconnected placement needs review before sample assembly.**
    `review_placement(result, policy)` sets `record["review"]` to `not_needed` or
-   `required` with the reasons ("Review criterion"). Assemble ([assembly-contract](../../docs/assembly-contract.md)) refuses a placement
+   `required` with the reasons ("Review criterion"). Assemble ([assembly-contract](assembly.md)) refuses a placement
    whose review is `required` and that has no approval, raising
    `PlacementReviewRequiredError` with the reasons. `approve_placement(result, *, reviewer,
    note)` records an approval (reviewer, UTC time, note, the SHA-256 of the per-FOV and
@@ -898,7 +898,7 @@ As agreed on 2026-09-27:
 connected, so connectivity alone is not enough; the correction bound catches a shift of
 about one overlap width, and the residual catches links the optimization could not
 reconcile. The two defaults are proposals for the validation design
-([stitching-assembly-validation](../../docs/stitching-assembly-validation.md)); neither is
+([stitching-assembly-validation](../validation/stitching-assembly.md)); neither is
 accepted. Whatever the criterion, a supplied placement is always `required`, with the
 reason `supplied_placement` ("Supplied placement").
 

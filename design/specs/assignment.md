@@ -116,7 +116,7 @@ page specifies. Its rules, and where this page follows each:
 The specification adds: there is no size or count filter, no probabilistic or
 transcript-based assignment and no second exporter; assignment is FOV-local, and
 stitching, global coordinates, overlap ownership and cross-FOV matching belong to
-stitching and assembly ([stitching-contract](stitching.md), [assembly-contract](../../docs/assembly-contract.md)).
+stitching and assembly ([stitching-contract](stitching.md), [assembly-contract](assembly.md)).
 
 % are §2.10's
 
@@ -951,7 +951,7 @@ On demand, never by `FOV.assign_molecules`:
   stitching and assembly): a
   `FOVOwnership` of `starfinder.assignment`, plain data that
   `starfinder.assembly.fov_ownership` builds for one FOV of an assembled sample: a boolean
-  Y, X mask of the pixels whose centres the FOV owns ([assembly-contract](../../docs/assembly-contract.md), "Ownership
+  Y, X mask of the pixels whose centres the FOV owns ([assembly-contract](assembly.md), "Ownership
   regions"), and the `cell_id` and `spot_id` of the FOV's cells and molecules whose
   assembly status is `excluded`. With it, panels 1 and 2 of both views draw the closed
   boundary of the mask as a yellow line, the colour of the legacy tile box, the image

@@ -1,4 +1,4 @@
-"""AS11 to AS14 of docs/stitching-assembly-validation.md: the sample-level AnnData, persistence in the
+"""AS11 to AS14 of design/validation/stitching-assembly.md: the sample-level AnnData, persistence in the
 export folder, ``write_h5ad`` and the legacy adapter, and determinism.
 
 Fixtures: ``assembly_golden`` (3D with an expanded FOV, 2D, molecules only), ``own_cases`` (a
@@ -51,7 +51,7 @@ def dense(result, rows, compartment):
 
 
 def check_anndata(adata, result, *, annotation=None):
-    """Every condition of "A test can check it against the sample tables" (docs/assembly-contract.md)."""
+    """Every condition of "A test can check it against the sample tables" (design/specs/assembly.md)."""
     rows = counted(result)
     assert adata.n_obs == len(rows)
     assert adata.obs_names.tolist() == rows.obs_name.tolist()

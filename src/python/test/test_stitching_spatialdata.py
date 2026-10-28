@@ -1,5 +1,5 @@
 """SD1 to SD8, the SpatialData parts of EX1 and EX3 and the store clause of FI11 of
-docs/stitching-assembly-validation.md: ``export_spatialdata``, its store ``sample.zarr``,
+design/validation/stitching-assembly.md: ``export_spatialdata``, its store ``sample.zarr``,
 its ``spatialdata`` section and ``lookup_source``.
 
 Fixtures: ``export_cases``, one sample per row of the table "Empty populations" of

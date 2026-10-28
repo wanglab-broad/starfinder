@@ -1,4 +1,4 @@
-"""The ``slow`` parts of FI1, FI2, FI3, FI4, FI6, FI8 and FI9 of docs/stitching-assembly-validation.md.
+"""The ``slow`` parts of FI1, FI2, FI3, FI4, FI6, FI8 and FI9 of design/validation/stitching-assembly.md.
 
 Fixtures, rebuilt in ``fusion_fixtures``: ``fuse_band`` (six FOVs of 16×256×256 uint8, fusion
 grid 16 × 1408 × 256), ``overlap_pair`` (W-354's overlap fixture, union grid 40 × 456, in

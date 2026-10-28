@@ -2,7 +2,7 @@
 
 % Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-Note: {doc}`assembly-contract` and {doc}`assembly-algorithms` were accepted at their review gate (2026-10-07) and are implemented in `starfinder.assembly`; this page keeps the text of its revision.
+Note: [Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md) and [Assembly algorithm specification](../specs/assembly-algorithms.md) were accepted at their review gate (2026-10-07) and are implemented in `starfinder.assembly`; this page keeps the text of its revision.
 
 % Note (W-583); accepted at W-329 (2026-10-07)
 
@@ -10,10 +10,10 @@ This page records how sample assembly behaves at revision `0f5cbd8` (branch
 `runner/s210-spec-20261006`, on `dev` after the assignment work and the stitching
 specification), before the stitching and assembly work changes it. It is the reference that the golden test
 `src/python/test/test_workflow_assembly_golden.py` pins. The proposed replacement is
-described in {doc}`assembly-contract` and {doc}`assembly-algorithms`; neither is accepted.
-The placement that assembly starts from is recorded in [stitching baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/stitching.md) and
-proposed in [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md); the per-FOV tables it reads are those of
-the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md). Paths are relative to the repository root, and line numbers
+described in [Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md) and [Assembly algorithm specification](../specs/assembly-algorithms.md); neither is accepted.
+The placement that assembly starts from is recorded in [stitching baseline](stitching.md) and
+proposed in [stitching specification](../specs/stitching.md); the per-FOV tables it reads are those of
+the [assignment specification](../specs/assignment.md). Paths are relative to the repository root, and line numbers
 are at `0f5cbd8` unless a revision is named.
 
 % on `dev` after the §2.9 work and W-325, before the Chapter II §2.10 work changes it
@@ -44,7 +44,7 @@ the assignment workflow adapter and two sample scripts:
 
 | Piece | Where | Engine |
 | --- | --- | --- |
-| Tile offsets and non-overlap rectangles | rule `create_tile_config` (`workflow/rules/stitching.smk:60-70`), `workflow/scripts/create_tile_config.py` (T1 to T7 of [stitching baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/stitching.md)) | workflow environment (plotly) |
+| Tile offsets and non-overlap rectangles | rule `create_tile_config` (`workflow/rules/stitching.smk:60-70`), `workflow/scripts/create_tile_config.py` (T1 to T7 of [stitching baseline](stitching.md)) | workflow environment (plotly) |
 | Global coordinates and the overlap filter, per FOV | rule `reads_assignment` (`workflow/rules/reads-assignment.smk:8-22`), `workflow/scripts/reads_assignment.py`, which since 2026-10-05 calls `_run_reads_assignment` in `src/python/starfinder/dataset/workflow.py`; before that the script itself (revision `6b384cd`, blob `26a7eab`) | Python package, in the workflow environment (anndata) |
 | Sample molecule table | rule `create_sample_reads_assignment` (`reads-assignment.smk:45-54`), `workflow/scripts/create_sample_reads_assignment.py` | workflow environment |
 | Sample H5AD | rule `create_sample_h5ad` (`reads-assignment.smk:29-38`), `workflow/scripts/create_sample_h5ad.py` | workflow environment (scanpy, anndata) |
@@ -52,12 +52,12 @@ the assignment workflow adapter and two sample scripts:
 
 % Global coordinates: since W-317 calls `_run_reads_assignment`; before W-317 the script itself
 
-Since the assignment stage, assignment is FOV-local ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#boundary-with-stitching-and-assembly), its section on the boundary with stitching and assembly):
+Since the assignment stage, assignment is FOV-local ([assignment specification](../specs/assignment.md#boundary-with-stitching-and-assembly), its section on the boundary with stitching and assembly):
 the package's `assign_molecules` reads no tile configuration, and the workflow adapter
 applies the legacy global coordinates and overlap filter to its result, outside the
 package, as the script did.
 
-% Since §2.9; {doc}`assignment-contract`, "Boundary with §2.10"
+% Since §2.9; [assignment-contract](../../docs/assignment-contract.md), "Boundary with §2.10"
 
 ## The rules and their files
 
@@ -70,7 +70,7 @@ Paths are relative to `OUTPUT = {root_output_path}/{dataset_id}/{output_id}`.
 | `create_sample_h5ad` | the annotation and the `raw.h5ad` of every FOV of the sample (`SAMPLE_TO_FOV`, lines 26-27) | `expr/{sample}_raw.h5ad` |
 | `create_sample_reads_assignment` | the annotation and the `reads_assignment.csv` of every FOV of the sample (lines 42-43) | `expr/{sample}_reads_assignment.csv` |
 
-A later change (2026-10-24) removed `documents/genes.csv` from `reads_assignment`'s inputs: the matrix's genes and their order are the codebook's ({doc}`migration`).
+A later change (2026-10-24) removed `documents/genes.csv` from `reads_assignment`'s inputs: the matrix's genes and their order are the codebook's ([migration](../../docs/migration.md)).
 
 % W-567 later removed `documents/genes.csv`
 
@@ -82,7 +82,7 @@ status, a link or a review state: none exists.
 
 Steps T1 to T5 (which view is which tile, the sum of the two translations, the integer
 cast towards zero, the shift by `|min|` and the join with `grid.csv`) are recorded in
-[stitching baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/stitching.md). T6 and T7 are assembly:
+[stitching baseline](stitching.md). T6 and T7 are assembly:
 
 | Step | Lines | Behavior |
 | --- | --- | --- |
@@ -91,7 +91,7 @@ cast towards zero, the shift by `|min|` and the join with `grid.csv`) are record
 | Right and lower edge | 98-108 | Towards a counted right neighbour at `x_r`: `end_x = int((x + img_col − x_r)/2 + 0.5 + x_r)`; otherwise `x + img_col`. **The lower edge uses `img_col`, not `img_row`** (lines 106 and 108), both towards a lower neighbour and without one. |
 | Blank tiles | 69-73, 127-130 | `start/end_*` and the normalized box are 0. A blank keeps its offsets `x, y, z`, and those offsets entered the minimum of T4. |
 | Normalized box | 122-125 | `start_x_norm = start_x − x`, likewise for the other three: the box in the tile's own pixel indices. |
-| Z | – | No box in z. The z offset is the truncated sum of the two z translations, in units of the xy pixel size (the stitching input inventory's finding 3, [stitching baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/stitching.md)), plus `|min|`. |
+| Z | – | No box in z. The z offset is the truncated sum of the two z translations, in units of the xy pixel size (the stitching input inventory's finding 3, [stitching baseline](stitching.md)), plus `|min|`. |
 
 The box is used half-open (`range(start, end)`), in integer pixels. With square tiles
 (LN: `img_col = img_row = 1496`) the `img_col` error has no effect; with non-square tiles
@@ -147,7 +147,7 @@ package:
 | Diagnostics | 1506-1522 | `plot_assignment` draws the whole result; `log.txt` gives the assignment counts of the whole FOV, before the filter, and adds "{n} cells inside the tile box". |
 
 The adapter has no empty branch: a FOV whose molecules all miss the cells keeps its cells
-(with zero counts) and filters its molecules like any other FOV ({doc}`migration`,
+(with zero counts) and filters its molecules like any other FOV ([migration](../../docs/migration.md),
 "Segmentation and assignment workflow rules"). Otherwise its `raw.h5ad` and `reads_assignment.csv` carry
 the script's values (golden test, `test_the_adapter_writes_the_legacy_values`).
 
@@ -215,7 +215,7 @@ datasets' reference outputs.
 
 % What the §2.9 assign entry hands over per FOV
 
-From the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md) (its sections on the boundary with stitching and assembly
+From the [assignment specification](../specs/assignment.md) (its sections on the boundary with stitching and assembly
 and on persistence), per FOV and per assignment name:
 
 % ("Boundary with §2.10", "Persistence")
@@ -240,21 +240,21 @@ filter; the package never sees a tile configuration.
 % Discrepancies with the agreed §2.10 scope
 
 Each line names the current behavior and the proposed resolution in
-{doc}`assembly-contract` or {doc}`assembly-algorithms`.
+[Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md) or [Assembly algorithm specification](../specs/assembly-algorithms.md).
 
 | # | Current behavior | Proposed resolution |
 | --- | --- | --- |
-| 1 | **Integer tile offsets.** `global_*` add the truncated, shifted offsets of `tile_config` (T3, T4); the fraction of the placement is lost (up to 0.998 px in x and 0.926 px in y on LN, `tables/ln_ownership.json`). | Sample coordinates come from the placement's float64 origins in µm by the index rule of [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md); nothing is cast ("Sample coordinates"). |
+| 1 | **Integer tile offsets.** `global_*` add the truncated, shifted offsets of `tile_config` (T3, T4); the fraction of the placement is lost (up to 0.998 px in x and 0.926 px in y on LN, `tables/ln_ownership.json`). | Sample coordinates come from the placement's float64 origins in µm by the index rule of [stitching specification](../specs/stitching.md); nothing is cast ("Sample coordinates"). |
 | 2 | **Centroids truncated to integers before the ownership test** (script line 141; adapter line 1379). With integer box edges and non-negative centroids the decision is the same as for the float centroid (`floor(c) < e` exactly when `c < e`), but the reported `global_*` lose up to one pixel, and the truncation would decide once the edges are fractional. | Ownership is tested on the float centroid in sample coordinates; the centroids of the cell table are carried unrounded. |
 | 3 | **Ownership tested in XY only**; z is never tested, although tiles carry their own z offsets. | Ownership in Y and X with a stated single-layer rule: a sample whose FOVs are not one layer is refused ("Ownership regions", option Z1). |
 | 4 | **`img_col` used for the Y extent of a tile** (`create_tile_config.py:106, 108`). In the golden fixture the band `y ∈ [43, 51)` is owned by two FOVs and one cell is kept twice. | Each FOV's footprint comes from its `ReferenceGrid` shape and spacing; no YAML tile size is read. |
 | 5 | **The empty branch bypasses the overlap filter** (script lines 111-124): every molecule is written unfiltered and the cells are dropped. The adapter removed the branch but keeps the filter. | One rule for every FOV: no branch. A FOV without assigned molecules keeps its cells, and a sample without segmentation is assembled from molecules alone by the same position rule ("Retention"). |
 | 6 | **Molecules of dropped cells are discarded without a record** (script lines 160-165; adapter 1457-1463). | Every molecule of every FOV stays in the sample molecule table with an assembly status and a reason ("Statuses and reasons"). |
 | 7 | **Diagnostics computed before the filter**: the script's log and plots, and the adapter's plot and assignment counts, describe the FOV before ownership; only "cells inside the tile box" follows it. | Assembly diagnostics are computed from the sample tables after retention, per status and reason; the per-FOV assignment diagnostics keep describing the FOV. |
-| 8 | **Ownership coupled to grid indices and blank tiles**: neighbours by `tile_{row}_{col±1}` names, diagonals ignored, a blank neighbour gives the tile its full edge, blank offsets enter the minimum. On LN about 33,600 px² are owned twice and about 3,000 px² by no tile. | Ownership regions computed in assemble from the placed footprints (origins and grid shapes), with no row or column index; padding views are not FOVs ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Placement record"). |
+| 8 | **Ownership coupled to grid indices and blank tiles**: neighbours by `tile_{row}_{col±1}` names, diagonals ignored, a blank neighbour gives the tile its full edge, blank offsets enter the minimum. On LN about 33,600 px² are owned twice and about 3,000 px² by no tile. | Ownership regions computed in assemble from the placed footprints (origins and grid shapes), with no row or column index; padding views are not FOVs ([stitching specification](../specs/stitching.md), "Placement record"). |
 | 9 | **No status or reason for an excluded observation**: a dropped cell or molecule leaves no trace, so the sample tables cannot be reconciled with the FOVs. | Assembly statuses `retained`, `excluded` with reasons, kept distinct from the per-FOV assignment statuses; count identities over both populations ("Count accounting"). |
 | 10 | **The filter is applied in the workflow adapter, outside the package** (`_write_raw_h5ad`, `_write_reads_assignment`). | A package entry, `assemble`, separate from stitch and from export (a settled decision); the adapter calls it ("Workflow configuration"). |
-| 11 | Global coordinates are integer pixels and slices in XYZ order; z comes from translations in xy-pixel units (the stitching input inventory's finding 3). | ZYX in µm in the sample frame of [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md). |
+| 11 | Global coordinates are integer pixels and slices in XYZ order; z comes from translations in xy-pixel units (the stitching input inventory's finding 3). | ZYX in µm in the sample frame of [stitching specification](../specs/stitching.md). |
 | 12 | Next to a blank or at the sample edge, a rectangle reaches past its own tile (the fixture's FOV3 owns `y` up to 64 in a 48-pixel tile). | Ownership is bounded by the footprints; a point in no footprint has no owner. |
 | 13 | Sample identities are `sample_fov_id_seg_label`; all background molecules of a FOV share `<sample>_<fov>_0`. | Cells keep `(cell_namespace, cell_id)` and molecules `(spot_namespace, spot_id)`; a readable `obs_name` is derived and checked unique ("Sample-level identities"). |
 | 14 | Duplicates and losses across FOVs are invisible: in the fixture one cell is kept by two FOVs, and one molecule of a kept cell (outside its owner's tile) is kept by none. | Flags on cells and molecules make such cases visible, with no matching or merging ("Flags"); the page states that one observation per biological cell is not guaranteed. |
@@ -262,7 +262,7 @@ Each line names the current behavior and the proposed resolution in
 | 16 | The adapter keeps every `outside_grid` molecule unfiltered, with `global_*` computed from coordinates outside the grid. | `outside_grid` molecules are excluded with the reason `outside_grid` and keep their sample coordinates. |
 | 17 | `reads_assignment` declares every sample's `tile_config` as input. | The assemble rule runs once per sample on that sample's placement and FOVs. |
 | 18 | The MATLAB merge keeps spots by first-come, spot-extent regions in file order. | Not carried forward; ownership does not depend on FOV order except for exact ties ("Ownership regions"). |
-| 19 | No placement status or review is read: a failed or unreviewed placement is assembled like any other. | Assemble refuses a placement whose review is `required` without approval and excludes the observations of FOVs without an origin (`fov_not_placed`) ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Failure policy"). |
+| 19 | No placement status or review is read: a failed or unreviewed placement is assembled like any other. | Assemble refuses a placement whose review is `required` without approval and excludes the observations of FOVs without an origin (`fov_not_placed`) ([stitching specification](../specs/stitching.md), "Failure policy"). |
 
 % 7: the §2.9 per-FOV diagnostics. 9: the §2.9 assignment statuses. 10: separate from stitch and from export (D3).
 % 11: W-323 finding 3. 15: the §2.9 AnnData code.

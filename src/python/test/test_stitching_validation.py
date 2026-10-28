@@ -1,6 +1,6 @@
 """The §2.10 engineering validation: EE6, the full chain, and the table of implemented checks (W-373).
 
-Rows of docs/stitching-assembly-validation.md ("Checks"). Every other row is in the module of
+Rows of design/validation/stitching-assembly.md ("Checks"). Every other row is in the module of
 the issue that delivered its code; the section "Implemented checks" of that page maps
 every row to its tests, and ``test_every_row_names_collected_tests``
 (``test_stitching_docs_contract.py``, W-602) keeps that map true:

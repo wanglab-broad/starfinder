@@ -1,4 +1,4 @@
-"""MV1 to MV6 of docs/stitching-assembly-validation.md: the ``multiview_stitcher`` placement method.
+"""MV1 to MV6 of design/validation/stitching-assembly.md: the ``multiview_stitcher`` placement method.
 
 Fixtures: ``cut_synthetic`` and its derived cases, rebuilt in ``stitching_cut_fixtures``
 from W-324's recipe (seeds 20261006, 324, 1000 + tile, 1050); ``scene_small``

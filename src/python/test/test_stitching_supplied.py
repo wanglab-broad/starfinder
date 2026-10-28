@@ -1,4 +1,4 @@
-"""PL18 of docs/stitching-assembly-validation.md: ``placement_from_table``, without and with ``origins``.
+"""PL18 of design/validation/stitching-assembly.md: ``placement_from_table``, without and with ``origins``.
 
 Fixtures: ``stub_grid``'s table and grids; ``own_cases``' table (two FOVs of 4×16×16 at
 1 µm, nominal x 0 and 12 µm, one layer) with the origins (0.3, 0.25, 1.5) and (−0.7,

@@ -13,7 +13,7 @@ and assembly work changes it. It is the reference that the golden test
 described in [stitching-contract](../specs/stitching.md) and [stitching-algorithms](../specs/stitching-algorithms.md); neither is
 accepted. Paths are relative to the repository root, and line numbers are at `8e7d256`.
 The assembly half of the stitching and assembly work (sample coordinates of molecules and cells, overlap ownership,
-the sample tables) is recorded by [assembly-baseline](../../docs/assembly-baseline.md); this page names it only where the stitching
+the sample tables) is recorded by [assembly-baseline](assembly.md); this page names it only where the stitching
 scripts reach into it, and marks which parts of `create_tile_config.py` belong to it.
 
 % on `dev` after the §2.9 work, before the Chapter II §2.10 work changes it; the assembly half of §2.10 is recorded by W-326
@@ -190,8 +190,8 @@ On LN sample1 the unchanged script (with a stand-in plotly module, in the parity
 | --- | --- | --- |
 | T1, T2, T5: which view is which FOV, and its fractional origin | 19-41, 50-58 | Placement: the import of `dataset.xml` ([stitching-contract](../specs/stitching.md), "BigStitcher") |
 | T3 integer cast | 43-45 | Neither: dropped; kept only in a legacy view that reproduces `tile_config` |
-| T4 shift to a zero minimum | 47-49 | The sample frame: its origin is a placement choice ([stitching-contract](../specs/stitching.md), "Placement record"); integer sample coordinates of molecules and cells are assembly's ([assembly-baseline](../../docs/assembly-baseline.md)) |
-| T6, T7 non-overlap rectangles | 60-130 | Assembly ([assembly-baseline](../../docs/assembly-baseline.md)): overlap ownership, computed in assemble from the placement |
+| T4 shift to a zero minimum | 47-49 | The sample frame: its origin is a placement choice ([stitching-contract](../specs/stitching.md), "Placement record"); integer sample coordinates of molecules and cells are assembly's ([assembly-baseline](assembly.md)) |
+| T6, T7 non-overlap rectangles | 60-130 | Assembly ([assembly-baseline](assembly.md)): overlap ownership, computed in assemble from the placement |
 | HTML plot | 134-140 | Output diagnostics |
 
 % T4: integer sample coordinates of molecules and cells are W-326's. T6, T7: Assembly (W-326).
@@ -249,7 +249,7 @@ Each line names the current behavior and the proposed resolution in
 | 4 | **The axis mapping is implicit in `rotate_angle`** (G3 fixes stage X → column, stage Y → row). | An explicit stage-axis mapping with no default; `rotate_angle` stays an image rotation, and the workflow adapter translates the legacy configuration into the mapping G3 hard-codes, recorded as such ("Stage-axis mapping"). |
 | 5 | **Macro parameters fixed in the script.** | A package function renders the macro from a `BigStitcherConfig` whose defaults are today's values, recorded in the placement record. |
 | 6 | **The transform names of `dataset.xml` hard-coded**, three transforms per view assigned by position (T1). | The import maps views to FOVs by setup id and the tile attribute, composes every transform of the view except `calibration`, refuses a non-translation, and raises naming the view when a transform is missing ("BigStitcher"). |
-| 7 | **Overlap rectangles computed together with placement** (T6-T7). | Placement stops at the per-FOV origins; ownership is computed in assemble ([assembly-contract](../../docs/assembly-contract.md)) from the placement. |
+| 7 | **Overlap rectangles computed together with placement** (T6-T7). | Placement stops at the per-FOV origins; ownership is computed in assemble ([assembly-contract](../specs/assembly.md)) from the placement. |
 | 8 | **`img_col` used for the Y extent** (lines 106, 108). | Assemble takes each FOV's extent from its `ReferenceGrid` shape; the legacy view keeps the bug only to reproduce existing files. |
 | 9 | **`fiji_path` needed at parse time.** | The BigStitcher engine task reads `fiji_path` only when it runs; the key becomes optional for workflows that do not stitch with BigStitcher ("Workflow configuration"). |
 | 10 | **No package API.** | A `starfinder.stitching` module with the stitch entry, the tile position table, `STITCHING_METHODS`, the macro function and the import ("Names"). |

@@ -67,7 +67,7 @@ passing.
 It builds on these pages and redefines none of them: {doc}`checkpoints` (`run.json`, the
 checkpoint stages), {doc}`registration-contract` (the transform convention, the
 registration QC), {doc}`registration-algorithms` (the transforms), {doc}`readout-contract` (call statuses, the read filter, deduplication),
-[stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) (the placement record), {doc}`assembly-contract` (the sample
+[stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) (the placement record), [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md) (the sample
 tables, ownership, population accounting), {doc}`sample-output-contract` (the export entry,
 `export/<sample>/`, `export.json`, `check_export`), {doc}`sample-segmentation-contract` (the
 route setting and every output column on the route after fusion) and

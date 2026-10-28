@@ -1,5 +1,5 @@
 """The FOV ownership region on the §2.9 assignment figure (W-330): ``fov_ownership`` and the ``ownership``
-argument of ``plot_assignment`` (design/specs/assignment.md, "Diagnostics"; docs/assembly-contract.md,
+argument of ``plot_assignment`` (design/specs/assignment.md, "Diagnostics"; design/specs/assembly.md,
 "Ownership regions").
 
 The region of each FOV is checked against a mask computed here from the placement origins, the grid
@@ -38,7 +38,7 @@ REGION, EXCLUDED = "ownership region", "excluded from sample"
 GOLDEN_CELLS = {"Position001": (0, 0), "Position002": (1, 0), "Position003": (0, 1)}
 
 
-# --- The independent ownership rule of docs/assembly-contract.md ("Ownership regions") ---------------------
+# --- The independent ownership rule of design/specs/assembly.md ("Ownership regions") ---------------------
 
 def footprint(origin, shape, spacing):
     """Half-open footprint ((y0, y1), (x0, x1)) and centre (y, x): per axis [o − s/2, o + (n − ½)·s) and

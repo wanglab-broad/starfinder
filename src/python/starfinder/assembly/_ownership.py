@@ -1,4 +1,4 @@
-"""Ownership regions computed from the placement (docs/assembly-contract.md, "Ownership regions").
+"""Ownership regions computed from the placement (design/specs/assembly.md, "Ownership regions").
 
 O1 (``nearest_center``): a point is owned by the owning FOV whose footprint contains it and
 whose footprint centre is nearest in Y and X; an exact tie goes to the FOV first in the

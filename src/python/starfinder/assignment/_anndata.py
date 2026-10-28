@@ -1,5 +1,5 @@
 """The one AnnData writer of the per-FOV assignment and the sample assembly: ``write_h5ad``
-(docs/assembly-contract.md, "Sample-level AnnData")."""
+(design/specs/assembly.md, "Sample-level AnnData")."""
 # §2.9, §2.10
 from __future__ import annotations
 

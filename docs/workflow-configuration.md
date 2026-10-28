@@ -599,7 +599,7 @@ Three Python-only top-level blocks (rejected unless `backend: python`) replace t
 sample-level rules for a configuration that has them. The specification is the
 "Workflow configuration" section of the
 [stitching contract](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md#workflow-configuration), the
-[assembly contract](assembly-contract.md#workflow-configuration) and the
+[assembly contract](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md#workflow-configuration) and the
 [sample-output contract](sample-output-contract.md#workflow-configuration).
 
 * **`stitching`.** With the block, `rules/stitching-py.smk` is included instead of the
@@ -638,7 +638,7 @@ sample-level rules for a configuration that has them. The specification is the
   FOVs whose territories share at least that share of the smaller one are one cell, the
   larger observation stays and the other is excluded `duplicate_observation` with its
   molecules; it removes a second observation and does not complete a cell cut by a FOV
-  edge ({doc}`assembly-contract`, "Retention", rule 8). With the block, `reads_assignment`
+  edge ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Retention", rule 8). With the block, `reads_assignment`
   assigns on the grid of the FOV's reference image (`reference_image`, default
   `fovs/{fov_id}/reference.tif`; its stored metadata, or for a file that stores none the
   grid `voxel_size_xy` and `voxel_size_z` declare, as `export_sample` reads it) and reads no

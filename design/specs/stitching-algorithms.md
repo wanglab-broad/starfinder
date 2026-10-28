@@ -326,7 +326,7 @@ filter and optimization).
 
 With one FOV the result has one row and component 0. With Z=1 grids the origins are used
 as given, z included; one layer of tiles is assemble's requirement (check 8 of
-[assembly-contract](../../docs/assembly-contract.md), which reads `nominal_z`), not this function's.
+[assembly-contract](assembly.md), which reads `nominal_z`), not this function's.
 
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
@@ -359,7 +359,7 @@ the record and cost nothing measurable.
 For scale (the parity runs' notes, section 5): LN corrections from the grid start reach 33.9 px in x
 and 44.5 px in y, below half the 149.6 px overlap (74.8 px); from the stage start they
 reach 149.9 px in x, above it. The defaults are proposals for the validation design
-([stitching-assembly-validation](../../docs/stitching-assembly-validation.md)), which sets the validation tolerances.
+([stitching-assembly-validation](../validation/stitching-assembly.md)), which sets the validation tolerances.
 
 % W-324 notes section 5; W-331's validation design; W-331 sets the validation tolerances
 

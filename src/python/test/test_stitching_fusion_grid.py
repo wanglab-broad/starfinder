@@ -1,4 +1,4 @@
-"""FI1, FI6 and FI10 of docs/stitching-assembly-validation.md on hand-built geometry: the fusion grid, the output
+"""FI1, FI6 and FI10 of design/validation/stitching-assembly.md on hand-built geometry: the fusion grid, the output
 levels and the configuration refusals, without multiview-stitcher.
 
 Fixtures: ``quad`` (seed 2102), ``zstack`` (equal Z, different Z, the one-plane pair),

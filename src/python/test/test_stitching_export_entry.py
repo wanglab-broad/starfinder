@@ -1,5 +1,5 @@
 """EX1 (its default and fuse parts), EX2 (checks 1 to 5), EX3 (a) and (b), EX4, AS15 and FI11 (through the entry)
-of docs/stitching-assembly-validation.md: ``Dataset.export``, its record and its folder.
+of design/validation/stitching-assembly.md: ``Dataset.export``, its record and its folder.
 
 Fixture: ``export_folder``, ``assembly_golden`` (3D, and with one-plane FOVs for the 2D
 case of ``export_cases``) written as a dataset by ``fusion_fixtures.export_folder``: the saved

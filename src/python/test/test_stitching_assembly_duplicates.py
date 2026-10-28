@@ -1,7 +1,7 @@
 """The duplicate rule of the route per FOV (W-400): one of two observations of a cell stays retained.
 
-docs/assembly-contract.md ("Retention", rule 8; "Statuses and reasons"; "Count accounting") and
-docs/assembly-algorithms.md ("Duplicate rule"). Fixtures, built here in the style of
+design/specs/assembly.md ("Retention", rule 8; "Statuses and reasons"; "Count accounting") and
+design/specs/assembly-algorithms.md ("Duplicate rule"). Fixtures, built here in the style of
 ``assembly_fixtures.py`` (box cells painted on unit grids, assigned in memory, a placement of
 ``positions_from_grid``):
 

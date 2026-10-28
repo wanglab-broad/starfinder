@@ -318,7 +318,7 @@ this ("Readout").
 
 With `M` the export's `tables/molecules.csv` and `C` its `tables/cells.csv`, the counted
 cells are `K = {(cell_namespace, cell_id) of rows of C with assembly_status == "retained"
-and status == "kept"}` ({doc}`assembly-contract`, "Statuses and reasons"). For FOV `f`:
+and status == "kept"}` ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Statuses and reasons"). For FOV `f`:
 
 ```text
 reads_in_cells(f) = #{ m in M : m.fov_id = f, m.assembly_status = "retained",
@@ -329,7 +329,7 @@ reads_in_cells_equal = (reads_in_cells == h5ad_whole_count_sum)
 ```
 
 On the route after fusion a retained molecule's `fov_id` is the owner of its position, so
-the same formula counts it once. By identity 4 of {doc}`assembly-contract` ("Count
+the same formula counts it once. By identity 4 of [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md) ("Count
 accounting") the two sums are equal; the report records both in `report.json` `summary` and
 shows the comparison. A difference is shown, with both numbers, and the report is still
 written: the report describes, and the difference points at the records. Without cells
@@ -452,7 +452,7 @@ planes for volume and for plane labels); the route after fusion starts from the
 `assemble_after_fusion` adds the retained molecules that `assign_molecules` places outside
 the segmentation grid, a grid of one plane, so by Y or X only. The tissue-2D export of the saved-files run,
 a `molecules_only` export of 56 FOVs of grid 1 × 3072 × 3072 whose molecule tables span 30
-planes ({doc}`stitching-assembly-validation`, "Results of the real examples"), has 5,353,714
+planes ([stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md), "Results of the real examples"), has 5,353,714
 molecules in its `export.json` `assembly.counts`, 4,703,832 retained, 649,882 `not_owner` and
 none `outside_grid`.
 
@@ -511,7 +511,7 @@ other column n/a.
 ### Inputs read as arrays
 
 * **`sample.h5ad`** is read with h5py, which the package requires: `X` as written by
-  `assignment.write_h5ad` (dense float64, {doc}`stitching-assembly-validation`, AS11), or a
+  `assignment.write_h5ad` (dense float64, [stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md), AS11), or a
   CSR matrix by its `encoding-type` attribute; `obs_names` and the `obs` columns by name; no
   AnnData object is built. Options (choice A10): **H1 (recommended)**, h5py, so that the
   report reads a sample in the plain environment; H2, `anndata.read_h5ad`, which needs the
@@ -557,13 +557,13 @@ pixel centres  q_ij = (o_z, o_y + i·s_y, o_x + j·s_x),  0 ≤ i < n_y, 0 ≤ j
 owned_area_um2(f) = #{(i, j) : O.owner(q_ij) == f} × s_y × s_x
 ```
 
-* The region a FOV owns lies inside its footprint ({doc}`assembly-contract`, "Ownership
+* The region a FOV owns lies inside its footprint ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Ownership
   regions"), and the footprint is the union of the FOV's pixel supports, so the count covers
   the whole region; a pixel is counted whole when its centre is owned. The count differs
   from the exact area of the region by at most the area of the pixels the region's
   boundary crosses; the validation (DF5) checks the count of pixels itself, which the test
   counts by hand.
-* Z is not used: ownership is decided in Y and X ({doc}`assembly-contract`, "The Z axis").
+* Z is not used: ownership is decided in Y and X ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "The Z axis").
 * A FOV that owns no point (`owns_points` false: a `placeholder`) is n/a; a `missing` or
   `failed` FOV is `fov_not_placed`; an owning FOV whose region is empty has area 0, and its
   density is `undefined`.
@@ -666,7 +666,7 @@ second configuration of the same sample and are given in brackets where they dif
 | `correct_form_fraction` | Readout | `correct_form_fraction`, low side | `k = 3`, floor 0.05 | fraction | "readout: correct-form fraction deviating (low)"; "median - fraction > max(3 x 1.4826 MAD, 0.05)" | 1 (edge: Position002) | 0 | 2 (edge tile_1, interior tile_29) [2023: 2, interior tile_29, tile_30] |
 | `matched_fraction` | Readout | `matched_fraction`, low side | `k = 3`, floor 0.05 | fraction | "readout: matched fraction deviating (low)"; "median - fraction > max(3 x 1.4826 MAD, 0.05)" | 1 (edge: Position002) | 0 | 2 (edge tile_1, interior tile_29) [2023: 2, interior tile_29, tile_30] |
 | `spots_near_zero` | Readout | `spots < spots_near_zero × median(spots)` | 0.05 | reads | "readout: spot count close to zero"; "spots < 0.05 x sample median" | 0 (lowest FOV at 0.07 × median; 0.1 × median marks 2 edge FOVs, Position006 and Position059) | 0 | 0 |
-| `not_placed` | Segmentation and assembly | `placement_status` in (`missing`, `failed`) | categorical | — | `w376_placement_status.csv` (every LN and culture FOV `image_supported`; no tissue-2D placement in the first stitching run) | 0 | 0 | not countable from the source-inventory run (the accepted {doc}`stitching-assembly-validation`, "Results of the real examples", places all 56 `image_supported` in the tissue-2D run: 0) |
+| `not_placed` | Segmentation and assembly | `placement_status` in (`missing`, `failed`) | categorical | — | `w376_placement_status.csv` (every LN and culture FOV `image_supported`; no tissue-2D placement in the first stitching run) | 0 | 0 | not countable from the source-inventory run (the accepted [stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md), "Results of the real examples", places all 56 `image_supported` in the tissue-2D run: 0) |
 | `stage_position_fallback` | Segmentation and assembly | The placement's `fovs.csv` `flags` holds `fallback` (`metadata_only` at the nominal position; a `supplied` placement is not a fallback) | categorical | — | as `not_placed` | 0 | 0 | as `not_placed` (0) |
 | `reads_no_cell` | Segmentation and assembly | An owning FOV with `n_molecules_retained > 0` and `n_cells_retained = 0` | categorical | — | no row: no log holds cells, and the own-folder run's exports are `molecules_only` | not countable from the logs | not countable | not countable |
 
@@ -1350,7 +1350,7 @@ Rules:
 | `report_cells` | `report_records` with an export folder written in the test: `export/s1/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `counts.csv` and `sample.h5ad` (through `assignment.write_h5ad`), with `export.json` written through `export/_record.py` so that `verify_section_hashes` passes; route `per_fov`. Five genes `G1` to `G5`; `n_cells_retained` F1 21, F2 0, F3 7, F4 14, with F2 holding retained molecules (reads but no cell); one retained cell `excluded_no_nucleus` (not counted) and one `not_owner` cell, each with molecules; molecule `z` values that include −0.6, −0.5, 0.4999, 0.5 and 3.5 on a grid of 4 planes. Variants: `nocal`, whose cells have `size_physical` NaN and `calibration` `unknown`; `mismatch`, whose `sample.h5ad` holds one count more than its molecules (written with its own hash, so the file agrees with its record); `no_markers`, with `ReportConfig()`. | none | hand-built; `anndata` |
 | `hand_tables` | DataFrames and dicts built in each test for the definitions: read counts; chains of results (translation `(0, 1, 2)`; affine with `A = diag(1, 1, 1.1)`, `b = (0, 0.5, −0.75)` on a 4 × 16 × 16 grid, centre (1.5, 7.5, 7.5); a dense last step); count matrices for MECR; molecule `z` values; step outputs of the dtypes uint8, uint16, float32 and bool for the bins. | none | hand-built |
 | `scene_chain` | `sample_scene_preset("sample-tiny-v1")` (2 × 2 FOVs of 5 × 36 × 36, four rounds of four channels): the FOV round images written as OME-TIFFs in the dataset layout, `FOV.run` with the source-inventory run's synthetic recipe (the source-inventory run's `scripts/synthetic_run.py`: min–max normalization to uint8 and a white top-hat of radius 3, one translation step on the channel maximum, local maxima, extraction, WTA decoding, scoring, deduplication and a filter with `end_bases`) and checkpoint stages `candidates` and `pre_qc`; the rule outputs; the truth labels imported with `import_labels(…, relabel=False)` and `FOV.assign_molecules`; the truth placement (`placement_from_table` of `placement_truth.csv`, approved) saved; `Dataset.export` on the route per FOV with `dimensionality: both`. `scene_chain_registered`: the same with the stage `registered` too. | 42 | generator addition; `anndata`; `multiview-stitcher`; `slow` |
-| `scene_chain_plane` | The same chain on `scene_plane` ({doc}`stitching-assembly-validation`, "Fixtures": one-plane FOVs of 1 × 36 × 36), exported twice: on the route per FOV, and on the route after fusion with the truth nuclei projection imported and cells by `seeded_watershed` on the fused image, as `per_fov_routes` and `seeded_runs` of {doc}`sample-segmentation-validation` build them. | 42 | as `scene_chain` |
+| `scene_chain_plane` | The same chain on `scene_plane` ([stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md), "Fixtures": one-plane FOVs of 1 × 36 × 36), exported twice: on the route per FOV, and on the route after fusion with the truth nuclei projection imported and cells by `seeded_watershed` on the fused image, as `per_fov_routes` and `seeded_runs` of {doc}`sample-segmentation-validation` build them. | 42 | as `scene_chain` |
 | `scene_no_run_json` | `scene_chain`'s output root with every `fovs/<fov>/run.json` removed, and a second root exported with `assignment=None` from the rule outputs `fovs/<fov>/molecules.csv` alone (no checkpoint folder), as the own-folder run exported LN sample1. | 42 | as `scene_chain` |
 | `scene_two_samples` | `scene_chain` as sample `s1` with its report, and `scene_chain_plane`'s route per FOV saved as sample `s2` under the same output root, without a report. | 42 | as `scene_chain` |
 
@@ -1406,7 +1406,7 @@ Rules:
 | PG7 | Output folder and entry checks | `report_records` (none) | Raised errors; the folder | Checks 1 to 7 of {doc}`report-contract` each raise their error, in that order, with the folder unchanged (a marker gene not in the codebook among them); a second report replaces the first; a file the first `report.json` does not list stops the entry with `FileExistsError` before anything is written. Exact. |
 | CH1 | The chain after the per-FOV processing | `scene_chain` with the export and assignment folders removed, once also without the placement (42) | Parts present and unavailable | As the first two rows of {doc}`report-contract` ("The report at each stage of a sample's processing"): without the placement the maps `no_placement`; with it the maps and the placement block; Segmentation and assembly and Sample measurements `no_export`; RC12's condition holds. Exact. |
 | CH2 | The chain after the assignment | `scene_chain` without the export (42) | Parts | The third row of that table: the segmentation examples and the per-FOV lane's segmentation and assignment present; cells, accounting and per-cell values `no_export`. Exact. |
-| CH3 | The chain after the export | `scene_chain` (42), with two marker groups and two pairs of the scene's genes | Every part; the reads check | Every part present except those the configuration lacks; `reads_in_cells` equals `Σ X` of `sample.h5ad` and the molecule count of identity 4 of {doc}`assembly-contract`; the present parts of CH1 ⊆ CH2 ⊆ CH3; each later report replaced the earlier in the same folder. Exact. |
+| CH3 | The chain after the export | `scene_chain` (42), with two marker groups and two pairs of the scene's genes | Every part; the reads check | Every part present except those the configuration lacks; `reads_in_cells` equals `Σ X` of `sample.h5ad` and the molecule count of identity 4 of [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md); the present parts of CH1 ⊆ CH2 ⊆ CH3; each later report replaced the earlier in the same folder. Exact. |
 | RT1 | Segmentation and assembly on both routes | `scene_chain_plane`, both exports (42) | `fovs.csv`, `population.csv`, the example tiles | The same columns on both routes; after fusion `n_cells == n_cells_retained` and each equals the count of `cells.csv` rows whose `sample_ownership_centroid_*` the FOV owns under `ownership_map`; the duplicate rows n/a; each example tile's labels equal the fused label image's values over the footprint's pixel range; density by the same formula on both. Exact. |
 | RT2 | Sample measurements on both routes | `scene_chain_plane`, both exports (42) | `cells.csv`, `mecr.csv`, `reads_along_z.csv`, the marker figures | `cells.csv` equals the rows of `X` on each route, every row compared; MECR as DF8 recomputed from `X` by the test; the marker figures drawn (decoded, sized) on both. Exact. |
 | Z1 | `Z = 1` | `scene_chain_plane`, route per FOV (42) | Registration, reads along Z, marker zooms, acquisition | `shift_z` and `residual_z` 0 on every row; `reads_along_z.csv` one row per FOV, plane 0; three rows `view=xz` with `no_stack` for the XZ zooms; the XY zooms drawn; acquisition "2D (Z = 1)"; PG1 to PG5 hold. Exact. |
@@ -1580,7 +1580,7 @@ the runs, and Jiahao inspects them.
   {doc}`report-contract`), and a `report` block holding the inputs survey's `markers.yaml` (two groups,
   four pairs).
 * Placement: the LN BigStitcher import of the 2024 `dataset.xml`, as the first stitching run made it and
-  the saved-files run and the own-folder run reused it ({doc}`stitching-assembly-validation`, "Results of the real
+  the saved-files run and the own-folder run reused it ([stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md), "Results of the real
   examples"), saved under the run's `stitching/ln_sample1/`.
 * Cells: the block segmentation's nucleus labels of the block Position048, Position049, Position057 and
   Position058 (`results/checkpoints/ln_sample1/<fov>/segmentation/nucleus_dapi/labels.tif` in its run directory),
@@ -1674,7 +1674,7 @@ the report batch), and step 6 checks for at least 10 GB free before it copies.
 | 5: block import and assignment | 1 | 1 CPU, 16 GiB, 3600 s per FOV | a 50 × 1496 × 1496 uint32 label image is 448 MB ([assignment algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment-algorithms.md#evidence), "Evidence"): about 120 s per FOV, 480 s | labels and territories, about 3.6 GB |
 | 6: copies and exports | 1 | 4 CPU threads, 32 GiB, 10,800 s | route A: the ZYX copies 130 s (the first stitching run) and the fusion from the copies 1,468 s (the first stitching run); route B: no copy and the fusion from the share 5,903 s (the own-folder run); both: the rest of the export run 239 s (the own-folder run: run 6,142 s less fusion 5,903 s) and the block about 180 s | stack 0.66 GB, `molecules.csv` 0.74 GB (the own-folder run), block below 0.2 GB; route A's copies (6.7 GiB) are scratch, deleted |
 | 7: reports after the export | 1 | 1 CPU, 16 GiB, 3600 s | `molecules.csv` of 3.8 million rows in memory (about 2 GiB with pandas) and the stack read plane by plane (34 MB per plane): about 900 s each, two reports and the comparison page (about 120 s) | below 50 MB each |
-| Part 2: five reports and their comparison page | 1 | 1 CPU, 16 GiB, 3600 s each | the rate of step 7, 900 s for LN's 3,782,580 molecules with its stack, scaled by each export's molecules and at least 120 s (code-derived): `ln_sample1` 900 s, `tissue_2d` 1,274 s (5,353,714 molecules), `cell_culture_3d` 585 s (2,458,865), the two blocks 120 s each, the comparison page 120 s; molecule counts of {doc}`stitching-assembly-validation`, "Results of the real examples" | below 0.3 GiB in all |
+| Part 2: five reports and their comparison page | 1 | 1 CPU, 16 GiB, 3600 s each | the rate of step 7, 900 s for LN's 3,782,580 molecules with its stack, scaled by each export's molecules and at least 120 s (code-derived): `ln_sample1` 900 s, `tissue_2d` 1,274 s (5,353,714 molecules), `cell_culture_3d` 585 s (2,458,865), the two blocks 120 s each, the comparison page 120 s; molecule counts of [stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md), "Results of the real examples" | below 0.3 GiB in all |
 | 8: manifest, last | 1 | 1 CPU, 4 GiB, 1800 s | about 120 s (the source-inventory run's manifest step: 120.0 s) | below 10 MB |
 
 % W-384, W-383, W-398, W-391, W-376
@@ -1741,7 +1741,7 @@ written to the new run directory (`output_dir`), never into the run directory of
   artifacts below 0.3 GiB in all.
 * Jiahao inspects: the pages of a sample without run records; the marker patterns of LN
   and the three most abundant genes of the others; the reads along Z of tissue-2D, whose
-  molecules span 30 planes over a one-plane grid ({doc}`stitching-assembly-validation`,
+  molecules span 30 planes over a one-plane grid ([stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md),
   "Results of the real examples"), so that its rows run over the planes its molecules have,
   beyond the grid's plane 0 (the rule of `reads_along_z.csv`, as amended on 2026-10-12); cells, MECR and the per-cell distributions of the blocks;
   the comparison page.

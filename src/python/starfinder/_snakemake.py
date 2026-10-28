@@ -503,7 +503,7 @@ def _run_reads_assignment(snakemake):
     over the DAPI image), assignment_single_layer.png (its middle plane) for a
     ZYX label image only, and log.txt with the assignment ratio.
 
-    With an assembly block (option W1 of docs/assembly-contract.md, "Workflow
+    With an assembly block (option W1 of design/specs/assembly.md, "Workflow
     configuration") no tile configuration is read: the molecule grid is that
     of the FOV's reference image (reference_image), as Dataset.export reads it
     (_assembly_cells). With assembly.assignment null (molecules only) the

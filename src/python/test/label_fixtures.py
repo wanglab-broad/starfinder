@@ -1,4 +1,4 @@
-"""Label-export fixtures of docs/stitching-assembly-validation.md ("Fixtures"), rebuilt in the test.
+"""Label-export fixtures of design/validation/stitching-assembly.md ("Fixtures"), rebuilt in the test.
 
 ``label_quad`` (and its volume variant), ``label_pair`` (W-359's two-FOV fixture, rebuilt
 from the constants of W-359 ``scripts/labels_retained.py``: ``TWO_FOV_CELLS``,

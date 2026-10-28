@@ -1,4 +1,4 @@
-"""AS1, AS2, AS16 and AS17 of docs/stitching-assembly-validation.md: sample coordinates and ownership.
+"""AS1, AS2, AS16 and AS17 of design/validation/stitching-assembly.md: sample coordinates and ownership.
 
 Fixtures: ``assembly_golden`` (3D and 2D, with an expanded FOV), ``stub_variants``' LN
 calibration, ``edge_points``, a 0.25-voxel raster over the golden footprints and
@@ -190,7 +190,7 @@ def test_as2_the_golden_raster_has_one_owner_per_covered_point():
     assert (pd.notna(got) == covered).all()
     owners = got.reshape(len(ys), len(xs))
     # FOV1/FOV3: the analytic bisector lies between x 59.1 and 59.3 on the rows of the fixture's cells
-    # (y 8 to 34, docs/assembly-algorithms.md "O1"), and the raster's owners switch at it on every row
+    # (y 8 to 34, design/specs/assembly-algorithms.md "O1"), and the raster's owners switch at it on every row
     # both footprints cover above FOV2.
     c1, c3 = fovs[0][2], fovs[2][2]
     for i, y in enumerate(ys):

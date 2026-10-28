@@ -1,4 +1,4 @@
-"""Hand-built stitching fixtures of docs/stitching-assembly-validation.md ("Fixtures").
+"""Hand-built stitching fixtures of design/validation/stitching-assembly.md ("Fixtures").
 
 ``stub_grid``: 2 rows × 3 columns of FOV grids of 4×16×24 voxels at (0.25, 0.25, 0.25) µm
 (dyadic, so the review boundaries are exact), identity direction, overlap 0.25, zero

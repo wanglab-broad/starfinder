@@ -1,4 +1,4 @@
-"""FI3, FI5 to FI11 (their routine parts) and EX5 of docs/stitching-assembly-validation.md: the fused files.
+"""FI3, FI5 to FI11 (their routine parts) and EX5 of design/validation/stitching-assembly.md: the fused files.
 
 ``fuse_images`` is called alone on ``quad`` (seed 2102), ``zstack``, ``plane_pair`` and
 ``checker_pair``, built in ``fusion_fixtures``. The files are compared with a direct call of

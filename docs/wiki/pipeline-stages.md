@@ -28,8 +28,8 @@ the stage's other pages. The stages are listed in processing order.
 | Stage | Covers | Algorithms | Validation | Baseline |
 | --- | --- | --- | --- | --- |
 | [Stitching](../stitching-contract.md) | Tile positions and the placement of each FOV | [reference](../stitching-algorithms.md) | | |
-| [Assembly](../assembly-contract.md) | Sample coordinates, ownership and the sample tables | [algorithms](../assembly-algorithms.md) | | [baseline](../assembly-baseline.md) |
-| [Sample output](../sample-output-contract.md) | The export: fused image, labels, SpatialData and profiles | | [validation](../stitching-assembly-validation.md) | [baseline](../sample-output-baseline.md) |
+| [Assembly](../assembly-contract.md) | Sample coordinates, ownership and the sample tables | [reference](../assembly-algorithms.md) | |  |
+| [Sample output](../sample-output-contract.md) | The export: fused image, labels, SpatialData and profiles | |  | [baseline](../sample-output-baseline.md) |
 | [Sample segmentation](../sample-segmentation-contract.md) | Segmentation after fusion and the check of the two routes | | [validation](../sample-segmentation-validation.md) | |
 | [Processing report](../report-contract.md) | One sample's report and a dataset's comparison page | [algorithms](../report-algorithms.md) | in algorithms | [baseline](../report-baseline.md) |
 

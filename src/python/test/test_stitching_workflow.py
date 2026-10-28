@@ -1,4 +1,4 @@
-"""WF1 to WF3 of docs/stitching-assembly-validation.md: the §2.10 workflow blocks and rules (W-372).
+"""WF1 to WF3 of design/validation/stitching-assembly.md: the §2.10 workflow blocks and rules (W-372).
 
 The Python-only ``stitching``, ``assembly`` and ``export`` blocks of
 ``workflow/schemas/config.schema.yaml``, the adapter functions of

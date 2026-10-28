@@ -1,4 +1,4 @@
-"""PL14 to PL17 of docs/stitching-assembly-validation.md: persistence, entry and registry, determinism, Dataset.stitch.
+"""PL14 to PL17 of design/validation/stitching-assembly.md: persistence, entry and registry, determinism, Dataset.stitch.
 
 Fixtures: ``stub_grid`` and the results of the other checks (PL4, PL10 with an approval,
 PL18); PL16 runs the ``stub_variants`` in three single-thread processes; PL17 writes a

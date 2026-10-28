@@ -1,6 +1,6 @@
 """A 3 × 3 grid of 3D tiles saved as compressed pages, and a counter of page decodes (W-397).
 
-The fixture of docs/stitching-assembly-validation.md for how the fusion reads its sources:
+The fixture of design/validation/stitching-assembly.md for how the fusion reads its sources:
 nine tiles of ``SHAPE`` uint16 (smooth random fields, seeded), on a 3 × 3 grid with 10 %
 overlap and sub-voxel jitter in Z, Y and X, so that each output plane interpolates two pages
 of a tile. Each tile is written as zlib-compressed pages without axis metadata (``IYX``, the

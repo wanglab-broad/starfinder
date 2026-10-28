@@ -117,7 +117,7 @@ per-FOV artifacts; placement quality still needs inspection on your sample.
 
 Engineering checks cover position conversion, placement records, BigStitcher
 export and import, and comparison with known synthetic positions. The shared
-{doc}`validation design <stitching-assembly-validation>` describes the checks of
+[validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md) describes the checks of
 stitching, assembly and sample outputs.
 
 The full [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md)

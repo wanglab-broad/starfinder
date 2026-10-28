@@ -1,4 +1,4 @@
-"""The assembly in the sample's export folder, option S1 (docs/assembly-contract.md, "Persistence").
+"""The assembly in the sample's export folder, option S1 (design/specs/assembly.md, "Persistence").
 
 ``<OUTPUT>/export/<sample>/`` holds the ``assembly`` section of ``export.json`` (the
 record, with the path and SHA-256 of every file), ``tables/fovs.<fmt>``,

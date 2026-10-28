@@ -1,6 +1,6 @@
 """The duplicate rule: one of two observations of a cell stays retained.
 
-docs/assembly-contract.md ("Retention", rule 8) and docs/assembly-algorithms.md ("Duplicate
+design/specs/assembly.md ("Retention", rule 8) and design/specs/assembly-algorithms.md ("Duplicate
 rule"). Each FOV's retained-cell territories are placed on the sample grid at scale 1 as the
 label export places them (docs/sample-output-contract.md, "Assembled label export"): the grid
 of ``label_grid`` at factor 1 in Y and X and the fusion grid's Z, each FOV at its origin, an

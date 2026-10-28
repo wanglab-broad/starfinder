@@ -1,4 +1,4 @@
-"""Hand-built assembly fixtures of docs/stitching-assembly-validation.md ("Fixtures").
+"""Hand-built assembly fixtures of design/validation/stitching-assembly.md ("Fixtures").
 
 ``assembly_golden``: the three FOVs of ``test_workflow_assembly_golden.py`` (8×48×64 voxels,
 unit spacing, nine scene cells, 24 molecules, 3D and 2D) assigned per FOV in memory, with a
@@ -390,7 +390,7 @@ def _none(value):
 
 
 def check_accounting(result, inputs, placement):
-    """Identities 1 to 5 of docs/assembly-contract.md ("Count accounting"), each recomputed from the inputs.
+    """Identities 1 to 5 of design/specs/assembly.md ("Count accounting"), each recomputed from the inputs.
 
     inputs maps a fov_id to its AssignmentResult (``cells`` mode) or MoleculeTable
     (``molecules_only``); nothing here reads AssemblyResult.__post_init__ or its helpers.
@@ -554,7 +554,7 @@ def placed_on_grid(territory, origin, spacing, grid_origin, grid_shape):
 
 
 def duplicate_oracle(territories, retained, origins, spacing, order, threshold=0.5):
-    """The duplicate rule of docs/assembly-algorithms.md recomputed from the territories, for the tests.
+    """The duplicate rule of design/specs/assembly-algorithms.md recomputed from the territories, for the tests.
 
     ``territories`` maps each FOV with a retained cell to its ZYX territory (1×Y×X for ``plane``), ``retained`` each
     of them to its retained ``cell_id`` set, ``origins`` every included FOV (``image_supported``,

@@ -1,6 +1,6 @@
-"""AS6 of docs/stitching-assembly-validation.md: every count identity refused twice.
+"""AS6 of design/validation/stitching-assembly.md: every count identity refused twice.
 
-docs/assembly-contract.md ("Count accounting"): "The identities are checked exactly by
+design/specs/assembly.md ("Count accounting"): "The identities are checked exactly by
 ``AssemblyResult.__post_init__`` and by the tests." Each case below changes one thing in a
 valid result of ``own_states`` (``own_cases`` with counted cells whose compartments are
 ``available``, ``withheld``, ``no_nucleus`` and ``unavailable``), ``own_cases`` or

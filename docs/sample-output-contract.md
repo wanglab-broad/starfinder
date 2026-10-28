@@ -37,7 +37,7 @@ contract.
   block, which the per-sample rule `export_sample` reads together with the `assembly`
   block ([Workflow configuration](#workflow-configuration)).
 
-Beneath this guide, {doc}`stitching-assembly-validation` is the engineering validation
+Beneath this guide, [stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md) is the engineering validation
 design that the sample outputs share with stitching and assembly, with the checks of the
 export entry, the fused image, the label export, the SpatialData export and the workflow
 (rows EX, FI, LB, SD and WF), their implemented checks and the results of the real
@@ -70,7 +70,7 @@ dependencies each output needs. It builds on three contracts and redefines none 
   the index-to-sample rule `sample_zyx = origin_zyx + D · (p ⊙ spacing_zyx)` and its
   inverse, `placed_metadata`, the failure policy, `PlacementReviewRequiredError`, and the
   dependency plan (Python 3.11 or later, the `multiview-stitcher` extra);
-* {doc}`assembly-contract`: `assemble`, `AssemblyResult` and its sample tables (`fovs`,
+* [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md): `assemble`, `AssemblyResult` and its sample tables (`fovs`,
   `cells`, `molecules`, `counts`), `sample.h5ad`, the assembly record, `save_assembly` and
   `load_assembly`, footprints and centres, `ownership_map` with options O1, T1 and Z1 and
   its `candidates` argument, the sample-level identities and the count accounting;
@@ -218,7 +218,7 @@ recomputation of counts from a fused image or a label raster on the route per FO
 route after fusion assigns the sample's molecules to the cells of a segmentation of the
 fused image: {doc}`sample-segmentation-contract`), merging of cells across
 FOVs (the assembly's duplicate rule, decided on 2026-10-09, excludes one of two
-observations of a cell before these parts read the cell table: {doc}`assembly-contract`,
+observations of a cell before these parts read the cell table: [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md),
 "Retention", rule 8), and any change to the placement, segmentation or assignment contracts or to the assembly contract beyond its
 `Dataset` method, saved layout and workflow configuration, which move to the export
 entry.
@@ -334,7 +334,7 @@ runner").
 
 | Order | Part | Turned off by | What the method does | Writes in `output_dir` |
 | --- | --- | --- | --- | --- |
-| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from each FOV's saved molecule table `fovs/<fov_id>/molecules.csv` read through `load_molecules`, with the identities it holds; since 2026-10-23, and on the workflow's legacy route the one-based `signal/<fov_id>_goodSpots.csv` read through `import_legacy_molecules_csv`, with the identities `csv:<row>`) and the reference grids (the stored metadata of each FOV's reference image, the file the dataset's `reference_image` names, default `fovs/{fov_id}/reference.tif`, read as `reference_grid_from_file` reads it, or, for a file that stores none, the grid the dataset's `voxel_size_xy` and `voxel_size_z` declare; without them such a file raises `ValueError` naming them, and a missing file raises `FileNotFoundError` naming `reference_image` and the path), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
+| 1 | `assemble` ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md)) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from each FOV's saved molecule table `fovs/<fov_id>/molecules.csv` read through `load_molecules`, with the identities it holds; since 2026-10-23, and on the workflow's legacy route the one-based `signal/<fov_id>_goodSpots.csv` read through `import_legacy_molecules_csv`, with the identities `csv:<row>`) and the reference grids (the stored metadata of each FOV's reference image, the file the dataset's `reference_image` names, default `fovs/{fov_id}/reference.tif`, read as `reference_grid_from_file` reads it, or, for a file that stores none, the grid the dataset's `voxel_size_xy` and `voxel_size_z` declare; without them such a file raises `ValueError` naming them, and a missing file raises `FileNotFoundError` naming `reference_image` and the path), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ([assembly algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly-algorithms.md), "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
 | 2 | `fuse` | `fuse: false` | Builds one `FusionInput` per included FOV from the saved source images and reference grids, and calls `fuse_images` with the assembly of part 1. | The fused images; section `fusion` |
 | — | `segment` ({doc}`sample-segmentation-contract`) | `segment: false` (reuses the saved sample segmentation) | On the route per FOV, recorded `off` (reason `route_per_fov`, or `no_cells` with `assignment=None`). On the route after fusion, calls `segment_fused` on the fused projection, or reuses the saved sample segmentation. | `segmentation_<run>.ome.tif`; section `segmentation` |
 | 3 | `fuse_labels` | `fuse_labels: false` (the default; "Choices decided at the gate", 8) | Calls `fuse_labels` with the placement and the assembly. | `cell_labels.ome.tif`; section `labels` |
@@ -349,7 +349,7 @@ segmentation), `fuse_labels`, `export_spatialdata`
 ({doc}`sample-segmentation-contract`, "The parts on each route").
 
 Each part can also be called alone with the saved files of the parts before it:
-`assemble` and `save_assembly` as {doc}`assembly-contract` specifies;
+`assemble` and `save_assembly` as [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md) specifies;
 `fuse_images(placement, inputs, *, assembly=None, config, output_dir)`;
 `fuse_labels(placement, load_assembly(output_dir), *, config, output_dir)`; and
 `export_spatialdata(load_assembly(output_dir), fused=…, labels=…, config, output_dir)`,
@@ -370,13 +370,13 @@ In this order; each raises, names the FOVs or keys, and leaves the folder unchan
 1. **Config.** `ExportConfig`, `FusionConfig`, `LabelConfig` and `AssemblyConfig`
    validate their fields in `__post_init__` ("Configuration").
 2. **Review.** A placement whose review is `required` without an approval raises
-   `PlacementReviewRequiredError`, exactly as `assemble` does ({doc}`assembly-contract`,
+   `PlacementReviewRequiredError`, exactly as `assemble` does ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md),
    "Checks the entry applies", 2).
 3. **Required extras.** The assemble part runs only with the `anndata` extra
    (`sample.h5ad`) and, for `table_format: parquet`, the `checkpoint` extra; without one
    the method raises `ModuleNotFoundError` naming it. These are the first part's own
    outputs, so nothing earlier exists to keep.
-4. **Assembly.** With `assemble: true`, the checks of {doc}`assembly-contract` ("Checks
+4. **Assembly.** With `assemble: true`, the checks of [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md) ("Checks
    the entry applies") run inside `assemble`, which computes in memory before
    `save_assembly` writes. With `assemble: false`, when `fuse_labels` or
    `export_spatialdata` is on, `output_dir` must hold a saved assembly that `load_assembly`
@@ -463,8 +463,8 @@ or `parquet`.
 | Profile | Selected by | Files that exist under `export/<sample>/` | Format | What each contains |
 | --- | --- | --- | --- | --- |
 | **Default** | nothing (the defaults of "Configuration") | `export.json` | JSON | The record: one section per part ("The record"); `labels` and `spatialdata` have status `off` |
-| | | `tables/fovs.csv`, `tables/cells.csv`, `tables/molecules.csv`, `tables/counts.csv` | CSV | The four sample tables of {doc}`assembly-contract`, "Sample tables" |
-| | | `sample.h5ad` | H5AD | The sample-level AnnData of {doc}`assembly-contract`: one row per counted cell |
+| | | `tables/fovs.csv`, `tables/cells.csv`, `tables/molecules.csv`, `tables/counts.csv` | CSV | The four sample tables of [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Sample tables" |
+| | | `sample.h5ad` | H5AD | The sample-level AnnData of [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md): one row per counted cell |
 | | | `<image>_projection.ome.tif` | OME-TIFF: BigTIFF, 512 × 512 tiles, zlib ("OME-TIFF layout") | The maximum projection of `<image>` fused by the library at scale 0.5 in Y and X, in the input dtype, with calibration and origin; not written when no FOV is included, nor for a dataset that sets `dimensionality: stack` |
 | Parquet tables | `table_format: parquet` (the `assembly` block) | `tables/*.parquet` instead of `tables/*.csv` | Parquet | The same tables |
 | No fused image | `fuse: false` | the default files without `<image>_projection.ome.tif` | | Section `fusion` has status `off` |
@@ -535,7 +535,7 @@ is a 2D file and a 2D element, which is its only plane. The **middle plane** of 
 Figures of LN sample1 (placement overviews, ownership regions, seam views and any view of
 its fused image) show its middle plane, never a maximum projection, except its seam
 sections in XZ and YZ through the stack, which show every plane of one row or one column
-of voxels and no projection either ({doc}`stitching-assembly-validation`, "Outputs to
+of voxels and no projection either ([stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md), "Outputs to
 inspect").
 
 ### Fused image inputs
@@ -680,7 +680,7 @@ not extend the grid; the area only they would cover is uncovered.
 placed FOVs are all placeholders), there is no grid: `fuse_images` writes no image file and
 records the part as `empty` with `outputs: []` and `reason: "no_included_fov"`. Such a
 placement has no owning FOV either, so through `Dataset.export` with the assemble part on
-it is refused by `assemble` before anything is written ({doc}`assembly-algorithms`,
+it is refused by `assemble` before anything is written ([assembly algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly-algorithms.md),
 "Ownership"); the `empty` record arises when `fuse_images` is called alone.
 **One included FOV** gives a grid equal to that FOV's grid (`o` its origin, `n0` its
 shape); its voxel centres are the grid's, so at scale 1 the fused image equals the source
@@ -1243,7 +1243,7 @@ elements end in `_projection` or `_stack`. `FusionConfig` refuses image names eq
 ignoring case. The obs and var column names and the uns, obsm and layers keys of every
 table must satisfy the same rule and be unique ignoring case
 (`spatialdata/_core/validation.py` lines 218 to 252); the column names of the sample tables
-and the keys of `sample.h5ad` do ({doc}`assembly-contract`), and the export refuses a table
+and the keys of `sample.h5ad` do ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md)), and the export refuses a table
 that does not, naming the key.
 
 **Elements** (`export/<sample>/sample.zarr`), each written only when its population has a
@@ -1291,7 +1291,7 @@ written, "Empty populations") is refused by `TableModel.parse` as above, and the
 does not work around it: `export_spatialdata` raises the library's error, neither
 overwrites nor drops the source key, and writes no store, leaving no `sample.zarr` and no
 staging folder, as check SD4 of
-{doc}`stitching-assembly-validation` asserts. Inside `Dataset.export` the same error is an
+[stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md) asserts. Inside `Dataset.export` the same error is an
 error inside the part `export_spatialdata`, and the rule of "When a part cannot run"
 applies to it.
 
@@ -1314,7 +1314,7 @@ every element is omitted, no `sample.zarr` is written and the section records
 | --- | --- | --- |
 | Usual sample | every element with rows; the images | `cells_unplaced`, `molecules_unplaced` when every FOV is placed (`empty`, the common case) |
 | No cell with a finite ownership centroid (no cell, or only cells of FOVs without an origin) | `molecules` if any row; `cells_unplaced` if any row; images | `cell_centroids`, `cells`, `expression` (`empty`); `cell_labels` (`empty` when the label part wrote no ID) |
-| Cells, but no counted cell | `cell_centroids`, `cells`, the rest as usual | `expression` (`empty`); `sample.h5ad` has no row ({doc}`assembly-contract`, "Sample-level AnnData") |
+| Cells, but no counted cell | `cell_centroids`, `cells`, the rest as usual | `expression` (`empty`); `sample.h5ad` has no row ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Sample-level AnnData") |
 | `molecules_only` sample | `molecules` if any row, `molecules_unplaced` if any row, images | `cell_centroids`, `cells`, `expression`, `cells_unplaced` (`empty`); `cell_labels` (`no_cells`) |
 | No molecule with finite sample coordinates | the rest as usual | `molecules` (`empty`) |
 | No included FOV | each table, points or shapes element that has rows (usually only `cells_unplaced` and `molecules_unplaced`) | image elements and `cell_labels` (`no_included_fov`); every table, points or shapes element without rows (`empty`) |
@@ -1344,7 +1344,7 @@ the OME-TIFF, so the two are equal. The section keeps the image element's path a
 SHA-256 of its array metadata.
 
 **Identities and source lookup.** Molecules keep `(spot_namespace, spot_id)` and `fov_id`;
-cells keep `(cell_namespace, cell_id)` and `obs_name` ({doc}`assembly-contract`,
+cells keep `(cell_namespace, cell_id)` and `obs_name` ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md),
 "Sample-level identities"). `instance_id` is `1..N` over the rows of the sample cell table
 in its order (uint32; more than 2³² − 1 rows is an error); `cell_instance_id` of a molecule
 is the `instance_id` of its `(cell_namespace, cell_id)`. `lookup_source(folder, spot=…)` or
@@ -1393,7 +1393,7 @@ without blending.
 which cells are retained and whose row order gives each cell's `instance_id`; and, per FOV
 with at least one retained cell, the territory label image that assign sampled (the
 expanded one when assign expanded, as the cell table's `ownership_centroid` records), at
-the path the assembly record holds beside its SHA-256 ({doc}`assembly-contract`, "What
+the path the assembly record holds beside its SHA-256 ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "What
 assemble records"); when that path is null (`conflicts=False` or an assignment given in
 memory), the file the assignment loader resolves from the recorded assignment folder, with the
 SHA-256 the assignment record holds. A FOV without a retained cell is not read; a `placeholder`
@@ -1475,7 +1475,7 @@ with the label-measurement record of each:
 | A retained cell that reaches the first or last voxel of its FOV, at a fractional offset | Up to one row or column of output voxels just beyond its FOV's voxel-centre extent, within half a voxel of its FOV's footprint, stays without the cell, because no other FOV draws it; at the sample's outer border no other FOV covers that row at all. | Label fixture of the fusion measurement at scale 1: 18 cells, 17 at the sample's outer border and 1 at an interior FOV edge (`tables/w354_incomplete_edges.csv`) |
 | A placeholder FOV | Nothing: it has no retained cell and is not read. The part of its footprint that no owning FOV covers is 0, and a cell only it imaged is absent; a neighbour's retained cell that reaches into its footprint is drawn as the neighbour holds it. | Label fixture of the fusion measurement with its centre FOV as a placeholder, scale 1: 13 cells absent, each retained by no FOV; no value in no input (`tables/cases.csv`, `tables/case_placeholder_summary.csv`) |
 | Background | 0, as is every voxel outside every included FOV and every voxel where no FOV draws a retained cell. | Two FOVs without a cell: an image of zeros at both scales (`tables/cases.csv`) |
-| An assembly made with `conflicts=False` | The same image: retention does not depend on the `conflict` and `unclaimed` flags, which are then not computed; the territory files are those of "Inputs", and the `labels` section records the conflict count as null. | Not run: the rule reads `assembly_status` only, which `conflicts` does not change ({doc}`assembly-contract`, "Flags") |
+| An assembly made with `conflicts=False` | The same image: retention does not depend on the `conflict` and `unclaimed` flags, which are then not computed; the territory files are those of "Inputs", and the `labels` section records the conflict count as null. | Not run: the rule reads `assembly_status` only, which `conflicts` does not change ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Flags") |
 
 % W-359; W-354
 
@@ -1557,7 +1557,7 @@ non-blending function (`tables/labels_summary.csv`, `id_offset` 16777216).
 % W-354
 
 **Conflicts.** The label image resolves nothing: a cell retained by two FOVs shows two IDs
-(above). The flag `conflict` is the cell table's, by the rule of {doc}`assembly-contract`,
+(above). The flag `conflict` is the cell table's, by the rule of [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md),
 "Flags": a retained cell is flagged when its ownership centroid lies inside the territory
 of a retained cell of another FOV, or the ownership centroid of a retained cell of another
 FOV lies inside its territory. A cell retained by two FOVs may therefore carry no flag:
@@ -1571,7 +1571,7 @@ cells only: the cell rows flagged `conflict` whose `instance_id` is in the label
 not the cells retained by two FOVs, or null for an assembly made with `conflicts=False`.
 On the two-FOV fixture it is 0, although cell 6 shows two IDs (its two views share 0.24 of
 the smaller territory, below the duplicate rule's default 0.5). No cell is merged across
-FOVs. The duplicate rule of the assembly ({doc}`assembly-contract`, "Retention", rule 8)
+FOVs. The duplicate rule of the assembly ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Retention", rule 8)
 excludes the second observation of a cell whose two territories share at least its
 threshold of the smaller one, so that observation is not retained and is not drawn; the
 label export applies no rule of its own. The rule removes a second observation; it does
@@ -1580,7 +1580,7 @@ not complete a cell cut by a FOV edge.
 % W-359 `scripts/labels_retained.py`; W-359; W-360
 
 **Cells retained by no FOV.** The label image does not show such a cell (above). The flag
-`unclaimed` is the cell table's, by the rule of {doc}`assembly-contract`, "Flags": a cell
+`unclaimed` is the cell table's, by the rule of [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Flags": a cell
 excluded `not_owner` is flagged when no FOV owns its ownership centroid (only possible for
 a cell of a `placeholder`), or when the owner FOV has no retained cell there, that is when
 the owner's territory at that centroid, sampled as for `conflict`, is 0 or a cell the
@@ -1665,7 +1665,7 @@ accepts.
   the workflow's opt-in ownership previews (since 2026-10-24). A part with status `off`, `not_run` or
   `empty` lists no file.
 * R3. When the `assembly` section is `written` or `reused`, it and the files of `tables/`
-  and `sample.h5ad` pass `load_assembly` ({doc}`assembly-contract`, "Persistence"); when
+  and `sample.h5ad` pass `load_assembly` ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Persistence"); when
   it is `off`, no such file exists.
 
 % W-568
@@ -1865,7 +1865,7 @@ class ExportConfig:
     fuse: bool = True
     fuse_labels: bool = False
     export_spatialdata: bool = False
-    assembly: AssemblyConfig = AssemblyConfig()      # {doc}`assembly-contract`
+    assembly: AssemblyConfig = AssemblyConfig()      # [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md)
     table_format: str = "csv"                        # "csv" | "parquet"
     fusion: FusionConfig = FusionConfig()
     labels: LabelConfig = LabelConfig()
@@ -2006,12 +2006,12 @@ options stay there as options not taken.
 `test_workflow_stitching_golden.py`, `test_workflow_assembly_golden.py` and every existing
 test pass unchanged; nothing here changes a legacy script or an existing output. The checks
 of the export entry, the fused image, the label export, the SpatialData export and the
-workflow blocks are the rows EX, FI, LB, SD and WF of {doc}`stitching-assembly-validation`,
+workflow blocks are the rows EX, FI, LB, SD and WF of [stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md),
 "Checks", from the conditions of "Sample position to image position" and "Read-back
 checks", with their tests in "Implemented checks". Tests that call
 multiview-stitcher need its extra and are skipped without it, naming the extra.
 
-% "Implemented checks (W-373)" of {doc}`stitching-assembly-validation`
+% "Implemented checks (W-373)" of [stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md)
 
 ## Workflow configuration
 
@@ -2020,7 +2020,7 @@ one per-sample rule `export_sample`, which runs `Dataset.export` after the place
 exists and, on the route per FOV, after `reads_assignment` of every FOV of the sample; on
 the route after fusion the rule needs the molecule tables and the source images
 ({doc}`sample-segmentation-contract`, "The route setting"). The assemble part takes its
-keys from the `assembly` block ({doc}`assembly-contract`, "Workflow configuration"):
+keys from the `assembly` block ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Workflow configuration"):
 
 ```yaml
 export:
@@ -2060,7 +2060,7 @@ export:
   2026-10-24; default false) and the assembly written or reused, the rule also draws each FOV's
   assignment figures `export/{sample}/previews/{fovID}/assignment.png` and
   `assignment_single_layer.png`, with the FOV's ownership region
-  ({doc}`assembly-contract`, "Workflow configuration"; added on 2026-10-08). The folder `previews/` is a
+  ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Workflow configuration"; added on 2026-10-08). The folder `previews/` is a
   declared directory output of the rule on the route per FOV with `assemble` on, the
   conditions the configuration decides; the rule creates it whenever it declares it (empty
   when the assemble part was neither written nor reused). It is not listed in
@@ -2087,7 +2087,6 @@ an image).
 ```{toctree}
 :hidden:
 
-Stitching and assembly validation <stitching-assembly-validation>
 Sample-output baseline (history) <sample-output-baseline>
 ```
 

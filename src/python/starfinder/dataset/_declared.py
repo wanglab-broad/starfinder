@@ -1,6 +1,6 @@
 """The reference grid of a saved FOV: the file's stored metadata, else the grid declared by the configuration.
 
-docs/sample-output-contract.md ("The export entry") and docs/assembly-contract.md ("Workflow
+docs/sample-output-contract.md ("The export entry") and design/specs/assembly.md ("Workflow
 configuration"). One rule for ``Dataset.export`` (the assembly and fusion inputs),
 ``Dataset.stitch``, the workflow's stitching rules and its ``reads_assignment`` with an
 ``assembly`` block, so that a dataset analysed before the stitching and sample-assembly stages,

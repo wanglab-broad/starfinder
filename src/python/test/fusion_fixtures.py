@@ -1,4 +1,4 @@
-"""Fused-image and export fixtures of docs/stitching-assembly-validation.md ("Fixtures"), rebuilt in the test.
+"""Fused-image and export fixtures of design/validation/stitching-assembly.md ("Fixtures"), rebuilt in the test.
 
 ``quad`` (seed 2102), ``zstack``, ``plane_pair``, ``checker_pair``, ``overlap_pair`` and
 ``position_grid`` (seed 354) follow the rows of that table; ``checker_pair``,

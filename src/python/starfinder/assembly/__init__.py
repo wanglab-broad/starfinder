@@ -28,7 +28,7 @@ gives one FOV's ownership region and excluded observations as the
 :func:`~starfinder.assignment.plot_assignment` draws. :class:`AssemblyConfig`
 selects the ownership rule, the centroid, the tie rule, the conflict flags and the
 duplicate rule. See
-docs/assembly-contract.md and docs/assembly-algorithms.md.
+design/specs/assembly.md and design/specs/assembly-algorithms.md.
 """
 # §2.10, §2.9
 from ._anndata import write_sample_h5ad

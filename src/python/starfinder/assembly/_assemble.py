@@ -1,8 +1,8 @@
 """The assemble entry: sample coordinates, retention, flags, accounting and the sample tables.
 
-docs/assembly-contract.md ("The assemble entry", "Sample coordinates", "Retention",
+design/specs/assembly.md ("The assemble entry", "Sample coordinates", "Retention",
 "Statuses and reasons", "Flags", "Count accounting", "Sample tables") and
-docs/assembly-algorithms.md.
+design/specs/assembly-algorithms.md.
 """
 from __future__ import annotations
 
@@ -182,7 +182,7 @@ def _counts_record(cells, molecules, fovs, flags_computed, duplicates=True):
 
 
 def check_identities(result: AssemblyResult) -> None:
-    """The identities 1 to 5 of docs/assembly-contract.md ("Count accounting") on a result.
+    """The identities 1 to 5 of design/specs/assembly.md ("Count accounting") on a result.
 
     Cells are keyed by the cell key ``(cell_namespace, cell_id)``, and a molecule
     links to its cell, and counts in it, by the same key in its own columns.
@@ -415,7 +415,7 @@ class AssemblyResult:
     (null without a cell); ``counts`` the assignment's long counts of the counted
     cells (retained, assignment ``kept``) with ``fov_id`` and ``cell_namespace``.
     ``record`` is the ``assembly`` section of ``export.json``. See
-    docs/assembly-contract.md ("Sample tables", "What assemble records").
+    design/specs/assembly.md ("Sample tables", "What assemble records").
 
     Raises
     ------
@@ -498,7 +498,7 @@ class _Saved:
 
     Its territory image is read again from the folder when it is needed
     (:func:`_territory`), so at most two territory images are in memory at a
-    time (docs/assembly-algorithms.md, "Flags").
+    time (design/specs/assembly-algorithms.md, "Flags").
     """
     molecules: pd.DataFrame
     cells: pd.DataFrame
@@ -572,7 +572,7 @@ def _identity(namespace, what):
 
 
 def _check_inputs(placement, inputs, config):
-    """Checks 1 to 8 of docs/assembly-contract.md ("Checks the entry applies"), in order."""
+    """Checks 1 to 8 of design/specs/assembly.md ("Checks the entry applies"), in order."""
     if not isinstance(config, AssemblyConfig):
         raise TypeError("config must be an AssemblyConfig")
     config.__post_init__()
@@ -702,7 +702,7 @@ def _edge_values(labels, plane):
 
 
 def _duplicate_rule(placement, by_fov, state, order, threshold):
-    """The duplicate rule (docs/assembly-algorithms.md, "Duplicate rule") over the cells retained so far.
+    """The duplicate rule (design/specs/assembly-algorithms.md, "Duplicate rule") over the cells retained so far.
 
     Returns ``(excluded, sizes, shared)``: ``{(fov_id, cell_id): (kept fov_id,
     kept cell_id)}``, each retained cell's territory voxels on the sample grid
@@ -744,7 +744,7 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
              config: AssemblyConfig = AssemblyConfig(), segmentation=None) -> AssemblyResult:
     """Assemble a sample from its placement and its per-FOV assignment results, or on the route after fusion.
 
-    Applies the checks of docs/assembly-contract.md ("Checks the entry
+    Applies the checks of design/specs/assembly.md ("Checks the entry
     applies") in order, then maps every observation into sample coordinates
     (``origin + p ⊙ spacing``, float64, never rounded), computes the ownership
     regions from the placement (:func:`ownership_map`), gives every cell and

@@ -1,4 +1,4 @@
-"""The sample-level AnnData, ``sample.h5ad`` (docs/assembly-contract.md, "Sample-level AnnData")."""
+"""The sample-level AnnData, ``sample.h5ad`` (design/specs/assembly.md, "Sample-level AnnData")."""
 from __future__ import annotations
 
 import json

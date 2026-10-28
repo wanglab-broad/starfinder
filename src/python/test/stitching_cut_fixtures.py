@@ -1,4 +1,4 @@
-"""The ``cut_synthetic`` fixture of docs/stitching-assembly-validation.md ("Fixtures"), rebuilt in the test.
+"""The ``cut_synthetic`` fixture of design/validation/stitching-assembly.md ("Fixtures"), rebuilt in the test.
 
 The recipe is W-324's (``scripts/fixture_data.py`` and ``scripts/fixtures.py``), restated
 here from its constants: nothing is read from a run directory. One scene of 16×256×256

@@ -6,11 +6,11 @@ This page is a proposal of 2026-10-09; where Jiahao has decided a question, the 
 
 At the implementation review of 2026-10-08 Jiahao saw that a cell at a seam can be in
 the sample twice, and decided that this has to be handled. A cell is retained by the FOV
-that owns its ownership centroid ({doc}`assembly-contract`, "Retention"); a cell cut by a
+that owns its ownership centroid ([Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md), "Retention"); a cell cut by a
 FOV edge is seen in part by each FOV, the two centroids differ, and both observations can
 be retained. This page answers, with measurements on the two cellular 2 × 2 blocks of the
 real examples of stitching and assembly (the real-example segmentation and the real-example run of
-{doc}`stitching-assembly-validation`), the five questions its measurement was asked to answer, and
+[Validation design: placement, assembly and sample outputs](../validation/stitching-assembly.md)), the five questions its measurement was asked to answer, and
 makes one recommendation for each.
 It proposes; it changes no accepted page, no default and no rule. Jiahao decides.
 
@@ -289,7 +289,7 @@ no status is changed.
 **Decided on 2026-10-09** (Jiahao): both routes stay, segmentation per FOV followed by
 assembly and segmentation of the fused image (option C, not the recommendation A); the
 route after fusion is built for projection samples, specified by the sample-segmentation specification
-({doc}`sample-segmentation-contract`), and the 3D block-wise route is not built now.
+([sample-segmentation-contract](../../docs/sample-segmentation-contract.md)), and the 3D block-wise route is not built now.
 
 % W-401
 
@@ -367,7 +367,7 @@ interim for 3D samples, not a second route kept for good.
 ## Question 2: how to segment after fusion
 
 **Decided on 2026-10-09** (Jiahao): for projection samples, the fused Z maximum reduced
-in Y and X is segmented in one call (specified by {doc}`sample-segmentation-contract`); the block-by-block segmentation
+in Y and X is segmented in one call (specified by [sample-segmentation-contract](../../docs/sample-segmentation-contract.md)); the block-by-block segmentation
 of a fused 3D stack with a chunked label file is not built now.
 
 % W-401
@@ -425,7 +425,7 @@ fused stack, block by block with StarDist's present blocks (all planes × 256 ×
 ## Question 3: if cells of several FOVs stay a route, the rule that keeps one observation
 
 **Decided on 2026-10-09** (Jiahao): option (b), as a part of the route per FOV for good;
-implemented on 2026-10-09 ({doc}`assembly-contract`, "Retention", rule 8).
+implemented on 2026-10-09 ([Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md), "Retention", rule 8).
 
 % W-400
 
@@ -567,19 +567,19 @@ for a sample type when its route after fusion exists.
 
 These are named, not edited:
 
-* {doc}`assembly-contract`, "Settled decisions this page follows" ("Retention"): "There is
+* [Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md), "Settled decisions this page follows" ("Retention"): "There is
   no matching or merging of cells across FOVs". Option (b) of question 3 matches
   observations by their overlap, without merging them.
-* {doc}`assembly-contract`, "Flags": "No matching, merging or reassignment repairs them".
-* {doc}`sample-output-contract`, the exclusions of its introduction: "cross-FOV cell
+* [Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md), "Flags": "No matching, merging or reassignment repairs them".
+* [sample-output-contract](../../docs/sample-output-contract.md), the exclusions of its introduction: "cross-FOV cell
   matching" is excluded. Under option (b) the label image of "Assembled label export"
   still shows the retained cells, but a candidate second observation would no longer be
   retained;
   the rule LR4 itself does not change.
-* {doc}`sample-output-contract`, the same exclusions: "reassignment of molecules or
+* [sample-output-contract](../../docs/sample-output-contract.md), the same exclusions: "reassignment of molecules or
   recomputation of counts from a fused image or a label raster". The route after fusion of
   question 1 assigns the sample's molecules to the cells of a segmentation of the fused
-  image, which this exclusion of the first delivery leaves out; {doc}`assembly-contract`
+  image, which this exclusion of the first delivery leaves out; [Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md)
   defines no sample-level segmentation either.
 
 ## What was not measured

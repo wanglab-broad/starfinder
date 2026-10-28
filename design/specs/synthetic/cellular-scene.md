@@ -1916,7 +1916,7 @@ by section.
 % entry 2 "set there from W-393's measurements of method labels, not fitted to tissue and not a D04 calibration"
 
 The other accepted pages were read for statements the scene changes. The statement of
-[the stitching and assembly validation design](../../../docs/stitching-assembly-validation.md) that the sample scene's cells are "power-diagram
+[the stitching and assembly validation design](../../validation/stitching-assembly.md) that the sample scene's cells are "power-diagram
 territories around ellipsoids, not a tissue model" stays true of that scene and of this
 one, and is not listed.
 

@@ -44,7 +44,7 @@ Beneath this guide, {doc}`sample-segmentation-validation` is the validation desi
 route after fusion, the route setting and `compare_routes`, with its fixtures, its checks
 and the tests that implement them. The stage has no separate algorithm page and no
 baseline: its rules are on this page, which cites its measurements from
-{doc}`cells-across-fovs-proposal`.
+[cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md).
 
 ## Amendments after acceptance
 
@@ -90,11 +90,11 @@ and cite this page.
 
 It builds on these pages and redefines none of them: {doc}`sample-output-contract` (the
 export entry, `export/<sample>/`, the fused image, the label export, the SpatialData
-export, the read-back checks), {doc}`assembly-contract` (`assemble`, the sample tables,
+export, the read-back checks), [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md) (`assemble`, the sample tables,
 `sample.h5ad`, the duplicate rule of 2026-10-09), the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md) (`segment`,
 `SegmentationInput`, the method configs), the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md) (`assign_molecules`,
 `MoleculeTable`, the grid rule) and [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) (the placement and the
-sample frame). The measurements it uses are those of {doc}`cells-across-fovs-proposal`,
+sample frame). The measurements it uses are those of [cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md),
 cited there with their limits.
 
 % in six steps: W-425 to W-430
@@ -102,7 +102,7 @@ cited there with their limits.
 Evidence, cited by path; the run directories are kept with the run records outside the
 repository:
 
-* The two-FOV cell measurement ({doc}`cells-across-fovs-proposal`):
+* The two-FOV cell measurement ([cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md)):
   `notes.md` section 4 (how the block's molecules were assigned on the fused grid and
   where the scripts worked around the package) and `scripts/w399.py` (functions
   `step_fuse`, `step_culture_cellpose`, `fused_molecules`, `step_assign`).
@@ -155,7 +155,7 @@ is segmented per FOV.
 
 ## Settled decisions this page follows
 
-Decided by Jiahao on 2026-10-08 and 2026-10-09 (on {doc}`cells-across-fovs-proposal`).
+Decided by Jiahao on 2026-10-08 and 2026-10-09 (on [cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md)).
 They are stated as settled and not reopened:
 
 * **Both routes to a sample's cells stay**: segmentation per FOV followed by assembly (the
@@ -164,7 +164,7 @@ They are stated as settled and not reopened:
   thick section cannot be fused on the hardware at hand, and earlier samples were
   processed that way.
 * **The route per FOV keeps the duplicate rule** of question 3, option (b), for good
-  ({doc}`assembly-contract`, "Retention", rule 8; decided on 2026-10-09).
+  ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Retention", rule 8; decided on 2026-10-09).
 * **A dataset chooses its route by one setting with a default.** The two routes give the
   same outputs: the same files of `export/<sample>/`, the same tables and the same
   `sample.h5ad`, so that what reads them need not know the route. The two routes are
@@ -406,7 +406,7 @@ dataset on this route that sets `projection: sum` is refused before anything is 
 **Recommendation: SC1.** One setting decides the scale of the image and of the cells, and
 the segmented image is a file of the folder. On the culture block the two-FOV cell measurement found 146 kept
 cells at 1/1 and at 1/4, with about the same counts per cell, and the 1/4 calls took 13 s
-to 14 s against 18 s to 23 s ({doc}`cells-across-fovs-proposal`, measurement 2: one 2 × 2
+to 14 s against 18 s to 23 s ([cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md), measurement 2: one 2 × 2
 block; that they are the same cells is not measured; no accuracy). For another projection
 sample, the proposal's rule is the largest whole factor that keeps the cell diameter at
 30 pixels or more, Cellpose's working size, a rule not measured on tissue-2D (question 2).
@@ -414,7 +414,7 @@ sample, the proposal's rule is the largest whole factor that keeps the cell diam
 % W-399
 
 The whole culture projection at full resolution is about 13,636 × 9,576 pixels, which one
-call is expected to take; this is not measured ({doc}`cells-across-fovs-proposal`,
+call is expected to take; this is not measured ([cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md),
 question 2). The route segments the whole projection in one call; no block-wise driver is
 specified.
 
@@ -424,7 +424,7 @@ The segmentation method settings hold some lengths in pixels of the input grid. 
 segmentation grid a pixel is `k` acquired pixels wide, so a setting given for the
 acquired grid has to be divided by `k`. The two-FOV cell measurement divided Cellpose's diameters by 4 by hand
 (240 and 60 became 60 and 15), and its settings in µm needed nothing
-({doc}`cells-across-fovs-proposal`, measurement 2). The pixel fields of the two learned
+([cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md), measurement 2). The pixel fields of the two learned
 configs (call C14), and what `StarDistConfig` accepts (call C14b):
 
 % §2.9; W-399
@@ -551,7 +551,7 @@ the grid formulas, not measured).
 The route after fusion writes the same tables, with the same columns and dtypes, the same
 `sample.h5ad` and the same files. For each column, key and file of the present outputs,
 this section says "the same" or what it holds on this route and why. The column lists are
-those of {doc}`assembly-contract` ("Sample tables", "Sample-level AnnData") and of the
+those of [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md) ("Sample tables", "Sample-level AnnData") and of the
 package (call C13).
 
 ### The cells
@@ -595,7 +595,7 @@ source, `src/python/starfinder/export/_spatialdata.py:755–757`); and
 
 | Option | `fov_id` on this route | What it changes in the package | What it changes in the outputs | Readers of the present outputs |
 | --- | --- | --- | --- | --- |
-| **F1. The owning FOV of the ownership centroid (recommended)** | The FOV that `ownership_map` gives for `sample_ownership_centroid_*` (call C21: FOV1 at x 9.7 µm, FOV2 at x 9.8 µm, none at 30 µm); where no owning footprint holds the point, the owning FOV with the nearest footprint centre, ties by table order, and `owner_fov_id` null. | One `ownership_map` call per sample (it exists) and the nearest-centre rule for a point outside every footprint (new). | One real FOV ID per cell. On the route per FOV a retained cell's `fov_id` is also the owner of its ownership centroid ({doc}`assembly-contract`, "Retention", rule 1), so for every counted cell the column has one meaning on both routes. `fovs.n_cells` counts the cells each FOV owns. | Kept: `obs_name`, identity 1, the counts key, `sample.h5ad`, a reader that groups cells by FOV, `lookup_source`'s entry lookup. `equivalent_radii` and `lookup_source` still change for other reasons ("Readers that change"). |
+| **F1. The owning FOV of the ownership centroid (recommended)** | The FOV that `ownership_map` gives for `sample_ownership_centroid_*` (call C21: FOV1 at x 9.7 µm, FOV2 at x 9.8 µm, none at 30 µm); where no owning footprint holds the point, the owning FOV with the nearest footprint centre, ties by table order, and `owner_fov_id` null. | One `ownership_map` call per sample (it exists) and the nearest-centre rule for a point outside every footprint (new). | One real FOV ID per cell. On the route per FOV a retained cell's `fov_id` is also the owner of its ownership centroid ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Retention", rule 1), so for every counted cell the column has one meaning on both routes. `fovs.n_cells` counts the cells each FOV owns. | Kept: `obs_name`, identity 1, the counts key, `sample.h5ad`, a reader that groups cells by FOV, `lookup_source`'s entry lookup. `equivalent_radii` and `lookup_source` still change for other reasons ("Readers that change"). |
 | F2. Null | No value. | `obs_name` needs a rule for a missing FOV (a new format); identity 1 skips the cells; `lookup_source` needs a branch, because its entry lookup finds no FOV entry for a null value (read from the source, `_spatialdata.py:757`). | `fov_id` null on every cell row, count row and `obs` row; `fovs.n_cells` 0 for every FOV. | Broken without changes: `obs_name` by its stated format, `lookup_source(cell=…)`; a reader that groups or filters cells by FOV loses every cell. Kept: readers that only copy the column. |
 | F3. The FOVs whose footprints the cell touches | The `;`-joined `fov_id`s of every owning FOV whose footprint holds a pixel of the cell's territory, as `conflict_with` joins names. | A footprint test per cell (new); identity 1, the counts key and `lookup_source` change to split the value. | `fov_id` is no longer one FOV: a cell at a seam holds two or four names, `obs_name` contains `;`, and `fovs.n_cells` sums to more than the cell rows. | Broken without changes: identity 1 (the joined value is no row of `fovs`), `lookup_source`, any join of the cell or count table with `fovs` on `fov_id`; `sample.h5ad`'s `fov_id` becomes a category per combination. It buys a direct view of the cells at seams, which a new column beside F1 would give without breaking the key. |
 
@@ -606,7 +606,7 @@ already has for retained cells, and breaks no reader that F2 or F3 would break.
 
 | Option | Rule | What it changes | Consequence |
 | --- | --- | --- | --- |
-| **FL1. None applies (recommended)** | `fov_edge`, `z_edge`, `conflict` and `unclaimed` are not computed; the record's `flags.computed` is empty and `flags.applicable` is false. | Nothing. | A cell touching the outer border of the sample is not marked; on the culture block 32 cells of the fused image touched it, against 31 retained cells plus 18 at an inner FOV edge on the route per FOV ({doc}`cells-across-fovs-proposal`, measurement 2, one 2 × 2 block). |
+| **FL1. None applies (recommended)** | `fov_edge`, `z_edge`, `conflict` and `unclaimed` are not computed; the record's `flags.computed` is empty and `flags.applicable` is false. | Nothing. | A cell touching the outer border of the sample is not marked; on the culture block 32 cells of the fused image touched it, against 31 retained cells plus 18 at an inner FOV edge on the route per FOV ([cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md), measurement 2, one 2 × 2 block). |
 | FL2. A new flag `sample_edge` | A cell whose territory touches the first or last pixel of the segmentation grid. | A new value of `CELL_ASSEMBLY_FLAGS`. | It marks cells cut by the sample border, which exist on both routes; on the route per FOV it would need its own rule. |
 
 **Recommendation: FL1**, and FL2 as a later addition for both routes if the cells at the
@@ -682,7 +682,7 @@ cell equal its retained `assigned` molecules.
 | --- | --- |
 | `format_version`, `stage`, `sample`, `frame_id`, `complete`, `viewer_qualification` | The same. |
 | `parts` | The same keys and `segment` (on both routes; `off` on the route per FOV). |
-| `assembly` | The same layout ({doc}`assembly-contract`, "What assemble records"), with `mode` `cells`, `route` `after_fusion`, `route_source`, `segmentation_files` (the SHA-256 of each label file it read), the sample assignment's record as `assignment`, `config.duplicate_threshold` null and `flags` as FL1; `fovs[*].kind` `molecules`, `assignment` null, `territories` null. On the route per FOV `route` is `per_fov`. |
+| `assembly` | The same layout ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "What assemble records"), with `mode` `cells`, `route` `after_fusion`, `route_source`, `segmentation_files` (the SHA-256 of each label file it read), the sample assignment's record as `assignment`, `config.duplicate_threshold` null and `flags` as FL1; `fovs[*].kind` `molecules`, `assignment` null, `territories` null. On the route per FOV `route` is `per_fov`. |
 | `fusion` | The same. |
 | `segmentation` | New ("The record"). |
 | `labels` | The same layout, with the rule `segmentation` and `segmentation_files` ("The label images"). |
@@ -852,7 +852,7 @@ projection samples only; a dataset with dimensionality 'stack' is segmented per 
 chunked label file is not built now (decided on 2026-10-09); the fused LN 2 × 2 block
 already took 7.7 GB in one call, and a whole LN stack has about 21 times its voxels; and a
 stack reduced to 1/2 is no cheaper equivalent for the LN model, which found 1,695 nuclei
-there against 8,932 at full resolution ({doc}`cells-across-fovs-proposal`, measurement 3
+there against 8,932 at full resolution ([cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md), measurement 3
 and question 1: one 2 × 2 block; the whole-stack figure is an extrapolation; no
 accuracy). With `both` the route after fusion segments the projection.
 
@@ -920,7 +920,7 @@ folders; then it writes the tables below as CSV and the summary as JSON there.
 
 ### How two cells are matched
 
-By the measure of the duplicate rule ({doc}`assembly-algorithms`, "Duplicate rule"),
+By the measure of the duplicate rule ([assembly algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly-algorithms.md), "Duplicate rule"),
 applied between the routes: each route's cells are placed on one grid, the segmentation
 grid of the route after fusion, and the shared pixels of a pair of cells are counted.
 
@@ -973,7 +973,7 @@ grid of the route after fusion, and the shared pixels of a pair of cells are cou
 
 The two-FOV cell measurement's comparison of the culture block is an example of what the report holds: 146 kept
 cells after fusion against 158 counted cells per FOV, of which 8 are candidate second
-observations by the overlap measure ({doc}`cells-across-fovs-proposal`, measurement 2:
+observations by the overlap measure ([cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md), measurement 2:
 one 2 × 2 block; candidates inferred from geometry; no accuracy). Those numbers came from
 labels extended through Z and assigned in 3D; the route of this page assigns the
 projection's plane labels by Y and X, so its counts on that block are not measured.
@@ -982,7 +982,7 @@ projection's plane labels by Y and X, so its counts on that block are not measur
 
 ## Resources
 
-What the two-FOV cell measurement recorded on 2 × 2 blocks is in {doc}`cells-across-fovs-proposal`; nothing
+What the two-FOV cell measurement recorded on 2 × 2 blocks is in [cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md); nothing
 here is a new measurement. A whole sample has more seam per FOV than a 2 × 2 block
 (`2 − 1/N − 1/M` side lengths per FOV against 1), so the share of cells near a seam is
 expected to be larger there, by up to about 1.8 for the two samples measured; this is an
@@ -1001,7 +1001,7 @@ no block-wise driver, no chunked label file; no merging of cells across FOVs; no
 to the rule for molecules; no change to the route per FOV beyond the column
 `cell_namespace` (choice 7) and the readers' link; no new output folder; no model call, no
 GPU and no real data in the validation (every number is cited from
-{doc}`cells-across-fovs-proposal` with its limits, and every statement about a present
+[cells-across-FOVs proposal](https://github.com/wanglab-broad/starfinder/blob/dev/design/proposals/cells-across-fovs.md) with its limits, and every statement about a present
 function from the grounding calls' record).
 
 % W-401

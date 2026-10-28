@@ -1,5 +1,5 @@
 """LB1 to LB7, and the label parts of EX1, EX2 (check 6) and EX3 ((c), (e) to (h)), of
-docs/stitching-assembly-validation.md: the assembled label export ``fuse_labels``.
+design/validation/stitching-assembly.md: the assembled label export ``fuse_labels``.
 
 Fixtures (``label_fixtures``): ``label_quad`` and its volume variant, ``label_pair`` (W-359's
 two-FOV fixture) with ``label_pair_conflict``, ``label_pair_empty`` and ``label_pair_merged``,
@@ -778,7 +778,7 @@ def test_lb7_12_a_cell_retained_by_no_fov_without_a_flag(runs):
 # --- W-400: the duplicate rule, the label image and the flags ------------------------------------------------------
 
 def page_flags(case):
-    """(fov_edge, unclaimed) of every cell by the definitions of docs/assembly-contract.md ("Flags"), over the cells
+    """(fov_edge, unclaimed) of every cell by the definitions of design/specs/assembly.md ("Flags"), over the cells
     the cell table retains (after the duplicate rule): fov_edge from the territory's first and last Y and X index;
     unclaimed for a cell excluded not_owner whose ownership centroid has no owner, or whose owner's territory there
     holds 0 or a cell the owner does not retain (sampled at floor(c + ½), Y and X for these plane territories)."""

@@ -178,7 +178,7 @@ def equivalent_radii(cells, spacings) -> np.ndarray:
     segmentation grid on the route after fusion (``_fov_spacing``). A
     ``volume`` territory as a sphere, ``(3·size·s_z·s_y·s_x / (4π))^(1/3)``; a
     ``plane`` territory, which the sample cell table marks with a NaN
-    ``sample_centroid_z`` (docs/assembly-contract.md, "Sample tables"), as a disc,
+    ``sample_centroid_z`` (design/specs/assembly.md, "Sample tables"), as a disc,
     ``(size·s_y·s_x / π)^(1/2)``. Raises ValueError naming a cell of zero voxels,
     whose circle the shapes model refuses, or of a FOV without a known spacing.
     """

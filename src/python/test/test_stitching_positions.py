@@ -1,4 +1,4 @@
-"""PL1 of docs/stitching-assembly-validation.md: the tile position table and its three converters.
+"""PL1 of design/validation/stitching-assembly.md: the tile position table and its three converters.
 
 Fixtures: the stage files of ``hand_records`` (``maf_3x2_gap``, ``maf_2x3_jitter``),
 ``golden_stitching``'s stage file, supplied tables in µm, nm and mm, and the

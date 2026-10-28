@@ -403,7 +403,7 @@ def test_ch1_ch2_ch3_the_report_at_each_stage(stages, tmp_path):
 @pytest.mark.slow
 def test_ch3_the_reads_assigned_to_cells(stages):
     """CH3's reads check: reads_in_cells equals Σ X of sample.h5ad (read with anndata) and the molecules of the counted
-    cells (identity 4 of docs/assembly-contract.md), per FOV as this test counts them from the export's tables."""
+    cells (identity 4 of design/specs/assembly.md), per FOV as this test counts them from the export's tables."""
     chain, pages, _ = stages
     page = pages["ch3"]
     _, _, _, X = measurement_checks.matrix(chain.root, chain.sample)

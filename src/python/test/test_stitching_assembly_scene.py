@@ -1,4 +1,4 @@
-"""EE1 to EE5 of docs/stitching-assembly-validation.md: the synthetic sample scene through the path that
+"""EE1 to EE5 of design/validation/stitching-assembly.md: the synthetic sample scene through the path that
 needs no segmenter, assembled on its truth placement.
 
 Fixtures: ``scene_tiny`` (``sample-tiny-v1``, seed 42, J1 jitter in Z, Y and X),
@@ -9,7 +9,7 @@ molecules through ``import_legacy_molecules_csv``; ``assign_molecules`` runs wit
 the placement is ``placement_from_table`` on ``positions.csv`` with ``origins`` from
 ``true_origin_z/y/x`` of ``placement_truth.csv``, approved. The oracle of EE2 is computed here
 from the truth tables and the FOV truth label images by the rules of
-docs/assembly-algorithms.md, never from ``assemble``'s output. EE5's table is a measurement:
+design/specs/assembly-algorithms.md, never from ``assemble``'s output. EE5's table is a measurement:
 it is printed (``-s``) and no accuracy is claimed.
 """
 import dataclasses

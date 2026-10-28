@@ -75,7 +75,7 @@ def harmonic(planar):
 
 
 def plane(config):
-    """The single-plane configuration of docs/stitching-assembly-validation.md (``scene_plane``): FOVs of
+    """The single-plane configuration of design/validation/stitching-assembly.md (``scene_plane``): FOVs of
     1 × 36 × 36 and a jitter bound of (0, 1.5, 1.5) voxels."""
     return replace(config, acquisition=replace(config.acquisition, fov_shape_zyx=(1, 36, 36),
                                                jitter_max_zyx=(0.0, 1.5, 1.5)),

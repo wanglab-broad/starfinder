@@ -1,4 +1,4 @@
-"""PL3 to PL11 of docs/stitching-assembly-validation.md, their stub parts, and PL4's scene part.
+"""PL3 to PL11 of design/validation/stitching-assembly.md, their stub parts, and PL4's scene part.
 
 Fixtures: ``stub_grid`` and ``stub_variants`` (fractional translations, spacing (1, 2, 2) µm
 and the LN calibration, Z = 1 grids from YX inputs, unequal shapes, unsnapped stage

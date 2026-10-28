@@ -1,4 +1,4 @@
-"""Vocabularies, the per-FOV input and the config of the assemble entry (docs/assembly-contract.md, "Names")."""
+"""Vocabularies, the per-FOV input and the config of the assemble entry (design/specs/assembly.md, "Names")."""
 from __future__ import annotations
 
 import math
@@ -39,7 +39,7 @@ class AssemblyConfig:
     first in the placement's table order) or ``half_open`` (T2, only with
     ``midpoint_box``: a point on a box edge belongs to the box that starts
     there). ``conflicts`` computes the ``conflict`` and ``unclaimed`` flags,
-    which read the territories. See docs/assembly-algorithms.md.
+    which read the territories. See design/specs/assembly-algorithms.md.
 
     Raises
     ------

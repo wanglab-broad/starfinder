@@ -1,4 +1,4 @@
-"""PL2 (neighbour pairs), the box part of PL7 and the pair part of PL8 of docs/stitching-assembly-validation.md.
+"""PL2 (neighbour pairs), the box part of PL7 and the pair part of PL8 of design/validation/stitching-assembly.md.
 
 Fixtures: ``stub_grid``, the ``stub_variants`` with irregular stage positions
 (``maf_2x3_jitter`` unsnapped), unequal shapes and the L shape of ``maf_3x2_gap``, and an

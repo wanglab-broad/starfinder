@@ -1365,7 +1365,7 @@ def _reads_assignment(config):
 
 
 # --- §2.10: the Python-only stitching, assembly and export blocks (design/specs/stitching.md,
-# --- docs/assembly-contract.md and docs/sample-output-contract.md, "Workflow configuration").
+# --- design/specs/assembly.md and docs/sample-output-contract.md, "Workflow configuration").
 
 _STITCHING_KEYS = ('method', 'input', 'positions', 'config', 'review', 'fallback', 'bigstitcher_save_dir')
 # BigStitcher runs in Fiji as an engine task, so it is a method of the block but not of STITCHING_METHODS.
@@ -1635,7 +1635,7 @@ def _sample_table(block, dataset, sample, fov_ids, grids, position_ids, grid_fov
 
 
 def _assembly_block(config) -> _AssemblyBlock:
-    """The Python-only assembly block (docs/assembly-contract.md, "Workflow configuration").
+    """The Python-only assembly block (design/specs/assembly.md, "Workflow configuration").
 
     Its keys are the AssemblyConfig fields, assignment (the assignment name
     read per FOV, default ``default``; null for molecules only),

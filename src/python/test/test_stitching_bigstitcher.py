@@ -1,6 +1,6 @@
 """The BigStitcher macro and the import of ``dataset.xml`` (W-366): the import parts of PL3, PL5, PL7, PL11, PL12, PL14.
 
-Rows of docs/stitching-assembly-validation.md. Fixtures, all written in the test (no Fiji
+Rows of design/validation/stitching-assembly.md. Fixtures, all written in the test (no Fiji
 run, no image read, nothing read from a run directory):
 
 * ``hand_records``: the two ``dataset.xml`` files of W-324 ``scripts/parity_fixtures.py``

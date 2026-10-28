@@ -1,4 +1,4 @@
-"""AS3 to AS10 of docs/stitching-assembly-validation.md: retention, flags, accounting, special populations,
+"""AS3 to AS10 of design/validation/stitching-assembly.md: retention, flags, accounting, special populations,
 placeholder, missing and failed FOVs, and the entry's checks; and the ``assemble`` clauses of PL18.
 
 Fixtures (``assembly_fixtures.py``): ``assembly_golden`` (3D, 2D, expanded), ``own_cases`` with

@@ -21,7 +21,7 @@ It builds on these pages and redefines none of them:
 * [stitching-contract](../stitching.md): the sample frame, the tile position table and
   `positions_from_grid`, the placement record (`PlacementResult`, `origin_z/y/x` in µm,
   the gauge G1) and the index-to-sample rule;
-* [assembly-contract](../../../docs/assembly-contract.md): footprints, ownership, retention, statuses and the count
+* [assembly-contract](../assembly.md): footprints, ownership, retention, statuses and the count
   identities;
 * [segmentation-contract](../segmentation.md) ("External-mask import", "Label image") and
   [assignment-contract](../assignment.md) (`MoleculeTable`, `import_legacy_molecules_csv`, "Coordinate
@@ -29,7 +29,7 @@ It builds on these pages and redefines none of them:
 
 It is implemented in `starfinder.synthetic`, no existing generator behavior changes and
 nothing is renamed. The validation designs that use the scene are
-[stitching and assembly validation design](../../../docs/stitching-assembly-validation.md) and [synthetic cellular scene validation](../../validation/synthetic-cellular-scene.md); this page
+[stitching and assembly validation design](../../validation/stitching-assembly.md) and [synthetic cellular scene validation](../../validation/synthetic-cellular-scene.md); this page
 states the identities a test can check, not the validation plan.
 
 ## What this addition is not
@@ -68,7 +68,7 @@ states the identities a test can check, not the validation plan.
   pipeline.
 * **Placement runs on the CPU only** and is translation only. The scene's FOV offsets are
   translations; no rotation or deformation of a FOV against the sample is generated.
-* **Retention** (2026-09-27, [assembly-contract](../../../docs/assembly-contract.md)): cells by centroid, no cross-FOV
+* **Retention** (2026-09-27, [assembly-contract](../assembly.md)): cells by centroid, no cross-FOV
   matching. The scene provides truth to measure that policy, not a replacement for it.
 
 % The §2.12 scope is amended (D7 of the W-152 comment "§2.10 planning decisions (2026-10-05)"); the §2.12 milestone;
@@ -91,7 +91,7 @@ states the identities a test can check, not the validation plan.
 * A FOV's **nominal origin** is its position from the nominal grid; its **true origin** is
   where it was actually rendered; the **jitter** is true minus nominal, the true
   correction in the language of the placement record.
-* A FOV's **footprint** is that of [assembly-contract](../../../docs/assembly-contract.md): per axis
+* A FOV's **footprint** is that of [assembly-contract](../assembly.md): per axis
   `[origin − s/2, origin + (n − ½)·s)`. In index units, a position `p` is in the
   footprint exactly when `−0.5 ≤ p < n − 0.5` on every axis, which is the "inside" test of
   the assignment's coordinate sampling (`0 ≤ floor(p + 0.5) < n`).
@@ -325,7 +325,7 @@ class AcquisitionConfig:
 | `jitter_zyx` | voxels | None | with `jitter="supplied"`: one finite triple per FOV ID, `|j_a| ≤ jitter_max_a` |
 
 The nominal origin of FOV `k` is `(0, row · step_y, col · step_x)` µm: every FOV has
-nominal z 0 (one layer of tiles, option Z1 of [assembly-contract](../../../docs/assembly-contract.md)). The nominal
+nominal z 0 (one layer of tiles, option Z1 of [assembly-contract](../assembly.md)). The nominal
 positions equal, value for value, those of
 `positions_from_grid(columns=…, rows=…, order=…, tile_shape_yx=fov_shape_zyx[1:],
 spacing_yx=spacing_zyx[1:], overlap=…, fov_ids=…)`.
@@ -680,7 +680,7 @@ molecule keeps its ID in every FOV that renders it (the FOV namespace differs).
   `anchor_in_footprint`, `n_voxels` (in that FOV, possibly 0), `fov_edge` (the cell
   touches the first or last Y or X index of the FOV grid) and `z_edge` (first or last Z
   index, for Z>1). The two edge flags are the same tests as the `fov_edge` and `z_edge`
-  flags of [assembly-contract](../../../docs/assembly-contract.md), computed on the truth labels. A cell with
+  flags of [assembly-contract](../assembly.md), computed on the truth labels. A cell with
   `n_voxels > 0` that touches no edge of a FOV is **complete** in it by this label test,
   which is how assembly's flags judge it. A thin part of its territory that lies between
   voxel centres can still cross the FOV's footprint.
@@ -872,7 +872,7 @@ within 1e-9 µm (both are `true_origin − nominal`), and the review is `require
 `supplied_placement`, so the caller approves it with `approve_placement` before `assemble`
 accepts it. Because the nominal grid puts every FOV at nominal z 0 ("Nominal grid"), a
 scene with Z jitter then still has one `nominal_z`, and its truth placement passes check 8
-of [assembly-contract](../../../docs/assembly-contract.md) ("Checks the entry applies"); the jitter in Z moves the
+of [assembly-contract](../assembly.md) ("Checks the entry applies"); the jitter in Z moves the
 FOVs' sample z, not ownership (option Z1). One need of this
 path is still not met by the current contracts and is recorded in the worker notes: a
 molecule input that keeps the sample IDs.

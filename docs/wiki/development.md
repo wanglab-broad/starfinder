@@ -42,13 +42,6 @@ Diagnoses by symptom.
 Updating callers of earlier Python interfaces.
 :::
 
-:::{grid-item-card} Cells across FOVs (proposed)
-:link: ../cells-across-fovs-proposal
-:link-type: doc
-:class-card: sf-card sf-card-planned
-A proposal for cells seen by two FOVs.
-:::
-
 ::::
 
 ```{toctree}
@@ -60,5 +53,4 @@ Quickstart script <../getting-started>
 Development recipes <../recipes>
 Troubleshooting <../troubleshooting>
 Migration guide <../migration>
-Cells across FOVs (proposed) <../cells-across-fovs-proposal>
 ```
