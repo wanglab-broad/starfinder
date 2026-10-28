@@ -90,7 +90,7 @@ give the calculations and eligibility details.
 | `fov_failed` | Failed or interrupted processing |
 | `fov_not_run` | An expected FOV without a run record |
 | `shift_residual` | A shift far from the sample's usual shift |
-| `alignment_score` | A low alignment score |
+| `alignment_score` | A low alignment score (off by default) |
 | `registration_rejected` | A rejected registration attempt |
 | `registration_fallback` | Successful registration that used fallback |
 | `correct_form_fraction` | A low fraction of correct-form reads |

@@ -69,9 +69,9 @@ locations and route-specific interpretation, see the
 
 ### Example FOVs and replay
 
-The automatic choice uses read counts for a representative main example and seeks
-low and high cell counts for the other panels. `example_fovs` lets you choose the
-examples instead. `report.json` records their selection and the replay outcome.
+The automatic choice uses read counts for a representative main example.
+`example_fovs` lets you choose the examples instead. `report.json` records their
+selection and the replay outcome.
 If a replay cannot be reproduced, its unavailable reason helps identify the
 missing input or saved state. The
 [example and replay rules](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/report.md#the-example-fovs)
