@@ -11,15 +11,15 @@ This page records how molecule-to-cell assignment behaves at revision `6b384cd` 
 assignment work changes it. It is the reference that the golden test
 `src/python/test/test_assignment_golden.py` pins. The proposed replacement is described
 in {doc}`assignment-contract` and {doc}`assignment-algorithms`; neither is accepted. The
-label images assignment reads are specified by {doc}`segmentation-contract`, and their
-current production by {doc}`segmentation-baseline`. Paths are relative to the
+label images assignment reads are specified by the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md), and their
+current production by the [segmentation baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/segmentation.md). Paths are relative to the
 repository root, and line numbers are at `6b384cd`.
 
 % after the §2.8 work; before the Chapter II §2.9 work
 
 Assignment has no model and no measured behavior beyond what the golden test pins: the
 model-dependent part of the labels it reads (StarDist inference) is pinned by the parity
-outputs of the dependency study, as {doc}`segmentation-baseline` ("Golden test") describes.
+outputs of the dependency study, as the [segmentation baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/segmentation.md) ("Golden test") describes.
 
 % the W-306 parity outputs
 
@@ -129,7 +129,7 @@ rules from the workflow side.
 `example/sequential_workflow/reads_assignment_cell_culture.py` (stitched culture):
 
 1. Reads `Cell.tif`, `Nuclei.tif` and `Cyto.tif`, written by `create_3d_segmentation.m`,
-   where `Cyto = Cell − Nuclei` on label values ({doc}`segmentation-baseline`, "The culture
+   where `Cyto = Cell − Nuclei` on label values ([segmentation baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/segmentation.md), "The culture
    path"). Each is assigned independently with `labels[z, y, x]`.
 2. The number of cells is that of `Cell.tif`; row `i` counts label value `i + 1`, so the
    rows assume consecutive labels. The metadata rows come from `regionprops` of each image
@@ -171,7 +171,7 @@ identity-preserving `fovs/{fovID}/molecules.csv` ({doc}`migration`).
 | 1 | Coordinates index the label image without a bounds check (`:87`, `:89`): one-based 0 reads the far edge, a coordinate beyond the grid raises `IndexError` (golden test). | Every molecule is sampled through one rule with explicit bounds; a molecule off the grid gets the status `outside_grid` and is kept ({doc}`assignment-contract`, "Coordinate sampling"). |
 | 2 | The subpixel-to-voxel rule is implicit: integers index directly and floats raise, including the package's own goodSpots output. | A stated rule for zero-based subpixel ZYX positions (recommended: the voxel whose support `[i − 0.5, i + 0.5)` holds the position), applied to the package tables, never to the one-based CSV. |
 | 3 | Expansion is applied here (`:55-57`, `:66-67`) after an earlier expansion in `stardist_segmentation.py`, with its own distance; two expansions are not one (4 then 2 differs from 6 on the golden fixture by 585 voxels). | One expansion through segmentation's `expand_labels`, applied once, by assign, and recorded; assign keeps the original and the expanded territories and refuses a label image already expanded in segmentation, whose original is not kept ({doc}`assignment-contract`, "Label expansion"). |
-| 4 | Expansion of 3D labels is per slice, in pixels: labels never grow in Z, and a plane without labels stays empty. | `expand_labels` with an explicit mode (`planar` reproduces today; `volumetric` in physical units) and unit, recorded ({doc}`segmentation-contract`). |
+| 4 | Expansion of 3D labels is per slice, in pixels: labels never grow in Z, and a plane without labels stays empty. | `expand_labels` with an explicit mode (`planar` reproduces today; `volumetric` in physical units) and unit, recorded ([segmentation reference](segmentation-algorithms.md#input-and-label-functions)). |
 | 5 | Assignment is coupled to the tile configuration, global coordinates and the overlap filter (`:39-42`, `:78-80`, `:141-165`), and the rule needs every sample's tile configuration. | Assignment is FOV-local and reads no tile configuration; stitching and assembly receive cell identities, centroids and statuses ({doc}`assignment-contract`, "Boundary with stitching and assembly"). The workflow adapter keeps today's overlap filter outside the package until stitching and assembly replace it. |
 | 6 | No status for unassigned or excluded molecules: label 0 is the only record, the overlap filter drops molecules of dropped cells, and the empty branch writes a different population. | Every molecule keeps exactly one assignment status (`assigned`, `unassigned`, `excluded_cell`, `outside_grid`) in one table, whatever happens to its cell. |
 | 7 | No nucleus–cell correspondence and no compartment counts; the culture example derives compartments from label arithmetic. | A correspondence table, supplied or derived from overlap, with flags and a correspondence status per cell; whole-cell counts always, nuclear and cytoplasmic counts only where correspondence allows, withheld for flagged cells and not produced for a cell without a detected nucleus, with no automatic repair. |

@@ -1932,7 +1932,7 @@ class FOV:
         as :func:`~starfinder.segmentation.reference_grid_from_file` reads it
         (source ``"file:<path>"``; a YX file gives a Z=1 grid). Either is the
         same grid by the grid rule (equal shape and metadata). See
-        docs/segmentation-contract.md.
+        design/specs/segmentation.md.
 
         Raises
         ------
@@ -2001,7 +2001,7 @@ class FOV:
         file gives a Z=1 grid), and ``InputChannel(reference_merged=True)``, also
         as the amplicon of a ``CompositeConfig``, reads it. With
         :meth:`load_registered_round`, a process can then segment with no
-        sequencing round resident (docs/segmentation-contract.md, "Coordination
+        sequencing round resident (design/specs/segmentation.md, "Coordination
         per FOV"). A channel of the reference round other than the merged image
         still needs that round. When the reference round is resident too, the
         round is read, and the file must agree with its channel maximum
@@ -2059,12 +2059,12 @@ class FOV:
         ``reference_image`` (path relative to the dataset output root and
         SHA-256). A process that restores the reference image and the prepared
         images it needs segments with no sequencing round resident.
-        It never runs registration, detection or decoding (docs/segmentation-contract.md,
+        It never runs registration, detection or decoding (design/specs/segmentation.md,
         "Coordination per FOV").
 
         With ``checkpoints``, each run is also written to
         ``<FOV folder>/segmentation/<run>/`` (option F1 of
-        docs/segmentation-contract.md, "Saved format"): ``labels.tif`` (ZYX
+        design/specs/segmentation.md, "Saved format"): ``labels.tif`` (ZYX
         ``uint32``, zlib, with the grid's ImageMetadata), ``input.ome.tif`` (the
         segmentation input, ZYXC OME-TIFF; not for an import) and
         ``segmentation.json`` (the run record, with each file's path and SHA-256).

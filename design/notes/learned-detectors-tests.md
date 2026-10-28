@@ -153,7 +153,7 @@ the contract's known-weights table shows abbreviated hashes.
   (empty for Piscis, whose `.pt` file is already checked).
 
 * The segmentation models of `segmentation.KNOWN_MODELS` (`starfinder.segmentation`;
-  [segmentation-contract](../../docs/segmentation-contract.md), "Models") share the cache and the three commands:
+  [segmentation-contract](../specs/segmentation.md), "Models") share the cache and the three commands:
   `starfinder weights fetch stardist 2D_versatile_fluo` downloads the StarDist
   archive and `starfinder weights fetch cellpose cpsam_v2` the Cellpose file, with
   the same size and SHA-256 checks of the download and of each listed file. A

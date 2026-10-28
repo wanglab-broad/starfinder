@@ -111,7 +111,7 @@ def check_models(segmentation: SampleSegmentationConfig) -> list[dict]:
     """Every model of the runs resolves with its SHA-256 (``resolve_model``, which imports no segmentation library).
 
     Returns the artifacts entries per run; raises the model errors of
-    docs/segmentation-contract.md with the run and key named.
+    design/specs/segmentation.md with the run and key named.
     """
     from starfinder.segmentation import MissingModelError, ModelHashMismatchError
     resolved = []

@@ -40,7 +40,7 @@ def grid_sha256(image) -> str:
     """SHA-256 of an image's C-order bytes alone, the ``ReferenceGrid.sha256`` convention.
 
     No dtype or shape prefix, as ``reference_sha256`` of ``FOV.register``
-    (docs/segmentation-contract.md, "The reference grid").
+    (design/specs/segmentation.md, "The reference grid").
     """
     return hashlib.sha256(np.ascontiguousarray(image).tobytes()).hexdigest()
 
@@ -53,7 +53,7 @@ def _json(value):
 def to_label_dtype(labels) -> np.ndarray:
     """Convert an integer label array to C-contiguous ``uint32`` without wrapping.
 
-    The label dtype rule of docs/segmentation-contract.md: every label image is
+    The label dtype rule of design/specs/segmentation.md: every label image is
     ``uint32``. Values are kept as they are; the shape is not checked.
 
     Raises
@@ -217,7 +217,7 @@ class SegmentationResult:
     grid.shape_zyx``). ``target`` is ``nucleus`` or ``cell``; ``geometry`` is
     ``volume`` (Z>1), ``plane`` (Z=1) or ``extended`` (Z>1, from
     :func:`extend_labels_through_z`). A label's identity is ``(label_namespace,
-    value)``. ``record`` is the run record of docs/segmentation-contract.md and
+    value)``. ``record`` is the run record of design/specs/segmentation.md and
     ``diagnostics`` holds method-specific counts and timings.
 
     Raises

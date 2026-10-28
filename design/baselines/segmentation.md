@@ -2,11 +2,11 @@
 
 % Status: Accepted (W-309, 2026-10-05, at 3550723)
 
-Note: {doc}`segmentation-contract` and {doc}`segmentation-algorithms` were accepted at their acceptance review (2026-10-05) and are implemented in `starfinder.segmentation`; this page keeps the text of its revision.
+Note: [segmentation-contract](../specs/segmentation.md) and [segmentation-algorithms](../specs/segmentation-algorithms.md) were accepted at their acceptance review (2026-10-05) and are implemented in `starfinder.segmentation`; this page keeps the text of its revision.
 
 % Note (W-583); accepted at W-309 (2026-10-05)
 
-Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ([migration](../../docs/migration.md), "The FOV folder, the reference image and channel folders by label").
 
 % Note (W-564)
 
@@ -14,10 +14,10 @@ This page records how segmentation and its inputs behave at revision `6b384cd`
 (branch `runner/s29-spec-20261004`, on `dev` after the readout work), before the
 segmentation and assignment work changes them. It is the reference that the golden test
 `src/python/test/test_segmentation_golden.py` pins. The proposed replacement is
-described in {doc}`segmentation-contract` and {doc}`segmentation-algorithms`; neither
+described in [segmentation-contract](../specs/segmentation.md) and [segmentation-algorithms](../specs/segmentation-algorithms.md); neither
 is accepted. Paths are relative to the repository root, and line numbers are at
 `6b384cd`. The assignment half of the work (`reads_assignment.py`, compartments, counts)
-is recorded in {doc}`assignment-baseline`; this page names it only where segmentation
+is recorded in [assignment-baseline](../../docs/assignment-baseline.md); this page names it only where segmentation
 reaches into it.
 
 % after the §2.8 work; before the Chapter II §2.9 work; The assignment half of §2.9; is recorded by W-308
@@ -92,13 +92,13 @@ study's notes, section 3, `tables/parity.csv`).
 | `parameters.distance` | integer ≥ 0 | expansion distance in pixels |
 
 The block and its `parameters` allow additional properties, and no key has a schema
-default. {doc}`workflow-configuration` lists the same keys.
+default. [workflow-configuration](../../docs/workflow-configuration.md) lists the same keys.
 
 ## The composite: `create_nuclei_amplicon_overlay.py`
 
 | Step | Lines | Behavior |
 | --- | --- | --- |
-| Inputs | 10-11 | `dapi_img` = `images/DAPI/{fovID}.tif` (from `rotate_nuclei`) and `amplicon_img` = `images/ref_merged/{fovID}.tif` (the reference round's channel maximum, written by the sequencing rules; see {doc}`workflows`). No shape, frame or dtype check. |
+| Inputs | 10-11 | `dapi_img` = `images/DAPI/{fovID}.tif` (from `rotate_nuclei`) and `amplicon_img` = `images/ref_merged/{fovID}.tif` (the reference round's channel maximum, written by the sequencing rules; see [workflows](../../docs/workflows.md)). No shape, frame or dtype check. |
 | Amplicon contrast | 14-18 | `np.quantile` (linear) at 0.001 and 0.999 over the whole volume, then `rescale_intensity(img, in_range)` onto the dtype range. |
 | DAPI contrast | 21-25 | The same at 0.005 and 0.995. |
 | Combination | 28-33 | Both to float with `img_as_float`; stacked on a new last axis; the maximum over `axis=3`. The axis is hard-coded, so the inputs must be 3D: two YX images raise `AxisError` (golden test). Inputs of different shapes raise a broadcasting `ValueError`. |
@@ -129,7 +129,7 @@ The two inputs are written by the Python `nuclei_registration` adapter
 (`src/python/starfinder/dataset/workflow.py:784-795`) for an additional round named
 `flamingo` with channels named `DAPI` and `Flamingo`, but the rule declares only its
 two log files as outputs (`registration-py.smk:77-80`), so Snakemake cannot connect the
-two rules; {doc}`workflow-downstream` says the folders "must be supplied separately".
+two rules; [workflow-downstream](../../docs/workflow-downstream.md) says the folders "must be supplied separately".
 The golden test pins the enhancement on its fixture.
 
 ## `rotate_nuclei` and the DAPI image
@@ -162,7 +162,7 @@ as an `ExternalReference`, and calls `FOV.register` (`fov.py:572-676`) with one
 translation step on the round's shared stain, the one channel whose name contains the
 top-level `ref_channel`. Every channel of the round is resampled through that
 transform, and the round takes the reference metadata; `registration_record["rounds"]`
-keeps the reference label and its SHA-256 ({doc}`coordination`, "Other rounds and
+keeps the reference label and its SHA-256 ([coordination](../../docs/coordination.md), "Other rounds and
 external references"). It writes `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`
 and `images/<round>/<channel name>/{fovID}.tif` (ZYX, or the Z maximum with
 `maximum_projection`, dtype kept). With the MATLAB backend `nuclei_registration.m`
@@ -171,7 +171,7 @@ reference, `images/ref_merged/{fovID}.tif`, is the reference round's channel max
 written by `FOV.save_reference_image` (`fov.py:1534-1580`) or by MATLAB.
 
 Note: the Python rule writes `fovs/{fovID}/nuclei_registration.json` instead of the log and
-the shift table ({doc}`migration`, "Sequencing logs and the morphology record").
+the shift table ([migration](../../docs/migration.md), "Sequencing logs and the morphology record").
 
 % Note (W-563)
 
@@ -186,7 +186,7 @@ Paths are relative to the output directory unless marked INPUT.
 | `create_nuclei_amplicon_overlay` | `images/DAPI/{fovID}.tif`, `images/ref_merged/{fovID}.tif` | `images/overlay/{fovID}.tif` (uint8) |
 | `enhance_dapi_with_flamingo` | `images/flamingo/DAPI/{fovID}.tif`, `images/flamingo/Flamingo/{fovID}.tif` | `images/flamingo/enhanced_DAPI/{fovID}.tif` (uint8) |
 | `stardist_segmentation` | `images/{segmentation_input_folder}/{fovID}.tif` | `images/stardist_segmentation/{fovID}.tif` (uint16, zlib); `log/benchmark/stardist_segmentation/{fovID}.txt` |
-| `reads_assignment` | `images/DAPI/{fovID}.tif`, `images/stardist_segmentation/{fovID}.tif` and the tables listed in {doc}`workflow-downstream` | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv` and diagnostics |
+| `reads_assignment` | `images/DAPI/{fovID}.tif`, `images/stardist_segmentation/{fovID}.tif` and the tables listed in [workflow-downstream](../../docs/workflow-downstream.md) | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv` and diagnostics |
 | `create_segmentation_preview.py` (no rule) | `snakemake.input['overlay_img']`, `snakemake.input['segmentation']` | an RGB TIFF: the overlay in red and the dilated label boundaries in green |
 
 `create_segmentation_preview.py` is not wired into any rule. It cannot run in the locked
@@ -225,24 +225,24 @@ references, not annotations.
 
 | # | Discrepancy | Proposed resolution |
 | --- | --- | --- |
-| 1 | The dimensionality is chosen implicitly from the array rank (`stardist_segmentation.py:24`); a 1×Y×X plane goes to the 3D model and nothing checks the model. | The method input is always ZYXC with Z=1 for a plane. Each model declares its dimensionality (StarDist's `config.json` `n_dim`, Cellpose's mode), and the stage wrapper checks it against the input before the model loads: Z=1 runs 2D models and is rejected by 3D models; Z>1 runs 3D models and is rejected by 2D models unless the method declares a per-plane mode ({doc}`segmentation-contract`, "Method registry"). |
+| 1 | The dimensionality is chosen implicitly from the array rank (`stardist_segmentation.py:24`); a 1×Y×X plane goes to the 3D model and nothing checks the model. | The method input is always ZYXC with Z=1 for a plane. Each model declares its dimensionality (StarDist's `config.json` `n_dim`, Cellpose's mode), and the stage wrapper checks it against the input before the model loads: Z=1 runs 2D models and is rejected by 3D models; Z>1 runs 3D models and is rejected by 2D models unless the method declares a per-plane mode ([segmentation-contract](../specs/segmentation.md), "Method registry"). |
 | 2 | `areas.max()` fails on an image with no foreground (`:23`), and the 100-voxel gate decides whether the model runs at all. | No foreground gate. An image with no foreground gives an all-zero label image with outcome `empty`, which all three libraries already return (the dependency study's notes, section 6). |
-| 3 | Labels are cast to `uint16` (`:63`) and wrap above 65,535. | The label dtype rule of the contract (recommended: `uint32` always), with an explicit, checked conversion of the library's int32, uint16 or uint32 result ({doc}`segmentation-contract`, "Label image"). |
-| 4 | Parameters are read from the Snakemake configuration inside the script, with no types or defaults. | Frozen config dataclasses registered in `SEGMENTATION_METHODS`; the workflow adapter translates the legacy `rules.stardist_segmentation.parameters` keys ({doc}`segmentation-contract`, "Workflow configuration"). |
+| 3 | Labels are cast to `uint16` (`:63`) and wrap above 65,535. | The label dtype rule of the contract (recommended: `uint32` always), with an explicit, checked conversion of the library's int32, uint16 or uint32 result ([segmentation-contract](../specs/segmentation.md), "Label image"). |
+| 4 | Parameters are read from the Snakemake configuration inside the script, with no types or defaults. | Frozen config dataclasses registered in `SEGMENTATION_METHODS`; the workflow adapter translates the legacy `rules.stardist_segmentation.parameters` keys ([segmentation-contract](../specs/segmentation.md), "Workflow configuration"). |
 | 5 | The fixed 0.5 rescale (`:32`, `:52`) computes outlines on the shrunk grid and changes the grid for odd sizes. | An explicit, recorded input scale per model call, applied inside the library (StarDist `scale=`, Cellpose `diameter`), which returns labels on the input grid (the dependency study, section 6); no default is carried between models. The script's round trip is pinned only by the golden test and the dependency study's parity outputs. |
-| 6 | Label expansion is applied per slice (`:40-42`), and again in `reads_assignment.py:55-57` and `:66-67` with its own `dilation_distance`. | One label operation, `expand_labels`, with an explicit mode (`planar`, the legacy per-plane behavior, or `volumetric` in physical units), applied once in the segmentation entry and recorded in the label provenance; the assignment entry reads the record and never expands again ({doc}`assignment-contract`, "Label expansion"). |
-| 7 | The composite assumes 3D inputs (`create_nuclei_amplicon_overlay.py:33`) and checks no grid. | The composite function takes ZYX images (Z=1 for a plane) and requires both on one grid with equal `ImageMetadata` ({doc}`segmentation-contract`, "Input preparation and label functions"). |
+| 6 | Label expansion is applied per slice (`:40-42`), and again in `reads_assignment.py:55-57` and `:66-67` with its own `dilation_distance`. | One label operation, `expand_labels`, with an explicit mode (`planar`, the legacy per-plane behavior, or `volumetric` in physical units), applied once in the segmentation entry and recorded in the label provenance; the assignment entry reads the record and never expands again ([assignment-contract](../../docs/assignment-contract.md), "Label expansion"). |
+| 7 | The composite assumes 3D inputs (`create_nuclei_amplicon_overlay.py:33`) and checks no grid. | The composite function takes ZYX images (Z=1 for a plane) and requires both on one grid with equal `ImageMetadata` ([segmentation-contract](../specs/segmentation.md), "Input preparation and label functions"). |
 | 8 | The DAPI file is found by an unchecked glob (`registration-py.smk:88-90`). | The nuclear stain is a declared channel of a loaded round (`Dataset.channel_labels`); the workflow adapter requires exactly one matching file and raises naming the matches. |
-| 9 | No record of the model's identity. | Pretrained models from a known-models table with file SHA-256 values, user-trained models by explicit path with each file's SHA-256 recorded; both in the provenance entry's `artifacts` ({doc}`segmentation-contract`, "Models"). |
+| 9 | No record of the model's identity. | Pretrained models from a known-models table with file SHA-256 values, user-trained models by explicit path with each file's SHA-256 recorded; both in the provenance entry's `artifacts` ([segmentation-contract](../specs/segmentation.md), "Models"). |
 | 10 | The thresholds come only from YAML; the model's stored `thresholds.json` is ignored. | The stored thresholds are the default; any other value is recorded as an override (the rule set after the survey). |
 | 11 | Normalization (1–99.8 percent over the whole image) and tiling (`n_tiles` 1×4×4 or 2×2) are fixed and not recorded. | Explicit StarDist parameters with these values as defaults, recorded in the provenance entry. |
 | 12 | `rotate_nuclei` reads the raw `dapi_round` image and rotates with `reshape=True` and cubic interpolation, so for angles other than multiples of 90°, and when `dapi_round` is not the reference round, the DAPI image is not on the reference grid. | The nuclear stain comes from the reference round or from a round registered by `FOV.register`, both on the reference grid after `FOV.run`'s rotation. |
-| 13 | The registered morphology images of `nuclei_registration` are not declared rule outputs. | A rule change of the workflow integration ({doc}`segmentation-contract`, "Workflow configuration"). |
+| 13 | The registered morphology images of `nuclei_registration` are not declared rule outputs. | A rule change of the workflow integration ([segmentation-contract](../specs/segmentation.md), "Workflow configuration"). |
 | 14 | The Flamingo enhancement assumes 3D inputs (plane loop) and its inputs are not connected to a producing rule. | The function takes ZYX (Z=1 for a plane); the rule wiring belongs to the workflow integration. |
-| 15 | The culture extension through z exists only as a MATLAB example on the stitched sample, in pixels, and its `Cyto` subtraction operates on label values. | A Python label function `extend_labels_through_z` per FOV with physical parameters and geometry `extended`; compartments belong to assignment ({doc}`assignment-contract`). |
+| 15 | The culture extension through z exists only as a MATLAB example on the stitched sample, in pixels, and its `Cyto` subtraction operates on label values. | A Python label function `extend_labels_through_z` per FOV with physical parameters and geometry `extended`; compartments belong to assignment ([assignment-contract](../../docs/assignment-contract.md)). |
 | 16 | `create_segmentation_preview.py` has no rule and cannot run (`compress=`), and its boundary mode is misspelled. | Replaced by an on-demand label overlay in the segmentation diagnostics; the script's removal belongs to the workflow integration. |
 | 17 | The label TIFF carries no axes, geometry, target or provenance. | The saved format of the contract: ZYX with `ImageMetadata` in the description and a JSON record beside it. |
-| 18 | The rule runs in a separate conda environment that lacks Starfinder. | The project environment with the `stardist` and `cellpose` extras ({doc}`segmentation-contract`, "Device and environments"). |
+| 18 | The rule runs in a separate conda environment that lacks Starfinder. | The project environment with the `stardist` and `cellpose` extras ([segmentation-contract](../specs/segmentation.md), "Device and environments"). |
 | 19 | No Cellpose backend, no seeded watershed and no external-mask import. | Registered `cellpose` and `seeded_watershed` methods and an `import_labels` function. |
 | 20 | The model's `details` (probabilities, polygons) are discarded. | Recorded counts and parameters only; the per-object probabilities are an open choice of the worker notes. |
 
@@ -257,7 +257,7 @@ blobs under 100 voxels), the merged amplicon signal (80 bright voxels, four satu
 and a Flamingo stain (larger ellipsoids around the nuclei), plus a DAPI image holding
 only the small blobs. It pins, with exact SHA-256 digests for the uint8 images and the
 labels, and for the float64 shrunk image of (c) as an explicit expected array within the
-float64 tolerance of [contributing](contributing.md), "Expected values and tolerances"
+float64 tolerance of [contributing](../../docs/contributing.md), "Expected values and tolerances"
 (since 2026-10-25; it replaced that image's digest and reproduces it):
 
 * (a) the composite, run unchanged through a stub `snakemake` object, with and without
@@ -315,7 +315,7 @@ and `expand_labels`, written by the unchanged script in the legacy environment o
 with the SHA-256 of each array in `parity/legacy-runs.json`. A prototype that follows
 the script with the same library calls reproduced all 12 exactly in the spike
 environment (StarDist 0.9.2, TensorFlow 2.20.0) on CPU. The contract names the test
-that keeps this pin once the StarDist method exists ({doc}`segmentation-algorithms`,
+that keeps this pin once the StarDist method exists ([segmentation-algorithms](../specs/segmentation-algorithms.md),
 "Golden and parity tests").
 
 % how W-306 pins it; W-306 pins it instead

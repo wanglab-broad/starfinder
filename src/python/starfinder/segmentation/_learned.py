@@ -2,9 +2,9 @@
 
 Both backends are imported inside the method functions only, after the stage
 wrapper has imported the dependencies (check 5) and resolved and hashed the model
-files (check 6); nothing here downloads. See docs/segmentation-contract.md
+files (check 6); nothing here downloads. See design/specs/segmentation.md
 ("Registered methods", "Block-wise prediction", "Models", "Device and environments")
-and docs/segmentation-algorithms.md ("stardist", "cellpose").
+and design/specs/segmentation-algorithms.md ("stardist", "cellpose").
 """
 from __future__ import annotations
 
@@ -117,7 +117,9 @@ def _scale_zyx(scale) -> tuple[float, float, float]:
 
 @dataclass(frozen=True, kw_only=True)
 class StarDistConfig:
-    """StarDist 2D or 3D on one ``nuclear`` or ``composite`` channel (docs/segmentation-algorithms.md, "stardist").
+    """StarDist 2D or 3D on one ``nuclear`` or ``composite`` channel.
+
+    See design/specs/segmentation-algorithms.md ("stardist").
 
     model names a known pretrained model (``2D_versatile_fluo``) in the weights
     cache, model_path the folder of a user-trained model (``config.json``,
@@ -333,7 +335,9 @@ def _stardist_blocks(config, n_dim, grid, shape):
 
 
 def _stardist(image, config: StarDistConfig, context) -> tuple[np.ndarray, dict[str, Any]]:
-    """Normalize, then ``predict_instances`` or block-wise ``predict_instances_big`` (docs/segmentation-algorithms.md).
+    """Normalize, then ``predict_instances`` or block-wise ``predict_instances_big``.
+
+    See design/specs/segmentation-algorithms.md.
 
     The one channel is normalized by csbdeep's percentiles over the whole image
     (normalize_percentile_unclipped, float32); a Z=1 input to a 2D model is
@@ -394,7 +398,7 @@ def _stardist(image, config: StarDistConfig, context) -> tuple[np.ndarray, dict[
 def _cellpose(image, config: CellposeConfig, context) -> tuple[np.ndarray, dict[str, Any]]:
     """``CellposeModel(pretrained_model=<checked path>).eval`` with the recorded parameters.
 
-    See docs/segmentation-algorithms.md, "cellpose".
+    See design/specs/segmentation-algorithms.md, "cellpose".
 
     The channels are passed in role order, ``cytoplasm`` then ``nuclear``; a
     Z=1 input is passed as one plane (YX, or YXC with ``channel_axis``) and the

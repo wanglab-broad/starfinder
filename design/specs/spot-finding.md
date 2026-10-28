@@ -237,7 +237,7 @@ class SpotFindingPlan:
 takes the same keyword (`device="cpu"`). The setting belongs to execution, not to
 a method; it is recorded in `run.json` with the rest of `ExecutionConfig`.
 Segmentation does not reuse it: the segment entry takes its own `device` keyword
-([segmentation-contract](../../docs/segmentation-contract.md), option V1, approved at the segmentation acceptance review
+([segmentation-contract](segmentation.md), option V1, approved at the segmentation acceptance review
 on 2026-10-05), and
 `ExecutionConfig.device` stays CPU-only.
 

@@ -2,7 +2,7 @@
 
 Default tier: nothing here imports StarDist, TensorFlow, Cellpose or torch, and no model
 file of the weights cache is read. The configs and the block fields follow
-docs/segmentation-contract.md ("Registered methods", "Block-wise prediction"); the table,
+design/specs/segmentation.md ("Registered methods", "Block-wise prediction"); the table,
 resolution and the fetch command follow its "Models" section; the behavior without the
 extras follows checks 5 and "Method registry". Model folders are small files written in
 the test, and the fetch downloads a local zip through a ``file://`` URL, so no network is

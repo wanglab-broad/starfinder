@@ -1,4 +1,4 @@
-"""The per-FOV segmentation plan and its coordination (docs/segmentation-contract.md, "Coordination per FOV").
+"""The per-FOV segmentation plan and its coordination (design/specs/segmentation.md, "Coordination per FOV").
 
 A plan is not a recipe engine: each run names one method or one import, at most one
 input function per channel and an ordered tuple of label functions.

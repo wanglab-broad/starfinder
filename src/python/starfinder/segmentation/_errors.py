@@ -1,4 +1,4 @@
-"""Segmentation errors (docs/segmentation-contract.md, "Names")."""
+"""Segmentation errors (design/specs/segmentation.md, "Names")."""
 
 
 class SegmentationBackendUnavailableError(ImportError):

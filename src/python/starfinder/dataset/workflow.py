@@ -1015,7 +1015,7 @@ def _nuclei_checkpoints(config):
     return _typed(CheckpointConfig, values, 'rules.nuclei_registration.parameters.checkpoints')
 
 
-# --- §2.9 segmentation and assignment (docs/segmentation-contract.md, docs/assignment-contract.md, ---------
+# --- §2.9 segmentation and assignment (design/specs/segmentation.md, docs/assignment-contract.md, ---------
 # --- "Workflow configuration"). The rules of segmentation.smk and reads-assignment.smk run for both backends.
 
 # segmentation_input_folder -> the role of the input file's one channel; any other folder is nuclear.
@@ -1133,7 +1133,7 @@ def _stored_thresholds(folder):
 def _segmentation(config) -> _LegacySegmentation:
     """The stardist_segmentation rule's one segment call, from rules.stardist_segmentation.parameters.
 
-    The translation table of docs/segmentation-contract.md ("Workflow
+    The translation table of design/specs/segmentation.md ("Workflow
     configuration"): model_path = <stardist_base_path>/<stardist_model_name>, or
     the known model of that name when the base path is the weights cache's
     stardist folder; prob_thresh and nms_thresh pass as None (the stored
@@ -1226,7 +1226,7 @@ def _run_method(values, name, method, target, what='segmentation run'):
 
 
 def _segmentation_run(values):
-    """SegmentationRun of one segmentation block run (docs/segmentation-contract.md, "Workflow configuration")."""
+    """SegmentationRun of one segmentation block run (design/specs/segmentation.md, "Workflow configuration")."""
     from starfinder.preprocessing import ProjectionConfig
     from starfinder.segmentation import ExpandLabelsConfig, SegmentationRun, ZExtensionConfig
     if not isinstance(values, dict) or 'method' not in values or 'name' not in values:
@@ -1267,7 +1267,7 @@ def _segmentation_block(config):
     method, a SEGMENTATION_METHODS name whose config fields are the run's other
     keys, or import with the LabelImportConfig fields. device is cpu (default)
     or cuda. The block needs backend: python; a workflow-orchestration rule
-    runs it with FOV.segment (docs/segmentation-contract.md, "Workflow configuration").
+    runs it with FOV.segment (design/specs/segmentation.md, "Workflow configuration").
     """
     # The §2.13 rule
     from starfinder.segmentation import SegmentationPlan

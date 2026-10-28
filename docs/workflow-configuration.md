@@ -544,7 +544,7 @@ backends (`_snakemake.py`), keeping their names, inputs and outputs. The
 environment that runs Snakemake therefore needs the package, with the `stardist` extra
 for `stardist_segmentation` and the `anndata` extra for `reads_assignment`; no rule reads
 `envs_path` any more. The legacy keys are translated as the
-[segmentation contract](segmentation-contract.md#workflow-configuration) and the
+[segmentation reference](segmentation-algorithms.md#legacy-stardist-keys) and the
 [assignment contract](assignment-contract.md#workflow-configuration) state; the
 [downstream parameter blocks](#downstream-parameter-blocks) summarize them.
 

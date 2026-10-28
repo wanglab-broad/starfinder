@@ -1,4 +1,4 @@
-"""The saved format of a segmentation run (docs/segmentation-contract.md, "Saved format", option F1).
+"""The saved format of a segmentation run (design/specs/segmentation.md, "Saved format", option F1).
 
 Each run is a folder ``fovs/<fov_id>/segmentation/<run>/`` (the FOV folder) holding
 ``labels.tif`` (ZYX ``uint32``, zlib, ``ImageMetadata`` in its description),

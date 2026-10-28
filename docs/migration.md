@@ -1213,8 +1213,8 @@ shrunk image back onto the exact input grid. None of these is registered in
 
 ### The segment entry and the seeded watershed
 
-Segmentation is its own entry, separate from `FOV.run` (the settled decision "Separate entries" of
-{doc}`segmentation-contract`): `PipelineConfig` and `ExecutionConfig` gain no field.
+Segmentation is its own entry, separate from `FOV.run` (the settled decision "Separate entries" of the
+[segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#settled-decisions-this-page-follows)): `PipelineConfig` and `ExecutionConfig` gain no field.
 {py:func}`~starfinder.segmentation.segment` runs one method of
 {py:data}`~starfinder.segmentation.SEGMENTATION_METHODS` on a
 {py:class}`~starfinder.segmentation.SegmentationInput` (a ZYXC image on its grid, with one

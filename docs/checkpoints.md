@@ -376,7 +376,7 @@ image" below; written by `FOV.save_reference_image`, not a checkpoint)
 are what a process that only segments reads: `fov.load_reference_image()`, then
 `fov.load_registered_round(name)` for each image its plan names, then
 `fov.segment(plan, checkpoints=…)`, with no sequencing round resident and no partial load
-of `registered` ({doc}`segmentation-contract`, "Coordination per FOV"). `fov.assign_molecules` there
+of `registered` ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#coordination-per-fov), "Coordination per FOV"). `fov.assign_molecules` there
 takes the molecules from the `candidates` and `pre_qc` stages, which restore no image,
 and re-applies the filter with `FOV.run` ("Reload and continue").
 
@@ -401,7 +401,7 @@ the output root, or by its absolute path when it lies outside, with its SHA-256 
 ## Segmentation runs
 
 `fov.segment(plan, checkpoints=CheckpointConfig(…))` writes each run of the plan to
-`segmentation/<run>/` (option F1 of {doc}`segmentation-contract`, "Saved format"). Only
+`segmentation/<run>/` ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#saved-format), "Saved format"). Only
 `directory` and `overwrite` are used. A run folder that already holds these files raises
 `FileExistsError` before any run when `overwrite` is false; with `overwrite=True` the
 run's files are replaced. Other runs and the `FOV.run` files are never touched.
@@ -410,7 +410,7 @@ run's files are replaced. Other runs and the `FOV.run` files are never touched.
 | --- | --- |
 | `labels.tif` | The label image: ZYX `uint32` (a plane is 1×Y×X), zlib, written by `save_volume` with the grid's `ImageMetadata` in its description. |
 | `input.ome.tif` | The segmentation input the labels were computed from: ZYXC OME-TIFF by `save_volume`, with its grid's metadata (the projected grid for a projected run). An imported mask has no segmentation input and no such file. |
-| `segmentation.json` | The run record of {doc}`segmentation-contract` ("Run record"), with `labels.path` and `labels.file_sha256`, and for a computed run `input.path` and `input.file_sha256`. Each `input.channels` entry has the channel's `name` and `wavelength` beside `channel` (since 2026-10-05; additive, so a record without them still loads). `format_version` is 1. |
+| `segmentation.json` | The run record of the [segmentation reference](segmentation-algorithms.md#records), with `labels.path` and `labels.file_sha256`, and for a computed run `input.path` and `input.file_sha256`. Each `input.channels` entry has the channel's `name` and `wavelength` beside `channel` (since 2026-10-05; additive, so a record without them still loads). `format_version` is 1. |
 
 % W-336
 

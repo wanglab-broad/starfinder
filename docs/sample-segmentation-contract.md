@@ -91,7 +91,7 @@ and cite this page.
 It builds on these pages and redefines none of them: {doc}`sample-output-contract` (the
 export entry, `export/<sample>/`, the fused image, the label export, the SpatialData
 export, the read-back checks), {doc}`assembly-contract` (`assemble`, the sample tables,
-`sample.h5ad`, the duplicate rule of 2026-10-09), {doc}`segmentation-contract` (`segment`,
+`sample.h5ad`, the duplicate rule of 2026-10-09), the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md) (`segment`,
 `SegmentationInput`, the method configs), {doc}`assignment-contract` (`assign_molecules`,
 `MoleculeTable`, the grid rule) and {doc}`stitching-contract` (the placement and the
 sample frame). The measurements it uses are those of {doc}`cells-across-fovs-proposal`,
@@ -388,7 +388,7 @@ and `flamingo` are image names of `images` (for example
 FOV is the one `fuse` reads for that name ({doc}`sample-output-contract`, "Fused image
 inputs"). The input of `segment` is the fused projection itself, so the segmentation input
 is a saved artifact with its SHA-256, as a segmentation run's `input.ome.tif` is
-({doc}`segmentation-contract`, "Method input").
+([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#method-input), "Method input").
 
 % W-399; §2.9
 

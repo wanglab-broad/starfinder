@@ -23,7 +23,7 @@ It builds on these pages and redefines none of them:
   the gauge G1) and the index-to-sample rule;
 * [assembly-contract](../../../docs/assembly-contract.md): footprints, ownership, retention, statuses and the count
   identities;
-* [segmentation-contract](../../../docs/segmentation-contract.md) ("External-mask import", "Label image") and
+* [segmentation-contract](../segmentation.md) ("External-mask import", "Label image") and
   [assignment-contract](../../../docs/assignment-contract.md) (`MoleculeTable`, `import_legacy_molecules_csv`, "Coordinate
   sampling").
 
@@ -573,7 +573,7 @@ ordinary seeds otherwise: the same territory rule, molecules and truth.
   relabelling.
 
 The label dtype and geometry follow the label-image contract (uint32, option L1 of
-[segmentation-contract](../../../docs/segmentation-contract.md); `volume` for Z>1, `plane` for Z=1).
+[segmentation-contract](../segmentation.md); `volume` for Z>1, `plane` for Z=1).
 
 ### Stain
 

@@ -1,6 +1,6 @@
 """Segmenting from saved reference-frame images in a separate process (W-338).
 
-docs/segmentation-contract.md ("Coordination per FOV"), docs/assignment-contract.md ("The grid
+design/specs/segmentation.md ("Coordination per FOV"), docs/assignment-contract.md ("The grid
 rule") and docs/checkpoints.md. The dataset is the W-337 dataset of test_morphology_rounds,
 written in session (8×32×32 uint16): the reference round1 (ch00–ch03 and the stain file ch04,
 DAPI), the sequencing round2 and the other round morph (Flamingo, RBD, DAPI), here with a

@@ -4,7 +4,7 @@ Row L7 of the engineering validation design in docs/assignment-algorithms.md: th
 DAPI–amplicon composite and the Flamingo enhancement against W-307's pinned digests
 (``test_segmentation_golden.py``), ``normalize_percentile_unclipped`` against its formula computed
 here, and ``rescale_input``'s shape and metadata; then input preservation (D4), the shape
-rules and records of docs/segmentation-contract.md ("Input preparation and label
+rules and records of design/specs/segmentation.md ("Input preparation and label
 functions"), and the reuse of the §2.6 registration outputs: a morphology round
 registered by ``FOV.register`` and the reference merged image, compared with the
 same arrays read back from the ``registered`` checkpoint and the round's saved form
@@ -274,7 +274,7 @@ def test_a_wrong_config_type_raises(images):
 
 
 def test_no_input_function_is_a_preprocessing_method():
-    """D4: the input functions are not preprocessing steps (docs/segmentation-contract.md)."""
+    """D4: the input functions are not preprocessing steps (design/specs/segmentation.md)."""
     assert not {CompositeConfig, FlamingoEnhancementConfig} & set(PREPROCESSING_METHODS)
     names = {getattr(spec, "name", None) for spec in PREPROCESSING_METHODS.values()}
     assert not names & {"composite_nuclei_amplicon", "enhance_with_flamingo", "normalize_percentile_unclipped",

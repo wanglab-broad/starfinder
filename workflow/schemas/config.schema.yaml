@@ -1832,7 +1832,7 @@ $defs:
     additionalProperties: true
 
   # ==================== Segmentation and assignment blocks (Python only) ====================
-  # docs/segmentation-contract.md and docs/assignment-contract.md, "Workflow configuration".
+  # design/specs/segmentation.md and docs/assignment-contract.md, "Workflow configuration".
   segmentation_block:
     description: >-
       Python only. A segmentation plan of named runs for FOV.segment, run by the §2.13 rule;

@@ -44,7 +44,7 @@ round, a Python process can segment from saved images: `FOV.load_reference_image
 restores the reference image (`fovs/{fovID}/reference.tif` by default) and `FOV.load_registered_round(name)` the
 saved form of each prepared image (the `reference_stain` and the additional rounds),
 and `FOV.segment` then runs with no sequencing round resident
-({doc}`segmentation-contract`, "Coordination per FOV"). For the Python rule to write
+([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#coordination-per-fov), "Coordination per FOV"). For the Python rule to write
 that saved form, set
 `rules.nuclei_registration.parameters.checkpoints` (for example `{}`; `null` or absent
 writes none). The Python-only `segmentation` block is not wired to a rule yet (that is

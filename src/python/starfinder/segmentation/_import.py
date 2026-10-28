@@ -1,4 +1,4 @@
-"""External-mask import into the label contract (docs/segmentation-contract.md)."""
+"""External-mask import into the label contract (design/specs/segmentation.md)."""
 # D3
 from __future__ import annotations
 

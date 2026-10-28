@@ -1,4 +1,4 @@
-"""The segment entry and the checks the stage wrapper applies to every method (docs/segmentation-contract.md)."""
+"""The segment entry and the checks the stage wrapper applies to every method (design/specs/segmentation.md)."""
 from __future__ import annotations
 
 import os

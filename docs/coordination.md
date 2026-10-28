@@ -176,7 +176,7 @@ checking the hashes, the identity and, when the reference round is resident,
 that the metadata equals the reference grid's; see {doc}`checkpoints`
 ("Prepared morphology images"). `FOV.segment` reads `reference_stain` and every
 round with an entry of `registration_record["rounds"]`, prepared in this
-process or reloaded ({doc}`segmentation-contract`, "Coordination per FOV").
+process or reloaded ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#coordination-per-fov), "Coordination per FOV").
 
 ```python
 from starfinder.dataset import CheckpointConfig, MorphologyConfig

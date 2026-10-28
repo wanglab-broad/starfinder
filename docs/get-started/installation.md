@@ -79,7 +79,7 @@ Processing never downloads a model: the weights are fetched explicitly beforehan
 Installing the spot detectors, fetching their pretrained weights and configuring a run
 are in
 {doc}`../learned-detectors`; the segmentation models and their environment are in the
-[segmentation contract](../segmentation-contract.md#models).
+[segmentation guide](../segmentation-contract.md#models).
 
 ## Snakemake
 

@@ -58,7 +58,7 @@ image, one placement record for every backend, a stitching registry on the share
 mechanism of {doc}`method-registry`, the BigStitcher macro and import, the failure
 policy, persistence and the workflow keys. Its registry fields, lookup, dependency and
 provenance rules are those of {doc}`method-registry`, used unchanged. It uses the
-`ReferenceGrid` of {doc}`segmentation-contract` ("Coordination per FOV") and
+`ReferenceGrid` of the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#coordination-per-fov) ("Coordination per FOV") and
 `ImageMetadata` (`src/python/starfinder/image.py`) as they are, and redefines neither.
 It is implemented in `starfinder.stitching`, and nothing is renamed. Sample coordinates of molecules and
 cells, overlap ownership, retained and excluded populations and the sample tables belong

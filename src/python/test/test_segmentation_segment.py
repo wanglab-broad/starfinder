@@ -1,7 +1,7 @@
 """The §2.9 segment entry, the segmentation registry, the seeded watershed and FOV.segment (W-313).
 
 Rows L8 and L9 of the engineering validation design in docs/assignment-algorithms.md, the
-registry list of docs/segmentation-contract.md ("Method registry") and the coordination of
+registry list of design/specs/segmentation.md ("Method registry") and the coordination of
 ``FOV.segment`` ("Coordination per FOV", "Run record", "What the segment entry needs from
 FOV.run and FOV.register"). L8 uses a test-only method registered with monkeypatch on
 the W-307 golden DAPI image; L9 uses the hand-built ``seeded`` fixture

@@ -3,7 +3,7 @@
 % Status: Accepted (W-309, 2026-10-05, at 3550723)
 
 This page is the maintained guide to the assignment stage and its contract. It
-builds on the label contract of {doc}`segmentation-contract` ("Label image", "What assign
+builds on the label contract of the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md) ("Label image", "What assign
 receives from segment") and does not redefine it: the label image, its dtype, grid,
 target, geometry, namespace, record and saved files are as specified there.
 
@@ -57,7 +57,7 @@ fixtures in the default test tier.
 ## Settled decisions this page follows
 
 From the planning comment of 2026-10-03 on segmentation and assignment, quoted in full in
-{doc}`segmentation-contract` ("Settled decisions this page follows"):
+[segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#settled-decisions-this-page-follows) ("Settled decisions this page follows"):
 
 % the W-152 comment "§2.9 planning decisions (2026-10-03)"
 
@@ -70,7 +70,7 @@ From the planning comment of 2026-10-03 on segmentation and assignment, quoted i
   any other `SegmentationResult`.
 * **Reusable functions.** Label expansion is a plain function (`expand_labels`), not
   a method; assign calls it and does not reimplement it.
-* **Two specifications.** Segmentation is specified by {doc}`segmentation-contract` up to
+* **Two specifications.** Segmentation is specified by the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md) up to
   the label contract; this page takes over from there.
 * **The method registry, the conflicting environments and the GPU** concern segmentation
   methods, their environments and the GPU. Assign is not a method and has no registry,
@@ -163,7 +163,7 @@ New names under N1:
 | Result | `AssignmentResult` | frozen dataclass |
 | Molecule input | `MoleculeTable`; `molecule_table(detection, reads, *, genes, population="final")`; `load_molecules(path, *, genes, spot_namespace=None)` (`molecules.csv`); `import_legacy_molecules_csv(path, *, spot_namespace, genes)` (legacy one-based CSV) | frozen dataclass, functions |
 | Config | `AssignmentConfig`, `CorrespondenceConfig` | frozen dataclasses |
-| Expansion | `ExpandLabelsConfig` and `expand_labels` of {doc}`segmentation-contract`, unchanged | reused |
+| Expansion | `ExpandLabelsConfig` and `expand_labels` of the [segmentation reference](segmentation-algorithms.md#input-and-label-functions), unchanged | reused |
 | Statuses | `ASSIGNMENT_STATUSES = ("assigned", "unassigned", "excluded_cell", "outside_grid")`; `CELL_STATUSES = ("kept", "excluded_no_nucleus")`; `CELL_CORRESPONDENCE = ("matched", "ambiguous", "no_nucleus", "unavailable")`; `NUCLEUS_STATUSES = ("matched", "ambiguous", "no_cell")`; `COMPARTMENT_STATES = ("available", "withheld", "no_nucleus", "unavailable")` | tuples |
 | Sampling | `labels_at_positions(labels, positions_zyx, *, geometry)` | function |
 | Correspondence | `match_nuclei(nuclei, cells, *, config)` | function |
@@ -264,7 +264,7 @@ In this order, before any sampling; each uses only the arguments:
    `grid.projected(method=m)`, where `m` is the projection recorded in
    the cell run's record (`input.projection`) or, for an import, declared by it; a `plane`
    label image on a Z=1 grid must equal the grid. Otherwise `IncompatibleGeometryError`
-   naming both shapes and frames. A `declared` grid of an import ({doc}`segmentation-contract`,
+   naming both shapes and frames. A `declared` grid of an import ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md),
    "External-mask import") is checked here against the molecule run, and the record says so.
 5. **Nuclei on the cell grid.** `nuclei.grid` equals `cells.grid` (shape and metadata),
    else `IncompatibleGeometryError`. A plane nucleus image with an `extended` cell image is
@@ -369,7 +369,7 @@ In this illustration the cell run was saved under its run and is linked, while t
 run was not and is written into the assignment folder ("Persistence", "Label images of a
 checkpointed assignment"); `inputs.<run>.record` holds the run's full record, so its
 `label_namespace`, grid, target and operations resolve from `assignment.json` alone.
-`inputs.<run>.labels_sha256` is the label array's hash of {doc}`segmentation-contract`
+`inputs.<run>.labels_sha256` is the label array's hash of the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md)
 ("Run record"). `inputs.<run>.record_sha256` is the SHA-256 of the run's record
 (`inputs.<run>.record`) as JSON text encoded as UTF-8: keys sorted, the default separators
 `, ` and `: `, characters outside ASCII escaped as `\uXXXX`, NaN and infinity written as
@@ -391,7 +391,7 @@ made (an `import_labels` result, for example). It takes the molecules from
 `FOV.filtering_result` (or the `candidates` and `pre_qc` checkpoints with the filter
 re-applied) through `molecule_table`, the genes from the loaded codebook, and the grid
 from `FOV.reference_grid()`: the reference round's, or, in a process that segmented from
-the saved images ({doc}`segmentation-contract`, "Coordination per FOV"), the grid of the
+the saved images ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#coordination-per-fov), "Coordination per FOV"), the grid of the
 saved reference image, one grid by "The grid rule". A saved reference image that is a Z
 projection is not the molecules' grid, so `FOV.assign_molecules` refuses its grid without the
 reference round (`ValueError`); call `assign_molecules` with the molecule run's grid
@@ -519,7 +519,7 @@ The cell key is `(cell_namespace, cell_id)`; `cell_namespace` is the cell run's
 ## Label expansion
 
 The expansion is optional and is applied once, by assign only
-(`AssignmentConfig.expansion`), through `expand_labels` of {doc}`segmentation-contract`
+(`AssignmentConfig.expansion`), through `expand_labels` of the [segmentation reference](segmentation-algorithms.md#input-and-label-functions)
 with an `ExpandLabelsConfig` (`distance`, `unit` `pixel` or `um`, `mode` `planar` or
 `volumetric`; no default distance). Assign is the place where the original label image is
 always at hand: it is the cell run's `labels`. So both masks exist in every case this
@@ -996,7 +996,7 @@ name, inputs and outputs.
 
 | Legacy input or key | Translation |
 | --- | --- |
-| `images/stardist_segmentation/{fovID}.tif` | `import_labels` with the target the segmentation adapter infers ({doc}`segmentation-contract`: `cell` for the `overlay` input, else `nucleus`); its grid is declared from the file's shape and the configured `voxel_size_z`, `voxel_size_xy`, recorded as declared. When `rules.stardist_segmentation.parameters.expand_labels` is true, the file was expanded in segmentation and no original mask exists: the adapter raises `ValueError` naming that key and the replacement (set it to false and give the distance as `reads_assignment.parameters.dilation_distance` with `expand_labels: true`, so assign expands once and keeps both masks). |
+| `images/stardist_segmentation/{fovID}.tif` | `import_labels` with the target the segmentation adapter infers ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#workflow-configuration): `cell` for the `overlay` input, else `nucleus`); its grid is declared from the file's shape and the configured `voxel_size_z`, `voxel_size_xy`, recorded as declared. When `rules.stardist_segmentation.parameters.expand_labels` is true, the file was expanded in segmentation and no original mask exists: the adapter raises `ValueError` naming that key and the replacement (set it to false and give the distance as `reads_assignment.parameters.dilation_distance` with `expand_labels: true`, so assign expands once and keeps both masks). |
 | The FOV's molecule table ({doc}`workflows`, "Molecule tables") | `fovs/{fovID}/molecules.csv` of the Python `rsf_single_fov`: `load_molecules` with the FOV's `spot_namespace` and the codebook's genes, the identities kept (since 2026-10-23). The legacy route's `signal/{fovID}_goodSpots.csv` (MATLAB's `rsf_single_fov`, `stitch_subtile`): `import_legacy_molecules_csv` with the same arguments; integer and float coordinates are both accepted. |
 | The codebook (the rule's codebook input: `INPUT/genes.csv`, or the file `codebook` or `direct_panel` names) | Loaded as the sequencing rules load it; its genes in its order (`Codebook.genes`, or `DirectPanel.genes` with `readout_mode: direct`) are the gene universe of the molecule reader and the matrix columns (since 2026-10-24; before, a second gene list in OUTPUT's `documents` folder gave the order, {doc}`migration`). |
 | `parameters.expand_labels: false` | `expansion: null`; `dilation_distance` is ignored and recorded. |
@@ -1034,7 +1034,7 @@ and the two figures only with `assembly.previews: true`, in `fovs/{fovID}/previe
 
 ## Exclusions
 
-No segmentation and no change to the label contract ({doc}`segmentation-contract`); no
+No segmentation and no change to the label contract ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md)); no
 stitching, global coordinates, overlap ownership or cross-FOV matching (stitching and
 assembly); no probabilistic or transcript-based assignment; no size or count filter; no
 automatic compartment repair; no new exporter (the existing exporters are reused); no real

@@ -16,7 +16,7 @@ the stage's other pages. The stages are listed in processing order.
 | [Registration](../registration-contract.md) | Aligning each round with the reference round | [reference](../registration-algorithms.md) | | |
 | [Spot finding](../spot-finding-contract.md) | Detection and stable spot identities | [reference](../spot-finding-algorithms.md) | | |
 | [Readout](../readout-contract.md) | Extraction, decoding and read QC | [reference](../readout-algorithms.md) | | |
-| [Segmentation](../segmentation-contract.md) | Label images, methods and imported masks | [algorithms](../segmentation-algorithms.md) | | [baseline](../segmentation-baseline.md) |
+| [Segmentation](../segmentation-contract.md) | Label images, methods and imported masks | [reference](../segmentation-algorithms.md) | | |
 | [Assignment](../assignment-contract.md) | Molecules to cells, compartments and counts | [algorithms](../assignment-algorithms.md) | in algorithms | [baseline](../assignment-baseline.md) |
 
 :::

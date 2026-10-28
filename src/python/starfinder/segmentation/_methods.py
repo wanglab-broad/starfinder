@@ -1,7 +1,7 @@
 """The segmentation method registry: exact config type -> SegmentationSpec, and the private method functions.
 
 Each config's method discriminator equals its SEGMENTATION_METHODS spec name
-(docs/segmentation-contract.md, "Method registry"; docs/method-registry.md).
+(design/specs/segmentation.md, "Method registry"; docs/method-registry.md).
 """
 from __future__ import annotations
 
@@ -100,7 +100,9 @@ def _positive(value, name):
 
 @dataclass(frozen=True)
 class SeededWatershedConfig:
-    """The nucleus-seeded, stain-guided watershed (docs/segmentation-algorithms.md, "seeded_watershed").
+    """A watershed that grows one cell from each nucleus seed over a smoothed stain.
+
+    See design/specs/segmentation-algorithms.md ("seeded_watershed").
 
     sigma_um is the standard deviation of the Gaussian smoothing of the stain
     in µm, converted per axis with the input's spacing (an axis of length 1 is
@@ -170,7 +172,7 @@ def _seeded_watershed(image, config: SeededWatershedConfig,
     return cells, details
 
 
-#: The segmentation registry (docs/segmentation-contract.md, "Registered methods"). The backends of
+#: The segmentation registry (design/specs/segmentation.md, "Registered methods"). The backends of
 #: stardist and cellpose are imported by segment (check 5) and inside the method functions only.
 SEGMENTATION_METHODS: dict[type, SegmentationSpec] = {
     StarDistConfig: SegmentationSpec(

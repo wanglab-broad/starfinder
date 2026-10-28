@@ -1,6 +1,6 @@
 """The §2.9 segmentation workflow key: the legacy stardist_segmentation translation, the Python-only
 segmentation block, the static schema, the adapter run and the shared rules under both backends
-(W-317; docs/segmentation-contract.md, "Workflow configuration")."""
+(W-317; design/specs/segmentation.md, "Workflow configuration")."""
 import copy
 import glob
 import json

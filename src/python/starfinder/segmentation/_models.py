@@ -4,7 +4,7 @@ Models live in the shared weights cache (``STARFINDER_WEIGHTS_DIR``, default
 ``~/.cache/starfinder/weights``) as ``<root>/<method>/<model>/``; a user-trained
 model is given by path. Resolution never uses the network and never calls a
 library: it checks that the files exist and recomputes their SHA-256
-(docs/segmentation-contract.md, "Models"). Only :func:`_fetch_model`, which the
+(design/specs/segmentation.md, "Models"). Only :func:`_fetch_model`, which the
 ``starfinder weights fetch`` command calls and no segmentation entry imports,
 downloads.
 """
@@ -39,7 +39,7 @@ class ModelFile:
 
 @dataclass(frozen=True)
 class KnownModel:
-    """One row of the known-models table (docs/segmentation-contract.md, "Known-models table").
+    """One row of the known-models table (design/specs/segmentation.md, "Known-models table").
 
     url is the file ``starfinder weights fetch`` downloads, with its SHA-256 and
     size (None when not recorded); archive is True when the download is a zip

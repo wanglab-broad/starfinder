@@ -11,7 +11,7 @@ one rule as the docs state it:
 * ``record_sha256``: the ``record_sha256`` of a record given in memory (docs/assignment-contract.md, "Run record");
 * ``placement_table_csv`` and ``placement_table_sha256``: a placement table's CSV bytes and their SHA-256
   (docs/stitching-contract.md, "Persistence");
-* ``array_sha256``: the hash of a label or input array (docs/segmentation-contract.md, "Run record");
+* ``array_sha256``: the hash of a label or input array (design/specs/segmentation.md, "Run record");
 * ``bank_digest``: an appearance bank's digest (docs/synthetic-real-appearance.md, "The appearance bank");
 * ``read_table``: a CSV or Parquet table read back with its recorded dtypes (docs/checkpoints.md, "Table formats").
 

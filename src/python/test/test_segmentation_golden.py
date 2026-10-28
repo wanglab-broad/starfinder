@@ -21,17 +21,17 @@ scripts became adapter calls (W-317) it is the frozen legacy reference, as
 ``legacy_overlay_combination`` is for the composite's 3D-only combination. The model call
 is replaced by a stand-in (``stand_in_model``: Otsu threshold and connected components),
 so nothing here pins model inference; the W-306 parity outputs pin it
-(docs/segmentation-baseline.md). The tests that ran only the frozen reference are gone
+(design/baselines/segmentation.md). The tests that ran only the frozen reference are gone
 (W-535); the frozen reference and its pins stay, and ``test_expand_labels_function`` and
 the tests that import them check the package against the pins. One test documents legacy
 behavior that §2.9 changes: the composite needs 3D inputs.
 
 The digests were produced with the locked project environment (NumPy 2.2.6,
 scikit-image 0.26.0, SciPy 1.17.0, tifffile 2026.1.28) and are bit-identical over
-repeated single-thread runs; see docs/segmentation-baseline.md. The §2.9 work may
+repeated single-thread runs; see design/baselines/segmentation.md. The §2.9 work may
 replace the body of ``legacy_stardist_steps``, ``composite`` and
 ``flamingo_enhancement`` with calls to the package functions; every pinned digest
-stays, except where docs/segmentation-algorithms.md ("Golden and parity tests") names an
+stays, except where design/specs/segmentation-algorithms.md ("Golden and parity tests") names an
 edit. The one float64
 pin, the shrunk DAPI image, is an explicit expected array since W-574
 (``expected_shrunk_image``, ``data/expected/test_segmentation_golden/``), compared
