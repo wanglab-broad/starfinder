@@ -63,14 +63,13 @@ print(result.spots[["spot_id", "z", "y", "x", "channel"]])
 
 ## What it does
 
-1. **Channels.** A pipeline method detects each channel on its own. A channel whose
-   voxels all have one value gives no candidates, and the method does not run on it.
+1. **Channels.** A pipeline method detects each channel on its own.
 2. **Threshold.** Local maxima computes each channel's threshold in the mode that
-   `threshold_mode` names (below); the other pipeline methods apply the threshold their
-   config gives.
-3. **Candidates.** The candidates of all channels form one table, ordered by channel.
-   `spot_id` numbers its rows `"0"`, `"1"`, … within the result's namespace. In a
-   FOV, the namespace names the dataset, sample, FOV and subtile.
+   `threshold_mode` names (below); the other pipeline methods apply their threshold
+   option.
+3. **Candidates.** The candidates of all channels form one table. `spot_id` numbers
+   its rows `"0"`, `"1"`, … within the result's namespace. In a FOV, the namespace
+   names the dataset, sample, FOV and subtile.
 4. **Records.** The diagnostics record each channel's threshold, count and effective
    settings, and the software and execution in effect.
 
@@ -128,13 +127,11 @@ threshold:
 * `adaptive`: `threshold_value` times the channel's maximum;
 * `adaptive_round`: `threshold_value` times the maximum of the whole image, all
   channels together;
-* `global`: `threshold_value` times the maximum of the image's integer dtype (uint8
-  or uint16 images only).
+* `global`: `threshold_value` times the maximum of the image's integer dtype.
 
 Local maxima records each channel's median, MAD and zero fraction in
-`diagnostics["noise"]`, in every mode. When a channel's MAD is 0 or more than half of
-its voxels are zero, the median and MAD do not measure its noise: a
-`SpotFindingWarning` names the channel, and the threshold is unchanged. The other
+`diagnostics["noise"]`, in every mode, and a `SpotFindingWarning` names a channel
+whose median and MAD do not measure its noise; its threshold is unchanged. The other
 pipeline methods have their own thresholds: `threshold` for `starfish_log` and `piscis`,
 `prob_thresh` for `spotiflow`.
 
@@ -152,34 +149,32 @@ plan = SpotFindingPlan(
 )
 ```
 
-An override has the plan config's type. `FOV.find_spots` and `FOV.run` fill the
-channel labels from `Dataset.channel_order`; direct `find_spots` with overrides needs
+An override names its channel by label: `FOV.find_spots` and `FOV.run` take the
+labels from `Dataset.channel_order`, and direct `find_spots` from
 `config.channel_labels`. {py:class}`~starfinder.spot_finding.ChannelOverride` says
-which settings an override may change.
+which configs and settings an override takes.
 
 ## Detection in several rounds
 
 By default, detection runs in the reference round only. `SpotFindingPlan.rounds`
 names the rounds to detect in, for example
 `SpotFindingPlan(LocalMaximaConfig(), rounds=("round1", "round2"))`. `FOV.run` detects
-each listed round after its preprocessing and registration, so all coordinates are
-on the reference round's grid. The result is one table with a `round` column, the
-rounds in the order `FOV.run` processes them (the reference round first when it is
-listed), and `spot_id` runs over the whole table. Candidates of different rounds are
-never merged. Per-round diagnostics are under `diagnostics["rounds"]`.
+each listed round on its registered image, so all coordinates are on the reference
+round's grid. The result is one table with a `round` column, and `spot_id` runs over
+the whole table. Candidates of different rounds stay separate rows. Per-round
+diagnostics are under `diagnostics["rounds"]`.
 
-Direct readout reads each candidate in its own round and needs such a table; decoding
-it needs `Dataset.readout_mode="direct"` ({doc}`readout-contract`). `find_spots`
-detects one image, so its plan takes no rounds.
+`FOV.find_spots` and `FOV.run` detect the rounds of a plan; `find_spots` detects one
+image. {doc}`readout-contract` describes how direct readout uses such a table.
 
 ## Z=1
 
-An image with one Z plane is detected as a YX plane, and its candidates have `z=0`.
-A Starfish LoG config with per-axis sigmas raises an error on such an image.
-Spotiflow needs a 2D model (`general` or `hybiss`) for such an image and a 3D model
-for a volume; {doc}`learned-detectors` gives the dimensionality of each model. Piscis
-detects a single plane in its plane mode and a volume in its stack mode, with the
-same weights.
+The methods detect an image with one Z plane as a YX plane, and its candidates have
+`z=0`; the
+[specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#z1-dimensionality-scale-and-tiling)
+gives each method's rules for such images. For Spotiflow, choose a model of the
+image's dimensionality ({doc}`learned-detectors` gives each model's). Piscis detects
+single planes and volumes with the same weights.
 
 ## Execution device
 
@@ -212,18 +207,17 @@ rules:
           ch01: {threshold_value: 8.0}
 ```
 
-The MATLAB keys `intensity_estimation`, `intensity_threshold` and `min_distance` of
-local maxima raise an error under `backend: python`; the error names the field that
-replaces each. "Spot-finding method key" in {doc}`workflow-configuration` describes
-the block.
+Under `backend: python`, local maxima takes the field names `threshold_mode`,
+`threshold_value` and `min_distance_voxels`, in place of the MATLAB keys
+`intensity_estimation`, `intensity_threshold` and `min_distance`. "Spot-finding
+method key" in {doc}`workflow-configuration` describes the block.
 
 ## Limits
 
 * One method per run. Overrides change settings, not the method.
 * No deduplication across channels: a crosstalk copy of a spot in the next channel is
   a separate candidate.
-* No training or fine-tuning of the learned detectors, and no automatic resampling:
-  their `scale` must be 1.
+* No training or fine-tuning of the learned detectors, and no automatic resampling.
 * No GPU.
 * Coordinates are voxel indices, not physical units.
 

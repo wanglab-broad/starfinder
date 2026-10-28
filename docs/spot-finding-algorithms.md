@@ -12,8 +12,8 @@ option tables are read from the code when the site is built. The
 
 Each method's name is its `method` value, used by the workflow key. `FOV.find_spots`,
 `FOV.run` and the workflow accept `local_maxima`, `starfish_log`, `spotiflow` and
-`piscis`; `noise_landmark` and `percentile_centroid` are called through `find_spots`
-only.
+`piscis`; registration and the benchmarks call `noise_landmark` and
+`percentile_centroid` through `find_spots`.
 
 ## Method options
 
@@ -38,9 +38,9 @@ See {py:class}`~starfinder.spot_finding.StarfishLogConfig`.
 
 ### Spotiflow
 
-A learned detector that predicts a probability heatmap and refines each peak to
-sub-voxel coordinates. It needs the `spotiflow` extra and the pretrained weights that
-`model` names ({doc}`learned-detectors`). See
+A learned detector that predicts a probability heatmap and finds spots at its peaks,
+optionally refined to sub-voxel positions. It needs the `spotiflow` extra and the
+pretrained weights that `model` names ({doc}`learned-detectors`). See
 {py:class}`~starfinder.spot_finding.SpotiflowConfig`.
 
 ```{config-options} starfinder.spot_finding.SpotiflowConfig
@@ -87,7 +87,7 @@ See {py:class}`~starfinder.spot_finding.SpotFindingPlan` and
 | Column | Type | Methods | Contents |
 | --- | --- | --- | --- |
 | `spot_id` | string | all | The identity, unique within the result's namespace |
-| `z`, `y`, `x` | float64 | all | Zero-based voxel coordinates; `spotiflow`, `piscis` and `percentile_centroid` may give fractional values |
+| `z`, `y`, `x` | float64 | all | Zero-based voxel coordinates, which may be fractional |
 | `channel` | int64 | the four pipeline methods | The index of the candidate's channel on the image's channel axis |
 | `peak_intensity` | float64 | the four pipeline methods (`local_maxima` with `measure_peak_intensity`) | The original pixel value at the candidate's voxel |
 | `radius` | float64 | `starfish_log` | The blob radius in voxels |
@@ -96,7 +96,7 @@ See {py:class}`~starfinder.spot_finding.SpotFindingPlan` and
 
 ## Diagnostics
 
-`SpotFindingResult.diagnostics` holds:
+`SpotFindingResult.diagnostics` can hold these keys:
 
 | Key | Contents |
 | --- | --- |
@@ -104,11 +104,11 @@ See {py:class}`~starfinder.spot_finding.SpotFindingPlan` and
 | `thresholds` | The threshold of each channel, in the method's units (one value for `percentile_centroid`, which sums the channels) |
 | `counts` | Pipeline methods: the candidates per channel |
 | `outcomes` | Pipeline methods: per channel, `ok`, `empty` (the method ran and found nothing) or `constant` (a constant channel) |
-| `effective_settings` | Per channel, the effective config, with the native defaults that `None` resolved |
+| `effective_settings` | Per channel, the channel's config |
 | `noise` | `local_maxima`: per channel, `zero_fraction`, `median`, `mad` and `threshold` |
 | `merged` | `local_maxima` with `merge_radius_zyx`: the maxima removed per channel |
 | `warnings` | The messages of the `SpotFindingWarning`s emitted |
-| `native` | `starfish_log` and `spotiflow`: per channel, the minimum, median and maximum of `radius` or `probability` |
+| `native` | `starfish_log` and `spotiflow`: per channel, the minimum, median and maximum of `radius` or `probability`, or `None` without candidates |
 | `geometry` | `starfish_log`: the scale-space memory estimate; `spotiflow`: the tiling; `piscis`: the mode, tile size, overlap and tile boundaries |
 | `model` | `spotiflow` and `piscis`: the model, the loaded files with their SHA-256, and the training pixel size |
 | `software` | The versions of starfinder, NumPy, SciPy, scikit-image and the method's libraries |
@@ -140,9 +140,9 @@ With `backend: python`, the `spot_finding` block of a Python processing rule hol
 | Key, under `rules.<rule>.parameters.spot_finding` | Meaning |
 | --- | --- |
 | `run` | Whether the rule detects spots |
-| `ref_round` | The reference round; it must equal the dataset's |
+| `ref_round` | The dataset's reference round |
 | `method` | A pipeline method of the table above; default `local_maxima` |
-| The config's fields | Any field of that method's config, such as `threshold_mode` or `model`; the fields without a default must be given |
+| The config's fields | Fields of that method's config, such as `threshold_mode` or `model`; the option tables above mark the required ones |
 | `channel_overrides` | A mapping from channel label to the fields that change for that channel |
 | `rounds` | A list of the round labels to detect in |
 
