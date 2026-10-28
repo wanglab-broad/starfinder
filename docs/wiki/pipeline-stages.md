@@ -15,7 +15,7 @@ the stage's other pages. The stages are listed in processing order.
 | [Preprocessing](../preprocessing-contract.md) | The ordered recipe of preprocessing steps | [reference](../preprocessing-algorithms.md) | | |
 | [Registration](../registration-contract.md) | Aligning each round with the reference round | [reference](../registration-algorithms.md) | | |
 | [Spot finding](../spot-finding-contract.md) | Detection and stable spot identities | [reference](../spot-finding-algorithms.md) | | |
-| [Readout](../readout-contract.md) | Extraction, decoding and read QC | [algorithms](../readout-algorithms.md) | in algorithms | [baseline](../readout-baseline.md) |
+| [Readout](../readout-contract.md) | Extraction, decoding and read QC | [reference](../readout-algorithms.md) | | |
 | [Segmentation](../segmentation-contract.md) | Label images, methods and imported masks | [algorithms](../segmentation-algorithms.md) | | [baseline](../segmentation-baseline.md) |
 | [Assignment](../assignment-contract.md) | Molecules to cells, compartments and counts | [algorithms](../assignment-algorithms.md) | in algorithms | [baseline](../assignment-baseline.md) |
 
@@ -37,10 +37,10 @@ the stage's other pages. The stages are listed in processing order.
 
 ## The pages beneath a guide
 
-* **Algorithms:** the specification of each method. For readout, assignment and the
-  processing report, the validation design is part of this page.
-  Preprocessing, registration and spot finding have a reference instead: their methods,
-  options and records, with the specification in `design/`.
+* **Algorithms:** the specification of each method. For assignment and the processing
+  report, the validation design is part of this page. Preprocessing, registration, spot
+  finding and readout have a reference instead: their methods, options and records,
+  with the specification in `design/`.
 * **Validation:** a separate validation design, where the stage has one. The design that
   checks placement, assembly and the sample outputs sits under the sample-output guide,
   the last stage it checks.

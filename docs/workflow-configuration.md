@@ -359,7 +359,7 @@ reads_filtration: {run: true, n_barcode_segments: 2, split_index: [5], end_base:
 ## Codebook encoding table
 
 The Python-only `load_codebook.encoding.pair_to_color` sets the `two_base` table of
-`EncodingConfig.pair_to_color` ({doc}`readout-contract`, "Encoding registry"): the
+`EncodingConfig.pair_to_color` ({doc}`readout-algorithms`, "Encodings"): the
 16 ordered base pairs, in read orientation, each mapped to a color 1–4 (integers
 or strings), where the four pairs that start with one base have four different
 colors. The adapter gives the same codebook as the Python call and raises the same

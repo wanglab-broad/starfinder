@@ -176,7 +176,7 @@ class _RunRecord:
             "output_root": os.path.abspath(dataset.output_root),
             "status": "running", "started_at": _now(), "ended_at": None, "error": None,
             **software(),
-            # The dataset's readout mode (docs/readout-contract.md) is recorded with the configs.
+            # The dataset's readout mode (design/specs/readout.md) is recorded with the configs.
             "config": {"pipeline": config, "execution": execution, CHECKPOINTS: stored,
                        "readout_mode": dataset.readout_mode, "encoding": encoding},
             # The workflow configuration file of a workflow rule (null outside the workflow).
@@ -263,7 +263,7 @@ class _RunRecord:
             # accepted and endpoint_valid over all reads, null when there are none.
             counts["filtering"]["fractions"] = dict(fov.filtering_result.fractions)
         if fov.decoding_result is not None:
-            # The §2.8 population summary (docs/readout-contract.md, "Diagnostics") of the latest reads,
+            # The §2.8 population summary (design/specs/readout.md, "Diagnostics") of the latest reads,
             # with or without scoring and deduplication.
             from starfinder.readout import summarize_reads
             counts["summary"] = summarize_reads(fov.results)

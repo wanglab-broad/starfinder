@@ -1,7 +1,7 @@
 """§2.8 optional deduplication and the extended read filter (W-295; checks R13 to R15, R17, R18).
 
-docs/readout-contract.md, "Optional deduplication", "Runtime order and defaults" and
-"Checkpoints and reruns"; docs/readout-algorithms.md, "Deduplication" and "Engineering
+design/specs/readout.md, "Optional deduplication", "Runtime order and defaults" and
+"Checkpoints and reruns"; design/specs/readout-algorithms.md, "Deduplication" and "Engineering
 validation design". R13 checks the known answers on the crosstalk fixture (seeds 100 to
 102). R14 (extended tier) checks the false merges on the W-278 held-out scenes (cal and
 dense, seeds 103 to 105) against W-278 duplicates.csv (heldout, all_calibrated,

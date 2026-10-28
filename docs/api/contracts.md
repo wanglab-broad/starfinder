@@ -301,7 +301,7 @@ per voxel: median and 1.4826 × MAD of the ring between the outer box `(1,6,6)` 
 the inner box `(1,3,3)`, clipped to the image; NaN below `min_voxels` ring voxels),
 `background_voxels` (`(N,R)`) and the image `image_background` and `image_noise`
 (`(C,R)`). These measurements never change `values` or `valid`
-({doc}`../readout-contract`, "Extraction").
+(the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#extraction), "Extraction").
 
 `load_codebook` returns `readout.Codebook`; explicit `round_labels` and
 `channel_labels` are required. Its ordered table has one row per entry:
@@ -336,7 +336,7 @@ Direct readout (`Dataset.readout_mode="direct"`) is
 round (`extract_intensities(..., readout_mode="direct")` leaves the other rounds
 at 0.0 with `valid=False`) and assigned the `DirectPanel` gene of its own
 (round, channel), with no competition, rescue or reassignment
-({doc}`../readout-contract`, "Direct readout").
+(the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#direct-readout), "Direct readout").
 Every input identity retains one row with `assigned`, `unmatched`, `ambiguous`
 or `no_signal` status, reason, observed/decoded sequence and nullable gene and
 entry IDs; competition and rescue are between entries.
@@ -369,7 +369,7 @@ as more reliable), over every round (`multiplexed`) or the own round (`direct`).
 ranks calls and never changes an identity; reads without an assignment, or with a
 round without background, are NaN with `no_assignment` or `background_unavailable`,
 and intensities without background raise `ValueError` naming extraction
-({doc}`../readout-contract`, "Shared read-QC score").
+(the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#shared-read-qc-score), "Shared read-QC score").
 
 `deduplicate_reads(decoded, spots, extracted, config=DeduplicationConfig())`
 returns a `ReadDeduplicationResult` whose table is the read table with
@@ -384,7 +384,7 @@ different `entry_id` keeps every member (`conflicting_calls`); otherwise one
 original candidate represents it, the assigned member (any member when none is
 assigned) with the largest sum in its own detection channel in the detection round,
 ties to the earliest row, and the others are its duplicates. No read is removed,
-averaged or changed ({doc}`../readout-contract`, "Optional deduplication").
+averaged or changed (the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#optional-deduplication), "Optional deduplication").
 
 `filter_reads(decoded, config=ReadFilterConfig(...))` can rerun without image
 access or decoding; `decoded` may also be a `ReadScoringResult` or a
@@ -401,7 +401,7 @@ default) rejects deduplicated reads that are not representatives with reason
 segment. Empty counts are zero and undefined fractions
 are `None` with a reason. IDs and typed columns survive all-rejected results.
 
-Three diagnostics read retained results only ({doc}`../readout-contract`,
+Three diagnostics read retained results only ({doc}`../readout-algorithms`,
 "Diagnostics"). `inspect_read(extracted, reads, spot_id, reference=...)` returns one
 row per round and channel of a read: the sum, background × `box_voxels`, the
 background-subtracted sum, the channel probability on the sums and on the

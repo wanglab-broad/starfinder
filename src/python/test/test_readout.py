@@ -76,7 +76,7 @@ def test_invalid_csv_has_row_context(tmp_path, rows):
 
 
 def test_two_barcodes_of_one_gene_load_as_two_entries(tmp_path):
-    # D5 (docs/readout-contract.md): a codebook entry is not a gene.
+    # D5 (design/specs/readout.md): a codebook entry is not a gene.
     path = tmp_path / "entries.csv"
     path.write_text("gene,barcode\nA,CACGC\nA,CATGC\n")
     cb = load_codebook(path, round_labels=ROUNDS, channel_labels=CHANNELS)

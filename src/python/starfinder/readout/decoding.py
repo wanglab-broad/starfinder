@@ -34,7 +34,10 @@ def _policy(config):
 
 @dataclass(frozen=True)
 class WtaDecoderConfig:
-    """Exact WTA calls; score is summed -log(max/(L2+epsilon)) across rounds.
+    """Winner-take-all: each round's brightest channel gives its color, and the color
+    sequence is looked up in the codebook.
+
+    Exact WTA calls; score is summed -log(max/(L2+epsilon)) across rounds.
 
     Normalization is max / (sqrt(sum(squares)) + 1e-6), matching legacy scores.
     Exact maximum ties are ambiguous. A zero-total round yields no_signal.
@@ -50,7 +53,10 @@ class WtaDecoderConfig:
 
 @dataclass(frozen=True)
 class CodebookAwareDecoderConfig:
-    """Probability-score decoder with exact calls and conservative rescue gates.
+    """Probability-scored decoding: exact calls and an optional, gated rescue of reads
+    close to a codebook entry.
+
+    Probability-score decoder with exact calls and conservative rescue gates.
 
     Probabilities use additive 1e-6, candidate scores sum -log(p) with 1e-12
     floor. max_corrected_round_margin is an UPPER bound. Exact calls bypass
@@ -272,7 +278,7 @@ class DecodingSpec:
             raise TypeError(f"decoding method {self.name!r} requires must be a tuple of Dependency")
 
 
-#: Readout modes (docs/readout-contract.md, "Readout modes"); the first is the default.
+#: Readout modes (design/specs/readout.md, "Readout modes"); the first is the default.
 READOUT_MODES = ("multiplexed", "direct")
 
 
@@ -281,7 +287,7 @@ def _mode_mismatch(mode, spec):
             f"{' and '.join(sorted(spec.modes))}")
 
 
-#: Decoders by exact config type (docs/readout-contract.md, "What a decoder declares").
+#: Decoders by exact config type (design/specs/readout.md, "What a decoder declares").
 DECODING_METHODS: dict[type, DecodingSpec] = {
     WtaDecoderConfig: DecodingSpec(
         "wta", _run_wta, modes=frozenset({"multiplexed"}), encodings=frozenset({"color"}),

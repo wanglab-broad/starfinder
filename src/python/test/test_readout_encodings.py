@@ -1,6 +1,6 @@
-"""The §2.8 encoding and decoding registries (W-292, docs/readout-contract.md, "Encoding registry").
+"""The §2.8 encoding and decoding registries (W-292, design/specs/readout.md, "Encoding registry").
 
-Check R1 of docs/readout-algorithms.md: round trips of both encodings on random barcodes,
+Check R1 of design/specs/readout-algorithms.md: round trips of both encodings on random barcodes,
 the two_base pair table against src/matlab/EncodeBases.m, and a non-bijective one_base
 mapping. The registry tests check the shared fields, the exact-type lookup and the
 decoder's declared encoding kinds.

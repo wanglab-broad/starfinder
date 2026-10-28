@@ -1,4 +1,4 @@
-"""Checks of the worked examples in docs/readout-algorithms.md ("Worked examples", W-279).
+"""Checks of the worked examples in design/specs/readout-algorithms.md ("Worked examples", W-279).
 
 Each test follows one example of the page, step by step. The ``two_base`` examples run
 against the current code. The ``one_base`` and direct-readout examples describe behavior
@@ -94,7 +94,7 @@ def test_two_base_two_segments(tmp_path):
 
 def layout_encode(bases, lengths, order, reverse_bases):
     """Expected segment-layout encoding: each segment encoded on its own bases, then the
-    segments' colors joined in acquisition order (docs/readout-contract.md)."""
+    segments' colors joined in acquisition order (design/specs/readout.md)."""
     starts = np.cumsum((0,) + tuple(lengths))
     segments = [bases[a:b] for a, b in zip(starts[:-1], starts[1:])]
     colors = [bases_to_colors(s[::-1] if reverse_bases else s) for s in segments]

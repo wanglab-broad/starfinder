@@ -1,6 +1,6 @@
-"""Codebook entries separate from genes (W-292, D5; docs/readout-contract.md, "Codebook entries and genes").
+"""Codebook entries separate from genes (W-292, D5; design/specs/readout.md, "Codebook entries and genes").
 
-Check R4 of docs/readout-algorithms.md on the ``entries`` fixture: the W-278 ``cal`` scene
+Check R4 of design/specs/readout-algorithms.md on the ``entries`` fixture: the W-278 ``cal`` scene
 of seed 103 (condition ``mixing``: calibrated_scene_preset("clean") with the preset's own
 crosstalk switched on, as W-278 built it) with its 16-entry codebook relabeled to 6 genes
 (entries e1-e16, genes g1-g6, 2 to 3 entries each). Per-entry decoding rows equal the run

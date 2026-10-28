@@ -1,6 +1,6 @@
 """§2.8 diagnostics: read inspection, population summaries and decision inspection (W-295).
 
-docs/readout-contract.md, "Diagnostics". On the golden fixture of test_readout_golden.py:
+design/specs/readout.md, "Diagnostics". On the golden fixture of test_readout_golden.py:
 summarize_reads counts equal the pinned statuses, explain_read lists spot 6's rescue to
 GeneA with its corrected-round margin against the limit, and inspect_read shows spot 4's
 tied round 2. FOV.run never calls inspect_read, plot_read or explain_read, and records the

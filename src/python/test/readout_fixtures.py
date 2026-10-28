@@ -1,4 +1,4 @@
-"""Hand-built §2.8 readout fixtures `crosstalk` and `two_seg` (docs/readout-algorithms.md, "Fixtures").
+"""Hand-built §2.8 readout fixtures `crosstalk` and `two_seg` (design/specs/readout-algorithms.md, "Fixtures").
 
 Both are 16×64×64 uint16 images with four channels and four rounds, built like the golden
 fixture of test_readout_golden.py: a background of 20 grey levels with noise sd 3, and

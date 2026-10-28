@@ -1,6 +1,6 @@
 """§2.8 local background and noise next to the extracted sums (W-294; checks R9 and R10).
 
-docs/readout-contract.md, "Extraction"; docs/readout-algorithms.md, "Background and noise".
+design/specs/readout.md, "Extraction"; design/specs/readout-algorithms.md, "Background and noise".
 R9 uses the hand-built bg_const and bg_neighbor fixtures (12×48×48, four channels, four
 rounds) with analytic expectations. R10 (extended tier) reruns the W-278 held-out
 measurement of the estimator local_ring at the truth positions of the calibrated scenes

@@ -61,7 +61,7 @@ class Dataset:
     for an unchanged field, keeps that round's ChannelInfo.
     :meth:`channel_index` is the one rule that finds a channel by index,
     pattern or name.
-    readout_mode is how reads get their identity (docs/readout-contract.md,
+    readout_mode is how reads get their identity (design/specs/readout.md,
     "Readout modes"): ``multiplexed`` (default) decodes color sequences with
     the codebook; ``direct`` assigns each candidate the direct_panel gene of its
     own round and channel.

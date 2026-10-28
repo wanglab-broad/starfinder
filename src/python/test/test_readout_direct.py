@@ -1,8 +1,8 @@
-"""The §2.8 readout modes and direct readout (W-293, docs/readout-contract.md, "Readout modes" and
+"""The §2.8 readout modes and direct readout (W-293, design/specs/readout.md, "Readout modes" and
 "Direct readout").
 
-Fixture ``direct2`` is worked example 4 of docs/readout-algorithms.md: two rounds of 6×24×24
-voxels (seed 100; the R7 and R16 checks run it with seeds 100 to 102, docs/readout-algorithms.md,
+Fixture ``direct2`` is worked example 4 of design/specs/readout-algorithms.md: two rounds of 6×24×24
+voxels (seed 100; the R7 and R16 checks run it with seeds 100 to 102, design/specs/readout-algorithms.md,
 "Engineering validation design") with four planted spots and the eight-gene panel. Check R7: the reads are
 Gfap, Gad1, Sst and Aqp4; the other round of each candidate is valid=False with values 0; an
 unmapped (round, channel) is unmatched with unmapped_channel; a zero own round is no_signal; a

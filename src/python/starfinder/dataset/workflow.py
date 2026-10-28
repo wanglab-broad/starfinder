@@ -248,7 +248,7 @@ def _ends(value, context):
 
 
 def _split_layout(split_index, n_bases, *, reverse_bases=True, ends=((), ())):
-    """Two-segment BarcodeLayout of the shared split_index (docs/readout-contract.md, "Segment layout").
+    """Two-segment BarcodeLayout of the shared split_index (design/specs/readout.md, "Segment layout").
 
     split_index is MATLAB's one-based position s, in the encoded color string, of
     the junction color that LoadCodebook.m removes; the colors after it are acquired

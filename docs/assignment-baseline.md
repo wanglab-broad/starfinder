@@ -143,7 +143,7 @@ rules from the workflow side.
 
 % heading: The §2.8 molecule outputs assignment reads
 
-{doc}`readout-contract` (accepted at its review) and {doc}`checkpoints` define them:
+The [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md) (accepted at its review) and {doc}`checkpoints` define them:
 
 % (accepted at W-280)
 

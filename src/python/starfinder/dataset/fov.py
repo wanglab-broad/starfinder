@@ -1037,7 +1037,7 @@ class FOV:
         return self
 
     def _check_readout(self, decoder, has_round):
-        """Mode checks of decoding in dataset.readout_mode (docs/readout-contract.md, "Readout modes").
+        """Mode checks of decoding in dataset.readout_mode (design/specs/readout.md, "Readout modes").
 
         multiplexed: a round column raises ValueError (MULTI_ROUND_DECODING);
         a decoder without the mode raises TypeError naming both; direct: no
@@ -1181,7 +1181,7 @@ class FOV:
         round), combines them as FOV.find_spots does, and then extracts
         every sequencing round at every candidate (batch mode or
         retain_images is then required for extraction). The dataset's
-        readout_mode decides the readout (docs/readout-contract.md): in
+        readout_mode decides the readout (design/specs/readout.md): in
         ``multiplexed`` mode decoding such a candidate set raises ValueError
         naming the readout mode; in ``direct`` mode each candidate is
         extracted in its own round only, its other rounds are valid=False,

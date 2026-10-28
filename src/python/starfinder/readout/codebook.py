@@ -1,7 +1,7 @@
 """Validated, ordered STARmap codebooks. Colors are symbols, not channels.
 
 A codebook row is an entry: one barcode with its color sequence. Several entries
-may share a gene (docs/readout-contract.md, "Codebook entries and genes").
+may share a gene (design/specs/readout.md, "Codebook entries and genes").
 Encodings are registered in ENCODINGS by exact config type; the segment layout
 is a typed description on the codebook.
 """
@@ -69,7 +69,9 @@ def _labels(labels, name):
 
 @dataclass(frozen=True)
 class EncodingConfig:
-    """two_base encoding: reverse bases before encoding; optionally remove/swap at split_index.
+    """two_base encoding: each adjacent pair of bases gives one color, as in STARmap.
+
+    Reverse bases before encoding; optionally remove/swap at split_index.
 
     pair_to_color maps each of the 16 ordered base pairs (in read orientation) to
     a color "1" to "4"; the default is the active table of src/matlab/EncodeBases.m
@@ -226,7 +228,7 @@ def _one_base_decode(colors, config, first_base=None):
     return read_orientation("".join(inverse[c] for c in colors), config)
 
 
-#: Barcode encodings by exact config type (docs/readout-contract.md, "Encoding registry").
+#: Barcode encodings by exact config type (design/specs/readout.md, "Encoding registry").
 ENCODINGS: dict[type, EncodingSpec] = {
     EncodingConfig: EncodingSpec(
         "two_base", _two_base_encode, _two_base_decode, lambda n: n - 1,

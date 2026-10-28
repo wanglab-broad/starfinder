@@ -1,6 +1,6 @@
 """The shared read-QC score: a ranking of calls that never changes them.
 
-docs/readout-contract.md, "Shared read-QC score"; docs/readout-algorithms.md, "Shared read-QC score".
+design/specs/readout.md, "Shared read-QC score"; design/specs/readout-algorithms.md, "Shared read-QC score".
 """
 
 from dataclasses import dataclass, field

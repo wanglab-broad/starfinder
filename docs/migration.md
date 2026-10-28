@@ -870,7 +870,7 @@ keys `detection_config`, `detection_rounds`, `detection_plan` and
 ### Readout mode
 
 The readout stage adds two readout modes as one dataset setting ({doc}`readout-contract`,
-"Readout modes" and "Direct readout"). `Dataset.readout_mode` is `"multiplexed"`
+"Readout modes"; the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#direct-readout), "Direct readout"). `Dataset.readout_mode` is `"multiplexed"`
 (the default: every earlier result, identity and digest is unchanged) or
 `"direct"`, where a round and channel identify a gene.
 {py:class}`~starfinder.readout.DirectPanel` holds the gene of each (round, channel),
@@ -925,7 +925,7 @@ gain `readout_mode`; a checkpoint without it loads as `multiplexed`, and
 ### Readout encodings and decoders
 
 The readout stage registers the barcode encodings and the decoders on the shared registry
-mechanism ({doc}`method-registry`, {doc}`readout-contract`, "Encoding registry").
+mechanism ({doc}`method-registry`; the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#encoding-registry), "Encoding registry").
 `starfinder.readout.ENCODINGS` maps each encoding config type to its
 `EncodingSpec`: `two_base` is {py:class}`~starfinder.readout.EncodingConfig`, which
 gains the discriminator `method="two_base"` (its positional constructor is
@@ -946,7 +946,7 @@ config; `Dataset.load_codebook` gains keyword-only `encoding` and `layout`.
 ### Encoding table
 
 The encoding-table change of 2026-10-04 makes the `two_base` pair-to-color table visible, configurable and recorded
-({doc}`readout-contract`, "Encoding registry"). {py:class}`~starfinder.readout.EncodingConfig`
+(the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#encoding-registry), "Encoding registry"). {py:class}`~starfinder.readout.EncodingConfig`
 gains `pair_to_color`, the 16 ordered base pairs mapped to the colors `"1"` to `"4"`,
 whose default is the active table of `src/matlab/EncodeBases.m`; `EncodingConfig()`
 and every default result are unchanged, the positional constructor is unchanged,
@@ -993,7 +993,7 @@ holds the zero-based Python value and `WorkflowConfig.layout` the translated lay
 A configuration that worked around the defect by giving the Python value (for
 example 4 for aging) must give the MATLAB value (5). On the 11-base barcode
 `CAGTACTGCAT`, `[5]` now gives `242324242`; before, it gave `423242423`
-({doc}`readout-baseline`). The adapter also accepts the MATLAB two-segment keys:
+(the [readout baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/readout.md)). The adapter also accepts the MATLAB two-segment keys:
 `reads_filtration.n_barcode_segments` and `reads_filtration.split_index`, when given,
 must agree with the layout, and a list `end_base` gives the allowed segment ends
 ({doc}`workflow-configuration`). The benchmark pipeline profiles record the
@@ -1001,7 +1001,7 @@ zero-based split and pass the shared one-based value.
 
 ### Codebook entries
 
-A codebook row is an entry, not a gene (settled decision 5 of {doc}`readout-contract`). `Codebook.table` gains `entry_id`
+A codebook row is an entry, not a gene (settled decision 5 of the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#settled-decisions-this-page-follows)). `Codebook.table` gains `entry_id`
 (unique) before `gene_id`, which may now repeat; `color_sequence` and
 `base_sequence` stay unique. A `gene,barcode` row has `entry_id` equal to the
 barcode as written; a canonical file may state `entry_id` and otherwise gets the
@@ -1019,7 +1019,7 @@ as two entries of that gene, and the decoding table (and so `pre_qc`) gains
 ### Background measurements
 
 Extraction now measures a local background and noise next to the sums, on by
-default ({doc}`readout-contract`, "Extraction"; {doc}`readout-algorithms`,
+default ({doc}`readout-contract`, "Extraction"; the [readout algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout-algorithms.md#background-and-noise),
 "Background and noise"). {py:class}`~starfinder.readout.LocalBackgroundConfig`
 (`inner_radius_zyx=(1, 3, 3)`, `outer_radius_zyx=(1, 6, 6)`, `min_voxels=16`,
 provisional) is the new field `NeighborhoodSumConfig.background`; `background=None`
@@ -1072,7 +1072,7 @@ spot CSV columns are unchanged.
 ### Optional deduplication
 
 {py:func}`~starfinder.readout.deduplicate_reads` (`DeduplicationConfig`,
-`ReadDeduplicationResult`; {doc}`readout-contract`, "Optional deduplication") groups
+`ReadDeduplicationResult`; the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#optional-deduplication), "Optional deduplication") groups
 the reads of one amplicon that was detected in two channels. Candidates of one
 detection round in different detection channels are linked when they lie within
 `distance_voxels` (default 1.0, inclusive, voxel index space) and have identical WTA
@@ -1103,7 +1103,7 @@ segment from the codebook's segment layout (see "Segment layout" above);
 ### Checkpoints
 
 The checkpoint stages and files stay, and `FORMAT_VERSION` stays 2 (option C1 of
-{doc}`readout-contract`, "Checkpoints and reruns"; {doc}`checkpoints`). `candidates`
+the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#checkpoints-and-reruns), "Checkpoints and reruns"; {doc}`checkpoints`). `candidates`
 adds the background columns after `valid_<round>` and `candidates.json` the top-level
 keys `background_config`, `image_background` and `image_noise`; the saved
 `signals.extraction_config` keeps only its earlier fields, so a reader at `141c093`
@@ -1128,7 +1128,7 @@ cutoff.
 
 ### Read diagnostics
 
-`starfinder.readout` adds the three diagnostics of {doc}`readout-contract`
+`starfinder.readout` adds the three diagnostics of {doc}`readout-algorithms`
 ("Diagnostics"), which read retained results only.
 {py:func}`~starfinder.readout.inspect_read` returns one read's sums, background,
 background-subtracted sums, channel probabilities, noise, observed and assigned

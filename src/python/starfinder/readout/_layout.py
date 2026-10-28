@@ -1,4 +1,4 @@
-"""Typed segment layout of a codebook barcode (docs/readout-contract.md, "Segment layout").
+"""Typed segment layout of a codebook barcode (design/specs/readout.md, "Segment layout").
 
 A layout is a description, not a registry: segments in barcode order with their
 lengths in bases and allowed (first, last) end bases in read orientation, and the

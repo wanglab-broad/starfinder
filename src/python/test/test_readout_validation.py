@@ -1,6 +1,6 @@
 """§2.8 engineering validation checks not covered by the task-group modules (W-296).
 
-docs/readout-algorithms.md, "Engineering validation design". The task groups implemented
+design/specs/readout-algorithms.md, "Engineering validation design". The task groups implemented
 R1 (test_readout_encodings.py), R2 (test_readout_layout.py), R4 (test_readout_entries.py),
 R7 (test_readout_direct.py), R9 and R10 (test_readout_background.py), R11, R12, R16 and
 R17 (test_readout_scoring.py) and R13 to R15, R17 and R18 (test_readout_deduplication.py).

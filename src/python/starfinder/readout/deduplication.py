@@ -1,6 +1,6 @@
 """Optional cross-channel deduplication: one amplicon read in two channels keeps one read.
 
-docs/readout-contract.md, "Optional deduplication"; docs/readout-algorithms.md, "Deduplication".
+design/specs/readout.md, "Optional deduplication"; design/specs/readout-algorithms.md, "Deduplication".
 The pairwise link (same WTA observed sequence within a distance) is the rule the
 readout design study of 2026-10-02 measured; the M/N exclusion, the grouping, the
 representative and the conflict rule are the accepted proposals that study did not measure.
@@ -27,7 +27,7 @@ DEDUPLICATION_COLUMNS = ("duplicate_group", "duplicate_of", "is_representative",
 COMPATIBILITY = ("same_sequence",)
 MERGED, CONFLICTING = "same_sequence_within_distance", "conflicting_calls"
 
-# Raised in readout mode direct (docs/readout-contract.md, "Optional deduplication").
+# Raised in readout mode direct (design/specs/readout.md, "Optional deduplication").
 DIRECT_MODE = ("deduplication is not available in readout mode 'direct': different channels and rounds are "
                "different genes there, and no direct-mode read is merged or reassigned")
 

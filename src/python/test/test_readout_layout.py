@@ -1,8 +1,8 @@
-"""The §2.8 segment layout and its workflow translation (W-292, docs/readout-contract.md, "Segment layout").
+"""The §2.8 segment layout and its workflow translation (W-292, design/specs/readout.md, "Segment layout").
 
 The split_index fix: the shared load_codebook.split_index is MATLAB's one-based position,
 so [5] on the 11-base example CAGTACTGCAT gives 242324242 (141c093 gave 423242423; see
-docs/readout-baseline.md). Check R2 (layout part) of docs/readout-algorithms.md: the
+design/baselines/readout.md). Check R2 (layout part) of design/specs/readout-algorithms.md: the
 translated BarcodeLayout gives the codebook of EncodingConfig(split_index=s - 1) for every
 valid split, with and without reverse_bases; the reads_filtration keys must agree with the
 layout; a list end_base gives the allowed ends per segment. The schema's decoding-method

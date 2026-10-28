@@ -432,7 +432,7 @@ original pixel value.
 
 This section is the interface proposed to the readout stage. Readout owns the readout mode, gene
 mapping, direct-mode wiring in `FOV.run` and direct-mode extraction semantics, and
-may amend this interface through its own gate. It did so in [readout-contract](../../docs/readout-contract.md)
+may amend this interface through its own gate. It did so in [readout-contract](readout.md)
 ("Amendments to the option-A interface"), accepted at the readout acceptance review of
 2026-10-02 and implemented with the readout modes: the rules below carry the three amendments.
 

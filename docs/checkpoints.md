@@ -233,7 +233,7 @@ it is `multiplexed`.
 % §2.8, W-293
 
 Since 2026-10-02 extraction measures the local background and noise by default
-({doc}`readout-contract`, "Extraction"; option C1 of "Checkpoints and reruns"). The
+({doc}`readout-contract`, "Extraction"; option C1 of the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#checkpoints-and-reruns), "Checkpoints and reruns"). The
 saved extraction configuration `signals.extraction_config` keeps exactly the fields
 `neighborhood_radius_zyx`, `sampling` and `boundary`, so a reader at `141c093`
 still rebuilds it; the background settings are new top-level keys:

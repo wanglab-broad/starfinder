@@ -1,7 +1,7 @@
 """§2.8 shared read-QC score, its checkpoints and reruns (W-294; checks R11, R12, R16, R17).
 
-docs/readout-contract.md, "Shared read-QC score" and "Checkpoints and reruns";
-docs/readout-algorithms.md, "Shared read-QC score". R11 compares qc_score and its
+design/specs/readout.md, "Shared read-QC score" and "Checkpoints and reruns";
+design/specs/readout-algorithms.md, "Shared read-QC score". R11 compares qc_score and its
 components with the W-278 formula (scripts/w278_lib.py, components) written out in the
 test, on the golden fixture of test_readout_golden.py and on the calibrated scenes of
 seed 103. R12 (extended tier) checks the ranking on the W-278 held-out scenes (seeds 103

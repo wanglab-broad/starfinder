@@ -1,4 +1,4 @@
-"""The two_base encoding table: visible, configurable and recorded (W-304, docs/readout-contract.md,
+"""The two_base encoding table: visible, configurable and recorded (W-304, design/specs/readout.md,
 "Encoding registry").
 
 EncodingConfig.pair_to_color holds the 16 ordered base pairs mapped to the colors 1 to 4, with

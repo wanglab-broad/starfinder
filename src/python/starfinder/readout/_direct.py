@@ -1,6 +1,6 @@
 """Direct readout: a gene per (round, channel) and assignment from each candidate's own round.
 
-docs/readout-contract.md, "Direct readout"; docs/readout-algorithms.md, "Direct assignment".
+design/specs/readout.md, "Direct readout"; design/specs/readout-algorithms.md, "Direct assignment".
 """
 
 import csv
@@ -134,7 +134,7 @@ class DirectDecoderConfig:
 
 
 def _run_direct(intensity_result, spots, panel, config):
-    """The direct read table of decode_direct (docs/readout-algorithms.md, "Direct assignment").
+    """The direct read table of decode_direct (design/specs/readout-algorithms.md, "Direct assignment").
 
     Status precedence: unmapped_channel, then invalid_measurement, then
     zero_signal_round. Negative sums count as 0, as in the decoders' clipping.

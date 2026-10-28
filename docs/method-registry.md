@@ -39,8 +39,8 @@ stage's own frozen spec dataclass, re-exported by the stage package.
 | `STITCHING_METHODS` | `starfinder.stitching` | `StitchingSpec` | `stitching/_methods.py`, filled by `stitching/_multiview.py` | `stitch` |
 
 `ENCODINGS` registers barcode encodings rather than algorithms that process an image; it
-uses the same lookup and naming rules. Its stage-specific fields are in
-{doc}`readout-contract`.
+uses the same lookup and naming rules. Its stage-specific fields are in the
+[readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#encoding-registry).
 
 ## The shared mechanism
 
@@ -93,7 +93,7 @@ contract: for example `category`, `scope`, `post_registration` and `supplied` fo
 preprocessing ([preprocessing specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing.md)); `step_kind`, `transform_kind` and `space`
 for registration ({doc}`registration-algorithms`); `pipeline`, `output_columns` and
 `weights` for spot finding ([spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#registry-entries)); `modes`, `encodings`, `rescue`
-and `score_columns` for decoding ({doc}`readout-contract`); `targets`, `roles`,
+and `score_columns` for decoding ([readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#encoding-registry)); `targets`, `roles`,
 `required_roles`, `seeds`, `models` and `devices` for segmentation
 ({doc}`segmentation-contract`); `devices` and `transform_kind` for stitching
 ({doc}`stitching-contract`). A stage may add a field without changing the helper.

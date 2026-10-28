@@ -30,13 +30,13 @@ substitutions from every codeword, and a spot next to the y=0 face whose extract
 is clipped. The codebook is a gene,barcode CSV of 5-base barcodes with the two-base
 encoding and reversed bases, one segment. The first digests were produced with the
 locked project environment (NumPy 2.2.6, pandas 3.0.0) and are bit-identical over
-repeated single-thread runs; see docs/readout-baseline.md.
+repeated single-thread runs; see design/baselines/readout.md.
 
 Every extraction, decoding, filtering, encoding, detection, pipeline and checkpoint
 configuration is built by ``readout_config``, which holds the only imports of those
 config types. The
 §2.8 work may change that helper's body only; every pinned value stays, except where
-docs/readout-algorithms.md ("Engineering validation design (task group 6)") names an edit.
+design/specs/readout-algorithms.md ("Engineering validation design (task group 6)") names an edit.
 """
 import hashlib
 import json
@@ -232,7 +232,7 @@ def file_digest(path):
 
 
 def without_entry(table):
-    """The table without the entry_id column that §2.8 adds (docs/readout-contract.md, option E1)."""
+    """The table without the entry_id column that §2.8 adds (design/specs/readout.md, option E1)."""
     return table.drop(columns="entry_id")
 
 
@@ -434,7 +434,7 @@ def test_extracted_tensor_is_pinned(radius):
 
 
 def test_valid_is_always_true_at_the_border_and_in_a_zero_round():
-    # Legacy behavior that §2.8 changes (docs/readout-baseline.md): extraction never
+    # Legacy behavior that §2.8 changes (design/baselines/readout.md): extraction never
     # marks a measurement unavailable, even where the box is clipped by a face.
     assert extract().valid.all()
 
@@ -500,7 +500,7 @@ def test_a_changed_score_bound_changes_the_filtering_digest(tmp_path, decoder):
 
 
 def test_candidates_with_a_round_column_raise_on_decoding(tmp_path):
-    # Legacy behavior that §2.8 changes (docs/readout-contract.md, "Direct readout"):
+    # Legacy behavior that §2.8 changes (design/specs/readout.md, "Direct readout"):
     # a multi-round candidate set cannot be decoded until a readout mode exists.
     dataset = golden_dataset(tmp_path)
     dataset.codebook = golden_codebook(tmp_path)

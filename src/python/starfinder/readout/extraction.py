@@ -34,7 +34,7 @@ class LocalBackgroundConfig:
     ring's median and noise 1.4826 x its median absolute deviation, in grey
     levels per voxel. With fewer than min_voxels ring voxels inside the image
     both are NaN (min_voxels 16 is provisional). The ring is not masked for
-    other spots (docs/readout-algorithms.md, "Background and noise").
+    other spots (design/specs/readout-algorithms.md, "Background and noise").
     """
 
     inner_radius_zyx: tuple[int, int, int] = (1, 3, 3)
@@ -243,7 +243,7 @@ def extract_intensities(
     valid is all true. ``direct`` needs a ``round`` column in the spot table and
     sums each spot in its own round only; its other rounds (and every round of
     a spot whose round is not in the mapping) are 0.0 with valid false and
-    box_voxels 0 (docs/readout-contract.md, "Direct readout").
+    box_voxels 0 (design/specs/readout.md, "Direct readout").
 
     With config.background (on by default) each extracted (spot, round) also
     gets the local ring background and noise per channel, and each round and

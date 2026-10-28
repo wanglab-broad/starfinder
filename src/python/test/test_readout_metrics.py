@@ -1,6 +1,6 @@
 """ranking_quality and evaluate_deduplication against analytic answers on hand-built inputs (W-292).
 
-The two measures of the §2.8 validation design (docs/readout-algorithms.md, "Engineering
+The two measures of the §2.8 validation design (design/specs/readout-algorithms.md, "Engineering
 validation design"), in the form W-278 computed them for scores.csv and duplicates.csv.
 """
 import math

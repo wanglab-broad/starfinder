@@ -2,7 +2,7 @@
 
 % Status: Accepted (W-280, 2026-10-02, at b1c7261)
 
-Note: {doc}`readout-contract` and {doc}`readout-algorithms` were accepted at the acceptance review of 2026-10-02 and are implemented in `starfinder.readout`; this page keeps the text of its revision.
+Note: [readout-contract](../specs/readout.md) and [readout-algorithms](../specs/readout-algorithms.md) were accepted at the acceptance review of 2026-10-02 and are implemented in `starfinder.readout`; this page keeps the text of its revision.
 
 % Note (W-583); accepted at W-280
 
@@ -10,7 +10,7 @@ This page records how intensity extraction, barcode decoding and read filtering
 behave at revision `141c093` (branch `runner/s28-spec-20261001`, on `dev` after
 the spot-finding work), before the package's readout work changes them. It is the reference
 that the golden test `src/python/test/test_readout_golden.py` pins. The proposed
-replacement is described in {doc}`readout-contract` and {doc}`readout-algorithms`;
+replacement is described in [readout-contract](../specs/readout.md) and [readout-algorithms](../specs/readout-algorithms.md);
 neither is accepted. Paths are relative to `src/python/starfinder/` unless they
 start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 `141c093`.
@@ -20,7 +20,7 @@ start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 ## Extraction
 
 `extract_intensities(rounds, spots, *, config)` in `starfinder.readout`
-({doc}`api/readout`) sums a box around each candidate in every round.
+([api/readout](../../docs/api/readout.rst)) sums a box around each candidate in every round.
 
 | Field | Behavior at `141c093` |
 | --- | --- |
@@ -32,7 +32,7 @@ start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 | The `valid` mask | Boolean N×R, documented as "false marks an unavailable measurement, not zero signal" (`:44`). `extract_intensities` always sets it to all true (`:161`), including for a clipped box at a face and for a round that is zero at the candidate. Nothing in the package sets it to false. It can only be false in a result a caller builds directly or in a `candidates` checkpoint whose `valid_<round>` column was edited. Decoding turns any false round into `unmatched` with reason `invalid_measurement` (`readout/decoding.py:195`, `:267-276`). |
 | `FOV` extraction | `FOV.extract_intensities(config, rounds)` and `FOV.run` extract one round at a time (`_extract_round`, `dataset/fov.py:887-900`) from the round's image or the recipe's `extraction_source` snapshot, then concatenate the rounds (`_assemble_intensities`, `:902-915`). Every sequencing round is extracted at every candidate. |
 | Cost | The readout design study of 2026-10-02 measured the per-spot loop on `medium` (32×512×512, 587 candidates, 4 rounds, 4 channels): median 0.0586 s, 25 µs per spot and round, 685,180 KiB peak RSS for the process (its `extraction-cost.csv`). |
-| MATLAB counterpart | `STARMapDataset.ReadsExtraction` (`src/matlab/STARMapDataset.m:762-811`) calls `ExtractFromLocation` (`src/matlab/ExtractFromLocation.m:1-48`) per round on the channels whose name contains `seq`. It clips the box to the image (`GetExtents`, `:51-67`), L2-normalizes the channel sums, and stores only the round's WTA color (`M` for a tie, `N` for NaN) and its score `-log(max)`. The color strings of the rounds are concatenated into `color_seq` (`STARMapDataset.m:796-805`); the sums themselves are not kept. Its `voxel_size` is `(row, column, Z)`, Python's is `(z, y, x)` ({doc}`conventions`). |
+| MATLAB counterpart | `STARMapDataset.ReadsExtraction` (`src/matlab/STARMapDataset.m:762-811`) calls `ExtractFromLocation` (`src/matlab/ExtractFromLocation.m:1-48`) per round on the channels whose name contains `seq`. It clips the box to the image (`GetExtents`, `:51-67`), L2-normalizes the channel sums, and stores only the round's WTA color (`M` for a tie, `N` for NaN) and its score `-log(max)`. The color strings of the rounds are concatenated into `color_seq` (`STARMapDataset.m:796-805`); the sums themselves are not kept. Its `voxel_size` is `(row, column, Z)`, Python's is `(z, y, x)` ([conventions](../../docs/conventions.md)). |
 
 % W-278
 
@@ -81,7 +81,7 @@ per-round margin table and a candidate table (`decoding.py:285-372`); they are n
 saved in checkpoints. Exact calls are identical in both decoders; they differ in
 scores and in rescue. Both treat each codebook row as one gene. The decoders are
 hard-coded in `decoding.py:169`, `:207`, `dataset/config.py:226` and
-`_checkpoint.py:537` ({doc}`method-registry`, "Decoding").
+`_checkpoint.py:537` ([method-registry](../../docs/method-registry.md), "Decoding").
 
 ## Read filtering
 
@@ -100,7 +100,7 @@ annotates every row and keeps it; `ReadFilteringResult.accepted` is a view.
 
 `FilterReadsMultiSegment.m` is the MATLAB route for two segments, with `end_base`
 holding one pair per segment and `split_index` the shared key (aging: `5`,
-`["CC", "TT"]`, {doc}`datasets`):
+`["CC", "TT"]`, [datasets](../../docs/datasets.md)):
 
 * **Membership uses the complete concatenated color string.**
   `barcodes_in_codebook = contains(color_seq, codebook_barcodes)` compares the whole
@@ -171,7 +171,7 @@ counts (`dataset/_run_record.py:119-129`).
 | `candidates` | `candidates.<csv|parquet>`: identity, spot columns, then `sig_<round>_<channel>` and `valid_<round>` (`_checkpoint.py:196-220`); `candidates.json` with the detection plan, the extraction config, labels and metadata (`:458-484`). Reloading rebuilds the `SpotFindingResult` and `IntensityExtractionResult` (`:496-518`). |
 | `pre_qc` | `pre_qc.<csv|parquet>`: the decoding table unchanged; `pre_qc.json` with the decoder config, labels and the JSON-representable diagnostics (`:523-531`). It holds the decoding table only: no extracted values, no background, no score and no filtering. Reloading rebuilds a `ReadDecodingResult` without its array diagnostics (`:534-540`). |
 | Version | `FORMAT_VERSION = 2`; readers accept 1 and 2 (`:20-22`). |
-| Rerun | From `candidates`: decode and filter without images; from `pre_qc`: filter only ({doc}`checkpoints`, "Reload and continue"). There is no filtering checkpoint. |
+| Rerun | From `candidates`: decode and filter without images; from `pre_qc`: filter only ([checkpoints](../../docs/checkpoints.md), "Reload and continue"). There is no filtering checkpoint. |
 
 ## YAML keys and their translation
 
@@ -216,22 +216,22 @@ fixed retention) and no duplicate measure; the readout design study computed bot
 
 | # | Discrepancy | Proposed resolution |
 | --- | --- | --- |
-| 1 | Two segments exist only as `EncodingConfig.split_index`: no segment count, lengths in bases and colors, acquisition order, junction rule or per-segment end bases. | A typed `BarcodeLayout` on the codebook ({doc}`readout-contract`, "Segment layout"); `split_index` stays the shared MATLAB-facing key and is translated at the workflow boundary. |
+| 1 | Two segments exist only as `EncodingConfig.split_index`: no segment count, lengths in bases and colors, acquisition order, junction rule or per-segment end bases. | A typed `BarcodeLayout` on the codebook ([readout-contract](../specs/readout.md), "Segment layout"); `split_index` stays the shared MATLAB-facing key and is translated at the workflow boundary. |
 | 2 | `dataset/workflow.py` passes the shared one-based `split_index` to Python without converting its index base (`:407-411`, `:426`). On the 11-base example the expected sequence is `242324242` and the obtained one `423242423`. | Subtract one at the workflow boundary and state the index base in the contract; a test with this example. The fix is drafted as its own criterion of the task-group-2 issue, not made here. |
 | 3 | The workflow adapter rejects `n_barcode_segments` other than 1 and a nonempty `reads_filtration.split_index` (`:380-381`). | Translate them into the segment layout (`n_barcode_segments` must equal the number of segments the layout's split produces) and accept the MATLAB two-segment configuration. |
 | 4 | Segment end bases are checked for one pair with one start base over the whole sequence (`filtering.py:22-23`, `:138-147`); YAML lists of pairs raise. | Per-segment sets of allowed (first, last) pairs, each segment decoded separately; the check stays diagnostic unless exclusion is requested. |
-| 5 | A codebook row is treated as a gene: repeated `gene_id` raises (`codebook.py:100-101`), `n_genes` counts rows, `gene_to_seq` maps a gene to one sequence. The aging codebook has 14,242 entries for 2,044 genes. | An entry identifier separate from the gene identifier; several entries may map to one gene; collisions are checked on entries ({doc}`readout-contract`, "Codebook entries and genes"). |
+| 5 | A codebook row is treated as a gene: repeated `gene_id` raises (`codebook.py:100-101`), `n_genes` counts rows, `gene_to_seq` maps a gene to one sequence. The aging codebook has 14,242 entries for 2,044 genes. | An entry identifier separate from the gene identifier; several entries may map to one gene; collisions are checked on entries ([readout-contract](../specs/readout.md), "Codebook entries and genes"). |
 | 6 | `valid` is always true (`extraction.py:161`), so `invalid_measurement` never occurs in a pipeline run. | `valid` false for rounds not extracted (the direct mode's other rounds) and kept as the decoders' required-round rule; the semantics are qualified in the contract. |
-| 7 | No background or noise measurement exists per (spot, channel, round); the spot-finding image median and MAD are per round and channel only. | A local ring estimate kept with the traces, as the readout design study recommends ({doc}`readout-algorithms`, "Background and noise"). |
+| 7 | No background or noise measurement exists per (spot, channel, round); the spot-finding image median and MAD are per round and channel only. | A local ring estimate kept with the traces, as the readout design study recommends ([readout-algorithms](../specs/readout-algorithms.md), "Background and noise"). |
 | 8 | The filter's score names are a fixed list of eight (`filtering.py:37-47`). | Bounds on any numeric score column the input result declares, including the shared score; unknown names still raise. |
 | 9 | `FOV.run` has no shared score stage and no deduplication between decoding and filtering (`fov.py:1142-1148`). | The order extract → decode or assign → score → deduplicate → filter, with deduplication off by default. |
 | 10 | `pre_qc` holds the decoding table only (`_checkpoint.py:523-531`). | `pre_qc` holds the read table after scoring and deduplication, before filtering, with each stage's config. |
 | 11 | Multi-round candidates raise on decoding (`fov.py:33`, `:940-941`, `:1018-1020`). | A `direct` readout mode assigns them by round and channel; `multiplexed` mode keeps the error. |
-| 12 | `CodebookAwareDecoderConfig` defaults to `allow_rescue=True` (`decoding.py:62`), while the agreed default is rescue off. | The pipeline default decoder stays WTA, which never rescues, so the agreed default holds without a change. Whether the codebook-aware config itself should default to `allow_rescue=False`, which would change its golden digest, is an open choice ({doc}`readout-contract`, "Runtime order and defaults"). |
+| 12 | `CodebookAwareDecoderConfig` defaults to `allow_rescue=True` (`decoding.py:62`), while the agreed default is rescue off. | The pipeline default decoder stays WTA, which never rescues, so the agreed default holds without a change. Whether the codebook-aware config itself should default to `allow_rescue=False`, which would change its golden digest, is an open choice ([readout-contract](../specs/readout.md), "Runtime order and defaults"). |
 | 13 | The YAML route always decodes with WTA (`workflow.py:391`). | A Python-only `decoding` block selects the decoder and its settings. |
 | 14 | `no_signal` and `invalid_measurement` rows keep the codebook-aware scores (`decoding.py:267-276`; golden spot 5). | Scores of reads without a call are NaN in the shared score; the decoder's own columns are kept as diagnostics and documented. |
 | 15 | MATLAB drops `M`/`N` reads before membership (`STARMapDataset.m:880-887`); Python keeps every row with a status. | Recorded; Python keeps every row, which the agreed scope requires. |
-| 16 | `starfinder.evaluation` has no ranking or duplicate measure. | Add `ranking_quality` and `evaluate_deduplication` ({doc}`readout-algorithms`, "Engineering validation design"). |
+| 16 | `starfinder.evaluation` has no ranking or duplicate measure. | Add `ranking_quality` and `evaluate_deduplication` ([readout-algorithms](../specs/readout-algorithms.md), "Engineering validation design"). |
 
 % §2.7, W-278
 
@@ -257,7 +257,7 @@ segment) written as a `gene,barcode` CSV. The fixture contains:
 * a spot at y = 1 whose box is clipped by the y = 0 face (spot 3), still `valid`.
 
 It pins, as explicit expected values with the tolerances of
-[contributing](contributing.md) ("Expected values and tolerances") (since 2026-10-25; they replaced
+[contributing](../../docs/contributing.md) ("Expected values and tolerances") (since 2026-10-25; they replaced
 the exact SHA-256 digests pinned at first and reproduce them), (a) the extracted
 tensor and `valid` for two radii; (b) the decoding table of both decoders at their
 defaults; (c) the filtering table with the default filter, with one upper score bound
