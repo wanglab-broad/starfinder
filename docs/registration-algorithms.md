@@ -34,13 +34,11 @@ These run with elastix, from the `registration-elastix` extra, imported only whe
 of them runs; B-spline also needs `local-registration`, whose SimpleITK evaluates its
 grid. `metric` is `"mattes"` (Mattes mutual information, with `histogram_bins` bins for
 rigid and 32 bins for affine and B-spline) or `"ncc"` (normalized correlation). `iterations` are per
-pyramid level, with no convergence test; `samples` are the random samples per
+pyramid level; `samples` are the random samples per
 iteration, drawn with `random_seed`.
 
-* **Pyramid.** `levels=None` takes the largest number of levels, up to 4, at which
-  the smaller of Y and X is still at least 16 at the coarsest level. Level `l` of `L`
-  shrinks Y and X by `2^(L−1−l)`, and, in 3D, Z by the same factor capped at
-  `max(1, Z // 4)`.
+* **Pyramid.** `levels=None` chooses up to 4 levels from the image size; the
+  [algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration-algorithms.md#shared-numerical-rules-for-the-elastix-methods) gives the schedule.
 * **Start.** Rigid and affine start from the identity about the grid centre; a
   preceding `translation` step handles large shifts. B-spline starts from zero
   displacement.
@@ -48,9 +46,6 @@ iteration, drawn with `random_seed`.
   of `spacing_zyx` and equal on every axis; `None` uses the X extent divided by 8.
 * **Unknown spacing.** When both rounds have no `spacing_zyx`, unit spacing is used and
   the diagnostics record `spacing_source="unknown_unit"` and a warning in `warnings`.
-* **Failures.** A constant signal raises `RegistrationEstimationError("constant
-  registration signal")`; a `RuntimeError` or `ValueError` from elastix, and
-  non-finite parameters, become a `RegistrationEstimationError`.
 
 ```{config-options} starfinder.registration.RigidConfig
 :exclude: method
@@ -69,8 +64,7 @@ iteration, drawn with `random_seed`.
 SimpleITK demons, from the `local-registration` extra. `variant` is `"demons"`,
 `"diffeomorphic"`, `"symmetric"` or `"fast_symmetric"`. `iterations` gives one entry
 per pyramid level, coarsest first. `smoothing_sigma` smooths the displacement field, in
-voxels. `pyramid_mode` is `"antialias"` (a Butterworth low-pass, then downsampling by
-2 per level) or `"sitk"` (SimpleITK shrinking). On Z=1 the pyramid acts on Y and X only and the field
+voxels. `pyramid_mode` is `"antialias"` (Butterworth-filtered downsampling) or `"sitk"` (SimpleITK shrinking). On Z=1 the pyramid acts on Y and X only and the field
 has no Z component.
 
 ```{config-options} starfinder.registration.DemonsConfig
@@ -79,15 +73,13 @@ has no Z component.
 
 ### TPS and CPD
 
-Both detect spots in the two signals, as local maxima above
-`median + k · 1.4826 · MAD` with `k = detection_noise_sigma`. They evaluate the
-displacements on a coarse grid of every Z plane, with a step of
-`min(grid_spacing_voxels, max(1, n // 4))` voxels on Y and on X, where `n` is the size of
-that axis (so an axis shorter than 8 voxels gets a step of 1), then interpolate it to
+Both detect spots in the two signals above a noise threshold that
+`detection_noise_sigma` sets. They evaluate the displacements on a coarse grid of every
+Z plane, with Y and X steps of at most `grid_spacing_voxels`, then interpolate it to
 every voxel. TPS matches spots within `match_distance_voxels` and needs `min_matches` pairs,
 otherwise it raises `InsufficientLandmarksError`. CPD aligns the two spot sets by
-coherent point drift; it raises `InsufficientLandmarksError` with fewer than 10 spots
-in either signal or fewer than 10 candidates within `candidate_radius_voxels`. A configuration translated from the MATLAB keys sets CPD's
+coherent point drift; it raises `InsufficientLandmarksError` when it finds too few spots
+or too few candidates within `candidate_radius_voxels`. A configuration translated from the MATLAB keys sets CPD's
 `detection_noise_sigma` to 3.0 and `grid_spacing_voxels` to 32 unless it gives them.
 
 ```{config-options} starfinder.registration.TpsConfig
@@ -138,21 +130,15 @@ order.
 
 | `backend` | Resampling |
 | --- | --- |
-| `"translation"` | Translations and chains of translations only: an exact shift for whole voxels, otherwise a Fourier shift, computed in float32 unless the image is float64; constant zero fill only. When `warp` is set, a recipe whose steps and recovery alternatives are all translations must use it, and any other recipe must not; with `warp=None` it is chosen from the chain, as above |
-| `"scipy"` | Linear interpolation, sampled in float64 one Z plane at a time; any transform or chain except a lone `TranslationTransform` |
-| `"simpleitk"` | Linear interpolation with SimpleITK of the float64 image, on the whole pull field; any transform or chain except a lone `TranslationTransform` |
+| `"translation"` | Exact and Fourier shifts, for translations and chains of translations. When `warp` is set, a recipe whose steps and recovery alternatives are all translations must use it, and any other recipe must not; with `warp=None` it is chosen from the chain, as above |
+| `"scipy"` | Linear interpolation with SciPy |
+| `"simpleitk"` | Linear interpolation with SimpleITK |
 
-The backends treat a pull point outside the moving grid differently:
-
-* `"translation"` gives zero wherever the pull point lies outside the grid.
-* `"scipy"` with `boundary_mode="constant"` gives `fill_value` to every pull point
-  outside `[0, n − 1]` on any axis.
-* `"simpleitk"` with `boundary_mode="constant"` gives the edge value to a pull point
-  up to half a voxel beyond the edge, and `fill_value` beyond that.
-* With `"nearest"`, `"scipy"` and `"simpleitk"` both give the nearest edge value.
-
-With `output_dtype="input"`, every backend rounds integer images to the nearest even
-integer, clips them to the dtype's range and casts them once.
+`boundary_mode`, `fill_value` and `output_dtype` set what a pull point outside the moving
+image gets and the type of the output. How pull points at and beyond the edge are
+treated differs between the backends: the
+[specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration.md#one-final-resampling) ("One final resampling") describes the resampling, and
+{py:class}`~starfinder.registration.WarpConfig` documents the options.
 
 ### QC criteria
 
@@ -175,7 +161,7 @@ four step types and `TransformChain`, which composes them, record the direction
 | --- | --- | --- |
 | `TranslationTransform` | `displacement_zyx` | `p + d` |
 | `AffineTransform` | `matrix_zyx` (4 × 4, voxel indices), `physical` (for an elastix estimate, the backend's matrix, centre, translation and parameters) | `A p + b` |
-| `BSplineTransform` | the control grid (`grid_size_xyz`, `grid_origin_xyz`, `grid_spacing_xyz`, `grid_direction_xyz`), `coefficients`, `spacing_zyx`, `order` 3 | `p` plus the B-spline displacement; `dense()` evaluates it with SimpleITK, whatever the backend |
+| `BSplineTransform` | the control grid (`grid_size_xyz`, `grid_origin_xyz`, `grid_spacing_xyz`, `grid_direction_xyz`), `coefficients`, `spacing_zyx`, `order` 3 | `p` plus the B-spline displacement; `dense()` evaluates it with SimpleITK |
 | `DenseDisplacementTransform` | `displacement_zyx`, shape (Z, Y, X, 3) | `p + u(p)` |
 | `TransformChain` | the step transforms in order | `T₁(T₂(…Tₙ(p)))`; `pull_field()` gives the composed field |
 
@@ -192,7 +178,7 @@ to one translation whose displacement is the sum.
 | `RegistrationEstimationError` | The estimator fails or returns non-finite values |
 | `InsufficientLandmarksError` | TPS or CPD finds too few spots or matches |
 | `RegistrationRejectedError` | A step fails a configured QC criterion; the message names the criterion, value and bound |
-| `UnsupportedTransformOperationError` | A transform or chain has an unsupported direction, type or order, a chain is empty, or a transform is applied with a backend that does not support it |
+| `UnsupportedTransformOperationError` | A transform or chain has an unsupported direction, units, type or order, a chain is empty, or a transform is applied with a backend that does not support it |
 
 A recovery may allow only `RegistrationEstimationError`, `InsufficientLandmarksError` and
 `RegistrationRejectedError`; the last two are `RegistrationEstimationError`s.

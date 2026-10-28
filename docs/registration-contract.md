@@ -112,7 +112,7 @@ column shows which methods take a Z=1 round.
 | --- | --- | --- |
 | `RegistrationRecipe.steps` | required | The ordered `RegistrationStep`s, each with a method config, optional `recovery` and optional per-step `signal` |
 | `RegistrationRecipe.signal` | `RegistrationSignalConfig()`: `mode="max"` | `"max"`, `"sum"`, or `"channel"` with `reference_channel` and `moving_channel` (index or label) |
-| `RegistrationRecipe.warp` | `None`: translation for a chain of translations, linear SciPy otherwise | The final resampling: `backend`, `boundary_mode` (`"constant"`, or `"nearest"` with `scipy` or `simpleitk`), `fill_value` (0 with `translation`), `output_dtype` |
+| `RegistrationRecipe.warp` | `None`: translation for a chain of translations, linear SciPy otherwise | The final resampling: `backend`, `boundary_mode`, `fill_value`, `output_dtype` ({py:class}`~starfinder.registration.WarpConfig`) |
 | `RegistrationRecipe.reference_round` | `None`: the dataset's reference round | Sequencing rounds: must equal the dataset's reference round when set. Other rounds: must equal the call's `reference` round, and must be `None` with an `ExternalReference` |
 | `RegistrationRecipe.qc` | `RegistrationQcConfig()`: rejects nothing | `min_coverage`, `min_ncc_gain`, `max_fold_fraction`, `max_translation_voxels` |
 | `RecoveryConfig` | no recovery | `allowed_errors` and ordered `alternatives` |
