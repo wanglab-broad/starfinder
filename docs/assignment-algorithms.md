@@ -64,9 +64,9 @@ territories. See {py:class}`~starfinder.segmentation.ExpandLabelsConfig`.
 
 | Cell correspondence (`CELL_CORRESPONDENCE`) | Meaning |
 | --- | --- |
-| `matched` | At least one nucleus is matched to it |
-| `ambiguous` | No matched nucleus, and an ambiguous nucleus overlaps it |
-| `no_nucleus` | No matched nucleus, and no ambiguous nucleus overlaps it |
+| `matched` | Has matched nuclei |
+| `ambiguous` | Pairing is unresolved |
+| `no_nucleus` | No nucleus belongs to it |
 | `unavailable` | No nuclei were given |
 
 | Nucleus status (`NUCLEUS_STATUSES`) | Meaning |
@@ -77,7 +77,7 @@ territories. See {py:class}`~starfinder.segmentation.ExpandLabelsConfig`.
 
 | Compartments (`COMPARTMENT_STATES`) | Meaning |
 | --- | --- |
-| `available` | Nuclear and cytoplasmic counts exist |
+| `available` | Nuclear and cytoplasmic split is available |
 | `withheld` | Not split: a doubtful pairing |
 | `no_nucleus` | Not split: no nucleus belongs to the cell |
 | `unavailable` | Not split: no nuclei were given |
@@ -93,7 +93,7 @@ territories. See {py:class}`~starfinder.segmentation.ExpandLabelsConfig`.
 
 ### Molecules
 
-`AssignmentResult.molecules`, one row per input molecule, in input order:
+`AssignmentResult.molecules`, one row per input molecule:
 
 | Column | Type | Contents |
 | --- | --- | --- |
@@ -105,12 +105,12 @@ territories. See {py:class}`~starfinder.segmentation.ExpandLabelsConfig`.
 | `cell_id` | UInt32 | The cell, or null |
 | `in_expansion` | boolean | Whether the cell's value comes from the expansion only |
 | `original_cell_id` | UInt32 | The original cell label at the voxel |
-| `nucleus_id` | UInt32 | The nucleus label at the voxel, 0 outside every nucleus |
-| `compartment` | string | `nucleus` or `cytoplasm`, or the cell's compartments state; null unless `assigned` |
+| `nucleus_id` | UInt32 | The sampled nucleus label, or null |
+| `compartment` | string | The compartment label or availability state, or null |
 
 ### Cells
 
-`AssignmentResult.cells`, one row per cell, in increasing `cell_id`:
+`AssignmentResult.cells`, one row per cell:
 
 | Column | Type | Contents |
 | --- | --- | --- |
@@ -130,7 +130,7 @@ territories. See {py:class}`~starfinder.segmentation.ExpandLabelsConfig`.
 
 ### Nuclei
 
-`AssignmentResult.nuclei`, one row per nucleus, in increasing `nucleus_id`:
+`AssignmentResult.nuclei`, one row per nucleus:
 
 | Column | Type | Contents |
 | --- | --- | --- |
@@ -138,11 +138,11 @@ territories. See {py:class}`~starfinder.segmentation.ExpandLabelsConfig`.
 | `size_voxels` | int64 | Voxels of the nucleus |
 | `status` | string | The nucleus status |
 | `cell_id` | UInt32 | The matched cell, or null |
-| `share_in_cell` | float64 | Share of the nucleus in the matched cell, or in the cell holding most of it; 0 for `no_cell` |
+| `share_in_cell` | float64 | The nucleus overlap share reported for the pairing |
 | `share_background` | float64 | Share of the nucleus outside every cell |
 | `n_cells_overlapped` | int64 | Cells the nucleus overlaps |
-| `outside` | boolean | A matched nucleus lies partly outside its cell, beyond `outside_tolerance` |
-| `seed_value_agrees` | boolean | For cells grown from these nuclei as seeds: whether the nucleus is matched to the cell of the same value; null otherwise |
+| `outside` | boolean | Flags a matched nucleus extending outside its cell |
+| `seed_value_agrees` | boolean | Agreement between nucleus and seeded cell label values, when recorded |
 
 ### Counts
 
@@ -164,7 +164,7 @@ territories. See {py:class}`~starfinder.segmentation.ExpandLabelsConfig`.
 | `molecules`, `cells`, `counts`, `nuclei` | The tables, as `.csv` or `.parquet` (`CheckpointConfig.table_format`); `nuclei` with nuclei only |
 | `assignment.json` | The run record |
 | `territories.tif` | The expanded territories, with an expansion |
-| `cell_labels.tif`, `nucleus_labels.tif` | Copies of the label images that are not saved under their segmentation run |
+| `cell_labels.tif`, `nucleus_labels.tif` | Local label copies as needed; other label inputs are referenced in `assignment.json` |
 
 The label images are ZYX `uint32` with the grid's metadata.
 
@@ -186,7 +186,7 @@ The label images are ZYX `uint32` with the grid's metadata.
 | `calibration`, `calibration_source`, `size_unit` | Whether the grid has a voxel spacing and unit, where it came from, and the unit of the physical sizes |
 | `counts` | The totals; after `FOV.assign_molecules`, those of `summarize_assignment` |
 | `outcome` | `ok`, or `empty` without cells |
-| `files` | Each written file with its SHA-256 |
+| `files` | Saved tables and local label files with their SHA-256 |
 | `software` | The software versions |
 
 ## Workflow keys
@@ -214,9 +214,10 @@ Without an `assembly` block the rule writes:
 
 | File | Contents |
 | --- | --- |
-| `expr/{fovID}/raw.h5ad` | AnnData: whole-cell counts in `X` and the cells in `obs`; with nuclei, `nucleus` and `cytoplasm` layers |
-| `expr/{fovID}/reads_assignment.csv` | The molecule rows with their assignment columns |
-| `expr/{fovID}/assignment.png`, `assignment_single_layer.png` | The `plot_assignment` figures |
+| `expr/{fovID}/raw.h5ad` | AnnData: whole-cell counts in `X` and the retained cells in `obs` |
+| `expr/{fovID}/reads_assignment.csv` | Molecule rows after the workflow overlap filter, with assignment columns |
+| `expr/{fovID}/assignment.png` | The `plot_assignment` figure |
+| `expr/{fovID}/assignment_single_layer.png` | An additional middle-plane figure for label images with Z > 1 |
 | `expr/{fovID}/log.txt` | The molecule totals |
 
 The run record keeps the legacy keys under `workflow.legacy`. {doc}`workflow-downstream`

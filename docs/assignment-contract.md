@@ -76,7 +76,7 @@ whole-cell counts only.
    doubtful pairs.
 5. **Compartments.** Splits the molecules of clearly paired cells into nuclear and
    cytoplasmic.
-6. **Exclusion**, with nuclei: excludes the `no_nucleus` cells, by default.
+6. **Exclusion.** Applies the configured cell exclusion.
 7. **Counts.** Counts the assigned molecules per cell and gene.
 8. **Saving**, with `checkpoints`.
 
@@ -106,10 +106,8 @@ whole-cell counts only.
 * `cells` and `nuclei`: the segmentation runs, or `SegmentationResult` objects, used as
   cell territories and nuclei.
 * `AssignmentConfig.expansion`: grows the cell territories before sampling.
-* `CorrespondenceConfig.match_fraction`: the share of a nucleus above which a cell is
-  paired with it.
-* `CorrespondenceConfig.outside_tolerance`: the share of a paired nucleus outside its cell
-  above which the cell is flagged.
+* `CorrespondenceConfig.match_fraction`: controls nucleus–cell pairing by overlap.
+* `CorrespondenceConfig.outside_tolerance`: controls flags for nuclei outside their cells.
 * `AssignmentConfig.exclude_cells_without_nucleus`: keeps or excludes the `no_nucleus`
   cells.
 * `population`: the accepted reads (`final`) or every read called to a gene (`called`).
@@ -127,41 +125,32 @@ molecules' reference grid and, optionally, the nuclei; it reads and writes no fi
 
 ## Coordinate sampling
 
-Positions are zero-based voxel coordinates of the reference grid. A molecule is read at the voxel that contains its position: voxel `i` covers positions
-from `i − 0.5` up to `i + 0.5`. A plane label image is read at the molecule's `y` and
-`x`. A molecule whose voxel lies outside the grid is `outside_grid`. The
-[specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#coordinate-sampling)
-gives the rules at the edges and for planes.
+Assignment samples the label images at each molecule's position on the reference grid;
+see the [sampling specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#coordinate-sampling)
+for voxel boundaries and plane images.
 
 ## Label expansion
 
-`AssignmentConfig.expansion`, an `ExpandLabelsConfig`, grows each cell territory into
-the background with `expand_labels` of segmentation: `planar` in each Z plane, like the
-legacy scripts, and `volumetric` in 3D. Each cell keeps its `cell_id`. The original
-labels stay in `cell_labels`, the grown ones are in `territories`, and molecules are read
-in the grown ones; each molecule records `in_expansion` and `original_cell_id`.
+`AssignmentConfig.expansion` grows cell territories into the background before sampling,
+while preserving the original labels in `cell_labels` and the grown labels in `territories`.
+The molecule table records `in_expansion` and `original_cell_id`; see
+{py:class}`~starfinder.segmentation.ExpandLabelsConfig` for expansion settings.
 
 ## Nucleus–cell correspondence
 
-With `nuclei`, a nucleus is `matched` to the cell that holds more than `match_fraction`
-of its voxels; a nucleus that overlaps cells without such a share is `ambiguous`, and one
-outside every cell is `no_cell`. A cell may have several matched nuclei.
+With `nuclei`, assignment pairs nuclei with cells by overlap and records correspondence
+statuses and flags to help you inspect doubtful pairs; see the
+[correspondence specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#nucleuscell-correspondence)
+for the matching rules.
 
-Each cell gets one correspondence status, `matched`, `ambiguous`, `no_nucleus` or
-`unavailable` (no nuclei given), and flags for doubtful cases: `several_nuclei`,
-`ambiguous_nucleus`, `nucleus_outside_cell` (more than `outside_tolerance` of a
-matched nucleus lies outside it) and `foreign_nucleus` (it holds part of another cell's
-nucleus). To pair them yourself, pass `correspondence`, a table of `nucleus_id` and `cell_id`.
+To pair them yourself, pass `correspondence`, a table of `nucleus_id` and `cell_id`.
 
 ## Compartments
 
-A cell's nuclear part is its territory inside its matched nuclei; the rest is cytoplasm.
-Cells whose `compartments` is `available`, the matched cells without the flags
-`ambiguous_nucleus`, `nucleus_outside_cell` and `foreign_nucleus`, get nuclear and
-cytoplasmic counts, which sum to the whole-cell counts for each gene. Other cells keep
-their whole-cell counts, and `compartments` says why they have no split:
-`withheld` (a doubtful pairing), `no_nucleus` or `unavailable`. A missing compartment
-count is absent, never zero.
+Assignment can split whole-cell counts into nuclear and cytoplasmic counts when the
+nucleus–cell pairing is clear; see the
+[compartment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#compartments)
+for eligibility and count representation.
 
 ## Statuses
 
@@ -172,10 +161,9 @@ Every input molecule keeps one row with one status:
 * `excluded_cell`: in the territory of an excluded cell;
 * `outside_grid`: outside the grid.
 
-With nuclei, the cells whose correspondence is `no_nucleus` are excluded by default:
-their status is `excluded_no_nucleus`, their molecules are `excluded_cell`, and they
-have no count rows, but they keep their row, labels and molecules. `ambiguous` cells are
-kept. Without nuclei no cell is excluded.
+The cell table also records exclusions, controlled by
+`AssignmentConfig.exclude_cells_without_nucleus`; see
+{py:class}`~starfinder.assignment.AssignmentConfig` for details.
 
 ## Cell table
 
@@ -185,11 +173,11 @@ compartments. The reference lists the columns.
 
 ## Count accounting
 
-The result checks that its counts add up: the four statuses sum to the number of
-molecules, the whole-cell counts to the `assigned` molecules, and for an `available` cell
-nuclear plus cytoplasmic to whole. `FOV.assign_molecules` stores
-`summarize_assignment(result)` in `record["counts"]`, with the totals before and after
-the exclusion.
+The result checks that its molecule totals and cell counts agree; see the
+[count specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#count-accounting)
+for the identities checked.
+`FOV.assign_molecules` stores `summarize_assignment(result)` in `record["counts"]`,
+with the totals before and after exclusion.
 
 ## Troubleshooting
 
