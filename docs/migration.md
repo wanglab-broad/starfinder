@@ -1594,8 +1594,8 @@ workflow key is added yet.
 
 Origins are float64 in µm in the sample frame `sample:<sample>`, never truncated to
 pixels as `tile_config_{sample}.csv` is; the gauge is zero mean correction over the
-`image_supported` FOVs. The specification is {doc}`stitching-contract` and
-{doc}`stitching-algorithms`.
+`image_supported` FOVs. The specification is [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) and
+[stitching algorithm specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching-algorithms.md).
 
 ### Stitching: the BigStitcher macro and the import of `dataset.xml`
 
@@ -1616,8 +1616,8 @@ voxel size, which is the reference grids' spacing instead of `voxel_size_xy` and
 (`method_translation_*`, world units) and gives origins in µm, z divided by the
 calibration's z scale; a view without a link into the reference component is `failed`,
 or `metadata_only` at its nominal position with `fallback="nominal"`, and review is then
-required. The specification is {doc}`stitching-contract` ("BigStitcher") and
-{doc}`stitching-algorithms` ("Import arithmetic").
+required. The specification is [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) ("BigStitcher") and
+[stitching algorithm specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching-algorithms.md) ("Import arithmetic").
 
 ### Sample assembly and the shared AnnData writer
 
@@ -1662,8 +1662,8 @@ L1: a link below 0.7 or with NaN quality (which the library itself keeps) is not
 neighbour pair the library does not register is `pruned`; a link its optimizer removes is
 `optimizer_removed` and requires review. When no link is left, every FOV is `failed`
 (the library's `NotEnoughOverlapError`), and the result is still returned and can be
-saved. The specification is {doc}`stitching-contract` ("Method registry") and
-{doc}`stitching-algorithms` ("`multiview_stitcher`").
+saved. The specification is [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) ("Method registry") and
+[stitching algorithm specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching-algorithms.md) ("`multiview_stitcher`").
 
 ### Sample outputs: the export entry and the fused image
 

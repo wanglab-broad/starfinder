@@ -1,6 +1,6 @@
-"""The review policy V1, the approval and the review gate (docs/stitching-contract.md, "Failure policy").
+"""The review policy V1, the approval and the review gate (design/specs/stitching.md, "Failure policy").
 
-The checks are those of docs/stitching-algorithms.md ("Placement-quality checks"); they
+The checks are those of design/specs/stitching-algorithms.md ("Placement-quality checks"); they
 read only the record.
 """
 from __future__ import annotations

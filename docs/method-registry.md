@@ -96,7 +96,7 @@ for registration ({doc}`registration-algorithms`); `pipeline`, `output_columns` 
 and `score_columns` for decoding ([readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#encoding-registry)); `targets`, `roles`,
 `required_roles`, `seeds`, `models` and `devices` for segmentation
 ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#method-registry)); `devices` and `transform_kind` for stitching
-({doc}`stitching-contract`). A stage may add a field without changing the helper.
+([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md)). A stage may add a field without changing the helper.
 
 ## Adding a method: the mandatory steps
 

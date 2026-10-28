@@ -1,6 +1,6 @@
 """The stitching method registry: exact config type -> StitchingSpec, and what a method returns.
 
-docs/stitching-contract.md ("Method registry"), on the shared mechanism of
+design/specs/stitching.md ("Method registry"), on the shared mechanism of
 docs/method-registry.md. No method is registered here; each method's module adds its
 entry (``_multiview``: ``multiview_stitcher``). ``supplied`` (:func:`placement_from_table`)
 and ``bigstitcher`` (the import) are not methods and are never keys.

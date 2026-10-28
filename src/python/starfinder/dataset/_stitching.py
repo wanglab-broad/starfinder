@@ -1,6 +1,6 @@
 """What ``Dataset.stitch`` reads: the saved stitching images and the workflow's ``positions`` mapping.
 
-docs/stitching-contract.md ("Coordination on the dataset", "Input image", "Workflow
+design/specs/stitching.md ("Coordination on the dataset", "Input image", "Workflow
 configuration").
 """
 from __future__ import annotations

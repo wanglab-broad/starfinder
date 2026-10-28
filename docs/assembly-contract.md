@@ -57,7 +57,7 @@ sample-level identities, count accounting, the sample tables, the sample-level A
 persistence and the workflow translation. It builds on two contracts and redefines
 neither:
 
-* the placement of {doc}`stitching-contract`: `PlacementResult` (per-FOV `status`,
+* the placement of [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md): `PlacementResult` (per-FOV `status`,
   float64 `origin_z/y/x` in µm, `nominal_*`, links, record, review), the sample frame, the
   index-to-sample rule and `placed_metadata`, the failure policy and
   `PlacementReviewRequiredError`;
@@ -119,7 +119,7 @@ of 2026-09-27 on stitching and assembly:
   AnnData"); the record holds each territory label file's path beside its SHA-256 ("What
   assemble records"); and `ownership_map` takes an optional `candidates` argument
   ("Ownership regions"). A placement from `placement_from_table`
-  ({doc}`stitching-contract`, "Supplied placement") is a `PlacementResult` like any other.
+  ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Supplied placement") is a `PlacementResult` like any other.
 * **Decided on 2026-10-09** (Jiahao, on {doc}`cells-across-fovs-proposal`, question 3,
   option b; implemented on that date): the route per FOV keeps one of two observations of a
   cell, as a part of that route for good. Two retained cells of different FOVs whose
@@ -143,7 +143,7 @@ assignment contracts.
 
 * A **sample**, the **sample frame** (ZYX, µm, identity direction, `frame_id`
   `sample:<sample>`), a FOV's **reference grid**, **origin** and **placed** FOV are those
-  of {doc}`stitching-contract`. A FOV is **placed** when its origin is finite
+  of [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md). A FOV is **placed** when its origin is finite
   (`image_supported`, `metadata_only`, `placeholder`).
 * The **footprint** of a placed FOV is the region of the sample frame its reference grid
   covers: in Y and X the union of its voxel supports, `[origin − s/2, origin + (n − ½)·s)`
@@ -174,7 +174,7 @@ assignment contracts.
 
 **Recommendation: A1.** It mirrors the settled stage split (stitch, assemble, fuse and
 export), follows the stitching contract's recommendation that assemble keeps its own module
-({doc}`stitching-contract`, "Names"), and keeps `starfinder.stitching` free of the assignment
+([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Names"), and keeps `starfinder.stitching` free of the assignment
 tables.
 
 % D3; W-325; §2.9
@@ -230,7 +230,7 @@ after fusion of {doc}`sample-segmentation-contract`, it calls `assign_molecules`
 the sample), merges no cell across FOVs,
 matches observations of two FOVs only by the duplicate rule ("Retention", rule 8), and
 moves no molecule to another cell. Like `stitch`, it is a sample-level computation, not a
-multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV runner").
+multi-FOV runner ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Not the multi-FOV runner").
 
 % §2.9
 
@@ -279,7 +279,7 @@ In this order, before any coordinate is computed; each raises and names the FOVs
    the field).
 2. **Review.** A placement whose `record["review"]` is `required` and that holds no
    approval raises `PlacementReviewRequiredError` with the reasons
-   ({doc}`stitching-contract`, "Failure policy", item 2).
+   ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Failure policy", item 2).
 3. **FOV identity.** Every `fov_id` is unique among the inputs and is a row of
    `placement.fovs` (`ValueError`). Every FOV whose placement status is
    `image_supported` or `metadata_only` must have an input (`ValueError`); an input of a
@@ -390,7 +390,7 @@ class AssemblyResult:
 ## Sample coordinates
 
 An observation's sample coordinates are its zero-based index position on its FOV's
-reference grid, pushed into the sample frame by the rule of {doc}`stitching-contract`
+reference grid, pushed into the sample frame by the rule of [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md)
 ("Placement record", "Index to sample coordinates"), used unchanged:
 `sample_zyx = origin_zyx + D · (p ⊙ spacing_zyx)`, equivalently
 `placed_metadata(placement, fov_id).index_to_world(p)`.
@@ -456,7 +456,7 @@ in it, not placed, a `placeholder`, or without a grid), raises `ValueError` nami
 
 ### Placeholder FOVs
 
-A `placeholder` ({doc}`stitching-contract`, "Placement record") is placed, so it has a
+A `placeholder` ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Placement record") is placed, so it has a
 footprint and a centre, which the `fovs` table and the record keep, but it owns no point.
 A point in a placeholder's footprint goes to the nearest owning FOV whose footprint covers
 it, by the geometry and tie rule below, or to none when no owning FOV covers it. Its
@@ -623,7 +623,7 @@ Flags make visible what assembly cannot decide; they never change a status.
 | `cell_unclaimed` | excluded molecule | Its cell is flagged `unclaimed`. |
 
 "Inside a territory" is the assignment sampling rule applied in the other FOV: the sample point
-is mapped into that FOV's index coordinates by the inverse rule of {doc}`stitching-contract`
+is mapped into that FOV's index coordinates by the inverse rule of [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md)
 and sampled at `floor(c + 0.5)` (Y and X for a `plane`, Z, Y and X otherwise); a point
 outside its grid is in no territory. With `conflicts=False` the `conflict` and `unclaimed`
 flags are not computed and the record says so. "Retained" in the rules of `conflict` and
@@ -770,7 +770,7 @@ molecule's `fov_id` and `cell_id`, null where no single row holds them); `sample
 
 | Option | Layout | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **S1. The sample's export folder beside the placement (recommended)** | `<OUTPUT>/export/<sample>/`: the section `assembly` of `export.json` (the record, with the SHA-256 of every file), `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>` and `sample.h5ad`. `<fmt>` is CSV by default or Parquet, through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), as for the assignment tables. The other parts of `Dataset.export` write their files and sections in the same folder ({doc}`sample-output-contract`, "The export folder and the output profiles"). | None: the golden test pins values, not files. | New folder beside `stitching/<sample>/` (option S1 of {doc}`stitching-contract`), shared by every part of the export entry (the review gate, 2026-10-06). `output/tile_config_{sample}.csv`, `expr/{fovID}/*` and the legacy sample files are untouched while the legacy rules run. |
+| **S1. The sample's export folder beside the placement (recommended)** | `<OUTPUT>/export/<sample>/`: the section `assembly` of `export.json` (the record, with the SHA-256 of every file), `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>` and `sample.h5ad`. `<fmt>` is CSV by default or Parquet, through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), as for the assignment tables. The other parts of `Dataset.export` write their files and sections in the same folder ({doc}`sample-output-contract`, "The export folder and the output profiles"). | None: the golden test pins values, not files. | New folder beside `stitching/<sample>/` (option S1 of [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md)), shared by every part of the export entry (the review gate, 2026-10-06). `output/tile_config_{sample}.csv`, `expr/{fovID}/*` and the legacy sample files are untouched while the legacy rules run. |
 | S2. The legacy sample file names as the store | `expr/{sample}_raw.h5ad` (the AnnData) and `expr/{sample}_reads_assignment.csv` (the molecule table), with new content; the record in `uns`. | None. | The same names hold different populations and columns depending on the configuration; readers of earlier runs cannot tell which they read. The cell table of excluded cells has no file. |
 | S3. One AnnData as the only store | `sample.h5ad` with every cell (retained and excluded) as `obs`, the molecule table in `uns`. | None. | Breaks "one row per counted cell" of the AnnData, needs anndata to read any table, and stores a large molecule table inside an H5AD. |
 
@@ -881,7 +881,7 @@ rows with `assembly_status == "retained"` and `status == "kept"`), in table orde
 
 **Dependency.** `write_sample_h5ad` imports `anndata`, from the existing `anndata` extra
 (`starfinder[anndata]`: `anndata==0.12.6`, its pin for Python 3.11 and later, which are
-the versions the package supports once the dependency plan of {doc}`stitching-contract` is
+the versions the package supports once the dependency plan of [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) is
 applied), lazily; `write_h5ad` imports it the same way. Without it, either raises
 `ModuleNotFoundError` naming the extra. `assemble` and the tables need only the base
 dependencies. No dependency or lock change.
@@ -937,7 +937,7 @@ equal to them, as for the other blocks.
 % §2.9
 
 **Recommendation: W1.** It keeps legacy configurations reproducible, gives the new
-populations one home, and follows the stitching block's pattern ({doc}`stitching-contract`,
+populations one home, and follows the stitching block's pattern ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md),
 "Workflow configuration").
 
 Note: with an assignment name, `reads_assignment` now writes the saved folder alone
@@ -987,7 +987,7 @@ Without an `assembly` block the figures stay as `reads_assignment` draws them, i
 ## Exclusions
 
 No implementation, rename, dependency or lock change; no change to the placement contract
-({doc}`stitching-contract`) or to the label and assignment contracts; no merging of cells across FOVs
+([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md)) or to the label and assignment contracts; no merging of cells across FOVs
 (the duplicate rule of "Retention", rule 8, decided on 2026-10-09, excludes one of two
 observations and merges nothing), no recovery of complete cells across borders, no reassignment of molecules; no
 fused image, label export or SpatialData (the sample outputs); no real data (every measured number is

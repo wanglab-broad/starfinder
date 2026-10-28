@@ -21,8 +21,8 @@ today's ``tile_config_{sample}.csv`` from the import.
 :func:`approve_placement` records an approval, and :func:`save_placement` and
 :func:`load_placement` write and read ``stitching/<sample>/`` (option S1).
 ``Dataset.stitch`` reads the saved per-FOV images and calls :func:`stitch`. Importing this
-module imports no stitching backend. See docs/stitching-contract.md and
-docs/stitching-algorithms.md.
+module imports no stitching backend. See design/specs/stitching.md and
+design/specs/stitching-algorithms.md.
 """
 # §2.10
 from ._bigstitcher import BigStitcherConfig, export_bigstitcher, import_bigstitcher, legacy_tile_config_view

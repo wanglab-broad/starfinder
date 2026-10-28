@@ -1,7 +1,7 @@
 """The tile position table, its three converters and the stage-axis mapping.
 
-docs/stitching-contract.md ("Tile position table", "Stage-axis mapping") and
-docs/stitching-algorithms.md ("Converters"). Every converter returns a table in µm and
+design/specs/stitching.md ("Tile position table", "Stage-axis mapping") and
+design/specs/stitching-algorithms.md ("Converters"). Every converter returns a table in µm and
 reads no image: the tile size and spacing it needs are arguments, as values.
 """
 from __future__ import annotations
@@ -117,7 +117,7 @@ class StageAxisMapping:
     different image axes. ``source`` says where the mapping comes from
     (``"declared"`` by the caller, ``"legacy"`` for the workflow's translation of
     a legacy configuration). For LN sample1 it is ``StageAxisMapping(x="+x",
-    y="+y")`` (docs/stitching-contract.md, "Stage-axis mapping").
+    y="+y")`` (design/specs/stitching.md, "Stage-axis mapping").
 
     Raises
     ------
@@ -252,7 +252,7 @@ def _grid_nominal(cells, step_yx):
 def positions_from_grid(*, columns: int, rows: int, order: str, tile_shape_yx: tuple[int, int],
                         spacing_yx: tuple[float, float], overlap: float | tuple[float, float],
                         fov_ids: Sequence[str]) -> TilePositionTable:
-    """Tile position table of a regular grid (docs/stitching-algorithms.md, "Regular grid").
+    """Tile position table of a regular grid (design/specs/stitching-algorithms.md, "Regular grid").
 
     FOV ``k`` of ``fov_ids`` goes to a cell by ``order``:
     ``column_major_down_right`` (column ``k // rows``, row ``k % rows``),
@@ -366,7 +366,7 @@ def _select_points(points, position_ids, path):
 
 def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping[int, str],
                          snap_to_grid: GridSnap | None = None, position_ids=None) -> TilePositionTable:
-    """Tile position table of a Leica LAS X stage file (docs/stitching-algorithms.md, "Leica stage file").
+    """Tile position table of a Leica LAS X stage file (design/specs/stitching-algorithms.md, "Leica stage file").
 
     Reads every ``XYZStagePointDefinition`` (``PositionID``, ``StageXPos`` and
     ``StageYPos`` in metres), converts to µm (× 1e6), sends stage +X and +Y where
@@ -498,7 +498,7 @@ def _to_um(values, unit):
 
 
 def positions_from_table(path_or_frame, *, unit: str = "µm") -> TilePositionTable:
-    """Tile position table of a supplied CSV or frame (docs/stitching-algorithms.md, "Supplied table").
+    """Tile position table of a supplied CSV or frame (design/specs/stitching-algorithms.md, "Supplied table").
 
     Reads ``fov_id``, ``nominal_z``, ``nominal_y`` and ``nominal_x`` (other
     columns are ignored) and converts the nominal values from ``unit`` to µm:

@@ -496,7 +496,7 @@ class Dataset:
 
     def stitch(self, sample: str, fov_ids, *, table, config, input: str = "reference_merged", review=None,
                fallback: str | None = None, output_dir: Path | str | None = None, position_ids=None):
-        """Place one sample's FOVs from their saved stitching images (docs/stitching-contract.md).
+        """Place one sample's FOVs from their saved stitching images (design/specs/stitching.md).
 
         A sample-level computation, not a multi-FOV runner: it calls no per-FOV
         stage and reads only saved per-FOV files. For each FOV it reads the

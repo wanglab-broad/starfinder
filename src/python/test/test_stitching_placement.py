@@ -57,7 +57,7 @@ def bits(frame, columns):
 
 
 def check_record(result, table):
-    """The record assertions of docs/stitching-contract.md ("Method record")."""
+    """The record assertions of design/specs/stitching.md ("Method record")."""
     fovs = result.fovs
     assert list(fovs.fov_id) == table.fov_ids
     assert set(fovs.status) <= STATUSES
@@ -453,7 +453,7 @@ def test_placement_result_rules():
 def test_a_present_fov_with_a_non_finite_translation_is_failed_and_keeps_a_component(stub, fallback):
     """Every image present, FOV3's translation NaN and its links dropped as nan_quality or reported kept.
 
-    docs/stitching-algorithms.md ("Failure behavior"): "A non-finite translation: `failed`", whatever
+    design/specs/stitching-algorithms.md ("Failure behavior"): "A non-finite translation: `failed`", whatever
     the fallback; the component rule of W-365 holds (its own component, −1 only for ``missing``).
     """
     table = stub_table()

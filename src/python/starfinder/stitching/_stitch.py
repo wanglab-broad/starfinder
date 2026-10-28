@@ -1,4 +1,4 @@
-"""The stitch entry and its input (docs/stitching-contract.md, "The stitch entry", "Input image")."""
+"""The stitch entry and its input (design/specs/stitching.md, "The stitch entry", "Input image")."""
 from __future__ import annotations
 
 import re

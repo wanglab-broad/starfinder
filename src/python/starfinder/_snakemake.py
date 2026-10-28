@@ -686,7 +686,7 @@ def _bigstitcher_folder(block, sample):
 def _write_tile_config(result, path, config):
     """The legacy writer: output/tile_config_{sample}.csv from the import's raw translations and view map.
 
-    legacy_tile_config_view (T3 to T7 of docs/stitching-baseline.md) with the
+    legacy_tile_config_view (T3 to T7 of design/baselines/stitching.md) with the
     configuration's img_col and img_row, written as create_tile_config.py
     writes it (frame.to_csv()); it reads no status, so it is the same for every
     fallback.
@@ -782,7 +782,7 @@ def _check_bigstitcher_engine(dataset_xml, view_map, returncode=None):
     """The engine rule's success check: dataset.xml exists and holds a Stitching Transform for every view.
 
     Fiji exits with status 0 when the macro fails, so the check, not the exit
-    status, decides (docs/stitching-contract.md, "BigStitcher"). A view is
+    status, decides (design/specs/stitching.md, "BigStitcher"). A view is
     mapped to its registration through the ViewSetup tile attribute, as the
     import maps it. Raises RuntimeError naming the path (no file, or not
     readable XML) or the views without a Stitching Transform, with Fiji's exit

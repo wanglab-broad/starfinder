@@ -1,4 +1,4 @@
-"""Stitching errors (docs/stitching-contract.md, "Names")."""
+"""Stitching errors (design/specs/stitching.md, "Names")."""
 
 
 class StitchingBackendUnavailableError(ImportError):

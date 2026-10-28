@@ -18,7 +18,7 @@ It builds on these pages and redefines none of them:
 
 * [synthetic specification](amplicon-scene.md): the formed-amplicon model, its stages, truth tables and
   random streams, used unchanged for every FOV;
-* [stitching-contract](../../../docs/stitching-contract.md): the sample frame, the tile position table and
+* [stitching-contract](../stitching.md): the sample frame, the tile position table and
   `positions_from_grid`, the placement record (`PlacementResult`, `origin_z/y/x` in µm,
   the gauge G1) and the index-to-sample rule;
 * [assembly-contract](../../../docs/assembly-contract.md): footprints, ownership, retention, statuses and the count
@@ -76,7 +76,7 @@ states the identities a test can check, not the validation plan.
 
 ## Terms
 
-* The **sample frame** is that of [stitching-contract](../../../docs/stitching-contract.md): ZYX, µm, identity direction,
+* The **sample frame** is that of [stitching-contract](../stitching.md): ZYX, µm, identity direction,
   `frame_id` `sample:<sample>`.
 * The **scene domain** `Ω` is the box of the sample frame in which scene content is
   generated; it contains every footprint for any allowed jitter ("The sample scene").
@@ -317,7 +317,7 @@ class AcquisitionConfig:
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
 | `columns`, `rows` | – | 2, 2 | integers ≥ 1 |
-| `order` | – | `column_major_down_right` | FOV `k` at column `k // rows`, row `k % rows`, the order of `positions_from_grid` ([stitching-contract](../../../docs/stitching-contract.md)) |
+| `order` | – | `column_major_down_right` | FOV `k` at column `k // rows`, row `k % rows`, the order of `positions_from_grid` ([stitching-contract](../stitching.md)) |
 | `fov_shape_zyx` | voxels | (5, 36, 36) | positive integers; every FOV has this reference grid |
 | `spacing_zyx` | µm | (1.0, 0.5, 0.5) | finite, > 0 |
 | `overlap` | fraction | 1/3 | `0 ≤ overlap < 1`; the nominal step is `(1 − overlap) · n · s` in Y and X, as in `positions_from_grid` |
@@ -392,7 +392,7 @@ model evaluated at that voxel's centre.
 * **Metadata.** Each FOV's reference `ImageMetadata` is in the FOV frame
   (`<formed namespace>/reference`, as today) with the acquisition spacing, origin
   `(0, 0, 0)`, identity direction and unit `µm`, which is what `stitch` and `assemble`
-  require ("Relation to `ImageMetadata.origin`", [stitching-contract](../../../docs/stitching-contract.md)). The true
+  require ("Relation to `ImageMetadata.origin`", [stitching-contract](../stitching.md)). The true
   origin is never written into it; it is truth.
 
 **Implementation route.**
@@ -423,7 +423,7 @@ position table order:
 | `shape_z/y/x`, `spacing_z/y/x` | int, float64 µm | The FOV's reference grid |
 
 **Units and direction.** Positions are in µm in the sample frame. The direction is the
-push sense of the placement record ([stitching-contract](../../../docs/stitching-contract.md), "Index to sample
+push sense of the placement record ([stitching-contract](../stitching.md), "Index to sample
 coordinates"): a FOV index position `p` is at `sample = true_origin + p ⊙ spacing`, the
 identity direction of the sample frame. A `PlacementResult` is therefore compared with the
 truth column for column: its `origin_*` with `true_origin_g1_*` under G1 (both have zero
@@ -590,7 +590,7 @@ class StainConfig:
 
 The stain is one ZYX image per FOV, in the template's dtype, saved as
 `fovs/<fov_id>/stain.ome.tif` with the FOV's reference metadata. It is the
-`reference_stain` input of `stitch` ([stitching-contract](../../../docs/stitching-contract.md), "Input image") and the
+`reference_stain` input of `stitch` ([stitching-contract](../stitching.md), "Input image") and the
 nuclear image of the cellular scene. The cellular scene of [synthetic cellular scene](cellular-scene.md)
 renders several stains per FOV, each in its own output dtype; its first nuclear stain of
 the reference round takes this role.
@@ -861,7 +861,7 @@ assembly can be compared with sample-level truth without running a segmenter:
 
 The validation itself (which comparisons, which numbers) belongs to the validation
 design; this page fixes only the inputs and their identities. The placement from the
-placement truth is built by `placement_from_table` of [stitching-contract](../../../docs/stitching-contract.md)
+placement truth is built by `placement_from_table` of [stitching-contract](../stitching.md)
 ("Supplied placement") from the scene's nominal positions and its true origins: the tile
 position table is `positions.csv` (read by `positions_from_table`), whose `nominal_z/y/x`
 are the nominal grid's; `origins` maps each `fov_id` to the `(true_origin_z,

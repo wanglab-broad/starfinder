@@ -1,4 +1,4 @@
-"""The saved placement, option S1 (docs/stitching-contract.md, "Persistence").
+"""The saved placement, option S1 (design/specs/stitching.md, "Persistence").
 
 A placement is a folder, by convention ``<OUTPUT>/stitching/<sample>/``, holding
 ``placement.json`` (the record with the SHA-256 and dtypes of both tables),

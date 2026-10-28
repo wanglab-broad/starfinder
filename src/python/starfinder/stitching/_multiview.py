@@ -1,4 +1,4 @@
-"""The ``multiview_stitcher`` placement method (docs/stitching-algorithms.md, "multiview_stitcher").
+"""The ``multiview_stitcher`` placement method (design/specs/stitching-algorithms.md, "multiview_stitcher").
 
 Importing this module registers ``MultiviewStitcherConfig`` in ``STITCHING_METHODS``. The
 library is imported inside the method function only: importing ``starfinder.stitching``
@@ -38,7 +38,7 @@ def _number(value, name, *, low=None, strict=False):
 
 @dataclass(frozen=True)
 class MultiviewStitcherConfig:
-    """multiview-stitcher's translation placement, in the contract's starting configuration.
+    """Place overlapping FOVs by phase correlation and global translation optimization.
 
     Phase correlation on each registered pair's overlap, mean-binned by
     ``binning_zyx`` voxels (z ignored for Z=1 tiles, which are registered as
@@ -57,7 +57,7 @@ class MultiviewStitcherConfig:
     Raises
     ------
     ValueError
-        A field outside the rules of docs/stitching-algorithms.md: a binning
+        A field outside the rules of design/specs/stitching-algorithms.md: a binning
         that is not three integers ≥ 1, an ``upsample_factor`` below 1, a
         ``quality_threshold`` outside [−1, 1], a negative
         ``overlap_tolerance_um``, a ``pairwise``, ``pruning`` or ``groupwise``
@@ -148,7 +148,7 @@ def _labels(n, present, edges):
 
 
 def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewStitcherConfig) -> MethodPlacement:
-    """Place the tiles with multiview-stitcher in one call (docs/stitching-algorithms.md, steps 1 to 7).
+    """Place the tiles with multiview-stitcher in one call (design/specs/stitching-algorithms.md, steps 1 to 7).
 
     1. Each present tile becomes a one-level image with its grid's spacing and
        its nominal origin (µm) as the array translation; Z=1 tiles are passed

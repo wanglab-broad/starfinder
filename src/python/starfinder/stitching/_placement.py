@@ -1,7 +1,7 @@
 """The placement record, the index-to-sample rule and the supplied placement.
 
-docs/stitching-contract.md ("Placement record", "Supplied placement") and
-docs/stitching-algorithms.md ("Supplied placement").
+design/specs/stitching.md ("Placement record", "Supplied placement") and
+design/specs/stitching-algorithms.md ("Supplied placement").
 """
 from __future__ import annotations
 
@@ -107,7 +107,7 @@ class PlacementResult:
     link). ``record`` holds ``format_version``, ``stage``, ``sample``,
     ``frame``, ``gauge``, ``method`` (the uniform provenance entry), ``table``
     (the table's record), ``inputs`` (per FOV: source, file SHA-256 and grid) and
-    ``review``, as JSON values. See docs/stitching-contract.md ("Placement
+    ``review``, as JSON values. See design/specs/stitching.md ("Placement
     record").
 
     Raises

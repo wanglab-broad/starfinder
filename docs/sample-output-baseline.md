@@ -91,7 +91,7 @@ tampering, the three-molecule link oracle).
 
 The premise of the reference branch's sample-export specification differs from the accepted stitching and assembly design now: it took the assembly as a caller-supplied
 affine per source and left "which overlap observation survives" open. That design now has a
-placement record ({doc}`stitching-contract`) and sample tables with ownership and
+placement record ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md)) and sample tables with ownership and
 retention ({doc}`assembly-contract`), so the export reads those instead.
 
 % The W-168 premise differs from §2.10 now; §2.10 now has a placement record
@@ -108,7 +108,7 @@ What `dev` does have and the contract uses:
 | OME-TIFF writer and readers | `src/python/starfinder/io/tiff.py`: `save_volume` (ZYX TIFF with a JSON description, or ZYXC OME-TIFF with the `ImageMetadata` as JSON in a `CommentAnnotation` of namespace `starfinder.image.ImageMetadata`), `load_volume`, `load_volume_zyxc` | Whole-array writes, no BigTIFF flag, no tiling, no resolution levels and no OME `PhysicalSize`; the metadata convention is reused by the fused files. |
 | Geometry | `src/python/starfinder/image.py`: `ImageMetadata` with `index_to_world`, `world_to_index`, `cropped`, `rotated`, `projected` | `projected(method)` returns a frame with unknown physical fields; the fused projection needs its Y and X calibration, which the contract records differently ("The 2D projection"). |
 | Projection | `src/python/starfinder/preprocessing/projection.py`: `ProjectionConfig` (`max` or `sum`, axis `z` or `channel`), `project_image` | The per-FOV projection rule the fused projection reuses for one FOV. |
-| Placement and assembly | {doc}`stitching-contract`, {doc}`assembly-contract` (Proposed, this batch) | The inputs of fusion and export. |
+| Placement and assembly | [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), {doc}`assembly-contract` (Proposed, this batch) | The inputs of fusion and export. |
 | Extras | `pyproject.toml`: `spatialdata = ["spatialdata>=0.1", "spatialdata-io>=0.1"]`; `anndata`; base `tifffile>=2023.0` | Locked: spatialdata 0.6.1, ome-zarr 0.12.2, zarr 3.1.5, numcodecs 0.15.1, anndata 0.12.6, tifffile 2026.1.28 on Python 3.11 and later; spatialdata 0.3.0, ome-zarr 0.10.2 or 0.11.1, zarr 2.18.3, numcodecs 0.13.1, anndata 0.11.4, tifffile 2025.5.10 on 3.10. The locked environment of this batch has zarr, numcodecs, tifffile and anndata installed, not spatialdata or ome-zarr. |
 | Workflow | `workflow/rules/stitching.smk`, `common.smk` (`FUSE_DIR = <OUTPUT>/images/fused`) | `images/fused/{sample}/` holds only BigStitcher's inputs and `dataset.xml`; no rule fuses an image. |
 

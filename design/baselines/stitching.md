@@ -2,7 +2,7 @@
 
 % Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-Note: {doc}`stitching-contract` and {doc}`stitching-algorithms` were accepted at their review gate (2026-10-07) and are implemented in `starfinder.stitching`; this page keeps the text of its revision.
+Note: [stitching-contract](../specs/stitching.md) and [stitching-algorithms](../specs/stitching-algorithms.md) were accepted at their review gate (2026-10-07) and are implemented in `starfinder.stitching`; this page keeps the text of its revision.
 
 % Note (W-583); accepted at W-329 (2026-10-07)
 
@@ -10,10 +10,10 @@ This page records how stitching behaves at revision `8e7d256` (branch
 `runner/s210-spec-20261006`, on `dev` after the assignment work), before the stitching
 and assembly work changes it. It is the reference that the golden test
 `src/python/test/test_workflow_stitching_golden.py` pins. The proposed replacement is
-described in {doc}`stitching-contract` and {doc}`stitching-algorithms`; neither is
+described in [stitching-contract](../specs/stitching.md) and [stitching-algorithms](../specs/stitching-algorithms.md); neither is
 accepted. Paths are relative to the repository root, and line numbers are at `8e7d256`.
 The assembly half of the stitching and assembly work (sample coordinates of molecules and cells, overlap ownership,
-the sample tables) is recorded by {doc}`assembly-baseline`; this page names it only where the stitching
+the sample tables) is recorded by [assembly-baseline](../../docs/assembly-baseline.md); this page names it only where the stitching
 scripts reach into it, and marks which parts of `create_tile_config.py` belong to it.
 
 % on `dev` after the §2.9 work, before the Chapter II §2.10 work changes it; the assembly half of §2.10 is recorded by W-326
@@ -153,7 +153,7 @@ without `*.tif`, it re-saves as N5 with Gzip, its `subsampling_factors` are
 `{fiji_path} -Djava.io.tmpdir={OUTPUT}/images/fused/{sample}/DAPI --ij2 --headless --run <macro>`
 with 4 threads and a Snakemake benchmark file. `config['fiji_path']` is read inside an
 f-string when the rule file is parsed, so every workflow needs the key even when the
-rule is disabled ({doc}`workflow-configuration`). Two facts from the input inventory decide how the
+rule is disabled ([workflow-configuration](../../docs/workflow-configuration.md)). Two facts from the input inventory decide how the
 rule may be trusted: Fiji exits with status 0 when the macro fails, so only a written
 `dataset.xml` shows success; and BigStitcher cannot write its HDF5 on the CIFS artifact
 mount from GP099, so the save folder must be on local disk.
@@ -188,10 +188,10 @@ On LN sample1 the unchanged script (with a stand-in plotly module, in the parity
 
 | Part | Lines | Belongs to |
 | --- | --- | --- |
-| T1, T2, T5: which view is which FOV, and its fractional origin | 19-41, 50-58 | Placement: the import of `dataset.xml` ({doc}`stitching-contract`, "BigStitcher") |
+| T1, T2, T5: which view is which FOV, and its fractional origin | 19-41, 50-58 | Placement: the import of `dataset.xml` ([stitching-contract](../specs/stitching.md), "BigStitcher") |
 | T3 integer cast | 43-45 | Neither: dropped; kept only in a legacy view that reproduces `tile_config` |
-| T4 shift to a zero minimum | 47-49 | The sample frame: its origin is a placement choice ({doc}`stitching-contract`, "Placement record"); integer sample coordinates of molecules and cells are assembly's ({doc}`assembly-baseline`) |
-| T6, T7 non-overlap rectangles | 60-130 | Assembly ({doc}`assembly-baseline`): overlap ownership, computed in assemble from the placement |
+| T4 shift to a zero minimum | 47-49 | The sample frame: its origin is a placement choice ([stitching-contract](../specs/stitching.md), "Placement record"); integer sample coordinates of molecules and cells are assembly's ([assembly-baseline](../../docs/assembly-baseline.md)) |
+| T6, T7 non-overlap rectangles | 60-130 | Assembly ([assembly-baseline](../../docs/assembly-baseline.md)): overlap ownership, computed in assemble from the placement |
 | HTML plot | 134-140 | Output diagnostics |
 
 % T4: integer sample coordinates of molecules and cells are W-326's. T6, T7: Assembly (W-326).
@@ -239,7 +239,7 @@ the two sample datasets come from this path.
 % Discrepancies with the agreed §2.10 scope
 
 Each line names the current behavior and the proposed resolution in
-{doc}`stitching-contract` or {doc}`stitching-algorithms`.
+[stitching-contract](../specs/stitching.md) or [stitching-algorithms](../specs/stitching-algorithms.md).
 
 | # | Current behavior | Proposed resolution |
 | --- | --- | --- |
@@ -249,19 +249,19 @@ Each line names the current behavior and the proposed resolution in
 | 4 | **The axis mapping is implicit in `rotate_angle`** (G3 fixes stage X → column, stage Y → row). | An explicit stage-axis mapping with no default; `rotate_angle` stays an image rotation, and the workflow adapter translates the legacy configuration into the mapping G3 hard-codes, recorded as such ("Stage-axis mapping"). |
 | 5 | **Macro parameters fixed in the script.** | A package function renders the macro from a `BigStitcherConfig` whose defaults are today's values, recorded in the placement record. |
 | 6 | **The transform names of `dataset.xml` hard-coded**, three transforms per view assigned by position (T1). | The import maps views to FOVs by setup id and the tile attribute, composes every transform of the view except `calibration`, refuses a non-translation, and raises naming the view when a transform is missing ("BigStitcher"). |
-| 7 | **Overlap rectangles computed together with placement** (T6-T7). | Placement stops at the per-FOV origins; ownership is computed in assemble ({doc}`assembly-contract`) from the placement. |
+| 7 | **Overlap rectangles computed together with placement** (T6-T7). | Placement stops at the per-FOV origins; ownership is computed in assemble ([assembly-contract](../../docs/assembly-contract.md)) from the placement. |
 | 8 | **`img_col` used for the Y extent** (lines 106, 108). | Assemble takes each FOV's extent from its `ReferenceGrid` shape; the legacy view keeps the bug only to reproduce existing files. |
 | 9 | **`fiji_path` needed at parse time.** | The BigStitcher engine task reads `fiji_path` only when it runs; the key becomes optional for workflows that do not stitch with BigStitcher ("Workflow configuration"). |
 | 10 | **No package API.** | A `starfinder.stitching` module with the stitch entry, the tile position table, `STITCHING_METHODS`, the macro function and the import ("Names"). |
 | 11 | z translations of `dataset.xml` are in xy-pixel units and are cast and used as slice offsets (T2, T3; the input inventory's finding 3). | The import divides z by the calibration's z scale before converting to micrometres. |
 | 12 | Fiji exits with status 0 when the macro fails. | The engine task checks that `dataset.xml` exists and holds a stitching transform for every view, else fails. |
-| 13 | `stitching_preparation.py` fails with pandas 3.0.0 (`pd.value_counts`), the version the lock has for Python 3.11 to 3.13. | The package converter does not use `pd.value_counts`; its step rule and tie rule are explicit ({doc}`stitching-algorithms`, "Leica stage file"). The legacy script is not repaired by this issue. |
+| 13 | `stitching_preparation.py` fails with pandas 3.0.0 (`pd.value_counts`), the version the lock has for Python 3.11 to 3.13. | The package converter does not use `pd.value_counts`; its step rule and tie rule are explicit ([stitching-algorithms](../specs/stitching-algorithms.md), "Leica stage file"). The legacy script is not repaired by this issue. |
 | 14 | `create_tile_config.py` imports plotly, which is not in the lock. | The plot leaves the placement path; a diagnostic plot uses matplotlib. |
-| 15 | The step comes from Y alone, as the most frequent exact float difference, with a tie broken by order; two positions in one cell are summed into one id. | The stage converter keeps positions, so no step is needed; the optional snapping to a grid ({doc}`stitching-algorithms`) states its step and tie rule and refuses two positions in one cell. |
+| 15 | The step comes from Y alone, as the most frequent exact float difference, with a tie broken by order; two positions in one cell are summed into one id. | The stage converter keeps positions, so no step is needed; the optional snapping to a grid ([stitching-algorithms](../specs/stitching-algorithms.md)) states its step and tie rule and refuses two positions in one cell. |
 | 16 | The input folder `images/DAPI` and the name `Position%03d` are fixed; `fov_id_pattern` is ignored; the stage file's `PositionID` is taken as the FOV number. | The input is a specified, saved stain image on each FOV's reference grid; FOV identities come from the tile position table ("Input image"). |
 | 17 | T4 moves a positive minimum away from 0. | The sample frame's origin is defined by a stated gauge ("Placement record"). |
 | 18 | The tile copies and `dataset.h5` are undeclared outputs; BigStitcher's save folder must be on local disk. | The engine task declares its outputs and takes a local save folder as a parameter. |
-| 19 | The calibration is taken from `voxel_size_xy` and `voxel_size_z`, rounded for LN. | The import converts through each FOV's `ReferenceGrid` spacing ({doc}`stitching-algorithms`, "Import arithmetic"). |
+| 19 | The calibration is taken from `voxel_size_xy` and `voxel_size_z`, rounded for LN. | The import converts through each FOV's `ReferenceGrid` spacing ([stitching-algorithms](../specs/stitching-algorithms.md), "Import arithmetic"). |
 | 20 | `create_tile_config.py` converts one-element arrays to scalars with `int()` (lines 88, 94, 100, 106), deprecated since NumPy 1.25. | Not repaired; recorded. |
 | 21 | The current macro stores no full-resolution pyramid level (the input inventory's finding 2). | The macro function records its pyramid setting; a fusion from BigStitcher's HDF5 is not part of the placement path. |
 

@@ -116,7 +116,7 @@ page specifies. Its rules, and where this page follows each:
 The specification adds: there is no size or count filter, no probabilistic or
 transcript-based assignment and no second exporter; assignment is FOV-local, and
 stitching, global coordinates, overlap ownership and cross-FOV matching belong to
-stitching and assembly ([stitching-contract](../../docs/stitching-contract.md), [assembly-contract](../../docs/assembly-contract.md)).
+stitching and assembly ([stitching-contract](stitching.md), [assembly-contract](../../docs/assembly-contract.md)).
 
 % are §2.10's
 

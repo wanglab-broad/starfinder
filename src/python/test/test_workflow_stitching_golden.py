@@ -30,9 +30,9 @@ in test_stitching_bigstitcher.py and test_stitching_workflow.py.
 
 The values were produced in the locked project environment (Python 3.12.12, pandas 3.0.0,
 NumPy 2.2.6, SciPy 1.17.0, tifffile 2026.1.28) and are identical over repeated
-single-thread runs; see docs/stitching-baseline.md. When the §2.10 implementation
+single-thread runs; see design/baselines/stitching.md. When the §2.10 implementation
 replaces these scripts, ``legacy_tile_config`` stays as the frozen legacy reference;
-docs/stitching-contract.md names which pinned values the package functions must
+design/specs/stitching.md names which pinned values the package functions must
 reproduce.
 """
 import hashlib

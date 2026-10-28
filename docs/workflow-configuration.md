@@ -598,7 +598,7 @@ assignment:
 Three Python-only top-level blocks (rejected unless `backend: python`) replace the legacy
 sample-level rules for a configuration that has them. The specification is the
 "Workflow configuration" section of the
-[stitching contract](stitching-contract.md#workflow-configuration), the
+[stitching contract](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md#workflow-configuration), the
 [assembly contract](assembly-contract.md#workflow-configuration) and the
 [sample-output contract](sample-output-contract.md#workflow-configuration).
 

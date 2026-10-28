@@ -7,7 +7,7 @@ the coordinate rule, the ownership regions, retention, the duplicate rule, the f
 the count accounting, and the sample-level AnnData built from them. Each has its
 parameters, units, defaults, failure behavior and a resource estimate. The behavior before sample assembly is history, in
 {doc}`assembly-baseline`; the placement it starts from is specified in
-{doc}`stitching-contract` and {doc}`stitching-algorithms`, and the per-FOV tables in
+[stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) and [stitching algorithm specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching-algorithms.md), and the per-FOV tables in
 the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md) and the [assignment algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment-algorithms.md). Each element is implemented in
 `starfinder.assembly`, and no default here is accepted.
 
@@ -50,7 +50,7 @@ magnitude from the array sizes, for planning.
 
 `sample_zyx = origin_zyx + D · (p ⊙ spacing_zyx)` per observation, with `origin` the FOV's
 row of `placement.fovs` and `spacing`, `D` from its `ReferenceGrid.metadata`
-({doc}`stitching-contract`, "Index to sample coordinates"). With identity direction (check
+([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Index to sample coordinates"). With identity direction (check
 6 of the entry) this is `origin + p * spacing` per axis, vectorized over the FOV's table.
 
 | Input | `p` | Output columns |
@@ -69,7 +69,7 @@ Failure: a FOV without a finite origin is not mapped (its rows get NaN and the r
 raise `IncompatibleGeometryError` before any mapping. Example: origin `(1.3, 37.4, 0.7)`
 µm with spacing 1 µm maps `(3.0, 8.0, 20.0)` to `(4.3, 45.4, 20.7)`; with the LN spacing
 `(0.346255, 0.194398, 0.194398)` µm, `p = (2, 10, 0)` from origin `(0, 250.5, 100.25)`
-maps to `(0.69251, 252.44398, 100.25)` µm, the example of {doc}`stitching-contract`.
+maps to `(0.69251, 252.44398, 100.25)` µm, the example of [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md).
 
 Cost: three multiply-adds per row; memory, three float64 columns per table (24 bytes per
 row).

@@ -1,8 +1,8 @@
 """The two package ends of the BigStitcher path: the macro and the import of ``dataset.xml``.
 
-docs/stitching-contract.md ("BigStitcher", "Where the record differs from ``tile_config`` on
-purpose") and docs/stitching-algorithms.md ("Import arithmetic"). Fiji itself is an engine
-task: nothing here starts it. The legacy view applies T3 to T7 of docs/stitching-baseline.md
+design/specs/stitching.md ("BigStitcher", "Where the record differs from ``tile_config`` on
+purpose") and design/specs/stitching-algorithms.md ("Import arithmetic"). Fiji itself is an engine
+task: nothing here starts it. The legacy view applies T3 to T7 of design/baselines/stitching.md
 to the import's raw translations and the view map, so that ``tile_config_{sample}.csv`` can
 still be written from the record.
 """
@@ -805,7 +805,7 @@ def view_map_of(result: PlacementResult) -> pd.DataFrame | None:
 def legacy_tile_config_view(result: PlacementResult, *, img_col: int, img_row: int) -> pd.DataFrame:
     """The legacy view: ``tile_config_{sample}.csv`` from an import's raw translations and view map.
 
-    Applies T3 to T7 of docs/stitching-baseline.md to the raw world translation
+    Applies T3 to T7 of design/baselines/stitching.md to the raw world translation
     ``w`` of every view (FOVs, placeholders and padding, in view order, view
     ``j`` being grid row ``j``): the cast ``int`` (truncation towards zero), the
     shift by ``|min|`` per axis, the join with the grid (``col``, ``row``,

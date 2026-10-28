@@ -1364,7 +1364,7 @@ def _reads_assignment(config):
     return AssignmentConfig(expansion=expansion, legacy_pixel_expansion=expand), target, record
 
 
-# --- §2.10: the Python-only stitching, assembly and export blocks (docs/stitching-contract.md,
+# --- §2.10: the Python-only stitching, assembly and export blocks (design/specs/stitching.md,
 # --- docs/assembly-contract.md and docs/sample-output-contract.md, "Workflow configuration").
 
 _STITCHING_KEYS = ('method', 'input', 'positions', 'config', 'review', 'fallback', 'bigstitcher_save_dir')
@@ -1405,7 +1405,7 @@ def _stitching_methods():
 
 
 def _stitching_block(config) -> _StitchingBlock:
-    """The Python-only stitching block (docs/stitching-contract.md, "Workflow configuration").
+    """The Python-only stitching block (design/specs/stitching.md, "Workflow configuration").
 
     method is a STITCHING_METHODS name, run in process by Dataset.stitch, or
     bigstitcher (the default), run by the macro, engine and import rules; config

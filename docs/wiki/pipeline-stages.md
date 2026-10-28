@@ -27,7 +27,7 @@ the stage's other pages. The stages are listed in processing order.
 
 | Stage | Covers | Algorithms | Validation | Baseline |
 | --- | --- | --- | --- | --- |
-| [Stitching](../stitching-contract.md) | Tile positions and the placement of each FOV | [algorithms](../stitching-algorithms.md) | | [baseline](../stitching-baseline.md) |
+| [Stitching](../stitching-contract.md) | Tile positions and the placement of each FOV | [reference](../stitching-algorithms.md) | | |
 | [Assembly](../assembly-contract.md) | Sample coordinates, ownership and the sample tables | [algorithms](../assembly-algorithms.md) | | [baseline](../assembly-baseline.md) |
 | [Sample output](../sample-output-contract.md) | The export: fused image, labels, SpatialData and profiles | | [validation](../stitching-assembly-validation.md) | [baseline](../sample-output-baseline.md) |
 | [Sample segmentation](../sample-segmentation-contract.md) | Segmentation after fusion and the check of the two routes | | [validation](../sample-segmentation-validation.md) | |
@@ -39,7 +39,7 @@ the stage's other pages. The stages are listed in processing order.
 
 * **Algorithms:** the specification of each method. For assignment and the processing
   report, the validation design is part of this page. Preprocessing, registration, spot
-  finding and readout have a reference instead: their methods, options and records,
+  finding, readout and stitching have a reference instead: their methods, options and records,
   with the specification in `design/`.
 * **Validation:** a separate validation design, where the stage has one. The design that
   checks placement, assembly and the sample outputs sits under the sample-output guide,

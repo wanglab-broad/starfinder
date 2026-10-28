@@ -93,7 +93,7 @@ export entry, `export/<sample>/`, the fused image, the label export, the Spatial
 export, the read-back checks), {doc}`assembly-contract` (`assemble`, the sample tables,
 `sample.h5ad`, the duplicate rule of 2026-10-09), the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md) (`segment`,
 `SegmentationInput`, the method configs), the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md) (`assign_molecules`,
-`MoleculeTable`, the grid rule) and {doc}`stitching-contract` (the placement and the
+`MoleculeTable`, the grid rule) and [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) (the placement and the
 sample frame). The measurements it uses are those of {doc}`cells-across-fovs-proposal`,
 cited there with their limits.
 

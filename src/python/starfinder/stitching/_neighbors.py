@@ -1,4 +1,4 @@
-"""Neighbour pairs from nominal overlap (docs/stitching-algorithms.md, "Neighbour derivation")."""
+"""Neighbour pairs from nominal overlap (design/specs/stitching-algorithms.md, "Neighbour derivation")."""
 from __future__ import annotations
 
 import math

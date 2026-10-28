@@ -65,7 +65,7 @@ factor, written as OME-TIFF (the default) or OME-Zarr; the assembled label expor
 SpatialData export of the sample tables; the read-back checks; and the resources and
 dependencies each output needs. It builds on three contracts and redefines none of them:
 
-* {doc}`stitching-contract`: `PlacementResult` (per-FOV `status`, float64 `origin_z/y/x`
+* [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md): `PlacementResult` (per-FOV `status`, float64 `origin_z/y/x`
   in µm), the sample frame (`frame_id` `sample:<sample>`, ZYX, µm, identity direction),
   the index-to-sample rule `sample_zyx = origin_zyx + D · (p ⊙ spacing_zyx)` and its
   inverse, `placed_metadata`, the failure policy, `PlacementReviewRequiredError`, and the
@@ -175,7 +175,7 @@ Amended at the review gate (comment "Approval record — 2026-10-06"):
   the word "assembly".
 * **Python 3.11 or later** (`requires-python = ">=3.11"`), with the optional extra
   `multiview-stitcher`, which the fuse part names when it is missing; both are applied by
-  the operator ({doc}`stitching-contract`, "Dependency plan").
+  the operator ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Dependency plan").
 
 % the stitching parity runs: W-324; the settled stage split of 2026-10-05: D3
 
@@ -269,7 +269,7 @@ for the implementation issue to verify; the sections that rely on one name it.
   holds for a given configuration ("The export folder and the output profiles").
 * The **store** is the SpatialData Zarr store `export/<sample>/sample.zarr/`.
 * A FOV is **included** in fusion when it has a finite origin and a source image: status
-  `image_supported` or `metadata_only` ({doc}`stitching-contract`). `placeholder` FOVs (a
+  `image_supported` or `metadata_only` ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md)). `placeholder` FOVs (a
   blank image), `missing` and `failed` FOVs contribute nothing.
 
 ## Names
@@ -325,7 +325,7 @@ Dataset.export(sample: str, *, placement: PlacementResult | str | Path,
 `load_placement`. `assignment` is the assignment name read per FOV, or `None` for a
 sample without segmentation (molecules only). `output_dir` is the sample's export folder;
 the workflow passes `<OUTPUT>/export/<sample>/`. Like `stitch`, it is a sample-level
-computation, not a multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV
+computation, not a multi-FOV runner ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Not the multi-FOV
 runner").
 
 % §2.9
@@ -454,9 +454,9 @@ and segment), `off`, `empty`, `not_run` and `failed`.
 
 `<OUTPUT>/export/<sample>/` holds everything the entry writes. It sits beside the
 placement folder `<OUTPUT>/stitching/<sample>/`, which is unchanged
-({doc}`stitching-contract`, "Persistence"), and is not the legacy
+([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Persistence"), and is not the legacy
 `<OUTPUT>/images/fused/<sample>/`, which keeps BigStitcher's inputs and `dataset.xml`
-({doc}`stitching-baseline`); no existing file is rewritten. `<image>` is a source-image
+([stitching baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/stitching.md)); no existing file is rewritten. `<image>` is a source-image
 name of "Fused image inputs" (`reference_stain` by default); `<fmt>` is `csv` by default
 or `parquet`.
 
@@ -544,7 +544,7 @@ inspect").
   the BigStitcher import and `multiview_stitcher` give one type, and both are fused by the
   same call ("Fusion by multiview-stitcher").
 * **Per included FOV, the selected source images on its reference grid**, named as the
-  stitching inputs are ({doc}`stitching-contract`, "Input image"): `reference_stain` (the
+  stitching inputs are ([stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md), "Input image"): `reference_stain` (the
   saved `reference_stain` of `FOV.prepare_morphology`, whose stain each dataset's
   configuration chooses) by default; `reference_merged` (the FOV's reference image, the file
   the dataset's `reference_image` names, default `fovs/{fov_id}/reference.tif`);
@@ -1940,7 +1940,7 @@ uncompressed TIFF writer:
 ### Dependencies per output
 
 On Python 3.11 or later, the supported versions once the dependency plan of
-{doc}`stitching-contract` is applied. The versions are those of `src/python/uv.lock`
+[stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) is applied. The versions are those of `src/python/uv.lock`
 (sha256 `bc994b55…`) for its Python 3.11-and-later entries, and of the trial resolution of
 2026-10-06 for the `multiview-stitcher` extra, which is not yet in the lock.
 
