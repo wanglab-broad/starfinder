@@ -10,8 +10,7 @@ tables are read from the code when the site is built. The
 ```{method-table} starfinder.preprocessing.PREPROCESSING_METHODS
 ```
 
-Each method's name is its `method` value, used by the workflow key. A step is chosen by
-the exact type of its config.
+Each method's name is its `method` value, used by the workflow key.
 
 ## Method options
 

@@ -50,8 +50,8 @@ for record in fov.preprocessing_record["rounds"]["round1"]:
 ## What it does
 
 1. **Steps.** The steps run in the declared order on each round, one round at a time.
-   Each step returns an image of the same shape; the output of the last step is the
-   *detection image*. With no steps, it is the loaded image.
+   The output of the last step is the *detection image*. With no steps, it is the
+   loaded image.
 2. **Snapshots.** A step with `save_as` keeps a named copy of its output. The recipe's
    `extraction_source` names the snapshot that intensity extraction reads, and
    `registration_source` the snapshot that registration signals are built from; both
@@ -61,12 +61,12 @@ for record in fov.preprocessing_record["rounds"]["round1"]:
    detection image and to every snapshot of the round, so they stay aligned. The
    reference round is not transformed.
 4. **After registration.** The `post_registration` steps run on each round after
-   registration, or after the steps when no registration is set. Only `reconstruction`
-   may run there, the order the resident subtile rules use.
+   registration, or after the steps when no registration is set.
+   {py:class}`~starfinder.preprocessing.PreprocessingRecipe` says which methods may run
+   there.
 
-Every step runs through one wrapper that checks its output: the same shape, a dtype
-that its method allows, finite values, unchanged metadata, and records that can be
-written as JSON.
+Every step's output is checked; the
+[specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing.md#enforcement-wrapper) ("Enforcement wrapper") gives the checks.
 
 ## Methods
 
@@ -113,7 +113,8 @@ The reference gives each method's options and their defaults.
 ## Fitting modes
 
 `scalar_background`, `percentile_normalization` and `histogram_matching` have a `fit`
-option. With `fit="fov"`, `scalar_background` and `percentile_normalization` fit their values on each round of each FOV, and
+option. With `fit="fov"`, `scalar_background` and `percentile_normalization` fit
+their values on each round of each FOV, and
 `histogram_matching` matches every round to one channel of the reference round of
 the same FOV. With `fit="supplied"`, they are read from the recipe's
 `supplied_statistics` file, which holds statistics merged over a set of FOVs of the
@@ -138,9 +139,8 @@ summary pass and the application pass by hand on three synthetic FOVs; from
 `FOV.run` processes the reference round first, then the other sequencing rounds in
 their declared order. With `ExecutionConfig(mode="streaming")`, rounds are loaded one
 at a time, and a moving round's image and snapshots are released once the round is
-done unless `retain_images=True`. The reference round's input to `histogram_matching`
-(with `fit="fov"`) and its `registration_source` snapshot are kept until every round
-has been processed.
+done unless `retain_images=True`. The [specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing.md#streaming) ("Streaming")
+says what is kept from the reference round.
 
 ## Workflow keys
 
@@ -163,9 +163,9 @@ rules:
 
 `post_registration` lists steps in the same form; `extraction_source`,
 `registration_source` and `supplied_statistics` are the recipe's fields. Without the
-key, no preprocessing runs. The MATLAB keys `enhance_contrast`, `hist_equalize`,
-`morph_recon` and `tophat` raise under `backend: python`, naming the step that
-replaces each. {doc}`workflow-configuration` describes the rules.
+key, no preprocessing runs. Under `backend: python`, the MATLAB preprocessing keys
+raise an error; {doc}`migration` gives the step that replaces each.
+{doc}`workflow-configuration` describes the rules.
 
 ## Limits
 
