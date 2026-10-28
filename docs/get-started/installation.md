@@ -76,8 +76,8 @@ never need the extras; running a learned method without its extra raises an
 `SegmentationBackendUnavailableError`.
 
 Processing never downloads a model: the weights are fetched explicitly beforehand.
-Fetching the pretrained weights of the spot detectors, configuring a run and running
-their tests are in
+Installing the spot detectors, fetching their pretrained weights and configuring a run
+are in
 {doc}`../learned-detectors`; the segmentation models and their environment are in the
 [segmentation contract](../segmentation-contract.md#models).
 

@@ -189,7 +189,7 @@ rule:
 
 % The multi-round candidate set left by §2.7
 
-{doc}`spot-finding-contract` ("Detection in several rounds", option A) added a
+The [spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#detection-in-several-rounds) ("Detection in several rounds", option A) added a
 `round` column to candidates of a `SpotFindingPlan` with `rounds`, one table and
 namespace for all listed rounds, and never merges coincident candidates. Extraction
 reads every sequencing round at every candidate (`dataset/fov.py:1131-1135`).

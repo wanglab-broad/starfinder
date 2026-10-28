@@ -1,4 +1,4 @@
-"""In-session §2.7 spot-finding scenes (docs/spot-finding-algorithms.md, "Engineering validation design").
+"""In-session §2.7 spot-finding scenes (design/specs/spot-finding-algorithms.md, "Engineering validation design").
 
 isolated_scene ports W-266 ``w266_common.make_case`` for the isolated-spot cases (iso3d,
 iso_z1); formed16 is the §2.12 ``amplicon_scene_preset("small")`` appearance and codebook

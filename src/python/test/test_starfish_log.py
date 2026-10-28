@@ -1,5 +1,5 @@
-"""The native Starfish LoG, starfish_log (W-271; docs/spot-finding-algorithms.md, "Starfish LoG", checks
-S1, S2 and S12; docs/spot-finding-contract.md).
+"""The native Starfish LoG, starfish_log (W-271; design/specs/spot-finding-algorithms.md, "Starfish LoG", checks
+S1, S2 and S12; design/specs/spot-finding.md).
 
 Bounds and their sources:
 * S12 parity: exact equality with the six W-266 starfish BlobDetector tables in

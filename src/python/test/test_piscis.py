@@ -1,5 +1,5 @@
-"""Piscis with verified weights (W-272; docs/spot-finding-algorithms.md, "Piscis", checks S14 and S15;
-docs/spot-finding-contract.md, "Pretrained weights", "Z=1, dimensionality, scale and tiling").
+"""Piscis with verified weights (W-272; design/specs/spot-finding-algorithms.md, "Piscis", checks S14 and S15;
+design/specs/spot-finding.md, "Pretrained weights", "Z=1, dimensionality, scale and tiling").
 
 Extended tier, CPU only, one thread: skipped without the piscis extra, and failing with MissingModelError
 when the extra is installed but the weights were not fetched into STARFINDER_WEIGHTS_DIR. Both models run

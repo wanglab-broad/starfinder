@@ -92,7 +92,7 @@ is a field of the stage spec, documented with the spec's docstring and its stage
 contract: for example `category`, `scope`, `post_registration` and `supplied` for
 preprocessing ([preprocessing specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing.md)); `step_kind`, `transform_kind` and `space`
 for registration ({doc}`registration-algorithms`); `pipeline`, `output_columns` and
-`weights` for spot finding ({doc}`spot-finding-contract`); `modes`, `encodings`, `rescue`
+`weights` for spot finding ([spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#registry-entries)); `modes`, `encodings`, `rescue`
 and `score_columns` for decoding ({doc}`readout-contract`); `targets`, `roles`,
 `required_roles`, `seeds`, `models` and `devices` for segmentation
 ({doc}`segmentation-contract`); `devices` and `transform_kind` for stitching

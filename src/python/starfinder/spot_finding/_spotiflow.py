@@ -1,4 +1,4 @@
-"""Spotiflow: native 3D with a 3D model, a YX plane with a 2D model (docs/spot-finding-algorithms.md, "Spotiflow").
+"""Spotiflow: native 3D with a 3D model, a YX plane with a 2D model (design/specs/spot-finding-algorithms.md, "Spotiflow").
 
 Spotiflow 0.6.5 is loaded with Spotiflow.from_folder(<verified folder>,
 map_location="cpu") from the Starfinder weights cache, never through

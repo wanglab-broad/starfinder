@@ -1,6 +1,6 @@
 """Engineering validation of the §2.7 spot-finding methods (spot-finding task group 6, W-274).
 
-Checks S1 to S16 of docs/spot-finding-algorithms.md ("Engineering validation
+Checks S1 to S16 of design/specs/spot-finding-algorithms.md ("Engineering validation
 design"): known-answer synthetic fixtures (spot_finding_fixtures, the W-266
 ports in spot_finding_scenes and learned_detectors, and the multiround fixture
 of test_spot_finding_rounds) with the pass/fail tolerances of the design table,
@@ -67,7 +67,7 @@ pytestmark = [pytest.mark.spot_finding, pytest.mark.validation]
 META = ImageMetadata("validation")
 NAMESPACE = "validation/test"
 
-# --- Tolerances (docs/spot-finding-algorithms.md, "Engineering validation design") -------------------------
+# --- Tolerances (design/specs/spot-finding-algorithms.md, "Engineering validation design") -------------------------
 # Fixed before the run and never re-tuned in it: a correct implementation that misses one is recorded as a
 # strict expected failure with the bound unchanged and reported to Jiahao (W-268; as W-258 did for §2.6).
 
@@ -510,7 +510,7 @@ def test_s6_empty_input_zero_channels_and_the_mad_diagnostics(method, seed, spy,
         assert len(found) == 1 and "channel '0'" in found[0]
         assert result.diagnostics["warnings"] == tuple(found)
     else:
-        # The noise record and its warning are the local-maxima §2.5 record (docs/spot-finding-contract.md).
+        # The noise record and its warning are the local-maxima §2.5 record (design/specs/spot-finding.md).
         assert noise is None and found == [] and result.diagnostics["warnings"] == ()
 
 

@@ -1,5 +1,5 @@
 """localization_errors and classify_detections against the saved W-266 and W-267 records
-(W-270, docs/spot-finding-algorithms.md, "Engineering validation design (task group 6)";
+(W-270, design/specs/spot-finding-algorithms.md, "Engineering validation design (task group 6)";
 data in data/spot_finding_metrics)."""
 import csv
 import json

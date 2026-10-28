@@ -11,7 +11,8 @@ output columns, weights and optional dependencies. :py:func:`~starfinder.spot_fi
 :py:class:`~starfinder.spot_finding.SpotFindingResult`, the dataset configs,
 ``FOV.find_spots``, the workflow adapter and the checkpoint reader derive their accepted
 methods from it, so a subclass of a config is not accepted; see :doc:`../method-registry`
-and :doc:`../spot-finding-contract`. A missing optional dependency raises
+and the `spot-finding specification
+<https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#registry-entries>`_. A missing optional dependency raises
 :py:class:`~starfinder.spot_finding.SpotFindingBackendUnavailableError`.
 
 A :py:class:`~starfinder.spot_finding.SpotFindingPlan` runs one method on every channel

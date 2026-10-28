@@ -2,7 +2,7 @@
 
 Expected outputs of starfish `BlobDetector` (starfish `1fb00cbc`, reported version
 `0.4.0+38.g1fb00cb`; `blob.py` is identical at 0.4.0, `d9a305f`) for the native LoG method
-that §2.7 adds (decision D1; docs/spot-finding-algorithms.md). No test reads them yet; the
+that §2.7 adds (decision D1; design/specs/spot-finding-algorithms.md). No test reads them yet; the
 LoG implementation issue adds the parity test.
 
 * `fixtures.py` regenerates the input arrays (NumPy only, float32 RCZYX in [0, 1]) and

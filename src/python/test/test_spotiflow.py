@@ -1,5 +1,5 @@
-"""Spotiflow with verified weights (W-272; docs/spot-finding-algorithms.md, "Spotiflow", checks S14 and S15;
-docs/spot-finding-contract.md, "Pretrained weights" and "Execution device").
+"""Spotiflow with verified weights (W-272; design/specs/spot-finding-algorithms.md, "Spotiflow", checks S14 and S15;
+design/specs/spot-finding.md, "Pretrained weights" and "Execution device").
 
 Extended tier, CPU only, one thread: skipped without the spotiflow extra, and failing with
 MissingModelError when the extra is installed but the weights were not fetched into

@@ -1,6 +1,6 @@
 """Detection in several rounds (§2.7 check S10; W-273).
 
-The ``multiround`` fixture of docs/spot-finding-algorithms.md is hand-built here (no §2.12
+The ``multiround`` fixture of design/specs/spot-finding-algorithms.md is hand-built here (no §2.12
 generator): 3 rounds × 16×64×64 × 2 uint16 channels on one grid, 15 spots per round and
 channel, 5 of them at the same positions in every round. Spots have integer centres on a
 lattice of sites 7 voxels apart (Z layers 4 and 11), the iso3d appearance (brightness 1500,

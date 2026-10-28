@@ -1,5 +1,5 @@
 """Spotiflow and Piscis without their extras: configs, dependency errors, the run order, the extracted weights
-files and the records plumbing (W-272; docs/spot-finding-contract.md, "Registry entries", "Configs of the new
+files and the records plumbing (W-272; design/specs/spot-finding.md, "Registry entries", "Configs of the new
 methods", "Pretrained weights"; checks S9 and S14).
 
 Default tier: the extras are simulated missing by patching imports, or present as empty stand-ins, so no test

@@ -1,5 +1,5 @@
 """The known-weights table, the weights cache, fetch, verification, their errors and the CLI group
-(W-270, docs/spot-finding-contract.md, "Pretrained weights").
+(W-270, design/specs/spot-finding.md, "Pretrained weights").
 
 No test uses the network: fixture entries inserted into KNOWN_MODELS download a few-byte file
 from a temporary directory through a file:// URL, and socket connections are blocked.

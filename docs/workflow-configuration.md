@@ -517,7 +517,7 @@ round labels to detect in (omitted: the reference round only); a candidate set o
 rounds is decoded only with `readout_mode: direct` ([readout mode](#readout-mode)). The rule-level
 Python-only key `device` sets `ExecutionConfig.device`; `cpu` is the only value.
 The method-aware rules are in the
-[spot-finding contract](spot-finding-contract.md#workflow-configuration).
+[spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#workflow-configuration).
 
 % W-218
 

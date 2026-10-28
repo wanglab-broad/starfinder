@@ -1,4 +1,4 @@
-"""Piscis: plane mode for Z=1, stack mode for Z>1 (docs/spot-finding-algorithms.md, "Piscis").
+"""Piscis: plane mode for Z=1, stack mode for Z>1 (design/specs/spot-finding-algorithms.md, "Piscis").
 
 Piscis 1.1.0 is loaded through the hash-checked absolute-path wrapper:
 Piscis(model_name=<verified folder>/<model>), which the library resolves to

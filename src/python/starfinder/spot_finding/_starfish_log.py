@@ -2,7 +2,7 @@
 
 Follows starfish/core/spots/FindSpots/blob.py at 1fb00cbc (identical at 0.4.0):
 blob_log on the dtype-scaled image, then starfish's four post-processing steps.
-docs/spot-finding-algorithms.md ("Starfish LoG") is the specification.
+design/specs/spot-finding-algorithms.md ("Starfish LoG") is the specification.
 """
 import numpy as np
 import pandas as pd

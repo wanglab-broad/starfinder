@@ -442,7 +442,7 @@ mapping in `SegmentationResult.record`:
 ```
 
 * `methods` holds the uniform entry of {doc}`method-registry`, with `stage`
-  `"segmentation"`, plus `execution` (as in {doc}`spot-finding-contract`) and
+  `"segmentation"`, plus `execution` (as in the [spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#execution-device)) and
   `effective` (the parameters the method resolved: scale, thresholds and their source,
   tiles). An imported run has `methods: []` and an `import` entry instead.
 * `input.sha256` is the SHA-256 of the segmentation input as an array; each channel also
@@ -987,7 +987,7 @@ only in a batch whose guidance names the GPU as an exception.
 What is recorded (the execution entry of the provenance entry): `device`; `framework`
 with its name (`tensorflow` or `torch`), version, CUDA build (`None` for CPU builds) and,
 for `"cuda"`, the GPU name and driver version; for TensorFlow, whether memory growth was
-enabled; and `threads` as in {doc}`spot-finding-contract` plus TensorFlow's intra- and
+enabled; and `threads` as in the [spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#execution-device) plus TensorFlow's intra- and
 inter-op thread counts. Starfinder enables TensorFlow memory growth before the first
 model call on `"cuda"` and changes no thread setting.
 

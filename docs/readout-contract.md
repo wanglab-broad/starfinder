@@ -51,7 +51,7 @@ extraction, decoding and read QC.
 
 The contract builds on {doc}`method-registry`, whose registry fields, lookup,
 dependency and provenance rules it uses unchanged, and on the option-A multi-round
-candidate set of {doc}`spot-finding-contract`, which "Direct readout" amends. Beneath
+candidate set of the [spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#detection-in-several-rounds), which "Direct readout" amends. Beneath
 this guide, {doc}`readout-algorithms` specifies the numerical methods, the worked
 examples and the engineering validation (R1 to R19, "Implemented checks" and
 "Limitations"). {doc}`readout-baseline` is history: the behavior at `141c093`, before
@@ -378,7 +378,7 @@ aging codebook needs, and the golden edit is mechanical.
 | Barcode rules that do not apply | Competition between codewords, rescue (a codebook-aware config raises in `direct` mode), required rounds (only the own round is read), encodings, segment layout, end-base checks and the WTA color sequence (`observed_color_sequence` and `decoded_color_sequence` are missing values). |
 | Score | The shared score over the own round only (below). |
 
-**Amendments to the option-A interface of {doc}`spot-finding-contract`.** Option A
+**Amendments to the option-A interface of the [spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#rules-for-option-a).** Option A
 stays as specified: one table, a `round` column, `spot_id` over the combined table,
 and coincident candidates never merged. This page amends three rules:
 

@@ -25,7 +25,7 @@ volume faces, a channel with more than half its voxels zero (noise-mode MAD 0), 
 dim channel whose maximum is below the image maximum (adaptive differs from
 adaptive_round). The first digests were produced with the locked project environment
 (NumPy 2.2.6, SciPy 1.17.0, scikit-image 0.26.0, pandas 3.0.0) and are bit-identical
-over repeated single-thread runs; see docs/spot-finding-baseline.md.
+over repeated single-thread runs; see design/baselines/spot-finding.md.
 
 Every detection configuration is built by ``detection_config``, which also holds the
 only imports of detection configuration types and the only construction of

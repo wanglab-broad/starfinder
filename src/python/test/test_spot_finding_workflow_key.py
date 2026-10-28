@@ -1,6 +1,6 @@
 """The spot_finding workflow block: the method key, config fields, the local_maxima legacy aliases,
 channel_overrides, the rule-level device, and the static schema's consistency with SPOT_FINDING_METHODS
-(W-270, docs/spot-finding-contract.md, "Workflow configuration")."""
+(W-270, design/specs/spot-finding.md, "Workflow configuration")."""
 import copy
 from dataclasses import dataclass, field, fields
 from pathlib import Path

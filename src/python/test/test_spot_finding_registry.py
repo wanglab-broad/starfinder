@@ -1,5 +1,5 @@
 """SPOT_FINDING_METHODS (registry move 4), the dependency error, the execution device and the detection
-provenance entry in run.json (registry move 5) (W-270, docs/spot-finding-contract.md)."""
+provenance entry in run.json (registry move 5) (W-270, design/specs/spot-finding.md)."""
 import json
 import subprocess
 import sys

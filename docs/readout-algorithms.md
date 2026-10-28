@@ -56,7 +56,7 @@ match are a separate population, unmatched detections.
 | Direct assignment | One gene per (round, channel) panels. | Each round images up to four genes; a candidate's channel is its identity. |
 | Local background | A background that varies over the field and across channels and rounds. | Broad and regional background, gain and trend differ per channel and round; a global median misses them. |
 | Shared score | Ranking calls by reliability across decoders and modes. | A read's correctness depends on how clearly its assigned channel stands above the others once background is removed. |
-| Deduplication | One amplicon read twice, as a candidate in its own channel and as a crosstalk copy in the next. | 5 % crosstalk into the next channel makes a weaker copy that local maxima detects correctly (re-measurement in {doc}`spot-finding-baseline`). |
+| Deduplication | One amplicon read twice, as a candidate in its own channel and as a crosstalk copy in the next. | 5 % crosstalk into the next channel makes a weaker copy that local maxima detects correctly (re-measurement in the [spot-finding baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/spot-finding.md)). |
 
 % W-218
 
@@ -324,7 +324,7 @@ default-tier pytest modules, and extended-tier modules (`-m extended`, one threa
 CPU) for the checks on calibrated scenes. It has no comparison matrix, no parameter
 sweep, no cutoff selection, no benefit flag and no default chosen from comparative
 data; comparisons and real-data cutoffs belong to separate evidence work on readout methods.
-The checks follow the S-table of the spot-finding validation ({doc}`spot-finding-algorithms`).
+The checks follow the S-table of the spot-finding validation ([spot-finding algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding-algorithms.md#engineering-validation-design-task-group-6)).
 
 % W-152, §2.14, E03, §2.7
 

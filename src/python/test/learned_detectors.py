@@ -24,7 +24,7 @@ from starfinder.synthetic import (BackgroundConfig, AmpliconSceneConfig, NoiseCo
 
 META = ImageMetadata("learned-detectors")
 NAMESPACE = "learned-detectors/test"
-# W-266's isolated-spot policy (docs/spot-finding-algorithms.md, "Engineering validation design").
+# W-266's isolated-spot policy (design/specs/spot-finding-algorithms.md, "Engineering validation design").
 W266_MATCH = dict(policy="greedy", threshold=3.0, boundary="inclusive", units="voxel")
 SEAM_SHAPES = {"seam_z1": (1, 64, 64), "seam3d": (32, 64, 64)}
 SEAM_OFFSETS = (0.5, 1.0, 2.0)

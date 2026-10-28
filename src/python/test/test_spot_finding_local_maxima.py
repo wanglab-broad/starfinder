@@ -1,5 +1,5 @@
 """The W-218 option of local maxima: the opt-in within-channel merge merge_radius_zyx and the S16 check on the
-§2.12 formed scene (W-271; docs/spot-finding-algorithms.md, "Local maxima" and check S16).
+§2.12 formed scene (W-271; design/specs/spot-finding-algorithms.md, "Local maxima" and check S16).
 
 Every bound here is provisional: merge_radius_zyx is a new option whose only evidence is the W-267
 post-hoc merge check and border probe on the `small` scene (2 same-channel ties removed and no

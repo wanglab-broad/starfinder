@@ -57,7 +57,9 @@ def _sigma(value, name):
 
 @dataclass(frozen=True)
 class LocalMaximaConfig:
-    """Per-channel pipeline peaks; no spatial deduplication across channels.
+    """Local maxima above a threshold, one channel at a time.
+
+    Per-channel pipeline peaks; no spatial deduplication across channels.
 
     noise uses median + value * MAD * 1.4826 (sigma units); adaptive uses
     channel maximum, adaptive_round the image maximum, global the uint8/uint16
@@ -212,8 +214,9 @@ class PiscisConfig:
 
 @dataclass(frozen=True)
 class NoiseLandmarkConfig:
-    """Registration MAD peaks with the original per-channel radius deduplication.
+    """Registration landmarks: maxima above a noise threshold, deduplicated across channels.
 
+    Registration MAD peaks with the original per-channel radius deduplication.
     Keep the lower concatenated index for every pair within min_distance_voxels.
     This is intentionally distinct from pipeline channel-local detections.
     """

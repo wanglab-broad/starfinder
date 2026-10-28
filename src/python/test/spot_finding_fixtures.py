@@ -1,4 +1,4 @@
-"""The hand-built fixtures of the §2.7 engineering validation (docs/spot-finding-algorithms.md,
+"""The hand-built fixtures of the §2.7 engineering validation (design/specs/spot-finding-algorithms.md,
 "Engineering validation design"; W-274).
 
 The W-266 isolated-spot and seam scenes are the ports in spot_finding_scenes

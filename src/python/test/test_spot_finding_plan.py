@@ -1,8 +1,8 @@
 """The detection plan with per-channel overrides, the effective settings, and the §2.5 noise-mode record
-and warning (W-270, docs/spot-finding-contract.md).
+and warning (W-270, design/specs/spot-finding.md).
 
 The bounds here are provisional: new diagnostics and bookkeeping without a W-266 reference
-(parts of checks S4 and S6 of docs/spot-finding-algorithms.md).
+(parts of checks S4 and S6 of design/specs/spot-finding-algorithms.md).
 """
 import warnings
 from dataclasses import replace

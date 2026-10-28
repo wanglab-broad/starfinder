@@ -39,7 +39,8 @@ matching units. ``classify_detections`` counts matched, duplicate (an unmatched
 detection within ``radius`` of a matched truth point) and spurious detections; with
 ``groups`` (for example the channel of each detection) it splits the duplicates into
 those in the group of the truth point's matched detection and those in another group,
-the duplicate classification of :doc:`../spot-finding-baseline`.
+the duplicate classification of the
+`spot-finding baseline <https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/spot-finding.md>`_.
 
 .. W-218
 
