@@ -209,8 +209,7 @@ rules:
 
 Under `backend: python`, local maxima takes the field names `threshold_mode`,
 `threshold_value` and `min_distance_voxels`, in place of the MATLAB keys
-`intensity_estimation`, `intensity_threshold` and `min_distance`. "Spot-finding
-method key" in {doc}`workflow-configuration` describes the block.
+`intensity_estimation`, `intensity_threshold` and `min_distance`. The [workflow specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#spot-finding-method-key) describes the block.
 
 ## Limits
 

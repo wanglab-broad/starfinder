@@ -186,7 +186,7 @@ given, must equal the dataset's reference round; YAML lists become tuples. The M
 `global_registration` and `local_registration` raise under `backend: python`. The Python-only rule parameter `reference_image_view` (`{mode: max}`, or
 `{mode: channel, channel: <index or label>}`) chooses the reference image the rule
 writes; the resident subtile rules write none and refuse it.
-{doc}`workflow-configuration` describes the rules.
+The [workflow specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#explicit-registration-recipe) describes the rules.
 
 ## Limits
 

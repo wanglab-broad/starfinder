@@ -1,5 +1,5 @@
 """
-    The two rules of the report block (docs/report-contract.md, "Workflow configuration"; option WR1), included
+    The two rules of the report block (design/specs/report.md, "Workflow configuration"; option WR1), included
     when the configuration has a report block: report_sample writes report/{sample}/ with Dataset.report after the
     sample's last per-sample output, and report_dataset writes the comparison page report/index.html and
     report/samples.csv with Dataset.compare_samples over every sample's report.

@@ -26,7 +26,7 @@ properties:
 
   envs_path:
     type: string
-    description: "Path to conda environments directory"
+    description: "Legacy conda environment directory setting; no current rule reads it."
 
   starfinder_path:
     type: string
@@ -75,10 +75,7 @@ properties:
       minLength: 1
     minItems: 1
     uniqueItems: true
-    description: >-
-      Python only: the FOV IDs of fovs.csv to run (absent or null: every FOV); restricts every
-      rule, per-sample rules included
-
+    description: "Python FOV IDs selected from fovs.csv."
   n_rounds:
     type: integer
     minimum: 1
@@ -103,12 +100,7 @@ properties:
     minItems: 1
     items:
       $ref: "#/$defs/channel_info"
-    description: >-
-      Python only (Dataset.reference_stains): the reference round's stain files that are not sequencing
-      colours, as {channel, name} entries (channel the file pattern and label, name the content); absent or
-      null is none. rotate_nuclei and nuclei_registration read the one entry, or with several the one whose
-      name contains ref_channel. Replaces MATLAB's dapi_round and its hard-coded *ch04.tif.
-
+    description: "Python reference-round stains as channel and name entries."
   rotate_angle:
     type: number
     description: "Rotation angle for image alignment (degrees)"
@@ -145,42 +137,23 @@ properties:
   reference_image:
     type: [string, "null"]
     pattern: "\\{fov_id\\}"
-    description: >-
-      File pattern of a FOV's reference image with {fov_id}, absolute or relative to the output root
-      (Python only); absent or null is fovs/{fov_id}/reference.tif. The Python processing rules write it there,
-      and every reader reads it there. Excludes reference_image_import.
-
+    description: "Python saved reference-image pattern with {fov_id}, relative to the output root or absolute."
   reference_image_import:
     type: [string, "null"]
     pattern: "\\{fov_id\\}"
-    description: >-
-      File pattern with {fov_id} of an imported reference image, one another tool or rule produced,
-      absolute or relative to the output root (Python only). The processing rules then write no reference
-      image, and every reader reads this file; nothing writes to it. Excludes reference_image.
-
+    description: "Python imported reference-image pattern with {fov_id}, relative to the output root or absolute."
   image_dir_template:
     type: [string, "null"]
     enum: ["{round}/{fov}", "{fov}/{round}", null]
-    description: >-
-      Layout of the acquisition images under the input root (Python only; Dataset.image_dir_template):
-      "{round}/{fov}" (absent or null), a folder per round holding a folder per FOV, or "{fov}/{round}", a
-      folder per FOV holding a folder per round. The MATLAB rules read the round-first layout only.
-
+    description: "Python acquisition-image folder layout under the input root."
   codebook:
     type: [string, "null"]
     minLength: 1
-    description: >-
-      The codebook the sequencing rules read and whose genes, in its order, are the count matrix's columns
-      (Python only; readout_mode multiplexed), absolute or relative to the input root; absent or null is
-      <input root>/genes.csv, the file the MATLAB rules read.
-
+    description: "Python multiplexed codebook path, relative to the input root or absolute; omitted uses genes.csv."
   direct_panel:
     type: [string, "null"]
     minLength: 1
-    description: >-
-      The direct panel (round,channel,gene_id) of readout_mode direct (Python only), absolute or relative to
-      the input root; absent or null is <input root>/genes.csv.
-
+    description: "Python direct-readout panel path, relative to the input root or absolute; omitted uses genes.csv."
   maximum_projection:
     type: boolean
     default: false
@@ -212,9 +185,7 @@ properties:
           minItems: 1
           items:
             $ref: "#/$defs/channel_info"
-          description: >-
-            The round's channels in C order: channel is the file pattern, name the content
-            (nuclei_registration matches ref_channel in it and writes images/<round>/<name>).
+          description: "The additional round's channels in C order, with channel file patterns and content names."
     description: "Additional imaging rounds beyond sequencing"
 
   # ==================== Readout Mode ====================
@@ -222,12 +193,7 @@ properties:
     type: string
     enum: ["multiplexed", "direct"]
     default: "multiplexed"
-    description: >-
-      Python only (Dataset.readout_mode). multiplexed decodes color sequences with the
-      codebook; direct assigns each candidate the gene of its own round and channel from
-      the panel CSV (round,channel,gene_id; direct_panel), which is then the rule's codebook input, and
-      needs spot_finding.rounds. direct requires backend python.
-
+    description: "Python molecule readout: multiplexed color-sequence decoding or direct round/channel gene calls."
   # ==================== Segmentation and assignment (Python only) ====================
   segmentation:
     $ref: "#/$defs/segmentation_block"
@@ -272,13 +238,7 @@ properties:
     type: string
     enum: ["free", "direct", "subtile", "deep"]
     default: "free"
-    description: |
-      Workflow mode:
-      - 'free': Mix and match rules using individual run flags
-      - 'direct': Single FOV processing via rsf_single_fov
-      - 'subtile': Subtile-based workflow (gr → lrsf → stitch)
-      - 'deep': Deep-tissue optimized workflow
-
+    description: "Job grouping: free rule flags, direct per-FOV processing, subtiles, or the deep-tissue subtile path."
   # ==================== Subsetting Options (MATLAB backend only) ====================
   # No default here: Snakemake's validate inserts schema defaults, and the Python backend refuses these keys.
   subset_list:
@@ -290,7 +250,7 @@ properties:
 
   subset_range:
     type: boolean
-    description: "Enable range-based subsetting (absent: false, applied by common.smk's MATLAB branch)"
+    description: "MATLAB range-based FOV selection."
 
   subset_start:
     type: integer
@@ -304,7 +264,7 @@ properties:
 
   subset_random:
     type: boolean
-    description: "Enable random subsetting (absent: false, applied by common.smk's MATLAB branch)"
+    description: "MATLAB random FOV selection."
 
   n_random_tests:
     type: integer
@@ -691,10 +651,7 @@ $defs:
     additionalProperties: true
 
   tophat_params:
-    description: >-
-      White top-hat per XY slice (TophatConfig(radius_yx=radius)). No MATLAB script reads it; the Python
-      backend refuses it (preprocessing white_tophat), and the adapters of the shared rules translate it
-      for MATLAB-backend configurations.
+    description: "Legacy white top-hat settings for MATLAB-backend shared-rule translation."
     type: object
     properties:
       run:
@@ -809,10 +766,7 @@ $defs:
       fit: {$ref: "#/$defs/preprocessing_fit"}
 
   preprocessing_params:
-    description: >-
-      Python-only explicit recipe (preprocessing guide, Workflow keys): steps before registration and
-      post_registration, the steps run after it (reconstruction only); it replaces enhance_contrast,
-      hist_equalize, morph_recon, tophat and snr_threshold
+    description: "Python preprocessing steps before and after registration."
     type: object
     required: [steps]
     additionalProperties: false
@@ -882,7 +836,7 @@ $defs:
       projections: {type: boolean}
 
   registration_step_recovery:
-    description: "Opt-in recovery; alternatives name methods of the step's kind and configure estimators only"
+    description: "Alternative estimators for registration recovery."
     type: object
     required: [allowed_errors, alternatives]
     additionalProperties: false
@@ -1024,7 +978,7 @@ $defs:
       clamp_sampling_coordinates: {type: boolean}
 
   registration_params:
-    description: "Python-only explicit RegistrationRecipe (registration contract, Python-only key); mutually exclusive with an enabled global_registration or local_registration"
+    description: "Python explicit registration recipe."
     type: object
     required: [steps]
     additionalProperties: false
@@ -1047,18 +1001,12 @@ $defs:
       reference_round: {type: ["string", "null"]}
 
   python_rule_parameters:
-    description: >-
-      The explicit preprocessing and registration keys replace their legacy keys. device
-      (Python only) is the execution device of the methods; §2.7 accepts only cpu.
-      reference_image_view (Python only) selects the reference image the rule writes.
+    description: "Python processing device, reference-image view and checkpoint settings."
     properties:
       device:
         enum: ["cpu"]
       reference_image_view:
-        description: >-
-          Python only: the reference image of the rule (FOV.save_reference_image), mode max (the default,
-          the channel maximum) or mode channel with channel, a zero-based index or a channel label of the
-          reference round. The resident subtile rules write none and refuse the key.
+        description: "Python reference-image view: channel maximum or a selected channel."
         type: object
         additionalProperties: false
         properties:
@@ -1072,11 +1020,7 @@ $defs:
         else:
           not: {required: [channel]}
       checkpoints:
-        description: >-
-          Python only (backend python). The checkpoint stages the rule writes besides
-          fovs/<fov>/run.json, as {stages: [...]} in fovs/<fov>/checkpoints/; absent or null is {stages: []}, run.json
-          alone. A rerun replaces the FOV's earlier record (overwrite); the declared outputs do not
-          change.
+        description: "Python processing checkpoints saved in addition to run.json."
         type: [object, "null"]
         properties:
           stages:
@@ -1105,7 +1049,7 @@ $defs:
                 properties: {local_registration: {required: [run], properties: {run: {const: true}}}}
 
   registration_recovery_params:
-    description: "Python-only opt-in recovery; validation/dependency/application errors never recover"
+    description: "Legacy registration recovery settings for shared-rule translation."
     type: object
     required: [allowed_errors, alternatives]
     additionalProperties: false
@@ -1121,7 +1065,7 @@ $defs:
         minItems: 1
         items:
           type: object
-          description: "Ordered estimator configs; Python adapter validates method-specific fields"
+          description: "Ordered alternative estimator configurations."
 
   global_registration_params:
     type: object
@@ -1199,7 +1143,7 @@ $defs:
         type: string
       method:
         type: string
-        description: "The registered local methods and the legacy demons variant names (a default-tier test keeps them equal to REGISTRATION_METHODS)"
+        description: "Legacy local registration method or demons variant name."
         enum: ["bspline", "cpd", "demons", "tps", "diffeomorphic", "symmetric", "fast_symmetric"]
         default: "demons"
       ref_img:
@@ -1219,15 +1163,7 @@ $defs:
     additionalProperties: true
 
   spot_finding_params:
-    description: >-
-      Shared keys run and ref_round; MATLAB keys intensity_threshold and intensity_estimation.
-      Python-only: method (a SPOT_FINDING_METHODS name with pipeline=True, default local_maxima)
-      and the fields of its config; for local_maxima the Python backend refuses
-      intensity_estimation, intensity_threshold and min_distance, naming threshold_mode,
-      threshold_value and min_distance_voxels (the adapters of the shared rules translate them for
-      MATLAB-backend configurations); channel_overrides maps a channel label to fields that
-      replace the block's for that channel; rounds lists the rounds to detect in. The Python
-      adapter validates the fields of the selected method.
+    description: "Spot detection settings; method-specific Python options accompany the selected method."
     type: object
     properties:
       run:
@@ -1241,10 +1177,10 @@ $defs:
         type: string
         enum: ["global", "noise", "adaptive", "adaptive_round"]
       method:
-        description: "Python only; kept equal to the pipeline SPOT_FINDING_METHODS names by a test"
+        description: "Python spot-finding method."
         enum: ["local_maxima", "starfish_log", "spotiflow", "piscis"]
       min_distance:
-        description: "Python only; local_maxima alias of min_distance_voxels, and the native field of spotiflow and piscis"
+        description: "Spacing setting for Spotiflow and Piscis; the Python local_maxima method uses min_distance_voxels."
         type: integer
         minimum: 1
       threshold_mode:
@@ -1265,7 +1201,7 @@ $defs:
         description: "Python only; local_maxima"
         type: boolean
       merge_radius_zyx:
-        description: "Python only; local_maxima opt-in W-218 within-channel merge radii (ZYX voxels), null: off"
+        description: "Python local_maxima within-channel merge radii in ZYX voxels; null turns merging off."
         type: [array, "null"]
         items:
           type: number
@@ -1348,10 +1284,7 @@ $defs:
         items:
           type: integer
       encoding:
-        description: >-
-          Python only; method (an ENCODINGS name, default two_base) and the fields of its config
-          (two_base: reverse_bases, pair_to_color; one_base: base_to_color, reverse_bases). The method
-          list is kept equal to ENCODINGS by a test.
+        description: "Python barcode encoding method and its configuration fields."
         type: object
         properties:
           method:
@@ -1359,12 +1292,7 @@ $defs:
           reverse_bases:
             type: boolean
           pair_to_color:
-            description: >-
-              Python only (MATLAB's EncodeBases.m keeps its own table; the schema rejects the key
-              unless backend: python); two_base: the 16 ordered base pairs mapped to the colors 1-4,
-              the four pairs with one first base to four different colors (checked by the adapter).
-              Without it, the default table (AA, CC, GG, TT 1; AC, CA, GT, TG 2; AG, CT, GA, TC 3;
-              AT, CG, GC, TA 4).
+            description: "Python only: two_base mapping from ordered base pairs to colors."
             type: object
             required: [AA, AC, AG, AT, CA, CC, CG, CT, GA, GC, GG, GT, TA, TC, TG, TT]
             additionalProperties: false
@@ -1442,11 +1370,7 @@ $defs:
       run:
         type: boolean
       end_base:
-        description: >-
-          Shared. A string is one (first, last) pair checked over the whole sequence from
-          start_base (one segment). A list gives the allowed ends of the layout's segments: with
-          one segment every listed pair, with two segments item k (a pair or a list of pairs) for
-          segment k in acquisition order.
+        description: "Allowed barcode end pairs for the configured segment layout."
         oneOf:
           - type: string
           - type: array
@@ -1468,9 +1392,7 @@ $defs:
     additionalProperties: true
 
   scoring_params:
-    description: >-
-      Python only. The adapter adds the shared read-QC score (ReadScoreConfig) whenever it
-      decodes; run false turns it off. It ranks calls and sets no cutoff.
+    description: "Python read-QC scoring settings for ranking decoded calls."
     type: object
     properties:
       run:
@@ -1480,13 +1402,7 @@ $defs:
     additionalProperties: false
 
   deduplication_params:
-    description: >-
-      Python only. Optional cross-channel deduplication (DeduplicationConfig), off unless run
-      is true: reads of one detection round in different channels within distance_voxels
-      (inclusive, voxel index space, default 1.0) with identical WTA observed sequences
-      without M or N are grouped, and one original read represents each group. Needs
-      reads_filtration.run; not available with readout_mode direct. The filter rejects the
-      duplicates by default.
+    description: "Python cross-channel duplicate-read grouping settings."
     type: object
     properties:
       run:
@@ -1499,12 +1415,7 @@ $defs:
     additionalProperties: false
 
   decoding_params:
-    description: >-
-      Python only; method (a DECODING_METHODS name, default wta, or direct with
-      readout_mode direct) and the fields of its config. wta and codebook_aware need
-      readout_mode multiplexed and direct needs readout_mode direct. Decoding runs with
-      reads_filtration.run. The adapter sets diagnostics true and allow_rescue false unless
-      given. The method list is kept equal to DECODING_METHODS by a test.
+    description: "Python read decoding method and its configuration fields."
     type: object
     properties:
       method:
@@ -1758,11 +1669,7 @@ $defs:
         type: object
         properties:
           checkpoints:
-            description: >-
-              Python only (backend python). CheckpointConfig fields ({} for the defaults), or null:
-              also write the saved form of each prepared image (other_rounds/<name>/ under the
-              checkpoint directory), which FOV.load_registered_round reads. The declared outputs
-              do not change.
+            description: "Python morphology checkpoints for reloading prepared images."
             type: [object, "null"]
         additionalProperties: true
     additionalProperties: true
@@ -1832,12 +1739,9 @@ $defs:
     additionalProperties: true
 
   # ==================== Segmentation and assignment blocks (Python only) ====================
-  # design/specs/segmentation.md and docs/assignment-contract.md, "Workflow configuration".
+  # design/specs/segmentation.md and design/specs/assignment.md, "Workflow configuration".
   segmentation_block:
-    description: >-
-      Python only. A segmentation plan of named runs for FOV.segment, run by the §2.13 rule;
-      the stardist_segmentation rule translates its own legacy keys instead and raises when
-      this block is present.
+    description: "Python named per-FOV segmentation plan for API use; not connected to a workflow rule."
     type: object
     required: [runs]
     properties:
@@ -1852,10 +1756,7 @@ $defs:
     additionalProperties: false
 
   segmentation_run:
-    description: >-
-      One run. Keys besides name, target, inputs, seeds, projection, operations and method are
-      the init fields of the method's config (or of LabelImportConfig with method import); the
-      Python adapter validates them.
+    description: "A named segmentation run with inputs and method configuration."
     type: object
     required: [name, target, method]
     properties:
@@ -1883,7 +1784,7 @@ $defs:
               enum: ["expand_labels", "extend_labels_through_z"]
           additionalProperties: true
       method:
-        description: "A SEGMENTATION_METHODS name (the first list, kept equal to the registry by a test), or import"
+        description: "Segmentation method name or import."
         anyOf:
           - enum: ["stardist", "cellpose", "seeded_watershed"]
           - const: import
@@ -1914,11 +1815,7 @@ $defs:
     additionalProperties: false
 
   assignment_block:
-    description: >-
-      Python only. The call of FOV.assign_molecules, run by the §2.13 rule: the AssignmentConfig
-      fields and the FOV.assign_molecules arguments (keys kept equal to them by a test); the
-      reads_assignment rule translates its own legacy keys instead and raises when this block
-      is present.
+    description: "Python molecule-to-cell assignment settings for API calls and segmentation after fusion."
     type: object
     properties:
       cells:
@@ -1954,7 +1851,7 @@ $defs:
             type: number
             default: 0.5
           outside_tolerance:
-            description: "Share of a matched nucleus allowed outside its cell (option C2, provisional)"
+            description: "Share of a matched nucleus allowed outside its cell."
             type: number
             default: 0.1
         additionalProperties: false
@@ -1966,19 +1863,16 @@ $defs:
     additionalProperties: false
 
   # ==================== Stitching, assembly and export blocks (Python only) ====================
-  # docs/stitching-contract.md, docs/assembly-contract.md and docs/sample-output-contract.md,
+  # design/specs/stitching.md, design/specs/assembly.md and design/specs/sample-output.md,
   # "Workflow configuration". Tests keep the method names, the assembly keys and the export keys
   # equal to STITCHING_METHODS plus bigstitcher, AssemblyConfig and ExportConfig.
   stitching_block:
-    description: >-
-      Python only. The per-sample placement: Dataset.stitch for an in-process method, or the
-      BigStitcher macro, engine and import rules for bigstitcher; without the block the four legacy
-      stitching rules run unchanged.
+    description: "Python sample placement settings."
     type: object
     required: [positions]
     properties:
       method:
-        description: "A STITCHING_METHODS name (kept equal to the registry by a test), or bigstitcher (the default)"
+        description: "Sample stitching method."
         enum: ["multiview_stitcher", "bigstitcher"]
         default: "bigstitcher"
       input:
@@ -1990,7 +1884,7 @@ $defs:
       positions:
         $ref: "#/$defs/stitching_positions"
       config:
-        description: "Fields of MultiviewStitcherConfig or BigStitcherConfig; the Python adapter validates them"
+        description: "MultiviewStitcherConfig or BigStitcherConfig fields."
         type: object
       review:
         description: "ReviewPolicy fields"
@@ -2012,9 +1906,7 @@ $defs:
     additionalProperties: false
 
   stitching_positions:
-    description: >-
-      The positions mapping of Dataset.stitch; stage_axes and stage_file are required with source
-      stage_file (with the position_id column of fovs.csv), table with source table
+    description: "Sample positions from a stage file, a regular grid or a table."
     type: object
     required: [source]
     allOf:
@@ -2090,13 +1982,7 @@ $defs:
     additionalProperties: false
 
   assembly_block:
-    description: >-
-      Python only, with a stitching block. The assemble part of Dataset.export, run by the
-      export_sample rule: the AssemblyConfig fields, the assignment name of Dataset.export and its
-      table_format (keys kept equal to them by a test), and previews. With the block, reads_assignment
-      saves each FOV's assignment folder alone (with assignment null, it writes the per-FOV files
-      without the legacy filter), stitch_sample writes no tile_config_{sample}.csv, and
-      create_sample_h5ad and create_sample_reads_assignment do not run.
+    description: "Python sample assembly and saved-assignment settings."
     type: object
     properties:
       assignment:
@@ -2117,10 +2003,7 @@ $defs:
       conflicts:
         type: boolean
       duplicate_threshold:
-        description: >-
-          The duplicate rule (default 0.5): two retained cells of different FOVs whose territories
-          share at least this share of the smaller one are one cell, and the smaller observation is
-          excluded; null turns the rule off
+        description: "Overlap share used to exclude duplicate cell observations; null turns this off."
         type: [number, "null"]
         exclusiveMinimum: 0
         maximum: 1
@@ -2129,10 +2012,7 @@ $defs:
     additionalProperties: false
 
   export_block:
-    description: >-
-      Python only, with an assembly block. The parts of Dataset.export and their settings, run by the
-      export_sample rule; without the block the defaults apply (keys kept equal to ExportConfig,
-      FusionConfig, LabelConfig and SpatialDataExportConfig by a test).
+    description: "Python sample export settings."
     type: object
     properties:
       assemble:
@@ -2177,10 +2057,7 @@ $defs:
         description: "The part segment of the route after fusion; false reuses the saved sample segmentation"
         type: boolean
       segmentation:
-        description: >-
-          The segmentation of the fused projection on the route after fusion (SampleSegmentationConfig):
-          device, cells, nuclei and runs, each with name, target, inputs ({role, image}), seeds and method,
-          whose config fields are the run's other keys (pixel lengths of the acquired grid)
+        description: "Segmentation settings for the fused sample projection, with pixel lengths on the acquired grid."
         type: ["object", "null"]
         properties:
           device:
@@ -2193,9 +2070,7 @@ $defs:
             type: array
             minItems: 1
             items:
-              description: >-
-                One run. Keys besides name, target, inputs, seeds and method are the init fields of the
-                method's config (or of LabelImportConfig with method import); the Python adapter validates them.
+              description: "A named sample segmentation run with inputs and method configuration."
               type: object
               required: [name, target, method]
               properties:
@@ -2218,7 +2093,7 @@ $defs:
                 seeds:
                   type: ["string", "null"]
                 method:
-                  description: "A SEGMENTATION_METHODS name (the first list, kept equal to the registry by a test), or import"
+                  description: "Segmentation method name or import."
                   anyOf:
                     - enum: ["stardist", "cellpose", "seeded_watershed"]
                     - const: import
@@ -2227,12 +2102,7 @@ $defs:
     additionalProperties: false
 
   report_block:
-    description: >-
-      Python only. The processing report (docs/report-contract.md, "Workflow configuration"): the
-      ReportConfig fields (keys kept equal to ReportConfig, MarkerGroup, ReportLimits and RuleLimit by a
-      test). With the block, report_sample writes report/{sample}/ after the sample's last per-sample
-      output and report_dataset writes report/index.html and report/samples.csv; an empty block gives
-      the defaults.
+    description: "Python sample processing reports and dataset comparison page; an empty block uses report defaults."
     type: object
     properties:
       markers:
@@ -2308,10 +2178,7 @@ $defs:
     additionalProperties: false
 
   report_rule_limit:
-    description: >-
-      The limit of one problematic-FOV rule (RuleLimit): absolute alone, or k and floor (a deviation from
-      the sample median larger than max(k * 1.4826 * MAD, floor)); an omitted key is null, all three null
-      leave the rule unevaluated
+    description: "Threshold settings for flagging a FOV in the processing report."
     type: object
     properties:
       k:

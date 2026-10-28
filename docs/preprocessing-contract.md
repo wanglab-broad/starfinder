@@ -165,7 +165,7 @@ rules:
 `registration_source` and `supplied_statistics` are the recipe's fields. Without the
 key, no preprocessing runs. Under `backend: python`, the MATLAB preprocessing keys
 raise an error; {doc}`migration` gives the step that replaces each.
-{doc}`workflow-configuration` describes the rules.
+The [workflow specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#explicit-preprocessing-recipe) describes the rules.
 
 ## Limits
 

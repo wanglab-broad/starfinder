@@ -438,7 +438,7 @@ ZYX TIFF. With `projection=ProjectionConfig()` (top-level
 and dtype are unchanged. Python outputs written before this change hold ZYXC;
 rerun the rule to replace them. `ProjectionConfig` gains `axis`, `"z"` (the
 default and earlier behavior) or `"channel"`; see
-[projection views](workflows.md#projection-views-and-the-reference-merged-image).
+[projection views](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflows.md#projection-views-and-the-reference-merged-image).
 Since 2026-10-24 the Python file is `fovs/{fovID}/reference.tif` by default; see "The FOV folder, the reference image and channel folders by label".
 
 % W-564
@@ -1856,7 +1856,7 @@ The records the processing report reads ([run-record specification](https://gith
   `registered` wrote them, and no array is written into `run.json`.
 * **The workflow writes `checkpoints/<fov>/run.json`** for the processing rules, alone by
   default, with `overwrite` on; `rules.<rule>.parameters.checkpoints` adds stages
-  ({doc}`workflow-configuration`, "Run records of the processing rules"). The logs the
+  ([workflow record settings](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#run-records-of-the-processing-rules)). The logs the
   rules write do not change (the sequencing-log change of 2026-10-23 later removed the Python logs; the FOV-folder change of 2026-10-24 moved the record to
   `fovs/<fov>/run.json`, see "The FOV folder, the reference image and channel folders by label").
 * **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256**,

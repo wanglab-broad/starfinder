@@ -133,7 +133,7 @@ and omitted elements.
 ## Workflow keys
 
 The Python workflow's `export` block maps to these public configurations.
-The {doc}`workflow guide <workflow-configuration>` shows complete configurations.
+The [workflow configuration record](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#stitching-assembly-and-export) shows complete configurations.
 
 | Keys | API counterpart |
 | --- | --- |

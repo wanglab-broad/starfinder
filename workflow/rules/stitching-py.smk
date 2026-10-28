@@ -1,5 +1,5 @@
 """
-    Stitching rules of the Python-only stitching block (docs/stitching-contract.md, "Workflow configuration"),
+    Stitching rules of the Python-only stitching block (design/specs/stitching.md, "Workflow configuration"),
     included instead of stitching.smk when the configuration has the block. One stitch rule per sample writes
     stitching/{sample}/; with method bigstitcher the macro rule, the Fiji engine rule and the import come first,
     and without an assembly block the import also writes output/tile_config_{sample}.csv with the legacy writer

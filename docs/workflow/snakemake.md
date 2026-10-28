@@ -1,19 +1,16 @@
 # Snakemake
 
-The Snakemake workflow is `workflow/Snakefile` with its rules in `workflow/rules/`, its
-scripts in `workflow/scripts/` and its configuration schema in
-`workflow/schemas/config.schema.yaml`. One YAML file configures a run, and the config
-scheme describes its keys and blocks. A profile describes how
-the jobs are submitted on a cluster; the checkout carries the profile of the Broad UGER
-cluster.
+One YAML file configures a run of `workflow/Snakefile`. The guide prepares a dry
+run, the reference lists schema keys, and the downstream guide covers cells.
+The Broad UGER profile supplies cluster submission settings.
 
 ```{toctree}
 :maxdepth: 2
 
-Workflows and configuration <../workflows>
-Config scheme <../workflow-configuration>
-Profile: Broad UGER <broad-uger>
-Downstream segmentation and assignment <../workflow-downstream>
+Snakemake guide <../workflows>
+Configuration reference <../workflow-configuration>
+Segmentation and assignment <../workflow-downstream>
+Broad UGER guide <broad-uger>
 ```
 
-Install Snakemake as [Installation](../get-started/installation.md#snakemake) describes.
+Install Snakemake as {doc}`../get-started/installation` describes.

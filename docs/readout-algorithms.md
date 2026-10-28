@@ -185,5 +185,4 @@ With `backend: python`:
 | `deduplication` | Optional deduplication | `run` and the `DeduplicationConfig` fields |
 
 The keys go under `rules.<rule>.parameters`, except `readout_mode`.
-{doc}`workflow-configuration` gives each key's values and rules ("Readout mode",
-"Codebook segment layout", "Codebook encoding table").
+The [workflow specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#readout-mode) gives the readout, segment-layout and encoding rules.

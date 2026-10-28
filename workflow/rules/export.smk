@@ -1,9 +1,9 @@
 """
-    The one per-sample export rule of the assembly and export blocks (docs/sample-output-contract.md and
-    docs/assembly-contract.md, "Workflow configuration"; option W1), included when the configuration has an
+    The one per-sample export rule of the assembly and export blocks (design/specs/sample-output.md and
+    design/specs/assembly.md, "Workflow configuration"; option W1), included when the configuration has an
     assembly block: export_sample runs every part of Dataset.export and writes export/{sample}/. It replaces
     create_sample_h5ad and create_sample_reads_assignment, which do not run with the block. Its inputs follow
-    the route (docs/sample-segmentation-contract.md, "The entry"): on the route per FOV the saved assignment
+    the route (design/specs/sample-segmentation.md, "The entry"): on the route per FOV the saved assignment
     folders reads_assignment writes; on the route after fusion the molecule tables and the reference and source
     images. With assembly.previews on, on the route per FOV with assemble on, it also declares
     export/{sample}/previews/, the FOVs' ownership figures (_export_preview_outputs).

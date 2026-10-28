@@ -46,6 +46,7 @@ from starfinder.export import (
 from starfinder.segmentation import SEGMENTATION_METHODS, LabelImportConfig
 from starfinder.segmentation._methods import ROLES
 
+from . import docs_pages
 from .fusion_fixtures import listing
 from .sample_segmentation_fixtures import (
     DS,
@@ -280,8 +281,8 @@ def test_rs5_invalid_route_keys_fail_the_schema(change):
 
 
 def page_examples():
-    """The YAML examples of the workflow configuration page that set export.route."""
-    text = (ROOT / "docs/workflow-configuration.md").read_text()
+    """The preserved workflow configuration examples that set export.route."""
+    text = docs_pages.design("specs/workflow-configuration.md")
     blocks = [yaml.safe_load(b) for b in re.findall(r"```yaml\n(.*?)```", text, re.DOTALL)]
     return [b for b in blocks if isinstance(b, dict) and isinstance(b.get("export"), dict)
             and "route" in b["export"]]
@@ -289,7 +290,7 @@ def page_examples():
 
 @pytest.mark.contract
 def test_rs5_the_example_configuration_of_each_route():
-    """docs/workflow-configuration.md gives one example per route; each validates, translates and passes the
+    """design/specs/workflow-configuration.md gives one example per route; each validates, translates and passes the
     parse-time check of the route. It reads the page, so it is ``contract`` and runs in Q: this module holds no
     ``slow``, ``learned`` or ``extended`` test (docs/contributing.md, "Test markers"; W-602)."""
     examples = page_examples()

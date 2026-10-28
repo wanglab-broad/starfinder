@@ -398,7 +398,7 @@ if BACKEND == "matlab":
             json_path = yaml_to_json(config['config_path'])
 
 # The FOV molecule table that reads_assignment and export_sample read, chosen by its producer
-# (docs/workflows.md, "Molecule tables"): fovs/{fovID}/molecules.csv of the Python rsf_single_fov, or the
+# (design/specs/workflows.md, "Molecule tables"): fovs/{fovID}/molecules.csv of the Python rsf_single_fov, or the
 # legacy one-based signal/{fovID}_goodSpots.csv of MATLAB's rsf_single_fov and of stitch_subtile (the
 # subtile and deep modes, the ruleorder of the Snakefile). The Python backend asks the package (_molecule_table).
 MOLECULE_TABLE = f"{OUTPUT_DIR}/signal/{{fovID}}_goodSpots.csv"
@@ -420,7 +420,7 @@ if BACKEND == "python":
         if is_rule_enabled(python_rule):
             from_workflow_config(config, python_rule)
     # The §2.10 blocks raise here, naming the key, rather than when their rules run; so does the route
-    # (check 7 of docs/sample-segmentation-contract.md, without the reuse conditions and the models).
+    # (check 7 of design/specs/sample-segmentation.md, without the reuse conditions and the models).
     from starfinder.dataset.workflow import (_check_export_route, _check_sample_rules, _export_config, _membership,
                                              _molecule_table, _report_block, _stage_position_ids, _stitching_block)
     # The annotation-driven legacy sample rules run with backend matlab only; the blocks replace them.

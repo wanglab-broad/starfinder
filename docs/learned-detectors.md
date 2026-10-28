@@ -158,7 +158,7 @@ rules:
 
 For Piscis, use `method: piscis` and a Piscis model in quotes, for example
 `model: "20251212"`; YAML reads an unquoted `20251212` as an integer. The other
-fields keep their defaults when omitted. See {doc}`workflow-configuration` ("Spot-finding method key")
+fields keep their defaults when omitted. See the [workflow key table](workflow-configuration.md#schema-definitions)
 for `channel_overrides` and `rounds`.
 
 Starfinder does not change thread settings. To run on one thread, set

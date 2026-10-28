@@ -144,7 +144,7 @@ read matches an entry on its whole color sequence; the end-base check of each se
 with allowed end bases is a diagnostic, and
 `ReadFilterConfig(exclude_invalid_endpoints=True)` rejects the reads that fail it. In
 the workflow, `load_codebook.split_index` gives a two-segment layout
-({doc}`workflow-configuration`, "Codebook segment layout").
+([workflow segment layout](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#codebook-segment-layout)).
 
 ## Extraction
 
@@ -227,7 +227,7 @@ rules:
       deduplication: {run: true, distance_voxels: 1.0}
 ```
 
-The reference lists the keys, and {doc}`workflow-configuration` their rules.
+The reference lists the keys, and the [workflow specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md) their rules.
 
 ## Limits
 

@@ -187,7 +187,7 @@ Two recipe modes apply to recipe 2:
   {doc}`api/preprocessing` for the two-pass procedure.
 
 The workflow key for an explicit recipe is described in
-[Explicit preprocessing recipe](workflow-configuration.md#explicit-preprocessing-recipe).
+[Explicit preprocessing recipe](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#explicit-preprocessing-recipe).
 The {doc}`preprocessing reference <preprocessing-algorithms>` lists the methods; the
 evaluation design is in the [preprocessing algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing-algorithms.md).
 

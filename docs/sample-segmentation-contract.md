@@ -49,7 +49,7 @@ record = dataset.export(
 
 For workflow runs, put these settings in `export.segmentation`, with the route in
 `export.route`. The top-level `assignment` block supplies the assignment settings.
-The {doc}`workflow configuration <workflow-configuration>` has complete examples.
+The [workflow configuration record](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#stitching-assembly-and-export) has complete examples.
 
 ## What it does
 

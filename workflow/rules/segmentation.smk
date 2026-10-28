@@ -1,7 +1,7 @@
 """
     Segmentation rules: StarDist, DAPI enhancement
     Uses variables from common.smk, whose SHARED_IMAGE_INPUTS names the images these rules read: the reference
-    image and the channel folders of the flamingo round (docs/workflows.md, "Nuclei registration").
+    image and the channel folders of the flamingo round (design/specs/workflows.md, "Nuclei registration").
 """
 
 ### ==================== [ DAPI Enhancement with Flamingo ] =========================

@@ -146,5 +146,4 @@ With `backend: python`, the `spot_finding` block of a Python processing rule hol
 | `channel_overrides` | A mapping from channel label to the fields that change for that channel |
 | `rounds` | A list of the round labels to detect in |
 
-The rule-level key `device` sets `ExecutionConfig.device`. "Spot-finding method key" in
-{doc}`workflow-configuration` gives the block's other rules.
+The rule-level key `device` sets `ExecutionConfig.device`. The [workflow specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#spot-finding-method-key) gives the block's other rules.
