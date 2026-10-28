@@ -25,7 +25,7 @@ from starfinder.segmentation import (InputChannel, LabelImportConfig, SeededWate
                                      SegmentationRun)
 from starfinder.synthetic import benchmark_scene_preset, generate_amplicon_dataset, save_amplicon_dataset
 
-# A synthetic FOV, loaded with a voxel spacing in µm (the watershed needs one).
+# A synthetic FOV, loaded with a voxel spacing in µm, which the watershed uses.
 codebook, scene = benchmark_scene_preset("tiny")
 generated = generate_amplicon_dataset(codebook, replace(scene, seed=42), fov_ids=("FOV_001",), preset="tiny")
 save_amplicon_dataset(generated, "input")
@@ -80,9 +80,9 @@ The run writes one folder per run, `results/fovs/FOV_001/segmentation/nucleus/` 
 ```{method-table} starfinder.segmentation.SEGMENTATION_METHODS
 ```
 
-Choose by your stains ([Method input](#method-input)). `stardist` and `cellpose` need
-their extra and a model; `seeded_watershed` grows cells from the nuclei of an earlier
-run. This page does not recommend a method or a model.
+Choose by your stains ([Method input](#method-input)). `stardist` and `cellpose` are
+learned methods ([Models](#models)); `seeded_watershed` grows cells from the nuclei of an
+earlier run. This page does not recommend a method or a model.
 
 ## What you get
 
@@ -110,7 +110,7 @@ run. This page does not recommend a method or a model.
 * `projection`: segments a Z projection of the input as one plane.
 * `model` or `model_path`: the model of a learned method.
 * `StarDistConfig.scale` and `CellposeConfig.diameter`: how the input is scaled to the
-  model's training data; every such run sets one.
+  model's training data.
 
 The reference gives each config's options and their defaults.
 
@@ -129,8 +129,8 @@ Each `InputChannel` gives a channel a role and a source:
   `InputChannel("nuclear", round="reference_stain", channel="DAPI")`;
 * the reference round's channel maximum: `InputChannel("amplicon", reference_merged=True)`.
 
-Each role (`nuclear`, `cytoplasm`, `membrane`, `amplicon`, `composite`) appears at most
-once per run. The methods read:
+The roles are `nuclear`, `cytoplasm`, `membrane`, `amplicon` and `composite`. The
+methods read:
 
 * `stardist`: one `nuclear` or `composite` channel;
 * `cellpose`: a `cytoplasm` or a `nuclear` channel, or both;
@@ -155,8 +155,8 @@ says which inputs they serve.
 ## Importing masks
 
 A mask made elsewhere, by CellProfiler for example, enters as a run whose method is
-`LabelImportConfig(path, target)`: an integer TIFF, YX or ZYX, on the run's grid. The
-result is a `SegmentationResult` like any other. `relabel=True` numbers the labels 1 to
+`LabelImportConfig(path, target)`, which names a YX or ZYX integer TIFF. The result is a
+`SegmentationResult` like any other. `relabel=True` numbers the labels 1 to
 n; otherwise the file's values are kept.
 
 Without a FOV, `import_labels(path, grid=…, target=…, label_namespace=…)` imports onto a
@@ -179,14 +179,13 @@ uv run starfinder weights fetch cellpose cpsam_v2
   {doc}`learned detectors <learned-detectors>`.
 * **Your own model.** `model_path` names a StarDist model folder (`config.json`,
   `thresholds.json`, `weights_best.h5`) or a Cellpose model file.
-* **No download.** Segmentation checks the model files' SHA-256 before it loads them,
-  and never downloads.
+* **Downloads.** `starfinder weights fetch` downloads the known models; segmentation
+  reads the files and checks their SHA-256 before it loads them.
 
 ## Devices
 
-`device="cuda"` runs StarDist and Cellpose on a GPU; the default is `"cpu"`. The
-seeded watershed runs on the CPU only, and `FOV.segment` passes its `device` to the
-method of every run, so a plan with a watershed run segments with `device="cpu"`.
+`device="cuda"` runs StarDist and Cellpose on a GPU; the default is `"cpu"`. The seeded
+watershed runs on the CPU.
 
 ## Troubleshooting
 
@@ -195,16 +194,18 @@ method of every run, so a plan with a watershed run segments with `device="cpu"`
 | `SegmentationBackendUnavailableError` | The method's extra is not installed | Install the extra (above) |
 | `MissingModelError` | A model file or folder is not there | Fetch the known model, or check `model_path` |
 | `ModelHashMismatchError` | A model file differs from its expected SHA-256 | Fetch the model again, or check `model_sha256` |
+| `TypeError` naming `scale` or `diameter` | A StarDist or Cellpose config without it | Set the input scale |
+| `ValueError` naming `'cuda'` | A plan with a watershed run uses `device="cuda"` | Use `"cpu"` |
 | `IncompatibleGeometryError` | An input, a mask or the seeds have another ZYX shape than the run's grid, or the model does not fit the input's Z | Check the grid, or choose a model for 2D or 3D input |
 
 ## Workflow configuration
 
 The shared rule `stardist_segmentation`, under both backends, runs StarDist on one input
 file per FOV from `rules.stardist_segmentation.parameters`, and writes
-`images/stardist_segmentation/{fovID}.tif` with its run record. Snakemake's environment
-needs the package with the `stardist` extra. The reference lists the legacy keys.
+`images/stardist_segmentation/{fovID}.tif` with its run record. It runs in Snakemake's
+environment, with the package and its `stardist` extra. The reference lists the legacy keys.
 
-The Python-only top-level `segmentation` block describes a plan:
+With `backend: python`, the top-level `segmentation` block describes a plan:
 
 ```yaml
 backend: python
@@ -227,8 +228,7 @@ segmentation:
 ```
 
 A run's other keys are the fields of its method's config, or with `method: import` those
-of `LabelImportConfig`. No rule runs the block yet, and `stardist_segmentation` stops
-with an error when it is present.
+of `LabelImportConfig`. No rule runs the block yet.
 
 ## Limits
 

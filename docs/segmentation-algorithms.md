@@ -155,11 +155,11 @@ by default ({doc}`checkpoints`); `FOV.load_segmentation(name)` reads them. The
 
 ### The segmentation block
 
-The Python-only top-level `segmentation` block holds a plan; no rule runs it yet.
+With `backend: python`, the top-level `segmentation` block holds a plan; no rule runs it yet.
 
 | Key | Meaning |
 | --- | --- |
-| `device` | The device of every run |
+| `device` | The device of the plan's runs |
 | `runs` | The runs, in order |
 | `runs[].name`, `target`, `seeds` | As in `SegmentationRun` |
 | `runs[].inputs` | A list of `InputChannel` fields; `prepare` names `composite_nuclei_amplicon` or `enhance_with_flamingo` with its config's fields |
@@ -181,7 +181,7 @@ The rule turns `rules.stardist_segmentation.parameters` into one StarDist run:
 | `rescale` | `scale` 0.5 when true, 1.0 when false |
 | `expand_labels`, `distance` | One planar expansion by `distance` pixels |
 | `segmentation_input_folder` | The input channel's role: `composite` for `overlay`, the default, and `nuclear` for any other folder |
-| `target` (Python only) | The run's target; without it, `cell` for `overlay` and `nucleus` otherwise |
-| `device` (Python only) | The device |
+| `target` (`backend: python`) | The run's target; without it, `cell` for `overlay` and `nucleus` otherwise |
+| `device` (`backend: python`) | The device |
 
 The run record keeps the legacy keys under `workflow.legacy`.
