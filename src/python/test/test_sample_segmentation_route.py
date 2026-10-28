@@ -1,4 +1,4 @@
-"""RS1, SG4, SG5, SA1 to SA8 and SO1 of docs/sample-segmentation-validation.md: the route after fusion in
+"""RS1, SG4, SG5, SA1 to SA8 and SO1 of design/validation/sample-segmentation.md: the route after fusion in
 ``Dataset.export`` (the parts ``fuse``, ``segment`` and ``assemble`` with the sample segmentation), its statuses,
 its reuse rule, the sample assignment and the outputs it writes, against the route per FOV of the same fixture.
 
@@ -6,7 +6,7 @@ Fixtures (``sample_segmentation_fixtures.py``): ``fused_pair``, ``fused_quad``, 
 ``scene_plane`` written as datasets, ``truth_import`` (``truth_runs``) and ``seeded_runs`` at ``k = 1``, and
 ``per_fov_routes`` (per FOV the truth labels cut at its origin, imported and assigned with the same
 ``AssignmentConfig``, saved as §2.9 folders and exported with ``route: per_fov`` into a second folder). The
-conditions T2, T3 and T4 of docs/sample-segmentation-contract.md ("The record") are evaluated in the tests. The
+conditions T2, T3 and T4 of design/specs/sample-segmentation.md ("The record") are evaluated in the tests. The
 label export and the SpatialData export are off: on this route they are W-428's. No model is loaded or run; dask
 runs with the synchronous scheduler.
 """
@@ -148,7 +148,7 @@ def routes(tmp_path_factory):
     return get
 
 
-# --- The conditions T2, T3, T4 (docs/sample-segmentation-contract.md, "The record"), evaluated here --------------
+# --- The conditions T2, T3, T4 (design/specs/sample-segmentation.md, "The record"), evaluated here --------------
 
 def label_image(folder, path):
     labels = tifffile.imread(folder / path)

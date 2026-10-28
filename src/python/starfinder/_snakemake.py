@@ -835,7 +835,7 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
     """(inputs, output) of the export_sample rule for one sample (export.smk builds the rule from them).
 
     The inputs are the sample's placement stitching/<sample>/placement.json,
-    then by route (docs/sample-segmentation-contract.md, "The entry"). On the
+    then by route (design/specs/sample-segmentation.md, "The entry"). On the
     route per FOV, the one output of reads_assignment per FOV, the saved
     folder's assignment.json, or with assembly.assignment null the molecule
     tables (on either route; _molecule_table: fovs/{fovID}/molecules.csv, or the legacy goodSpots CSV

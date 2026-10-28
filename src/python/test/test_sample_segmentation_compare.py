@@ -1,4 +1,4 @@
-"""CR1 to CR5 of docs/sample-segmentation-validation.md: ``compare_routes``, the consistency check of the two routes,
+"""CR1 to CR5 of design/validation/sample-segmentation.md: ``compare_routes``, the consistency check of the two routes,
 and that its measure is the duplicate rule's.
 
 Fixtures (``sample_segmentation_fixtures.py``): ``fused_pair``, ``fused_pair_seams``, ``fused_quad``, ``scene_plane``

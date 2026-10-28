@@ -18,7 +18,7 @@ synthetic scene as an engineering check and that validation and its thresholds a
 % "§2.12 planning decisions (2026-10-08)"
 
 It builds on [synthetic cellular scene](../specs/synthetic/cellular-scene.md), [synthetic sample scene](../specs/synthetic/sample-scene.md),
-[the stitching and assembly validation design](stitching-assembly.md), [sample-segmentation-validation](../../docs/sample-segmentation-validation.md) and the
+[the stitching and assembly validation design](stitching-assembly.md), [sample-segmentation-validation](sample-segmentation.md) and the
 validation design of [report-algorithms](../../docs/report-algorithms.md), and redefines nothing in them: every rule,
 identity, column and status a check names is used as those pages state it. The appearance
 presets of [synthetic real appearance](../specs/synthetic/real-appearance-scene.md) are validated by
@@ -27,7 +27,7 @@ here ("Implementation").
 
 It is a page beside [synthetic cellular scene](../specs/synthetic/cellular-scene.md) rather than a section of it, as the
 validation designs of stitching and assembly ([stitching and assembly validation](stitching-assembly.md)) and of the route after
-fusion ([sample-segmentation-validation](../../docs/sample-segmentation-validation.md)) are pages beside their contracts: the gate
+fusion ([sample-segmentation-validation](sample-segmentation.md)) are pages beside their contracts: the gate
 reviews the scene and its validation as two decisions, and an amendment of a threshold
 after acceptance is recorded here without touching the scene's page.
 
@@ -199,7 +199,7 @@ the table of EE5 (`ee5_table`), moved to a helper module when a second file impo
 From `test/test_segmentation_validation.py`: the matching of the segmentation check L12
 (`l12_agreement`: one to one at IoU ≥ 0.5, the larger IoU first). The validation tables of
 [report-algorithms](../../docs/report-algorithms.md) (DF7, DF8, CH3, RT1, RC12, PG1) and of
-[sample-segmentation-validation](../../docs/sample-segmentation-validation.md) (SA3, SA5, SA7) are the definitions the chain checks'
+[sample-segmentation-validation](sample-segmentation.md) (SA3, SA5, SA7) are the definitions the chain checks'
 fourth and third steps apply; they are cited by row.
 
 % W-384; §2.9
@@ -462,7 +462,7 @@ with a true cell and the share of them left unassigned are reported.
 **The count identities of the assembly (step 3)** are identities 1 to 5 of
 [assembly-contract](../specs/assembly.md) ("Count accounting"), as AS6 and EE3 of
 [the stitching and assembly validation design](stitching-assembly.md) check them (route per FOV) and as SA7 of
-[sample-segmentation-validation](../../docs/sample-segmentation-validation.md) restates them (route after fusion), with `n_obs` of
+[sample-segmentation-validation](sample-segmentation.md) restates them (route after fusion), with `n_obs` of
 `sample.h5ad` equal to the counted cells. They hold on the method's labels and on the truth
 labels alike; on `chain_*_truth`, EE1 to EE3 (route per FOV) and SA3 and SA5 (route after
 fusion) hold as those pages state them.
@@ -684,7 +684,7 @@ or about the threshold**, not a verdict on the method, and not a defect to be ma
   its target range, change the threshold, or record the case as a known limit of the scene.
 * **Who decides.** Jiahao, at a gate, as for an accepted page: a changed threshold or
   preset is written into this page as a dated amendment ("Amendments after acceptance", in
-  the form of [sample-segmentation-validation](../../docs/sample-segmentation-validation.md)), with the finding that caused it. Until
+  the form of [sample-segmentation-validation](sample-segmentation.md)), with the finding that caused it. Until
   then the check stays as written and stays red.
 * **What it never means.** A miss is never read as an accuracy of the method on real tissue,
   and a pass never is either (see "The claim boundary").

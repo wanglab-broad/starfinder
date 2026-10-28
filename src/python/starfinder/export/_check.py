@@ -8,7 +8,7 @@ tests. For the label image of the ``labels`` section: L1 (layout, uint32), L2 (n
 value), L3 (drawn by retained cells), L4 (absent IDs) and L5 (grid); L6 is a check of the
 entry before anything is written. For the store of the ``spatialdata`` section, read back
 with ``spatialdata.read_zarr``: S1 (elements, omissions, format) to S8 (store hashes). On the
-route after fusion (docs/sample-segmentation-contract.md, "The record"): R1 with the part
+route after fusion (design/specs/sample-segmentation.md, "The record"): R1 with the part
 ``segment``, T1 to T5 for the sample segmentation, and L3 and L5 by the rule ``segmentation``.
 """
 from __future__ import annotations
@@ -585,7 +585,7 @@ def _t4(section, cells):
 
 
 def _check_segmentation(folder, record):
-    """T1 to T5 for the sample segmentation of the ``segmentation`` section (docs/sample-segmentation-contract.md,
+    """T1 to T5 for the sample segmentation of the ``segmentation`` section (design/specs/sample-segmentation.md,
     "The record"), when the part ``segment`` is ``written`` or ``reused``."""
     from starfinder.assembly import load_assembly
     section = record.get("segmentation")
@@ -717,7 +717,7 @@ def _check_labels(folder, record):
 
 
 def _check_sample_labels(folder, record, section, output):
-    """L2 to L5 by the rule ``segmentation`` (docs/sample-segmentation-contract.md, "The label images"): L3 reads
+    """L2 to L5 by the rule ``segmentation`` (design/specs/sample-segmentation.md, "The label images"): L3 reads
     the sample's territories, L5 checks the grid of the label scale's spacing and the territories' origin."""
     from starfinder.assembly import load_assembly
     from starfinder.segmentation._operations import retained_image
@@ -1165,7 +1165,7 @@ def check_export(folder) -> None:
     S6 transforms and extents; S7 values against the OME-TIFF files; S8 the
     SHA-256 of every store file.
 
-    On the route after fusion (docs/sample-segmentation-contract.md, "The
+    On the route after fusion (design/specs/sample-segmentation.md, "The
     record"), R1 includes the part ``segment``, and when that part is
     ``written`` or ``reused``: T1 the ``segmentation`` section's label files
     with their SHA-256, uint32, the OME-TIFF layout checks and the recorded

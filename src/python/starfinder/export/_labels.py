@@ -10,7 +10,7 @@ no owner mask is used and no ID is shifted. The result is written as ``cell_labe
 (uint32) with the ``labels`` section of ``export.json``. The library is imported only when
 :func:`fuse_labels` fuses.
 
-On the route after fusion (docs/sample-segmentation-contract.md, "The label images") the
+On the route after fusion (design/specs/sample-segmentation.md, "The label images") the
 one view passed to the same library call is the sample's territories (the cell run's label
 file, or ``territories.ome.tif`` when assign expanded) with ``cell_id`` mapped to
 ``instance_id``; the section records the rule ``segmentation`` and ``segmentation_files``.
@@ -282,7 +282,7 @@ def sample_territory_source(assembly):
 def sample_label_grid(shape_zyx, spacing_zyx, origin_zyx, output_spacing_yx) -> dict:
     """The label grid of the route after fusion in Y and X: the output spacing (``k·s`` at the label scale, ``s``
     the acquired spacing), the territories' origin ``O``, size ``floor((N − 1)·S / (k·s) + 1e-9) + 1`` for
-    territories of ``N`` pixels of spacing ``S`` (docs/sample-segmentation-contract.md, "The label images")."""
+    territories of ``N`` pixels of spacing ``S`` (design/specs/sample-segmentation.md, "The label images")."""
     grid = {"spacing": {}, "origin": {}, "shape": {}}
     for i, a, out in ((1, "y", output_spacing_yx[0]), (2, "x", output_spacing_yx[1])):
         grid["spacing"][a] = float(out)
@@ -326,7 +326,7 @@ def fuse_labels(placement: PlacementResult, assembly, *, config: LabelConfig = L
     unchanged, after removing the files the earlier section listed.
 
     On the route after fusion (an assembly with ``route`` ``after_fusion``
-    and ``mode`` ``cells``; docs/sample-segmentation-contract.md, "The label
+    and ``mode`` ``cells``; design/specs/sample-segmentation.md, "The label
     images") the one view is the sample's territories, the file of
     ``output_dir`` that the assembly record lists in ``segmentation_files``
     (``territories.ome.tif`` when assign expanded, else the cell run's

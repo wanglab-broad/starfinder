@@ -676,7 +676,7 @@ sample-level rules for a configuration that has them. The specification is the
   fields (`images`, `dimensionality`, `projection`, `scale_yx`, `ome_zarr`,
   `ome_zarr_version`, `pyramid_levels`), `labels_scale_yx` (`LabelConfig.scale_yx`) and
   `spatialdata_zarr_format` (`SpatialDataExportConfig.zarr_format`), and the route
-  ({doc}`sample-segmentation-contract`): `route` (`per_fov`, `after_fusion`, or null for the
+  ([sample-segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-segmentation.md)): `route` (`per_fov`, `after_fusion`, or null for the
   default by `dimensionality`: `projection` gives `after_fusion`, `stack` and `both` give
   `per_fov`), `segment` (default true; false reuses the saved sample segmentation) and
   `segmentation`, the settings of the route after fusion (`SampleSegmentationConfig`):
@@ -686,7 +686,7 @@ sample-level rules for a configuration that has them. The specification is the
   with the `LabelImportConfig` fields. The pixel settings of a method are given for the
   acquired grid, as for the route per FOV, and the route converts them to the segmentation
   grid at the factor `k` of `scale_yx = 1/k` by the table of
-  {doc}`sample-segmentation-contract` ("Lengths in pixels"), recording both values:
+  [sample-segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-segmentation.md) ("Lengths in pixels"), recording both values:
   Cellpose's `diameter` becomes `diameter / k` and its area `min_size` becomes
   `max(1, round(min_size / k²))`; StarDist's `scale` is multiplied by `k` in Y and X, and its
   `block_size`, `min_overlap` and `context` are divided by `k` and rounded up, so block runs
@@ -700,7 +700,7 @@ sample-level rules for a configuration that has them. The specification is the
   `export_sample`, so that rule needs the device and memory of the segmentation methods:
   with a learned model on `cuda` (`segmentation.device: cuda`) the rule must run on a GPU
   node (choice E1 of
-  {doc}`sample-segmentation-contract`, whose stated cost this is; the GPU resource of the
+  [sample-segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-segmentation.md), whose stated cost this is; the GPU resource of the
   rule belongs to workflow orchestration and is not set by this block). The whole fused projection is
   segmented in one call, so its size, set by `scale_yx`, must fit that device.
 

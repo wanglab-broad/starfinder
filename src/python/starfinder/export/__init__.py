@@ -25,7 +25,7 @@ segments the fused projection of a sample on the route after fusion (:data:`ROUT
 image per run and the ``segmentation`` section (:class:`~starfinder.segmentation.SampleSegmentation`,
 :func:`load_sample_segmentation`); :func:`compare_routes` reports how the cells and
 molecules of an export folder of each route correspond (:class:`RouteComparison`) and
-decides nothing; see docs/sample-segmentation-contract.md.
+decides nothing; see design/specs/sample-segmentation.md.
 Importing this module imports neither multiview-stitcher, zarr nor spatialdata. See
 design/specs/sample-output.md.
 """

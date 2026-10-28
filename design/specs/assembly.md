@@ -104,7 +104,7 @@ of 2026-09-27 on stitching and assembly:
 * **Retention** (2026-09-27): a cell is retained by its centroid; all molecules of a
   retained cell are kept wherever they lie; an unassigned molecule is retained by its own
   position. This holds for the route per FOV; on the route after fusion
-  ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md)) every cell of the sample segmentation is retained
+  ([sample-segmentation-contract](sample-segmentation.md)) every cell of the sample segmentation is retained
   and molecules are retained by their position. Exclusions are preserved, not dropped. Cells at a FOV border are flagged.
   Cells are not merged across FOVs, complete cells are not recovered across borders and
   molecules are not reassigned; two retained observations of one cell in two FOVs are
@@ -226,7 +226,7 @@ computes the flags, copies the assignment counts of the counted cells ("Statuses
 and returns an
 `AssemblyResult`. It never reads or writes files except to load a saved assignment named
 by path, never runs stitch, assign or any per-FOV stage (with a `segmentation`, the route
-after fusion of [sample-segmentation-contract](../../docs/sample-segmentation-contract.md), it calls `assign_molecules` once on
+after fusion of [sample-segmentation-contract](sample-segmentation.md), it calls `assign_molecules` once on
 the sample), merges no cell across FOVs,
 matches observations of two FOVs only by the duplicate rule ("Retention", rule 8), and
 moves no molecule to another cell. Like `stitch`, it is a sample-level computation, not a
@@ -334,7 +334,7 @@ The record of the result (the `assembly` section of `export.json` when saved, "P
   `default` as `Dataset.export` resolved the route; null when `assemble` is called alone),
   and on the route after fusion `segmentation_files` (per run the label file's name and
   SHA-256 that it read, and `territories.ome.tif` when it wrote one) and the sample
-  assignment's record as `assignment` ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The
+  assignment's record as `assignment` ([sample-segmentation-contract](sample-segmentation.md), "The
   record").
 
 % §2.9
@@ -730,7 +730,7 @@ footprint_y1, footprint_x0, footprint_x1` and `centre_y, centre_x` (µm); `owns_
 increasing `cell_id` (on the route after fusion, one row per cell of the sample
 segmentation, in increasing `cell_id`, whose `fov_id` is the owning FOV of its ownership
 centroid, or where no owning footprint holds that point the owning FOV with the nearest
-footprint centre: [sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The cells"):
+footprint centre: [sample-segmentation-contract](sample-segmentation.md), "The cells"):
 
 | Column | Type | Content |
 | --- | --- | --- |
@@ -961,7 +961,7 @@ The rule `export_sample` reads `stitching/{sample}/placement.json`, the saved as
 folders (or molecule tables) of the sample's FOVs and their reference grids, and writes
 the files of "Persistence" and of the other parts it runs. It runs once per sample, after
 `reads_assignment` of every FOV of the sample on the route per FOV
-([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The route setting") and after the placement exists; unlike
+([sample-segmentation-contract](sample-segmentation.md), "The route setting") and after the placement exists; unlike
 `reads_assignment` today, no rule reads another sample's placement.
 
 **The assignment figures with ownership** (added after the implementation, on 2026-10-08; opt-in

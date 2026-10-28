@@ -158,7 +158,7 @@ def _fov_spacing(assembly) -> dict:
     The FOV's grid on the route per FOV; on the route after fusion (``route``
     ``after_fusion``, ``mode`` ``cells``) the segmentation grid's spacing for
     every FOV, the grid of ``size_voxels`` there, which the sample assignment
-    records (docs/sample-segmentation-contract.md, "Readers that change").
+    records (design/specs/sample-segmentation.md, "Readers that change").
     """
     after_fusion = assembly.record.get("route") == "after_fusion" and assembly.record.get("mode") == "cells"
     segmentation = ((assembly.record.get("assignment") or {}).get("grid") or {}) if after_fusion else None
@@ -742,7 +742,7 @@ def lookup_source(folder, *, spot=None, cell=None) -> dict:
     is the cell's position in the sample cell table, and two keys are added,
     ``label_file`` (the cell run's label file, relative to the folder, as the
     ``assembly`` section's ``segmentation_files`` lists it) and
-    ``label_value`` (its ``cell_id``) (docs/sample-segmentation-contract.md,
+    ``label_value`` (its ``cell_id``) (design/specs/sample-segmentation.md,
     "Readers that change"). A molecule is found as in a ``molecules_only``
     sample.
 

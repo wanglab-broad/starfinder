@@ -232,7 +232,7 @@ with `expansion`. The record says how the territories were obtained
     `spot_namespace` list `[dataset_id, sample_id, fov_id, subtile_id]`, or the sample
     identity `[dataset_id, sample_id, null, null]` with null `fov_id` and `subtile_id`,
     which the constructor accepts and the route after fusion of
-    [sample-segmentation-contract](../../docs/sample-segmentation-contract.md) uses); finite
+    [sample-segmentation-contract](sample-segmentation.md) uses); finite
     coordinates (`ValueError` naming the first bad row); every `gene_id` non-null and in
     `genes` (`ValueError` naming the unknown genes; today they are dropped silently,
     [assignment-baseline](../baselines/assignment.md) discrepancy 11).
@@ -883,7 +883,7 @@ reload raise `ValueError` naming the path and both hashes.
 
 Assignment is FOV-local: it reads one FOV's molecules and label images on that FOV's
 reference grid, and nothing else. The function stays as it is; the route after fusion
-([sample-segmentation-contract](../../docs/sample-segmentation-contract.md)) calls it once on the segmentation grid with the
+([sample-segmentation-contract](sample-segmentation.md)) calls it once on the segmentation grid with the
 sample's molecules in one sample-level namespace. It reads no tile configuration, computes no global
 coordinate, decides no overlap ownership, matches no cell across FOVs and filters nothing
 by position.

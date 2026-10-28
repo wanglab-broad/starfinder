@@ -1,4 +1,4 @@
-"""RS2, RS3, RS4, SG1, SG2, SG3 and SG6 of docs/sample-segmentation-validation.md: the route setting, check 7
+"""RS2, RS3, RS4, SG1, SG2, SG3 and SG6 of design/validation/sample-segmentation.md: the route setting, check 7
 of ``Dataset.export``, the conversion of pixel lengths (LS2) and ``segment_fused`` called alone on a folder in
 which ``fuse`` ran; and the route per FOV of ``Dataset.export``, untouched but for the part ``segment``.
 
@@ -336,7 +336,7 @@ def test_the_route_per_fov_is_untouched(tmp_path, case):
     loaded = load_assembly(folder.export_dir)
     for table in ("fovs", "cells", "molecules", "counts"):
         pd.testing.assert_frame_equal(getattr(loaded, table), getattr(expected, table), check_exact=True)
-    # The assembly section records the route and its source (docs/sample-segmentation-contract.md, "The record");
+    # The assembly section records the route and its source (design/specs/sample-segmentation.md, "The record");
     # the fusion section does not name it.
     assert (record["assembly"]["route"], record["assembly"]["route_source"]) == ("per_fov", source)
     assert "route" not in record["fusion"]
@@ -493,7 +493,7 @@ RUN_KEYS = {"name", "target", "geometry", "label_namespace", "inputs", "seeds", 
 
 
 def _t1(folder, section, record):
-    """T1 of docs/sample-segmentation-contract.md ("The record"), evaluated here."""
+    """T1 of design/specs/sample-segmentation.md ("The record"), evaluated here."""
     grid = section["inputs"]["grid"]
     for run in section["runs"]:
         path = folder / run["path"]

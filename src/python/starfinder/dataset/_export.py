@@ -7,7 +7,7 @@ the parts in order, writing ``export.json`` after each part, whose section repla
 entry. On the route per FOV: ``assemble`` (then ``save_assembly``), ``fuse``,
 ``fuse_labels`` and ``export_spatialdata``, with the part ``segment`` recorded ``off``
 (reason ``route_per_fov``, or ``no_cells`` without an assignment, on either route). On the
-route after fusion with an assignment (docs/sample-segmentation-contract.md, "The parts on
+route after fusion with an assignment (design/specs/sample-segmentation.md, "The parts on
 each route"): ``fuse``, ``segment`` (``segment_fused``, or the saved sample segmentation
 ``reused``), ``assemble`` with the sample segmentation (or the ``molecules_only`` assembly
 when ``segment`` could not run), then ``fuse_labels`` (the sample's territories as its one
@@ -208,7 +208,7 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
     # 6. Label IDs.
     if config.fuse_labels and result is not None:
         check_label_ids(result.cells)
-    # 7. The route (docs/sample-segmentation-contract.md, "The entry").
+    # 7. The route (design/specs/sample-segmentation.md, "The entry").
     check_route(config, assignment)
     segmentation = segment_off_section(route, route_source, assignment)
 
@@ -279,7 +279,7 @@ def _spatialdata_part(result, config, output_dir):
         raise
 
 
-# --- The route after fusion (docs/sample-segmentation-contract.md, "The entry") -------------------------------------
+# --- The route after fusion (design/specs/sample-segmentation.md, "The entry") -------------------------------------
 
 GRID_TOLERANCE_UM = 1e-9
 
@@ -449,7 +449,7 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
 
 def _check_label_bound(output_dir, sample, segmentation):
     """L6 on a fresh export of the route after fusion, directly after the part ``segment`` and before ``assemble``
-    writes (docs/sample-segmentation-contract.md, "The label images"): the number of labels of the cell run, one cell
+    writes (design/specs/sample-segmentation.md, "The label images"): the number of labels of the cell run, one cell
     row each. A refusal records the part ``fuse_labels`` ``failed`` with the error of L6 and raises; the files of
     ``fuse`` and ``segment`` stay, and no table, ``sample.h5ad``, label image or store is written."""
     try:

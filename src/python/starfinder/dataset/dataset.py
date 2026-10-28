@@ -603,7 +603,7 @@ class Dataset:
         reads only saved files. After the checks before anything is written
         (the configs; the placement's review; the ``anndata`` extra, and
         ``checkpoint`` for Parquet tables; the assembly; the fusion inputs; the
-        label IDs; the route, check 7 of docs/sample-segmentation-contract.md:
+        label IDs; the route, check 7 of design/specs/sample-segmentation.md:
         ``config.route``, or by default ``after_fusion`` for
         ``dimensionality: projection`` and ``per_fov`` for ``stack`` and
         ``both``) it removes the files the previous ``export.json`` lists for
@@ -637,7 +637,7 @@ class Dataset:
         again. The part ``segment`` of the route after fusion is recorded
         ``off`` on the route per FOV (reason ``route_per_fov``, or ``no_cells``
         with ``assignment=None``). On the route after fusion with an
-        assignment (docs/sample-segmentation-contract.md) the parts run in the
+        assignment (design/specs/sample-segmentation.md) the parts run in the
         order ``fuse``; ``segment``
         (:func:`~starfinder.export.segment_fused` on the fused
         projection, with the dataset's ``(dataset_id, sample_id)``; with

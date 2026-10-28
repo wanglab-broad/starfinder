@@ -289,7 +289,7 @@ no status is changed.
 **Decided on 2026-10-09** (Jiahao): both routes stay, segmentation per FOV followed by
 assembly and segmentation of the fused image (option C, not the recommendation A); the
 route after fusion is built for projection samples, specified by the sample-segmentation specification
-([sample-segmentation-contract](../../docs/sample-segmentation-contract.md)), and the 3D block-wise route is not built now.
+([sample-segmentation-contract](../specs/sample-segmentation.md)), and the 3D block-wise route is not built now.
 
 % W-401
 
@@ -367,7 +367,7 @@ interim for 3D samples, not a second route kept for good.
 ## Question 2: how to segment after fusion
 
 **Decided on 2026-10-09** (Jiahao): for projection samples, the fused Z maximum reduced
-in Y and X is segmented in one call (specified by [sample-segmentation-contract](../../docs/sample-segmentation-contract.md)); the block-by-block segmentation
+in Y and X is segmented in one call (specified by [sample-segmentation-contract](../specs/sample-segmentation.md)); the block-by-block segmentation
 of a fused 3D stack with a chunked label file is not built now.
 
 % W-401

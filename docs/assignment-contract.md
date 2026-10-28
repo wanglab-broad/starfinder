@@ -210,7 +210,7 @@ assignment:
 ```
 
 Its keys are the `AssignmentConfig` fields and `cells`, `nuclei`, `name`, `population`
-and `checkpoints`. The `segmentation` of the {doc}`export block <sample-segmentation-contract>`
+and `checkpoints`. The `segmentation` of the [export block](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-segmentation.md#where-the-settings-live)
 takes its `AssignmentConfig` fields from it.
 
 ## Limits

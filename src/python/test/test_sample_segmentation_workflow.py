@@ -1,4 +1,4 @@
-"""RS5, WF1 and WF2 of docs/sample-segmentation-validation.md: the route in the workflow (W-430).
+"""RS5, WF1 and WF2 of design/validation/sample-segmentation.md: the route in the workflow (W-430).
 
 RS5: the static schema's ``export`` keys equal the fields of ``ExportConfig`` with ``route``,
 ``segment`` and ``segmentation``, and a run's keys besides ``name``, ``target``, ``inputs``,

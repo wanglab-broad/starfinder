@@ -1,4 +1,4 @@
-"""SO2 and SO4 of docs/sample-segmentation-validation.md: the readers and the label export on the route after fusion.
+"""SO2 and SO4 of design/validation/sample-segmentation.md: the readers and the label export on the route after fusion.
 
 SO2: ``load_assembly``, ``write_sample_h5ad``, ``check_export`` (R1 to R3, F, L, S and T1 to T5), ``lookup_source``
 and ``export_spatialdata`` with its round trip, on ``fused_pair`` exported on both routes (``per_fov_routes``), the

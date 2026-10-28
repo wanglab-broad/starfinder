@@ -1405,7 +1405,7 @@ lobed share to 0.074.
 Real data tissue-2D; **projection samples through the route after fusion**
 (`fusion.dimensionality` `projection`): `Dataset.stitch`, then `Dataset.export` fuses, takes
 the Z maximum and segments it in one call with the settings of the `segmentation` block
-of `export` ([sample-segmentation-contract](../../../docs/sample-segmentation-contract.md), "Where the settings live"). Nuclear
+of `export` ([sample-segmentation-contract](../sample-segmentation.md), "Where the settings live"). Nuclear
 stain PI as a reference stain file of the reference round (`ch04`, named `PI`); nuclei by
 StarDist `2D_versatile_fluo` at the scale that gives it about 0.38 µm pixels (1 on the
 routine preset's 0.37854 µm, 0.5 on the `slow` preset's 0.18927 µm); cells by

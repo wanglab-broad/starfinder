@@ -111,7 +111,7 @@ assigned to the sample segmentation), ``fuse_labels`` and ``export_spatialdata``
 on a folder whose ``fuse`` ran, segments the fused projection of each input image on the
 segmentation grid (the fused file's grid, frame ``sample:<sample>``), with the method's pixel
 lengths given for the acquired grid and converted to the segmentation grid by the table
-"Lengths in pixels" of :doc:`../sample-segmentation-contract` (both values recorded),
+"Lengths in pixels" of the `sample-segmentation specification <https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-segmentation.md#lengths-in-pixels>`_ (both values recorded),
 and writes one ``segmentation_<run>.ome.tif`` per run (uint32) and the ``segmentation``
 section of ``export.json``, whose inputs are the fused files' SHA-256 and the grid;
 :py:func:`~starfinder.export.load_sample_segmentation` reads them back as a

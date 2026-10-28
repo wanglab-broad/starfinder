@@ -1,4 +1,4 @@
-"""Fixtures of docs/sample-segmentation-validation.md ("Fixtures"), rebuilt in the test.
+"""Fixtures of design/validation/sample-segmentation.md ("Fixtures"), rebuilt in the test.
 
 ``fused_pair``: the fixture of W-401's grounding calls (``scripts/grounding_calls.py``, read,
 not copied), two FOVs of 3 × 24 × 24 voxels at spacing (1.0, 0.5, 0.5) µm and origins (0, 0,

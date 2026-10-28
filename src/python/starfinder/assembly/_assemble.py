@@ -51,7 +51,7 @@ MOLECULE_DTYPES_29 = {"spot_namespace": "string", "spot_id": "string", "z": "flo
 MOLECULE_ONLY_DTYPES = {"spot_namespace": "string", "spot_id": "string", "z": "float64", "y": "float64",
                         "x": "float64", "gene_id": "string", "assignment_status": "string"}
 # The namespace of a molecule's cell, so that (cell_namespace, cell_id) names the cell in the sample (choice 7, CK1 of
-# docs/sample-segmentation-contract.md); null for a molecule without a cell_id.
+# design/specs/sample-segmentation.md); null for a molecule without a cell_id.
 CELL_KEY = ["cell_namespace", "cell_id"]
 CELL_KEY_DTYPES = {"cell_namespace": "string"}
 CELL_DTYPES = {"fov_id": "string", "cell_namespace": "string", "cell_id": "UInt32", "obs_name": "string",
@@ -765,7 +765,7 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
     route was set or taken from the default).
 
     With ``segmentation`` (the route after fusion,
-    docs/sample-segmentation-contract.md) the inputs are molecule tables: it
+    design/specs/sample-segmentation.md) the inputs are molecule tables: it
     computes their ``molecules_only`` assembly by the rules above, converts
     its retained molecules to one molecule table on the segmentation grid
     (``spot_namespace`` ``[dataset_id, sample_id, null, null]``, ``z, y, x =

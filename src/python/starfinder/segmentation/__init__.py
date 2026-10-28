@@ -18,7 +18,7 @@ model of ``KNOWN_MODELS`` or a user-trained model by path without downloading;
 :class:`SampleSegmentation` is what ``starfinder.export.segment_fused``
 returns on the route after fusion: the segmentation grid, one
 :class:`SegmentationResult` per run and the ``segmentation`` section
-(docs/sample-segmentation-contract.md). See design/specs/segmentation.md and
+(design/specs/sample-segmentation.md). See design/specs/segmentation.md and
 design/specs/segmentation-algorithms.md.
 """
 # §2.9

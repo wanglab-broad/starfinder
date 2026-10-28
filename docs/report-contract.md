@@ -69,7 +69,7 @@ checkpoint stages), {doc}`registration-contract` (the transform convention, the
 registration QC), {doc}`registration-algorithms` (the transforms), {doc}`readout-contract` (call statuses, the read filter, deduplication),
 [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) (the placement record), [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md) (the sample
 tables, ownership, population accounting), {doc}`sample-output-contract` (the export entry,
-`export/<sample>/`, `export.json`, `check_export`), {doc}`sample-segmentation-contract` (the
+`export/<sample>/`, `export.json`, `check_export`), [sample-segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-segmentation.md) (the
 route setting and every output column on the route after fusion) and
 {doc}`workflow-downstream` ("Two routes to a sample's cells").
 
@@ -594,7 +594,7 @@ for a sample that has one and needs its own null rule in `samples.csv`.
 
 | Report element | Route per FOV | Route after fusion |
 | --- | --- | --- |
-| `fovs.csv` `n_cells` | The FOV's own cells (`tables/fovs.csv` `n_cells`) | The sample's cells attributed to the FOV by their ownership centroid ({doc}`sample-segmentation-contract`, "The FOVs"); equal to `n_cells_retained` |
+| `fovs.csv` `n_cells` | The FOV's own cells (`tables/fovs.csv` `n_cells`) | The sample's cells attributed to the FOV by their ownership centroid ([sample-segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-segmentation.md), "The FOVs"); equal to `n_cells_retained` |
 | `fovs.csv` `n_cells_retained` | The FOV's cells retained by ownership and the duplicate rule | The same as `n_cells` |
 | Cell density (`cell_density_per_mm2`) | `n_cells_retained` / the area the FOV owns | The same formula (amendment 1) |
 | Reads in cells (`reads_in_cells`, its fraction) | The FOV's retained molecules whose cell is counted, over its retained molecules | The same columns; a molecule's FOV is the owner of its position |

@@ -11,7 +11,7 @@ import numpy as np
 from starfinder.assembly import AssemblyConfig
 from starfinder.assignment import AssignmentConfig
 
-#: The routes to a sample's cells (docs/sample-segmentation-contract.md, "The route setting"): segmentation per
+#: The routes to a sample's cells (design/specs/sample-segmentation.md, "The route setting"): segmentation per
 #: FOV followed by assembly, and segmentation of the fused projection.
 ROUTES = ("per_fov", "after_fusion")
 DIMENSIONALITIES = ("projection", "stack", "both")
@@ -201,9 +201,9 @@ class SampleSegmentationRun:
     :class:`~starfinder.segmentation.LabelImportConfig` whose target equals the
     run's, with its pixel lengths given for the acquired grid (LS2: the route
     converts them to the segmentation grid by the table "Lengths in pixels" of
-    docs/sample-segmentation-contract.md and records both values); ``seeds``
+    design/specs/sample-segmentation.md and records both values); ``seeds``
     names an earlier run of the same config. See
-    docs/sample-segmentation-contract.md ("Where the settings live").
+    design/specs/sample-segmentation.md ("Where the settings live").
 
     Raises
     ------
@@ -286,7 +286,7 @@ class SampleSegmentationConfig:
     None; ``assignment`` the dataset's
     :class:`~starfinder.assignment.AssignmentConfig`; ``device`` ``cpu`` or
     ``cuda``, which every method of the runs must support. See
-    docs/sample-segmentation-contract.md ("Where the settings live").
+    design/specs/sample-segmentation.md ("Where the settings live").
 
     Raises
     ------
@@ -358,7 +358,7 @@ class ExportConfig:
     ``both``); ``segment`` turns the part ``segment`` of the route after
     fusion on or off (off reuses the saved sample segmentation); and
     ``segmentation`` (a :class:`SampleSegmentationConfig`, or None) holds the
-    settings of that route (docs/sample-segmentation-contract.md, "The route
+    settings of that route (design/specs/sample-segmentation.md, "The route
     setting").
 
     Raises

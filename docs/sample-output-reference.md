@@ -47,7 +47,7 @@ The workflow writes `export/<sample>/` under its output root;
 | `<image>_stack.ome.tif` | Fused stack |
 | `<image>_<dimensionality>.ome.zarr/` | Optional standalone OME-Zarr fusion output |
 | `cell_labels.ome.tif` | Optional uint32 instance labels |
-| `segmentation_<run>.ome.tif` | Segmentation after fusion; see {doc}`sample segmentation <sample-segmentation-contract>` |
+| `segmentation_<run>.ome.tif` | Segmentation after fusion; see {doc}`sample-segmentation reference <sample-segmentation-reference>` |
 | `territories.ome.tif` | Expanded sample territories after fusion, when present |
 | `sample.zarr/` | Optional SpatialData store |
 

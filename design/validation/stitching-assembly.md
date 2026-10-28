@@ -9,7 +9,7 @@ Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` 
 % Note (W-564)
 
 This page is the validation design for the whole of stitching and assembly (for the route after
-fusion, see [sample-segmentation-validation](../../docs/sample-segmentation-validation.md)): the engineering
+fusion, see [sample-segmentation-validation](sample-segmentation.md)): the engineering
 checks of placement ([stitching specification](../specs/stitching.md), [stitching algorithm specification](../specs/stitching-algorithms.md)), of assembly
 ([Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md), [Assembly algorithm specification](../specs/assembly-algorithms.md)) and of the export entry with its
 fused image, label export and SpatialData export ([sample-output-contract](../specs/sample-output.md)), the

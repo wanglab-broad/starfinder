@@ -1,5 +1,5 @@
-"""SO3 of docs/sample-segmentation-validation.md: the column ``cell_namespace`` of the sample molecule
-table on the route per FOV (choice 7, CK1 of docs/sample-segmentation-contract.md), and the readers that
+"""SO3 of design/validation/sample-segmentation.md: the column ``cell_namespace`` of the sample molecule
+table on the route per FOV (choice 7, CK1 of design/specs/sample-segmentation.md), and the readers that
 link a molecule to its cell by the cell key ``(cell_namespace, cell_id)``.
 
 Fixtures: the assemblies of design/validation/stitching-assembly.md (``assembly_golden`` 3D, 2D and

@@ -19,7 +19,7 @@ from starfinder._layout import EXPORT_FILE
 FORMAT_VERSION = 1
 STAGE = "export"
 #: The parts in the order Dataset.export calls them, with the section each writes. ``segment`` is the part of the
-#: route after fusion (docs/sample-segmentation-contract.md, "The entry"); on the route per FOV it is ``off``.
+#: route after fusion (design/specs/sample-segmentation.md, "The entry"); on the route per FOV it is ``off``.
 PARTS = ("assemble", "fuse", "segment", "fuse_labels", "export_spatialdata")
 SECTIONS = {"assemble": "assembly", "fuse": "fusion", "segment": "segmentation", "fuse_labels": "labels",
             "export_spatialdata": "spatialdata"}

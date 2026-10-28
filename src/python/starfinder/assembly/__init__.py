@@ -18,7 +18,7 @@ observations of one cell: the larger stays and the other is excluded
 ``duplicate_observation`` with its molecules. No observation is merged across FOVs.
 With ``segmentation`` (the route after fusion), :func:`assemble` assigns the retained
 molecules of the ``molecules_only`` assembly to the cells of the sample segmentation, one
-row per cell (docs/sample-segmentation-contract.md).
+row per cell (design/specs/sample-segmentation.md).
 :func:`write_sample_h5ad`
 writes ``sample.h5ad`` through :func:`starfinder.assignment.write_h5ad`, and
 :func:`save_assembly` and :func:`load_assembly` write and read the sample's export folder

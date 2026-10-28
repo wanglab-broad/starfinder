@@ -1,4 +1,4 @@
-"""The consistency check of the two routes (docs/sample-segmentation-contract.md, "The consistency check").
+"""The consistency check of the two routes (design/specs/sample-segmentation.md, "The consistency check").
 
 :func:`compare_routes` reads an export folder of each route for the same sample and reports
 how their cells and molecules correspond. Each route's counted cells are placed on the

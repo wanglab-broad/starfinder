@@ -216,7 +216,7 @@ assumption ("Assumptions").
 Excluded: viewer sessions, BigStitcher's fusion in Fiji, reassignment of molecules or
 recomputation of counts from a fused image or a label raster on the route per FOV (the
 route after fusion assigns the sample's molecules to the cells of a segmentation of the
-fused image: [sample-segmentation-contract](../../docs/sample-segmentation-contract.md)), merging of cells across
+fused image: [sample-segmentation-contract](sample-segmentation.md)), merging of cells across
 FOVs (the assembly's duplicate rule, decided on 2026-10-09, excludes one of two
 observations of a cell before these parts read the cell table: [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md),
 "Retention", rule 8), and any change to the placement, segmentation or assignment contracts or to the assembly contract beyond its
@@ -336,7 +336,7 @@ runner").
 | --- | --- | --- | --- | --- |
 | 1 | `assemble` ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md)) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from each FOV's saved molecule table `fovs/<fov_id>/molecules.csv` read through `load_molecules`, with the identities it holds; since 2026-10-23, and on the workflow's legacy route the one-based `signal/<fov_id>_goodSpots.csv` read through `import_legacy_molecules_csv`, with the identities `csv:<row>`) and the reference grids (the stored metadata of each FOV's reference image, the file the dataset's `reference_image` names, default `fovs/{fov_id}/reference.tif`, read as `reference_grid_from_file` reads it, or, for a file that stores none, the grid the dataset's `voxel_size_xy` and `voxel_size_z` declare; without them such a file raises `ValueError` naming them, and a missing file raises `FileNotFoundError` naming `reference_image` and the path), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ([assembly algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly-algorithms.md), "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
 | 2 | `fuse` | `fuse: false` | Builds one `FusionInput` per included FOV from the saved source images and reference grids, and calls `fuse_images` with the assembly of part 1. | The fused images; section `fusion` |
-| — | `segment` ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md)) | `segment: false` (reuses the saved sample segmentation) | On the route per FOV, recorded `off` (reason `route_per_fov`, or `no_cells` with `assignment=None`). On the route after fusion, calls `segment_fused` on the fused projection, or reuses the saved sample segmentation. | `segmentation_<run>.ome.tif`; section `segmentation` |
+| — | `segment` ([sample-segmentation-contract](sample-segmentation.md)) | `segment: false` (reuses the saved sample segmentation) | On the route per FOV, recorded `off` (reason `route_per_fov`, or `no_cells` with `assignment=None`). On the route after fusion, calls `segment_fused` on the fused projection, or reuses the saved sample segmentation. | `segmentation_<run>.ome.tif`; section `segmentation` |
 | 3 | `fuse_labels` | `fuse_labels: false` (the default; "Choices decided at the gate", 8) | Calls `fuse_labels` with the placement and the assembly. | `cell_labels.ome.tif`; section `labels` |
 | 4 | `export_spatialdata` | `export_spatialdata: false` (the default) | Calls `export_spatialdata` with the assembly and the records of parts 2 and 3 that were written. | `sample.zarr/`; section `spatialdata` |
 
@@ -346,7 +346,7 @@ The order above is that of the route per FOV. On the route after fusion with an
 `assignment` name the parts run in the order `fuse`, `segment`, `assemble` (the
 `molecules_only` assembly of the molecule tables, assigned to the cells of the sample
 segmentation), `fuse_labels`, `export_spatialdata`
-([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The parts on each route").
+([sample-segmentation-contract](sample-segmentation.md), "The parts on each route").
 
 Each part can also be called alone with the saved files of the parts before it:
 `assemble` and `save_assembly` as [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md) specifies;
@@ -360,7 +360,7 @@ SHA-256 of the sections it was computed from, so `check_export` finds a section 
 an earlier assembly ("Read-back checks", R1). On the route after fusion, where a section
 holds times, files take the place of sections: the `segmentation` section records the
 SHA-256 of each fused file it read, and the `assembly` section the SHA-256 of each label
-file it read (`segmentation_files`) ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "What the
+file it read (`segmentation_files`) ([sample-segmentation-contract](sample-segmentation.md), "What the
 segmentation was made from").
 
 ### Checks before anything is written
@@ -392,7 +392,7 @@ In this order; each raises, names the FOVs or keys, and leaves the folder unchan
 6. **Label IDs**, when `fuse_labels` is on: the sample cell table has at most
    16,777,216 rows (2^24), so every `instance_id` fits in float32 exactly ("Assembled
    label export", "IDs and float32"; `ValueError` naming the count).
-7. **Route** ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The entry", check 7): the route is a
+7. **Route** ([sample-segmentation-contract](sample-segmentation.md), "The entry", check 7): the route is a
    value of `ROUTES` or null; `route: after_fusion` with `dimensionality: stack` or with
    `projection: sum` is refused, for a set route and for the default alike; on the route
    after fusion with an `assignment` name, `segmentation` is given, each run's input
@@ -419,7 +419,7 @@ with its status.
 | A selected source image missing for an included FOV | `fuse` | `not_run`, `source_image_missing`, with each FOV and image name | No image is fused, for any image name, so the part is all or nothing. `fuse_labels` runs (it reads no source image); `export_spatialdata` omits the image elements (`part_not_run`) |
 | A territory file of a FOV with a retained cell missing | `fuse_labels` | `not_run`, `territory_missing`, with each FOV and path | `export_spatialdata` omits `cell_labels` (`part_not_run`) |
 | `spatialdata` not importable | `export_spatialdata` | `not_run`, `extra_missing`, `extra: "spatialdata"` | none |
-| On the route after fusion, `fuse` did not write the fused images | `segment` | `not_run`, `part_not_run` | `assemble` writes the tables of the `molecules_only` assembly and `sample.h5ad` without a row, its section with `mode` `molecules_only` and the reason ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The entry") |
+| On the route after fusion, `fuse` did not write the fused images | `segment` | `not_run`, `part_not_run` | `assemble` writes the tables of the `molecules_only` assembly and `sample.h5ad` without a row, its section with `mode` `molecules_only` and the reason ([sample-segmentation-contract](sample-segmentation.md), "The entry") |
 | On the route after fusion, the backend of a segmentation method not importable | `segment` | `not_run`, `extra_missing`, naming the method's extra (for example `cellpose`) | as above |
 
 Two other outcomes are not failures: `fuse_images` with no included FOV writes no image and
@@ -468,16 +468,16 @@ or `parquet`.
 | | | `<image>_projection.ome.tif` | OME-TIFF: BigTIFF, 512 × 512 tiles, zlib ("OME-TIFF layout") | The maximum projection of `<image>` fused by the library at scale 0.5 in Y and X, in the input dtype, with calibration and origin; not written when no FOV is included, nor for a dataset that sets `dimensionality: stack` |
 | Parquet tables | `table_format: parquet` (the `assembly` block) | `tables/*.parquet` instead of `tables/*.csv` | Parquet | The same tables |
 | No fused image | `fuse: false` | the default files without `<image>_projection.ome.tif` | | Section `fusion` has status `off` |
-| 3D stack alone (dense 3D tissue, such as LN sample1) | `dimensionality: stack` in the dataset's configuration | `<image>_stack.ome.tif` instead of the projection; no projection file | OME-TIFF | The 3D fused image at `scale_yx` in Y and X, Z as acquired ("The fused image by dataset"); refused on the route after fusion ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The route setting") |
+| 3D stack alone (dense 3D tissue, such as LN sample1) | `dimensionality: stack` in the dataset's configuration | `<image>_stack.ome.tif` instead of the projection; no projection file | OME-TIFF | The 3D fused image at `scale_yx` in Y and X, Z as acquired ("The fused image by dataset"); refused on the route after fusion ([sample-segmentation-contract](sample-segmentation.md), "The route setting") |
 | Stack and projection | `dimensionality: both` | `<image>_stack.ome.tif` beside the projection | OME-TIFF | Both images, on equal Y and X grids |
-| Sum projection | `projection: sum` | the projection file | OME-TIFF, float32 | The per-FOV sums over Z, fused ("Dtypes written"); refused on the route after fusion ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The route setting") |
+| Sum projection | `projection: sum` | the projection file | OME-TIFF, float32 | The per-FOV sums over Z, fused ("Dtypes written"); refused on the route after fusion ([sample-segmentation-contract](sample-segmentation.md), "The route setting") |
 | Another scale factor | `scale_yx: 1/k` | the same names | | The output level of factor `k` |
 | Standalone OME-Zarr | `ome_zarr: true` with `export_spatialdata: false` | `<image>_projection.ome.zarr/` (and `_stack.ome.zarr/`) beside each OME-TIFF | OME-NGFF 0.5 on Zarr format 3 ("OME-Zarr layout") | The same array as the OME-TIFF, with the library's resolution levels |
 | Further channels | `images: [reference_stain, reference_merged, …]` | one file per image name and dimensionality, as above | as above | Each selected source image fused on the same grid with the same placement |
 | Pyramid in OME-TIFF | `pyramid_levels: L` | the same files | SubIFD levels | `L` further levels, each halving Y and X ("Resolution levels inside a file") |
 | Label export | `fuse_labels: true` | `cell_labels.ome.tif` | OME-TIFF, uint32 | The `instance_id`s of the retained cells, each drawn whole by its FOV and placed without blending, at `labels_scale_yx` (default 0.25) ("Assembled label export"); not written for a `molecules_only` sample or without an included FOV |
 | SpatialData | `export_spatialdata: true` | `sample.zarr/` | SpatialData store, spatialdata's default format (container format 0.2 on Zarr format 3) | Points `molecules`, shapes `cell_centroids`, tables `cells`, `expression`, `cells_unplaced`, `molecules_unplaced`, one image element per fused image and, with the label export, the labels element `cell_labels`; each written when not empty ("SpatialData export"). No standalone `.ome.zarr` is written; the OME-TIFF files stay. |
-| Route after fusion | `route: after_fusion`, or by default for `dimensionality: projection` ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md)) | the default files, the fused images of the segmentation's stains among them, and `segmentation_<run>.ome.tif` per segmentation run; with an expansion of the assignment, `territories.ome.tif` | OME-TIFF, uint32 | Each run's labels on the segmentation grid (the fused projection's), and the territories the sample assignment sampled (values `cell_id`); section `segmentation` |
+| Route after fusion | `route: after_fusion`, or by default for `dimensionality: projection` ([sample-segmentation-contract](sample-segmentation.md)) | the default files, the fused images of the segmentation's stains among them, and `segmentation_<run>.ome.tif` per segmentation run; with an expansion of the assignment, `territories.ome.tif` | OME-TIFF, uint32 | Each run's labels on the segmentation grid (the fused projection's), and the territories the sample assignment sampled (values `cell_id`); section `segmentation` |
 | Assembly reused | `assemble: false` | the tables and `sample.h5ad` of the earlier run, unchanged | | Section `assembly` has status `reused` |
 | A part that cannot run | "When a part cannot run" | the files of the parts that ran | | The part's section has status `not_run` and its reason; `complete: false` |
 
@@ -1353,7 +1353,7 @@ the files of the assembly, finds the row and returns its FOV, the FOV's assignme
 its `assignment.json` SHA-256 and the row's position in the FOV's own table, from the `assembly`
 section; for a cell of the route after fusion, its FOV, no assignment folder, the row's
 position in the sample cell table, and `label_file` (the cell run's label file) and
-`label_value` (its `cell_id`) ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "Readers that change").
+`label_value` (its `cell_id`) ([sample-segmentation-contract](sample-segmentation.md), "Readers that change").
 It does not verify the files of the store, which `check_export` verifies.
 
 % §2.9
@@ -1386,7 +1386,7 @@ renames; and the SHA-256 of every file of the store (the store's entry in `outpu
 Part of the first delivery (`fuse_labels`), at a default scale factor of 0.25 in Y and X.
 The label image is an inspection product: it shows the retained cells of the sample, each
 drawn whole as its FOV segmented it (on the route after fusion, each drawn as the sample
-segmentation holds it: [sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The label images"), placed
+segmentation holds it: [sample-segmentation-contract](sample-segmentation.md), "The label images"), placed
 without blending.
 
 **Inputs**: the placement; the assembly's sample cell table, whose `assembly_status` says
@@ -1405,7 +1405,7 @@ the sample's territories in place of each FOV's: the cell run's label image, or 
 expanded territories `territories.ome.tif` when assign expanded, with each `cell_id`
 mapped to its `instance_id` as the one view of the same library call; the `labels`
 section records the rule `segmentation` and `segmentation_files`
-([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The label images").
+([sample-segmentation-contract](sample-segmentation.md), "The label images").
 
 % §2.9
 
@@ -1659,7 +1659,7 @@ accepts.
   a NaN or infinite value refused with `ValueError` rather than written; in Python,
   `json.dumps(section, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
   allow_nan=False)`). The parts include
-  `segment` of the route after fusion ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The entry").
+  `segment` of the route after fusion ([sample-segmentation-contract](sample-segmentation.md), "The entry").
 * R2. Every file the record lists exists with its SHA-256; every file under
   `export/<sample>/` (the store's files included) is listed, but those under `previews/`,
   the workflow's opt-in ownership previews (since 2026-10-24). A part with status `off`, `not_run` or
@@ -1743,17 +1743,17 @@ accepts.
 * L5. **Grid.** The label file's spacing, origin and size equal the formulas of "Scale
   factor 0.25" within 1e-9 µm (the fusion measurement's `tables/reduced.csv`, `geometry_matches_formula` of
   the `spacing` rows). By the rule `segmentation`, the grid is that of "The label images"
-  of [sample-segmentation-contract](../../docs/sample-segmentation-contract.md): the label scale's spacing, the territories'
+  of [sample-segmentation-contract](sample-segmentation.md): the label scale's spacing, the territories'
   origin, and `floor((N − 1)·S / (k·s) + 1e-9) + 1` pixels for territories of `N` pixels
   of spacing `S`, Z the segmentation grid's slab.
 * L6. **ID bound.** A sample with more than 16,777,216 cell rows (2^24) is refused before
   anything is written (on the route after fusion, when the number of cells is first known:
-  [sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The label images").
+  [sample-segmentation-contract](sample-segmentation.md), "The label images").
 
 % W-359; W-354 `tables/reduced.csv`
 
 **The sample segmentation** of the route after fusion, when the part `segment` is
-`written` or `reused`: the conditions T1 to T5 of [sample-segmentation-contract](../../docs/sample-segmentation-contract.md)
+`written` or `reused`: the conditions T1 to T5 of [sample-segmentation-contract](sample-segmentation.md)
 ("The record").
 
 * T1. The `segmentation` section's label files exist with their SHA-256, are uint32 and
@@ -2019,7 +2019,7 @@ The Python-only `export` block, read by `_run_export` in the workflow adapter an
 one per-sample rule `export_sample`, which runs `Dataset.export` after the placement
 exists and, on the route per FOV, after `reads_assignment` of every FOV of the sample; on
 the route after fusion the rule needs the molecule tables and the source images
-([sample-segmentation-contract](../../docs/sample-segmentation-contract.md), "The route setting"). The assemble part takes its
+([sample-segmentation-contract](sample-segmentation.md), "The route setting"). The assemble part takes its
 keys from the `assembly` block ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Workflow configuration"):
 
 ```yaml
@@ -2079,7 +2079,7 @@ viewer session (deferred); no change to the placement, segmentation or assignmen
 assembly contract beyond its `Dataset` method, saved layout and workflow configuration;
 no reassignment of molecules or recomputation of counts from a fused image or a label
 raster on the route per FOV (the route after fusion assigns the sample's molecules to the
-cells of a segmentation of the fused image: [sample-segmentation-contract](../../docs/sample-segmentation-contract.md)); no real data (every measured number comes from the records of the evidence list by path, and the label and stack sizes are derived from them without reading
+cells of a segmentation of the fused image: [sample-segmentation-contract](sample-segmentation.md)); no real data (every measured number comes from the records of the evidence list by path, and the label and stack sizes are derived from them without reading
 an image).
 
 % §2.9; W-323; W-324; W-328; W-354; W-359

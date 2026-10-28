@@ -1681,7 +1681,7 @@ def _export_keys():
 
 
 def _sample_segmentation_block(values, config):
-    """SampleSegmentationConfig of the export block's segmentation (docs/sample-segmentation-contract.md, "Where the
+    """SampleSegmentationConfig of the export block's segmentation (design/specs/sample-segmentation.md, "Where the
     settings live"): device, cells, nuclei and runs, each run with name, target, inputs (a list of {role, image}),
     seeds and method, whose config fields are the run's other keys (import: the LabelImportConfig fields); the
     assignment settings are those of the top-level assignment block."""
@@ -1754,7 +1754,7 @@ def _export_config(config):
 def _after_fusion(export, block):
     """Whether export_sample runs the route after fusion: the route resolved by Dataset.export's rule (set, or by
     default after_fusion for dimensionality projection) with an assignment name; without one the export is
-    molecules_only on either route (docs/sample-segmentation-contract.md, "The route setting")."""
+    molecules_only on either route (design/specs/sample-segmentation.md, "The route setting")."""
     from starfinder.export._segment import resolve_route
     return block.assignment is not None and resolve_route(export)[0] == 'after_fusion'
 

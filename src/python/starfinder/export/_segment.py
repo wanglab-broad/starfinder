@@ -1,10 +1,10 @@
-"""The part ``segment`` of the route after fusion and the route setting (docs/sample-segmentation-contract.md).
+"""The part ``segment`` of the route after fusion and the route setting (design/specs/sample-segmentation.md).
 
 :func:`segment_fused` segments the fused projection that ``fuse`` wrote, run by run, and
 writes one label OME-TIFF per run and the ``segmentation`` section of ``export.json``;
 :func:`load_sample_segmentation` reads them back with their SHA-256 checked. The pixel
 lengths of a method's settings are given for the acquired grid and converted here to the
-segmentation grid by the table "Lengths in pixels" of docs/sample-segmentation-contract.md,
+segmentation grid by the table "Lengths in pixels" of design/specs/sample-segmentation.md,
 both values recorded (LS2, :data:`LENGTH_FIELDS`). :func:`resolve_route` gives a dataset's route,
 and :func:`check_route` is check 7 of ``Dataset.export``.
 """
@@ -131,7 +131,7 @@ def check_models(segmentation: SampleSegmentationConfig) -> list[dict]:
 
 
 def check_route(config: ExportConfig, assignment, *, reuse=None, models=True) -> tuple[str, str]:
-    """Check 7 of ``Dataset.export`` (docs/sample-segmentation-contract.md, "The entry"); returns the route.
+    """Check 7 of ``Dataset.export`` (design/specs/sample-segmentation.md, "The entry"); returns the route.
 
     In this order: the route is a value of :data:`ROUTES` or None; the route
     after fusion, set or by default, refuses ``dimensionality: stack`` and
@@ -309,7 +309,7 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     """Segment a sample's fused projection and write its label images and the ``segmentation`` section.
 
     The part ``segment`` of the route after fusion
-    (docs/sample-segmentation-contract.md, "The entry"), callable alone on an
+    (design/specs/sample-segmentation.md, "The entry"), callable alone on an
     export folder whose ``fuse`` ran. It reads the fused projection of each
     input image from the ``fusion`` section (its path, checked against the
     recorded SHA-256), builds per run one

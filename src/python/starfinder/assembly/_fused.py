@@ -1,6 +1,6 @@
 """The assembly of the route after fusion: the sample's molecules assigned to the cells of the sample segmentation.
 
-docs/sample-segmentation-contract.md ("The entry", "The sample's molecule table", "Outputs, column by
+design/specs/sample-segmentation.md ("The entry", "The sample's molecule table", "Outputs, column by
 column"). The molecules are those of the ``molecules_only`` assembly, unchanged: a position belongs to
 one FOV. Its retained molecules are converted to one ``MoleculeTable`` on the segmentation grid (MT1,
 private: ``spot_namespace`` ``[dataset_id, sample_id, null, null]``, ``spot_id`` the row's position in
