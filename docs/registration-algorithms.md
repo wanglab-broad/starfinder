@@ -138,14 +138,21 @@ order.
 
 | `backend` | Resampling |
 | --- | --- |
-| `"translation"` | Chains of translations only: an exact shift for whole voxels, a Fourier shift otherwise; constant zero fill only. When `warp` is set, a recipe whose steps and recovery alternatives are all translations must use it, and any other recipe must not; with `warp=None` it is chosen from the chain, as above |
-| `"scipy"` | Linear interpolation in float64, one Z plane at a time |
-| `"simpleitk"` | Linear interpolation with SimpleITK |
+| `"translation"` | Translations and chains of translations only: an exact shift for whole voxels, otherwise a Fourier shift, computed in float32 unless the image is float64; constant zero fill only. When `warp` is set, a recipe whose steps and recovery alternatives are all translations must use it, and any other recipe must not; with `warp=None` it is chosen from the chain, as above |
+| `"scipy"` | Linear interpolation, sampled in float64 one Z plane at a time; any transform or chain except a lone `TranslationTransform` |
+| `"simpleitk"` | Linear interpolation with SimpleITK of the float64 image, on the whole pull field; any transform or chain except a lone `TranslationTransform` |
 
-A pull point outside the moving grid gets `fill_value` with `boundary_mode="constant"`,
-or the nearest edge value with `"nearest"`. With `output_dtype="input"`, integer
-images are rounded to the nearest even integer, clipped to the dtype's range and cast
-once.
+The backends treat a pull point outside the moving grid differently:
+
+* `"translation"` gives zero wherever the pull point lies outside the grid.
+* `"scipy"` with `boundary_mode="constant"` gives `fill_value` to every pull point
+  outside `[0, n − 1]` on any axis.
+* `"simpleitk"` with `boundary_mode="constant"` gives the edge value to a pull point
+  up to half a voxel beyond the edge, and `fill_value` beyond that.
+* With `"nearest"`, `"scipy"` and `"simpleitk"` both give the nearest edge value.
+
+With `output_dtype="input"`, every backend rounds integer images to the nearest even
+integer, clips them to the dtype's range and casts them once.
 
 ### QC criteria
 
@@ -168,7 +175,7 @@ four step types and `TransformChain`, which composes them, record the direction
 | --- | --- | --- |
 | `TranslationTransform` | `displacement_zyx` | `p + d` |
 | `AffineTransform` | `matrix_zyx` (4 × 4, voxel indices), `physical` (for an elastix estimate, the backend's matrix, centre, translation and parameters) | `A p + b` |
-| `BSplineTransform` | the control grid (`grid_size_xyz`, `grid_origin_xyz`, `grid_spacing_xyz`, `grid_direction_xyz`), `coefficients`, `spacing_zyx`, `order` 3 | `p` plus the B-spline displacement; `dense()` evaluates it |
+| `BSplineTransform` | the control grid (`grid_size_xyz`, `grid_origin_xyz`, `grid_spacing_xyz`, `grid_direction_xyz`), `coefficients`, `spacing_zyx`, `order` 3 | `p` plus the B-spline displacement; `dense()` evaluates it with SimpleITK, whatever the backend |
 | `DenseDisplacementTransform` | `displacement_zyx`, shape (Z, Y, X, 3) | `p + u(p)` |
 | `TransformChain` | the step transforms in order | `T₁(T₂(…Tₙ(p)))`; `pull_field()` gives the composed field |
 

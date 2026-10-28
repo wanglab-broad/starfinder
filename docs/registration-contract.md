@@ -62,7 +62,7 @@ recipe = RegistrationRecipe(
    channels, or their sum, or one chosen channel; a step may set its own. In `FOV.run`
    it is built from the preprocessing recipe's `registration_source` snapshot, or from
    the detection image when there is none; on the other-round route, from the round's
-   image. Nothing is projected; a Z=1 round stays one plane.
+   image. A Z=1 round stays one plane.
 2. **Steps.** A recipe has at least one step: zero or more global steps (`translation`,
    `rigid`, `affine`) followed by at most one local step (`demons`, `bspline`, `tps`,
    `cpd`). Step k is estimated on the moving signal resampled through steps 1 to k−1.
@@ -112,12 +112,12 @@ column shows which methods take a Z=1 round.
 | --- | --- | --- |
 | `RegistrationRecipe.steps` | required | The ordered `RegistrationStep`s, each with a method config, optional `recovery` and optional per-step `signal` |
 | `RegistrationRecipe.signal` | `RegistrationSignalConfig()`: `mode="max"` | `"max"`, `"sum"`, or `"channel"` with `reference_channel` and `moving_channel` (index or label) |
-| `RegistrationRecipe.warp` | `None`: translation for a chain of translations, linear SciPy otherwise | The final resampling: `backend`, `boundary_mode` (`"constant"` or `"nearest"`), `fill_value`, `output_dtype` |
+| `RegistrationRecipe.warp` | `None`: translation for a chain of translations, linear SciPy otherwise | The final resampling: `backend`, `boundary_mode` (`"constant"`, or `"nearest"` with `scipy` or `simpleitk`), `fill_value` (0 with `translation`), `output_dtype` |
 | `RegistrationRecipe.reference_round` | `None`: the dataset's reference round | Sequencing rounds: must equal the dataset's reference round when set. Other rounds: must equal the call's `reference` round, and must be `None` with an `ExternalReference` |
 | `RegistrationRecipe.qc` | `RegistrationQcConfig()`: rejects nothing | `min_coverage`, `min_ncc_gain`, `max_fold_fraction`, `max_translation_voxels` |
 | `RecoveryConfig` | no recovery | `allowed_errors` and ordered `alternatives` |
 
-The reference gives each method's options and defaults.
+The reference gives each method's options.
 
 ## Routine QC
 
@@ -185,14 +185,14 @@ rules:
 given, must equal the dataset's reference round; YAML lists become tuples. The MATLAB keys
 `global_registration` and `local_registration` raise under `backend: python`. The Python-only rule parameter `reference_image_view` (`{mode: max}`, or
 `{mode: channel, channel: <index or label>}`) chooses the reference image the rule
-writes; the two resident subtile rules write none and refuse it.
+writes; the resident subtile rules write none and refuse it.
 {doc}`workflow-configuration` describes the rules.
 
 ## Limits
 
 * The reference and moving rounds must share one grid: the same shape, spacing,
   origin, direction and unit; nothing converts between grids.
-* The translation estimator finds whole voxels only.
+* The translation estimator finds whole voxels.
 * At most one local step per recipe.
 * Rigid, affine and B-spline need at least 16 × 16 in Y and X; demons needs at least
   4 × 4. In 3D, all four need at least 4 planes. TPS and
