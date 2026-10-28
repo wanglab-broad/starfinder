@@ -10,14 +10,14 @@ float64 tolerance of docs/contributing.md. Any behavior change, including a
 changed demons iteration count or a changed signal mode, changes the round2
 digest and moves the field outside that tolerance. The values were produced
 with the locked project environment (SimpleITK 2.5.3, NumPy 2.2.6, SciPy 1.17.0);
-see docs/registration-baseline.md.
+see design/baselines/registration.md.
 
 Every registration configuration is built by ``registration_config``, which
 also holds the only imports of registration configuration types; the pinned
 runs use each config's defaults. The §2.6 refactor (``RegistrationRecipe``)
 replaces that helper. Its one other named edit is the translation -> demons
 image digest, which changes with the reviewed one final resampling described in
-docs/registration-contract.md. The fixture, the runs, and the input,
+design/specs/registration.md. The fixture, the runs, and the input,
 translation-only and demons-field digests stay (the field is the expected array
 since W-574).
 """

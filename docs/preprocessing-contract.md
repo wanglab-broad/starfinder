@@ -202,7 +202,7 @@ source.
   pre-registration version.
 * **Several registration steps** (for example global then local). The steps compose
   into one transform chain, and each snapshot is resampled once through it from its
-  pre-registration version ({doc}`registration-contract`, "One final resampling").
+  pre-registration version ({doc}`registration-contract`, "What it does").
 * **Consistency.** Every downstream snapshot goes through the same resampling, so
   all snapshots of a round stay aligned with each other and with
   the detection coordinates.

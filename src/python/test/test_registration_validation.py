@@ -1,6 +1,6 @@
 """Engineering validation of the §2.6 registration methods (registration task group 6, W-258).
 
-Checks V1 to V11 of docs/registration-algorithms.md ("Engineering validation
+Checks V1 to V11 of design/specs/registration-algorithms.md ("Engineering validation
 design"): known-answer synthetic scenes with pass/fail tolerances fixed before
 the run. Where the design names a recipe the check runs FOV.run with that
 RegistrationRecipe and compares the round's composite pull field
@@ -50,7 +50,7 @@ pytestmark = [
 ]
 
 SEEDS = (100, 101, 102)
-# Fixed before the run (docs/registration-algorithms.md); never re-tuned in a run. A V4 or V5 failure goes to
+# Fixed before the run (design/specs/registration-algorithms.md); never re-tuned in a run. A V4 or V5 failure goes to
 # Jiahao (W-246 approval, 2026-09-30).
 TRANSLATION_TOLERANCE = 0.5          # V1, per axis, strict
 GLOBAL_BOUNDS = (0.25, 0.5)          # V2, V3: median, p95 (voxels)

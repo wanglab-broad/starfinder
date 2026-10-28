@@ -1,6 +1,6 @@
 """Composition of registration steps into one pull map and the one final resampling (W-256).
 
-The four analytic examples of docs/registration-contract.md ("Analytic
+The four analytic examples of design/specs/registration.md ("Analytic
 composition examples"): TransformChain.pull_field() at the named points, with
 tolerance 1e-12 voxels, and the value the wrong order would give. Then the
 final resampling: an integer translation does not quantize a later affine step.

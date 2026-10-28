@@ -2,7 +2,7 @@
 
 itk-elastix is imported only when one of these methods runs. Z=1 inputs are
 estimated as 2D images. The shared numerical rules (pyramid, sampling, seed,
-diagnostics and failures) are those of the registration algorithm page.
+diagnostics and failures) are those of design/specs/registration-algorithms.md.
 """
 
 import re
@@ -51,7 +51,7 @@ def _schedule(levels, shape_zyx, dim):
 
 
 def _parameter_object(itk, config, shape_zyx, spacing_zyx, dim):
-    """elastix's default parameter map of the method with the matched settings of the algorithm page."""
+    """elastix's default parameter map of the method, with the settings of design/specs/registration-algorithms.md."""
     levels = config.levels or _levels(shape_zyx)
     schedule = [str(f) for f in _schedule(levels, shape_zyx, dim)]
     settings = dict(

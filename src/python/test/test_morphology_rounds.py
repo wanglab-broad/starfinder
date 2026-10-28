@@ -1,6 +1,6 @@
 """Sequencing and other rounds handled separately, the morphology entry and its saved form (W-337).
 
-docs/coordination.md ("Sequencing rounds and other rounds"), docs/registration-contract.md
+docs/coordination.md ("Sequencing rounds and other rounds"), design/specs/registration.md
 ("Other rounds and the reference stain") and docs/checkpoints.md ("Prepared morphology
 images"). The dataset is written in session as single-channel TIFFs (8×32×32, uint16):
 the reference round1 (sequencing ch00–ch03 and the stain file ch04, DAPI), the sequencing

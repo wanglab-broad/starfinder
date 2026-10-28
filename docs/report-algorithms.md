@@ -225,10 +225,10 @@ registration that failed.
 The round's results are rebuilt as `registration.csv` `transform_source` names them
 (`_checkpoint.py`: `_restore_result`). The **global steps** are the results whose
 `transform.kind` is `translation` or `affine` (`registration/_chain.py`: `transform_kind`);
-a local step (`dense`, `bspline`) is always last in a chain ({doc}`registration-contract`,
-"Composition order"), so the global steps are a prefix `T₁ … T_k` of the chain. Their
+a local step (`dense`, `bspline`) is always last in a chain ({doc}`registration-algorithms`,
+"Transforms"), so the global steps are a prefix `T₁ … T_k` of the chain. Their
 composed pull map is `Φ_g(p) = T₁(T₂(…T_k(p)…))`, the composition order of
-{doc}`registration-contract`. With `c = ((n_z − 1)/2, (n_y − 1)/2, (n_x − 1)/2)` the
+{doc}`registration-algorithms`. With `c = ((n_z − 1)/2, (n_y − 1)/2, (n_x − 1)/2)` the
 centre of the reference grid of shape `reference_shape_zyx`:
 
 ```text

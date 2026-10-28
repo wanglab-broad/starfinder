@@ -147,7 +147,7 @@ default-tier pytest modules for local maxima and LoG and extended-tier modules
 Piscis. It has no method comparison matrix, no threshold or parameter sweep, no
 benefit flag, no default selection from comparative data, and no run framework or
 report engine; comparisons belong to separate evidence work on spot-finding methods. The checks
-follow the V-table of the registration validation ({doc}`registration-algorithms`).
+follow the V-table of the registration validation ([registration algorithms record](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration-algorithms.md)).
 
 % W-152, §2.14, E02, §2.6
 

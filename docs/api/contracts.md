@@ -50,7 +50,7 @@ Direction and units are validated; inversion/composition/conversion is not impli
 `registered[p] = moving[A p + b]`. The B-spline type, the physical-space
 estimation of rigid, affine and B-spline (with its `physical` parameters and the
 unknown-spacing rule) and the composition of steps into a `TransformChain` are
-specified in the registration guide ({doc}`../registration-contract`, "Transform
+specified in the [registration specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration.md) ("Transform
 types" and "Physical-space estimation").
 
 Apply accepts ZYX or ZYXC and preserves channel order. Output metadata is

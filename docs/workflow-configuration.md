@@ -460,8 +460,8 @@ and registration use the normalized image; extraction reads `bg_corrected`.
 ## Explicit registration recipe
 
 The Python-only `registration` parameter of the five Python rules declares a
-registration recipe explicitly, as specified in the
-[registration contract](registration-contract.md#python-only-key). Each entry
+registration recipe explicitly, as described in the
+[registration guide](registration-contract.md#workflow-keys). Each entry
 of `steps` names a method by its registered name (`translation`, `rigid`,
 `affine`, `bspline`, `demons`, `tps` or `cpd`; the demons variants are the
 `variant` field of `demons`). Its other keys are the fields of that method's

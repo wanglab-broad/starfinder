@@ -1115,7 +1115,7 @@ round's one channel of the same name (`dataset/fov.py::FOV.prepare_morphology`;
 one file per channel matched by `*<pattern>*.tif` (`dataset/fov.py::FOV.load_images`,
 `io/tiff.py::load_round`). Registration transforms are pull maps: the registered image
 at reference index `p` is the moving image at `p + d` for a translation with
-`displacement_zyx` `d` ([registration-contract](../../../docs/registration-contract.md), "Transform types").
+`displacement_zyx` `d` ([registration](../registration.md), "Transform types").
 
 In the real contexts the nuclear stain is a file of the reference round in tissue-2D (PI,
 `round1` `ch04`) and LN (DAPI, `round4` `ch04`, with a `flamingo` round that also holds

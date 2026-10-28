@@ -1,284 +1,231 @@
-# Registration algorithm specification
+# Registration reference
 
-% Status: Accepted (W-246, 2026-09-30, at 47057aa)
+The methods, options, transforms, records and files of registration. The method and
+option tables are read from the code when the site is built. The
+{doc}`registration guide <registration-contract>` explains how to use them; the
+{doc}`registration API <api/registration>` documents every class.
 
-This page specifies the numerical methods that the registration work adds: rigid, affine and
-B-spline registration, and demons on Z=1 data. It also gives the engineering
-validation design of registration task group 6. The recipe, transforms,
-composition and records they plug into are in {doc}`registration-contract`, the
-registration guide; the behavior before the registration work is recorded in {doc}`registration-baseline`
-(history). The methods are implemented in
-`starfinder.registration` ({doc}`api/registration`), with the checks that "Implemented
-checks" lists, and nothing here sets a default beyond the agreed
-translation-only default: the parameter values below are what each method
-uses when a recipe selects it.
+## Methods
 
-% §2.6, W-258
+```{method-table} starfinder.registration.REGISTRATION_METHODS
+```
 
-## Evidence for the backends
+Each method's name is its `method` value, used by the workflow key. Its registry entry
+also declares its step kind (`global` or `local`), the kind of transform it returns
+and its estimation space. A global step returns a translation or an affine transform;
+a local step returns a B-spline or a dense displacement field. Rigid, affine and
+B-spline estimate in physical units from `spacing_zyx` (space `physical`); the others
+work on voxel indices (`index`).
 
-The backend choices follow the backend comparison of SimpleITK and elastix of 2026-09-29
-(a development spike, not the separate evidence work on registration methods). Its saved table is
-`comparison.csv` in its run directory, kept with the run records outside the repository
-(826 rows; manifest `comparison-manifest.json`, summary tables
-`comparison-summary.md`, in the same directory). The backend comparison ran rigid, affine and
-B-spline with both backends on the synthetic development sizes, on `medium`
-(32×512×512), on a 1×512×512 Z=1 case and on `large` (30×1024×1024), with
-held-out seeds 100 to 102. Its recommendation is provisional: the detailed
-comparison belongs to the separate evidence work on registration methods. The rows cited below are held-out, matched
-settings, medians over cases and seeds, errors in voxels.
+## Method options
 
-% W-244, E01, /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-244/20260929T232115Z-a2d4ce97/comparison.csv, §2.12, W-94
+### Translation
 
-| Method | Backend | Backend comparison rows cited | Reason |
-| --- | --- | --- | --- |
-| B-spline | elastix (`itk-elastix` 0.25.4, `itk` 5.4.7) | `bspline` × {`elastix`, `sitk`} × `matched` on `medium`, `large` and `z1-512` | Median error 0.14 against 1.13 (medium), 0.16 against 1.12 (large), 0.12 against 0.40 (Z=1 512); 95th percentile 0.80 against 3.71 (medium); registration time 8.8 s against 40.2 s (medium). SimpleITK's own default B-spline took about 340 s on medium and one of five calls failed. The grids were not strictly matched (mainly in Z), so the size of the gap is not attributed to the backend alone. |
-| Affine | elastix | `affine` × backends × `matched` on `medium`, `large`, `z1-512`, `small`, `z1`, `small-sp122` | Median 0.14 against 1.36 (medium), 1.35 against 2.56 (large); similar on Z=1 512 (0.17 against 0.18) and on the development sizes (0.03 against 0.03 to 0.04); SimpleITK better on the spacing case (0.07 against 0.17). elastix is faster from medium upward (2.3 s against 10.7 s) and shares one integration and persistence with B-spline. |
-| Rigid | elastix (weak preference) | `rigid` × backends × `matched` on all scenes | Equivalent on the development sizes (0.03 to 0.06). elastix closer on medium local-deformation cases (`gaussian_small` 0.09 against 0.75); neither recovers the realistic rigid case with shifts near 50 voxels without pre-alignment. Chosen for one integration with affine and B-spline and for speed from medium upward; SimpleITK remains an adequate locked alternative (worker notes, open choice). |
-| Demons on Z=1 | SimpleITK 2.5.3 (locked, `local-registration` extra) | `z1_3d_probe` rows (all six method × backend pairs failed on a 3D Z=1 volume) and the Z=1 rows with `dimension_estimated = 2` (all completed) | The backend comparison did not run demons. Its Z=1 rows show that both backends estimate genuine 2D transforms from 2D arrays and fail on 3D volumes with Z=1; the existing demons implementation already uses SimpleITK, whose demons filters are dimension-generic, so no new backend is needed. |
+Phase correlation on the whole volume, with the peak taken at whole voxels. `backend`
+is `"scipy_fft"` or `"skimage"`; `skimage` needs `fft_workers=1`.
 
-% W-244
+```{config-options} starfinder.registration.TranslationConfig
+:exclude: method
+```
 
-elastix is an optional dependency (the `registration-elastix` extra).
-The backend comparison measured about 11 s of import time and 0.5 to 0.8 GB of extra baseline
-RSS per process, so it is imported lazily and only when a recipe selects an
-elastix method.
+### Rigid, affine and B-spline
 
-% W-244
+These run with elastix, from the `registration-elastix` extra, imported only when one
+of them runs. `metric` is `"mattes"` (Mattes mutual information with
+`histogram_bins` bins) or `"ncc"` (normalized correlation). `iterations` are per
+pyramid level, with no convergence test; `samples` are the random samples per
+iteration, drawn with `random_seed`.
 
-## What each method corrects
+* **Pyramid.** `levels=None` takes the largest number of levels, up to 4, at which
+  the smaller of Y and X is still at least 16 at the coarsest level. Level `l` of `L`
+  shrinks Y and X by `2^(L−1−l)`, and Z by the same factor capped at `max(1, Z // 4)`.
+* **Start.** Rigid and affine start from the identity about the grid centre; a
+  preceding `translation` step handles large shifts. B-spline starts from zero
+  displacement.
+* **B-spline grid.** `grid_spacing_physical` is the control-point spacing, in the unit
+  of `spacing_zyx` and equal on every axis; `None` uses the X extent divided by 8.
+* **Unknown spacing.** When both rounds have no `spacing_zyx`, unit spacing is used and
+  the diagnostics record `spacing_source="unknown_unit"` with a warning.
+* **Failures.** A constant signal raises `RegistrationEstimationError("constant
+  registration signal")`; any elastix error becomes a `RegistrationEstimationError`.
 
-The synthetic image-formation model ({doc}`synthetic-specification`, step 6) maps
-reference points of round r by `F_r(q) = q + t_r + A_r(q − c) + P_r m(u) +
-Σ_k v_rk exp(−‖q − c_k‖² / (2 l_k²))`: a translation, a linear term about the
-grid centre, a smooth quadratic term and local Gaussian displacements. The
-ideal registration pull map of round r is `F_r`, and the truth pull field is
-`forward_displacement`. Translation (the current global method) models only
-`t_r`.
+```{config-options} starfinder.registration.RigidConfig
+:exclude: method
+```
 
-% §2.12
+```{config-options} starfinder.registration.AffineConfig
+:exclude: method
+```
 
-| Method | Problem addressed | Cause in the image-formation model |
+```{config-options} starfinder.registration.BSplineConfig
+:exclude: method
+```
+
+### Demons
+
+SimpleITK demons, from the `local-registration` extra. `variant` is `"demons"`,
+`"diffeomorphic"`, `"symmetric"` or `"fast_symmetric"`. `iterations` gives one entry
+per pyramid level, coarsest first. `smoothing_sigma` smooths the displacement field, in
+voxels. `pyramid_mode` is `"antialias"` (low-pass filtering, then downsampling by 2) or
+`"sitk"` (SimpleITK shrinking). On Z=1 the pyramid acts on Y and X only and the field
+has no Z component.
+
+```{config-options} starfinder.registration.DemonsConfig
+:exclude: method
+```
+
+### TPS and CPD
+
+Both detect spots in the two signals, as voxels above `median + k · 1.4826 · MAD`
+with `k = detection_noise_sigma`, and turn their displacements into a dense field on a
+coarse grid of `grid_spacing_voxels`, which is then interpolated to every voxel. TPS
+matches spots within `match_distance_voxels` and needs `min_matches` pairs, otherwise
+it raises `InsufficientLandmarksError`. CPD aligns the two spot sets by coherent point
+drift. A configuration translated from the MATLAB keys sets CPD's
+`detection_noise_sigma` to 3.0 and `grid_spacing_voxels` to 32 unless it gives them.
+
+```{config-options} starfinder.registration.TpsConfig
+:exclude: method
+```
+
+```{config-options} starfinder.registration.CpdConfig
+:exclude: method
+```
+
+## Recipe options
+
+```{config-options} starfinder.registration.RegistrationRecipe
+```
+
+`steps` are zero or more global steps followed by at most one local step.
+`warp=None` uses `WarpConfig()` (the translation backend) for a chain of translations
+and `WarpConfig(backend="scipy")` otherwise.
+
+```{config-options} starfinder.registration.RegistrationStep
+```
+
+```{config-options} starfinder.registration.RecoveryConfig
+```
+
+`allowed_errors` may name `RegistrationEstimationError`, `InsufficientLandmarksError`
+and `RegistrationRejectedError`; the alternatives must have the step's kind and run in
+order.
+
+### Signal
+
+```{config-options} starfinder.registration.RegistrationSignalConfig
+```
+
+| `mode` | Signal |
+| --- | --- |
+| `"max"` | The maximum over the channels |
+| `"sum"` | The float64 sum over the channels |
+| `"channel"` | `reference_channel` of the reference round and `moving_channel` (default: the same) of the moving round, each a zero-based index or a channel label |
+
+### Final resampling
+
+```{config-options} starfinder.registration.WarpConfig
+```
+
+| `backend` | Resampling |
+| --- | --- |
+| `"translation"` | Chains of translations only: an exact shift for whole voxels, a Fourier shift otherwise; constant zero fill only |
+| `"scipy"` | Linear interpolation in float64, one Z plane at a time |
+| `"simpleitk"` | Linear interpolation with SimpleITK |
+
+A pull point outside the moving grid gets `fill_value` with `boundary_mode="constant"`,
+or the nearest edge value with `"nearest"`. With `output_dtype="input"`, integer
+images are rounded to the nearest even integer, clipped to the dtype's range and cast
+once.
+
+### QC criteria
+
+```{config-options} starfinder.registration.RegistrationQcConfig
+```
+
+Every criterion is off when `None`. `projections=True` makes `registration_qc` return
+the Z maximum projections for overlays; `FOV` does not keep them.
+
+## Transforms
+
+Every transform maps reference voxel indices `p` (ZYX) to moving voxel indices; the
+direction is `"reference_to_moving"` and the units `"voxel_index"`.
+
+| Type | Main fields | Pull map |
 | --- | --- | --- |
-| Rigid | Rounds rotated as well as shifted relative to the reference, which translation alone leaves as a position-dependent residual that grows with distance from the rotation centre. | `A_r` restricted to a rotation (`A_r = R − I`), as when a sample is remounted between rounds; physical-space estimation keeps a rotation rigid for anisotropic voxels. |
-| Affine | Global scaling and shear between rounds, for example uniform expansion or shrinkage of the sample, which rigid cannot absorb. | The full linear term `A_r(q − c)` with `t_r`. |
-| B-spline | Smooth, spatially varying displacement that no global map explains, with a regularized parameterization on a physical control grid. | The quadratic term `P_r m(u)` and broad local terms `v_rk`, at scales larger than the control spacing. |
-| Demons on Z=1 | Local registration is impossible for single-plane data today: every local estimator rejects Z=1. | The same local terms `v_rk` and `P_r m(u)`, restricted to YX (the model requires zero Z motion for Z=1). |
+| `TranslationTransform` | `displacement_zyx` | `p + d` |
+| `AffineTransform` | `matrix_zyx` (4 × 4, voxel indices), `physical` (the backend's matrix, centre, translation and parameters) | `A p + b` |
+| `BSplineTransform` | the control grid (`grid_size_xyz`, `grid_origin_xyz`, `grid_spacing_xyz`, `grid_direction_xyz`), `coefficients`, `spacing_zyx`, `order` 3 | `p` plus the B-spline displacement; `dense()` evaluates it |
+| `DenseDisplacementTransform` | `displacement_zyx`, shape (Z, Y, X, 3) | `p + u(p)` |
+| `TransformChain` | the step transforms in order | `T₁(T₂(…Tₙ(p)))`; `pull_field()` gives the composed field |
 
-## Shared numerical rules for the elastix methods
+The last step is applied to the reference point first. A chain of translations reduces
+to one translation whose displacement is the sum.
 
-* **Images.** The reference and moving signals of the step
-  ({doc}`registration-contract`, "Registration signal") are passed as float32
-  ITK images with spacing `spacing_zyx` reversed to XYZ, origin 0 and identity
-  direction; Z=1 inputs are passed as 2D images. Unknown spacing uses 1 and is
-  recorded ({doc}`registration-contract`, "Physical-space estimation").
-* **Constant signals.** A reference or moving signal with zero variance raises
-  `RegistrationEstimationError("constant registration signal")` before the
-  backend runs.
-* **Pyramid.** `levels` = the largest L ≤ 4 with `min(Y, X) / 2^(L−1) ≥ 16`
-  (at least 1); shrink factor `2^(L−1−l)` at level l on every axis, with
-  Gaussian smoothing sigma `factor / 2` voxels at levels with factor > 1 and
-  none at factor 1 (elastix `FixedRecursiveImagePyramid` and
-  `MovingRecursiveImagePyramid` with an explicit schedule). This is the backend comparison's
-  matched rule. It shrinks Z as well; the backend comparison ran it on Z=9 and Z=32. At
-  `min_shape_zyx` (Z=4) with a large YX extent it would shrink Z below one
-  plane (factor 8 at four levels), so capping the Z factor at
-  `max(1, Z // 4)` is an open choice (worker notes).
-* **Sampling and seed.** 4096 random samples per iteration
-  (`NumberOfSpatialSamples`), redrawn every iteration, with
-  `RandomSeed = 1` so repeated single-thread calls are bit-identical (the backend comparison's
-  determinism rows: identical field hashes for all six method and backend
-  pairs at one thread).
-* **Optimizer.** elastix `AdaptiveStochasticGradientDescent` with automatic
-  parameter estimation, the default of elastix's default parameter maps. It
-  runs a fixed number of iterations per level; there is no convergence test.
-* **Interpolation during estimation.** The interpolator of elastix's default
-  parameter map for the method, recorded in the diagnostics. The final
-  resampling is always Starfinder's ({doc}`registration-contract`, "One final
-  resampling"), never elastix's (`WriteResultImage=false`).
-* **Threads.** The ITK global thread count follows the caller's setting; the
-  validation runs use one thread. The backend comparison found one-thread and four-thread
-  results bit-different for both backends.
-* **Diagnostics.** `converged=None` (no convergence test), `iterations_completed`
-  per level, the final metric value per level and the stop condition from the
-  elastix log, the backend versions, and the index-space matrix or grid.
-* **Failure.** Any elastix or ITK exception (for example "too many samples map
-  outside moving image buffer") and any non-finite parameter becomes
-  `RegistrationEstimationError` with the backend message. A missing
-  `itk-elastix` raises `RegistrationBackendUnavailableError` naming the
-  `registration-elastix` extra; it never recovers. An input below
-  `min_shape_zyx` raises `IncompatibleGeometryError` before the backend runs.
-  No method is substituted unless the recipe's recovery names it.
+## Errors
 
-% W-244
-
-## Rigid
-
-| Field | Specification |
+| Error | Raised when |
 | --- | --- |
-| Backend and version | elastix through `itk-elastix` 0.25.4 (`itk` 5.4.7); the backend comparison's `rigid` rows. |
-| Transform | `EulerTransform` (3D: three angles and a translation; 2D: one angle and a translation), stored as `AffineTransform` with its physical parameters ({doc}`registration-contract`). |
-| Metric | `AdvancedMattesMutualInformation`, 32 histogram bins (the backend comparison's tuning candidate k2, the lowest mean median error for rigid on the development seed). |
-| Optimizer | Adaptive stochastic gradient descent, 200 iterations per level, 4096 samples. |
-| Pyramid | Shared rule above. |
-| Initialization | Identity, with the rotation centre at the geometric centre of the reference grid (`AutomaticTransformInitialization` with `GeometricalCenter`). Large shifts are handled by a preceding `translation` step in the recipe, which the composition carries; the backend comparison found that neither backend recovers shifts near 50 voxels from identity. |
-| Parameters (units) | `RigidConfig(metric="mattes", histogram_bins=32, iterations=200` (per level), `samples=4096, levels=None` (derived), `random_seed=1)`. Angles are in radians and translations in the spatial unit of `spacing_zyx` in the stored physical parameters; the index-space matrix is in voxels. |
-| Defaults | As listed: the backend comparison's development-tuned starting values, not operating points. |
-| Convergence | Fixed iterations; the final metric value and the per-level values are recorded. |
-| Failure | Shared rules above. |
-| Resources (the backend comparison, one thread, matched) | 0.9 s (1×32×32), 1.0 s (9×32×32), 1.3 s (1×512×512), 2.8 s (32×512×512) of registration; peak RSS 615 to 909 MiB including 539 to 602 MiB of process baseline. Plus about 11 s of `itk-elastix` import once per process. |
+| `InvalidRegistrationConfigError` (a `ValueError`) | A config field is invalid |
+| `IncompatibleGeometryError` (`starfinder.image`) | The grids differ, or the shape is below the method's minimum or has a Z it does not support |
+| `RegistrationBackendUnavailableError` (an `ImportError`) | The method's optional extra is not installed; never recovered |
+| `RegistrationEstimationError` | The estimator fails or returns non-finite values |
+| `InsufficientLandmarksError` | TPS or CPD finds too few spots or matches |
+| `RegistrationRejectedError` | A step fails a configured QC criterion; the message names the criterion, value and bound |
+| `UnsupportedTransformOperationError` | A transform is applied in an unsupported direction or way |
 
-% W-244
+The last three are `RegistrationEstimationError`s, so a recovery may allow them.
 
-## Affine
+## Records
 
-| Field | Specification |
+`fov.registration_attempts[round]` lists one entry per estimation attempt, then one
+application entry for the round.
+
+| Key | Estimation entry | Application entry |
+| --- | --- | --- |
+| `record` | `"estimation"` | `"application"` |
+| `step`, `attempt` | Index of the step, and 0 for its own config or 1, 2, … for recovery alternatives | — |
+| `requested_method`, `actual_method`, `fallback` | The step's method, the one that ran, and whether it was an alternative | — |
+| `backend`, `backend_versions` | The backend that ran and the versions of its packages | — |
+| `reference`, `reference_sha256` | The reference round's name, or the external reference's label and image hash | — |
+| `config` | The method config that ran | — |
+| `application_config` | — | The `WarpConfig` of the final resampling |
+| `outcome` | `"succeeded"`, `"failed"` or `"rejected"` | `"succeeded"` or `"application_failed"` |
+| `failure` | Error type and message, and the criterion of a rejection | Error type and message |
+| `qc` | The step's QC | The QC of the whole chain |
+
+Each QC record holds these values; any of them may be `None` with a reason.
+
+| Value | Meaning |
 | --- | --- |
-| Backend and version | elastix, as for rigid; the backend comparison's `affine` rows. |
-| Transform | `AffineTransform` of dimension 3 or 2 (12 or 6 parameters), stored as `AffineTransform` with its physical parameters. |
-| Metric | `AdvancedNormalizedCorrelation` (the backend comparison's candidate k1). |
-| Optimizer | Adaptive stochastic gradient descent, 200 iterations per level, 4096 samples. |
-| Pyramid | Shared rule above. |
-| Initialization | Identity about the geometric centre, as for rigid; a preceding `translation` or `rigid` step provides pre-alignment. |
-| Parameters (units) | `AffineConfig(metric="ncc", iterations=200, samples=4096, levels=None, random_seed=1)`. |
-| Defaults | As listed; not operating points. |
-| Convergence | As for rigid. |
-| Failure | Shared rules above. A matrix with `det A ≤ 0` (a reflection or collapse) is returned but flagged in the QC transform summary; it is rejected only if the recipe's QC configures it. |
-| Resources (the backend comparison) | 0.7 s (1×32×32), 0.8 s (9×32×32), 1.0 s (1×512×512), 2.3 s (32×512×512), 5.1 s (30×1024×1024); peak RSS up to 1598 MiB on `large` (baseline 780 MiB). |
+| `coverage` | Fraction of reference voxels whose pull point lies inside the moving grid |
+| `ncc_before`, `ncc_after`, `ncc_gain` | Pearson correlation with the reference over that overlap, before and after, and the gain |
+| `ssim_before`, `ssim_after` | SSIM of the Z maximum projections, 7 × 7 window, over the valid columns eroded by 3 pixels |
 
-% W-244
+Its `details` hold the transform summary and the optimizer's diagnostics.
 
-## B-spline
+## Files
 
-| Field | Specification |
+| File | Written by | Contents |
+| --- | --- | --- |
+| `checkpoints/registered/<round>.ome.tif` | `FOV.run` with the `registered` stage | The registered round; snapshots under `registered/<snapshot>/` |
+| `checkpoints/registered/transforms.json` | the same | Each round's step transforms, diagnostics and attempts, its resampling, and the recipe |
+| `checkpoints/registered/<round>_field.npz` | the same | The dense fields and B-spline coefficients of that round |
+| `other_rounds/<round>/image.ome.tif`, `registration.json`, `field.npz` | `FOV.register` on other rounds and `FOV.prepare_morphology`, with `checkpoints` | A registered other round, its chain, attempts and reference; `field.npz` only for dense or B-spline transforms |
+| `nuclei_registration.json` | `FOV.save_registration_record` | The registration record of a FOV's other rounds |
+
+Paths are inside the FOV's folder, `<output_root>/fovs/<fov_id>/` by default.
+`FOV.load_checkpoint("registered")` and `FOV.load_registered_round(name)` read them
+back.
+
+## Workflow keys
+
+| Key, under `rules.<rule>.parameters` | Meaning |
 | --- | --- |
-| Backend and version | elastix for estimation (the backend comparison's `bspline` rows). SimpleITK 2.5.3 evaluates the stored grid into a dense field, so reloading needs no elastix. The backend comparison did not validate that SimpleITK route for elastix coefficients. Its round-trip rows convert elastix B-splines with ITK's `TransformToDisplacementFieldFilter` on the elastix transform, compared with the transformix field (at most 1.2e-7 voxels apart), and SimpleITK B-splines with SimpleITK's own conversion. Task group 3 must show that the SimpleITK evaluation of stored elastix coefficients matches the transformix deformation field within 1e-6 voxels ({doc}`registration-contract`, "Physical-space estimation"). |
-| Transform | Cubic `BSplineTransform` on a physical control grid, dimension 3 or 2, stored with its fixed parameters and coefficients ({doc}`registration-contract`). |
-| Metric | `AdvancedNormalizedCorrelation` (the backend comparison's candidate k1), with no bending-energy penalty, as in the backend comparison's matched setting. |
-| Optimizer | Adaptive stochastic gradient descent, 200 iterations per level, 4096 samples. |
-| Pyramid | Shared rule above; `GridSpacingSchedule` 1 at every level, so the control spacing is constant over levels. |
-| Initialization | Zero coefficients (identity). A preceding global step provides the global alignment. |
-| Parameters (units) | `BSplineConfig(metric="ncc", grid_spacing_physical=None, iterations=200, samples=4096, levels=None, random_seed=1)`. `grid_spacing_physical` is the final control-point spacing in the spatial unit of `spacing_zyx`, the same on every axis; `None` means the physical YX extent `X · spacing_x` divided by 8 (the backend comparison's matched rule: 64 units on `medium`, 128 on `large`). |
-| Defaults | As listed; not operating points. |
-| Convergence | As for rigid. |
-| Failure | Shared rules above. |
-| Resources (the backend comparison) | 1.1 s (1×32×32), 4.0 s (9×32×32), 1.7 s (1×512×512), 8.8 s (32×512×512), 11.6 s (30×1024×1024); peak RSS up to 1598 MiB on `large`. Converting the grid to a dense float64 field adds 24 bytes per voxel if a caller requests the whole field; the final resampling evaluates it plane by plane. |
+| `registration.steps` | A list of steps: `method` (a name in the method table), that config's fields, and optional `recovery` and `signal` |
+| `registration.signal`, `.warp`, `.qc` | The fields of `RegistrationSignalConfig`, `WarpConfig` and `RegistrationQcConfig` |
+| `registration.reference_round` | Must equal the dataset's reference round |
+| `reference_image_view` | `{mode: max}` (default) or `{mode: channel, channel: <index or label>}`: the reference image the rule writes; the resident subtile rules refuse it |
 
-% W-244
-
-## Demons on Z=1
-
-| Field | Specification |
-| --- | --- |
-| Backend and version | SimpleITK 2.5.3, the existing demons filters (`DemonsRegistrationFilter` and the three variants), run on 2D images. |
-| Transform | A 2D displacement field, embedded as `DenseDisplacementTransform` of shape (1, Y, X, 3) with the Z component exactly 0. |
-| Metric | The demons force of each variant (intensity difference driven), as in 3D. |
-| Optimizer | Demons iterations per level, with the variant-specific settings of `registration/_demons.py` unchanged. Every variant sets the displacement-field standard deviation to `smoothing_sigma` (voxels), and SimpleITK smooths the displacement field by default. `diffeomorphic` also sets the update-field standard deviation to `smoothing_sigma / 2` and `fast_symmetric` to `smoothing_sigma`, but the code never enables `SmoothUpdateField`, whose SimpleITK 2.5.3 default is off for all four filters (queried for this page). So only the displacement field is smoothed, in 2D as in 3D. |
-| Pyramid | The existing `antialias` pyramid applied in YX only (Butterworth low-pass and downsampling by 2 per level of Y and X; Z untouched), or `sitk` shrinking of Y and X only. The number of levels is `len(iterations)`. |
-| Initialization | Zero field at the coarsest level; each finer level starts from the upsampled, doubled field, as in 3D. |
-| Parameters (units) | The existing `DemonsConfig` fields and defaults: `variant="demons"`, `iterations=(100, 50, 25)` per level, `smoothing_sigma=1` (voxels), `pyramid_mode="antialias"`. No field is added. |
-| Defaults | Unchanged from 3D. |
-| Convergence | A level ends after its iterations or when the RMS change of the field falls below SimpleITK's `MaximumRMSError` (0.02); the elapsed iterations and the final RMS change per level are recorded (today they are not). |
-| Failure | Y or X below 4 raises `IncompatibleGeometryError`; 1 < Z < 4 stays rejected. SimpleITK errors become `RegistrationEstimationError`; a missing SimpleITK raises `RegistrationBackendUnavailableError`. |
-| Resources | Measured for this page with SimpleITK 2.5.3 at one thread and iterations (100, 50, 25): 0.04 s for 1×64×64 and 0.78 s for 32×64×64, about 10 and 6 µs per voxel. That projects to about 3 s for 1×512×512 and 40 to 45 s for 1×2048×2048, with the images (float32) and field (two float64 components) at about 25 bytes per pixel, or roughly 0.1 GB at 2048×2048. |
-
-## Engineering validation design (task group 6)
-
-Task group 6 is engineering validation only (the planning decision of
-2026-09-29): known-answer synthetic scenes with pass/fail tolerances fixed
-before the run, in default-tier (and, where noted, extended-tier) pytest
-modules. It has no arm × condition matrix, no threshold or parameter sweep, no
-benefit flag, no default selection from comparative data, and no separate run
-framework or HTML report. Method comparisons belong to the separate evidence work on registration methods.
-
-% W-152, §2.14, E01, W-94
-
-The tolerances are engineering bounds that detect a broken implementation,
-fixed before the run; they are not accuracy claims. Where the answer is exact
-(V1, V6 to V11) the tolerance is analytic. For V2 and V3 the backend comparison's held-out
-elastix errors (matched settings, per case, median over seeds) on the same
-development scenes were at most 0.03 voxels median and 0.06 p95 (rigid on the
-rigid case, `small`, `z1` and the spacing case; affine on `linear_small`,
-`small` and `z1`), so 0.25 and 0.5 voxels leave a wide margin. V4 and V5 have
-no matching backend comparison row: the nearest are elastix B-spline on `polynomial_small`
-at `medium` (0.14 median, 0.74 p95) and at Z=1 512 (0.12, 0.61), and the backend comparison did
-not run demons. Their bounds are therefore provisional. They stay fixed during task
-group 6; if a correct implementation cannot meet one, the change goes to
-Jiahao rather than being adjusted in the run (worker notes, open choice).
-
-% W-244
-
-All scenes stay within the project bound of 32×64×64 voxels, four channels and
-four rounds, are generated in session with `generate_registration_pair`,
-`GeometryConfig` or a direct construction, and use seeds 100, 101 and 102.
-
-| # | Check | Fixture | Metric (source) | Pass/fail tolerance |
-| --- | --- | --- | --- | --- |
-| V1 | Known translation | `DEVELOPMENT_SIZES` `small` (9×32×32) and `z1` (1×32×32), `GeometryConfig` translations (2, −3, 4) and (0, −3, 4), benchmark appearance | `evaluate_translation` (`starfinder.evaluation`); and the existing registration benchmark task with `evaluation: {translation: {tolerance: 0.5}}` | Exact integer displacement: every axis error < 0.5 (strict gate), so any wrong sign or axis fails. |
-| V2 | Known rigid map | `small`, `z1` and `small` with spacing (1, 2, 2): rotation up to ±3° about the grid centre plus a shift of at most 3 voxels (the backend comparison's rigid case) | `evaluate_displacement_field` against `forward_displacement`, over the valid overlap | Median ≤ 0.25 and p95 ≤ 0.5 voxels, per seed. |
-| V3 | Known affine map | `small` and `z1`, `DEFORMATION_PRESETS["linear_small"]` | As V2 | Median ≤ 0.25 and p95 ≤ 0.5 voxels. |
-| V4 | Known deformation, B-spline | 16×64×64 and 1×64×64 with a supplied `GeometryConfig` polynomial term of peak 3 voxels (identity median error above 1 voxel by construction) | As V2 | Median ≤ 0.5 and p95 ≤ 1.0 voxels, and p95 below the identity p95. |
-| V5 | Known deformation, demons on Z=1 | 1×64×64 with one local Gaussian control of magnitude 2 voxels and scale 8 | As V2; plus the field's Z component | Median ≤ 0.5 and p95 ≤ 1.0 voxels; Z component exactly 0. |
-| V6 | Composition | The four analytic examples of {doc}`registration-contract`; and a chain (translation, affine, dense) on 8×32×32 | Named-point values; `TransformChain.pull_field()` compared with sequential evaluation of the step maps | 1e-12 voxels. |
-| V7 | Persistence round trip | Every transform kind on 8×32×32 and 1×32×32, saved as a version-2 registered checkpoint and reloaded | Pull field and re-applied images compared with the uninterrupted run | Bit-identical (`array_equal`). A version-1 checkpoint written by the start revision loads as `sequential`. |
-| V8 | Z=1 and small-Z rules | 1×32×32, 2×32×32, 3×32×32 for every registered method | Raised error type; Z component of the result | Methods with `2` in `dimensions` succeed on Z=1 with no Z motion; TPS and CPD raise `IncompatibleGeometryError` on Z=1; elastix methods and demons raise it on Z=2 and 3. |
-| V9 | Boundary and coverage | 1×32×32 ramp image. Constant boundary: translation displacement (0, 5, 0), a translation-only chain, which requires constant zero fill. Nearest boundary: the same shift as `AffineTransform` with `A = I` and `b = (0, 5, 0)`, a non-translation chain on the linear path. | `registration_qc` coverage; fill band values | Coverage exactly 27/32 for both; the 5 filled rows equal 0 for the translation chain and equal the edge row (y = 31) for the affine chain with `nearest`. |
-| V10 | Empty and constant input | Constant moving signal; moving round shifted beyond the grid | Raised error; `registration_qc` NCC and SSIM | Rigid, affine and B-spline raise `RegistrationEstimationError("constant registration signal")`; NCC and SSIM are `None` with a reason; coverage 0. |
-| V11 | Determinism | V2 to V5 fixtures, seed 100, run twice at one thread | Transform and image digests | Bit-identical. |
-
-% W-244
-
-**V4 and V5 fixture density (implemented checks, the implementation run of 2026-09-30; confirmed by Jiahao on
-2026-09-30).** The V4 and V5 scenes use the benchmark appearance with noise and
-128 amplicons per 64×64 plane: 128 on 1×64×64 and 512 on 16×64×64
-(`test/test_registration_methods.py`). This density was an operator decision of
-2026-09-30, taken under Jiahao's delegation and confirmed by Jiahao on
-2026-09-30. The fixture density decides pass or fail. At the backend comparison's development
-density (32 per 64×64 plane, 128 on 16×64×64) the provisional bounds are
-exceeded:
-
-% W-255, W-244
-
-* B-spline 16×64×64: p95 1.05;
-* B-spline 1×64×64: p95 1.69;
-* demons on Z=1, seed 100: median 0.53 and p95 1.43;
-* worst p95 across seeds 100 to 102: 2.52 (demons on Z=1, seed 102).
-
-At the chosen density every V4 and V5 case meets its bound, with p95 at most
-0.79. The per-case values are in the implementation run's directory, kept outside the repository
-(`bound_sensitivity.csv`). Task group 6 (the validation work) uses the same density.
-
-% W-255, W-258
-
-### Implemented checks
-
-% Implemented checks (W-258)
-
-The checks are in `src/python/test/test_registration_validation.py`, one test
-function per check (parametrized by case and seed). V4, V5 and their V11 runs
-are in the extended tier (`-m extended`); every other check is in the default
-tier. The scenes use the benchmark appearance of `registration_scene_preset`
-with the implementation run's densities (20 amplicons on 9×32×32, 8 on 1×32×32, 512 on
-16×64×64 and 128 on 1×64×64), generated in session, with the signal in ch00.
-ITK and SimpleITK run at one thread. The tolerances are the ones in the table
-above, unchanged.
-
-% W-255
-
-| # | Test | Route and fixture | Metric | Tolerance |
-| --- | --- | --- | --- | --- |
-| V1 | `test_v1_known_translation`, `test_v1_known_translation_benchmark_task` | `estimate_transform` (translation) and the registration benchmark task on the same pair; `small` with (2, −3, 4) and (0, −3, 4), `z1` with (0, −3, 4), seeds 100 to 102 | `evaluate_translation` against the displacement t; the benchmark `translation` metric | every axis error < 0.5 (strict) in both routes |
-| V2, V3 | `test_v2_v3_known_rigid_and_affine_maps_through_recipes` | `FOV.run` with `(translation, rigid)` on the backend comparison's rigid case (`small`, `z1`, `small` with spacing (1, 2, 2)) and `(translation, affine)` on `linear_small` (`small`, `z1`), seeds 100 to 102 | `evaluate_displacement_field` of the round's `pull_field()` against `forward_displacement` over its valid overlap | median ≤ 0.25, p95 ≤ 0.5 voxels per seed; Z component 0 for Z=1 |
-| V4, V5 | `test_v4_v5_known_deformations_through_recipes` (extended) | `FOV.run` with `(translation, bspline)` on 16×64×64 and 1×64×64 with the supplied quadratic term of peak 3 voxels, and `(translation, demons)` on 1×64×64 with one Gaussian control of magnitude 2 and scale 8; seed 100 | as V2, and the identity field over the same mask | median ≤ 0.5, p95 ≤ 1.0 voxels, p95 below the identity p95, Z component exactly 0 for Z=1 |
-| V6 | `test_v6_analytic_composition_examples`, `test_v6_example_4_physical_to_index_matrix`, `test_v6_translation_affine_dense_chain_equals_sequential_evaluation` | examples 1 to 4 of {doc}`registration-contract`; a (translation, affine, dense) chain on 8×32×32 | `pull_field()` at the named points, and against `T₁(T₂(T₃(p)))` evaluated step by step from the stored parameters on every voxel | 1e-12 voxels; the wrong-order values differ |
-| V7 | `test_v7_version_2_registered_checkpoint_round_trip` (rigid and two chains); `test_registration_recipe.py`'s `test_registered_checkpoint_reapplies_identically` (translation, affine, B-spline, demons) and `test_version_1_registered_checkpoints_still_load_as_sequential` | `FOV.run` with a registered checkpoint for translation, rigid, affine, B-spline, demons and two chains, on the seeded golden fixture at 8×32×32 and its plane z=4 (1×32×32) | reloaded `pull_field()`, the reloaded images and the images re-applied through the reloaded chain and policy, against the uninterrupted run | `array_equal`; a version-1 checkpoint loads as `sequential` |
-| V8 | `test_v8_covers_every_registered_method`, `test_v8_z1_and_small_z_rules` | `estimate_transform` for every `REGISTRATION_METHODS` entry on 1×32×32, 2×32×32 and 3×32×32 | raised error type; Z component of the pull field | methods with `2` in `dimensions` succeed on Z=1 with Z motion exactly 0; TPS and CPD raise `IncompatibleGeometryError` on Z=1; rigid, affine, B-spline and demons raise it on Z=2 and 3; translation, TPS and CPD are not rejected on geometry there |
-| V9 | `test_v9_constant_boundary_of_a_translation_only_chain`, `test_v9_nearest_boundary_of_an_affine_chain` | a 1×32×32 ramp in Y and X; a translation chain with displacement (0, 5, 0) and the translation backend; `AffineTransform` with `A = I`, `b = (0, 5, 0)` and `nearest` | `registration_qc` coverage; the five filled rows | coverage exactly 27/32; the band equals 0, and the edge row y = 31 for `nearest`; the translation backend rejects `nearest` |
-| V10 | `test_v10_constant_moving_signal_is_rejected`, `test_v10_constant_signal_qc_is_undefined_with_a_reason`, `test_v10_moving_round_beyond_the_grid` | a constant moving signal through `estimate_transform` and a one-step recipe; a moving round whose content lies 40 rows beyond the grid | raised error and the recorded attempt; `registration_qc` NCC, SSIM and coverage | `RegistrationEstimationError("constant registration signal")` for rigid, affine and B-spline; NCC (and SSIM beyond the grid) `None` with a reason; coverage 0 |
-| V11 | `test_v11_global_recipes_are_deterministic_at_one_thread`, `test_v11_local_recipes_are_deterministic_at_one_thread` (extended) | the V2 to V5 recipes at seed 100, each run twice | SHA-256 of every step transform, the composite pull field and the registered round | identical |
-
-% W-244
-
-V1 has two known one-voxel misses of the translation estimator (`small` with (2, −3, 4) at seed 101 and `z1` with (0, −3, 4) at seed 100), recorded as strict expected failures in both routes with the bound unchanged (operator decision in the validation work, confirmed by Jiahao on 2026-09-30); a separate investigation follows them.
-
-% W-258, W-259
+On the MATLAB backend, the `global_registration` and `local_registration` blocks are
+translated to one recipe of at most two steps; {doc}`migration` describes how.

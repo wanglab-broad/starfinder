@@ -2,11 +2,11 @@
 
 % Status: Accepted (W-246, 2026-09-30, at 47057aa)
 
-Note: {doc}`registration-contract` and {doc}`registration-algorithms` were accepted at the acceptance review of 2026-09-30 and are implemented in `starfinder.registration`; this page keeps the text of its revision.
+Note: [registration-contract](../specs/registration.md) and [registration-algorithms](../specs/registration-algorithms.md) were accepted at the acceptance review of 2026-09-30 and are implemented in `starfinder.registration`; this page keeps the text of its revision.
 
 % Note (W-583); accepted at W-246
 
-Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ([migration](../../docs/migration.md), "The FOV folder, the reference image and channel folders by label").
 
 % Note (W-564)
 
@@ -15,14 +15,14 @@ This page records how registration behaves at revision `2e48d3f` (branch
 unchanged since `1b4db5a`), before the package's registration work changes it. It is
 the reference that the golden test
 `src/python/test/test_registration_golden.py` pins. The proposed replacement is
-described in {doc}`registration-contract` and {doc}`registration-algorithms`;
+described in [registration-contract](../specs/registration.md) and [registration-algorithms](../specs/registration-algorithms.md);
 neither is accepted yet. Paths are relative to `src/python/starfinder/` unless
 they start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 `2e48d3f`.
 
 % Chapter II, §2.6
 
-Since 2026-09-30, `TranslationTransform` stores `displacement_zyx = −correction_zyx`; see "Translation displacement" in {doc}`migration`.
+Since 2026-09-30, `TranslationTransform` stores `displacement_zyx = −correction_zyx`; see "Translation displacement" in [migration](../../docs/migration.md).
 
 % W-262
 
@@ -31,7 +31,7 @@ Since 2026-09-30, `TranslationTransform` stores `displacement_zyx = −correctio
 Registration estimates a transform from one reference signal and one moving
 signal per moving round, then resamples that round. The public functions are
 `estimate_transform` and `apply_transform` in `starfinder.registration`
-({doc}`api/registration`). `FOV.register` runs one `RegistrationStep` for the
+([api/registration](../../docs/api/registration.rst)). `FOV.register` runs one `RegistrationStep` for the
 moving rounds, and `FOV.run` runs `PipelineConfig.registration`, an ordered
 tuple of steps.
 
@@ -61,7 +61,7 @@ tuple of steps.
 | Persistence | `transforms.json` entry `kind: "translation"` with `correction_zyx` inline; `log/gr_shifts/<fov>.txt` rows (`fov_id, round, row, col, z` = the detected displacement, `-correction`), written by `save_processing_log` for translation results only (`dataset/fov.py:463-474`). |
 
 Note: the Python backend no longer writes the shift tables; each translation is in `run.json`
-`transforms` and in its estimation attempt ({doc}`migration`, "Sequencing logs and the morphology record").
+`transforms` and in its estimation attempt ([migration](../../docs/migration.md), "Sequencing logs and the morphology record").
 
 % Note (W-563)
 
@@ -186,18 +186,18 @@ The registration benchmark task (`benchmark/_adapters.py:25-120`) evaluates
 
 | # | Discrepancy | Proposed resolution |
 | --- | --- | --- |
-| 1 | The Python `merged` signal sums channels (float64), while MATLAB `merged-image` takes the channel maximum. `FOV.save_reference_image` already writes the maximum for `ref_merged`, so Python registration and its saved reference image disagree. | `RegistrationSignalConfig(mode="max")` is the default and matches MATLAB; `sum` stays selectable. The legacy value `merged-image` (and `merged`) means maximum. Recorded in `docs/migration.md` as an intentional change ({doc}`registration-contract`, "Registration signal"). |
+| 1 | The Python `merged` signal sums channels (float64), while MATLAB `merged-image` takes the channel maximum. `FOV.save_reference_image` already writes the maximum for `ref_merged`, so Python registration and its saved reference image disagree. | `RegistrationSignalConfig(mode="max")` is the default and matches MATLAB; `sum` stays selectable. The legacy value `merged-image` (and `merged`) means maximum. Recorded in `docs/migration.md` as an intentional change ([registration-contract](../specs/registration.md), "Registration signal"). |
 | 2 | The workflow adapter defaults local registration to `single-channel` (channel 0), while MATLAB's workflow uses `merged-image`; the schema does not expose local `ref_img`/`mov_img`. | The legacy local default becomes `merged-image` (maximum), as in MATLAB; the schema declares `ref_img` and `mov_img` for the local block as Python-only keys. |
-| 3 | Local estimators reject Z=1 (`registration/_api.py:50-53`). | Z=1 is genuine 2D estimation behind the singleton-Z interface for demons and the new rigid, affine and B-spline methods; TPS and CPD declare 3D only ({doc}`registration-contract`, "Z=1"). |
-| 4 | Each registration step resamples the image and every snapshot again, rounding integer data after each step. | Steps compose into one pull field; every snapshot is resampled once, from its pre-registration image ({doc}`registration-contract`, "One final resampling"). |
-| 5 | There is no rigid, affine or B-spline method. | Add `rigid`, `affine` and `bspline`, estimated in physical space with elastix ({doc}`registration-algorithms`). |
-| 6 | Morphology registration runs only through MATLAB (`nuclei_registration`). | Python other-round and external-reference registration from a selected shared stain, with transfer to the round's other channels ({doc}`registration-contract`, "Other-round and external-reference registration"). The MATLAB rule stays. |
-| 7 | Method sets are hard-coded in several modules: `registration/_api.py`, `dataset/config.py:14`, `dataset/workflow.py:38-94`, `:204`, `_checkpoint.py:346`, `benchmark/_adapters.py:8-9` and the schema enum. | `REGISTRATION_METHODS` per {doc}`method-registry`; each place derives from it. |
+| 3 | Local estimators reject Z=1 (`registration/_api.py:50-53`). | Z=1 is genuine 2D estimation behind the singleton-Z interface for demons and the new rigid, affine and B-spline methods; TPS and CPD declare 3D only ([registration-contract](../specs/registration.md), "Z=1"). |
+| 4 | Each registration step resamples the image and every snapshot again, rounding integer data after each step. | Steps compose into one pull field; every snapshot is resampled once, from its pre-registration image ([registration-contract](../specs/registration.md), "One final resampling"). |
+| 5 | There is no rigid, affine or B-spline method. | Add `rigid`, `affine` and `bspline`, estimated in physical space with elastix ([registration-algorithms](../specs/registration-algorithms.md)). |
+| 6 | Morphology registration runs only through MATLAB (`nuclei_registration`). | Python other-round and external-reference registration from a selected shared stain, with transfer to the round's other channels ([registration-contract](../specs/registration.md), "Other-round and external-reference registration"). The MATLAB rule stays. |
+| 7 | Method sets are hard-coded in several modules: `registration/_api.py`, `dataset/config.py:14`, `dataset/workflow.py:38-94`, `:204`, `_checkpoint.py:346`, `benchmark/_adapters.py:8-9` and the schema enum. | `REGISTRATION_METHODS` per [method-registry](../../docs/method-registry.md); each place derives from it. |
 | 8 | `reference_channel` is one zero-based index for both rounds; MATLAB matches channel names (`contains`), and its local reference branch indexes by number while the moving branch matches names. | The signal selects a channel by index or by label, per round when needed (shared stain). |
-| 9 | Each method picks its own application backend (`translation`, `simpleitk`, `scipy`); only `boundary_mode` reaches YAML. The SimpleITK and SciPy linear resamplers differ at boundaries. | One recipe-level `WarpConfig` for the final resampling ({doc}`registration-contract`). |
+| 9 | Each method picks its own application backend (`translation`, `simpleitk`, `scipy`); only `boundary_mode` reaches YAML. The SimpleITK and SciPy linear resamplers differ at boundaries. | One recipe-level `WarpConfig` for the final resampling ([registration-contract](../specs/registration.md)). |
 | 10 | Estimation ignores physical spacing; SimpleITK demons runs with unit spacing. | New global and B-spline methods estimate in physical space; demons, TPS and CPD keep index space (declared per method). |
-| 11 | Persistence knows only `translation` and `dense`; `FORMAT_VERSION` is 1; `gr_shifts` holds translations only. | New `transforms.json` kinds and `FORMAT_VERSION = 2` with a version-1 reader ({doc}`registration-contract`, "Persistence"). `gr_shifts` keeps its columns and translation rows. |
-| 12 | Metrics have no valid-overlap mask, no coverage and no displacement-field truth metric; attempts do not record the backend or optimizer diagnostics. | A routine QC helper and `evaluate_displacement_field` in `starfinder.evaluation`, and richer attempt records ({doc}`registration-contract`, "Routine QC"). |
+| 11 | Persistence knows only `translation` and `dense`; `FORMAT_VERSION` is 1; `gr_shifts` holds translations only. | New `transforms.json` kinds and `FORMAT_VERSION = 2` with a version-1 reader ([registration-contract](../specs/registration.md), "Persistence"). `gr_shifts` keeps its columns and translation rows. |
+| 12 | Metrics have no valid-overlap mask, no coverage and no displacement-field truth metric; attempts do not record the backend or optimizer diagnostics. | A routine QC helper and `evaluate_displacement_field` in `starfinder.evaluation`, and richer attempt records ([registration-contract](../specs/registration.md), "Routine QC"). |
 | 13 | The schema's `local_registration.method` enum (`demons`, `tps`, `cpd`) is narrower than the adapter (also `translation` and the three demons variants). | Widen the schema to the registered names plus the legacy aliases, kept equal by a test (choice 4 of the method-registry design, accepted). |
 | 14 | MATLAB demons defaults (`Iterations=10`, `floor(log2(Z))` levels) differ from Python's (`(100, 50, 25)`, three levels). | Recorded only; no default changes (defaults beyond translation-only belong to the separate evidence work on registration methods). |
 
@@ -222,7 +222,7 @@ test that refers to `RegistrationStep` or `PipelineConfig.registration`. The
 pinned runs use each config's defaults, so a changed `DemonsConfig` default
 changes a digest. The registration refactor replaces that helper; its one other named
 edit is the translation → demons image digest, which one final resampling
-changes ({doc}`registration-contract`, "One final resampling").
+changes ([registration-contract](../specs/registration.md), "One final resampling").
 Two further tests show that a changed demons iteration count and the
 `single-channel` signal change the pinned translation → demons image digest
 and move the demons field outside the float64 tolerance. The translation-only
@@ -235,7 +235,7 @@ Three single-thread runs (ITK, OpenMP, BLAS threads 1) gave bit-identical
 digests. The uint16 images keep their exact digests and the correction is
 exact (whole voxels). The demons field, a computed float64 array, is an
 explicit expected array (`src/python/test/data/expected/test_registration_golden/`)
-compared with the float64 tolerance of [contributing](contributing.md),
+compared with the float64 tolerance of [contributing](../../docs/contributing.md),
 "Expected values and tolerances" (since 2026-10-25; it replaced the field's digest and
 reproduces it).
 

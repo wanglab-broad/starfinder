@@ -51,8 +51,9 @@ class RigidConfig:
 
     metric is "mattes" (Mattes mutual information with histogram_bins bins) or
     "ncc"; iterations are per pyramid level, samples are the random spatial
-    samples per iteration and random_seed seeds them. levels None derives the
-    shared pyramid rule of the registration algorithm page.
+    samples per iteration and random_seed seeds them. levels None takes the
+    largest number of levels, up to 4, at which min(Y, X) is still at least 16
+    at the coarsest level.
     """
 
     metric: str = "mattes"
@@ -132,7 +133,7 @@ class DemonsConfig:
 
 @dataclass(frozen=True)
 class TpsConfig:
-    """Noise landmarks and 3D thin-plate-spline interpolation."""
+    """Thin-plate-spline field from spots matched between the two rounds; 3D only."""
 
     detection_noise_sigma: float = 3
     match_distance_voxels: float = 10
@@ -154,7 +155,11 @@ class TpsConfig:
 
 @dataclass(frozen=True)
 class CpdConfig:
-    """3D coherent point drift; direct defaults differ from FOV defaults."""
+    """Coherent point drift between the spots of the two rounds; 3D only.
+
+    A configuration translated from the MATLAB workflow keys sets
+    detection_noise_sigma 3.0 and grid_spacing_voxels 32 unless it gives them.
+    """
 
     detection_noise_sigma: float = 5
     max_control_points: int = 1000

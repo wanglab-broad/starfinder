@@ -226,8 +226,8 @@ fov.registration_chains["round2"].pull_field()  # composite pull displacement, f
 `FOV.register(recipe, *, rounds, reference=None, checkpoints=None)` with rounds
 that are not sequencing rounds takes its other-round route: it registers loaded
 rounds, such as morphology rounds, through a shared stain, as specified in
-{doc}`registration-contract` ("Other-round and external-reference
-registration", which also gives the routing). The recipe's signal is usually `mode="channel"` with
+{doc}`registration-contract` ("Other rounds and external references", which
+also gives the routing). The recipe's signal is usually `mode="channel"` with
 `reference_channel` naming the stain in the reference and `moving_channel` in
 each moving round, by index, pattern or name (`Dataset.channel_index`, see
 "Channels" above). Sequencing rounds use `Dataset.channel_order`; an other
