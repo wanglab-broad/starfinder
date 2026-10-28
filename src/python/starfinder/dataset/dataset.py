@@ -45,7 +45,7 @@ class Dataset:
 
     Processing options belong to PipelineConfig, residency to ExecutionConfig.
     Shared workflow YAML is translated by from_workflow_config.
-    The channels come in three groups (docs/coordination.md, "Channels"):
+    The channels come in three groups (design/specs/coordination.md, "Channels"):
     channel_order, the sequencing colours, which also label the other rounds
     by default; other_channel_order, an other round's own channels (for
     example a morphology round's), in its C order; and reference_stains, the
@@ -153,7 +153,7 @@ class Dataset:
     _channels: dict = field(default_factory=dict, repr=False, kw_only=True)
     # The files load_codebook and load_direct_panel read, by kind (codebook, direct_panel): the loaded object,
     # the absolute path and the SHA-256 of its bytes; and the workflow configuration file from_workflow_config
-    # translated. run.json records them (docs/checkpoints.md, "run.json").
+    # translated. run.json records them (design/specs/checkpoints.md, "run.json").
     _reference_files: dict = field(default_factory=dict, repr=False, compare=False, kw_only=True)
     _workflow_config: Path | None = field(default=None, repr=False, compare=False, kw_only=True)
     # True on the workflow's legacy route (MATLAB's rsf_single_fov, or stitch_subtile in the subtile and deep

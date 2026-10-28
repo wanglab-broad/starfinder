@@ -148,7 +148,7 @@ them.
 | `images/stardist_segmentation/{fovID}.json` | the same | The run record |
 
 The `segmentation/` folders are inside the FOV's folder, `<output_root>/fovs/<fov_id>/`
-by default ({doc}`checkpoints`); `FOV.load_segmentation(name)` reads them. The
+by default ({doc}`checkpoint reference <checkpoints-reference>`); `FOV.load_segmentation(name)` reads them. The
 `images/` paths are under the workflow's output folder.
 
 ## Workflow keys

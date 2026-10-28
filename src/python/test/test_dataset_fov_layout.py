@@ -1,6 +1,6 @@
 """W-564: the FOV folder, the one reference-image resolver and the channel output paths by label.
 
-docs/checkpoints.md ("Layout") and docs/migration.md. A FOV's durable results go to
+design/specs/checkpoints.md ("Layout") and docs/migration.md. A FOV's durable results go to
 ``<output_root>/fovs/<fov_id>/`` (``CheckpointConfig.directory`` names the parent of the FOV
 folders), its restart material to the folder's ``checkpoints/``; the reference image is
 written and read through ``_layout.reference_image_path`` (default

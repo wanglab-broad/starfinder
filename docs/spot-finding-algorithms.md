@@ -131,7 +131,7 @@ model and the commands that fetch and verify them. Detection never downloads.
 | `run.json` | `FOV.run` with `checkpoints` | `config.pipeline.spot_finding` (the config or plan), `config.execution` (the device), and the detection's provenance entry |
 
 Paths are inside the FOV's folder, `<output_root>/fovs/<fov_id>/` by default;
-{doc}`checkpoints` describes them.
+{doc}`checkpoint reference <checkpoints-reference>` describes them.
 
 ## Workflow keys
 

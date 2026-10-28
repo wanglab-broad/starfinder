@@ -1,5 +1,5 @@
 """Channel name and wavelength per round: ChannelInfo, Dataset.channel_index, its users, the workflow translation
-and the records (W-336; docs/coordination.md, "Channels")."""
+and the records (W-336; design/specs/coordination.md, "Channels")."""
 from __future__ import annotations
 
 import json

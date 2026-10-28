@@ -1,4 +1,4 @@
-"""The saved form of a prepared morphology image (docs/checkpoints.md, "Prepared morphology images").
+"""The saved form of a prepared morphology image (design/specs/checkpoints.md, "Prepared morphology images").
 
 Each image prepared by ``FOV.prepare_morphology`` or registered by
 ``FOV.register`` (other rounds) with checkpoints is a folder

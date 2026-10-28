@@ -164,7 +164,7 @@ The guide's [two-pass example](preprocessing-contract.md#fitting-modes) uses the
 | Histogram summary | `save_histograms` | `counts` (rounds, channels, bins), labels, FOVs and the steps run before |
 
 Paths under `checkpoints/` are inside the FOV's folder, `<output_root>/fovs/<fov_id>/` by
-default; {doc}`checkpoints` describes them.
+default; {doc}`checkpoint reference <checkpoints-reference>` describes them.
 
 ## Workflow keys
 

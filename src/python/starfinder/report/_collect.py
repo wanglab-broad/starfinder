@@ -1199,7 +1199,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
             "assignment": resolved_assignment, "segmentation": resolved_segmentation, "generated_at": generated_at,
             "software": software(), "config": config_json,
             "stages": {"run_records": [f for f in fov_ids if records[f] is not None],
-                       # Read as recorded, and not eligible for verified resume (docs/checkpoints.md).
+                       # Read as recorded, and not eligible for verified resume (design/specs/checkpoints.md).
                        "version_1_run_records": [f for f in fov_ids if records[f] is not None
                                                  and records[f].get("format_version") == 1],
                        "placement": placement is not None, "export": export is not None,

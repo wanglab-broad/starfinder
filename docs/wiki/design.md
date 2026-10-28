@@ -1,7 +1,8 @@
 # Starfinder Design
 
 :::{container} sf-lead
-How STARfinder is built, and the guide of each pipeline stage.
+Architecture, shared conventions, coordination and saved processing, with guides
+and references for the pipeline stages.
 :::
 
 ::::{grid} 1 1 2 3
@@ -28,6 +29,13 @@ Shapes, axes, channels and coordinates that every stage shares.
 How a Dataset and its FOVs run the stages.
 :::
 
+:::{grid-item-card} Coordination reference
+:link: ../coordination-reference
+:link-type: doc
+:class-card: sf-card
+Configuration fields and result attributes.
+:::
+
 :::{grid-item-card} Checkpoints and run records
 :link: ../checkpoints
 :link-type: doc
@@ -35,11 +43,18 @@ How a Dataset and its FOVs run the stages.
 Per-FOV checkpoints and the run record.
 :::
 
+:::{grid-item-card} Checkpoint reference
+:link: ../checkpoints-reference
+:link-type: doc
+:class-card: sf-card
+Saved files, table columns and run-record fields.
+:::
+
 :::{grid-item-card} Dependencies and backends
 :link: ../api/backends
 :link-type: doc
 :class-card: sf-card
-Optional packages, and how a missing one fails.
+Packages used by the public interfaces.
 :::
 
 :::{grid-item-card} Learned detectors
@@ -54,7 +69,7 @@ Running the Spotiflow and Piscis spot detectors.
 :link-type: doc
 :columns: 12
 :class-card: sf-card sf-card-wide
-The guide of each stage, with its algorithms, validation and baseline.
+A guide and reference for each stage.
 :::
 
 ::::
@@ -66,7 +81,9 @@ The guide of each stage, with its algorithms, validation and baseline.
 Architecture <../architecture>
 Array and coordinate contracts <../api/contracts>
 Dataset and FOV coordination <../coordination>
+Coordination reference <../coordination-reference>
 Checkpoints and run records <../checkpoints>
+Checkpoint reference <../checkpoints-reference>
 Dependencies and backends <../api/backends>
 Learned detectors <../learned-detectors>
 Pipeline stages <pipeline-stages>

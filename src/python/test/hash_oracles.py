@@ -13,7 +13,7 @@ one rule as the docs state it:
   (design/specs/stitching.md, "Persistence");
 * ``array_sha256``: the hash of a label or input array (design/specs/segmentation.md, "Run record");
 * ``bank_digest``: an appearance bank's digest (docs/synthetic-real-appearance.md, "The appearance bank");
-* ``read_table``: a CSV or Parquet table read back with its recorded dtypes (docs/checkpoints.md, "Table formats").
+* ``read_table``: a CSV or Parquet table read back with its recorded dtypes (design/specs/checkpoints.md, "Table formats").
 
 The module uses only hashlib, json and pandas, and imports nothing from starfinder.
 """

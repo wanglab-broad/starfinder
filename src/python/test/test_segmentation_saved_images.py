@@ -1,7 +1,7 @@
 """Segmenting from saved reference-frame images in a separate process (W-338).
 
 design/specs/segmentation.md ("Coordination per FOV"), design/specs/assignment.md ("The grid
-rule") and docs/checkpoints.md. The dataset is the W-337 dataset of test_morphology_rounds,
+rule") and design/specs/checkpoints.md. The dataset is the W-337 dataset of test_morphology_rounds,
 written in session (8×32×32 uint16): the reference round1 (ch00–ch03 and the stain file ch04,
 DAPI), the sequencing round2 and the other round morph (Flamingo, RBD, DAPI), here with a
 calibrated ImageMetadata (spacing 1.0, 0.5, 0.5 µm), which the seeded watershed needs.
@@ -123,7 +123,7 @@ def process_run(root, output):
     """Process 1: FOV.run with checkpoints and save_reference_image.
 
     It may run after process 2, which made the FOV folder: run's overwrite guard covers run.json and checkpoints/
-    only, and overwrite=True removes checkpoint stage files only, so other_rounds/ stays (docs/checkpoints.md).
+    only, and overwrite=True removes checkpoint stage files only, so other_rounds/ stays (design/specs/checkpoints.md).
     """
     fov = dataset(root, output).fov("FOV").run(pipeline(rotation=ANGLE), checkpoints=CheckpointConfig(overwrite=True))
     fov.save_reference_image()

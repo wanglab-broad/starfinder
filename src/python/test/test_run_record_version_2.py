@@ -1,4 +1,4 @@
-"""run.json version 2 and the stage records that own their payload hashes (W-565, docs/checkpoints.md, "run.json").
+"""run.json version 2 and the stage records that own their payload hashes (W-565, design/specs/checkpoints.md, "run.json").
 
 A checkpointed run of the synthetic FOV of ``test_report_records_golden.py`` (two rounds of
 four channels, 4 × 24 × 24) writes run.json version 2: the output and stage paths relative to

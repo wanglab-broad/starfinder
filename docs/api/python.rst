@@ -5,7 +5,7 @@ The reference renders supported signatures, defaults, public members and source
 links. Each module page below lists its namespace's exports; :doc:`inventory`
 lists the root convenience exports, and the :ref:`general index <genindex>` lists every
 documented object A–Z. :doc:`contracts` defines arrays and geometry;
-:doc:`backends` covers dependencies and explicit failure behavior.
+:doc:`backends` lists dependencies.
 
 .. toctree::
    :maxdepth: 1

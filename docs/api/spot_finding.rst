@@ -2,7 +2,9 @@ starfinder.spot_finding
 ==============================
 
 Detection returns a typed SpotFindingResult with zero-based voxel coordinates,
-explicit geometry and namespace. See :doc:`contracts` for distinct policies.
+explicit geometry and namespace. See :doc:`contracts` for shared conventions and the `detection-policy specification
+<https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md>`_
+for detection policies.
 
 :py:data:`~starfinder.spot_finding.SPOT_FINDING_METHODS` maps each exact config type to
 its :py:class:`~starfinder.spot_finding.SpotFindingSpec`: the method name (the config's

@@ -90,7 +90,7 @@ def _run_nuclei_registration(snakemake):
     keeping the dtype; with the
     Python-only rules.nuclei_registration.parameters.checkpoints, also the
     saved form of each prepared image (other_rounds/<name>/,
-    docs/checkpoints.md), which FOV.load_registered_round reads. Unlike
+    design/specs/checkpoints.md), which FOV.load_registered_round reads. Unlike
     MATLAB, it does not min-max stretch the other rounds.
     """
     from dataclasses import asdict

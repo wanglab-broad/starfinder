@@ -2560,6 +2560,31 @@ unchanged; only code or a test that matches the old text needs an update.
 % W-306 models.csv, W-305 and W-306 notes section 8, and W-266 recovery note
 % R-20261001T005236Z-898a772a.
 
+### Dataset and FOV coordination migration
+
+
+| Before | After |
+| --- | --- |
+| `STARMapDataset`, `LayerState` | `Dataset`, `RoundState` |
+| `layers.seq`, `layers.other`, `layers.ref` | `rounds.sequencing_rounds`, `rounds.other_rounds`, `rounds.reference_round` |
+| `all_layers`, `to_register` | `all_rounds`, `moving_rounds` |
+| `STARMapDataset.from_config(config)` | `from_workflow_config(config, rule).dataset` |
+| `load_raw_images`, `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` | `load_images`, `normalize_min_max`, `match_histogram`, `correct_background`, `filter_tophat` |
+| `global_registration()`, `local_registration(method=...)` | `register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))`, `register(RegistrationRecipe((RegistrationStep(TpsConfig()),), signal=RegistrationSignalConfig("channel", 0)))` |
+| `run_streaming(...)`, `run_streaming_gr(...)` | `run(config, execution=ExecutionConfig("streaming"))` |
+| `all_spots`, `good_spots` | `spot_result`, `intensity_result`, `decoding_result`, `filtering_result.accepted` |
+| `global_shifts`, `local_registered` | `registration_results`, `registration_chains`, `registration_attempts`, keyed by round |
+| `save_signal`, `save_ref_merged`, `save_log`, `save_score_log` | `export_spots`, `save_reference_image`, and `run.json` of `run(..., checkpoints=CheckpointConfig(stages=()))` for both logs |
+
+FOV remains FOV. Path construction and logging helpers are private. No replaced
+Python aliases remain. Rotation and output projection are explicit operation
+configs rather than Dataset fields. Shared MATLAB config keys and filenames stay
+unchanged; `from_workflow_config` is their single Python translation boundary.
+The adapter rejects unknown fields in the selected rule, validates reference
+round consistency and preserves workflow CPD's threshold 3/grid spacing 32.
+Unsupported segmented endpoint filtering fails explicitly; it is not silently
+reinterpreted as a single-segment predicate.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

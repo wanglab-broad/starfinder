@@ -208,7 +208,7 @@ dataclasses), `requires` (each declared distribution with its installed version,
 and `artifacts` (empty). `(stage, method)` identifies a method, so names need only be
 unique within a stage. Spot finding (`dataset/fov.py`), segmentation and stitching write
 the entry, and a stage may add fields to it, such as spot finding's model `artifacts` and
-`execution`; {doc}`checkpoints` lists the fields of the `run.json` records.
+`execution`; {doc}`checkpoints-reference` lists the fields of the `run.json` records.
 
 ## Third-party methods
 

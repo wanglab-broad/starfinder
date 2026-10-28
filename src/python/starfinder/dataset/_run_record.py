@@ -1,6 +1,6 @@
 """Small per-FOV run record (run.json) in the FOV folder, written while checkpoints are active.
 
-Version 2 (docs/checkpoints.md, "run.json") is portable: the output and stage
+Version 2 (design/specs/checkpoints.md, "run.json") is portable: the output and stage
 paths are relative to the FOV folder, and the files the run reads are relative
 to the input root when they lie inside it, else absolute; every file it reads
 has its SHA-256. ``input_root`` and ``output_root`` record the roots of the run
@@ -181,7 +181,7 @@ class _RunRecord:
                        "readout_mode": dataset.readout_mode, "encoding": encoding},
             # The workflow configuration file of a workflow rule (null outside the workflow).
             "workflow_config": _workflow_config_record(dataset),
-            # Channel pattern, name and wavelength per round (docs/checkpoints.md, "run.json").
+            # Channel pattern, name and wavelength per round (design/specs/checkpoints.md, "run.json").
             "channels": dataset._channel_record(),
             # The round roles of the run (RoundState).
             "rounds": asdict(fov.rounds),

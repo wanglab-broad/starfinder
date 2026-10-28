@@ -2,7 +2,10 @@ starfinder.readout
 ==================
 
 Independent codebook validation, intensity extraction, decoding and filtering.
-See :doc:`contracts` for labels, identities, score meanings and numerical policy.
+See :doc:`contracts` for labels and identities, and :doc:`../readout-algorithms`
+for score fields. The `readout specification
+<https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md>`_
+gives numerical policies.
 
 :py:data:`~starfinder.readout.ENCODINGS` maps each encoding config type
 (``two_base``, ``one_base``) to its :py:class:`~starfinder.readout.EncodingSpec`, and

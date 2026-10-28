@@ -9,7 +9,7 @@ on their own. A FOV's own folder ``fovs/<fov_id>/`` (a subtile's
 tables ``FOV.export_spots`` writes, the registration record of its other
 rounds, its reference image and the folders ``other_rounds/``,
 ``segmentation/`` and ``assignment/``; the restart material of ``FOV.run``
-goes in its ``checkpoints/`` folder (docs/checkpoints.md, "Layout"). The
+goes in its ``checkpoints/`` folder (design/specs/checkpoints.md, "Layout"). The
 workflow's opt-in assignment previews (``assembly.previews``) go in the FOV
 folder's ``previews/`` and the export folder's ``previews/<fov_id>/``.
 """

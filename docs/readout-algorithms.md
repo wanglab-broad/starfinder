@@ -168,7 +168,7 @@ With checkpoints, `FOV.run` stores `summarize_reads` in `run.json` under
 | `reads.csv` | `FOV.export_spots("reads")`, after decoding | Every decoded read |
 
 Paths are inside the FOV's folder, `<output_root>/fovs/<fov_id>/` by default;
-{doc}`checkpoints` describes them.
+{doc}`checkpoint reference <checkpoints-reference>` describes them.
 
 ## Workflow keys
 

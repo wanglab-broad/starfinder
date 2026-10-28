@@ -4,8 +4,10 @@ starfinder.registration
 Estimate once, then apply the returned transform with its application config.
 Every transform is a pull map from reference to moving coordinates: translations
 store the detected displacement vector; affine, B-spline and dense transforms
-their matrices, control grids and fields. See :doc:`contracts` and :doc:`backends` for geometry, errors and
-supported dimensions.
+their matrices, control grids and fields. See :doc:`contracts` for coordinate conventions, :doc:`backends` for
+dependencies and :doc:`../registration-algorithms` for method dimensions. Error
+details are in the `registration specification
+<https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration.md#failure-and-recovery-records>`_.
 
 :py:class:`~starfinder.registration.RigidConfig`,
 :py:class:`~starfinder.registration.AffineConfig` and

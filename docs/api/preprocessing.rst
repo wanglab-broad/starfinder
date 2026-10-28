@@ -2,7 +2,7 @@ starfinder.preprocessing
 ========================
 
 Intensity normalization and background removal, and the step/recipe contract that
-orders them. See :doc:`contracts` for shape and dtype rules and
+orders them. See :doc:`contracts` for shared array conventions and
 :doc:`../preprocessing-contract` for steps, recipes and the enforcement wrapper.
 ``FOV.run`` executes a :py:class:`~starfinder.preprocessing.PreprocessingRecipe` given as
 ``PipelineConfig.preprocessing``; each step is looked up in

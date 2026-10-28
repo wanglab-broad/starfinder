@@ -41,7 +41,7 @@ dataset's comparison page (``report/index.html`` and ``report/samples.csv``) fro
 sample reports only; see :doc:`report`.
 
 ``dataset.load_checkpoint(path, stage)`` reads one stage of a per-FOV checkpoint folder (``fovs/<fov_id>/checkpoints``) into the
-typed results; see :doc:`../checkpoints` for the layout.
+typed results; see :doc:`../checkpoints-reference` for the layout.
 
 .. currentmodule:: starfinder.dataset
 

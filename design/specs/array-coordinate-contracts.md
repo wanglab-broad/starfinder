@@ -1,0 +1,547 @@
+# Array and coordinate contracts
+
+These conventions describe the current Python implementation. Individual
+[generated signatures](../../docs/api/python.rst) give defaults and more specific requirements.
+Arrays are accompanied by optional `ImageMetadata`; distances below are in voxel-index
+units unless a function explicitly says otherwise. Unknown calibration stays unknown.
+
+| Object | Shape / columns | Convention |
+| --- | --- | --- |
+| Single-channel volume | `(Z, Y, X)` | Numeric intensity array |
+| Multi-channel round | `(Z, Y, X, C)` | Channel-last, usually uint8 or uint16 |
+| Projection | `(1, Y, X)` or `(1, Y, X, C)` along `"z"`; `(Z, Y, X)` along `"channel"` | Singleton Z is retained; check each registration backend’s dimensional support |
+| Spot coordinates | `(N, 3)` or DataFrame `z, y, x` | Zero-based voxel indices |
+| Raw extracted intensities | `(N, C, R)` | Float64 neighborhood sums, rounds in caller-supplied order |
+| Dense displacement field | `(Z, Y, X, 3)` | Last axis `(dz, dy, dx)`, backward sampling |
+| Molecule table | `molecules.csv`: `spot_namespace, spot_id, z, y, x, gene_id, entry_id, qc_score`; `reads.csv` on request | Zero-based coordinates and the spot identities, a typed CSV written by `FOV.export_spots`; the legacy route's `goodSpots` CSV is one-based `x, y, z, gene` |
+
+## Registration transforms
+
+{func}`starfinder.registration.estimate_transform` accepts finite real ZYX
+arrays and explicit reference/moving `ImageMetadata`. Choose a frozen
+`TranslationConfig`, `RigidConfig`, `AffineConfig`, `BSplineConfig`,
+`DemonsConfig`, `TpsConfig` or `CpdConfig`; there is no independent method
+selector. Its `RegistrationResult` contains the transform,
+measured diagnostics (unknown values stay `None`) and `application_config`.
+
+```python
+from starfinder.image import ImageMetadata
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
+result = estimate_transform(reference, moving, config=TranslationConfig(),
+    reference_metadata=ImageMetadata("reference"),
+    moving_metadata=ImageMetadata("moving"))
+registered = apply_transform(moving, result.transform, config=result.application_config)
+```
+
+Every transform is a pull map from reference to moving coordinates
+(`direction="reference_to_moving"`). `TranslationTransform.displacement_zyx` is
+the detected displacement `d` of the moving content: pull sampling is
+`registered[p] = moving[p + displacement_zyx]`, so a moving image displaced by
+`(1, -2, 3)` gets displacement `(1, -2, 3)`. `FOV.registration_results` stores
+these transforms, and the FOV's `run.json` records the same detected displacements
+under `transforms` ("MATLAB boundary", below).
+
+`DenseDisplacementTransform.displacement_zyx` uses
+`registered[p] = moving[p + displacement_zyx[p]]`, in ZYX voxel-index components.
+TPS/CPD fields are float32; demons fields are float64. Do not negate dense fields.
+Direction and units are validated; inversion/composition/conversion is not implicit.
+
+`AffineTransform.matrix_zyx` is the 4×4 index-space pull matrix `[[A, b], [0, 1]]`:
+`registered[p] = moving[A p + b]`. The B-spline type, the physical-space
+estimation of rigid, affine and B-spline (with its `physical` parameters and the
+unknown-spacing rule) and the composition of steps into a `TransformChain` are
+specified in the [registration specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration.md) ("Transform
+types" and "Physical-space estimation").
+
+Apply accepts ZYX or ZYXC and preserves channel order. Output metadata is
+`result.transform.reference_metadata`. Equal-shaped grids with matching physical
+fields are required; frame identifiers may differ. Explicitly unknown geometry
+is allowed, but is never inferred. Unsupported conversion raises
+`image.IncompatibleGeometryError`. Translation and dense application support
+singleton axes; each method's Z=1 and minimum-shape rules are in the
+[registration guide](../../docs/registration-contract.md) ("Limits") and the method table of the
+[registration reference](../../docs/registration-algorithms.md) ("Methods").
+
+### Translation edge cases and resampling precision
+
+The FFT estimator still returns integer-valued displacements; it does not add
+subpixel estimation. Singleton axes return zero. For odd length `n`,
+a correlation peak at `n//2` is not wrapped. An exact even half-period cannot
+distinguish positive from negative motion: `TranslationConfig(backend="scipy_fft")` reports displacement `+n/2`,
+whereas the `skimage` backend retains displacement `-n/2`. Both
+align the periodic interior; their zero-filled boundaries can differ.
+
+Translation application uses exact integer rolling (within its existing `1e-6` voxel
+integer tolerance), otherwise Fourier shifting followed by the **real part**
+of the inverse FFT. Signed intensities and negative ringing are retained;
+the previous magnitude operation lost signs. For even axes, taking the real
+part also projects away the fractional-shift Nyquist imaginary component.
+This is periodic Fourier interpolation followed by zeroing wrapped edges,
+not spatial interpolation of a zero-padded volume. Shifts spanning an entire
+axis return zeros. Lost edge content is not recoverable.
+
+`WarpConfig` accepts `output_dtype="input"` (default), `"float32"` or `"float64"`. For example:
+
+```python
+from dataclasses import replace
+registered_float = apply_transform(moving, result.transform,
+    config=replace(result.application_config, output_dtype="float32"))
+```
+
+Source dtype is preserved by default. Integer output is interpolated in floating
+point, rounded **once with nearest-even ties**, saturated to the source dtype's
+range, then cast. Explicit floating output skips rounding and clipping; it does
+not rescale intensities or select calculation precision. This intentionally
+changes legacy truncation (Fourier/SimpleITK), SciPy's implicit integer rounding,
+and overflow/wrap behavior. For example, interpolated `0.5, 1.5, 2.5, 3.5` now
+becomes `0, 2, 2, 4`, while uint8 Fourier overshoot saturates to `[0, 255]`.
+
+Fractional Fourier application calculates in float32, except float64 source
+images use float64. Native SimpleITK linear resampling uses float64; SciPy
+linear sampling produces a float64 slice before final conversion. Integer
+rolling preserves exact stored values; interpolation of wide integers remains
+subject to floating precision. Tests use `2e-6` absolute tolerance for small
+float32 signed Fourier fixtures and `1e-12` for float64, not a universal
+full-image accuracy guarantee. No estimator tuning or calibration is implied.
+Translation stays compact, SimpleITK reuses the prepared transform across
+channels, and TPS/CPD allocate coordinates and sampled values per Z slice.
+
+## Intensities and channels
+
+{func}`starfinder.io.load_volume` returns an `ImageLoadResult` with a ZYX
+`image`, `metadata`, ordered `channel_labels`, `source_paths` and `diagnostics`.
+{func}`starfinder.io.load_round` returns ZYXC and requires `ImageLoadConfig`.
+Both preserve dtype by default. TIFF axes select OME/ImageJ dimensions; multiple
+series/time points/channels require explicit indices. Plain TIFFs are ZYX (YX
+is expanded); `source_axes` explicitly describes other supported layouts.
+
+Channel patterns determine output order. To match wavelength-sorted MATLAB data,
+use `("ch00", "ch02", "ch01", "ch03")` explicitly. Missing/ambiguous matches,
+repeated source files, mixed dtypes or inconsistent geometry raise `ValueError`.
+Unequal shapes error unless `crop_policy="minimum"` requests a low-index crop;
+its source shapes and start are recorded in diagnostics. No silent rescale.
+
+`ImageConversionConfig` specifies `output_dtype`, mode `cast`, `clip` or `rescale`,
+ranges, `global`/`per_channel` scope and `nearest_even`/`truncate` rounding. A cast
+rejects range loss. Clip needs an output range. Rescale needs a declared input
+range or `range_policy="data"`, plus output range. Declared input-range violations
+error. Constant data maps to the lower output endpoint. This is intensity
+conversion, not physical-unit conversion. Float64 work is allocated per active
+channel/group, plus output. Inputs are never mutated.
+
+{func}`starfinder.preprocessing.normalize_min_max` requires
+`MinMaxNormalizationConfig(output_dtype="uint8", output_range=(0, 255))` to
+reproduce the historical output choice. Its default scope is per-channel and
+integer rounding truncates; float64 calculation can differ at quantization
+boundaries from the old float32 calculation. The SNR gate retains nonconstant
+low-SNR raw values, clipped to the declared range. Constant groups always map
+to the lower endpoint before SNR gating, including a nonzero lower endpoint
+when explicitly requested. This applies to global and per-channel scope and
+intentionally corrects the historical constant-with-enabled-gate behavior.
+
+{func}`starfinder.preprocessing.match_histogram` matches each channel to one
+ZYX reference with an exact CDF. `HistogramMatchingConfig` preserves input dtype
+by default and rejects unrepresentable results; the unused `nbins` is removed.
+{func}`starfinder.preprocessing.correct_background` and
+{func}`starfinder.preprocessing.filter_tophat` use a disk of `radius_yx` pixels,
+independently per XY slice/channel, with reflect boundaries. Float64 slice work
+avoids signed uint16 overflow; results retain source dtype and saturate to its
+representable range, never wrap or force uint8. Float reconstruction can be
+negative. Integers wider than 32 bits are unsupported for morphology.
+
+{func}`starfinder.preprocessing.project_image` retains singleton Z along axis
+`"z"` (the default) and reduces a ZYXC image to ZYX along axis `"channel"`. Max retains
+dtype; sum uses uint64/int64 for integers up to 32 bits and float64 for floats.
+64-bit integer sums error; explicitly convert first. Requested integer output
+errors on overflow unless an explicit clipping conversion is supplied. There is
+no implicit display rescaling. Projection allocates only a reduced result;
+normalization and histogram matching allocate output plus active-channel work;
+morphology allocates output plus slice work. All processing rejects empty,
+nonfinite, complex and unsupported-dimensional arrays without mutating inputs.
+
+## Geometry and derived frames
+
+{class}`starfinder.image.ImageMetadata` stores `frame_id`, `spacing_zyx`,
+`origin_zyx`, orthonormal `direction_zyx`, and `spatial_unit`. Spacing is a finite,
+strictly positive triple (repeated positive values are valid), or `None`.
+Physical conversion requires every field:
+`world_zyx = origin_zyx + direction_zyx @ (index_zyx * spacing_zyx)`.
+TIFF resolution tags do not supply an invented origin, direction or unit.
+`save_volume(metadata=...)` persists these fields for round-trip loading: in
+the JSON description of a ZYX TIFF, or in an OME-XML comment annotation of a
+ZYXC OME-TIFF. The OME-XML UUID of an OME-TIFF it writes is derived from the
+pixel data and the metadata written, so the same array and metadata give the
+same bytes.
+
+Crop/subtile output indices map to source indices by adding the crop start;
+known origin is translated accordingly. FOV NPZ subtiles retain geometry and
+source metadata/start mappings, while shared filenames and one-based MATLAB
+coordinate tables remain unchanged. Legacy NPZs without geometry load with an
+explicit unknown frame.
+
+XY rotation uses the pull map `source = R @ (output - output_center) + source_center`,
+where the YX block of R is `[[cos, sin], [-sin, cos]]`. Right angles use rot90 and
+swap XY shape/spacing as needed; other angles retain shape and interpolate.
+Known anisotropic XY geometry at non-right angles would require shear, which
+this orthonormal geometry model rejects explicitly. Unknown calibration remains
+unknown. Projection creates a derived frame: `(0,y,x)` represents all source
+`(z,y,x)` along the collapsed column. It has no unique 3D physical coordinate;
+physical fields remain unknown and FOV diagnostics retain the source metadata.
+
+### Before and after
+
+Old array-returning I/O and positional preprocessing arguments are removed:
+
+```python
+from starfinder.io import ImageLoadConfig, load_round
+from starfinder.preprocessing import MinMaxNormalizationConfig, normalize_min_max
+
+loaded = load_round("round1", config=ImageLoadConfig(channel_labels=("ch00", "ch01")))
+image = normalize_min_max(loaded.image, config=MinMaxNormalizationConfig(
+    output_dtype="uint8", output_range=(0, 255), snr_threshold=5.0))
+```
+
+Access `.image` instead of treating the loader result as an array or tuple.
+The old I/O names, preprocessing names and `starfinder.utils` projection import
+have no aliases. FOV/Dataset coordination changes are documented in the
+[coordination guide](coordination.md). MATLAB APIs and shared configuration keys are
+unchanged; Python numeric corrections are not claims of MATLAB equivalence.
+
+## Spots, reads and output
+
+{func}`starfinder.spot_finding.find_spots` requires `config`, `metadata` and
+`spot_namespace`, and returns {class}`starfinder.spot_finding.SpotFindingResult`.
+Its `spots` table has `spot_id` (pandas string) and `z/y/x` (float64), including
+empty results. Coordinates are zero-based voxel indices; physical conversion
+requires complete `ImageMetadata`. Detection never performs landmark matching.
+
+{class}`starfinder.spot_finding.LocalMaximaConfig` preserves the pipeline's
+per-channel peaks: noise uses `median + threshold_value * MAD * 1.4826` (sigma
+units); adaptive uses channel maximum, adaptive_round the image maximum, and
+global the uint8/uint16 maximum (fractions in [0,1]). `min_distance_voxels` is a
+positive integer, with `exclude_border=True` by default. Singleton Z is processed
+as a YX plane with Z=0 and only the YX border excluded. Other volumes retain the
+original 3D peak policy. No spacing correction is applied to distances.
+Optional `channel` is int64; `peak_intensity` is float64 in original input units
+and can be omitted with `measure_peak_intensity=False`. No integrated intensity
+or detection score is invented. Optional `channel_labels` must uniquely label
+all channels, and their tuple is recorded in diagnostics.
+
+The method is looked up in {data}`starfinder.spot_finding.SPOT_FINDING_METHODS` by the
+config's exact type, so a subclass of a config raises `TypeError("unsupported detection
+config")`. `config` may also be a {class}`starfinder.spot_finding.SpotFindingPlan`, whose
+channel overrides replace the whole config of named channels (it then needs
+`channel_labels`); every channel's effective config is in
+`diagnostics["effective_settings"]`. Local maxima records `diagnostics["noise"]` (per
+channel the zero fraction, median, MAD and threshold, in every threshold mode) and
+emits a {class}`starfinder.spot_finding.SpotFindingWarning`, listed in
+`diagnostics["warnings"]`, when a channel's MAD is 0 or more than half of its voxels are
+zero; the threshold and the detections are unchanged. `device` must be `"cpu"`, and
+`diagnostics["execution"]` records it with the thread settings in effect. Per-channel
+methods record `counts`, `outcomes` (`ok`, `empty` or `constant`; a constant channel is
+never passed to the method), `native` and `software`, and a method that finds nothing
+returns its declared columns with their dtypes. A plan's `rounds` is detected by
+`FOV.find_spots` and `FOV.run` only: one table with a `round` column, `spot_id` over the
+combined table (the reference round first, so its identities are unchanged) and the
+per-round diagnostics under `diagnostics["rounds"]`; such a set is never decoded as
+barcodes: in readout mode `multiplexed` decoding it raises, and readout mode `direct`
+assigns it with `decode_direct` (below).
+
+{class}`starfinder.spot_finding.NoiseLandmarkConfig` retains registration's
+per-channel MAD peaks followed by its original radius deduplication: for each
+pair within `min_distance_voxels`, drop the higher concatenated index.
+{class}`starfinder.spot_finding.PercentileCentroidConfig` instead sums channels,
+thresholds strictly above `threshold_percentile` in [0,100], labels face-connected
+components and computes intensity-weighted centroids. These policies return
+coordinates without inventing channel or peak measurements. All accept finite
+ZYX/ZYXC arrays; 2D callers must explicitly add singleton Z. The benchmark MIP
+caller now does this, correcting the old accidental collapse of a 2D image's X
+axis by the former detector. This is an intentional dimensional correction.
+
+Namespaces must identify dataset/sample/FOV and subtile when applicable. FOV
+uses an unambiguous JSON array of those identifiers (subtile ID is one-based or
+null for a full FOV), exposes `spot_result`, and retains `spot_id` and
+`spot_namespace` in its downstream tables. IDs survive filtering, reordering
+and joins on **(spot_namespace, spot_id)**; never regenerate IDs for a subset or
+join by row position. Results reject duplicate IDs within a namespace. Callers
+must choose distinct namespaces for independent detection results; identities
+are not promised invariant across changed images or detector configurations.
+Read results carry these identities into `molecules.csv`, and the sample-level stages
+keep them ([../assembly-contract](../../docs/assembly-contract.md), [../sample-output-contract](../../docs/sample-output-contract.md)).
+
+Before: `find_spots_3d(image, intensity_estimation="adaptive", intensity_threshold=0.2)`.
+After:
+
+```python
+from starfinder.image import ImageMetadata
+from starfinder.spot_finding import find_spots, LocalMaximaConfig
+result = find_spots(image, config=LocalMaximaConfig("adaptive", 0.2),
+                    metadata=ImageMetadata("dataset/sample/FOV/round1"),
+                    spot_namespace="dataset/sample/FOV")
+spots = result.spots
+```
+
+### Independent readout stages
+
+`extract_intensities(rounds, spots, config=NeighborhoodSumConfig(...))` takes an
+ordered mapping of round names to `ImageLoadResult`, plus `SpotFindingResult`.
+All images must share shape, frame/grid metadata and channel labels in the same
+order. `IntensityExtractionResult` retains float64 `(N,C,R)` values, namespace,
+IDs, labels, metadata, effective config and Boolean `(N,R)` valid flags. Empty
+spots retain `(0,C,R)`; C and R must be nonzero. Images and coordinates must be
+finite. Coordinates are within voxel-center bounds `[0,size-1]` before nearest
+sampling with `floor(coord+.5)`; subpixel coordinates are not truncated. Integer
+`neighborhood_radius_zyx=(1,2,2)` means half-widths of a 3×5×5 neighborhood,
+not physical spacing. Clipped slices implement zero-padded boundaries without a
+padded-volume allocation. Sums accumulate in float64 and inputs are not mutated.
+`box_voxels` (int64 `(N,R)`) counts the voxels each box summed. With
+`NeighborhoodSumConfig.background` (`LocalBackgroundConfig`, on by default) the
+result also holds the local `background` and `noise` (float64 `(N,C,R)`, grey levels
+per voxel: median and 1.4826 × MAD of the ring between the outer box `(1,6,6)` and
+the inner box `(1,3,3)`, clipped to the image; NaN below `min_voxels` ring voxels),
+`background_voxels` (`(N,R)`) and the image `image_background` and `image_noise`
+(`(C,R)`). These measurements never change `values` or `valid`
+(the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#extraction), "Extraction").
+
+`load_codebook` returns `readout.Codebook`; explicit `round_labels` and
+`channel_labels` are required. Its ordered table has one row per entry:
+`entry_id` (unique), `gene_id` (may repeat), `color_sequence` (unique) and optional
+`base_sequence` (unique). Repeated entry IDs, base sequences or encoded sequences
+raise naming both rows; invalid symbols/lengths/mapping/splits raise with row
+context. Colors `'1'`–`'4'` are symbols: `color_to_channel` maps them to four
+distinct zero-based channels. Encodings are registered in `ENCODINGS`:
+`EncodingConfig(reverse_bases=True)` (`two_base`) preserves STARmap/synthetic
+reversal, `OneBaseEncodingConfig` (`one_base`) maps each base through
+`base_to_color`; `bases_to_colors` alone does not reverse. The `two_base` table is
+`EncodingConfig.pair_to_color` (the 16 ordered base pairs to colors 1–4, default the
+active table of `EncodeBases.m`; the four pairs of one first base need four
+different colors), and every encode and decode path follows the codebook's table
+while `bases_to_colors` and `colors_to_bases` keep the default.
+`EncodingSpec.table(config)` returns either encoding's table;
+{py:meth}`~starfinder.readout.Codebook.encoding_table`,
+{py:meth}`~starfinder.dataset.Dataset.encoding_table` and
+{py:meth}`~starfinder.dataset.FOV.encoding_table` show it with the columns `bases`,
+`color` and `channel` (the latter two raise `ValueError` without a codebook or in
+readout mode `direct`). A legacy split removes
+that encoded character and swaps the remaining segments; `Codebook.layout`
+(`BarcodeLayout`) states segments, acquisition order and allowed segment ends
+explicitly. Lookup constants and numerical helpers are private; the old combined
+extraction and decoder interfaces have been removed.
+
+`decode_reads(extracted, codebook, config=...)` requires exact label order and
+a config registered in `DECODING_METHODS` whose declared encoding kinds include
+the codebook's and whose modes include `multiplexed` (else `TypeError`).
+Direct readout (`Dataset.readout_mode="direct"`) is
+`decode_direct(extracted, spots, panel)`: each candidate is read from its own
+round (`extract_intensities(..., readout_mode="direct")` leaves the other rounds
+at 0.0 with `valid=False`) and assigned the `DirectPanel` gene of its own
+(round, channel), with no competition, rescue or reassignment
+(the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#direct-readout), "Direct readout").
+Every input identity retains one row with `assigned`, `unmatched`, `ambiguous`
+or `no_signal` status, reason, observed/decoded sequence and nullable gene and
+entry IDs; competition and rescue are between entries.
+Nonfinite inputs fail. Negative values fail with `InvalidIntensityError` unless
+`negative_policy="clip_negative"` is explicit; diagnostics record clipped count
+and range. An unavailable measurement prevents assignment, and any zero-total
+round gives `no_signal`, even if the codebook could otherwise rescue a wildcard.
+
+`WtaDecoderConfig` uses exact channel ties and `wta_l2_nll`, the sum over rounds
+of `-log(max / (sqrt(sum(intensity**2)) + 1e-6))`. `CodebookAwareDecoderConfig`
+uses additive-1e-6 channel probabilities, `probability_nll` (sum of negative logs,
+1e-12 floor), and `geomean_probability`. These scores are not interchangeable.
+The probability decoder uses 1e-12 absolute channel-tie tolerance. A nonzero
+observed tie can be rescued by a unique supported candidate; equally scored
+candidates remain ambiguous even with `min_score_delta=0`. Exact calls bypass
+rescue gates. `max_corrected_round_margin` is an upper bound; other rescue gates
+are `max_hamming`, `min_score_delta`, `min_geomean_probability`,
+`max_correction_penalty`, `allow_exact` and `allow_rescue`.
+
+With `diagnostics=True`, results expose acquisition-ordered `probabilities`,
+identity-labeled `per_round` margins and `candidates` scores/ranks. Candidate
+ordering is score then color sequence; deterministic order does not resolve
+ambiguity into a gene assignment. WTA also exposes `wta_round_l2_nll`.
+
+`score_reads(decoded, extracted, reference=..., config=ReadScoreConfig())` returns
+a `ReadScoringResult` whose table is the read table with `qc_score`,
+`qc_ambiguity_max`, `qc_signal_to_background`, `qc_rounds` and `qc_reason` appended:
+the probability NLL of the assigned entry on background-subtracted sums (lower ranks
+as more reliable), over every round (`multiplexed`) or the own round (`direct`). It
+ranks calls and never changes an identity; reads without an assignment, or with a
+round without background, are NaN with `no_assignment` or `background_unavailable`,
+and intensities without background raise `ValueError` naming extraction
+(the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#shared-read-qc-score), "Shared read-QC score").
+
+`deduplicate_reads(decoded, spots, extracted, config=DeduplicationConfig())`
+returns a `ReadDeduplicationResult` whose table is the read table with
+`duplicate_group`, `duplicate_of`, `is_representative` and `duplicate_reason`
+appended. It is off unless called (`PipelineConfig.deduplication=None`) and raises
+`ValueError` in readout mode `direct`. Candidates of one detection round in
+different detection channels (the spot table's `channel` column) are linked when
+they lie within `distance_voxels` (inclusive, Euclidean, voxel index space,
+default 1.0) and their WTA observed sequences are identical and contain no `M` or
+`N`; groups are the connected components. A group whose assigned members have
+different `entry_id` keeps every member (`conflicting_calls`); otherwise one
+original candidate represents it, the assigned member (any member when none is
+assigned) with the largest sum in its own detection channel in the detection round,
+ties to the earliest row, and the others are its duplicates. No read is removed,
+averaged or changed (the [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md#optional-deduplication), "Optional deduplication").
+
+`filter_reads(decoded, config=ReadFilterConfig(...))` can rerun without image
+access or decoding; `decoded` may also be a `ReadScoringResult` or a
+`ReadDeduplicationResult`, whose score and deduplication columns are kept. It
+retains a complete table with acceptance/rejection reasons, an `accepted` view and
+counts/fractions. Predicates name allowed call statuses and inclusive bounds on any
+declared score column (a decoder's `DecodingSpec.score_columns`, or `qc_score`,
+`qc_ambiguity_max`, `qc_signal_to_background` and `qc_rounds`); unavailable score
+columns error, and NaN fails a requested bound. `exclude_duplicates=True` (the
+default) rejects deduplicated reads that are not representatives with reason
+`duplicate` and does nothing to reads that were not deduplicated. Endpoint checks are diagnostic-only unless
+`exclude_invalid_endpoints=True`: `end_bases` checks the whole sequence from
+`start_base`, and with `codebook=` the segment ends of its layout are checked per
+segment. Empty counts are zero and undefined fractions
+are `None` with a reason. IDs and typed columns survive all-rejected results.
+
+Three diagnostics read retained results only ([../readout-algorithms](../../docs/readout-algorithms.md),
+"Diagnostics"). `inspect_read(extracted, reads, spot_id, reference=...)` returns one
+row per round and channel of a read: the sum, background × `box_voxels`, the
+background-subtracted sum, the channel probability on the sums and on the
+background-subtracted sums, the noise, the observed and assigned color, and for each
+segment the bases in read orientation; `plot_read` draws it. `summarize_reads(reads)`
+returns a JSON-safe dict of counts by `call_status`, `failure_reason` and
+`call_type`, per gene and per entry, `qc_score` quantiles per `call_type`, the
+deduplication and filtering counts, per round the valid and background-unavailable
+measurements and per round and channel the medians of sums, background and noise, and
+the number of cross-channel candidate pairs within the duplicate distance.
+`explain_read(reads, spot_id)` returns the ordered decisions of a read with their
+values and limits. `reads` is a read result or a mapping of stage names to them, such
+as `FOV.results`. `FOV.run` never calls `inspect_read`, `plot_read` or
+`explain_read`; it stores the summary in `run.json` as `counts.summary` whenever it
+decoded reads, beside the filtering counts and their `fractions`.
+
+Before: combined extraction returned channel calls and scores; codebook loading
+returned two dictionaries, and filtering dropped rejected rows. After:
+
+```python
+from starfinder.readout import (
+    extract_intensities, decode_reads, filter_reads,
+    NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig,
+)
+extracted = extract_intensities(rounds, spots,
+    config=NeighborhoodSumConfig((1, 2, 2)))
+decoded = decode_reads(extracted, codebook, config=WtaDecoderConfig())
+filtered = filter_reads(decoded,
+    config=ReadFilterConfig(score_bounds={"wta_l2_nll": (None, 1.0)}))
+accepted = filtered.accepted
+```
+
+FOV exposes the same three operations and stores `intensity_result`,
+`decoding_result` and `filtering_result`. Its output tables follow the Python
+package's design since 2026-10-23: zero-based, identity-preserving `molecules.csv` and `reads.csv`. Historical saved-tensor diagnostic
+scripts explicitly declare positional channel/round axes; missing historical
+physical geometry remains unverified. No historical notebook outputs are rerun.
+
+% W-562
+
+{meth}`starfinder.dataset.FOV.export_spots` writes the joined columns with the
+in-memory zero-based `z`, `y`, `x` and leaves the in-memory table unchanged;
+{func}`starfinder.assignment.load_molecules` reads `molecules.csv` back with its
+identities. Subtile tables
+use one-based inclusive start/end coordinates and one-based tile IDs;
+{class}`starfinder.dataset.CropWindow` uses zero-based, end-exclusive slices.
+Evaluation functions expect zero-based `z, y, x`, as the exported tables hold them;
+convert the one-based `goodSpots` CSVs of the legacy route before using them.
+
+## MATLAB boundary
+
+Use this section when moving data between Python, MATLAB and workflow YAML. It holds only
+what differs at the Python↔MATLAB boundary; the Python side is stated in the sections
+above, and the [MATLAB reference](../../docs/api/matlab.md#array-and-calling-conventions) gives
+operation-specific details. Corresponding APIs do not imply numerical parity.
+
+### Axes and coordinates
+
+| Quantity | Python (and `molecules.csv`, `reads.csv`) | MATLAB / legacy `goodSpots` CSV |
+| --- | --- | --- |
+| Image | `(Z,Y,X,C)`; single channel `(Z,Y,X)` | MATLAB `(Y,X,Z,C)`, single channel `(Y,X,Z)` |
+| Spot table | Named `z,y,x`, **0-based** voxel indices | Named `x,y,z`, **1-based**; x is column, y is row |
+| Channel index | Table `channel` is 0-based | MATLAB array channel indices are 1-based |
+| Color labels | Strings `1`–`4` for four channels | Strings `1`–`4`; labels are not zero-based channel indices |
+| Extraction `voxel_size` | Half-widths `(dz,dy,dx)` | Half-widths `(row,column,Z)` |
+
+For array exchange, `python_image.transpose(1,2,0,3)` produces MATLAB axis order;
+`matlab_array.transpose(2,0,1,3)` restores Python order after loading into NumPy.
+These are axis permutations, not coordinate-origin conversions. Confirm file
+metadata first; do not use `reshape` to exchange axes. For a single channel,
+the analogous permutations are `(1,2,0)` and `(2,0,1)`.
+
+The Python tables keep the in-memory zero-based coordinates ("Spots, reads and output"):
+`(z,y,x)=(5,10,10)` is `z,y,x = 5,10,10` in `molecules.csv` and `reads.csv` (since 2026-10-23;
+[../migration](../../docs/migration.md)). To index a NumPy image from those tables, select columns by name in
+ZYX order, as in the [output recipe](../../docs/recipes.md#inspect-molecule-outputs). The one-based
+`x,y,z` CSVs of the legacy route (MATLAB's `goodSpots`, and those of the subtile and deep
+modes) need one subtracted **once**;
+{py:func}`~starfinder.assignment.import_legacy_molecules_csv` does it. Do not subtract one
+from shift vectors, color labels or already internal coordinates. Exports carry no
+physical calibration; distances are voxel indices.
+
+% W-562
+
+Extraction `(1,2,2)` in Python corresponds to `(2,2,1)` in MATLAB, both describing
+interior windows 3 Z × 5 Y × 5 X. Python zero-pads boundary windows; MATLAB clips
+them. Workflow `voxel_size_xy` / `voxel_size_z` are separate physical quantities
+for downstream stitching. See [configuration fields](../../docs/workflow-configuration.md#top-level-fields).
+
+### Channel order
+
+The wavelength-sorted MATLAB default is **`ch00,ch02,ch01,ch03`**, so filename
+`ch01` and `ch02` are swapped relative to natural sorting. The Python loader
+uses exactly the provided pattern list ("Intensities and channels"); it does not infer
+wavelengths. Set `channel_order` in the direct API or `seq_channel_order` in Python
+workflow YAML. An empty Python list is not a request for the MATLAB default.
+
+The tiny synthetic quickstart deliberately uses **`ch00,ch01,ch02,ch03`**.
+Color `2` therefore selects ch01 there, but selects ch02 under the real-data
+MATLAB ordering. Check acquisition and codebook metadata together before decoding.
+A channel permutation can produce plausible intensities with incorrect genes.
+
+Use unambiguous patterns: {py:func}`~starfinder.io.load_round` searches
+`*{channel}*.tif` and `*{channel}*.tiff`, and rejects ambiguous matches. MATLAB's loader
+expects a struct array for custom channel settings; the schema's string list is not
+portable to that custom path. See the
+[backend configuration caveat](../../docs/workflow-configuration.md#top-level-fields).
+
+### Registration signs
+
+| Interface / stored value | Meaning and sign |
+| --- | --- |
+| Python transforms ("Registration transforms") | Pull maps from reference to moving; a translation's `displacement_zyx` is the detected `(dz,dy,dx)`, and dense fields are passed to their warp directly |
+| Python `run.json` `transforms` | Each translation's `displacement_zyx` is the detected `(dz,dy,dx)`, with no origin offset (the former `row,col,z` shift log columns were `dy,dx,dz`) |
+| MATLAB {mat:func}`DFTRegister3D` → {mat:func}`DFTApply3D` | Correction parameters in `(row,column,Z)` order; passed directly, without Python's negation |
+
+The [registration recipe](../../docs/recipes.md#register-two-volumes) verifies the Python sign with
+an interior spot. MATLAB behavior here is source-checked, not runtime-validated.
+
+### Spot-finding thresholds
+
+For {py:func}`~starfinder.spot_finding.find_spots` and FOV calls, set
+`LocalMaximaConfig(threshold_mode=..., threshold_value=...)` together ("Spots, reads and
+output" gives each mode's cutoff). The Python workflow's `spot_finding` block takes the
+same fields; MATLAB configurations keep the keys `intensity_estimation` and
+`intensity_threshold`.
+
+| Python mode | Example pair |
+| --- | --- |
+| `noise` (default) | `noise`, `5.0` for the synthetic quickstart |
+| `adaptive` | `adaptive`, `0.2` as a fraction-of-max example |
+| `adaptive_round` | `adaptive_round`, `0.2` |
+| `global` | `global`, `0.2` (uint8/uint16 only) |
+
+Examples explain units, not recommended parameters for every dataset. All-zero channels
+yield no spots.
+
+MATLAB {mat:func}`SpotFindingMax3D` supports adaptive/global, not Python's noise
+or adaptive_round. The schema does not accept `local`, which the Python detector
+also rejects. MATLAB direct/local-subtile wrappers only forward the threshold; their mode
+stays adaptive. The deep wrapper forwards the mode. Consult
+[rule parameters and overrides](../../docs/workflow-configuration.md#rule-resources-and-parameters)
+before assuming a YAML setting reached the selected backend.

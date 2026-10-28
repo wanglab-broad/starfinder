@@ -1,23 +1,23 @@
 # Pipeline stages
 
 :::{container} sf-lead
-Each stage of the pipeline has a guide: its contract page, which states the stage's
-entries, configurations, records, limits and expected failures. Beneath each guide are
-the stage's other pages. The stages are listed in processing order.
+The stages below follow processing order, with a guide for running each stage and a
+reference for looking up its methods, options and outputs; detailed specifications
+and validation designs live in [design/](https://github.com/wanglab-broad/starfinder/blob/dev/design/README.md).
 :::
 
 ## Per-FOV stages
 
 :::{container} sf-stage-table
 
-| Stage | Covers | Algorithms | Validation | Baseline |
-| --- | --- | --- | --- | --- |
-| [Preprocessing](../preprocessing-contract.md) | The ordered recipe of preprocessing steps | [reference](../preprocessing-algorithms.md) | | |
-| [Registration](../registration-contract.md) | Aligning each round with the reference round | [reference](../registration-algorithms.md) | | |
-| [Spot finding](../spot-finding-contract.md) | Detection and stable spot identities | [reference](../spot-finding-algorithms.md) | | |
-| [Readout](../readout-contract.md) | Extraction, decoding and read QC | [reference](../readout-algorithms.md) | | |
-| [Segmentation](../segmentation-contract.md) | Label images, methods and imported masks | [reference](../segmentation-algorithms.md) | | |
-| [Assignment](../assignment-contract.md) | Molecules to cells, compartments and counts | [reference](../assignment-algorithms.md) | | |
+| Stage | Guide | Reference |
+| --- | --- | --- |
+| Preprocessing | [Prepare images](../preprocessing-contract.md) | [Methods and options](../preprocessing-algorithms.md) |
+| Registration | [Align rounds](../registration-contract.md) | [Methods and transforms](../registration-algorithms.md) |
+| Spot finding | [Detect spots](../spot-finding-contract.md) | [Methods and results](../spot-finding-algorithms.md) |
+| Readout | [Extract and decode](../readout-contract.md) | [Methods and records](../readout-algorithms.md) |
+| Segmentation | [Segment images](../segmentation-contract.md) | [Methods and labels](../segmentation-algorithms.md) |
+| Assignment | [Assign molecules to cells](../assignment-contract.md) | [Methods and counts](../assignment-algorithms.md) |
 
 :::
 
@@ -25,26 +25,15 @@ the stage's other pages. The stages are listed in processing order.
 
 :::{container} sf-stage-table
 
-| Stage | Covers | Algorithms | Validation | Baseline |
-| --- | --- | --- | --- | --- |
-| [Stitching](../stitching-contract.md) | Tile positions and the placement of each FOV | [reference](../stitching-algorithms.md) | | |
-| [Assembly](../assembly-contract.md) | Sample coordinates, ownership and the sample tables | [reference](../assembly-algorithms.md) | |  |
-| [Sample output](../sample-output-contract.md) | The export: fused image, labels, SpatialData and profiles | [reference](../sample-output-reference.md) | | |
-| [Sample segmentation](../sample-segmentation-contract.md) | Segmentation after fusion and the check of the two routes | [reference](../sample-segmentation-reference.md) | [validation](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/sample-segmentation.md) | |
-| [Processing report](../report-contract.md) | One sample's report and a dataset's comparison page | [reference](../report-algorithms.md) | | |
+| Stage | Guide | Reference |
+| --- | --- | --- |
+| Stitching | [Place FOVs](../stitching-contract.md) | [Methods and placement](../stitching-algorithms.md) |
+| Assembly | [Assemble sample tables](../assembly-contract.md) | [Options and tables](../assembly-algorithms.md) |
+| Sample output | [Export the sample](../sample-output-contract.md) | [Options and files](../sample-output-reference.md) |
+| Sample segmentation | [Segment the fused image](../sample-segmentation-contract.md) | [Routes and records](../sample-segmentation-reference.md) |
+| Processing report | [Inspect saved processing](../report-contract.md) | [Sections and records](../report-algorithms.md) |
 
 :::
-
-## The pages beneath a guide
-
-* **Algorithms:** the specification of each method. For assignment, the validation design is part of this page. Preprocessing, registration, spot
-  finding, readout, stitching and the processing report have a reference instead: their methods, options and records,
-  with the specification in `design/`.
-* **Validation:** a separate validation design, where the stage has one. The design that
-  checks placement, assembly and the sample outputs sits under the sample-output guide,
-  the last stage it checks.
-* **Baseline:** how the existing code behaved before the stage's contract, pinned to the
-  revision it describes. A baseline is history, not a description of the current code.
 
 ```{toctree}
 :hidden:
