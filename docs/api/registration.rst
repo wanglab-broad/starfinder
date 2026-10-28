@@ -24,7 +24,7 @@ its :py:class:`~starfinder.registration.RegistrationSpec`: the method name (the 
 and optional dependencies. :py:func:`~starfinder.registration.estimate_transform`, the
 dataset configs, the workflow adapter, the checkpoint reader and the benchmark adapter
 derive their accepted methods from it; see :doc:`../method-registry` and
-:doc:`../registration-contract`. :py:class:`~starfinder.registration.RegistrationQcConfig`
+:doc:`../registration-algorithms`. :py:class:`~starfinder.registration.RegistrationQcConfig`
 and :py:class:`~starfinder.registration.RegistrationRejectedError` are the routine QC
 criteria and their rejection error; nothing is rejected by default.
 

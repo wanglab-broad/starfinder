@@ -2,14 +2,14 @@
 
 Registration aligns each moving round of a FOV with its reference round. It builds a
 registration signal for each round, estimates a transform in one or more steps, and then
-resamples the round once onto the reference grid, so that spot finding and readout see
-every round in the same coordinates. The reference round is never changed.
+resamples the round once onto the reference grid for spot finding and readout. The
+reference round is never changed.
 
 It runs inside `FOV.run`, after the preprocessing steps and before the preprocessing
 recipe's `post_registration` steps and spot finding. A
 `RegistrationRecipe` in `PipelineConfig.registration` says what to do; `None`, the
-default, means no registration. A recipe of the same kind also registers other rounds, such as a
-morphology round, to the reference round or to an external reference image. The
+default, means no registration. A recipe also registers other rounds, such as a
+morphology round, to a reference round or an external reference image. The
 {doc}`registration reference <registration-algorithms>` lists every method, option,
 transform and record; the {doc}`registration API <api/registration>` documents the
 classes.
@@ -44,9 +44,8 @@ for name, results in fov.registration_results.items():
     print(name, results[0].transform.displacement_zyx)   # the detected shift, ZYX voxels
 ```
 
-A recipe can add more steps after the translation and set QC criteria. Rigid, affine
-and B-spline need the `registration-elastix` extra when they run, and B-spline also
-`local-registration`:
+A recipe can add more steps after the translation and set QC criteria. Affine, like
+rigid and B-spline, needs the `registration-elastix` extra when it runs:
 
 ```python
 from starfinder.registration import AffineConfig, RegistrationQcConfig
@@ -64,11 +63,11 @@ recipe = RegistrationRecipe(
    it is built from the preprocessing recipe's `registration_source` snapshot, or from
    the detection image when there is none; on the other-round route, from the round's
    image. Nothing is projected; a Z=1 round stays one plane.
-2. **Steps.** A recipe is zero or more global steps (`translation`, `rigid`, `affine`)
-   followed by at most one local step (`demons`, `bspline`, `tps`, `cpd`). Step k is
-   estimated on the moving signal resampled through steps 1 to k−1.
-3. **QC.** Every successful step, and then the round's whole chain, gets a routine QC
-   record. Nothing is rejected unless the recipe sets a criterion.
+2. **Steps.** A recipe has at least one step: zero or more global steps (`translation`,
+   `rigid`, `affine`) followed by at most one local step (`demons`, `bspline`, `tps`,
+   `cpd`). Step k is estimated on the moving signal resampled through steps 1 to k−1.
+3. **QC.** Every step estimate, and then the round's whole chain once it is resampled,
+   gets a routine QC record. Nothing is rejected unless the recipe sets a criterion.
 4. **Recovery.** A step may name alternatives of the same kind to try when it fails
    with an error it allows. Nothing else falls back.
 5. **One resampling.** The step transforms compose into one `TransformChain`. The
@@ -118,7 +117,7 @@ column shows which methods take a Z=1 round.
 | `RegistrationRecipe.qc` | `RegistrationQcConfig()`: rejects nothing | `min_coverage`, `min_ncc_gain`, `max_fold_fraction`, `max_translation_voxels` |
 | `RecoveryConfig` | no recovery | `allowed_errors` and ordered `alternatives` |
 
-Each method's own options and defaults are in the reference.
+The reference gives each method's options and defaults.
 
 ## Routine QC
 
@@ -142,7 +141,8 @@ which its recovery can allow; the reference says which criteria apply to which s
 ## Other rounds and external references
 
 `FOV.register(recipe, rounds=[...])` registers named rounds. When they are sequencing
-rounds, they are registered to the reference round as in `FOV.run`. When none of them
+rounds, they are registered to the reference round as in `FOV.run`, from their images
+or the snapshot `source` names. When none of them
 is, it takes the other-round route: each round is registered to `reference`, any
 loaded round's name (default the recipe's `reference_round`, else the dataset's
 reference round) or an `ExternalReference` holding a ZYX image on the same grid with a
@@ -154,12 +154,12 @@ naming it in each round; the chain found on the stain is applied to every channe
 `other_rounds/<round>/` in the FOV folder, and `FOV.load_registered_round(name)`
 restores it.
 
-`FOV.prepare_morphology(MorphologyConfig(rotation_degrees, recipe, rounds))` does the
-whole morphology preparation: when the dataset names reference stains, it loads them
+`FOV.prepare_morphology(MorphologyConfig(rotation_degrees, recipe, rounds))` prepares
+the morphology images: when the dataset names reference stains, it loads them
 from the reference round's folder and rotates them by `rotation_degrees`; then it
-loads, rotates and registers each other round. Without a recipe it uses one
-translation step on the shared reference stain, as the MATLAB `nuclei_registration`
-does.
+loads, rotates and registers each round of `rounds` (default: every other round).
+Without a recipe it uses one translation step on the dataset's single reference stain
+and the round's one channel of that name, as the MATLAB `nuclei_registration` does.
 
 ## Workflow keys
 
@@ -181,9 +181,9 @@ rules:
             recovery: {allowed_errors: [RegistrationEstimationError], alternatives: [{method: tps}]}
 ```
 
-`signal`, `warp` and `qc` take the fields of their classes, and `reference_round`
-must equal the dataset's reference round; YAML lists become tuples. The MATLAB keys
-`global_registration` and `local_registration` raise under `backend: python`. The rule parameter `reference_image_view` (`{mode: max}`, or
+`signal`, `warp` and `qc` take the fields of their classes, and `reference_round`, when
+given, must equal the dataset's reference round; YAML lists become tuples. The MATLAB keys
+`global_registration` and `local_registration` raise under `backend: python`. The Python-only rule parameter `reference_image_view` (`{mode: max}`, or
 `{mode: channel, channel: <index or label>}`) chooses the reference image the rule
 writes; the two resident subtile rules write none and refuse it.
 {doc}`workflow-configuration` describes the rules.
@@ -191,12 +191,11 @@ writes; the two resident subtile rules write none and refuse it.
 ## Limits
 
 * The reference and moving rounds must share one grid: the same shape, spacing,
-  origin, direction and unit. There is no conversion between grids and no plane-to-volume
-  registration.
+  origin, direction and unit; nothing converts between grids.
 * The translation estimator finds whole voxels only.
 * At most one local step per recipe.
 * Rigid, affine and B-spline need at least 16 × 16 in Y and X; demons needs at least
-  4 × 4. In 3D, all four need at least 4 planes, so 2 or 3 planes are rejected. TPS and
+  4 × 4. In 3D, all four need at least 4 planes. TPS and
   CPD reject Z=1 and need at least 2 in every axis.
 * Rigid, affine and B-spline sample randomly with `random_seed` (1 by default); the
   tests check exact repeats at one thread only.
@@ -206,7 +205,7 @@ writes; the two resident subtile rules write none and refuse it.
 Known-answer synthetic tests check that translation, rigid, affine, B-spline and
 demons (on one plane) recover a known shift, rotation, affine map or deformation within
 fixed bounds. All seven methods are checked against the Z=1 and small-Z rules, the
-composition against exact examples, and checkpoints against re-application. The checks are listed in the
+composition against exact examples, and checkpoints against re-application. They are listed in the
 [registration algorithms record](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration-algorithms.md).
 
 The full specification is in

@@ -200,8 +200,10 @@ calls) builds the signal of each round with the recipe's
 {py:class}`~starfinder.registration.RegistrationSignalConfig`, estimates the steps
 in order with routine QC after each, composes them into one
 {py:class}`~starfinder.registration.TransformChain` and resamples the round's
-detection image and every one of its snapshots once. The guide gives each rule
-("Registration signal", "Composition order", "One final resampling" and "Routine QC").
+detection image and every one of its snapshots once. The guide gives the signal and the
+one resampling under "What it does", and the QC under "Routine QC"; the
+{doc}`registration reference <registration-algorithms>` gives the composition order under
+"Transforms".
 
 The reference round is not transformed. `registration_results[round]` keeps the
 step results (their `application_config` is the round's one `WarpConfig`),

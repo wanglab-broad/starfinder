@@ -58,8 +58,9 @@ Apply accepts ZYX or ZYXC and preserves channel order. Output metadata is
 fields are required; frame identifiers may differ. Explicitly unknown geometry
 is allowed, but is never inferred. Unsupported conversion raises
 `image.IncompatibleGeometryError`. Translation and dense application support
-singleton axes; each method's Z=1 and minimum-shape rules are in the guide
-("Registry entries" and "Z=1").
+singleton axes; each method's Z=1 and minimum-shape rules are in the
+{doc}`registration guide <../registration-contract>` ("Limits") and the method table of the
+{doc}`registration reference <../registration-algorithms>` ("Methods").
 
 ### Translation edge cases and resampling precision
 

@@ -65,8 +65,8 @@ input is missing is shown as unavailable with its reason, never as zero and neve
 passing.
 
 It builds on these pages and redefines none of them: {doc}`checkpoints` (`run.json`, the
-checkpoint stages), {doc}`registration-contract` (transforms and their convention, the
-registration QC), {doc}`readout-contract` (call statuses, the read filter, deduplication),
+checkpoint stages), {doc}`registration-contract` (the transform convention, the
+registration QC), {doc}`registration-algorithms` (the transforms), {doc}`readout-contract` (call statuses, the read filter, deduplication),
 {doc}`stitching-contract` (the placement record), {doc}`assembly-contract` (the sample
 tables, ownership, population accounting), {doc}`sample-output-contract` (the export entry,
 `export/<sample>/`, `export.json`, `check_export`), {doc}`sample-segmentation-contract` (the
