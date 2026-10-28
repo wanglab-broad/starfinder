@@ -1,7 +1,7 @@
 """Calibrated development scenes: appearance derived from measured image-statistics targets.
 
 Development calibration against the processed uint8 image statistics of
-docs/image-statistics.md; not D04 and not a benchmark calibration. Every value
+design/notes/image-statistics.md; not D04 and not a benchmark calibration. Every value
 below is in uint8 grey levels; uint16 multiplies every intensity by 16.
 """
 from itertools import product
@@ -43,7 +43,7 @@ CALIBRATED_CONDITIONS = {
     "combined_geometry": _READOUT + _BACKGROUND + ("translation", "local"),
 }
 
-# Every target -> parameter step is in docs/image-statistics.md, section "Calibrated preset".
+# Every target -> parameter step is in design/notes/image-statistics.md, section "Calibrated preset".
 _CALIBRATION = dict(
     shape_zyx=(8, 64, 64), count=80,                     # crowding: about one same-channel neighbour per annulus
     brightness_median=88.0, brightness_log_sd=0.46,      # lognormal peak amplitude A
@@ -107,7 +107,7 @@ def calibrated_scene_preset(condition: str = "clean", dtype: str = "uint8", *, s
     """Return (codebook, config) for one FOV of calibrated-development-v1.
 
     A development calibration against the development target table of
-    docs/image-statistics.md, which records every target -> parameter step;
+    design/notes/image-statistics.md, which records every target -> parameter step;
     not D04 and not a benchmark calibration. One 8x64x64 ZYX FOV holds 80
     uniformly placed amplicons of development_codebook(codebook) with
     lognormal brightness. Every condition, including clean, carries the

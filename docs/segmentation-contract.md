@@ -869,7 +869,7 @@ one round's image to an image of the same shape; none of these functions is such
 operation, so none is registered in `PREPROCESSING_METHODS`:
 
 * A preprocessing step returns an image of its input's shape within one round
-  ({doc}`preprocessing-contract`, `StepResult`). The composite combines two rounds
+  ({doc}`preprocessing-contract`, {py:class}`~starfinder.preprocessing.StepResult`). The composite combines two rounds
   (the morphology DAPI and the reference merged image) into one new image, and the
   Flamingo enhancement combines two channels into one, so neither fits.
 * The composite and Flamingo stretches are not `percentile_normalization`: they use

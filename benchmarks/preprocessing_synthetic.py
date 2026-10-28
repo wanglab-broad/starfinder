@@ -2,7 +2,7 @@
 
 Development evidence for Chapter II §2.5 task group 5 (W-233); not scientific
 acceptance and no recommended defaults. Runs the bounded comparison matrix of
-docs/preprocessing-algorithms.md (*Evaluation design for task groups 5 and 6*)
+design/specs/preprocessing-algorithms.md (*Evaluation design for task groups 5 and 6*)
 and writes tables, curves and a manifest to an output directory outside Git.
 
 Scenes are development_scene_preset conditions with only existing
@@ -1119,7 +1119,7 @@ PILOT_CONDITIONS = ("clean", "combined", "gain_strong", "bright_outliers", "satu
 PILOT_UINT16 = ("clean", "bright_outliers")
 PILOT_MULTI_FOV = ("mf_density", "mf_density_clean")
 #: W-238 development target ranges, adaptive selection: min and max over the four datasets
-#: (docs/image-statistics.md, *Target ranges*; tables/target_ranges.csv of the W-238 run
+#: (design/notes/image-statistics.md, *Target ranges*; tables/target_ranges.csv of the W-238 run
 #: runs/W-238/20260928T194004Z-1da19f6c/measurement, outside the repository).
 TARGET_RANGES = {
     "peak_p50": (81.0, 89.0), "amplitude_p10": (33.0, 49.0), "amplitude_p50": (72.0, 82.0),

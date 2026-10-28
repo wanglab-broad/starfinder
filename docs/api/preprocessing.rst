@@ -17,8 +17,8 @@ its output. The recipe's ``extraction_source`` and ``registration_source`` name 
 snapshots that extraction and the registration signals read; both default to the
 detection image, the last step's output. How the snapshots are registered with their
 round and recorded, and the workflow key ``preprocessing``, are in the
-:doc:`preprocessing guide <../preprocessing-contract>` ("Recipe", "Registration and
-snapshots", "Provenance", "Explicit step list") and :doc:`../workflow-configuration`.
+:doc:`preprocessing guide <../preprocessing-contract>` ("What it does", "What you get",
+"Workflow keys") and :doc:`../workflow-configuration`.
 
 Background subtraction
 ----------------------
@@ -39,8 +39,8 @@ Sample-level statistics
 
 Steps with ``fit="supplied"`` (percentile normalization, scalar background and the
 histogram-matching reference) read their values from the recipe's ``supplied_statistics`` file, schema
-``starfinder.preprocessing.supplied/1``, as specified in
-:doc:`../preprocessing-algorithms`. A summary pass runs the steps before the fitted
+``starfinder.preprocessing.supplied/1``, as described in the
+:doc:`preprocessing reference <../preprocessing-algorithms>`. A summary pass runs the steps before the fitted
 step (:py:func:`~starfinder.preprocessing.summary_recipe`), records the integer
 histograms of each FOV at that step's input
 (:py:func:`~starfinder.preprocessing.summarize_histograms`), sums them

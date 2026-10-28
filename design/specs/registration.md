@@ -27,7 +27,7 @@ This page is the maintained guide to the registration stage and its contract:
   rule ([Workflow configuration](#workflow-configuration), [workflow-configuration](../../docs/workflow-configuration.md)).
 
 The recipe follows the shared [method-registry](../../docs/method-registry.md) design and reads the preprocessing
-snapshots of the [preprocessing-contract](../../docs/preprocessing-contract.md). Beneath this guide,
+snapshots of the [preprocessing-contract](preprocessing.md). Beneath this guide,
 [registration-algorithms](registration-algorithms.md) specifies the numerical methods and the engineering
 validation (V1 to V11 and "Implemented checks"). [registration-baseline](../baselines/registration.md)
 is history: the behavior at `2e48d3f`, before the registration work, kept with its golden test.
@@ -147,7 +147,7 @@ class RegistrationSignalConfig:
 * **Source.** The signal of each round is built from the preprocessing
   `registration_source` snapshot of the preprocessing recipe, or from the
   detection image when it is `None` or there is no preprocessing recipe, as
-  today ([preprocessing-contract](../../docs/preprocessing-contract.md)).
+  today ([preprocessing-contract](preprocessing.md)).
 * **Reduction.** `max` takes the channel maximum (MATLAB `merged-image`);
   `sum` the float64 channel sum (the current Python `merged`); `channel`
   selects one channel per round. A label is looked up in the round's channel

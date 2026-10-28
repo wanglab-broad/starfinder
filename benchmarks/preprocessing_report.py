@@ -6,7 +6,7 @@ inline figures and styles. It supports human review; it is not scientific
 acceptance and gives no recommended defaults. The manifest schema selects the
 layout: a W-233 evaluation gives the W-234 inspection report; a calibrated
 evaluation (W-248) gives the report of item 6 of the accepted amendment in
-docs/preprocessing-algorithms.md: a human summary first, then the method
+design/specs/preprocessing-algorithms.md: a human summary first, then the method
 sections with the nine visualization changes, then an appendix.
 
 Before rendering it checks that
@@ -111,8 +111,8 @@ CONDITIONS = {
     "mf_density_clean": "The density set with the clean appearance, the harm check of sample-level fitting.",
 }
 
-#: Method and mode sections, in report order. Text follows docs/preprocessing-algorithms.md and
-#: docs/preprocessing-baseline.md. The panel is the isolated comparison on the first targeted
+#: Method and mode sections, in report order. Text follows design/specs/preprocessing-algorithms.md and
+#: design/baselines/preprocessing.md. The panel is the isolated comparison on the first targeted
 #: condition unless stated.
 METHODS = {
     "scalar_background": dict(
@@ -981,7 +981,7 @@ punctum. The <code>_xsrc</code> variants have the same detection images as their
 # --- Calibrated rerun report (W-249) -------------------------------------------------------------------
 #
 # Item 6 of "Evaluation design amendment for the calibrated rerun" in
-# docs/preprocessing-algorithms.md: the human summary first (setup, one card per method, cross-cutting
+# design/specs/preprocessing-algorithms.md: the human summary first (setup, one card per method, cross-cutting
 # findings, reading order), then the method sections with the nine visualization changes, then the
 # appendix (identity, checksums, full tables). The W-234 checks run before anything is written.
 

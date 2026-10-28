@@ -148,8 +148,8 @@ For Gaussian puncta of width σ voxels per axis, the synthetic preprocessing eva
 uses `r = ceil(3σ) + 1`; for example σ = (0.7, 1.0, 1.0) gives
 `radius_voxels_zyx=(4, 4, 4)`, which needs at least 9 Z planes. On real data,
 measure the puncta width first, and check a before/after line profile through
-a dim punctum. The method, its cost and the evaluation design are in
-{doc}`preprocessing-algorithms`.
+a dim punctum. The method, its cost and the evaluation design are in the
+[preprocessing algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing-algorithms.md).
 
 % §2.5
 
@@ -188,7 +188,8 @@ Two recipe modes apply to recipe 2:
 
 The workflow key for an explicit recipe is described in
 [Explicit preprocessing recipe](workflow-configuration.md#explicit-preprocessing-recipe).
-The methods and the evaluation design are in {doc}`preprocessing-algorithms`.
+The {doc}`preprocessing reference <preprocessing-algorithms>` lists the methods; the
+evaluation design is in the [preprocessing algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing-algorithms.md).
 
 ### Reproduce one comparison
 

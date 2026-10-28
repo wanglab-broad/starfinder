@@ -12,7 +12,7 @@ the stage's other pages. The stages are listed in processing order.
 
 | Stage | Covers | Algorithms | Validation | Baseline |
 | --- | --- | --- | --- | --- |
-| [Preprocessing](../preprocessing-contract.md) | The ordered recipe of preprocessing steps | [algorithms](../preprocessing-algorithms.md) | | [baseline](../preprocessing-baseline.md) |
+| [Preprocessing](../preprocessing-contract.md) | The ordered recipe of preprocessing steps | [reference](../preprocessing-algorithms.md) | | |
 | [Registration](../registration-contract.md) | Aligning each round with the reference round | [reference](../registration-algorithms.md) | | |
 | [Spot finding](../spot-finding-contract.md) | Detection and stable spot identities | [algorithms](../spot-finding-algorithms.md) | in algorithms | [baseline](../spot-finding-baseline.md) |
 | [Readout](../readout-contract.md) | Extraction, decoding and read QC | [algorithms](../readout-algorithms.md) | in algorithms | [baseline](../readout-baseline.md) |
@@ -39,8 +39,8 @@ the stage's other pages. The stages are listed in processing order.
 
 * **Algorithms:** the specification of each method. For spot finding, readout,
   assignment and the processing report, the validation design is part of this page.
-  Registration has a reference instead: its methods, options and records, with the
-  specification in `design/`.
+  Preprocessing and registration have a reference instead: their methods, options and
+  records, with the specification in `design/`.
 * **Validation:** a separate validation design, where the stage has one. The design that
   checks placement, assembly and the sample outputs sits under the sample-output guide,
   the last stage it checks.

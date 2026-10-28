@@ -20,7 +20,7 @@ Maintained source-derived configuration and adapters for the common
   first, then the method figures, then an appendix, with both threshold modes side by side.
 - `image_statistics.py`: intensity, puncta and noise statistics of one real TIFF or synthetic channel
   volume, and the read-only real-data measurement behind the synthetic calibration targets (W-238);
-  see [image statistics](../docs/image-statistics.md).
+  see [image statistics](../design/notes/image-statistics.md).
 - `appearance_evidence.py`: the real-bank appearance checks GA23, GA24 (the `slow` presets, the
   acquired variants and the bank builds), GA26 and GA27 of
   [the appearance validation page](../docs/synthetic-real-appearance-validation.md), moved out of the

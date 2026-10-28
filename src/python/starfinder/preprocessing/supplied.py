@@ -3,7 +3,7 @@
 A generic envelope (schema, dtype, channel labels, FOVs used and excluded) is
 validated once; each fitted step has one section keyed by its step name,
 recording summarized_after, params and fitted by round, and validates it
-itself. See the preprocessing algorithms page.
+itself. See design/specs/preprocessing-algorithms.md.
 """
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, replace

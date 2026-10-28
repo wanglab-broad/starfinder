@@ -1,4 +1,4 @@
-"""Per-channel diagnostics of the shared numerical policy (preprocessing algorithms page)."""
+"""Per-channel diagnostics of the shared numerical policy (design/specs/preprocessing-algorithms.md)."""
 import numpy as np
 
 #: Sigma multiple of the default local-maxima noise threshold.

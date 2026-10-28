@@ -99,7 +99,7 @@ use. The test suite generates the amplicon preset `small` once per session
 
 The presets are chosen to look plausible, not fitted to real data. The one exception,
 `calibrated-development-v1`, matches the 8-bit processed-image statistics of
-[image statistics](image-statistics.md); its 16-bit scale is not checked against real
+[image statistics](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/image-statistics.md); its 16-bit scale is not checked against real
 data. Images of the current presets differ from every historical version below, even
 where shape, count and seed match.
 

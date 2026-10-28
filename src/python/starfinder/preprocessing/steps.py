@@ -1,6 +1,6 @@
 """Preprocessing steps, their explicit registry, the enforcement wrapper and recipes.
 
-See the preprocessing contract page for the interface. Steps are registered in
+See design/specs/preprocessing.md for the interface. Steps are registered in
 one mapping keyed by the exact frozen config type; the lookup from step name to
 config type is derived from it.
 """

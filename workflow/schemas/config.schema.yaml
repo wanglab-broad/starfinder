@@ -810,7 +810,7 @@ $defs:
 
   preprocessing_params:
     description: >-
-      Python-only explicit recipe (preprocessing contract, Explicit step list): steps before registration and
+      Python-only explicit recipe (preprocessing guide, Workflow keys): steps before registration and
       post_registration, the steps run after it (reconstruction only); it replaces enhance_contrast,
       hist_equalize, morph_recon, tophat and snr_threshold
     type: object

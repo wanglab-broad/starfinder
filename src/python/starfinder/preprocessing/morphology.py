@@ -14,7 +14,10 @@ def _radius(radius):
 
 @dataclass(frozen=True)
 class ReconstructionConfig:
-    """Disk radius in XY pixels, independently applied to each Z/channel slice."""
+    """Background removal by morphological reconstruction in XY, on each Z plane and channel.
+
+    Disk radius in XY pixels, independently applied to each Z/channel slice.
+    """
     radius_yx: int = 3
 
     def __post_init__(self):
@@ -23,7 +26,10 @@ class ReconstructionConfig:
 
 @dataclass(frozen=True)
 class TophatConfig:
-    """Disk radius in XY pixels; no filtering along Z or channels."""
+    """White top-hat background removal in XY, on each Z plane and channel.
+
+    Disk radius in XY pixels; no filtering along Z or channels.
+    """
     radius_yx: int = 3
 
     def __post_init__(self):

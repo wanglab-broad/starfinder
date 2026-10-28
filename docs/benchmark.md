@@ -6,7 +6,7 @@ adapters are registration (translation, demons, TPS or CPD) and the shared
 Dataset/FOV pipeline. Unsupported tasks fail explicitly. See the
 [maintained recipes](benchmark-recipes.md) for source-derived profiles, pipeline
 input/output contracts, saved reports and optional backend prerequisites.
-[Image statistics](image-statistics.md) defines the real and synthetic image
+[Image statistics](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/image-statistics.md) defines the real and synthetic image
 measurements and the development calibration targets for the synthetic presets.
 No adapter silently chooses a research protocol.
 

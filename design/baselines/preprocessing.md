@@ -1,6 +1,6 @@
 # Preprocessing baseline
 
-Note: {doc}`preprocessing-contract` and {doc}`preprocessing-algorithms` were accepted at the acceptance review of 2026-09-27 and are implemented in `starfinder.preprocessing`; this page keeps the text of its revision.
+Note: [preprocessing-contract](../specs/preprocessing.md) and [preprocessing-algorithms](../specs/preprocessing-algorithms.md) were accepted at the acceptance review of 2026-09-27 and are implemented in `starfinder.preprocessing`; this page keeps the text of its revision.
 
 % Note (W-583); accepted at W-227
 
@@ -8,12 +8,12 @@ This page records how the existing preprocessing operations behave at revision
 `21eda7f` (`dev`, 2026-09-27), before the step/recipe work
 changes them. It is the reference that the golden test
 `src/python/test/test_preprocessing_golden.py` pins. The proposed replacement is
-described in {doc}`preprocessing-contract` and {doc}`preprocessing-algorithms`;
+described in [preprocessing-contract](../specs/preprocessing.md) and [preprocessing-algorithms](../specs/preprocessing-algorithms.md);
 neither is accepted yet.
 
 % Chapter II, §2.5
 
-Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ({doc}`migration`, "The FOV folder, the reference image and channel folders by label").
+Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` (its run record `fovs/<fov>/run.json`, its stage files in `fovs/<fov>/checkpoints/`) and its reference image to `fovs/<fov>/reference.tif` by default; this page keeps the paths of its revision ([migration](../../docs/migration.md), "The FOV folder, the reference image and channel folders by label").
 
 % Note (W-564)
 
@@ -21,7 +21,7 @@ Note: the Python package now writes a FOV's durable results under `fovs/<fov>/` 
 
 All five operations take finite, nonempty ZYX or ZYXC arrays and never mutate
 their input. The public functions live in `starfinder.preprocessing`
-({doc}`api/preprocessing`); `FOV` methods apply them to selected rounds.
+([api/preprocessing](../../docs/api/preprocessing.rst)); `FOV` methods apply them to selected rounds.
 
 | Operation | Input → output dtype and range | Rounding and clipping | Axes and scope | Defaults |
 | --- | --- | --- | --- | --- |
@@ -78,7 +78,7 @@ per-channel offsets of 200–1600, Gaussian noise of standard deviation 20, twel
 puncta of amplitude 1000–4000 and unequal channel gains. Values are
 (zero fraction, median, MAD, threshold) for channels 0–3, rounded here; the test
 compares them in full precision with the float64 tolerance of
-[contributing](contributing.md), "Expected values and tolerances" (since 2026-10-25; before,
+[contributing](../../docs/contributing.md), "Expected values and tolerances" (since 2026-10-25; before,
 it rounded them to six decimals and compared exactly).
 
 % W-574
@@ -108,10 +108,10 @@ laboratory data.
 | --- | --- | --- |
 | Min–max output is hard-coded to `uint8`, `(0, 255)` in `FOV.normalize_min_max` (`dataset/fov.py:291`) and the workflow adapter (`dataset/workflow.py:157`) | Preserve the input dtype by default | Recipe steps default to the input dtype and its full range. The legacy YAML mapping keeps `uint8`, `(0, 255)` so recipe 1 reproduces the golden output |
 | `rounding="truncate"` is the default in `MinMaxNormalizationConfig` and `HistogramMatchingConfig` | One shared numerical policy | New steps use round-half-to-even. Legacy steps keep `truncate` through the legacy mapping; changing it is a separate, reviewed behavior change |
-| `workflow.py` accepts `tophat`, which `workflow/schemas/config.schema.yaml` does not declare | Configuration keys are validated consistently | Declare `tophat_params` (`run`, `radius`) in the schema for the Python rules, without changing MATLAB-shared keys; a schema consistency test keeps registered steps declared ({doc}`preprocessing-contract`) |
+| `workflow.py` accepts `tophat`, which `workflow/schemas/config.schema.yaml` does not declare | Configuration keys are validated consistently | Declare `tophat_params` (`run`, `radius`) in the schema for the Python rules, without changing MATLAB-shared keys; a schema consistency test keeps registered steps declared ([preprocessing-contract](../specs/preprocessing.md)) |
 | `histogram_reference_channel` is a `PipelineConfig` slot, separate from `HistogramMatchingConfig` | Each step is described by its own config | Move it to `HistogramMatchingConfig.reference_channel` (default 0) |
-| Morphology radii are XY pixels and filtering is slice-wise | A 3D option with scales in physical units | Keep the XY operations as baselines; add the 3D method with radii in physical units ({doc}`preprocessing-algorithms`) |
-| Each registration step resamples and overwrites the single processed image, and extraction reads that image | Every declared measurement snapshot receives the same transform, resampled once from its pre-registration version | Carry named snapshots through registration ({doc}`preprocessing-contract`); the registration stage composes stages |
+| Morphology radii are XY pixels and filtering is slice-wise | A 3D option with scales in physical units | Keep the XY operations as baselines; add the 3D method with radii in physical units ([preprocessing-algorithms](../specs/preprocessing-algorithms.md)) |
+| Each registration step resamples and overwrites the single processed image, and extraction reads that image | Every declared measurement snapshot receives the same transform, resampled once from its pre-registration version | Carry named snapshots through registration ([preprocessing-contract](../specs/preprocessing.md)); the registration stage composes stages |
 | Operation order is fixed by `PipelineConfig` slots | Independently selectable operations with a recorded order | Replace the slots with an ordered recipe of steps; map legacy keys to recipe 1 |
 | Histogram reference and min–max ranges are always fitted on the current FOV | `fov` and `supplied` fitting modes | Add the modes to the new steps; min–max stays per FOV |
 | Reconstruction output can make the noise threshold zero without notice | Record-and-warn diagnostic in the spot-finding stage | No change here; the spot-finding detector records the zero fraction, MAD and threshold and warns |

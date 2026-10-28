@@ -1,7 +1,7 @@
 """Integer histogram summaries, their merge across FOVs and inverted-CDF percentiles.
 
 Sample-level statistics come from per-FOV histograms taken at a fitted step's
-input and summed elementwise; see the preprocessing algorithms page.
+input and summed elementwise; see design/specs/preprocessing-algorithms.md.
 """
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass

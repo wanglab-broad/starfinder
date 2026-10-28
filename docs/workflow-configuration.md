@@ -418,8 +418,8 @@ rules:
 ## Explicit preprocessing recipe
 
 The Python-only `preprocessing` parameter of the five Python rules declares a
-preprocessing recipe explicitly, as specified in the
-[preprocessing contract](preprocessing-contract.md#explicit-step-list). Each
+preprocessing recipe explicitly, as described in the
+[preprocessing guide](preprocessing-contract.md#workflow-keys). Each
 entry of `steps` names a step by its registered name (`method`, one of
 `min_max_normalization`, `histogram_matching`, `reconstruction`,
 `white_tophat`, `scalar_background`, `background_3d` and

@@ -90,7 +90,7 @@ and stitching, `dimensions` (2 when Z=1 runs as a plane, 3 when Z>1 runs as a vo
 `PreprocessingSpec` has no `dimensions` field. Everything else
 is a field of the stage spec, documented with the spec's docstring and its stage
 contract: for example `category`, `scope`, `post_registration` and `supplied` for
-preprocessing ({doc}`preprocessing-contract`); `step_kind`, `transform_kind` and `space`
+preprocessing ([preprocessing specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing.md)); `step_kind`, `transform_kind` and `space`
 for registration ({doc}`registration-algorithms`); `pipeline`, `output_columns` and
 `weights` for spot finding ({doc}`spot-finding-contract`); `modes`, `encodings`, `rescue`
 and `score_columns` for decoding ({doc}`readout-contract`); `targets`, `roles`,

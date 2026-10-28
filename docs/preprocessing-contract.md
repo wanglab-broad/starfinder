@@ -1,334 +1,191 @@
-# Preprocessing guide
+# Preprocessing
 
-% **Status: Accepted (W-227, 2026-09-27, at `0d13c26`).**
+Preprocessing corrects each round's image before registration: it removes background
+and normalizes intensities, so that rounds and channels can be compared. A
+`PreprocessingRecipe` in `PipelineConfig.preprocessing` lists the steps to run, in
+order; `None`, the default, means no preprocessing. Inside `FOV.run`, each round goes
+through the recipe's steps, then {doc}`registration <registration-contract>` when it is
+a moving round, then the recipe's `post_registration` steps, before spot finding.
 
-This page is the maintained guide to the preprocessing stage and its contract:
-`starfinder.preprocessing` and `FOV.run` implement it ({doc}`api/preprocessing`).
+The {doc}`preprocessing reference <preprocessing-algorithms>` lists every method,
+option and record; the {doc}`preprocessing API <api/preprocessing>` documents the
+classes.
 
-% §2.5
-
-* **What preprocessing does.** It corrects each round's image before registration,
-  with intensity normalization and background removal, as one linear sequence of
-  pure steps run through one enforcement wrapper ([Step interface](#step-interface),
-  [Enforcement wrapper](#enforcement-wrapper)).
-* **The recipe.** A `PreprocessingRecipe` is an ordered tuple of `PreprocessingStep`s,
-  each holding the frozen config of a step registered in `PREPROCESSING_METHODS`. It
-  supports the two agreed recipes: min–max → histogram matching → optional morphology,
-  and background correction → percentile normalization; statistics are fitted per FOV
-  or supplied for the sample ([Registration of step implementations](#registration-of-step-implementations),
-  [Recipe](#recipe), [Fitting modes](#fitting-modes)).
-* **What it produces.** The last step's output is the detection image; named snapshots
-  can serve as the pre-normalization extraction source and the declared registration
-  source. The `registered` checkpoint stores every snapshot used downstream, and the run
-  record (`run.json`) holds the recipe and one record per round and step
-  ([Registration and snapshots](#registration-and-snapshots), [Provenance](#provenance),
-  {doc}`checkpoints`).
-* **Where the configuration goes.** In Python, `PipelineConfig.preprocessing` holds the
-  recipe. In the workflow, the Python backend reads the `preprocessing` key of a Python
-  rule; the legacy keys map to recipe 1 for MATLAB-backend configurations
-  ([Workflow configuration](#workflow-configuration), {doc}`workflow-configuration`).
-
-The steps follow the shared {doc}`method-registry` design. Beneath this guide,
-{doc}`preprocessing-algorithms` specifies the methods, the shared numerical policy,
-sample-level statistics and the evaluation design ("Evaluation design for task groups 5
-and 6" and its calibrated-rerun amendment, accepted on 2026-09-28). {doc}`preprocessing-baseline` is
-history: the behavior at `21eda7f`, before the step and recipe work, kept with its golden test.
-
-% W-243, §2.5
-
-## Step interface
-
-Every step is a pure function of one round's image:
+## Quick start
 
 ```python
-def run(volume: np.ndarray, config: StepConfig, context: StepContext) -> StepResult: ...
+from dataclasses import replace
 
-@dataclass(frozen=True)
-class StepContext:
-    round_name: str
-    reference_round: str
-    metadata: ImageMetadata
-    reference: np.ndarray | None = None      # only for needs_reference steps
-    supplied: Mapping[str, Any] | None = None  # this step's supplied section, fit="supplied" only
+from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState
+from starfinder.io import ImageLoadConfig
+from starfinder.preprocessing import (PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep,
+    ScalarBackgroundConfig)
+from starfinder.synthetic import benchmark_scene_preset, generate_amplicon_dataset, save_amplicon_dataset
 
-@dataclass(frozen=True)
-class StepResult:
-    image: np.ndarray                  # same shape and axes as the input
-    fitted: Mapping[str, Any]          # JSON-serializable fitted values
-    diagnostics: Mapping[str, Any]     # JSON-serializable, recorded in provenance
+# A synthetic FOV of four rounds, written as a raw dataset.
+codebook, scene = benchmark_scene_preset("tiny")
+generated = generate_amplicon_dataset(codebook, replace(scene, seed=42), fov_ids=("FOV_001",), preset="tiny")
+save_amplicon_dataset(generated, "input")
+rounds, channels = list(generated.codebook.round_labels), list(generated.channel_labels)
+
+dataset = Dataset(input_root="input", output_root="results", dataset_id="tiny", sample_id="synthetic",
+                  output_id="demo", rounds=RoundState(sequencing_rounds=rounds, reference_round="round1"),
+                  channel_order=channels)
+recipe = PreprocessingRecipe(
+    steps=(PreprocessingStep(ScalarBackgroundConfig(), save_as="bg_corrected"),
+           PreprocessingStep(PercentileNormalizationConfig())),
+    extraction_source="bg_corrected",
+)
+pipeline = PipelineConfig(load=ImageLoadConfig(channel_labels=tuple(channels)), preprocessing=recipe)
+fov = dataset.fov("FOV_001")
+fov.run(pipeline, checkpoints=CheckpointConfig(stages=()))
+
+print(fov.images["round1"].dtype, list(fov.snapshots["round1"]))   # the detection image keeps the input dtype
+for record in fov.preprocessing_record["rounds"]["round1"]:
+    print(record["step"], record["fitted"])                          # the background, then low and high
 ```
 
-A step never mutates its input and never reads other rounds except through
-`context.reference`.
+## What it does
 
-## Registration of step implementations
+1. **Steps.** The steps run in the declared order on each round, one round at a time.
+   Each step returns an image of the same shape; the output of the last step is the
+   *detection image*, which goes on to registration and spot finding. With no steps,
+   it is the loaded image.
+2. **Snapshots.** A step with `save_as` keeps a named copy of its output. The recipe's
+   `extraction_source` names the snapshot that intensity extraction reads, and
+   `registration_source` the snapshot that registration signals are built from; both
+   default to the detection image.
+3. **Registration.** Each moving round is registered to the reference round. The
+   transform is applied once to the detection image and to every snapshot of the
+   round, so they stay aligned. The reference round is not transformed.
+4. **After registration.** The `post_registration` steps run on each round after
+   registration. Only `reconstruction` may run there, the order the resident subtile
+   rules use.
 
-Implementations are registered in one explicit mapping, keyed by the exact
-frozen config type:
+Every step runs through one wrapper that checks its output: the same shape, a dtype
+that its method allows, finite values, unchanged metadata, and records that can be
+written as JSON.
 
-```python
-@dataclass(frozen=True)
-class PreprocessingSpec:
-    name: str            # stable identifier, e.g. "percentile_normalization"
-    run: Callable[..., StepResult]
-    category: str        # "background", "intensity" or "contrast"
-    scope: str           # "per_channel", "per_round" or "needs_reference"
-    dtype_policy: str    # "preserve" (default) or "declared"
-    # keyword-only, with defaults (method registry page):
-    requires: tuple[Dependency, ...] = ()
-    min_shape_zyx: tuple[int, int, int] = (1, 1, 1)
-    post_registration: bool = False       # True only for reconstruction
-    supplied: SuppliedSpec | None = None  # supplied-statistics hooks
+## Methods
 
-PREPROCESSING_METHODS: dict[type, PreprocessingSpec]  # populated in starfinder.preprocessing
+```{method-table} starfinder.preprocessing.PREPROCESSING_METHODS
 ```
 
-`PreprocessingSpec`, `PREPROCESSING_METHODS` and `PreprocessingStep` were
-called `StepSpec`, `STEPS` and `RecipeStep` before the registry renames
-({doc}`method-registry`, "History"); the shared fields and lookups are specified there.
+Two recipes are in use. Recipe 1 is `min_max_normalization` then `histogram_matching`,
+optionally followed by `reconstruction` or `white_tophat`; the MATLAB keys translate
+to its steps. Recipe 2, `scalar_background` or `background_3d` then
+`percentile_normalization`, keeps the input dtype. "Choose a preprocessing recipe" in
+{doc}`recipes` helps you choose between them.
 
-* `name` is the single identifier of a step. The workflow adapter, provenance and
-  the supplied-statistics file all use it. Names are unique lowercase
-  snake_case; a lookup from name to config type is derived from
-  `PREPROCESSING_METHODS`, never
-  maintained separately.
-* `category` follows the chapter's categories. It documents intent and does not
-  impose an order.
-* `scope="per_channel"` computes statistics per channel within the round.
-  `per_round` uses the whole round. `needs_reference` also receives the
-  reference round's input to the same step (histogram matching).
-* `dtype_policy="preserve"` requires the output dtype to equal the input dtype.
-  `declared` allows a dtype set in the config; it is reserved for legacy min–max.
-* Lookup uses `type(config)` exactly; subclasses are not matched. The existing
-  frozen-config validation (`__post_init__`) is kept.
+## What you get
 
-| Step name | Config | Category | Scope | dtype policy |
-| --- | --- | --- | --- | --- |
-| `min_max_normalization` | `MinMaxNormalizationConfig` | intensity | per_channel | declared |
-| `histogram_matching` | `HistogramMatchingConfig` | intensity | needs_reference | preserve |
-| `reconstruction` | `ReconstructionConfig` | background | per_channel | preserve |
-| `white_tophat` | `TophatConfig` | background | per_channel | preserve |
-| `scalar_background` | `ScalarBackgroundConfig` | background | per_channel | preserve |
-| `background_3d` | `Background3DConfig` | background | per_channel | preserve |
-| `percentile_normalization` | `PercentileNormalizationConfig` | intensity | per_channel | preserve |
+* **In memory**, per round of the FOV that is kept (every round in batch mode):
+  * `fov.images[round]`: the detection image, after registration and the
+    `post_registration` steps;
+  * `fov.snapshots[round][name]`: each snapshot, registered with the round;
+  * `fov.preprocessing_record`: the recipe, one record per round and step (its
+    config, fitted values, diagnostics, and input and output dtypes), the transforms
+    applied to each image of a round, and the path and SHA-256 of the
+    supplied-statistics file.
+* **On disk.** With any `checkpoints`, `run.json` records it under `preprocessing`.
+  With the `registered` checkpoint stage, `FOV.run` writes each round as it enters
+  spot finding and, when the recipe names an `extraction_source`, that snapshot under
+  `checkpoints/registered/<snapshot>/` in the FOV folder ({doc}`checkpoints`).
 
-### Histogram reference channel
+## Main options
 
-`HistogramMatchingConfig` has `reference_channel: int = 0`, which replaced
-`PipelineConfig.histogram_reference_channel`. The reference round is
-`context.reference_round`. For `fit="fov"`, the wrapper passes that round's
-input to the histogram-matching step, restricted to `reference_channel`, as
-`context.reference`. With `fit="supplied"`, the step's supplied section records
-the round and channel that were summarized ({doc}`preprocessing-algorithms`).
-The default reproduces the legacy behavior.
+* `PreprocessingRecipe.steps`: the ordered `PreprocessingStep`s, each holding the
+  config of one method.
+* `PreprocessingStep.save_as`: keeps the step's output as a named snapshot.
+* `PreprocessingRecipe.extraction_source` and `registration_source`: the snapshots
+  that extraction and registration read.
+* `PreprocessingRecipe.post_registration`: the steps run after registration.
+* `PreprocessingRecipe.supplied_statistics` and the `fit` option of the methods that
+  have one: sample-level statistics.
 
-## Recipe
-
-```python
-@dataclass(frozen=True)
-class PreprocessingStep:
-    config: StepConfig
-    save_as: str | None = None     # snapshot name for this step's output
-
-@dataclass(frozen=True)
-class PreprocessingRecipe:
-    steps: tuple[PreprocessingStep, ...]
-    post_registration: tuple[PreprocessingStep, ...] = ()
-    extraction_source: str | None = None     # snapshot name; None = detection image
-    registration_source: str | None = None   # snapshot name; None = detection image
-    supplied_statistics: Path | None = None  # file for fit="supplied" steps
-```
-
-* **Detection image.** The output of the last step in `steps` is the detection
-  image. With no steps it is the loaded image.
-* **Snapshots.** `save_as` keeps a named copy of that step's output. Names are
-  unique within a recipe and must not be `"detection"`. Snapshots cost memory
-  only when declared.
-* **Extraction source.** By default extraction reads the detection image. If
-  `extraction_source` names a snapshot, extraction reads that snapshot. The
-  agreed alternative is the background-corrected image before normalization.
-* **Registration source.** `registration_source` names the snapshot from which
-  registration signals are built, for both the reference round and each moving
-  round. By default it is the detection image. The
-  registration signal modes (maximum, sum or selected channel) apply to this snapshot.
-* **Post-registration steps.** `post_registration` may contain only
-  `ReconstructionConfig`, the legacy reconstruction-after-registration path for
-  resident subtiles. Any statistic a post-registration step computes is
-  restricted to the valid-overlap region, excluding fill introduced by
-  resampling.
-* **Order.** Steps run in the declared order, before registration. No branching
-  or DAG: snapshots are taps on one linear sequence.
-* **Supplied statistics.** A recipe whose steps include the same step name twice
-  with `fit="supplied"` is rejected at validation.
-
-% §2.6
-
-`PipelineConfig` has `preprocessing: PreprocessingRecipe | None`, which replaced the
-slots `normalization`, `histogram`, `histogram_reference_channel`,
-`reconstruction`, `reconstruction_after_registration`, `tophat` and
-`projection`. The migration guide records the replaced Python fields
-({doc}`migration`, "Preprocessing recipe").
-
-### Projection is not part of preprocessing
-
-Projection is an output view, not a correction of the image, so it is neither a
-step nor a pipeline slot. The pipeline always processes ZYX(C) volumes; 2D data
-are volumes with Z = 1. If a dataset ever needs processing on projected images,
-it is projected when loaded, before the recipe. Projection is used for two
-views, both with maximum projection by default:
-
-* **Visualization:** projection along Z for 2D figures such as registration
-  overlaps and spot-finding results.
-* **Inspection:** projection along channels for each FOV's reference merged
-  image (`fovs/{fovID}/reference.tif` by default, the dataset's `reference_image`): the reference round's detection
-  image, merged over channels, and also projected along Z when the workflow's
-  `maximum_projection` is true. It shows preprocessing before registration and
-  is the stitching input.
-
-The views and the alignment of the Python reference merged image with MATLAB
-are specified in {doc}`workflows`, "Projection views and the reference merged
-image" (an amendment of 2026-09-27).
-
-% W-235
-
-## Registration and snapshots
-
-For each moving round, registration estimates the transform from the
-`registration_source` snapshot. It then applies the same transform to every
-snapshot used downstream: the detection image and, if different, the extraction
-source.
-
-* **Single registration step.** Each snapshot is resampled once from its
-  pre-registration version.
-* **Several registration steps** (for example global then local). The steps compose
-  into one transform chain, and each snapshot is resampled once through it from its
-  pre-registration version ({doc}`registration-contract`, "What it does").
-* **Consistency.** Every downstream snapshot goes through the same resampling, so
-  all snapshots of a round stay aligned with each other and with
-  the detection coordinates.
-* The reference round is not transformed.
-* Provenance records, per round and snapshot, the transforms applied.
-* The `registered` checkpoint stores every snapshot used downstream under its
-  name. A recipe without an extraction source stores one image.
-
-## Enforcement wrapper
-
-One wrapper calls every step and checks the result:
-
-* shape and axis order equal the input;
-* dtype equals the input dtype (`preserve`) or the declared dtype (`declared`);
-* values are finite;
-* metadata is unchanged (steps never modify `ImageMetadata`);
-* `fitted` and `diagnostics` are JSON-serializable.
-
-A violation raises and is recorded, with the step name, as the failing step in
-the run record.
-
-## Provenance
-
-The run record (`run.json`) holds a `preprocessing` entry:
-
-```json
-{"recipe": {"steps": ["..."], "extraction_source": null, "registration_source": null},
- "rounds": {"round1": [{"index": 0, "step": "percentile_normalization",
-                        "config": {}, "fitted": {}, "diagnostics": {},
-                        "input_dtype": "uint8", "output_dtype": "uint8",
-                        "save_as": null}]},
- "supplied_statistics": {"path": null, "sha256": null}}
-```
-
-Checkpoints that store images also store the recipe and the per-round step
-records, so a reloaded run can report how each image was produced.
-
-## Streaming
-
-The reference round is processed first. For each `needs_reference`
-step, the reference round's input to that step is retained, restricted to the
-channel the config names (one channel volume for histogram matching), until all
-moving rounds have passed the step. The reference round's `registration_source`
-snapshot is retained until registration of all moving rounds is complete. No
-other cross-round image is kept in streaming mode.
+The reference gives each method's options and their defaults.
 
 ## Fitting modes
 
-Steps that fit statistics accept `fit="fov"` (fit on the current round of the
-current FOV) or `fit="supplied"` (read from the step's section of
-`supplied_statistics`, keyed by step name). This covers percentile
-normalization, scalar background estimation and the histogram-matching
-reference. Min–max keeps its per-FOV behavior. The recipe stage at which
-statistics are summarized, the histogram summary and merge, and the file format
-are in {doc}`preprocessing-algorithms`.
+`scalar_background`, `percentile_normalization` and `histogram_matching` have a `fit`
+option. With `fit="fov"`, the default, `scalar_background` and
+`percentile_normalization` fit their values on each round of each FOV, and
+`histogram_matching` matches every round to one channel of the reference round of
+the same FOV. With `fit="supplied"`, they are read from the recipe's
+`supplied_statistics` file, which holds statistics merged over a set of FOVs of the
+sample. Use it when FOVs differ strongly in content, such as near-empty fields at a
+tissue edge.
 
-## Workflow configuration
+The file is made by summary passes over the FOVs before the recipe is applied. A
+summary pass runs the steps before a supplied step, records histograms of their
+output on each FOV, merges them and fits that step's statistics; the specification
+says how many passes a recipe with several supplied steps needs. The Snakemake
+workflow does not run summary passes. This example, with one supplied step, runs the
+summary pass and the application pass by hand on three synthetic FOVs; from
+`src/python`, run
+`uv run python ../../docs/examples/percentile_two_pass.py <new output directory>`:
 
-### Legacy mapping
-
-The Python backend accepts the explicit step list only (since 2026-10-25): each legacy key
-below raises `ValueError` under `backend: python`, naming the step that replaces
-it, and the schema refuses it. The mapping is kept for MATLAB-backend
-configurations, which the adapters of the shared rules read
-(`dataset/_legacy_config.py`), and it is the native form a migrated
-configuration writes out ({doc}`migration`, "One Python configuration
-dialect"); both reproduce recipe 1 and its golden outputs exactly:
-
-% W-569
-
-| Legacy key | Recipe step |
-| --- | --- |
-| `enhance_contrast.run` (with `snr_threshold`) | `MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=..., rounding="truncate")`, `dtype_policy="declared"` |
-| `hist_equalize.run` (with `reference_channel`) | `HistogramMatchingConfig(reference_channel=reference_channel)`, scope `needs_reference` |
-| `morph_recon.run` (with `radius`) | `ReconstructionConfig(radius_yx=radius)`, in `post_registration` for resident subtile rules (the key's `post_registration` list) |
-| `tophat.run` (with `radius`) | `TophatConfig(radius_yx=radius)` |
-
-`maximum_projection` keeps its meaning for the saved reference merged image and
-does not enter the recipe.
-
-### Explicit step list
-
-The optional Python-rule key `preprocessing` takes an explicit recipe; the
-legacy keys raise beside it and without it on the Python backend:
-
-```yaml
-preprocessing:
-  steps:
-    - method: scalar_background
-      percentile: 10.0
-      save_as: bg_corrected
-    - method: percentile_normalization
-  extraction_source: bg_corrected
+```{literalinclude} examples/percentile_two_pass.py
+:language: python
 ```
 
-* `method` is a step name from `PREPROCESSING_METHODS`; an unknown name raises. The remaining keys
-  of a step, except `save_as`, are the fields of its config dataclass.
-* `post_registration` (absent: none) lists the steps run after registration in
-  the same form, carried to `PreprocessingRecipe.post_registration`: only
-  `reconstruction` steps, without `save_as` (the resident subtile rules' form of
-  `morph_recon`).
-* `extraction_source`, `registration_source` and `supplied_statistics` are the
-  recipe fields above.
-* `workflow/schemas/config.schema.yaml` declares the `preprocessing` key as a
-  static schema. A default-tier test checks that its step names and parameters
-  match `PREPROCESSING_METHODS` and the config dataclass fields, so a registered step cannot be
-  missing from the schema.
+## Streaming
 
-The key is available only on the Python backend. MATLAB APIs and shared MATLAB
-keys are unchanged. The pipeline default remains recipe 1 until evaluation
-supports a change; a Python configuration states it as the step list above.
+`FOV.run` processes the reference round first, then the other sequencing rounds in
+their declared order. With `ExecutionConfig(mode="streaming")`, rounds are loaded one
+at a time, and a moving round's image and snapshots are released once the round is
+done unless `retain_images=True`. The reference round's input to `histogram_matching`
+(with `fit="fov"`) and its `registration_source` snapshot are kept until every round
+has been processed.
 
-## Exclusions
+## Workflow keys
 
-* No DAG or branching recipes; one linear sequence with named snapshots.
-* No entry-point or plugin discovery; the step mapping is explicit in the package.
-* No metaclass-based logging; provenance is written by the recipe runner.
-* No projection inside the recipe or pipeline.
-* No change to MATLAB behavior or shared MATLAB-facing keys.
-* No registration or detection registries; the registration and spot-finding stages own those.
+On the Python backend, the `preprocessing` parameter of the five Python processing
+rules holds the recipe. Each step names a method and gives that config's fields:
 
-% §2.6, §2.7
+```yaml
+backend: python
+rules:
+  rsf_single_fov:
+    parameters:
+      preprocessing:
+        steps:
+          - method: scalar_background
+            percentile: 10.0
+            save_as: bg_corrected
+          - method: percentile_normalization
+        extraction_source: bg_corrected
+```
+
+`post_registration` lists steps in the same form; `extraction_source`,
+`registration_source` and `supplied_statistics` are the recipe's fields. Without the
+key, no preprocessing runs. The MATLAB keys `enhance_contrast`, `hist_equalize`,
+`morph_recon` and `tophat` raise under `backend: python`, naming the step that
+replaces each. {doc}`workflow-configuration` describes the rules.
+
+## Limits
+
+* One linear sequence of steps: no branches. Snapshots are copies taken along it.
+* Projection is not a step. The pipeline processes ZYX(C) volumes; a projected view
+  is an output, such as the reference image.
+* The Snakemake workflow does not make the supplied-statistics file.
+* The XY methods, `reconstruction` and `white_tophat`, work on each Z plane
+  separately, with radii in pixels.
+
+## How it is checked
+
+A golden test pins the outputs of recipe 1 (min–max, histogram matching,
+reconstruction) and of each recipe 1 method on a fixed fixture. Tests check scalar
+background, 3D background and percentile normalization against their formulas on
+small arrays, and sample-level percentiles and histogram matching against the same
+computation on the concatenated volumes. The synthetic evaluation design is in the
+[algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing-algorithms.md).
+
+The full specification is in
+[`design/specs/preprocessing.md`](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing.md).
 
 ```{toctree}
 :hidden:
 
-Preprocessing algorithms and validation <preprocessing-algorithms>
-Preprocessing baseline (history) <preprocessing-baseline>
+Preprocessing reference <preprocessing-algorithms>
 ```

@@ -139,7 +139,7 @@ is made by placing these records in a common table.
 ## Preprocessing comparison on synthetic presets
 
 `benchmarks/preprocessing_synthetic.py` runs the bounded preprocessing comparison matrix of
-{doc}`preprocessing-algorithms` (*Evaluation design*) on development-preset scenes:
+the [preprocessing algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing-algorithms.md) (*Evaluation design*) on development-preset scenes:
 
 % §2.5
 
@@ -157,8 +157,8 @@ low-benefit flag is provisional. The results are development evidence on
 uncalibrated synthetic data, not recommended defaults.
 
 `--design calibrated` runs the calibrated rerun instead, as specified by the
-*Evaluation design amendment for the calibrated rerun* of
-{doc}`preprocessing-algorithms`. The default design (`w233`) stays that of task group 5:
+*Evaluation design amendment for the calibrated rerun* of the
+[preprocessing algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing-algorithms.md). The default design (`w233`) stays that of task group 5:
 
 % W-233
 
@@ -178,7 +178,7 @@ uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrate
 * **Tables.** Besides the tables of task group 5, the output directory holds
   `preconditions.csv`, `fixture_gaps.csv`, the revised `low_benefit_flags.csv`,
   `harm_test.csv` and `image_statistics.csv`. The last compares each
-  condition's statistics, measured with the {doc}`image-statistics` tool, with
+  condition's statistics, measured with the [image statistics](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/image-statistics.md) tool, with
   the measured development ranges. Every table of detection results has a
   `threshold_mode` column.
 * **Projection.** The pilot scope records a projection of the full matrix

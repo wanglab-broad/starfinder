@@ -8,7 +8,7 @@ produced with the locked project environment; a dependency upgrade that changes
 scikit-image output must be reviewed, not re-pinned silently.
 
 The per-channel statistics (zero fraction, median, MAD and the local-maxima
-``noise`` threshold) are the values reported on the preprocessing baseline page.
+``noise`` threshold) are the values reported in design/baselines/preprocessing.md.
 Since W-574 they are explicit expected values in full precision
 (``data/expected/test_preprocessing_golden/stats.csv``), compared with the
 float64 tolerance of docs/contributing.md; before, they were rounded to six

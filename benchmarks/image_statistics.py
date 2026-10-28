@@ -2,7 +2,7 @@
 
 Development measurement that sets target ranges for the calibrated synthetic presets
 (W-241) and the §2.5 rerun (W-239); not D04 calibration and not data qualification.
-Definitions are in docs/image-statistics.md. measure_volume takes any integer ZYX
+Definitions are in design/notes/image-statistics.md. measure_volume takes any integer ZYX
 volume that returns YX planes by index: a NumPy array (for example one channel of a
 starfinder.synthetic scene round) or a TiffVolume, which reads a TIFF one page at a
 time. Histogram statistics accumulate plane by plane over the full volume; puncta are

@@ -1,4 +1,4 @@
-"""Scalar and 3D background subtraction (preprocessing algorithms page, task group 2)."""
+"""Scalar and 3D background subtraction (design/specs/preprocessing-algorithms.md, task group 2)."""
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 import math
@@ -211,8 +211,9 @@ def _radii(value, name, integer):
 
 @dataclass(frozen=True)
 class Background3DConfig:
-    """Anisotropic ellipsoidal radii (z, y, x) of a volumetric white top-hat.
+    """Volumetric white top-hat with an ellipsoidal footprint, for background that also varies along Z.
 
+    Anisotropic ellipsoidal radii (z, y, x) of a volumetric white top-hat.
     Exactly one of radius_um_zyx (micrometres, converted with
     ImageMetadata.spacing_zyx) and radius_voxels_zyx (voxels) must be set;
     there is no default radius. A radius of 0 leaves that axis unfiltered.

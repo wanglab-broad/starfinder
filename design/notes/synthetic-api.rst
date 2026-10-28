@@ -262,7 +262,7 @@ Calibrated development presets
 codebook="balanced")`` returns one 8×64×64 FOV of
 ``calibrated-development-v1``: 80 amplicons with lognormal brightness and a
 development calibration against the processed-image development targets
-(:doc:`../image-statistics`, which records how each parameter follows from a
+(`image statistics <image-statistics.md>`_, which records how each parameter follows from a
 target). Every condition, including ``clean``, carries a uniform pedestal,
 Poisson, white and spatially correlated noise (``NoiseConfig.correlated_enabled``),
 non-uniform channel gains and a mild round trend. ``CALIBRATED_CONDITIONS``

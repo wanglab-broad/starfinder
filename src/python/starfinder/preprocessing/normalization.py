@@ -16,7 +16,7 @@ _FITS = ("fov", "supplied")
 
 @dataclass(frozen=True)
 class MinMaxNormalizationConfig:
-    """Declared output dtype/range, global or per-channel min-max scaling.
+    """Linear min-max scaling onto a declared output dtype and range, per channel or over the whole volume.
 
     Integer rounding defaults to truncate, preserving historical uint8 behavior.
     Nonconstant low-SNR groups (max/mean < threshold; nonpositive mean gives
@@ -77,7 +77,9 @@ def _normalize(volume, config):
 
 @dataclass(frozen=True)
 class HistogramMatchingConfig:
-    """Exact CDF matching; input dtype retained by default.
+    """Matches each channel's intensity distribution to one channel of the reference round.
+
+    Exact CDF matching; input dtype retained by default.
 
     Integer values truncate by default. Out-of-range reference values raise
     rather than wrap; an explicit floating output_dtype can retain them.
