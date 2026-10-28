@@ -2,7 +2,8 @@ starfinder.benchmark
 ====================
 
 Explicit cases, trial records and saved-artifact lifecycle. See
-:doc:`../benchmark` for configuration, CLI, resume and resource contracts.
+:doc:`../benchmark` for the CLI workflow and smoke example, and
+:doc:`../benchmark-recipes` for case fields and saved files.
 
 .. currentmodule:: starfinder.benchmark
 

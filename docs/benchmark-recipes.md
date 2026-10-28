@@ -1,254 +1,74 @@
 # Maintained benchmark recipes
 
-The [common lifecycle](benchmark.md) replaces per-dataset Python workers and
-scheduler loops. `benchmarks/recipes.py` builds cases; `starfinder benchmark
-run/evaluate/report` executes them. `benchmarks/configs/registration.json` and
-`pipeline.json` retain selected source parameters. They select **no inputs or
-experiments automatically**. A profile named `large` can be tested with a tiny
-fixture; that does not validate the large dataset or historical performance.
+Look up the case builders, profiles and saved files here. The
+{doc}`lifecycle guide <benchmark>` shows how to run a case; the
+{doc}`benchmark API <api/benchmark>` documents the records and functions.
 
-## Source boundary and provenance
+## Case builders
 
-The maintained {download}`source map <../benchmarks/configs/source-map.json>`
-assigns every one of the 56 external scripts/notebooks a disposition, original
-relative path, SHA-256 and replacement target. Its bounded scope is file depth
-≤6 under `starfinder_benchmark`, extensions `.py/.m/.sh/.ipynb`, excluding runs,
-records, environments, Git/cache/hidden directories and symlinks. Files deeper
-than this boundary are not inventoried. Original files/results/notebook outputs
-are retained unchanged. The private byte archive and timestamp/Git-state
-manifest are stored outside this repository.
-Preservation does not validate historical outputs, dates, scientific claims or
-licensing. Backup coverage remains unverified; Jiahao owns retention.
+`benchmarks/recipes.py` builds cases from the JSON profiles in
+`benchmarks/configs/`. It writes a configuration for `starfinder benchmark run`.
 
-The maintained adapters/report helpers are newly authored STARfinder code under
-the Python package's declared MIT terms. Only configuration facts and provenance
-locators were extracted; no external implementation or notebook output was
-vendored. No new license is asserted for historical files. In particular, the
-eight `registration/results/imregdemons_ref/*.m` snapshots are private reference
-material, excluded from redistribution and implementation targets. MATLAB API
-and original source files remain unchanged.
-
-## Registration profiles
-
-| Profile | Preserved selection |
+| Builder | What you supply |
 | --- | --- |
-| `translation` | scipy FFT; one worker; explicit reference/moving pair |
-| `local-default`, `py_demons` | demons, iterations 100/50/25, sigma 1, antialias |
-| `py_diffeo` | diffeomorphic variant with the same pyramid/iterations |
-| `tps-default` | noise 3, distance 10, minimum 50 matches, 1000 controls, smoothing 1, grid 32 |
-| `tps-small` | noise 2, distance 15, minimum 5 matches, smoothing 2, grid 16 |
-| `cpd-default` | noise 5, 1000 controls, automatic kernel width, weight 2, outliers .15, affine first, grid 16 |
-| `cpd-small` | same CPD settings, grid 8 |
-| `antialias-old` | symmetric, 25 iterations, sigma .5, sitk pyramid |
-| `antialias-two-level` | symmetric, 50/25 iterations, sigma .5, antialias |
+| `registration_case` | Profile, case ID, reference and moving paths, their metadata, and evaluation settings |
+| `pipeline_case` | Profile, case ID, FOV ID, round/channel source mapping, codebook path, and round count where needed |
 
-Select `tps-small` explicitly; dataset names no longer change numerical settings.
-The old `run_local_comparison.py` and v2 are distinct recipes, not interchangeable
-measurements: the old script refers to symmetric/25/.5 results, while v2 selects
-`py_demons` and `py_diffeo`. Old scheduler timeouts (600/900 seconds), implicit
-warmups, existence-only resume and inferred dataset sweeps are preserved as
-historical behavior. Current execution uses explicit cases, externally bounded
-commands and checksum/config-aware resume. No large sweep is dispatched.
+The registration profiles below are read from `benchmarks/configs/registration.json`
+when the site is built. For method options, see the
+{doc}`registration reference <registration-algorithms>`.
 
-A request for `benchmarks/recipes.py` contains explicit builder arguments:
-
-```json
-{
-  "task": "registration", "profile": "translation", "case_id": "fixture",
-  "reference": "reference.npy", "moving": "moving.npy",
-  "reference_metadata": {"frame_id": "reference"},
-  "moving_metadata": {"frame_id": "moving"},
-  "evaluation": {"ncc": true, "ssim": {"data_range": 255, "policy": "mip"}}
-}
+```{benchmark-profiles} registration
 ```
 
-From `src/python`:
+The pipeline profiles below are read from `benchmarks/configs/pipeline.json`.
+For the processing configuration, see the
+{doc}`workflow reference <workflow-configuration>`.
 
-```bash
-uv run python ../../benchmarks/recipes.py --request /external/request.json --output /external/new-cases.json
-uv run starfinder benchmark run --config /external/new-cases.json --input-root /external/inputs --output-root /external/runs --owner Jiahao
+```{benchmark-profiles} pipeline
 ```
 
-Case generation validates configuration without reading image data. These paths
-are placeholders; supplying them does not authorize scientific execution.
+### Case fields
 
-## Pipeline and output adapter
+{py:class}`~starfinder.benchmark.BenchmarkCase` holds the input paths,
+configuration and optional truth and artifact references.
 
-`pipeline_case` builds `task="pipeline"` cases using the same
-`from_workflow_config` → `Dataset` → `FOV.run(PipelineConfig, ExecutionConfig)`
-path as the workflow. Both batch and streaming use this sequence. Per-channel
-TIFF inputs have an explicit `{round: {channel: path}}` source mapping and a
-codebook path. Layout (`round/FOV` or `FOV/round`) is resolved by that mapping,
-not inferred from a dataset label. All inputs are checksummed and copied to the
-unique run. Disposable layout links live in local `TMPDIR`, never on the SMB
-artifact mount. No image conversion occurs on loading; normalization to uint8
-is an explicit selected stage and appears in effective configuration.
-
-For example, a pipeline request has `task: "pipeline"`, `profile:
-"large-streaming"`, `case_id`, `fov_id`, `codebook`, `n_rounds: 4`, and `sources`
-with `round1` through `round4`, each naming all four channels. Synthetic profiles
-require the explicit round count formerly read from `ground_truth.json`. Real
-profiles preserve their source round count, channel order, rotation, reference,
-threshold, extraction radius and codebook split. Geometry remains as stored in
-TIFF or explicitly unknown; extraction radii are not physical voxel spacing.
-
-The 20 pipeline profiles distinguish batch, streaming and global-plus-local
-settings. Source aging profiles use encoded `split_index=4` and `end_bases="CC"`
-(the recipe passes the shared one-based `load_codebook.split_index: [5]`, which
-the adapter converts back to 4; see {doc}`workflow-configuration`);
-the LR source has radius `(2,2,1)`. These are historical script choices, not a
-correction to the separately owned nine-round, segmented scientific protocol.
-Likewise tissue-2D's historical radius `(1,2,2)` is preserved. Do not replace
-these values using dataset overview tables. Qualifying discrepancies belongs to
-the scientific owners, not this migration.
-
-Saved `spots.csv`, complete accepted/rejected `reads.csv`, `pipeline.json`,
-metadata, float transforms/dense fields and registration attempts support repeated count evaluation and report
-creation. Count evaluation reads saved tables only; it does not detect spots,
-extract intensities or rerun registration. Counts are not accuracy or molecular
-truth. To process already registered stacks, construct a pipeline case with
-explicit single-channel TIFF sources and registration disabled; this is a new
-**processing run**, not saved-only evaluation. Supplied stacks need declared
-compatible frames for extraction. Hybrid exported layouts must be normalized
-explicitly; 4D stacks are not guessed or silently split by the adapter.
-
-## Saved report recipes
-
-Current trial/evaluation records use `starfinder benchmark report`. Selected
-legacy comparison, scaling, backend-summary and notebook table behavior uses
-`benchmarks/report_saved.py` on explicit saved CSVs:
-
-```bash
-uv run python ../../benchmarks/report_saved.py --quality /external/quality.csv --timing /external/timing.csv --keys dataset pair_type backend --variant local-v2 --timing-scope 'GNU time whole subprocess, seconds' --memory-scope 'GNU time maximum RSS, KiB' --output /external/new-report
+```{config-options} starfinder.benchmark.BenchmarkCase
 ```
 
-The helper requires unique non-null join keys, retains unmatched timing failures
-and quality rows with an outer join, and records input/output hashes. Normalize
-legacy column names explicitly before joining. There is no algorithm execution,
-implicit metric computation, zero-fill, ranking or pooling. Distinct variants
-must retain distinct labels. Legacy plots/notebook outputs remain historical;
-only reusable table assembly has been selected for migration.
+## Saved files
 
-Historical estimator-only `internal_time`, FOV-stage sums and whole-subprocess
-wall time are different scopes. Historical tracemalloc `memory_mb` is not peak
-RSS; Linux GNU time maximum RSS is KiB. Process-lifetime `ru_maxrss` must not be
-reported as an isolated FOV peak. New lifecycle timings include loading,
-processing and persistence and exclude evaluation. No speedup/equivalence claim
-is made by placing these records in a common table.
+Paths in this table are relative to the run directory unless stated otherwise.
 
-## Preprocessing comparison on synthetic presets
+| Path | Contents |
+| --- | --- |
+| `manifest.json` | Run identity, case configurations, input checksums, host and environment |
+| `<case>/<trial>/trial.json` | Statuses, errors, effective configurations, resources and artifact references |
+| `<case>/<trial>/trial.checksum.json` | Trial-record checksum |
+| `<case>/<trial>/registered.npy`, `<case>/<trial>/transform.json` | Registration output and transform record |
+| `<case>/<trial>/spots.csv`, `<case>/<trial>/reads.csv`, `<case>/<trial>/pipeline.json` | Pipeline detections, decoded reads and processing summary |
+| `evaluations/<id>/results.json`, `evaluations/<id>/manifest.json` | Evaluation records and their provenance |
+| `evaluations/<id>/reports/<id>/trials.json` | Complete report records |
+| `evaluations/<id>/reports/<id>/summary.csv` | Long-form metrics: case, trial, requested/actual method, processing/evaluation status, metric, value, unit, metric status and reason |
 
-`benchmarks/preprocessing_synthetic.py` runs the bounded preprocessing comparison matrix of
-the [preprocessing algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing-algorithms.md) (*Evaluation design*) on development-preset scenes:
+## Saved-table helper
 
-% §2.5
+`benchmarks/report_saved.py` assembles explicitly supplied CSVs without running
+image processing. Its command-line help describes the arguments.
 
-```bash
-uv run python ../../benchmarks/preprocessing_synthetic.py run --output /external/evaluation
-uv run python ../../benchmarks/preprocessing_synthetic.py attach-time --output /external/evaluation --time-log /external/time.log
-```
-
-% /external/w233/evaluation
-
-It processes every arm with `FOV.run` and sweeps the noise-mode `threshold_value`.
-Tables, precision–recall curves and a manifest (conditions, seeds, dtypes,
-recipe configs and output checksums) go to the output directory. The
-low-benefit flag is provisional. The results are development evidence on
-uncalibrated synthetic data, not recommended defaults.
-
-`--design calibrated` runs the calibrated rerun instead, as specified by the
-*Evaluation design amendment for the calibrated rerun* of the
-[preprocessing algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/preprocessing-algorithms.md). The default design (`w233`) stays that of task group 5:
-
-% W-233
-
-```bash
-uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope pilot --output /external/pilot
-uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope full --output /external/calibrated-evaluation
-```
-
-% /external/w239/pilot, W-248, /external/w248/evaluation
-
-* **Scenes.** Every scene is `calibrated_scene_preset` with the balanced
-  codebook. The added conditions are `bright_outliers`, `saturation` (with
-  its `k` search), `gain_strong` and `clean_unbalanced`. uint16 is used only
-  for `clean`, `combined` and `bright_outliers`, and the multi-FOV sets run in
-  uint8 only. `--reduction R3` drops uint16.
-* **Detection.** Every arm is swept in the noise and adaptive threshold modes.
-* **Tables.** Besides the tables of task group 5, the output directory holds
-  `preconditions.csv`, `fixture_gaps.csv`, the revised `low_benefit_flags.csv`,
-  `harm_test.csv` and `image_statistics.csv`. The last compares each
-  condition's statistics, measured with the [image statistics](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/image-statistics.md) tool, with
-  the measured development ranges. Every table of detection results has a
-  `threshold_mode` column.
-* **Projection.** The pilot scope records a projection of the full matrix
-  against the 2700 s budget, before and after R3.
-
-% W-233, W-238
-
-`benchmarks/preprocessing_report.py` renders the task group 6 inspection report
-from a saved evaluation directory as one standalone HTML file:
-
-```bash
-uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/evaluation --output /external/report.html
-```
-
-% /external/w233/evaluation, /external/w234/report.html
-
-Before rendering, it checks every manifest-listed checksum. It also checks that
-the manifest's revision matches the checkout: for a run from an uncommitted
-tree, the recorded diff checksum must equal the diff to a later commit, and the
-evaluation sources must be unchanged since that commit. Tables are copied from
-the named output files. The before/after panels regenerate only the displayed
-scenes and outputs, and each must equal its manifest checksum. See
-[Choose a preprocessing recipe](recipes.md#choose-a-preprocessing-recipe).
-
-Given a calibrated evaluation directory, the same command renders the report of
-item 6 of the amendment. `--summary` also saves the render summary as
-JSON:
-
-% W-249
-
-```bash
-uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/calibrated-evaluation --output /external/calibrated-report.html --summary /external/render-summary.json
-```
-
-% /external/w248/evaluation, /external/w249/report.html, /external/w249/render-summary.json
-
-* **Layout.** The human summary comes first: the setup, one card per method,
-  the cross-cutting findings and a reading order. The method sections with the
-  nine visualization changes follow, and the appendix holds the identity,
-  checksums and full tables.
-* **Threshold modes.** Every card and figure shows the noise and adaptive modes
-  side by side.
-* **Checks.** The checksum and revision checks above also cover
-  `benchmarks/image_statistics.py`. Each detection overlay is rerun once on its
-  verified image at the saved development-selected value. Its spot, match and
-  read counts and its cutoffs must equal the saved curve row, or nothing is
-  written.
+| Output | Contents |
+| --- | --- |
+| `comparison.csv` | Quality values and optional timing values joined on supplied keys, with variant and resource-scope labels |
+| `manifest.json` | Source and output checksums, keys and scope labels |
 
 ## Optional recipes
 
-| Recipe | Prerequisites and retained distinctions |
+These pointers describe prerequisites and preserved recipes; they do not claim
+calibration or accuracy on a dataset.
+
+| Recipe | Where to look |
 | --- | --- |
-| Postcode aging/synthetic | Separate Postcode dependency/environment, model/config, codebook and exported intensity identities; original `common.py` and both workers remain external. No core dependency or model execution. |
-| MATLAB global/local | Licensed MATLAB, original unchanged functions, explicit data/coordinate/channel metadata, separate resource authorization; no vendored reference snapshots. |
-| Hybrid MATLAB global → Python LR | Qualified MATLAB global exports, Python local config and explicit channel/frame mapping; preserve distinct backend label. |
-| Hybrid Python global → MATLAB LR | Qualified Python exports and separately run licensed MATLAB local stage; never substitute for the reverse hybrid. |
-| Backend diagnostics | External backend manifest plus matching saved spots/stacks/metrics; `diagnose_lr_effects.py` pairs retain their original labels. New saved tables can use the common report helper. |
-| Aging pad balance | Qualified pad/gene annotations and segmented codebook decisions; original diagnostics remain historical, not a new validated metric. |
-| LR synthetic generation | `starfinder synthetic generate` is the common entry point; original recipe has base seed 200, linear deformation magnitude 10, XY shift 50, Z shifts 5/7/10 for large/tissue/thick_medium. The current generator uses keyed streams and its own preset seeds and shift ranges; truth remains unqualified. Do not run/generate these large presets as routine validation. |
-| Antialias/large comparison | Explicit method profile, qualified image pairs and separately authorized memory/time; old symmetric and later demons/diffeomorphic recipes remain distinct. |
-
-No optional recipe is claimed as a runnable scientific experiment merely because
-its configuration parses. Qualification and scientific acceptance remain
-separate from software validation. Bounded adapter tests use deterministic
-8×16×16 TIFFs, four channels/rounds and saved-table fixtures; no real-image
-processing, historical notebook execution or MATLAB run is part of validation.
-
-From `src/python`, `uv run python ../../docs/examples/benchmark_recipes.py
-/external/new-recipe-smoke` (one line) exercises eight source-derived profiles:
-translation, demons, diffeomorphic, small TPS/CPD and pipeline batch, streaming
-and global-plus-local. It saves the exact case config, inputs, trials,
-evaluations and reports. All images are deterministic and at most 16×32×32;
-the pipeline images are 8×16×16. The original scientific presets are not generated.
+| Demons, TPS, CPD | Optional dependencies in the {doc}`registration reference <registration-algorithms>` |
+| Postcode, MATLAB and hybrid comparisons | [Recipe notes](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/benchmark-recipes.md#optional-recipes) |
+| Synthetic preprocessing comparisons and report rendering | [Comparison design and commands](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/benchmark-recipes.md#preprocessing-comparison-on-synthetic-presets) |
+| Historical source mapping and preservation | [Source notes](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/benchmark-recipes.md#source-boundary-and-provenance) |

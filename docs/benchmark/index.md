@@ -12,7 +12,7 @@ report them with their provenance.
 :link: data
 :link-type: doc
 :class-card: sf-card
-The inputs benchmarks measure, and their image statistics.
+Input identities and synthetic presets.
 :::
 
 :::{grid-item-card} Recipe / Experiments

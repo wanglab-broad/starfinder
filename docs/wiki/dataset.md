@@ -12,7 +12,7 @@ renders with their truth, and real sequencing inputs.
 :link: synthetic
 :link-type: doc
 :class-card: sf-card
-The synthetic scenes and their design pages.
+The synthetic scene guides and preset reference.
 :::
 
 :::{grid-item-card} Real data

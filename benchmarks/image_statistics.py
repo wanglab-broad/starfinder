@@ -63,7 +63,7 @@ MIN_FIT_RETAINED = 0.001
 
 # --- Real-data plan (batch guidance for W-238) --------------------------------------
 DATASETS = ("tissue-2D", "cell-culture-3D", "LN", "aging")
-#: Register IDs from docs/datasets.md; aging is a catalog version without a benchmark ID.
+#: Register IDs from design/notes/datasets.md; aging is a catalog version without a benchmark ID.
 REGISTER_IDS = {"tissue-2D": "D01", "cell-culture-3D": "D02", "LN": "D03", "aging": None}
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
 FOV_POSITIONS = (0, 1, 2, 3)

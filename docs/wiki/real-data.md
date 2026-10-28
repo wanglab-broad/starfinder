@@ -1,7 +1,7 @@
 # Real data
 
 :::{container} sf-lead
-The real sequencing inputs, with their versions, shapes, codebooks and limits, are
+The real sequencing input names and historical versions are
 listed in the dataset catalog
 ([Real sequencing inputs](../datasets.md#real-sequencing-inputs)).
 :::

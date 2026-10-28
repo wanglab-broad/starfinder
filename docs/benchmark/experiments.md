@@ -1,8 +1,8 @@
 # Recipe / Experiments
 
-A benchmark experiment is a set of explicit cases: the lifecycle runs, evaluates and
-reports them, the maintained recipes build the cases from source-derived profiles, and
-the research scripts inspect the saved results of the codebook-aware decoder.
+Start with the lifecycle guide to run explicit cases, then look up case builders
+and profiles in the recipe reference. The research-script guide describes tools
+for inspecting saved codebook-aware decoding results.
 
 ```{toctree}
 :maxdepth: 1
