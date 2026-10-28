@@ -1,11 +1,13 @@
 # Preprocessing
 
-Preprocessing corrects each round's image before registration: it removes background
-and normalizes intensities, so that rounds and channels can be compared. A
+Preprocessing corrects each round's image before the later stages: it removes
+background and normalizes intensities, so that rounds and channels can be compared. A
 `PreprocessingRecipe` in `PipelineConfig.preprocessing` lists the steps to run, in
 order; `None`, the default, means no preprocessing. Inside `FOV.run`, each round goes
-through the recipe's steps, then {doc}`registration <registration-contract>` when it is
-a moving round, then the recipe's `post_registration` steps, before spot finding.
+through the recipe's steps, then {doc}`registration <registration-contract>` when
+`PipelineConfig.registration` holds a recipe and the round is a moving round, then the
+recipe's `post_registration` steps. The stages after them, such as spot finding, run
+when they are set.
 
 The {doc}`preprocessing reference <preprocessing-algorithms>` lists every method,
 option and record; the {doc}`preprocessing API <api/preprocessing>` documents the
@@ -49,18 +51,18 @@ for record in fov.preprocessing_record["rounds"]["round1"]:
 
 1. **Steps.** The steps run in the declared order on each round, one round at a time.
    Each step returns an image of the same shape; the output of the last step is the
-   *detection image*, which goes on to registration and spot finding. With no steps,
-   it is the loaded image.
+   *detection image*. With no steps, it is the loaded image.
 2. **Snapshots.** A step with `save_as` keeps a named copy of its output. The recipe's
    `extraction_source` names the snapshot that intensity extraction reads, and
    `registration_source` the snapshot that registration signals are built from; both
    default to the detection image.
-3. **Registration.** Each moving round is registered to the reference round. The
-   transform is applied once to the detection image and to every snapshot of the
-   round, so they stay aligned. The reference round is not transformed.
+3. **Registration.** When `PipelineConfig.registration` holds a recipe, each moving
+   round is registered to the reference round. The transform is applied once to the
+   detection image and to every snapshot of the round, so they stay aligned. The
+   reference round is not transformed.
 4. **After registration.** The `post_registration` steps run on each round after
-   registration. Only `reconstruction` may run there, the order the resident subtile
-   rules use.
+   registration, or after the steps when no registration is set. Only `reconstruction`
+   may run there, the order the resident subtile rules use.
 
 Every step runs through one wrapper that checks its output: the same shape, a dtype
 that its method allows, finite values, unchanged metadata, and records that can be
@@ -80,16 +82,18 @@ to its steps. Recipe 2, `scalar_background` or `background_3d` then
 ## What you get
 
 * **In memory**, per round of the FOV that is kept (every round in batch mode):
-  * `fov.images[round]`: the detection image, after registration and the
-    `post_registration` steps;
-  * `fov.snapshots[round][name]`: each snapshot, registered with the round;
+  * `fov.images[round]`: the detection image, after registration when it is set and
+    after the `post_registration` steps;
+  * `fov.snapshots[round][name]`: each snapshot, registered with the round when
+    registration is set;
   * `fov.preprocessing_record`: the recipe, one record per round and step (its
     config, fitted values, diagnostics, and input and output dtypes), the transforms
     applied to each image of a round, and the path and SHA-256 of the
     supplied-statistics file.
 * **On disk.** With any `checkpoints`, `run.json` records it under `preprocessing`.
-  With the `registered` checkpoint stage, `FOV.run` writes each round as it enters
-  spot finding and, when the recipe names an `extraction_source`, that snapshot under
+  With the `registered` checkpoint stage, `FOV.run` writes each round after its
+  preprocessing steps, any registration and its `post_registration` steps and, when the
+  recipe names an `extraction_source`, that snapshot under
   `checkpoints/registered/<snapshot>/` in the FOV folder ({doc}`checkpoints`).
 
 ## Main options
@@ -99,7 +103,8 @@ to its steps. Recipe 2, `scalar_background` or `background_3d` then
 * `PreprocessingStep.save_as`: keeps the step's output as a named snapshot.
 * `PreprocessingRecipe.extraction_source` and `registration_source`: the snapshots
   that extraction and registration read.
-* `PreprocessingRecipe.post_registration`: the steps run after registration.
+* `PreprocessingRecipe.post_registration`: the steps run after registration, or after
+  the other steps when no registration is set.
 * `PreprocessingRecipe.supplied_statistics` and the `fit` option of the methods that
   have one: sample-level statistics.
 
@@ -108,8 +113,7 @@ The reference gives each method's options and their defaults.
 ## Fitting modes
 
 `scalar_background`, `percentile_normalization` and `histogram_matching` have a `fit`
-option. With `fit="fov"`, the default, `scalar_background` and
-`percentile_normalization` fit their values on each round of each FOV, and
+option. With `fit="fov"`, `scalar_background` and `percentile_normalization` fit their values on each round of each FOV, and
 `histogram_matching` matches every round to one channel of the reference round of
 the same FOV. With `fit="supplied"`, they are read from the recipe's
 `supplied_statistics` file, which holds statistics merged over a set of FOVs of the
@@ -170,7 +174,7 @@ replaces each. {doc}`workflow-configuration` describes the rules.
   is an output, such as the reference image.
 * The Snakemake workflow does not make the supplied-statistics file.
 * The XY methods, `reconstruction` and `white_tophat`, work on each Z plane
-  separately, with radii in pixels.
+  separately.
 
 ## How it is checked
 

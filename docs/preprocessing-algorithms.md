@@ -17,25 +17,24 @@ the exact type of its config.
 
 ### Min–max normalization
 
-Maps the data range of each channel, or of the whole volume (`scope`), linearly onto
-`output_range` in `output_dtype`. `snr_threshold` sets when a channel keeps its values, clipped to
-`output_range`, instead of being rescaled. See {py:class}`~starfinder.preprocessing.MinMaxNormalizationConfig`.
+The legacy pipeline's min–max normalization. See
+{py:class}`~starfinder.preprocessing.MinMaxNormalizationConfig`.
 
 ```{config-options} starfinder.preprocessing.MinMaxNormalizationConfig
 ```
 
 ### Histogram matching
 
-Matches each channel's intensity distribution to channel `reference_channel` of the
-reference round. See {py:class}`~starfinder.preprocessing.HistogramMatchingConfig`.
+Matches each channel's intensity distribution to one channel of the reference round.
+See {py:class}`~starfinder.preprocessing.HistogramMatchingConfig`.
 
 ```{config-options} starfinder.preprocessing.HistogramMatchingConfig
 ```
 
 ### Reconstruction and white top-hat
 
-Both remove background in XY with a disk of radius `radius_yx` pixels, on each Z plane
-and channel. See {py:class}`~starfinder.preprocessing.ReconstructionConfig` and
+Both remove background in XY, on each Z plane and channel separately. See
+{py:class}`~starfinder.preprocessing.ReconstructionConfig` and
 {py:class}`~starfinder.preprocessing.TophatConfig`.
 
 ```{config-options} starfinder.preprocessing.ReconstructionConfig
@@ -46,17 +45,17 @@ and channel. See {py:class}`~starfinder.preprocessing.ReconstructionConfig` and
 
 ### Scalar background
 
-Subtracts one level per channel and round: the `percentile`-th intensity of the
-channel, or the supplied value. See {py:class}`~starfinder.preprocessing.ScalarBackgroundConfig`.
+Subtracts one background level per channel and round, estimated from the channel's
+intensities or read from a supplied-statistics file. See
+{py:class}`~starfinder.preprocessing.ScalarBackgroundConfig`.
 
 ```{config-options} starfinder.preprocessing.ScalarBackgroundConfig
 ```
 
 ### 3D background
 
-Subtracts a grey opening with an ellipsoidal footprint, whose radii are given in
-micrometres (`radius_um_zyx`) or in voxels (`radius_voxels_zyx`). Choose radii larger
-than the puncta; "Choose the 3D background radius" in {doc}`recipes` shows how. See
+Subtracts a volumetric grey opening, for background that also varies along Z.
+"Choose the 3D background radius" in {doc}`recipes` helps choose its size. See
 {py:class}`~starfinder.preprocessing.Background3DConfig`.
 
 ```{config-options} starfinder.preprocessing.Background3DConfig
@@ -64,8 +63,8 @@ than the puncta; "Choose the 3D background radius" in {doc}`recipes` shows how. 
 
 ### Percentile normalization
 
-Maps each channel's range from the `p_low`-th to the `p_high`-th percentile linearly
-onto the output range, in the input dtype. See
+Maps each channel's range between two percentiles linearly onto the output range,
+keeping the input dtype. See
 {py:class}`~starfinder.preprocessing.PercentileNormalizationConfig`.
 
 ```{config-options} starfinder.preprocessing.PercentileNormalizationConfig
@@ -125,7 +124,7 @@ channel. The other methods record none.
 | `noise_threshold` | `median + 5 × 1.4826 × mad`, the local-maxima `noise` threshold at its default `threshold_value` |
 | `mad_zero` | Whether `mad` is 0 |
 | `constant_channel` | Whether the input channel was constant |
-| `degenerate_range` | `percentile_normalization` only: whether `low` equals `high` or the channel was constant; the output is then zero |
+| `degenerate_range` | `percentile_normalization` only: whether `low` equals `high` or the channel was constant |
 | `footprint_voxels` | `background_3d` only: the number of voxels of the footprint |
 
 ## Sample-level statistics
@@ -136,7 +135,7 @@ file. These functions make the file:
 | Function | Does |
 | --- | --- |
 | `summary_recipe(recipe, step)` | Returns the recipe of the steps before `step`, to run on each FOV, and the record of those steps |
-| `summarize_histograms(images, channel_labels=..., fov_id=..., summarized_after=...)` | Records the per-channel histograms of one FOV's rounds (uint8 or uint16) |
+| `summarize_histograms(images, channel_labels=..., fov_id=..., summarized_after=...)` | Records the per-channel histograms of one FOV's rounds |
 | `save_histograms`, `load_histograms` | Write and read one summary as `.npz` |
 | `merge_histograms(summaries, exclude=...)` | Sums the summaries of the FOVs, leaving out those named in `exclude` |
 | `scalar_background_histograms(summary, config, supplied=...)` | Derives the histograms after a scalar background step without another pass |
@@ -159,8 +158,8 @@ The guide's [two-pass example](preprocessing-contract.md#fitting-modes) uses the
 | File | Written by | Contents |
 | --- | --- | --- |
 | `run.json` | `FOV.run` with `checkpoints` | The `preprocessing` record above |
-| `checkpoints/registered/<round>.ome.tif` | `FOV.run` with the `registered` stage | The round as it enters spot finding |
-| `checkpoints/registered/<snapshot>/<round>.ome.tif` | the same, when the recipe names an `extraction_source` | That snapshot, registered with the round |
+| `checkpoints/registered/<round>.ome.tif` | `FOV.run` with the `registered` stage | The round after its preprocessing steps, any registration and its post-registration steps |
+| `checkpoints/registered/<snapshot>/<round>.ome.tif` | the same, when the recipe names an `extraction_source` | That snapshot, registered with the round when registration is set |
 | `checkpoints/registered/transforms.json` | the same | Includes the stored snapshot names and the `preprocessing` record |
 | Supplied-statistics file | `save_supplied_statistics` | The JSON file above |
 | Histogram summary | `save_histograms` | `counts` (rounds, channels, bins), labels, FOVs and the steps run before |
@@ -176,7 +175,7 @@ the recipe:
 | Key, under `rules.<rule>.parameters.preprocessing` | Meaning |
 | --- | --- |
 | `steps` | A list of steps: `method` (a name in the method table), that config's fields, and optional `save_as` |
-| `post_registration` | Steps run after registration, in the same form |
+| `post_registration` | Steps run after registration (after `steps` when no registration is set), in the same form |
 | `extraction_source`, `registration_source`, `supplied_statistics` | The recipe fields of the same names |
 
 On the MATLAB backend, the legacy keys are translated to recipe 1, in this order:
