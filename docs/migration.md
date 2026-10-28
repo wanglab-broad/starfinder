@@ -1846,8 +1846,7 @@ the cell's row in the sample cell table, `label_file` and `label_value`. The SHA
 
 ### Records added to `run.json`
 
-The records the processing report reads ({doc}`report-contract`, "Records added to
-run.json"):
+The records the processing report reads ([run-record specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/report.md#records-added-to-runjson)):
 
 * **`run.json` gains `transforms`, `codebook`, `workflow_config` and
   `counts.filtering.endpoint_valid`** (with `endpoint_valid_segments`); `format_version`
@@ -2510,12 +2509,12 @@ scripts, rules and the JSON copy are unchanged, and `common.smk` selects the sam
 
 * **New: the processing report.** `Dataset.report(sample, fov_ids, …)` writes
   `<output_root>/report/<sample>/` (`report.html`, `report.json`, `tables/`) and returns a
-  `ReportRecord` ({doc}`report-contract`, "The sample entry"); `starfinder.report.load_report`
+  `ReportRecord` ({doc}`report-contract`, "Quick start"); `starfinder.report.load_report`
   reads a report back. The entry reads the saved records only and calls no processing stage.
   Nothing existing changes.
 * **New: the comparison page.** `Dataset.compare_samples(samples, *, report_root=None)` writes
   `<output_root>/report/index.html` and `report/samples.csv` from the finished sample reports
-  only and returns a `ComparisonRecord` ({doc}`report-contract`, "The comparison entry"); a
+  only and returns a `ComparisonRecord` ({doc}`report-contract`, "What you get"); a
   sample without a report is a row marked `missing`. Nothing existing changes.
 * **New: the workflow's `report` block and rules.** A Python-only top-level `report` block
   whose keys are the `ReportConfig` fields ({doc}`workflow-configuration`, "Processing

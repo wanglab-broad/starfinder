@@ -1,4 +1,4 @@
-"""The report page ``report.html`` (docs/report-algorithms.md, "Layout of the page", "How the page is built").
+"""The report page ``report.html`` (design/specs/report-algorithms.md, "Layout of the page", "How the page is built").
 
 The page is the template shipped with the package (``templates/report.html``, read with
 ``importlib.resources``): the page skeleton, the CSS and the inline script. Its named slots

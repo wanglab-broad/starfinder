@@ -10,7 +10,7 @@ the full rules behind it.
 
 | Folder | Holds | Read by tests |
 | --- | --- | --- |
-| `specs/` | The specification of each stage, method family and synthetic scene: the rules the code follows, the options considered and why one was chosen. | No |
+| `specs/` | The specification of each stage, method family and synthetic scene: the rules the code follows, the options considered and why one was chosen. | Yes: the processing report's labelled layout and check tables |
 | `validation/` | The validation designs: the checks of a scene or a chain, their thresholds, and the table that maps each check to its tests. | Yes: the "Implemented checks" tables, found by their MyST labels |
 | `baselines/` | What a stage did at a fixed revision before it was rewritten, with file and line pins. History; not maintained. | No |
 | `proposals/` | Designs proposed and not, or not yet, implemented. | No |

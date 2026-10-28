@@ -15,7 +15,7 @@ report's record back, checking every file it lists. ``Dataset.report`` writes a 
 report (the page ``report.html``, ``report.json`` and ``tables/``) and returns a
 :class:`ReportRecord`; ``Dataset.compare_samples`` writes the dataset's comparison page
 (``<OUTPUT>/report/index.html`` and ``samples.csv``) from finished sample reports only and
-returns a :class:`ComparisonRecord`. See docs/report-contract.md and docs/report-algorithms.md.
+returns a :class:`ComparisonRecord`. See design/specs/report.md and design/specs/report-algorithms.md.
 """
 # §2.11
 from ._config import MarkerGroup, ReportConfig, ReportLimits, RuleLimit

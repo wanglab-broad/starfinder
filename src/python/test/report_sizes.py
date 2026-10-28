@@ -1,4 +1,4 @@
-"""The figure sizes of the report page, written from docs/report-algorithms.md ("Figure sizes", W-475, W-478).
+"""The figure sizes of the report page, written from design/specs/report-algorithms.md ("Figure sizes", W-475, W-478).
 
 The slots are the widths in px at which the page shows a figure in a window 1,200 px wide: the
 full column, a half column, a third, and the column of the comparison page. A plot (PNG) is

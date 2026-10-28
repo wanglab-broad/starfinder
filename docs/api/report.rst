@@ -37,10 +37,10 @@ reads a report's ``report.json`` back, checking every file it lists against its 
 output_dir=None)`` is the entry: it writes the folder (by default ``<OUTPUT>/report/<sample>/``)
 and returns a :py:class:`~starfinder.report.ReportRecord`, the folder and its ``report.json``.
 It is a reader, not a runner: it calls no processing stage, reads the saved records at the places
-of :doc:`../report-contract` ("Where each record is looked for") and the raw input of the main
+of the `input specification <https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/report.md#where-each-record-is-looked-for>`_ and the raw input of the main
 example for its replay, and writes only its own folder. The folder holds every table of
 :py:data:`~starfinder.report.REPORT_TABLES` (the values each definition of
-:doc:`../report-algorithms` computes: the read fractions, the shifts and their residuals, the
+the `measurement specification <https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/report-algorithms.md#values-of-the-tables>`_ computes: the read fractions, the shifts and their residuals, the
 alignment score, the area a FOV owns and the cell density, the problematic FOVs, the example
 FOVs, the intensity distributions of the replayed main example, the reads assigned to cells,
 the per-cell values, MECR and the reads along Z), ``report.json`` and the page
@@ -49,7 +49,7 @@ the per-cell values, MECR and the reads along Z), ``report.json`` and the page
 The page is built from the template shipped with the package
 (``starfinder/report/templates/report.html``): eight sections (Summary, Workflow overview,
 Preprocessing, Registration, Readout, Segmentation and assembly, Sample measurements, Files) in
-the layout of :doc:`../report-algorithms` ("Layout of the page"). The tables are embedded as one
+the `layout specification <https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/report-algorithms.md#layout-of-the-page>`_. The tables are embedded as one
 JSON block, from which the page's inline script draws the FOV maps (plain SVG), their tooltips
 and the paged tables; the static figures are matplotlib PNG and JPEG images embedded as
 ``data:`` addresses; a part that is unavailable shows "Unavailable:" and its reason in its

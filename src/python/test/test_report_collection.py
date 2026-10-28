@@ -1,6 +1,6 @@
 """The collection of one sample's records into the report's tables and record (W-452).
 
-Checks of docs/report-algorithms.md ("Validation design") on the hand-written fixtures
+Checks of design/specs/report-algorithms.md ("Validation design") on the hand-written fixtures
 ``report_records`` and ``report_cells`` of ``report_fixtures.py``: RC1 to RC5, RC11 to RC13
 for the columns the collection copies from the records, the record of unavailable values
 (RC12), the inputs and their hashes, the entry checks and the output folder (PG7), the
@@ -81,7 +81,7 @@ def records(tmp_path):
     return report_records(tmp_path / "root")
 
 
-# --- The contract's lists, written here from docs/report-contract.md -------------------------------------
+# --- The contract's lists, written here from design/specs/report.md -------------------------------------
 
 CONTRACT_REASONS = ["no_run_record", "run_not_finished", "step_failed", "not_configured", "not_recorded",
                     "no_placement", "fov_not_placed", "no_export", "part_not_written", "no_segmentation",
@@ -518,7 +518,7 @@ WITHOUT_METHOD = ("load_images", "extract_round", "score_reads", "deduplicate_re
 
 
 def _not_applicable(table, column, row, case, context):
-    """The column's null rule names this case n/a (docs/report-contract.md, "The tables"), read from the records."""
+    """The column's null rule names this case n/a (design/specs/report.md, "The tables"), read from the records."""
     if table == "fovs":
         record = case.run_record(row["fov_id"]) if row["run_record"] else None
         error = (record or {}).get("error")

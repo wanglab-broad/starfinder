@@ -783,7 +783,7 @@ export:
 
 A Python-only top-level `report` block (rejected unless `backend: python`) makes the workflow
 write the processing reports; the specification is the "Workflow configuration" section of
-the [report contract](report-contract.md#workflow-configuration) (option WR1). A
+the [report specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/report.md#workflow-configuration) (option WR1). A
 configuration without the block runs as before: no report rule and no report output.
 
 * **The keys** are the `ReportConfig` fields: `markers`, a list of `{name, genes}`

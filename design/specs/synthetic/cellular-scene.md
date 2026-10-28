@@ -649,7 +649,7 @@ cell (`synthetic/_sample.py::_molecules`, stream `sample.identity`). Cell types 
 report's marker figures and MECR a pattern with known answers on synthetic data (the settled decisions, "Regimes and cell types"). MECR
 is `both / either` over the counted cells for a supplied pair, with a cell positive for a
 gene when its whole-cell count is at least `positive_threshold`
-(`report/_measurements.py::mecr`; [report-algorithms](../../../docs/report-algorithms.md), "`mecr.csv`").
+(`report/_measurements.py::mecr`; [report-algorithms](../report-algorithms.md), "`mecr.csv`").
 
 % §2.11; D3
 

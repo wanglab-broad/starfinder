@@ -1794,10 +1794,10 @@ def _export_dataset(config, block, export=None):
 
 
 # --- §2.11: the Python-only report block and the rules report_sample and report_dataset
-# --- (docs/report-contract.md, "Workflow configuration", option WR1).
+# --- (design/specs/report.md, "Workflow configuration", option WR1).
 
 def _report_block(config):
-    """ReportConfig of the Python-only top-level report block (docs/report-contract.md, "Workflow configuration").
+    """ReportConfig of the Python-only top-level report block (design/specs/report.md, "Workflow configuration").
 
     Its keys are the ReportConfig fields: markers a list of {name, genes}
     (MarkerGroup), marker_pairs a list of gene pairs, limits the ReportLimits

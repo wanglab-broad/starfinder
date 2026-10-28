@@ -1,4 +1,4 @@
-"""The sample measurements of the report (docs/report-algorithms.md, "Reads assigned to cells", "`cells.csv`",
+"""The sample measurements of the report (design/specs/report-algorithms.md, "Reads assigned to cells", "`cells.csv`",
 "`mecr.csv`", "`reads_along_z.csv`", "Sample measurements").
 
 Read from the export at its fixed place: ``tables/molecules.csv`` and ``tables/cells.csv``

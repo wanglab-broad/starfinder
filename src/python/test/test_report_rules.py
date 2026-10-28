@@ -1,6 +1,6 @@
 """The rules of the problematic FOVs (W-453): the one form of a rule on values and every rule of the first delivery.
 
-Checks of docs/report-algorithms.md ("Validation design"): PR1 to PR5, RC1's two rows, RC8 to RC10, the reason
+Checks of design/specs/report-algorithms.md ("Validation design"): PR1 to PR5, RC1's two rows, RC8 to RC10, the reason
 texts of "The reason texts", and PG6 and RC12 on the completed tables, on ``hand_tables`` built here and on
 ``report_records`` and ``report_cells`` of ``report_fixtures.py``. Comparisons are strict, as the page states. A
 float the page calls exact is compared within 1e-9 absolute (the project guidance); PR2's limit within 1e-12.

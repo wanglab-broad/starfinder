@@ -1,6 +1,6 @@
 """The sample measurements of the report (W-455).
 
-Checks of docs/report-algorithms.md ("Validation design"): DF7 (the reads assigned to cells
+Checks of design/specs/report-algorithms.md ("Validation design"): DF7 (the reads assigned to cells
 and the check against ``sample.h5ad``), DF8 (MECR), DF9 with RC7 (the per-cell values and
 the unknown calibration), DF10 (the reads along Z and the grid-edge lines of their figure),
 RC6 (no marker), and on the synthetic chains (seed 42, ``slow``) the marker figures on the

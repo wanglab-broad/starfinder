@@ -1,6 +1,6 @@
 """The report page and the entry ``Dataset.report`` (W-456).
 
-Checks of docs/report-algorithms.md ("Validation design") on the pages of the hand-written
+Checks of design/specs/report-algorithms.md ("Validation design") on the pages of the hand-written
 fixtures ``report_records`` (every variant of RC1 to RC13) and ``report_cells`` (and its
 variants): the data block equals the saved tables (PG1), every section and block is present
 in page order (PG2), every unavailable part and named null cell carries its reason (PG3), the
@@ -46,7 +46,7 @@ from .test_report_collection import (CHECKS, CONTRACT_COLUMNS, CONTRACT_RECORD_K
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
-# --- Written from docs/report-algorithms.md ("Layout of the page", "How an unavailable part is shown") ----------
+# --- Written from design/specs/report-algorithms.md ("Layout of the page", "How an unavailable part is shown") ----------
 
 SECTIONS = [("summary", "Summary", ["b-facts", "b-key-numbers", "b-problematic"]),
             ("run", "Workflow overview", ["b-chart", "b-fov-status", "b-time"]),
@@ -57,7 +57,7 @@ SECTIONS = [("summary", "Summary", ["b-facts", "b-key-numbers", "b-problematic"]
                                                     "b-population"]),
             ("sample", "Sample measurements", ["b-per-cell", "b-markers", "b-mecr", "b-reads-z"]),
             ("files", "Files", ["b-files-input", "b-files-configuration", "b-files-output"])]
-# The part each block draws (docs/report-contract.md, "Parts, their inputs and their reasons").
+# The part each block draws (design/specs/report.md, "Parts, their inputs and their reasons").
 BLOCK_PARTS = {"b-facts": "summary.identity", "b-key-numbers": "summary.key_numbers",
                "b-problematic": "summary.problematic_fovs", "b-chart": "workflow.steps",
                "b-fov-status": "workflow.fov_status", "b-time": "workflow.time",

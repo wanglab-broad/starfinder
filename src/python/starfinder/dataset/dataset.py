@@ -691,7 +691,7 @@ class Dataset:
                config=None, output_dir=None):
         """Write a sample's processing report: ``report.html``, ``report.json`` and ``tables/``.
 
-        The one sample report entry (docs/report-contract.md, "The sample
+        The one sample report entry (design/specs/report.md, "The sample
         entry"). A sample-level reader, not a runner: it calls no processing
         stage, reads only the saved records at their fixed places under the
         output root ("Where each record is looked for": the FOVs'
@@ -757,7 +757,7 @@ class Dataset:
     def compare_samples(self, samples, *, report_root=None):
         """Write the dataset's comparison page ``index.html`` and ``samples.csv`` from finished sample reports.
 
-        The comparison entry (docs/report-contract.md, "The comparison
+        The comparison entry (design/specs/report.md, "The comparison
         entry"). It reads only the sample reports: each sample's
         ``<report_root>/<sample>/report.json`` and the tables it lists, each
         checked against its recorded SHA-256, and draws one row per sample and

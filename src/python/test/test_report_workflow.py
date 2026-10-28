@@ -1,5 +1,5 @@
-"""WF1 of docs/report-algorithms.md: the workflow's ``report`` block and the rules ``report_sample`` and
-``report_dataset`` (W-458; docs/report-contract.md, "Workflow configuration", option WR1).
+"""WF1 of design/specs/report-algorithms.md: the workflow's ``report`` block and the rules ``report_sample`` and
+``report_dataset`` (W-458; design/specs/report.md, "Workflow configuration", option WR1).
 
 The Python-only ``report`` block of ``workflow/schemas/config.schema.yaml``, its adapter
 ``starfinder.dataset.workflow._report_block``, the rules of ``workflow/rules/report.smk`` and
@@ -42,7 +42,7 @@ WF_CONFIGS = ("docs/examples/workflow-full.yaml", "docs/examples/workflow-minima
               "docs/examples/workflow-recipe-2.yaml", "tests/minimal_config.yaml", "tests/tissue_2D_test.yaml")
 SAMPLE = "sample1"
 
-# The block of docs/report-contract.md, "Workflow configuration": W-383's markers.yaml for LN sample1, shortened.
+# The block of design/specs/report.md, "Workflow configuration": W-383's markers.yaml for LN sample1, shortened.
 REPORT = yaml.safe_load("""
 markers:
   - name: lymph node compartments

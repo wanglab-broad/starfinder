@@ -1,4 +1,4 @@
-"""The values the report computes from its records (docs/report-algorithms.md, "Values of the tables").
+"""The values the report computes from its records (design/specs/report-algorithms.md, "Values of the tables").
 
 A value is a number or string, :data:`NA` (it does not exist in its case) or an
 :class:`Unavailable` (null, named by one row of ``unavailable.csv``). Each definition here is a

@@ -1,6 +1,6 @@
 """The figures and the page after Jiahao's first review of the real block report (W-475).
 
-Checks of docs/report-algorithms.md ("Figure sizes" and the passages it names) on the figures
+Checks of design/specs/report-algorithms.md ("Figure sizes" and the passages it names) on the figures
 of the pages the page tests build (``report_records`` and ``report_cells`` with their
 variants), on the comparison page, on a hand-written sample of 64 FOVs and on hand-written
 examples: no text is smaller than 11 px as shown (the text size), each PNG is twice the

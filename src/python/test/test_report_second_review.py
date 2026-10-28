@@ -1,6 +1,6 @@
 """The figures and the page after Jiahao's second review of the real block report (W-478).
 
-Checks of docs/report-algorithms.md ("Layout of the page", "Workflow overview", "Preprocessing",
+Checks of design/specs/report-algorithms.md ("Layout of the page", "Workflow overview", "Preprocessing",
 "Registration", "Segmentation and assembly", "Sample measurements", "Figure sizes"): the page
 header is the heading "Processing report" alone (the header); the axes of "Time per step" span,
 as shown, the FOV rectangles of the FOV status map beside it, which the page's inline script

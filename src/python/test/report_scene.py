@@ -1,4 +1,4 @@
-"""The synthetic chains of the §2.11 report (docs/report-algorithms.md, "Fixtures").
+"""The synthetic chains of the §2.11 report (design/specs/report-algorithms.md, "Fixtures").
 
 ``scene_chain``: ``sample_scene_preset("sample-tiny-v1")`` (seed 42; 2 × 2 FOVs of
 5 × 36 × 36, four rounds of four channels). The FOV round images are written as one

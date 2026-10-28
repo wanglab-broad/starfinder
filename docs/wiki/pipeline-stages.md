@@ -31,15 +31,14 @@ the stage's other pages. The stages are listed in processing order.
 | [Assembly](../assembly-contract.md) | Sample coordinates, ownership and the sample tables | [reference](../assembly-algorithms.md) | |  |
 | [Sample output](../sample-output-contract.md) | The export: fused image, labels, SpatialData and profiles | [reference](../sample-output-reference.md) | | |
 | [Sample segmentation](../sample-segmentation-contract.md) | Segmentation after fusion and the check of the two routes | [reference](../sample-segmentation-reference.md) | [validation](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/sample-segmentation.md) | |
-| [Processing report](../report-contract.md) | One sample's report and a dataset's comparison page | [algorithms](../report-algorithms.md) | in algorithms | [baseline](../report-baseline.md) |
+| [Processing report](../report-contract.md) | One sample's report and a dataset's comparison page | [reference](../report-algorithms.md) | | |
 
 :::
 
 ## The pages beneath a guide
 
-* **Algorithms:** the specification of each method. For assignment and the processing
-  report, the validation design is part of this page. Preprocessing, registration, spot
-  finding, readout and stitching have a reference instead: their methods, options and records,
+* **Algorithms:** the specification of each method. For assignment, the validation design is part of this page. Preprocessing, registration, spot
+  finding, readout, stitching and the processing report have a reference instead: their methods, options and records,
   with the specification in `design/`.
 * **Validation:** a separate validation design, where the stage has one. The design that
   checks placement, assembly and the sample outputs sits under the sample-output guide,

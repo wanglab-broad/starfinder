@@ -1,4 +1,4 @@
-"""The segmentation previews of the example FOVs on both routes (docs/report-algorithms.md, "How the two routes
+"""The segmentation previews of the example FOVs on both routes (design/specs/report-algorithms.md, "How the two routes
 differ", "Segmentation and assembly").
 
 Route per FOV (and a sample without an export whose assignment folders exist): the FOV's

@@ -1,4 +1,4 @@
-"""The tables of docs/report-algorithms.md that the §2.11 report's tests parse (W-602).
+"""The tables of design/specs/report-algorithms.md that the §2.11 report's tests parse (W-602).
 
 A docs-contract module (docs/contributing.md, "Test markers"): it holds the tests that read the page, so that no
 ``slow`` test of the report reads it, and it finds each part by its label (``docs_pages``), not by its heading:
@@ -24,7 +24,7 @@ from .report_sizes import COMPARISON, FIGURES, FULL, HALF, THIRD
 
 pytestmark = [pytest.mark.report, pytest.mark.contract]
 
-PAGE = "report-algorithms.md"
+PAGE = "specs/report-algorithms.md"
 ROW = r"(?:RC|DF|PR|EF|RP|PG|CH|RT|Z|A|CP|RR|WF|DT)\d+"
 TIERS = {"default": (False,), "slow": (True,), "default and slow": (False, True)}
 
@@ -33,13 +33,13 @@ TIERS = {"default": (False,), "slow": (True,), "default and slow": (False, True)
 
 def design_rows():
     """The row ids of the table "Checks" of the validation design."""
-    text = docs_pages.table(docs_pages.read(PAGE), "report-algorithms-checks")
+    text = docs_pages.table(docs_pages.design(PAGE), "report-algorithms-checks")
     return [m.group(1) for m in re.finditer(rf"^\| ({ROW}) \|", text, flags=re.MULTILINE)]
 
 
 def implemented_checks():
     """{row: (the backticked names of its "Module and tests" cell, its tier)}."""
-    text = docs_pages.table(docs_pages.read(PAGE), "report-algorithms-implemented-checks")
+    text = docs_pages.table(docs_pages.design(PAGE), "report-algorithms-implemented-checks")
     rows = {}
     for line in text.splitlines():
         match = re.match(rf"\| ({ROW}) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$", line)
@@ -104,7 +104,7 @@ def numbers(text):
 def test_the_slot_table_of_figure_sizes_is_the_slots():
     """The page's table of slots has one row per slot with its width in px, the widths of ``report_sizes``, and the
     rules state the sizes the figure tests check."""
-    passage = docs_pages.section(docs_pages.read(PAGE), "report-algorithms-figure-sizes")
+    passage = docs_pages.section(docs_pages.design(PAGE), "report-algorithms-figure-sizes")
     table = dict(re.findall(r"^\| ([A-Za-z ,'()]+?) \| ([\d,]+) \|", passage, flags=re.M))
     assert {k: int(v.replace(",", "")) for k, v in table.items()} == {
         "Full column": FULL, "Half column": HALF, "Third of the column": THIRD, "Comparison page column": COMPARISON}
@@ -115,7 +115,7 @@ def test_the_slot_table_of_figure_sizes_is_the_slots():
 def test_the_figure_table_of_figure_sizes_is_report_sizes():
     """The page's table of figures has the ten rows of ``report_sizes.FIGURES``, each with its slot, its shown widths
     and the leading numbers of its drawn width, and the rules say "two thirds"."""
-    passage = docs_pages.section(docs_pages.read(PAGE), "report-algorithms-figure-sizes")
+    passage = docs_pages.section(docs_pages.design(PAGE), "report-algorithms-figure-sizes")
     rows = re.findall(r"^\| ([^|]+?) \| (full|half|third|third or half|comparison) \| ([\d, or]+?) \| ([^|]+?) \|",
                       passage, flags=re.M)
     table = {name: (slot, numbers(shown_w), numbers(drawn)) for name, slot, shown_w, drawn in rows}

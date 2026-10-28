@@ -1,4 +1,4 @@
-"""The static figures of the report page (docs/report-algorithms.md, "Workflow overview", "Preprocessing",
+"""The static figures of the report page (design/specs/report-algorithms.md, "Workflow overview", "Preprocessing",
 "Registration", "Readout", "Segmentation and assembly", "Sample measurements", "The replay of the examples",
 "Figure sizes").
 

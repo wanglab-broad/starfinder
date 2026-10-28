@@ -1,4 +1,4 @@
-"""The closed lists, the table schemas and the reader of the report's record (docs/report-contract.md).
+"""The closed lists, the table schemas and the reader of the report's record (design/specs/report.md).
 
 Every column's dtype is the contract's type in the checkpoint table form: a column
 that can be null is of a nullable dtype (``Int64``, ``boolean``), a column that is
@@ -106,13 +106,13 @@ RECORD_KEYS = ("format_version", "stage", "sample", "dataset_id", "sample_id", "
 SUMMARY_KEYS = ("fovs_expected", "fovs_with_run_record", "fovs_succeeded", "spots_median_per_fov", "matched_fraction",
                 "counted_cells", "reads_per_cell_median", "genes_per_cell_median", "cells_median_per_fov",
                 "reads_in_cells", "h5ad_whole_count_sum", "reads_in_cells_equal")
-#: The unit of each rule on values (docs/report-algorithms.md, "The rules of the first delivery"); the
+#: The unit of each rule on values (design/specs/report-algorithms.md, "The rules of the first delivery"); the
 #: categorical rules have none.
 RULE_UNITS = {"shift_residual": "voxels", "alignment_score": "dimensionless", "correct_form_fraction": "fraction",
               "matched_fraction": "fraction", "spots_near_zero": "reads"}
 
 
-#: The columns and dtypes of the comparison page's ``samples.csv``, in column order (docs/report-contract.md,
+#: The columns and dtypes of the comparison page's ``samples.csv``, in column order (design/specs/report.md,
 #: "``samples.csv``"); every column but ``sample`` and ``report`` is null for a missing report.
 SAMPLES_DTYPES = {"sample": "string", "report": "string", "report_sha256": "string", "generated_at": "string",
                   "route": "string", "fovs_expected": "Int64", "fovs_succeeded": "Int64",

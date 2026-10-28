@@ -1,4 +1,4 @@
-"""The configuration of the processing report (docs/report-contract.md, "Configuration")."""
+"""The configuration of the processing report (design/specs/report.md, "Configuration")."""
 from __future__ import annotations
 
 import math

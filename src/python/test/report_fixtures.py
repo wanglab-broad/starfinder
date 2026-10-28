@@ -1,4 +1,4 @@
-"""Hand-written records of one sample for the §2.11 report (docs/report-algorithms.md, "Fixtures").
+"""Hand-written records of one sample for the §2.11 report (design/specs/report-algorithms.md, "Fixtures").
 
 ``report_records``: an output root of sample ``s1`` with four FOVs ``F1`` to ``F4`` on a
 2 × 2 grid, each of 4 × 16 × 16 voxels at spacing (0.5, 0.25, 0.25) µm, nominal step 3 µm.
@@ -64,7 +64,7 @@ STARTED = {"F1": "2026-10-12T10:00:00+00:00", "F2": "2026-10-12T10:01:00+00:00",
            "F3": "2026-10-12T10:02:00+00:00", "F4": "2026-10-12T10:03:00+00:00"}
 ENDED = {"F1": "2026-10-12T10:00:08+00:00", "F2": "2026-10-12T10:01:08+00:00",
          "F3": "2026-10-12T10:02:08+00:00", "F4": "2026-10-12T10:03:08+00:00"}
-# The variants of docs/report-algorithms.md ("Fixtures"); RC13's three copies of ``failed`` are failed_<last entry>.
+# The variants of design/specs/report-algorithms.md ("Fixtures"); RC13's three copies of ``failed`` are failed_<last entry>.
 RECORD_VARIANTS = ("failed", "failed_applying", "failed_estimating", "failed_succeeded", "not_run", "only_f1",
                    "stage_off", "stage_off_registration", "no_placement", "one", "equal", "no_spot", "older",
                    "older_transforms", "placement_states", "placement_supplied")

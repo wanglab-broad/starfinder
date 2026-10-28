@@ -1,6 +1,6 @@
 """The §2.11 report end to end on the synthetic sample scene (W-459).
 
-Checks of docs/report-algorithms.md ("Validation design") that need the whole chain, through
+Checks of design/specs/report-algorithms.md ("Validation design") that need the whole chain, through
 the public entries ``Dataset.report`` and ``Dataset.compare_samples``: the report after the
 per-FOV processing without and with the placement (CH1), after the assignment (CH2) and after
 the export (CH3), each replacing the earlier in the sample's default folder; both routes on
@@ -13,9 +13,9 @@ keeps it true (W-602).
 
 The chains are those of ``report_scene.py`` (``sample_scene_preset("sample-tiny-v1")``, seed 42),
 each built once per module; every chain test is ``slow`` and skips without the ``anndata`` and
-``multiview-stitcher`` extras. Expected values are written here from docs/report-contract.md
+``multiview-stitcher`` extras. Expected values are written here from design/specs/report.md
 ("The report at each stage of a sample's processing", "Parts, their inputs and their reasons")
-and docs/report-algorithms.md, or computed here from the chain's own records and export (read
+and design/specs/report-algorithms.md, or computed here from the chain's own records and export (read
 with the checkpoint table reader and with ``anndata``), with ``ownership_map`` for the cells and
 pixels a FOV owns; never from the report's own output. The page, null-value and measurement
 checks are those of the earlier issues' test modules, called on these pages.
@@ -51,7 +51,7 @@ pytestmark = [pytest.mark.report, pytest.mark.integration, pytest.mark.validatio
 TOL = 1e-9
 KIB, MIB = 1024, 1024 * 1024
 ROLES = ("example_1", "example_2", "example_3")
-# The columns of fovs.csv "up to the readout": the run's status and the read levels (docs/report-contract.md, A2).
+# The columns of fovs.csv "up to the readout": the run's status and the read levels (design/specs/report.md, A2).
 RUN_COLUMNS = ("status", "failed_step", "failed_round", "started_at", "ended_at", "run_seconds", "spots",
                "correct_form", "matched", "merged_by_deduplication", "passed_filter", "correct_form_fraction",
                "matched_fraction", "merged_fraction", "passed_filter_fraction")
@@ -67,7 +67,7 @@ RUN_RECORD_PARTS = [("preprocessing.example", ""), ("preprocessing.intensity", "
 REPLAY_PARTS = ("preprocessing.example", "preprocessing.intensity", "registration.example")
 # A reason that a configuration or a record explains at every stage; any other reason makes its part unavailable.
 STANDING_REASONS = ("not_configured", "not_recorded")
-# The run-record steps that have a method in steps.csv (docs/report-contract.md, "steps.csv", method).
+# The run-record steps that have a method in steps.csv (design/specs/report.md, "steps.csv", method).
 STEPS_WITH_A_METHOD = ("preprocess:", "register", "find_spots", "decode_reads", "filter_reads")
 DT1_SCRIPT = """
 import json
@@ -177,7 +177,7 @@ def figure_sizes(page, chain: Chain):
 
 def check_null_values(page):
     """RC12 with test_report_collection.check_null_values, which reads the null rules of the hand-written records,
-    and three rules of docs/report-contract.md ("The tables") that only a chain exercises:
+    and three rules of design/specs/report.md ("The tables") that only a chain exercises:
 
     * ``steps.csv`` ``method``: n/a for a step that has none. The steps with a method are the preprocessing steps,
       registration, detection, decoding and the filter; a chain's run records also hold steps such as
@@ -308,7 +308,7 @@ def stages(scene_chain, tmp_path_factory):  # noqa: F811
 
 
 def stage_rows(chain: Chain, *, placement, assignment, export):
-    """The rows of unavailable.csv the contract's stage table gives for this chain (docs/report-contract.md, "The
+    """The rows of unavailable.csv the contract's stage table gives for this chain (design/specs/report.md, "The
     report at each stage of a sample's processing"), with the reasons of "Parts, their inputs and their reasons"."""
     fovs = list(chain.fov_ids)
     rows = [collection_checks.ALIGNMENT_RULE]  # the default configuration sets no alignment-score limit
@@ -637,7 +637,7 @@ def test_a2_an_export_and_no_run_json(scene_no_run_json, tmp_path, root, named):
                 null_and_named(page, "fovs", column, f"fov_id={fov}", "no_segmentation")
         assert [u[4] for u in whole_rows(page) if u[0] == "sample.per_cell"] == ["no_segmentation"]
         assert page.tables["cells"].empty
-        # MECR: each cell of each pair unavailable on its own (docs/report-contract.md, "mecr.csv").
+        # MECR: each cell of each pair unavailable on its own (design/specs/report.md, "mecr.csv").
         mecr = page.tables["mecr"]
         assert list(zip(mecr["gene_a"], mecr["gene_b"])) == list(config.marker_pairs)
         for a, b in config.marker_pairs:
@@ -781,7 +781,7 @@ def test_dt1_the_chain_in_two_single_thread_processes(scene_chain, tmp_path):  #
     assert [u["part"] for u in records[1]["unavailable"] if u["table"] is None] == ["rule:alignment_score"]
 
 
-# --- The Z size from a reference image (DF12; docs/report-contract.md, "Where each record is looked for") ---------
+# --- The Z size from a reference image (DF12; design/specs/report.md, "Where each record is looked for") ---------
 
 def z_size_case(tmp_path):
     """``report_records`` ``no_placement``: run records only, so no record holds a grid."""

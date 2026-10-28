@@ -1,5 +1,5 @@
-"""The comparison page of a dataset (docs/report-contract.md, "The comparison entry", "``samples.csv``";
-docs/report-algorithms.md, "The comparison page").
+"""The comparison page of a dataset (design/specs/report.md, "The comparison entry", "``samples.csv``";
+design/specs/report-algorithms.md, "The comparison page").
 
 :func:`compare_samples` reads finished sample reports only: each sample's
 ``<report_root>/<sample>/report.json``, checked with :func:`._schema.load_report` against

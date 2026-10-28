@@ -1,4 +1,4 @@
-"""The replay of the examples (docs/report-contract.md, "The replay"; docs/report-algorithms.md, "The replay of
+"""The replay of the examples (design/specs/report.md, "The replay"; design/specs/report-algorithms.md, "The replay of
 the examples", ``intensity.csv``).
 
 The report rebuilds the images of the main example from its run record: the raw input
@@ -39,7 +39,7 @@ from ._values import Unavailable, first
 
 #: The phases of a recorded entry, in the order ``FOV.run`` runs them; ``input`` is the loaded and rotated round.
 PHASES = ("input", "steps", "post_registration")
-#: The number of bins of a float output (docs/report-algorithms.md, ``intensity.csv``).
+#: The number of bins of a float output (design/specs/report-algorithms.md, ``intensity.csv``).
 FLOAT_BINS = 256
 # The report's outcome of a round's last registration entry ("Outcome"): succeeded only for a succeeded application.
 _SUCCEEDED = ("application", "succeeded")

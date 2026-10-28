@@ -1,6 +1,6 @@
 """Golden baseline of the records a FOV run writes today, before §2.11 adds to them (W-385).
 
-docs/report-contract.md ("Records added to run.json") adds fields to ``run.json`` so that
+design/specs/report.md ("Records added to run.json") adds fields to ``run.json`` so that
 the processing report can read the global transforms, the codebook file and the
 correct-form count. This file pins what ``FOV.run`` writes at the base revision
 (dc5fc3c) on one small synthetic FOV generated in the test (two rounds of four channels,

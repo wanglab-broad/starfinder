@@ -1,4 +1,4 @@
-"""The collection of one sample's records into the report's tables and record (docs/report-contract.md).
+"""The collection of one sample's records into the report's tables and record (design/specs/report.md).
 
 :func:`collect_report` applies the checks before anything is written, reads the
 records at their fixed places under the output root (the run records,
@@ -54,9 +54,9 @@ _WRITTEN = ("written", "reused")
 #: The tables this collection writes, in folder order; the others are written by the parts that make them.
 COLLECTED_TABLES = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
                     "cells", "mecr", "reads_along_z", "intensity", "unavailable")
-#: The parts the replay of the main example makes (docs/report-contract.md, "The replay").
+#: The parts the replay of the main example makes (design/specs/report.md, "The replay").
 REPLAY_PARTS = ("preprocessing.example", "preprocessing.intensity", "registration.example")
-#: The parts of the columns of the collected tables (docs/report-contract.md, "Parts, their inputs and their reasons").
+#: The parts of the columns of the collected tables (design/specs/report.md, "Parts, their inputs and their reasons").
 COLUMN_PARTS = {
     "fovs": {**{c: "workflow.fov_status" for c in ("example", "status", "failed_step", "failed_round", "started_at",
                                                     "ended_at", "run_seconds")},
@@ -85,7 +85,7 @@ _COUNTS = {"spots": (("spots",), "spot_finding"), "matched": (("call_status", "a
            "correct_form": (("filtering", "endpoint_valid"), "filtering")}
 _FRACTIONS = {"correct_form_fraction": "correct_form", "matched_fraction": "matched",
               "merged_fraction": "merged_by_deduplication", "passed_filter_fraction": "passed_filter"}
-# The report's outcome of a round from its last entry (docs/report-algorithms.md, "Outcome", choice A13).
+# The report's outcome of a round from its last entry (design/specs/report-algorithms.md, "Outcome", choice A13).
 _OUTCOMES = {("application", "succeeded"): "succeeded", ("application", "application_failed"): "application_failed",
              ("application", "applying"): "application_failed", ("estimation", "rejected"): "rejected",
              ("estimation", "failed"): "failed", ("estimation", "estimating"): "failed",
@@ -93,7 +93,7 @@ _OUTCOMES = {("application", "succeeded"): "succeeded", ("application", "applica
 _UNFINISHED = {("application", "applying"), ("estimation", "estimating"), ("estimation", "succeeded")}
 _SECTIONS = {"assemble": "assembly", "fuse": "fusion", "segment": "segmentation", "fuse_labels": "labels",
              "export_spatialdata": "spatialdata"}
-# The R1 to R4 keys a run record holds since docs/report-contract.md ("Records added to run.json").
+# The R1 to R4 keys a run record holds since design/specs/report.md ("Records added to run.json").
 _ADDED_KEYS = ("transforms", "codebook", "workflow_config")
 
 
@@ -1094,7 +1094,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
                    input_root=None) -> tuple[Path, dict]:
     """Collect one sample's records into its report folder; return the folder and the ``report.json`` content.
 
-    The checks 1 to 7 of docs/report-contract.md ("Checks before anything is
+    The checks 1 to 7 of design/specs/report.md ("Checks before anything is
     written") run first, in order, each raising with the folder unchanged. The
     tables of ``REPORT_TABLES``, the page ``report.html`` and the record are
     written into a staging folder beside the report folder, which then replaces

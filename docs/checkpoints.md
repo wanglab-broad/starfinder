@@ -564,7 +564,7 @@ depends on where the output tree or the input tree lies.
 | --- | --- |
 | `format_version` | `2`. |
 | `dataset_id`, `sample_id`, `fov_id`, `subtile_id` | Identity. |
-| `input_root`, `output_root` | The `Dataset`'s input root and output root, absolute (`null` input root for a dataset without one): provenance. The other paths do not depend on them; a reader of a version-2 record resolves the input paths against the input root it is given ({doc}`report-contract`, "The replay"), and against `input_root` only when it is given none. |
+| `input_root`, `output_root` | The `Dataset`'s input root and output root, absolute (`null` input root for a dataset without one): provenance. The other paths do not depend on them; a reader of a version-2 record resolves the input paths against the input root it is given ([replay specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/report.md#the-replay)), and against `input_root` only when it is given none. |
 | `status`, `started_at`, `ended_at` | `running`, `succeeded`, `failed` or `interrupted`, with UTC times: the outcome of `FOV.run`'s processing. |
 | `error` | `null`, or the failing `step` and `round`, the exception `type`, `message` and `traceback`. |
 | `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded only when the package runs from a starfinder checkout, never from an enclosing repository. |

@@ -1,4 +1,4 @@
-"""The rules of the problematic FOVs (docs/report-algorithms.md, "Problematic FOVs").
+"""The rules of the problematic FOVs (design/specs/report-algorithms.md, "Problematic FOVs").
 
 Each rule of ``PROBLEM_RULES`` lists where a value lies outside a stated limit, or where a
 categorical state holds; a row is a pointer, not a grade. :func:`rule_form` is the one form of

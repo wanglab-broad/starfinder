@@ -1,7 +1,7 @@
 """The values the report computes (W-453): read levels, shifts, residuals, alignment scores, areas, densities,
 summary keys, the other values of the page and the example FOVs.
 
-Checks of docs/report-algorithms.md ("Validation design"): DF1 to DF6, DF12, the fractions and residuals of RC1,
+Checks of design/specs/report-algorithms.md ("Validation design"): DF1 to DF6, DF12, the fractions and residuals of RC1,
 RC2, RC8 to RC10, RC13's medians and alignment score, EF1 and EF2 (without its ``scene_no_run_json`` part), on
 ``hand_tables`` built here and on ``report_records`` and ``report_cells`` of ``report_fixtures.py``. Expected
 values are written by hand or computed here by the page's formula from the fixtures' own numbers; the area a FOV

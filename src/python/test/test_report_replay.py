@@ -1,6 +1,6 @@
 """The replay of the examples and the image examples of the report (W-454).
 
-Checks of docs/report-algorithms.md ("Validation design"): RP1 to RP3 (the replay against
+Checks of design/specs/report-algorithms.md ("Validation design"): RP1 to RP3 (the replay against
 the saved registered image, its failures, the two sources of the transforms), DF11 (the
 bins of ``intensity.csv``), the figures of the Preprocessing and Registration examples and
 of the intensity distributions, and RT1's tile part (the segmentation previews on both

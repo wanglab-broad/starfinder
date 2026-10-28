@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><!--slot:title--></title>
 <style>
-/* The processing report (docs/report-algorithms.md, "Layout of the page"): the agreed mockup's layout and palette,
+/* The processing report (design/specs/report-algorithms.md, "Layout of the page"): the agreed mockup's layout and palette,
    a light theme only. One page: a side rail follows the scroll position; sections stack beside it. System fonts
    only, so that the page opens offline. */
 :root{
@@ -290,7 +290,7 @@ select{font:inherit;font-size:13px;padding:4px 6px;background:var(--surface);col
 <script>
 (function(){
   'use strict';
-  // ---- constants of the page: the reason texts of docs/report-algorithms.md ("How an unavailable part is shown")
+  // ---- constants of the page: the reason texts of design/specs/report-algorithms.md ("How an unavailable part is shown")
   //      and the labels of the controls; everything else is read from the data block
   var REASONS = {"no_run_record": "no run record for this FOV", "run_not_finished": "the run has not finished", "step_failed": "the run failed before this step", "not_configured": "not part of the run's configuration", "not_recorded": "the run did not record this value", "no_placement": "no placement for this sample", "fov_not_placed": "this FOV was not placed", "no_export": "no export for this sample", "part_not_written": "the export part that writes this was not written", "no_segmentation": "the sample has no cells", "no_markers": "no marker pairs supplied", "no_stack": "the export has no 3D stack", "input_missing": "an input file is missing", "input_changed": "an input file differs from its record", "field_not_saved": "the registration field was not saved", "replay_differs": "the replayed preprocessing differs from the record", "undefined": "undefined: the denominator is zero"};
   var LABELS = {"registration": [["residual", "Shift, residual"], ["absolute", "Shift, absolute"], ["score", "Alignment score"]], "readout": [["spots", "Spots detected"], ["correct_form_fraction", "Fraction with correct form"], ["matched_fraction", "Fraction matched to the codebook"], ["merged_fraction", "Fraction merged by deduplication"], ["passed_filter_fraction", "Fraction passing the QC filter"]], "cells": [["n_cells", "Cells"], ["cell_density_per_mm2", "Cells per mm²"], ["reads_in_cells_fraction", "Reads assigned to cells, %"], ["n_cells_retained", "Cells retained after assembly"]], "colour_by": "Colour by", "group": "Marker group", "categories": {"failed": "failed", "running": "running", "norec": "no run record", "out": "outside limits", "na": "unavailable", "not_placed": "not placed", "fb": "fell back to the stage position", "phd": "placeholder", "ok": "succeeded"}, "populations": {"input": "Input, all FOVs", "retained": "Retained", "excluded_not_owner": "Excluded: not owner", "excluded_fov_not_placed": "Excluded: FOV not placed", "excluded_duplicate_observation": "Excluded: duplicate observation", "excluded_cell_not_owner": "Excluded: cell not owner", "excluded_cell_duplicate_observation": "Excluded: cell duplicate observation", "excluded_outside_grid": "Excluded: outside the grid", "counted": "Counted"}};

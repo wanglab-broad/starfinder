@@ -1,7 +1,7 @@
 """The comparison page of a dataset and the entry ``Dataset.compare_samples`` (W-457).
 
-Checks of docs/report-contract.md ("The comparison entry", "``samples.csv``") and
-docs/report-algorithms.md ("The comparison page", CP1, PG1, PG4) on finished reports of the
+Checks of design/specs/report.md ("The comparison entry", "``samples.csv``") and
+design/specs/report-algorithms.md ("The comparison page", CP1, PG1, PG4) on finished reports of the
 hand-written fixtures: ``report_cells`` reported as sample ``s1``, ``s2`` with no report folder,
 ``s3`` with a folder and no ``report.json``, and ``report_records`` (no export, so no cells)
 reported as ``s4``. The table copies each present report's keys (every column compared with
@@ -36,7 +36,7 @@ from .test_report_collection import anndata_or_skip, snapshot
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
-# --- Written from docs/report-contract.md ("samples.csv") and docs/report-algorithms.md ("Figure sizes") ---------
+# --- Written from design/specs/report.md ("samples.csv") and design/specs/report-algorithms.md ("Figure sizes") ---------
 
 # Column, dtype (nullable where the column can be null), and the key of report.json it copies.
 SAMPLES_COLUMNS = [("sample", "string", None), ("report", "string", None), ("report_sha256", "string", None),
