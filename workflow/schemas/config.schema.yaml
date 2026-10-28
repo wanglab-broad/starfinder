@@ -1180,7 +1180,7 @@ $defs:
         description: "Python spot-finding method."
         enum: ["local_maxima", "starfish_log", "spotiflow", "piscis"]
       min_distance:
-        description: "Spacing setting for Spotiflow and Piscis; the Python local_maxima method uses min_distance_voxels."
+        description: "Minimum distance between detected spots."
         type: integer
         minimum: 1
       threshold_mode:

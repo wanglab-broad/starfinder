@@ -62,7 +62,7 @@ The stage references explain the processing methods:
 (explicit-registration-recipe)=
 (spot-finding-method-key)=
 For workflow-specific translation and saved records, use the
-[configuration specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#python-backend-keys-and-wrapper-defaults).
+[configuration specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#rule-resources-and-parameters).
 
 ## Segmentation and assignment
 
