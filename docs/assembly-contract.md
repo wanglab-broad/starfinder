@@ -90,7 +90,8 @@ The reference generates the configuration defaults from the code;
 
 In a Python workflow, `assembly.assignment` names the saved per-FOV assignment;
 `assembly.table_format` selects the table format and `assembly.previews` requests
-ownership figures. The configuration fields also live in `assembly`.
+assignment and ownership figures on the saved-assignment route. The configuration
+fields also live in `assembly`.
 The `export` block controls which parts of `Dataset.export` run. See the
 {doc}`workflow configuration <workflow-configuration>` and the reference's
 [workflow keys](assembly-algorithms.md#workflow-keys).

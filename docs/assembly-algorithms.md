@@ -27,7 +27,7 @@ See {py:class}`~starfinder.assembly.AssemblyConfig` for option details.
 | `duplicate_observation` | Cells | Another cell observation retained by the duplicate rule |
 | `cell_not_owner` | Molecules | Assigned cell excluded by ownership |
 | `cell_duplicate_observation` | Molecules | Assigned cell excluded by the duplicate rule |
-| `outside_grid` | Molecules | Molecule outside the input grid |
+| `outside_grid` | Molecules | Molecule outside its FOV grid or, after fusion, the sample segmentation grid |
 
 ## Flags
 
@@ -138,4 +138,4 @@ for a complete workflow.
 | `ownership`, `centroid`, `tie`, `conflicts`, `duplicate_threshold` | `AssemblyConfig` fields, listed above |
 | `assignment` | `Dataset.export(assignment=...)` |
 | `table_format` | `ExportConfig.table_format` |
-| `previews` | Assignment figures requested by the workflow |
+| `previews` | Assignment and ownership figures requested on the saved-assignment route |
