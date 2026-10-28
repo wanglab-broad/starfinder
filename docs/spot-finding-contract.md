@@ -233,7 +233,7 @@ class SpotFindingPlan:
 ## Execution device
 
 `ExecutionConfig` has `device: str = "cpu"`. In spot finding any other value raises
-`ValueError("device must be 'cpu'; §2.7 runs on CPU only")`. Direct `find_spots`
+`ValueError("device must be 'cpu'; spot finding runs on CPU only")`. Direct `find_spots`
 takes the same keyword (`device="cpu"`). The setting belongs to execution, not to
 a method; it is recorded in `run.json` with the rest of `ExecutionConfig`.
 Segmentation does not reuse it: the segment entry takes its own `device` keyword
@@ -476,7 +476,7 @@ cost of a format version and a second result container.
   plan with explicit `rounds`; listing only the reference round is allowed). In
   `multiplexed` mode, with a plan that names `rounds`, `FOV.run` raises
   `ValueError("decoding candidates from several detection rounds needs a readout
-  mode (§2.8): set readout_mode='direct' on the dataset for direct readout")` when
+  mode: set readout_mode='direct' on the dataset for direct readout")` when
   decoding is enabled, and `FOV.decode_reads` raises the same error for a spot
   table with a `round` column, so a multi-round set is never decoded as barcodes.
   In `direct` mode a spot table without a `round` column raises `ValueError`.

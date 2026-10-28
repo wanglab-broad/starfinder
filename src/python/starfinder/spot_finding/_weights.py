@@ -18,8 +18,9 @@ _SPOTIFLOW_RELEASE = "https://github.com/weigertlab/spotiflow-models/releases/do
 _PISCIS_REVISION = "9bdefc72cb519053c63fd2d7bff9d12db7bb394e"
 _PISCIS_FILES = f"https://huggingface.co/wniu/Piscis/resolve/{_PISCIS_REVISION}/models"
 _SPOTIFLOW_PIXELS = "https://weigertlab.org/spotiflow/pretrained.html"
-_OPERATOR = ("operator-retrieved on 2026-10-01 (W-266 recovery note R-20261001T005236Z-898a772a); "
-             "not verified by a worker")
+# W-266 recovery note R-20261001T005236Z-898a772a
+_OPERATOR = ("operator-retrieved on 2026-10-01 (a recovery note of the spot-finding dependency "
+             "study); not verified by a worker")
 
 
 @dataclass(frozen=True)

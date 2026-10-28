@@ -210,12 +210,12 @@ def test_multiplexed_mode_with_a_round_column_names_the_direct_mode(tmp_path):
     fov = direct_fov(direct_dataset(tmp_path, mode="multiplexed", panel=None))
     with pytest.raises(ValueError) as raised:
         fov.run(pipeline(decoding=WtaDecoderConfig(), filtering=None))
-    assert "readout mode (§2.8)" in str(raised.value) and "readout_mode='direct'" in str(raised.value)
+    assert "needs a readout mode" in str(raised.value) and "readout_mode='direct'" in str(raised.value)
     assert fov.spot_result is None
     fov.find_spots(config=PLAN)
     with pytest.raises(ValueError) as raised:
         fov.decode_reads()
-    assert "readout mode (§2.8)" in str(raised.value) and "readout_mode='direct'" in str(raised.value)
+    assert "needs a readout mode" in str(raised.value) and "readout_mode='direct'" in str(raised.value)
 
 
 @pytest.mark.contract

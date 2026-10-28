@@ -13,7 +13,6 @@ they are not evaluation results, and the 2-point threshold is provisional.
 
 From src/python: uv run python ../../docs/examples/preprocessing_comparison.py
 """
-# §2.5, W-233
 import importlib.util
 from pathlib import Path
 import tempfile

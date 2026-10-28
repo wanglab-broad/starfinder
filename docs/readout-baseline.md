@@ -194,10 +194,12 @@ rule:
 namespace for all listed rounds, and never merges coincident candidates. Extraction
 reads every sequencing round at every candidate (`dataset/fov.py:1131-1135`).
 Decoding such a set raises
-`ValueError("decoding candidates from several detection rounds needs a readout mode (§2.8)")`
+`ValueError("decoding candidates from several detection rounds needs a readout mode…")`
 in `FOV.run` (`:1018-1020`) and in `FOV.decode_reads` for any spot table with a
 `round` column (`:940-941`, message `:33`). There is no direct readout: no gene
 mapping per round and channel, and no extraction limited to a candidate's own round.
+
+% the quoted message ends "needs a readout mode (§2.8)"
 
 ## Evaluation
 

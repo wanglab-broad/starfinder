@@ -249,7 +249,8 @@ def test_undeclared_columns_are_rejected(fixture_method, monkeypatch):
 def test_device_accepts_only_cpu():
     assert ExecutionConfig().device == "cpu"
     for device in ("cuda", "CPU", None):
-        with pytest.raises(ValueError, match="^device must be 'cpu'; §2.7 runs on CPU only$"):
+        with pytest.raises(ValueError,
+                           match="^device must be 'cpu'; spot finding runs on CPU only$"):
             ExecutionConfig(device=device)
         with pytest.raises(ValueError, match="^device must be 'cpu'"):
             find_spots(image(), config=LocalMaximaConfig(), metadata=META, spot_namespace=NAMESPACE, device=device)

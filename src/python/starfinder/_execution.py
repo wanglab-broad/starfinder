@@ -16,7 +16,7 @@ def check_device(device) -> None:
     """Raise ValueError unless device is "cpu", the only device of the spot-finding contract."""
     # §2.7
     if not isinstance(device, str) or device not in DEVICES:
-        raise ValueError("device must be 'cpu'; §2.7 runs on CPU only")
+        raise ValueError("device must be 'cpu'; spot finding runs on CPU only")
 
 
 def execution_record(device: str, *, framework: bool = False) -> dict:

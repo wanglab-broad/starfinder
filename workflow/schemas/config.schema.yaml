@@ -1325,7 +1325,7 @@ $defs:
         additionalProperties:
           type: object
       rounds:
-        description: "Python only; the round labels to detect in (omitted: the reference round only); decoding such a candidate set needs a readout mode (§2.8)"
+        description: "Python only; the round labels to detect in (omitted: the reference round only); decoding such a candidate set needs a readout mode"
         type: array
         minItems: 1
         uniqueItems: true

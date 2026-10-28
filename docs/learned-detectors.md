@@ -43,8 +43,8 @@ example `--extra local-registration`, on the same command and on every later
   environment holds the CPU build `torch 2.7.1+cpu`. On other platforms uv takes
   them from PyPI. The only execution device for spot finding is `cpu`
   (`ExecutionConfig.device` and the `device` keyword of `find_spots`, default
-  `"cpu"`). Any other value raises `ValueError("device must be 'cpu'; §2.7 runs on
-  CPU only")`.
+  `"cpu"`). Any other value raises `ValueError("device must be 'cpu'; spot finding
+  runs on CPU only")`.
 * **Without the extra.** Importing `starfinder.spot_finding` and constructing a
   config never need the extras. Running a detection without its extra raises
   `SpotFindingBackendUnavailableError`, an `ImportError`, for example

@@ -197,13 +197,13 @@ def test_decoding_a_multi_round_set_raises_naming_the_readout_mode(tmp_path):
     fov = multiround_fov(tmp_path, images)
     pipeline = PipelineConfig(spot_finding=SpotFindingPlan(LocalMaximaConfig(), rounds=ROUNDS),
                               extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig())
-    with pytest.raises(ValueError, match="§2.8"):
+    with pytest.raises(ValueError, match="needs a readout mode"):
         fov.run(pipeline)
     assert fov.spot_result is None
     fov.find_spots(config=SpotFindingPlan(LocalMaximaConfig(), rounds=ROUNDS))
-    with pytest.raises(ValueError, match=r"readout mode \(§2\.8\)"):
+    with pytest.raises(ValueError, match="needs a readout mode"):
         fov.decode_reads()
-    with pytest.raises(ValueError, match="§2.8"):
+    with pytest.raises(ValueError, match="needs a readout mode"):
         fov.run(PipelineConfig(extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig()))
 
 

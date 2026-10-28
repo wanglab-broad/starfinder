@@ -36,7 +36,7 @@ from starfinder.readout import (DECODING_METHODS, Codebook, IntensityExtractionR
 from starfinder.readout.decoding import _mode_mismatch
 
 # Raised in readout mode multiplexed when a candidate set with a round column would be decoded as barcodes.
-MULTI_ROUND_DECODING = ("decoding candidates from several detection rounds needs a readout mode (§2.8): "
+MULTI_ROUND_DECODING = ("decoding candidates from several detection rounds needs a readout mode: "
                         "set readout_mode='direct' on the dataset for direct readout")
 # Raised in readout mode direct when the candidates have no round column.
 DIRECT_NEEDS_ROUNDS = ("readout_mode='direct' assigns each candidate from its own round and needs candidates "

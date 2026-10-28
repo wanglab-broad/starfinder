@@ -712,14 +712,15 @@ unchanged; coincident candidates are never merged. The new `SpotFindingResult.pl
 holds the plan (`None` on construction means `SpotFindingPlan(config)`). Direct
 `find_spots` detects one image and raises `ValueError` for a plan with `rounds`.
 **Intentional change:** decoding a candidate set of several rounds raises
-`ValueError("decoding candidates from several detection rounds needs a readout mode
-(§2.8)")`, from `FOV.run` before any processing and from `FOV.decode_reads` for a
+`ValueError("decoding candidates from several detection rounds needs a readout
+mode…")`, from `FOV.run` before any processing and from `FOV.decode_reads` for a
 spot table with a `round` column. Extraction reads every candidate in every sequencing
 round, as before; in `FOV.run` it then runs after the last detected round, which needs
 batch mode or `retain_images=True`. Since the readout modes of 2026-10-02 this holds in readout mode
 `multiplexed`; readout mode `direct` reads such a set ([Readout mode](#readout-mode)).
 
 % W-293
+% the quoted message ended "needs a readout mode (§2.8)"
 
 ### Spot-finding diagnostics
 
@@ -900,12 +901,14 @@ assign with `DirectDecoderConfig` and `Dataset.direct_panel`.
 
 Decoding a multi-round candidate set (a `round` column) needs
 `readout_mode="direct"`: in `multiplexed` mode it still raises `ValueError`, whose
-message keeps "needs a readout mode (§2.8)" and adds "set readout_mode='direct'".
+message keeps "…needs a readout mode…" and adds "set readout_mode='direct'".
 A decoder that does not support the dataset's mode (`wta` or `codebook_aware` in
 `direct` mode, `direct` in `multiplexed` mode) raises `TypeError` naming the mode
 and the decoder, in `FOV.run`, `FOV.decode_reads`, `decode_reads` and
 `decode_direct`; `direct` mode without a `round` column, or without a loaded panel,
 raises `ValueError`.
+
+% the quoted words were "needs a readout mode (§2.8)"
 
 The YAML top-level key `readout_mode` (Python only; the schema accepts `direct`
 only with `backend: python`) sets the mode. In `direct` mode the Python-only
@@ -2523,6 +2526,40 @@ scripts, rules and the JSON copy are unchanged, and `common.smk` selects the sam
   `report/samples.csv`). A configuration without the block gains no rule and no output.
 * **`workflow/notebook/create_rsf_qc_report.py.ipynb` is superseded** by the report; it is
   left in place.
+
+### Two error messages and three provenance strings in plain words
+
+Two error messages and three provenance strings lost the development references they
+carried. Exception types, the conditions that raise them and every other field are
+unchanged; only code or a test that matches the old text needs an update.
+
+* **The execution device.** `ExecutionConfig(device=...)`, `find_spots(..., device=...)`
+  and the execution record raise `ValueError("device must be 'cpu'; spot finding runs on
+  CPU only")` for a device other than `"cpu"`. The old message named a development section
+  in place of "spot finding": "device must be 'cpu'; … runs on CPU only". The prefix
+  "device must be 'cpu'" is unchanged.
+* **Decoding several detection rounds in `multiplexed` mode.** `FOV.run` and
+  `FOV.decode_reads` raise `ValueError("decoding candidates from several detection rounds
+  needs a readout mode: set readout_mode='direct' on the dataset for direct readout")`.
+  The old message had a section id in parentheses after "needs a readout mode", before the
+  colon; "needs a readout mode" and "readout_mode='direct'" still match.
+* **Model provenance.** The `source` of the StarDist `2D_versatile_fluo` entry of
+  `segmentation.KNOWN_MODELS` ends "(the dependency study's model table)", and that of the
+  Cellpose `cpsam_v2` entry reads "the Cellpose 4.2.1.1 URL, fetched in the survey; no
+  published hash was checked (the dependency study's notes, section 8)". The
+  `training_pixel_size_provenance` of every Spotiflow and Piscis entry of
+  `spot_finding.KNOWN_MODELS` names "a recovery note of the spot-finding dependency study"
+  in place of the note's issue and record ids; it still says the value was
+  operator-retrieved on 2026-10-01 and not verified by a worker. A learned detection's
+  model record, `diagnostics["model"]["training_pixel_size_provenance"]` of its spot-finding
+  result, stores that text, so the record now carries the new text; records written before
+  keep the old one. Hashes, URLs and sizes are unchanged.
+
+% W-619. The old messages were "device must be 'cpu'; §2.7 runs on CPU only" and
+% "decoding candidates from several detection rounds needs a readout mode (§2.8): set
+% readout_mode='direct' on the dataset for direct readout". The old provenance strings named
+% W-306 models.csv, W-305 and W-306 notes section 8, and W-266 recovery note
+% R-20261001T005236Z-898a772a.
 
 ## Intentional behavior changes — not mechanical equivalence
 

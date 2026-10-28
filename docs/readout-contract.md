@@ -219,7 +219,7 @@ A decoder declares the modes it supports in `DecodingSpec.modes`: `wta` and
 `decode_reads` raise `TypeError` naming the mode and the decoder when they do not
 match, and `ValueError` when the mode's reference (codebook or panel) is not loaded.
 In `multiplexed` mode a candidate table with a `round` column still raises
-`ValueError`; its message keeps the words "needs a readout mode (§2.8)" and adds
+`ValueError`; its message keeps the words "needs a readout mode" and adds
 "set readout_mode='direct'".
 
 ## Encoding registry

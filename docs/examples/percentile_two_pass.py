@@ -8,7 +8,6 @@ summary pass; this script runs both passes by hand.
 
 From src/python: uv run python ../../docs/examples/percentile_two_pass.py OUTPUT_DIR
 """
-# §2.13: Snakemake wiring of the two passes
 from pathlib import Path
 import sys
 

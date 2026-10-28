@@ -79,7 +79,9 @@ KNOWN_MODELS: dict[tuple[str, str], KnownModel] = {
                           5771480)),
             "2D YX", "1", (2, 2), {"prob": 0.479071463157368, "nms": 0.3},
             "not documented (fluorescent nuclei, DSB 2018 subset); train patch 256x256",
-            "stardist-models release v0.1; archive SHA-256 as StarDist 0.9.2 registers it (W-306 models.csv)"),
+            # W-306 models.csv
+            "stardist-models release v0.1; archive SHA-256 as StarDist 0.9.2 registers it (the dependency study's "
+            "model table)"),
         KnownModel(
             "cellpose", "cpsam_v2", "https://huggingface.co/mouseland/cellpose-sam/resolve/main/cpsam_v2",
             "0f1cc3f7ecdd8a037a57c6c48d9d8921391be4cbce3fa9f13c3e3a2e1253c667", 1233586851, False, (
@@ -87,7 +89,9 @@ KNOWN_MODELS: dict[tuple[str, str], KnownModel] = {
                           1233586851),),
             "2D network; 3D by planes (do_3d)", "1 to 3", None, None,
             "none: images are rescaled to a 30-pixel diameter",
-            "the Cellpose 4.2.1.1 URL, fetched in W-305; no published hash was checked (W-306 notes section 8)"),
+            # fetched in W-305; W-306 notes section 8
+            "the Cellpose 4.2.1.1 URL, fetched in the survey; no published hash was checked (the dependency study's "
+            "notes, section 8)"),
     )
 }
 

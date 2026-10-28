@@ -641,7 +641,7 @@ def test_s10_multi_round_identities(method, seed, record_property):
             assert sorted(found["round"]) == sorted(ROUNDS), (c, centre)
     reference = spots[spots["round"] == ROUNDS[0]].drop(columns="round").reset_index(drop=True)
     pd.testing.assert_frame_equal(reference, default.spots, check_exact=True)
-    with pytest.raises(ValueError, match="§2.8"):
+    with pytest.raises(ValueError, match="needs a readout mode"):
         fov.decode_reads()
 
 
