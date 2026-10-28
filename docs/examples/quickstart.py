@@ -1,6 +1,6 @@
 """Generate tiny synthetic TIFFs and process them to molecule-level CSVs.
 
-Run from src/python with a new external output directory; see getting-started.md.
+Run from src/python with a new external output directory; see docs/recipes.md, "Quick start".
 """
 
 import argparse

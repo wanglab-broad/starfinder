@@ -1,6 +1,6 @@
 """The sequencing logs folded into run.json and the morphology registration record (W-563, OM-05 and OM-17).
 
-docs/migration.md, "Sequencing logs and the morphology record". A checkpointed ``FOV.run`` records in ``run.json``
+design/notes/migration.md, "Sequencing logs and the morphology record". A checkpointed ``FOV.run`` records in ``run.json``
 the filter's ``counts.filtering.fractions``, the read summary ``counts.summary`` whenever reads were decoded (with or
 without scoring and deduplication) and the round roles ``rounds``; ``FOV.save_registration_record`` writes
 ``fovs/<fov_id>/nuclei_registration.json`` with the registered other rounds and their attempts, unchanged. The final

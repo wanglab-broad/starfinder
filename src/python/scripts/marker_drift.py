@@ -6,7 +6,7 @@ together), and the ``slow`` tests that took less than 2 s. A ``slow`` test under
 out of the second list, and reported apart with the entry's name, only when an entry of
 ``EXEMPTIONS`` covers it: the entry names one cached source (a wider-scoped fixture or a cached
 helper that is not a fixture), the tests that share it, and a saved measurement of the cost its
-first user pays, which makes the others ``slow`` (docs/contributing.md, "Test markers", rule 5).
+first user pays, which makes the others ``slow`` (docs/contributing.md, "Test markers").
 A wider-scoped fixture alone exempts nothing. Skipped tests are not counted. A one-time import is
 not separated here: a listed test is a candidate that a measurement with the import done
 beforehand confirms or clears.

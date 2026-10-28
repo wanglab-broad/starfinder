@@ -4,7 +4,7 @@
 
 This notebook takes one synthetic field of view (FOV) from raw images to a table of
 molecules with gene labels, in one call of `FOV.run`. It uses the **tiny** preset of the
-[quickstart](../getting-started.md): 8 × 128 × 128 voxels (Z, Y, X), 4 rounds × 4
+[quickstart](../recipes.md#quick-start): 8 × 128 × 128 voxels (Z, Y, X), 4 rounds × 4
 channels, seed 42. The methods are classical (no learned model), nothing is downloaded, and
 the notebook runs in a few seconds on one CPU with the package alone, no optional extra
 ([Installation](../get-started/installation.md)). Everything it writes goes to a

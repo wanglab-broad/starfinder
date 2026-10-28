@@ -4,7 +4,7 @@ This script exercises independent API contracts using in-memory arrays and a
 small TIFF/CSV. It is not an end-to-end microscopy tutorial. Its only random
 input is a `(12, 24, 24)` synthetic volume with seed 97.
 For a complete TIFF-to-molecule workflow, use the
-[minimal Python quickstart](../getting-started.md).
+[minimal Python quickstart](../recipes.md#quick-start).
 
 From `src/python`, choose a new output directory outside the checkout:
 

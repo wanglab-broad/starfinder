@@ -14,14 +14,7 @@ Pages for working on STARfinder itself.
 The documentation environment, build and checks.
 :::
 
-:::{grid-item-card} Quickstart script
-:link: ../getting-started
-:link-type: doc
-:class-card: sf-card
-The minimal image-to-molecule script.
-:::
-
-:::{grid-item-card} Development recipes
+:::{grid-item-card} Python recipes
 :link: ../recipes
 :link-type: doc
 :class-card: sf-card
@@ -49,8 +42,7 @@ Updating callers of earlier Python interfaces.
 :maxdepth: 1
 
 Contributing <../contributing>
-Quickstart script <../getting-started>
-Development recipes <../recipes>
+Python recipes <../recipes>
 Troubleshooting <../troubleshooting>
 Migration guide <../migration>
 ```

@@ -4,13 +4,13 @@ Generate a small synthetic dataset, register its sequencing rounds, detect spots
 extract their color sequences, and filter them against a codebook. The endpoint
 is a CSV of **candidate molecules with gene labels**, one file per field of view
 (FOV). Segmentation, cell assignment, cell expression matrices, and biological
-validation are outside this example. The [single FOV demo](get-started/single-fov-demo.md)
+validation are outside this example. The [single FOV demo](../../docs/get-started/single-fov-demo.md)
 shows the same route as an executed notebook, and the
-[multi-FOV / sample demo](get-started/multi-fov-demo.md) continues to cells and a whole sample.
+[multi-FOV / sample demo](../../docs/get-started/multi-fov-demo.md) continues to cells and a whole sample.
 
 ## Prerequisites and installation
 
-Install the package as [Installation](get-started/installation.md#the-python-package)
+Install the package as [Installation](../../docs/get-started/installation.md#the-python-package)
 describes: a STARfinder checkout, `uv` and Python 3.12, with no optional extra. No
 downloaded microscopy data, MATLAB, Snakemake, GPU, SimpleITK, or SpatialData is
 needed.
@@ -110,7 +110,7 @@ All paths below are relative to `QUICKSTART_OUTPUT`:
 | `input/formed.csv`, `input/round_truth.csv`, `input/scene_truth.csv` | Formed amplicons (`gene_id`, `color_sequence`), their per-round positions and visibility, and the per-round view of the channel each color sequence selects (MATLAB-compatible `gene` and `color_seq` columns) |
 | `results/fovs/FOV_*/reads.csv` | Every detected candidate with its read, as the quickstart requests it: `spot_namespace,spot_id,z,y,x,gene_id,observed_color_sequence,call_status` (`gene_id` is `<NA>` for an unassigned read) |
 | `results/fovs/FOV_*/molecules.csv` | Filtered molecule candidates: `spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score`; one row per retained read, not per cell (`qc_score` is `<NA>`: the quickstart does not score reads) |
-| `results/fovs/FOV_*/run.json` | The run record of `FOV.run` with `CheckpointConfig(stages=())` (no stage files): round roles, steps, registration attempts, transforms (detected `(dz,dy,dx)` displacements as `displacement_zyx`), counts with the filter's fractions, the read summary and `outputs.molecules` ({doc}`checkpoints`, "run.json") |
+| `results/fovs/FOV_*/run.json` | The run record of `FOV.run` with `CheckpointConfig(stages=())` (no stage files): round roles, steps, registration attempts, transforms (detected `(dz,dy,dx)` displacements as `displacement_zyx`), counts with the filter's fractions, the read summary and `outputs.molecules` ([checkpoints](../../docs/checkpoints.md), "run.json") |
 | `summary.json` | Per-FOV generated/detected/retained counts, detected shifts, gene counts and molecule CSV paths |
 
 In memory, image axes are `(Z,Y,X,C)` and spot coordinates are **0-based**.
@@ -128,7 +128,7 @@ The run record's `transforms` hold the **detected displacement**, the
 translation transform's `displacement_zyx`: a moving round displaced by
 `(dz,dy,dx)=(-2,3,2)` is recorded as `(-2,3,2)` and registered by
 sampling it at `p + (-2,3,2)`. See the
-[API contracts](api/contracts.md) for details.
+[API contracts](../../docs/api/contracts.md) for details.
 
 The script asserts input shape/dtype, nonempty filtered outputs, valid codebook
 labels, four-color sequence format, agreement of detected versus generated
@@ -155,7 +155,7 @@ PY
 If a check fails, inspect the traceback, `summary.json` if present, the CSVs
 already written and the FOV's `run.json` (its `status` and `error`). Check the interpreter, installed lockfile environment,
 channel order and input layout before changing processing parameters. The
-[small API examples](api/examples.md) isolate individual contracts. Real-image,
+[small API examples](../../docs/api/examples.md) isolate individual contracts. Real-image,
 MATLAB, local-registration, and cell-level workflows require separate validation.
 
 ## Complete source
@@ -164,4 +164,4 @@ MATLAB, local-registration, and cell-level workflows require separate validation
 :language: python
 ```
 
-`generate_amplicon_dataset` returns a `SyntheticDataset` with the images and the truth tables, and `save_amplicon_dataset` writes it; `starfinder synthetic generate` streams each round to disk instead. See [synthetic contracts](api/synthetic.rst) for scene eligibility and truth/reproducibility limitations.
+`generate_amplicon_dataset` returns a `SyntheticDataset` with the images and the truth tables, and `save_amplicon_dataset` writes it; `starfinder synthetic generate` streams each round to disk instead. See [synthetic contracts](../../docs/api/synthetic.rst) for scene eligibility and truth/reproducibility limitations.

@@ -9,7 +9,7 @@ file named only when the stage ``registered`` wrote it), R2 ``codebook`` (the fi
 rules write ``run.json``, alone by default). Every run is made here on the synthetic FOV of
 ``test_report_records_golden.py`` (two rounds of four channels, 4 × 24 × 24, round2 shifted
 by one voxel in X); nothing outside the test is read. ``format_version`` stayed 1 (V1) until
-run.json version 2 (W-565, docs/migration.md), which these records are.
+run.json version 2 (W-565, design/notes/migration.md), which these records are.
 """
 from __future__ import annotations
 

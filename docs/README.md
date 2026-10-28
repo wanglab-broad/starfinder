@@ -3,7 +3,7 @@
 This directory is for maintained software documentation: installation, usage, API behavior, architecture, and reproducible examples.
 
 The documentation publication URL is <https://wanglab-broad.github.io/starfinder/>.
-See [publishing and release verification](contributing.md#publish-and-verify-a-release)
+See [publishing and release verification](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/contributing.md#publish-and-verify-a-release)
 for the selected branch, deployment checks and how to identify the live revision.
 
 ## Build and preview the site
@@ -46,7 +46,7 @@ export parity, alphabetical reference lists and the five top-level sections.
 
 - [Installation](get-started/installation.md)
 - [Single FOV demo](get-started/single-fov-demo.md) and [multi-FOV / sample demo](get-started/multi-fov-demo.md)
-- [Minimal Python image-to-molecule quickstart](getting-started.md)
+- [Minimal Python image-to-molecule quickstart](recipes.md#quick-start)
 - [Project overview and setup](../README.md)
 - [Python package documentation](../src/python/README.md)
 - [Workflow examples](../example/README.md)

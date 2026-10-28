@@ -1,7 +1,7 @@
 # STARfinder usage examples
 
 For a small Python-only example requiring no downloaded microscopy data, start
-with the [canonical image-to-molecule quickstart](../docs/getting-started.md).
+with the [canonical image-to-molecule quickstart](../docs/recipes.md#quick-start).
 It runs the maintained [quickstart script](../docs/examples/quickstart.py) and
 produces molecule-level CSVs; it does not perform segmentation or cell assignment.
 

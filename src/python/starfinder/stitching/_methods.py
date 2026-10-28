@@ -1,7 +1,7 @@
 """The stitching method registry: exact config type -> StitchingSpec, and what a method returns.
 
 design/specs/stitching.md ("Method registry"), on the shared mechanism of
-docs/method-registry.md. No method is registered here; each method's module adds its
+design/notes/method-registry.md. No method is registered here; each method's module adds its
 entry (``_multiview``: ``multiview_stitcher``). ``supplied`` (:func:`placement_from_table`)
 and ``bigstitcher`` (the import) are not methods and are never keys.
 """
@@ -41,7 +41,7 @@ class StitchingSpec:
     Raises
     ------
     ValueError, TypeError
-        A shared field outside the rules of docs/method-registry.md, dimensions
+        A shared field outside the rules of design/notes/method-registry.md, dimensions
         that are not a nonempty subset of {2, 3}, devices other than
         ``("cpu",)`` or another transform kind.
     """

@@ -6,7 +6,7 @@ Documentation publication URL: <https://wanglab-broad.github.io/starfinder/>.
 
 See the [documentation build guide](../../docs/README.md) for the local Sphinx site
 and generated Python API reference.
-Start with the [Python image-to-molecule quickstart](../../docs/getting-started.md)
+Start with the [Python image-to-molecule quickstart](../../docs/recipes.md#quick-start)
 for a complete fixed-seed example using tiny synthetic TIFFs, registration,
 spot detection, barcode extraction/filtering, and molecule-level CSV inspection.
 

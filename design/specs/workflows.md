@@ -280,7 +280,7 @@ portable examples. The preparation helper validates a template, rewrites paths
 to a new external directory, and creates a one-FOV `fovs.csv`, one illustrative
 codebook row and empty round/FOV directories. **It creates no TIFFs. Keep `-n`
 on every command using these placeholder inputs.** This checks configuration
-and DAG construction; use the [Python quickstart](../../docs/getting-started.md) for actual
+and DAG construction; use the [Python quickstart](../../docs/recipes.md#quick-start) for actual
 small image processing.
 
 Run from `src/python`, using absolute paths for `RUN` and `REPO`:

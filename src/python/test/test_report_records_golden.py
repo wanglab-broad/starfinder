@@ -17,7 +17,7 @@ checkpoint stages of the default ``CheckpointConfig`` and with ``candidates`` an
 (b) the files the run writes in the FOV's checkpoint folder.
 
 So the record additions of §2.11 pass, and a removed key or a changed value fails. The
-pins follow run.json version 2 (W-565, docs/migration.md): the input paths relative to the
+pins follow run.json version 2 (W-565, design/notes/migration.md): the input paths relative to the
 input root, the provenance roots, the checkpoint folder relative to the FOV folder and
 each stage named by its record with that record's SHA-256. The
 pipeline is the recipe of W-384's synthetic runs on a smaller scene: min-max

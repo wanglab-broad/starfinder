@@ -1,133 +1,96 @@
 # Troubleshooting
 
-Start with the failing call or first traceback, the selected backend, input
-shape/dtype, channel patterns, rounds and effective configuration. The
-[development recipes](recipes.md) isolate small Python operations; the
-[quickstart](getting-started.md) checks the complete molecule-output path.
-The diagnoses below follow the current source. They do not certify real data,
-MATLAB runtime or cluster execution.
+Start with the first traceback, the backend, input shape and dtype, channel
+patterns, round names and effective configuration. The [Python recipes](recipes.md)
+isolate small operations; the [single-FOV demo](get-started/single-fov-demo.md)
+shows the complete molecule-output route.
 
 ## Missing dependencies or optional backends
 
-| Symptom | Check and supported action |
+| Symptom | What to do |
 | --- | --- |
-| `ImportError` mentioning SimpleITK from demons or `apply_transform` with a `simpleitk` warp | From `src/python`, install the declared extra with `uv sync --extra local-registration`, then use the same uv environment to run. Installation requires registry/cache access. Global registration does not need this extra. |
-| TPS/CPD cannot estimate a transform | Inspect `InsufficientLandmarksError` or `RegistrationEstimationError`. FOV and direct estimation propagate errors; there is no default fallback. |
-| Installing SpatialData or napari does not change output files | These packaging extras do not enable a public SpatialData writer or automatic viewer. FOV outputs are TIFF/CSV/text/NPZ. Inspect CSVs with the [output recipe](recipes.md#inspect-molecule-outputs). |
-| MATLAB launcher fails before image processing | Read the MATLAB command line printed in the Snakemake log. With `matlab_launcher: path`, set `STARFINDER_MATLAB_EXECUTABLE` or put `matlab` on `PATH`; on the Broad cluster, set `matlab_launcher: broad` and check `/broad/software/scripts/useuse` and `use Matlab`. Then check the license and required toolboxes on the execution host. See the [MATLAB launcher](workflow-configuration.md#matlab-launcher) and [MATLAB requirements](api/matlab.md#runtime-requirements-and-validation-limits). |
-
-See [backend behavior](api/backends.md) for direct versus runner dependencies.
-In particular, the registration benchmark runner's warp step uses SimpleITK
-even for TPS/CPD, unlike their direct warp functions. A strict docs build only
-imports/parses APIs; it does not execute these optional algorithms.
+| `ImportError` naming SimpleITK | Install the `local-registration` extra in the environment used to run the call; see the [backend reference](api/backends.md). |
+| `InsufficientLandmarksError` or `RegistrationEstimationError` | Inspect the registration inputs and landmark matches; use the [registration guide](registration-contract.md) to choose a method. |
+| Installing SpatialData does not create a store | Request the SpatialData export through the [sample-output guide](sample-output-contract.md); installing an extra alone does not run an export. |
+| MATLAB fails before processing | Inspect the printed launcher command, executable path, license and toolboxes on the execution host; see the [launcher settings](workflow-configuration.md#matlab-launcher). |
 
 ## Image shape, channel and dtype errors
 
-| Symptom | Diagnosis and next check |
+| Symptom | What to do |
 | --- | --- |
-| `Directory not found` or `expected one TIFF matching channel ...; found 0` | Inspect the resolved `input_root/round/FOV` and actual filenames. {py:func}`~starfinder.io.load_round` matches `*{pattern}*.tif`; `.tiff` is also supported, but a wrong suffix/layout will not match. The synthetic generator's FOV/round layout needs the quickstart's explicit layout conversion. |
-| `channel_labels must be nonempty and unique` while loading | An empty `channel_order` reaches the channel loader without a default. Supply a nonempty, acquisition-correct list; check `seq_channel_order` when using {py:func}`~starfinder.dataset.from_workflow_config`. |
-| Ambiguous-file error or unexpected channel intensities | Narrow each pattern to exactly one file, or provide explicit source paths. Check [channel order](api/contracts.md#channel-order) against the codebook. |
-| Channel-size mismatch warning or smaller-than-expected image | The loader crops to minimum Z/Y/X dimensions. Inspect `metadata['original_shapes']` and `metadata['cropped']`; verify acquisition/export alignment before accepting the crop. Cropping is not registration. |
-| `Expected 4D (Z, Y, X, C) image` in detection | Inspect `image.shape`. For a known single-channel ZYX volume, append a singleton channel axis with `volume[..., None]`. A YX projection or unknown axis order cannot be repaired by blindly appending dimensions. |
-| Shape unpacking/broadcast error during global registration | The single-channel registration call expects equal-shaped 3D ZYX inputs. Check both shapes and the intended channel/merge; the function does not provide full input-shape validation. |
-| `global thresholds require uint8/uint16` | The global threshold uses dtype maximum. Check whether your input is floating point and choose an explicitly justified threshold mode or scaling step; casting arbitrary floats to uint8 can discard signal. |
-| TIFF loaded with wrong dimensions or intensity range | Plain TIFFs default to ZYX; ambiguous OME/ImageJ axes require explicit selection. Inspect `ImageLoadConfig` and result diagnostics. Dtype is preserved unless an explicit conversion is configured. |
+| Directory missing or no TIFF matches a channel | Inspect `input_root`, round and FOV names, channel patterns and `image_dir_template`; the default layout is round/FOV. |
+| Empty or repeated channel labels | Supply the acquisition's channel patterns through `ImageLoadConfig.channel_labels` or the dataset's `channel_order`. |
+| Several files match one channel | Narrow the pattern or supply explicit paths. |
+| Cropped image warning | Inspect the load result's `diagnostics`, especially `original_shapes` and `cropped`, and check acquisition alignment. |
+| Detection expects a ZYXC image | For a known single-channel ZYX volume, use `volume[..., None]`; first verify the original axes. |
+| Global threshold rejects the dtype | Inspect scaling and choose the intended threshold mode in `LocalMaximaConfig`; avoid an arbitrary cast. |
+| TIFF has unexpected axes or intensity range | Inspect `ImageLoadConfig` and conversion settings in the [I/O API](api/io.rst). |
 
-The [I/O recipe](recipes.md#read-and-write-image-stacks) checks a lossless uint16
-round-trip. It does not validate arbitrary multi-channel acquisition formats.
+The [I/O recipe](recipes.md#read-and-write-image-stacks) provides a small TIFF
+round trip for comparison.
 
 ## No spots, no genes or unexpected coordinates
 
-An empty detection table is a possible outcome, not necessarily an exception.
-Check the reference image's range, all-zero channels, the mode/threshold pair,
-and excluded border (`min_distance`). Do not mix noise k-sigma values with
-adaptive fractions. Python rejects the schema-accepted `local` spot mode;
-see [threshold conventions](api/contracts.md#spot-finding-thresholds).
+Inspect the reference image's intensity range and the spot-finding threshold
+mode and value. Compare an isolated spot with the
+[detection recipe](recipes.md#detect-spots-in-a-volume).
 
-If filtering raises `Codebook not loaded`, call
-{py:meth}`~starfinder.dataset.Dataset.load_codebook` first. If candidates
-exist but none survive, inspect `fov.decoding_result.table['observed_color_sequence']` alongside
-`dataset.codebook.seq_to_gene`: check channel ordering, sequencing-round order,
-barcode orientation (`EncodingConfig.reverse_bases`), sequence lengths and optional suffix
-filtering. `M` is a tied maximum and `N` a NaN maximum; they are not valid
-four-color gene calls. A codebook parser `KeyError` can indicate an unexpected
-header or unsupported nucleotide pair. Use the actual two-column `gene,barcode`
-format described by {py:func}`~starfinder.readout.load_codebook`.
+If no reads survive filtering, compare
+`fov.decoding_result.table['observed_color_sequence']` with the codebook.
+Check sequencing-round order, channel order, encoding orientation and the
+input codebook format. The {doc}`readout guide <readout-contract>` shows the
+separate extraction, decoding and filtering results for inspection.
 
-`export_spots` writes header-only CSVs for successful zero detections or all-rejected
-results. Missing processing results still raise. Export joins coordinates by
-namespace and ID, rejects duplicate/missing identities, and leaves source tables
-unchanged. Select diagnostic columns explicitly, as in the recipe. Extraction
-requires matching frame/grid metadata for every round; register moving images
-or supply verified common metadata when they are already aligned.
-
-A one-voxel overlay offset often warrants checking origins: `molecules.csv` and
-`reads.csv` hold the 0-based ZYX of Python indexing, while the legacy `goodSpots`
-CSVs (MATLAB, and the subtile and deep modes) are 1-based XYZ. Convert a legacy file
-exactly once and check bounds against the loaded image. A subtile coordinate also needs
-its crop offset before full-FOV comparison; a FOV coordinate is not a stitched
-sample coordinate. See [the MATLAB boundary conventions](api/contracts.md#axes-and-coordinates).
-These are diagnostic possibilities, not a diagnosis of every shifted overlay.
+For a one-voxel overlay offset, check the file's coordinate origin.
+Python `molecules.csv` and `reads.csv` use zero-based ZYX coordinates;
+legacy molecule CSVs use one-based XYZ. Load a legacy file through
+{py:func}`~starfinder.assignment.import_legacy_molecules_csv`.
+A FOV coordinate also needs placement before comparison on a sample image;
+see the {doc}`coordinate reference <api/contracts>`.
 
 ## Configuration and workflow startup
 
-Use the [minimal/full documentation templates](workflows.md#small-reproducible-dry-run)
-and their bounded **dry-run** helper. Keep `-n` for the helper's empty placeholder
-image directories. A successful DAG does not inspect TIFF content.
+Use the [bounded dry run](workflows.md#small-reproducible-dry-run) to inspect the
+DAG before processing. A dry run does not inspect image content.
 
-| Symptom | Check |
+| Symptom | What to do |
 | --- | --- |
-| Schema validation error | Read the failing field path. Each provided rule needs boolean `run`; unknown rule/resource keys are rejected. Subset conditionals require companion fields even for false-valued flags. See [top-level fields](workflow-configuration.md#top-level-fields). |
-| Startup `KeyError`, even with downstream flags off | Rule parsing indexes fields including `additional_round` and, for the MATLAB backend, `fiji_path` (the legacy BigStitcher rule) (the Python backend reads `INPUT/fovs.csv` and refuses the subset keys, which the MATLAB branch reads with `.get`). Schema-optional does not mean every script can omit a key; the minimal documentation template supplies these. |
-| Only config preparation is scheduled | Request explicit target `all`; the preparation rule occurs before it in the Snakefile. Use the [documented dry-run command](workflows.md#small-reproducible-dry-run). |
-| Missing direct/subtile/deep rule sections | Preset modes need their named sections and select them regardless of their `run` flags. See [mode selection](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflows.md#modes-and-backend-selection). |
-| Reference-round `KeyError` | Check `ref_round` belongs to the loaded rounds, and their names match exactly. In the direct API, call {py:meth}`~starfinder.dataset.RoundState.validate` explicitly; it checks membership/overlap but does not check that TIFFs exist or require a non-null reference. |
-| A YAML edit or CLI override seems ineffective | Check exact key spelling and the selected wrapper. Unknown parameter fields can pass validation. Python wrappers do not forward every API option; MATLAB receives JSON serialized from the original YAML, not all merged CLI values. See [overrides](workflow-configuration.md#overrides-and-validation-boundaries). |
-| Input directories exist but the job fails | DAG inputs are round/FOV directories, not validated TIFF inventories. Check files, channels, codebook and backend compatibility. Schema validation does not check reference membership or scientific parameter suitability. |
+| Schema validation error | Read the field path in the error and compare with the [workflow reference](workflow-configuration.md). |
+| Missing `fovs.csv` for a Python workflow | Create the membership file under the input root with `sample,fov_id` columns; use `selected_fovs` to select members. |
+| A Python rule rejects a MATLAB key | Use native `preprocessing`, `registration` and `spot_finding` settings from the [migration guide](migration.md#one-python-configuration-dialect). |
+| Only config preparation is scheduled | Request the target `all` in the documented dry-run command. |
+| Reference round is not found | Compare `ref_round` with configured round names and actual inputs. |
+| A YAML edit seems ineffective | Check the selected rule and resolved configuration; compare with its [parameter reference](workflow-configuration.md). |
+| Projection export asks for segmentation settings | Configure segmentation after fusion or choose `route: per_fov` for existing per-FOV assignments; see [sample segmentation](sample-segmentation-contract.md). |
 
-Keep one resolved `.yaml` and matching `config_path`; preparation writes its
-sibling JSON. Do not hand-edit generated JSON as a durable configuration repair.
-Before rerunning, identify the failed stage and preserve its diagnostics.
+Preserve the failed stage's diagnostics before rerunning. Edit the source YAML,
+rather than treating a generated JSON copy as the durable configuration.
 
 ## Locate workflow logs
 
-For workflow runs, `OUTPUT` is
-`root_output_path/dataset_id/output_id`; direct Python recipes use their explicit
-`output_root`. These paths have different purposes:
-
-| Location | What it records |
+| Location | Use |
 | --- | --- |
-| Console / Snakemake working directory `.snakemake/log/` | Scheduling and execution diagnostics; start here for the failed job and traceback |
-| `OUTPUT/fovs/{FOV}/run.json` (Python) | The FOV's run record (`subtile_{n}/run.json` below it for a subtile rule): `status` (`running` until the run ends, then `succeeded`, `failed` with the failing step and traceback, or `interrupted`), steps, registration attempts and transforms, counts and fractions |
-| `OUTPUT/log/{FOV}_rsf.txt`, `{FOV}_gr.txt`, `log/gr_shifts/`, `log/sf_scores/` (MATLAB) | The MATLAB backend's console logs, shift tables and score tables; may be absent on early failure |
-| `OUTPUT/log/benchmark/{rule}/...txt` | Snakemake timing/resource records; these are not the Python exception log |
-| UGER submit log | `broad-submit.py` chooses the first declared rule log with `-qsub.log`, else `params.uger_log` with timestamp/job ID, else `/home/unix/{username}/snakemake-logs/{rule}/` |
+| Console and `.snakemake/log/` | Find the failed job and first traceback. |
+| `OUTPUT/fovs/<FOV>/run.json` | Inspect Python status, steps, counts and registration attempts; a subtile record is below `subtile_<n>/`. |
+| `OUTPUT/fovs/<FOV>/nuclei_registration.json` | Inspect the saved morphology registration record. |
+| `OUTPUT/log/` | Inspect MATLAB processing logs and Snakemake benchmark records. |
 
-UGER submission combines stdout/stderr with `qsub -j y -o <logfile>`. A rule's
-output named `log/...` is not necessarily a Snakemake `log:` directive, so
-check the actual job properties and fallback directory. See the checked-in
-[submit helper](https://github.com/wanglab-broad/starfinder/blob/dev/profile/broad-uger/broad-submit.py)
-and [UGER guide](workflow/broad-uger.md). Log routing is source-checked;
-submission, accounting and cluster recovery have not been exercised here.
+The {doc}`UGER guide <workflow/broad-uger>` explains scheduler logs. The
+{doc}`checkpoint reference <checkpoints-reference>` lists Python saved records.
 
 ## Documentation builds and local environment
 
-- **`sphinx-build` is unavailable:** run `uv sync --locked --no-default-groups --group docs`
-  from `src/python`, and include `--group docs` in the build command.
-- **`starfinder` cannot be imported:** build from `src/python` with `uv run` so the
-  checkout and its runtime dependencies are installed. Autodoc uses real imports.
-- **uv cache is read-only:** set `UV_CACHE_DIR` to a writable external directory
-  before running uv. A new cache may need package-registry access; it does not
-  repair missing runtime libraries.
-- **System MKL linkage error:** the recorded host's default Python 3.14 environment
-  failed at native-library loading. The validated examples use `UV_PYTHON=python3.12`
-  (or an absolute interpreter path), with actual version 3.12.12. Check
-  `uv run python --version` and the traceback. This host-specific workaround
-  changes no dependency pin and does not establish a general Python 3.14 defect.
-- **A warning makes the build fail:** read the file and line in the build output.
-  Fix the reference or markup, then rebuild into a fresh external output directory.
-- **Preview port is in use:** choose a different port in the `http.server` command
-  and open the matching URL. Stop the server with Ctrl-C when finished.
+| Symptom | What to do |
+| --- | --- |
+| `sphinx-build` unavailable | Install the locked `docs` dependency group and run with `uv run --group docs`. |
+| `starfinder` cannot be imported | Run from `src/python` in the installed environment; autodoc imports the package. |
+| uv cache is read-only | Set `UV_CACHE_DIR` to a writable directory before running uv. |
+| Native-library linkage error | Inspect the traceback and interpreter selected by `UV_PYTHON`; compare with the [installation guide](get-started/installation.md). |
+| Build warning | Fix the named reference or markup and repeat the strict build. |
+| Preview port in use | Choose another port and open the matching localhost URL. |
 
-See [contributing](contributing.md) for the exact strict build and preview commands.
+See [contributing](contributing.md) for build commands. These diagnoses are
+source-based help; they do not verify MATLAB or cluster execution.
+
+[Earlier troubleshooting notes](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/troubleshooting.md)
+preserve the longer environment and workflow discussion.

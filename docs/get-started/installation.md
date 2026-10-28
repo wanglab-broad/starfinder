@@ -2,7 +2,7 @@
 
 STARfinder is a Python package in `src/python` of the repository, with optional extras
 for backends, a separate Snakemake environment for the workflow and a MATLAB backend.
-The [single-FOV demo](single-fov-demo.md) and the [quickstart](../getting-started.md) need
+The [single-FOV demo](single-fov-demo.md) and the [quickstart](../recipes.md#quick-start) need
 only the package itself; the [multi-FOV / sample demo](multi-fov-demo.md) also needs the
 `multiview-stitcher` and `anndata` extras.
 

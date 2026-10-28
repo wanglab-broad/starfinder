@@ -34,7 +34,7 @@ A small synthetic sample to cells, exports and a report.
 
 Both demos use classical methods only and need no microscopy data, MATLAB, Snakemake,
 GPU, model or download; the sample demo needs the `multiview-stitcher` and `anndata`
-extras. The same single-FOV route as a script is the [quickstart](../getting-started.md).
+extras. The same single-FOV route as a script is the [quickstart](../recipes.md#quick-start).
 
 ```{toctree}
 :hidden:
