@@ -2,11 +2,11 @@
 
 % Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-Note: {doc}`sample-output-contract` was accepted at its review gate (2026-10-07) and is implemented in `starfinder.export` and `Dataset.export`; this page keeps the text of its revision.
+Note: [sample-output-contract](../specs/sample-output.md) was accepted at its review gate (2026-10-07) and is implemented in `starfinder.export` and `Dataset.export`; this page keeps the text of its revision.
 
 % Note (W-583); accepted at W-329 (2026-10-07)
 
-This page records what exists for the sample outputs of stitching and assembly before {doc}`sample-output-contract`
+This page records what exists for the sample outputs of stitching and assembly before [sample-output-contract](../specs/sample-output.md)
 specifies them: the shared raster preparation and the partial exporter on
 the reference branch, the reference branch's sample-export specification and its documentation there, what `dev`
 has, and the fused files of the two sample datasets as today's practice. For each part it
@@ -154,8 +154,8 @@ image is listed in the stitching input inventory.
 | Part | Proposal | Why |
 | --- | --- | --- |
 | `prepare_rasters` and its fidelity fallback | **Leave.** | It prepares rasters that are already aligned; fusion has to place FOVs, so its input does not exist. The halving fallback keeps native resolution whenever one small cell would vanish, which for a whole sample means a full-size image; the fused image instead has a fixed, requested scale factor. |
-| The block-reduction geometry of `raster.py` (`i_source = f·i_output + (f − 1)/2`, spacing × f, origin + spacing·(f − 1)/2, float64 accumulation) | **Keep the geometry, leave the code**: the output grid of the fused image ({doc}`sample-output-contract`, "The scale factor") has this spacing and origin, and the block mean is multiview-stitcher's own reduction of each FOV. | The geometry is right and tested by literal cases; since the review gate (2026-10-06) the fused image is made by multiview-stitcher's `fuse`, so no block-mean code is rewritten. |
-| The categorical block rule for labels (most frequent value, smallest ID on a tie) | **Leave.** The label export samples at interpolation order 0 without blending and lists the IDs lost at its scale factor instead of a fallback ({doc}`sample-output-contract`, "Assembled label export"). | Labels are placed by multiview-stitcher's `fuse` with a small non-blending function; a block mode would be a second label fusion. |
+| The block-reduction geometry of `raster.py` (`i_source = f·i_output + (f − 1)/2`, spacing × f, origin + spacing·(f − 1)/2, float64 accumulation) | **Keep the geometry, leave the code**: the output grid of the fused image ([sample-output-contract](../specs/sample-output.md), "The scale factor") has this spacing and origin, and the block mean is multiview-stitcher's own reduction of each FOV. | The geometry is right and tested by literal cases; since the review gate (2026-10-06) the fused image is made by multiview-stitcher's `fuse`, so no block-mean code is rewritten. |
+| The categorical block rule for labels (most frequent value, smallest ID on a tie) | **Leave.** The label export samples at interpolation order 0 without blending and lists the IDs lost at its scale factor instead of a fallback ([sample-output-contract](../specs/sample-output.md), "Assembled label export"). | Labels are placed by multiview-stitcher's `fuse` with a small non-blending function; a block mode would be a second label fusion. |
 | `remap_labels` (unique uint32 IDs with a reversible map) | **Rewrite** as the instance-ID rule of the label export and of the SpatialData tables. | The accepted stitching and assembly design has sample-level cell keys from assembly; the ID is a row of the sample cell table, not a sort of label files. |
 | `export_sample`: store-once rule, staging folder and rename, SHA-256 manifest and its verification, key validation, explicit missingness | **Bring over the rules, rewrite the code** against the sample tables. | The rules match the settled decisions; the inputs (`MoleculeIndex`, affine source mappings, a supplied H5AD) are replaced by the assembly result, which already holds coordinates, links and counts. |
 | The rewrite of NGFF dataset transforms inside a spatialdata store | **Leave**; specify the transform once through spatialdata's own API and check it on read-back. | Editing spatialdata's metadata after writing made two conventions disagree (NGFF voxel centres against spatialdata's `[i, i + 1)`), which is the half-voxel problem the reference branch's specification recorded. |

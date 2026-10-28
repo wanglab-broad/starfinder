@@ -1,6 +1,6 @@
 """The fusion grid and the geometry of each output level.
 
-docs/sample-output-contract.md ("The fusion grid", "The scale factor").
+design/specs/sample-output.md ("The fusion grid", "The scale factor").
 """
 from __future__ import annotations
 

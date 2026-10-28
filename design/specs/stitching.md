@@ -63,7 +63,7 @@ provenance rules are those of [method-registry](../../docs/method-registry.md), 
 It is implemented in `starfinder.stitching`, and nothing is renamed. Sample coordinates of molecules and
 cells, overlap ownership, retained and excluded populations and the sample tables belong
 to sample assembly ([assembly-contract](assembly.md)), which builds on the placement record below and does not redefine it; the fused
-image and the exports belong to the sample outputs ([sample-output-contract](../../docs/sample-output-contract.md)).
+image and the exports belong to the sample outputs ([sample-output-contract](sample-output.md)).
 
 % The §2.10 placement contract; sample assembly: W-326; the sample outputs: W-328
 
@@ -107,7 +107,7 @@ of 2026-10-05 and their amendment on the sample outputs):
 * **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
   and `Dataset.export` (as amended at the review gate of 2026-10-06);
   `Dataset.export` calls `assemble`, `fuse_images`, `fuse_labels` and `export_spatialdata` in
-  order ([sample-output-contract](../../docs/sample-output-contract.md), "The export entry"). Ownership regions are
+  order ([sample-output-contract](sample-output.md), "The export entry"). Ownership regions are
   computed in assemble from the placement.
 * **One tile position table**, fed by three converters (Leica stage file, regular grid,
   supplied table), with an explicit stage-axis mapping; placeholder tiles stay inside the
@@ -163,7 +163,7 @@ default change.
 **Recommendation: N1.** The stage is called stitching in the chapter, registries are named
 after stages (`SEGMENTATION_METHODS`, `DECODING_METHODS`), and `stitch` reads as the verb
 next to `segment` and `assign`. Assemble and fuse keep their own modules or names, which
-[assembly-contract](assembly.md) and [sample-output-contract](../../docs/sample-output-contract.md) propose.
+[assembly-contract](assembly.md) and [sample-output-contract](sample-output.md) propose.
 
 % which W-326 and W-328 propose
 

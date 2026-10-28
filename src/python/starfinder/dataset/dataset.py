@@ -598,7 +598,7 @@ class Dataset:
         """Write a sample's export folder: the sample tables, ``sample.h5ad``, the fused image and, on request,
         the label image and the SpatialData store.
 
-        The one sample-level export entry (docs/sample-output-contract.md, "The
+        The one sample-level export entry (design/specs/sample-output.md, "The
         export entry"). A sample-level computation, not a multi-FOV runner: it
         reads only saved files. After the checks before anything is written
         (the configs; the placement's review; the ``anndata`` extra, and
@@ -673,7 +673,7 @@ class Dataset:
         Raises
         ------
         ValueError, PlacementReviewRequiredError, ModuleNotFoundError, IncompatibleGeometryError
-            The checks of docs/sample-output-contract.md ("Checks before
+            The checks of design/specs/sample-output.md ("Checks before
             anything is written"), in their order, with the folder unchanged;
             a reference image without stored metadata while ``voxel_size_xy``
             or ``voxel_size_z`` is None raises ``ValueError`` naming them.

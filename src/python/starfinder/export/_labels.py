@@ -1,6 +1,6 @@
 """The assembled label export: the retained cells of the sample, each drawn whole, placed without blending.
 
-docs/sample-output-contract.md ("Assembled label export"), rule LR4. Each FOV with a
+design/specs/sample-output.md ("Assembled label export"), rule LR4. Each FOV with a
 retained cell has its territory image (the one assign sampled) mapped from ``cell_id`` to
 the ``instance_id`` of its retained cells and to 0 elsewhere; these retained-cell images,
 in placement table order, are fused by multiview-stitcher's ``fuse`` at interpolation
@@ -132,7 +132,7 @@ def retained_by_fov(cells) -> dict[str, tuple[np.ndarray, np.ndarray]]:
 
 def label_grid(spacing_zyx, origins, shapes, k) -> dict:
     """The formula label grid in Y and X: spacing ``k·s``, origin ``o``, size ``floor((max_f (origin_f +
-    (n_f − 1)·s) − o) / (k·s) + 1e-9) + 1`` (docs/sample-output-contract.md, "Scale factor 0.25")."""
+    (n_f − 1)·s) − o) / (k·s) + 1e-9) + 1`` (design/specs/sample-output.md, "Scale factor 0.25")."""
     grid = {"spacing": {}, "origin": {}, "shape": {}}
     for i, a in ((1, "y"), (2, "x")):
         s = float(spacing_zyx[i])
@@ -305,7 +305,7 @@ def fuse_labels(placement: PlacementResult, assembly, *, config: LabelConfig = L
                 output_dir) -> LabelRecord:
     """Write the assembled label image of a sample: its retained cells, each drawn whole, without blending.
 
-    Rule LR4 of docs/sample-output-contract.md ("Assembled label export"). Per
+    Rule LR4 of design/specs/sample-output.md ("Assembled label export"). Per
     included FOV in placement table order, its retained-cell image: the
     territory image assign sampled, read from the path the assembly record
     holds beside its SHA-256 (or, when that path is null, from the file the

@@ -5,9 +5,9 @@ package's own helper, so a defect in that helper cannot pass its own test (W-575
 one rule as the docs state it:
 
 * ``file_sha256``: the SHA-256 of a file's bytes;
-* ``section_sha256``: an ``export.json`` section (docs/sample-output-contract.md, "Read-back checks", R1);
+* ``section_sha256``: an ``export.json`` section (design/specs/sample-output.md, "Read-back checks", R1);
 * ``store_files`` and ``store_sha256``: an OME-Zarr or SpatialData store's file map and its SHA-256
-  (docs/sample-output-contract.md, "The fusion section of `export.json`");
+  (design/specs/sample-output.md, "The fusion section of `export.json`");
 * ``record_sha256``: the ``record_sha256`` of a record given in memory (design/specs/assignment.md, "Run record");
 * ``placement_table_csv`` and ``placement_table_sha256``: a placement table's CSV bytes and their SHA-256
   (design/specs/stitching.md, "Persistence");

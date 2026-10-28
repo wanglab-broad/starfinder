@@ -1,6 +1,6 @@
 """The fused sample image: multiview-stitcher's ``fuse`` on the placement of either backend.
 
-docs/sample-output-contract.md ("The fused image", "Fusion by multiview-stitcher", "The
+design/specs/sample-output.md ("The fused image", "Fusion by multiview-stitcher", "The
 fusion grid", "Dtypes written", "The 2D projection", "The scale factor", "The 3D stack",
 "File layouts"). Starfinder builds the library's inputs from the placement (one image per
 included FOV, its spacing as scale and its origin as translation, identity affine under the
@@ -214,7 +214,7 @@ def check_assembly(placement, assembly) -> None:
 def check_fusion(placement, inputs, *, config, assembly=None) -> _Plan:
     """The checks of ``fuse_images`` before anything is written; returns what it reads.
 
-    Check 5 of docs/sample-output-contract.md ("Checks before anything is
+    Check 5 of design/specs/sample-output.md ("Checks before anything is
     written"), then the source images' shapes and dtypes, the sum bound and
     the pyramid bound. Missing source images are returned, not raised: the
     part then cannot run.
@@ -384,7 +384,7 @@ def _section(status, placement, plan, config, assembly, outputs, timer, *, versi
 # --- Fusion ------------------------------------------------------------------------------------------------
 
 class _Reader:
-    """Starfinder's reading of the source files of one ``fuse_images`` call (docs/sample-output-contract.md, "Memory").
+    """Starfinder's reading of the source files of one ``fuse_images`` call (design/specs/sample-output.md, "Memory").
 
     A file is one task per page (a page is a Z plane), as one chunk per page
     whatever strips the page is stored in, or one task for the whole file, in
@@ -735,7 +735,7 @@ def fuse_images(placement: PlacementResult, inputs: Sequence[FusionInput], *, as
                 config: FusionConfig = FusionConfig(), output_dir) -> FusionRecord:
     """Fuse a sample's source images with multiview-stitcher and write them to its export folder.
 
-    Applies the checks of docs/sample-output-contract.md before anything is
+    Applies the checks of design/specs/sample-output.md before anything is
     written (review, an assembly of this placement, one FusionInput per
     included FOV on the grid the placement recorded, one spacing, one
     dimensionality, the dtypes uint8, uint16 and float32, the sum bound and

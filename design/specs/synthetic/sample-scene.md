@@ -63,7 +63,7 @@ states the identities a test can check, not the validation plan.
   and `Dataset.export` (a stitching planning decision, as amended at this page's review of
   2026-10-06);
   `Dataset.export` calls `assemble`, `fuse_images`, `fuse_labels` and `export_spatialdata` in
-  order ([sample-output-contract](../../../docs/sample-output-contract.md), "The export entry"); ownership regions are
+  order ([sample-output-contract](../sample-output.md), "The export entry"); ownership regions are
   computed in assemble. The scene feeds those entries; it adds no entry of its own to the
   pipeline.
 * **Placement runs on the CPU only** and is translation only. The scene's FOV offsets are

@@ -68,7 +68,7 @@ neither:
   rule and its count identities.
 
 Where this page lists a column of those tables, it copies it unchanged. It is implemented
-in `starfinder.assembly`, and nothing is renamed. The fused image and the SpatialData export belong to the sample outputs ([sample-output-contract](../../docs/sample-output-contract.md)).
+in `starfinder.assembly`, and nothing is renamed. The fused image and the SpatialData export belong to the sample outputs ([sample-output-contract](sample-output.md)).
 
 % The §2.10 assembly contract; the fused image and the SpatialData export belong to W-328
 
@@ -98,7 +98,7 @@ of 2026-09-27 on stitching and assembly:
 * **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
   and `Dataset.export` (as amended at the review gate of 2026-10-06);
   `Dataset.export` calls `assemble`, `fuse_images`, `fuse_labels` and `export_spatialdata` in
-  order ([sample-output-contract](../../docs/sample-output-contract.md), "The export entry"). **Ownership regions are
+  order ([sample-output-contract](sample-output.md), "The export entry"). **Ownership regions are
   computed in assemble from the placement**, not stored in it.
 * **Placement from either backend** enters as one `PlacementResult`.
 * **Retention** (2026-09-27): a cell is retained by its centroid; all molecules of a
@@ -166,7 +166,7 @@ assignment contracts.
 
 | Option | Names | Effect on the golden values | Effect on existing files and outputs |
 | --- | --- | --- | --- |
-| **A1. A `starfinder.assembly` module (recommended)** | Module `starfinder.assembly`; entry `assemble`; result `AssemblyResult`; input `AssemblyInput`; config `AssemblyConfig`; ownership `ownership_map`, `OwnershipMap`; vocabularies `ASSEMBLY_STATUSES`, `CELL_ASSEMBLY_REASONS`, `MOLECULE_ASSEMBLY_REASONS`, `CELL_ASSEMBLY_FLAGS`, `MOLECULE_ASSEMBLY_FLAGS`; persistence `save_assembly`, `load_assembly`; AnnData `write_sample_h5ad`; coordination through the assemble part of `Dataset.export` ([sample-output-contract](../../docs/sample-output-contract.md)) | None: `test_workflow_assembly_golden.py` pins the legacy scripts and the adapter through frozen helpers, which no option edits. | New files only; `Dataset.export` belongs to [sample-output-contract](../../docs/sample-output-contract.md); the exports go into `__all__` and the autosummary list of `docs/api/assembly.rst`, which `docs/check_reference.py` requires. `tile_config_{sample}.csv` and the legacy per-FOV and sample files stay as they are while the legacy rules run. |
+| **A1. A `starfinder.assembly` module (recommended)** | Module `starfinder.assembly`; entry `assemble`; result `AssemblyResult`; input `AssemblyInput`; config `AssemblyConfig`; ownership `ownership_map`, `OwnershipMap`; vocabularies `ASSEMBLY_STATUSES`, `CELL_ASSEMBLY_REASONS`, `MOLECULE_ASSEMBLY_REASONS`, `CELL_ASSEMBLY_FLAGS`, `MOLECULE_ASSEMBLY_FLAGS`; persistence `save_assembly`, `load_assembly`; AnnData `write_sample_h5ad`; coordination through the assemble part of `Dataset.export` ([sample-output-contract](sample-output.md)) | None: `test_workflow_assembly_golden.py` pins the legacy scripts and the adapter through frozen helpers, which no option edits. | New files only; `Dataset.export` belongs to [sample-output-contract](sample-output.md); the exports go into `__all__` and the autosummary list of `docs/api/assembly.rst`, which `docs/check_reference.py` requires. `tile_config_{sample}.csv` and the legacy per-FOV and sample files stay as they are while the legacy rules run. |
 | A2. Inside `starfinder.stitching` | `starfinder.stitching.assemble` returning `SampleAssembly`; the same `Dataset.export` | None. | The same files; one module then holds placement and the observation populations, which the settled stage split separates, and the stitching module gains a dependency on `starfinder.assignment`. |
 | A3. One `starfinder.sample` module for assemble and export | `starfinder.sample.assemble`, `AssembledSample`; the sample outputs' export beside it | None. | The same files; the module grows a second responsibility when the sample outputs add the fused image and SpatialData export. |
 
@@ -191,7 +191,7 @@ New names under A1:
 | Vocabularies | `ASSEMBLY_STATUSES = ("retained", "excluded")`; `CELL_ASSEMBLY_REASONS = ("not_owner", "fov_not_placed", "duplicate_observation")`; `MOLECULE_ASSEMBLY_REASONS = ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed", "cell_duplicate_observation")`; `CELL_ASSEMBLY_FLAGS = ("fov_edge", "z_edge", "conflict", "unclaimed")`; `MOLECULE_ASSEMBLY_FLAGS = ("outside_owner_region", "cell_unclaimed")` | tuples |
 | AnnData | `write_sample_h5ad(result, path, *, annotation=None)`, through `write_h5ad` of `starfinder.assignment` ("Sample-level AnnData") | functions |
 | Persistence | `save_assembly(result, folder, *, table_format="csv")`, `load_assembly(folder)` | functions |
-| Coordination | The assemble part of `Dataset.export(sample, *, placement, assignment="default", config=ExportConfig(), output_dir)` ([sample-output-contract](../../docs/sample-output-contract.md), "The export entry") | method |
+| Coordination | The assemble part of `Dataset.export(sample, *, placement, assignment="default", config=ExportConfig(), output_dir)` ([sample-output-contract](sample-output.md), "The export entry") | method |
 
 ## The assemble entry
 
@@ -254,7 +254,7 @@ multi-FOV runner ([stitching specification](stitching.md), "Not the multi-FOV ru
 
 `assemble` is the first part of the one sample-level export entry
 `Dataset.export(sample, *, placement, assignment="default", config=ExportConfig(),
-output_dir)` ([sample-output-contract](../../docs/sample-output-contract.md), "The export entry"), which replaces a
+output_dir)` ([sample-output-contract](sample-output.md), "The export entry"), which replaces a
 separate `Dataset.assemble` (the review gate of 2026-10-06, amending a settled decision). Its assemble part
 loads the saved placement (`load_placement`), builds one `AssemblyInput` per FOV of the
 placement from the saved assignment folders named `assignment` (or, with
@@ -770,7 +770,7 @@ molecule's `fov_id` and `cell_id`, null where no single row holds them); `sample
 
 | Option | Layout | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **S1. The sample's export folder beside the placement (recommended)** | `<OUTPUT>/export/<sample>/`: the section `assembly` of `export.json` (the record, with the SHA-256 of every file), `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>` and `sample.h5ad`. `<fmt>` is CSV by default or Parquet, through the checkpoint table writer ([checkpoints](../../docs/checkpoints.md), "Table formats"), as for the assignment tables. The other parts of `Dataset.export` write their files and sections in the same folder ([sample-output-contract](../../docs/sample-output-contract.md), "The export folder and the output profiles"). | None: the golden test pins values, not files. | New folder beside `stitching/<sample>/` (option S1 of [stitching specification](stitching.md)), shared by every part of the export entry (the review gate, 2026-10-06). `output/tile_config_{sample}.csv`, `expr/{fovID}/*` and the legacy sample files are untouched while the legacy rules run. |
+| **S1. The sample's export folder beside the placement (recommended)** | `<OUTPUT>/export/<sample>/`: the section `assembly` of `export.json` (the record, with the SHA-256 of every file), `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>` and `sample.h5ad`. `<fmt>` is CSV by default or Parquet, through the checkpoint table writer ([checkpoints](../../docs/checkpoints.md), "Table formats"), as for the assignment tables. The other parts of `Dataset.export` write their files and sections in the same folder ([sample-output-contract](sample-output.md), "The export folder and the output profiles"). | None: the golden test pins values, not files. | New folder beside `stitching/<sample>/` (option S1 of [stitching specification](stitching.md)), shared by every part of the export entry (the review gate, 2026-10-06). `output/tile_config_{sample}.csv`, `expr/{fovID}/*` and the legacy sample files are untouched while the legacy rules run. |
 | S2. The legacy sample file names as the store | `expr/{sample}_raw.h5ad` (the AnnData) and `expr/{sample}_reads_assignment.csv` (the molecule table), with new content; the record in `uns`. | None. | The same names hold different populations and columns depending on the configuration; readers of earlier runs cannot tell which they read. The cell table of excluded cells has no file. |
 | S3. One AnnData as the only store | `sample.h5ad` with every cell (retained and excluded) as `obs`, the molecule table in `uns`. | None. | Breaks "one row per counted cell" of the AnnData, needs anndata to read any table, and stores a large molecule table inside an H5AD. |
 
@@ -908,7 +908,7 @@ dependencies. No dependency or lock change.
 A Python-only `assembly` block (`backend: python`, and a `stitching` block, whose placement
 it reads), the configuration of the assemble part of `Dataset.export`, which the one
 per-sample rule `export_sample` runs through `_run_export` in the workflow adapter
-([sample-output-contract](../../docs/sample-output-contract.md), "Workflow configuration"; its `export` block turns the
+([sample-output-contract](sample-output.md), "Workflow configuration"; its `export` block turns the
 parts on and off):
 
 ```yaml

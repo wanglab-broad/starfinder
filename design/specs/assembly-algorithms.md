@@ -218,7 +218,7 @@ excluded `cell_duplicate_observation`.
 
 **The measure.** Each FOV's retained-cell territory (the territory assign sampled, with
 every value that is not one of its retained cells set to 0) is placed on the sample grid
-at scale 1 as the label export places it ([sample-output-contract](../../docs/sample-output-contract.md), "Assembled label
+at scale 1 as the label export places it ([sample-output-contract](sample-output.md), "Assembled label
 export"): in Y and X the label grid at factor 1 (spacing `s`, origin the smallest origin
 of the included FOVs), in Z the fusion grid's Z (spacing `s_z`, origin the smallest
 `origin_z`; Y and X only when the territories are `plane` or the FOVs have one plane), each

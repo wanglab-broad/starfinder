@@ -1,4 +1,4 @@
-"""The configuration of the export entry and its parts (docs/sample-output-contract.md, "Configuration")."""
+"""The configuration of the export entry and its parts (design/specs/sample-output.md, "Configuration")."""
 from __future__ import annotations
 
 import math
@@ -89,7 +89,7 @@ class FusionConfig:
     standalone OME-Zarr beside each OME-TIFF, in ``ome_zarr_version`` ``"0.5"``
     (Z2) or ``"0.4"`` (Z1); ``pyramid_levels`` OME-TIFF SubIFD levels. The
     fusion function, interpolation order and reduction route are fixed by
-    docs/sample-output-contract.md and are not keys.
+    design/specs/sample-output.md and are not keys.
 
     Raises
     ------
@@ -351,7 +351,7 @@ class ExportConfig:
     ``export_spatialdata`` (off by default) turn the four parts on or off;
     ``assembly`` and ``table_format`` (``csv`` or ``parquet``) configure the
     assemble part, ``fusion``, ``labels`` and ``spatialdata`` the others. See
-    docs/sample-output-contract.md ("The export entry", "Configuration").
+    design/specs/sample-output.md ("The export entry", "Configuration").
     ``route`` chooses the route to the sample's cells (a value of
     :data:`ROUTES`, or None for the default by ``fusion.dimensionality``:
     ``after_fusion`` for ``projection``, ``per_fov`` for ``stack`` and

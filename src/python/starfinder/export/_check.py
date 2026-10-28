@@ -1,4 +1,4 @@
-"""``check_export``: the read-back checks of an export folder (docs/sample-output-contract.md, "Read-back checks").
+"""``check_export``: the read-back checks of an export folder (design/specs/sample-output.md, "Read-back checks").
 
 R1 to R3 (the record and the folder) and, for each fused image of the ``fusion`` section,
 F1 (the OME-TIFF and OME-Zarr layout checks and conditions 1 to 3 of "Sample position to
@@ -291,7 +291,7 @@ def _chunk_keys_read(path, level_path, region) -> set[str]:
 def _check_chunk_reads(folder, name, output, multiscale):
     """OME-Zarr layout check 3: when a level has more than one chunk, a region inside one chunk touches it only.
 
-    The chunks are the requested ones of docs/sample-output-contract.md ("OME-Zarr layout"),
+    The chunks are the requested ones of design/specs/sample-output.md ("OME-Zarr layout"),
     (1, 1, 1024, 1024) for a projection and (1, 1, 16, 512, 512) for a stack, clipped to the
     level's size on each axis. The region is the first such chunk of each level that has more
     than one: one chunk is read, never a whole array.

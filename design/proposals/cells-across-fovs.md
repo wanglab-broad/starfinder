@@ -571,12 +571,12 @@ These are named, not edited:
   no matching or merging of cells across FOVs". Option (b) of question 3 matches
   observations by their overlap, without merging them.
 * [Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md), "Flags": "No matching, merging or reassignment repairs them".
-* [sample-output-contract](../../docs/sample-output-contract.md), the exclusions of its introduction: "cross-FOV cell
+* [sample-output-contract](../specs/sample-output.md), the exclusions of its introduction: "cross-FOV cell
   matching" is excluded. Under option (b) the label image of "Assembled label export"
   still shows the retained cells, but a candidate second observation would no longer be
   retained;
   the rule LR4 itself does not change.
-* [sample-output-contract](../../docs/sample-output-contract.md), the same exclusions: "reassignment of molecules or
+* [sample-output-contract](../specs/sample-output.md), the same exclusions: "reassignment of molecules or
   recomputation of counts from a fused image or a label raster". The route after fusion of
   question 1 assigns the sample's molecules to the cells of a segmentation of the fused
   image, which this exclusion of the first delivery leaves out; [Assembly guide: sample coordinates, ownership, retained and excluded populations and the sample tables](../specs/assembly.md)

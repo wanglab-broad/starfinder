@@ -1691,7 +1691,7 @@ Importing `starfinder.export` imports neither multiview-stitcher, zarr nor
 spatialdata. With `assemble` on, `assemble` now keeps at most two territory images in
 memory: a saved assignment's territories are read again from its folder, with their
 SHA-256 checked, when the flags need them; its results are unchanged. The specification
-is {doc}`sample-output-contract`.
+is [the sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md).
 
 ### Sample outputs: the assembled label export
 

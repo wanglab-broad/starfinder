@@ -375,7 +375,7 @@ checkpointed assignment"); `inputs.<run>.record` holds the run's full record, so
 `, ` and `: `, characters outside ASCII escaped as `\uXXXX`, NaN and infinity written as
 `NaN`, `Infinity` and `-Infinity`, and any other object written as its `str`; in Python,
 `json.dumps(record, sort_keys=True, default=str)`. It is neither the SHA-256 of a file nor
-the section hash of `export.json` ([sample-output-contract](../../docs/sample-output-contract.md), "Read-back checks", R1).
+the section hash of `export.json` ([sample-output-contract](sample-output.md), "Read-back checks", R1).
 `outcome` is `ok`, or `empty` when the territory image has no object; `software` has the
 content of `run.json`'s `code` and `environment` ([checkpoints](../../docs/checkpoints.md)). The numbers above
 are an illustration of the layout, not results.

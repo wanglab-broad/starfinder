@@ -1,6 +1,6 @@
 """The SpatialData export of an assembled sample, with each image written once.
 
-docs/sample-output-contract.md ("SpatialData export"). An export of the sample tables and
+design/specs/sample-output.md ("SpatialData export"). An export of the sample tables and
 the fused and label images of ``export/<sample>/``, not a second source: the points
 ``molecules``, the shapes ``cell_centroids`` and the tables ``cells``, ``expression``,
 ``cells_unplaced`` and ``molecules_unplaced`` take every value from the sample tables and
@@ -91,7 +91,7 @@ def _check_keys(table, attribute, keys) -> None:
 
 
 def check_table_keys(table, adata) -> None:
-    """The obs and var columns and the uns, obsm and layers keys of a table (docs/sample-output-contract.md,
+    """The obs and var columns and the uns, obsm and layers keys of a table (design/specs/sample-output.md,
     "Element names"): each satisfies the naming rule and no two are equal ignoring case."""
     for attribute in ("obs", "var", "uns", "obsm", "layers"):
         _check_keys(table, attribute, [str(k) for k in getattr(adata, attribute).keys()])
@@ -587,7 +587,7 @@ def export_spatialdata(assembly, *, fused=None, labels=None,
                        config: SpatialDataExportConfig = SpatialDataExportConfig(), output_dir) -> Path:
     """Write the SpatialData store ``sample.zarr`` of an assembled sample and its ``spatialdata`` section.
 
-    docs/sample-output-contract.md ("SpatialData export"). One coordinate
+    design/specs/sample-output.md ("SpatialData export"). One coordinate
     system, named after the sample, in the sample frame's axes and µm (identity
     for points and shapes). Elements, each written only when its population has
     a row or its image exists: points ``molecules`` (every molecule with finite
@@ -727,7 +727,7 @@ def _export(assembly, record, config, output_dir, timer, *, requested_images):
 def lookup_source(folder, *, spot=None, cell=None) -> dict:
     """Find where a molecule or a cell of an export folder came from.
 
-    docs/sample-output-contract.md ("Identities and source lookup"). Reads
+    design/specs/sample-output.md ("Identities and source lookup"). Reads
     ``export.json``, verifies its hashes, finds the row by ``spot =
     (spot_namespace, spot_id)`` or ``cell = (cell_namespace, cell_id)`` and
     returns, from the ``assembly`` section: ``fov_id``; ``assignment_folder``

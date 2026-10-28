@@ -60,7 +60,7 @@ baseline: its rules are on this page, which cites its measurements from
 * 2026-10-10: the status `empty` of `segment` is recorded when the part is called alone;
   through `Dataset.export` with the assemble part on, a placement without an included FOV
   is refused before anything is written, as the accepted "No included FOV" of
-  {doc}`sample-output-contract` settles for `fuse`; the `molecules_only` fallback with
+  [sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md) settles for `fuse`; the `molecules_only` fallback with
   `complete` false is about `not_run`, and `complete` keeps its one rule ("The entry").
   Found while implementing the route after fusion in the entry, and in that review.
   Operator decision, confirmed by Jiahao on 2026-10-10.
@@ -88,7 +88,7 @@ in the package and the workflow (in six steps, 2026-10-09 to 2026-10-10), with t
 ("Implemented checks"). The pages it builds on state the route's part of their own rules
 and cite this page.
 
-It builds on these pages and redefines none of them: {doc}`sample-output-contract` (the
+It builds on these pages and redefines none of them: [sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md) (the
 export entry, `export/<sample>/`, the fused image, the label export, the SpatialData
 export, the read-back checks), [assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md) (`assemble`, the sample tables,
 `sample.h5ad`, the duplicate rule of 2026-10-09), the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md) (`segment`,
@@ -198,13 +198,13 @@ beyond the one column of choice 7, a model call or a real-data run in the valida
 * The **route per FOV** and the **route after fusion** are defined above. A sample's route
   is recorded as `per_fov` or `after_fusion`.
 * A **projection sample** is a sample whose export writes the 2D projection
-  (`dimensionality` `projection` or `both`, {doc}`sample-output-contract`, "The fused image
+  (`dimensionality` `projection` or `both`, [sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "The fused image
   by dataset"). Its tiles may be stacks (cell-culture-3D) or planes (tissue-2D).
 * The **segmentation grid** is the grid of the fused projection file the route segments:
   shape `(1, N_y, N_x)`, frame `sample:<sample>`, Y and X spacing `k·s` and origin
   `o + s·(k − 1)/2` of the output level at factor `k`, and in Z the slab
   (`S_z = n0_z·s_z`, `O_z = o_z + s_z·(n0_z − 1)/2`), all as the `fusion` section records
-  them ({doc}`sample-output-contract`, "The scale factor"). Call C4 fused two FOVs at
+  them ([sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "The scale factor"). Call C4 fused two FOVs at
   `k = 2` and recorded `(1, 12, 20)`, spacing `(3.0, 1.0, 1.0)` and origin
   `(1.0, 0.25, 0.25)` µm; call C5 read the same grid back from the file alone.
 * A **segmentation run** is one `segment` call (or one import) of the route after fusion,
@@ -273,7 +273,7 @@ for a learned model on `cuda`); with E2 only the segmentation rule would.
 On the route per FOV the part `segment` is recorded `off` with the reason `route_per_fov`.
 The order differs because the cells of the route after fusion exist only after the fused
 image does. Fusion uses no ownership and records an assembly only when one is given
-({doc}`sample-output-contract`, "Fused image inputs"), so `fuse` before `assemble` changes
+([sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "Fused image inputs"), so `fuse` before `assemble` changes
 nothing in the fused files.
 
 **What each part does on the route after fusion.**
@@ -321,7 +321,7 @@ fusing again, or turning `fuse` off, would change the hash of a section whose
 segmentation is still valid. Likewise the `assembly` and `labels` sections of this route
 record the SHA-256 of each label file they read (`segmentation_files`), not a hash of the
 `segmentation` section, which also holds times. This follows the rule of
-{doc}`sample-output-contract` ("The export entry", the paragraph after "The parts, in
+[sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md) ("The export entry", the paragraph after "The parts, in
 order": "each section records the SHA-256 of the sections it was computed from, so
 `check_export` finds a section made from an earlier assembly"), with files in place of
 sections where a section holds times.
@@ -332,8 +332,8 @@ read-back checks (T1 and T5 of "The record") and the validation (SG4) follow:
 | Setting | Route after fusion |
 | --- | --- |
 | `segment: false` | The saved sample segmentation is loaded with `load_sample_segmentation` and recorded `reused`. It is refused before anything is written (`ValueError` naming the folder and the reason) when the folder holds no saved segmentation, when a label file is missing or its SHA-256 differs from the record, when the recorded placement SHA-256 differs from the placement's, when the recorded grid differs from the grid `fused_grid` gives for this export's placement and `scale_yx` (it is known before any fusion, call C22), or when an input image name is not in `images`. `fuse` may be on or off. |
-| `segment: false` with `fuse: true` | After `fuse` has written, each fused input file's SHA-256 is compared with the recorded one; a difference records the part `segment` as `failed`, reason `fused_input_changed` with the image name and both SHA-256 values, and raises; the files of `fuse` stay, as for any error inside a part ({doc}`sample-output-contract`, "When a part cannot run"). |
-| `segment: false` with `fuse: false` | `fuse` removes the fused files the previous record lists ({doc}`sample-output-contract`, "How the folder is kept equal to its record"; call C11d), so the reused segmentation's inputs are no longer in the folder; its recorded input SHA-256 values stay as provenance. |
+| `segment: false` with `fuse: true` | After `fuse` has written, each fused input file's SHA-256 is compared with the recorded one; a difference records the part `segment` as `failed`, reason `fused_input_changed` with the image name and both SHA-256 values, and raises; the files of `fuse` stay, as for any error inside a part ([sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "When a part cannot run"). |
+| `segment: false` with `fuse: false` | `fuse` removes the fused files the previous record lists ([sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "How the folder is kept equal to its record"; call C11d), so the reused segmentation's inputs are no longer in the folder; its recorded input SHA-256 values stay as provenance. |
 | `assemble: false` | Allowed only with `segment: false`: the saved tables are loaded with `load_assembly` and recorded `reused` when the `assembly` section's `segmentation_files` equal the reused segmentation's label files; otherwise refused before anything is written. With `segment: true` the cells may change, so the tables are made again. |
 | `fuse: false` with `segment: true` | Refused before anything is written: the part segments the fused images of this export, and `fuse: false` removes them. |
 
@@ -342,7 +342,7 @@ read-back checks (T1 and T5 of "The record") and the validation (SG4) follow:
 `empty` (no included FOV, reason `no_included_fov`, as `fuse` records, when the part is
 called alone on a folder without an included FOV; through `Dataset.export` with the
 assemble part on, such a placement has no owning FOV and is refused before anything is
-written, as on the route per FOV: {doc}`sample-output-contract`, "No included FOV"), `not_run`
+written, as on the route per FOV: [sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "No included FOV"), `not_run`
 (`part_not_run` when `fuse` did not run; `extra_missing` naming the method's extra, for
 example `cellpose`, when its backend is not importable) and `failed`. A model that is
 missing or whose SHA-256 differs is a setting error: it is refused before anything is
@@ -352,12 +352,12 @@ importing the method's libraries (calls C15, C15b and C15c).
 When `segment` is `not_run`, `assemble` still writes the tables of the
 `molecules_only` assembly, `sample.h5ad` without a row and its section with `mode`
 `molecules_only` and the reason, so that the files of the parts that ran exist, as
-{doc}`sample-output-contract` ("When a part cannot run") asks; `complete` is false.
+[sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md) ("When a part cannot run") asks; `complete` is false.
 `complete` keeps its one rule (no part `not_run` or `failed`), so a part that is `empty`
 does not by itself make it false, as for `fuse`.
 
 **Check 7 before anything is written** (after checks 1 to 6 of
-{doc}`sample-output-contract`, "Checks before anything is written"): the route is a value
+[sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "Checks before anything is written"): the route is a value
 of `ROUTES` or null; `route: after_fusion` with `dimensionality: stack` or with
 `projection: sum` is refused ("The route setting"); on the route after fusion with an `assignment` name, `segmentation` is
 given, each run's input images are names of `images`, `dimensionality` writes the
@@ -385,7 +385,7 @@ of "What Jiahao decides" depends on it.
 `cytoplasm: flamingo` with `nuclear: dapi`, nuclei from `nuclear: dapi`, where `dapi`
 and `flamingo` are image names of `images` (for example
 `dapi=file:images/organelle/DAPI/{fov_id}.tif`), as the two-FOV cell measurement fused them. The file of each
-FOV is the one `fuse` reads for that name ({doc}`sample-output-contract`, "Fused image
+FOV is the one `fuse` reads for that name ([sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "Fused image
 inputs"). The input of `segment` is the fused projection itself, so the segmentation input
 is a saved artifact with its SHA-256, as a segmentation run's `input.ome.tif` is
 ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#method-input), "Method input").
@@ -692,7 +692,7 @@ cell equal its retained `assigned` molecules.
 
 ### The files of `export/<sample>/`
 
-File by file against the output profiles of {doc}`sample-output-contract` ("The export
+File by file against the output profiles of [sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md) ("The export
 folder and the output profiles"). `<fmt>` is `csv` or `parquet`; `<image>` is an image
 name of `images`.
 
@@ -739,7 +739,7 @@ On the route after fusion the label image is the segmentation itself.
 
 | Option | Files in `export/<sample>/` | What it changes | Consequence |
 | --- | --- | --- | --- |
-| **K1. One OME-TIFF per run (recommended)** | `segmentation_<run>.ome.tif` per run (uint32, the run's label values, the segmentation grid's geometry, the OME-TIFF layout of {doc}`sample-output-contract`, written by the package's OME-TIFF writer `write_ome_tiff`, which call C18 used for a uint32 label plane read back equal in values and metadata); with an expansion, `territories.ome.tif` (the territories assign sampled, values `cell_id`), written by the `assemble` part. | One writer call per file. | Every label image the tables refer to is a file of the folder with its SHA-256; nothing is duplicated. |
+| **K1. One OME-TIFF per run (recommended)** | `segmentation_<run>.ome.tif` per run (uint32, the run's label values, the segmentation grid's geometry, the OME-TIFF layout of [sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), written by the package's OME-TIFF writer `write_ome_tiff`, which call C18 used for a uint32 label plane read back equal in values and metadata); with an expansion, `territories.ome.tif` (the territories assign sampled, values `cell_id`), written by the `assemble` part. | One writer call per file. | Every label image the tables refer to is a file of the folder with its SHA-256; nothing is duplicated. |
 | K2. The segmentation and assignment folders inside the export folder | `segmentation/<run>/` and `assignment/<name>/`, written by the segmentation and assignment writers `write_run` and `write_assignment`, as the two-FOV cell measurement did (read from the source, `src/python/starfinder/segmentation/_persist.py:95`, `src/python/starfinder/assignment/_persist.py:53`; `read_assignment` at `:120`). | No writer of its own. | Two folders, and the assignment folder repeats the molecule, cell and count tables of `tables/` in other keys. It buys `read_assignment` and the segmentation and assignment records as files. |
 
 % §2.9; W-399
@@ -804,7 +804,7 @@ The `assembly` section records `route`, `route_source` and, on this route,
 compares the section hashes it compares today.
 
 **What `check_export` checks for it** (new conditions, beside those of
-{doc}`sample-output-contract`, "Read-back checks"):
+[sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "Read-back checks"):
 
 * T1. **The segmentation and what it was made from.** Always: the `segmentation`
   section's label files exist with their SHA-256, are uint32 and have the recorded grid's

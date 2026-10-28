@@ -600,7 +600,7 @@ sample-level rules for a configuration that has them. The specification is the
 "Workflow configuration" section of the
 [stitching contract](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md#workflow-configuration), the
 [assembly contract](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md#workflow-configuration) and the
-[sample-output contract](sample-output-contract.md#workflow-configuration).
+[sample-output contract](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md#workflow-configuration).
 
 * **`stitching`.** With the block, `rules/stitching-py.smk` is included instead of the
   four legacy stitching rules, which then do not run whatever their `run` flags. One rule

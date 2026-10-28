@@ -1365,7 +1365,7 @@ def _reads_assignment(config):
 
 
 # --- §2.10: the Python-only stitching, assembly and export blocks (design/specs/stitching.md,
-# --- design/specs/assembly.md and docs/sample-output-contract.md, "Workflow configuration").
+# --- design/specs/assembly.md and design/specs/sample-output.md, "Workflow configuration").
 
 _STITCHING_KEYS = ('method', 'input', 'positions', 'config', 'review', 'fallback', 'bigstitcher_save_dir')
 # BigStitcher runs in Fiji as an engine task, so it is a method of the block but not of STITCHING_METHODS.
@@ -1714,7 +1714,7 @@ def _sample_segmentation_block(values, config):
 
 
 def _export_config(config):
-    """(ExportConfig, assembly block) of the export block and the assembly block (docs/sample-output-contract.md).
+    """(ExportConfig, assembly block) of the export block and the assembly block (design/specs/sample-output.md).
 
     The export block's keys turn the parts on and off and set FusionConfig,
     LabelConfig (labels_scale_yx) and SpatialDataExportConfig

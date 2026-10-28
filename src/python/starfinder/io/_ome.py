@@ -1,4 +1,4 @@
-"""Starfinder's OME-TIFF writer of a fused array (docs/sample-output-contract.md, "OME-TIFF layout", option T1).
+"""Starfinder's OME-TIFF writer of a fused array (design/specs/sample-output.md, "OME-TIFF layout", option T1).
 
 A file writer, not a fusion: it writes the array it is given, value for value, and
 computes no voxel. BigTIFF, one series of axes ``YX`` or ``ZYX`` (each Z plane one page),

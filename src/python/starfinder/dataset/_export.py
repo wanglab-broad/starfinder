@@ -1,4 +1,4 @@
-"""``Dataset.export``: the one sample-level export entry (docs/sample-output-contract.md, "The export entry").
+"""``Dataset.export``: the one sample-level export entry (design/specs/sample-output.md, "The export entry").
 
 It runs the checks before anything is written, removes the files the previous record
 lists for the parts that run or are off, records each part that will run as ``not_run``

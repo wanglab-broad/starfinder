@@ -1,6 +1,6 @@
 """The record ``export.json`` of the export folder.
 
-docs/sample-output-contract.md ("When a part cannot run", "How the folder is kept equal to its record").
+design/specs/sample-output.md ("When a part cannot run", "How the folder is kept equal to its record").
 """
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
 
 design/specs/assembly.md ("Retention", rule 8) and design/specs/assembly-algorithms.md ("Duplicate
 rule"). Each FOV's retained-cell territories are placed on the sample grid at scale 1 as the
-label export places them (docs/sample-output-contract.md, "Assembled label export"): the grid
+label export places them (design/specs/sample-output.md, "Assembled label export"): the grid
 of ``label_grid`` at factor 1 in Y and X and the fusion grid's Z, each FOV at its origin, an
 output voxel taking the value of the FOV voxel nearest its centre (index ``floor(i + ½)``)
 inside the FOV's voxel-centre extent, and ``retained_image`` keeping only the retained cells.

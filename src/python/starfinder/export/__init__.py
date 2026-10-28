@@ -27,7 +27,7 @@ image per run and the ``segmentation`` section (:class:`~starfinder.segmentation
 molecules of an export folder of each route correspond (:class:`RouteComparison`) and
 decides nothing; see docs/sample-segmentation-contract.md.
 Importing this module imports neither multiview-stitcher, zarr nor spatialdata. See
-docs/sample-output-contract.md.
+design/specs/sample-output.md.
 """
 # §2.10, §2.9
 from ._check import check_export

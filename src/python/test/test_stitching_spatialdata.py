@@ -3,7 +3,7 @@ design/validation/stitching-assembly.md: ``export_spatialdata``, its store ``sam
 its ``spatialdata`` section and ``lookup_source``.
 
 Fixtures: ``export_cases``, one sample per row of the table "Empty populations" of
-docs/sample-output-contract.md, built from ``export_folder`` (``assembly_golden`` written as a
+design/specs/sample-output.md, built from ``export_folder`` (``assembly_golden`` written as a
 dataset) with the §2.9 assignment folders replaced by the ``empty_cases`` and ``status_cases``
 variants; the row "No included FOV" through ``no_fov_assembly``, ``fuse_images`` called alone on its
 all-failed placement and ``export_spatialdata`` called alone. ``label_quad`` (label export),
