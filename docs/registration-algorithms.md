@@ -174,7 +174,10 @@ to one translation whose displacement is the sum.
 | `RegistrationRejectedError` | A step fails a configured QC criterion; the message names the criterion, value and bound |
 | `UnsupportedTransformOperationError` | A transform is applied in an unsupported direction or way |
 
-The last three are `RegistrationEstimationError`s, so a recovery may allow them.
+A recovery may allow only `RegistrationEstimationError`, `InsufficientLandmarksError` and
+`RegistrationRejectedError`; the last two are `RegistrationEstimationError`s.
+`UnsupportedTransformOperationError` is a `NotImplementedError` and is never recovered,
+nor are the configuration, geometry and backend errors.
 
 ## Records
 

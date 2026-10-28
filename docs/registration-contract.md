@@ -111,7 +111,7 @@ demons estimate in 2D, while TPS and CPD need 3D.
 | `RegistrationRecipe.steps` | required | The ordered `RegistrationStep`s, each with a method config, optional `recovery` and optional per-step `signal` |
 | `RegistrationRecipe.signal` | `RegistrationSignalConfig()`: `mode="max"` | `"max"`, `"sum"`, or `"channel"` with `reference_channel` and `moving_channel` (index or label) |
 | `RegistrationRecipe.warp` | `None`: translation for a chain of translations, linear SciPy otherwise | The final resampling: `backend`, `boundary_mode` (`"constant"` or `"nearest"`), `fill_value`, `output_dtype` |
-| `RegistrationRecipe.reference_round` | `None`: the dataset's reference round | Must equal it when set |
+| `RegistrationRecipe.reference_round` | `None`: the dataset's reference round | Sequencing rounds: must equal the dataset's reference round when set. Other rounds: must equal the call's `reference` round, and must be `None` with an `ExternalReference` |
 | `RegistrationRecipe.qc` | `RegistrationQcConfig()`: rejects nothing | `min_coverage`, `min_ncc_gain`, `max_fold_fraction`, `max_translation_voxels` |
 | `RecoveryConfig` | no recovery | `allowed_errors` and ordered `alternatives` |
 
@@ -138,9 +138,10 @@ step's recovery can allow.
 
 `FOV.register(recipe, rounds=[...])` registers named rounds. When they are sequencing
 rounds, they are registered to the reference round as in `FOV.run`. When none of them
-is, it takes the other-round route: each round is registered to `reference`, a loaded
-round's name (default the reference round) or an `ExternalReference` holding a ZYX
-image on the same grid with a label. Mixing both kinds raises `ValueError`.
+is, it takes the other-round route: each round is registered to `reference`, any
+loaded round's name (default the recipe's `reference_round`, else the dataset's
+reference round) or an `ExternalReference` holding a ZYX image on the same grid with a
+label. Mixing both kinds raises `ValueError`.
 
 On this route the recipe usually registers a shared stain, with
 `RegistrationSignalConfig("channel", reference_channel=..., moving_channel=...)`
@@ -175,8 +176,8 @@ rules:
             recovery: {allowed_errors: [RegistrationEstimationError], alternatives: [{method: tps}]}
 ```
 
-The keys `signal`, `warp`, `qc` and `reference_round` take the fields of their
-classes; YAML lists become tuples. The MATLAB keys `global_registration` and
+The keys `signal`, `warp` and `qc` take the fields of their classes, and
+`reference_round` must equal the dataset's reference round; YAML lists become tuples. The MATLAB keys `global_registration` and
 `local_registration` raise under `backend: python`; on the MATLAB backend they keep
 their meaning. The rule parameter `reference_image_view` (`{mode: max}`, or
 `{mode: channel, channel: <index or label>}`) chooses the reference image the rule
