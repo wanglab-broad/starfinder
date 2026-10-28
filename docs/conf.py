@@ -14,6 +14,7 @@ author = "STARfinder contributors"
 release = package_version("starfinder")
 
 extensions = [
+    "public_constants",
     "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",

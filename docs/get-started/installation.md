@@ -105,7 +105,7 @@ configuration.
 
 The MATLAB backend (`backend: matlab`, the workflow's default) targets **MATLAB R2023b or
 newer** with the Image Processing Toolbox; the full list of requirements is in
-[the MATLAB API](../api/matlab.md#runtime-requirements-and-validation-limits). The
+[the MATLAB runtime notes](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/matlab-api.md#runtime-requirements-and-validation-limits). The
 workflow starts MATLAB through `matlab_launcher`: the default `path` runs the executable
 named by `STARFINDER_MATLAB_EXECUTABLE`, or `matlab` on `PATH`
 ([MATLAB launcher](../workflow-configuration.md#matlab-launcher)). The Python package,

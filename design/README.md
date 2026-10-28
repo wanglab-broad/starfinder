@@ -14,7 +14,7 @@ the full rules behind it.
 | `validation/` | The validation designs: the checks of a scene or a chain, their thresholds, and the table that maps each check to its tests. | Yes: the "Implemented checks" tables, found by their MyST labels |
 | `baselines/` | What a stage did at a fixed revision before it was rewritten, with file and line pins. History; not maintained. | No |
 | `proposals/` | Designs proposed and not, or not yet, implemented. | No |
-| `notes/` | Longer notes behind a guide: calibration targets, research scripts, the full migration notes. | No |
+| `notes/` | Longer notes behind a guide: calibration targets, API behaviour, research scripts, the full migration notes. | No |
 
 ## How this folder relates to the site
 

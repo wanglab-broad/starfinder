@@ -1,68 +1,43 @@
 starfinder.preprocessing
 ========================
 
-Intensity normalization and background removal, and the step/recipe contract that
-orders them. See :doc:`contracts` for shared array conventions and
-:doc:`../preprocessing-contract` for steps, recipes and the enforcement wrapper.
-``FOV.run`` executes a :py:class:`~starfinder.preprocessing.PreprocessingRecipe` given as
-``PipelineConfig.preprocessing``; each step is looked up in
-:py:data:`~starfinder.preprocessing.PREPROCESSING_METHODS` by
-its exact config type and run through :py:func:`~starfinder.preprocessing.run_step`.
-
-Snapshots and sources
----------------------
-
-A :py:class:`~starfinder.preprocessing.PreprocessingStep` with ``save_as`` keeps a named snapshot of
-its output. The recipe's ``extraction_source`` and ``registration_source`` name the
-snapshots that extraction and the registration signals read; both default to the
-detection image, the last step's output. How the snapshots are registered with their
-round and recorded, and the workflow key ``preprocessing``, are in the
-:doc:`preprocessing guide <../preprocessing-contract>` ("What it does", "What you get",
-"Workflow keys") and :doc:`../workflow-configuration`.
-
-Background subtraction
-----------------------
-
-:py:class:`~starfinder.preprocessing.ScalarBackgroundConfig` (step ``scalar_background``)
-subtracts one level per channel and round, the inverted-CDF ``percentile`` of the
-channel's voxels, and clips at zero.
-:py:class:`~starfinder.preprocessing.Background3DConfig` (step ``background_3d``) subtracts a
-grey opening with an anisotropic ellipsoidal footprint, a volumetric white top-hat.
-Both keep the input dtype and record the shared per-channel diagnostics (zero fraction,
-median, MAD, noise threshold and ``mad_zero``). The XY methods
-(:py:class:`~starfinder.preprocessing.ReconstructionConfig`,
-:py:class:`~starfinder.preprocessing.TophatConfig`) are unchanged. Choosing the 3D radius
-relative to puncta size is described in :doc:`../recipes`.
-
-Sample-level statistics
------------------------
-
-Steps with ``fit="supplied"`` (percentile normalization, scalar background and the
-histogram-matching reference) read their values from the recipe's ``supplied_statistics`` file, schema
-``starfinder.preprocessing.supplied/1``, as described in the
-:doc:`preprocessing reference <../preprocessing-algorithms>`. A summary pass runs the steps before the fitted
-step (:py:func:`~starfinder.preprocessing.summary_recipe`), records the integer
-histograms of each FOV at that step's input
-(:py:func:`~starfinder.preprocessing.summarize_histograms`), sums them
-(:py:func:`~starfinder.preprocessing.merge_histograms`) and fits the step's section
-(:py:func:`~starfinder.preprocessing.fit_supplied_section`). The application pass runs the
-full recipe; ``FOV.run`` validates the file against the recipe, the dataset
-``channel_order`` and the rounds before any step runs. The manual two-pass example
-below summarizes three FOVs after a white top-hat, merges them, writes the file and
-applies it; from ``src/python``, run
-``uv run python ../../docs/examples/percentile_two_pass.py <new output directory>``.
-When only scalar background steps lie between two supplied steps,
-:py:func:`~starfinder.preprocessing.scalar_background_histograms` derives the later
-summary exactly from the earlier one, per FOV before merging (``fit="fov"``) or from the
-merged counts (``fit="supplied"``), without another pass over the images.
-
-.. literalinclude:: ../examples/percentile_two_pass.py
-   :language: python
-
-API
----
+Intensity normalization, background removal and preprocessing recipes. The
+:doc:`preprocessing guide <../preprocessing-contract>` shows how to run the steps; the
+:doc:`preprocessing reference <../preprocessing-algorithms>` lists methods and options.
 
 .. currentmodule:: starfinder.preprocessing
+
+Steps and recipes
+-----------------
+
+.. autosummary::
+   :toctree: generated
+
+   PREPROCESSING_METHODS
+   PreprocessingRecipe
+   PreprocessingSpec
+   PreprocessingStep
+   run_step
+   step_config_type
+   step_spec
+   StepContext
+   StepResult
+
+Normalization and histogram matching
+------------------------------------
+
+.. autosummary::
+   :toctree: generated
+
+   HistogramMatchingConfig
+   match_histogram
+   MinMaxNormalizationConfig
+   normalize_min_max
+   normalize_percentile
+   PercentileNormalizationConfig
+
+Background removal
+------------------
 
 .. autosummary::
    :toctree: generated
@@ -70,37 +45,47 @@ API
    Background3DConfig
    correct_background
    filter_tophat
+   ReconstructionConfig
+   ScalarBackgroundConfig
+   subtract_background_3d
+   subtract_scalar_background
+   TophatConfig
+
+Projection
+----------
+
+.. autosummary::
+   :toctree: generated
+
+   project_image
+   ProjectionConfig
+
+Sample-level statistics
+-----------------------
+
+.. autosummary::
+   :toctree: generated
+
    fit_supplied_section
    histogram_percentile
-   HistogramMatchingConfig
    HistogramSummary
    load_histograms
    load_supplied_statistics
-   match_histogram
    merge_histograms
-   MinMaxNormalizationConfig
-   normalize_min_max
-   normalize_percentile
-   PercentileNormalizationConfig
-   PREPROCESSING_METHODS
-   PreprocessingRecipe
-   PreprocessingSpec
-   PreprocessingStep
-   project_image
-   ProjectionConfig
-   ReconstructionConfig
-   run_step
    save_histograms
    save_supplied_statistics
    scalar_background_histograms
-   ScalarBackgroundConfig
-   step_config_type
-   step_spec
-   StepContext
-   StepResult
-   subtract_background_3d
-   subtract_scalar_background
    summarize_histograms
    summary_recipe
    supplied_statistics
-   TophatConfig
+
+Examples
+--------
+
+Run from ``src/python`` with
+``uv run python ../../docs/examples/percentile_two_pass.py OUTPUT_DIR``.
+
+.. dropdown:: Fit and apply sample-level statistics in two passes
+
+   .. literalinclude:: ../examples/percentile_two_pass.py
+      :language: python

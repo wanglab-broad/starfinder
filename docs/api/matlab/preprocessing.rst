@@ -1,11 +1,9 @@
 Preprocessing
 =============
 
-These helpers operate on cell arrays containing 4-D images. The dataset's
-``HistEqualize`` and ``Tophat`` methods supply additional processing operations.
-See :doc:`../preprocessing` for Python counterparts, whose normalization and
-dtype contracts differ. Disk morphology is applied to each XY plane, not as
-a spherical 3-D neighborhood.
+MATLAB intensity and background helpers. The :doc:`workflow guide <../../workflows>`
+shows the processing workflow; the :doc:`array reference <../contracts>` lists
+MATLAB image conventions.
 
 .. mat:currentmodule:: .
 

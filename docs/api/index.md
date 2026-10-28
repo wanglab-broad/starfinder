@@ -1,7 +1,9 @@
 # API
 
 :::{container} sf-lead
-Alphabetical function and class references for Python and MATLAB.
+Function and class references for Python and MATLAB, grouped by topic.
+The {doc}`workflow guide <../workflows>` shows the processing workflow; the
+{doc}`array reference <contracts>` lists shared conventions.
 :::
 
 ::::{grid} 1 1 3 3

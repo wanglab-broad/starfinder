@@ -4,8 +4,8 @@ Python API
 The reference renders supported signatures, defaults, public members and source
 links. Each module page below lists its namespace's exports; :doc:`inventory`
 lists the root convenience exports, and the :ref:`general index <genindex>` lists every
-documented object A–Z. :doc:`contracts` defines arrays and geometry;
-:doc:`backends` lists dependencies.
+documented object A–Z. :doc:`contracts` defines arrays and geometry, :doc:`backends` lists dependencies,
+and the :doc:`coordination guide <../coordination>` shows a Python pipeline.
 
 .. toctree::
    :maxdepth: 1

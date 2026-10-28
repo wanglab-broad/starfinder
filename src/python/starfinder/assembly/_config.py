@@ -11,13 +11,18 @@ import numpy as np
 from starfinder.assignment import AssignmentResult, MoleculeTable
 from starfinder.segmentation import ReferenceGrid
 
+#: Whether assembly retained or excluded an observation.
 ASSEMBLY_STATUSES = ("retained", "excluded")
+#: Reasons a cell observation is excluded from the sample.
 CELL_ASSEMBLY_REASONS = ("not_owner", "fov_not_placed", "duplicate_observation")
+#: Reasons a molecule observation is excluded from the sample.
 MOLECULE_ASSEMBLY_REASONS = ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed",
                              "cell_duplicate_observation")
 # The reasons of the duplicate rule, which the record counts only when the rule is on (duplicate_threshold not None).
 DUPLICATE_REASONS = ("duplicate_observation", "cell_duplicate_observation")
+#: Diagnostic flags attached to cell observations during assembly.
 CELL_ASSEMBLY_FLAGS = ("fov_edge", "z_edge", "conflict", "unclaimed")
+#: Diagnostic flags attached to molecule observations during assembly.
 MOLECULE_ASSEMBLY_FLAGS = ("outside_owner_region", "cell_unclaimed")
 
 OWNERSHIP = ("nearest_center", "midpoint_box")

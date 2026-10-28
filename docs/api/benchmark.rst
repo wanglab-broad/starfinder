@@ -7,11 +7,21 @@ Explicit cases, trial records and saved-artifact lifecycle. See
 
 .. currentmodule:: starfinder.benchmark
 
+Cases and trials
+----------------
+
 .. autosummary::
    :toctree: generated
 
    BenchmarkCase
    BenchmarkTrialResult
+
+Run, evaluate and report
+------------------------
+
+.. autosummary::
+   :toctree: generated
+
    evaluate_benchmark
    report_benchmark
    run_benchmark
