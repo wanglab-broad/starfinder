@@ -130,7 +130,8 @@ accepted ones.
 
 ## Molecule table
 
-`FOV.export_spots()` writes the accepted reads as `molecules.csv`, a typed CSV:
+After the filter, `FOV.export_spots()` writes the accepted reads as `molecules.csv`, a
+typed CSV:
 
 | Column | Type | Contents |
 | --- | --- | --- |
@@ -161,10 +162,10 @@ With checkpoints, `FOV.run` stores `summarize_reads` in `run.json` under
 | File | Written by | Contents |
 | --- | --- | --- |
 | `checkpoints/candidates.csv` or `.parquet`, with `candidates.json` | `FOV.run` with the `candidates` stage | The candidates; after extraction, their sums and `valid`, and the box sizes and local background when measured |
-| `checkpoints/pre_qc.csv` or `.parquet`, with `pre_qc.json` | `FOV.run` with the `pre_qc` stage | The read table after scoring and deduplication, before the filter |
-| `run.json` | `FOV.run` with `checkpoints` | The readout mode, the configs, the codebook's encoding (`multiplexed`) and the read summary |
-| `molecules.csv` | `FOV.export_spots()` | The accepted reads (above) |
-| `reads.csv` | `FOV.export_spots("reads")` | Every decoded read |
+| `checkpoints/pre_qc.csv` or `.parquet`, with `pre_qc.json` | `FOV.run` with the `pre_qc` stage, when it decodes, scores or deduplicates | The read table before the filter, with the score and duplicate columns of the stages that ran |
+| `run.json` | `FOV.run` with `checkpoints` | The readout mode, the configs, the codebook's encoding (`multiplexed`) and, after decoding, the read summary |
+| `molecules.csv` | `FOV.export_spots()`, after the filter | The accepted reads (above) |
+| `reads.csv` | `FOV.export_spots("reads")`, after decoding | Every decoded read |
 
 Paths are inside the FOV's folder, `<output_root>/fovs/<fov_id>/` by default;
 {doc}`checkpoints` describes them.
@@ -173,17 +174,16 @@ Paths are inside the FOV's folder, `<output_root>/fovs/<fov_id>/` by default;
 
 With `backend: python`:
 
-| Key | Meaning |
-| --- | --- |
-| `readout_mode` (top level) | `multiplexed` or `direct` |
-| `load_codebook.split_index` | The two-segment split, as MATLAB's one-based position |
-| `load_codebook.encoding` | `method` (an encoding name) and that config's fields |
-| `reads_extraction` | `run`; `voxel_size`, the box half-widths; `background`, `false` or the `LocalBackgroundConfig` fields |
-| `reads_filtration` | `run` (decode and filter); `end_base`, `start_base`, `exclude_invalid_endpoints`, `score_bounds`, `n_barcode_segments`, `split_index` |
-| `decoding` | `method` (a decoder name) and that config's fields |
-| `scoring` | `run` and `method` |
-| `deduplication` | `run` and the `DeduplicationConfig` fields |
+| Key | What it is for | Fields |
+| --- | --- | --- |
+| `readout_mode` (top level) | How reads get their identity | |
+| `load_codebook` | The codebook's segment layout and encoding | `split_index`, `encoding` |
+| `reads_extraction` | Extraction and the local background | `run`, `voxel_size`, `background` |
+| `reads_filtration` | Decoding and the read filter | `run`, `end_base`, `start_base`, `exclude_invalid_endpoints`, `score_bounds`, `n_barcode_segments`, `split_index` |
+| `decoding` | The decoder | `method` and the decoder config's fields |
+| `scoring` | The shared read-QC score | `run`, `method` |
+| `deduplication` | Optional deduplication | `run` and the `DeduplicationConfig` fields |
 
 The keys go under `rules.<rule>.parameters`, except `readout_mode`.
-{doc}`workflow-configuration` gives their rules ("Readout mode", "Codebook segment
-layout", "Codebook encoding table").
+{doc}`workflow-configuration` gives each key's values and rules ("Readout mode",
+"Codebook segment layout", "Codebook encoding table").

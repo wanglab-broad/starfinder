@@ -3,8 +3,8 @@
 Readout turns the candidates of {doc}`spot finding <spot-finding-contract>` into reads.
 It sums a small box around each candidate, decodes or assigns each read, ranks the calls
 with one shared quality score, can mark duplicates seen in two channels, and filters the
-reads. `FOV.export_spots` writes the accepted reads as `molecules.csv`,
-which {doc}`assignment <assignment-contract>` can read.
+reads. After the filter, `FOV.export_spots` writes the accepted reads as
+`molecules.csv`, which {doc}`assignment <assignment-contract>` can read.
 
 The {doc}`readout reference <readout-algorithms>` lists every method, option, column
 and file; the {doc}`readout API <api/readout>` documents the classes.
@@ -78,25 +78,25 @@ readout mode `direct`.
 
 ## What you get
 
-* **In memory:** `fov.intensity_result` holds the sums (`values`, candidates ×
+* **In memory**, for each stage that ran: `fov.intensity_result` holds the sums (`values`, candidates ×
   channels × rounds), `valid` and, when recorded, `box_voxels` and the local
   `background` and `noise`. `fov.decoding_result` holds one read per candidate, with
   `gene_id`, `entry_id`, `call_status`, `failure_reason`, `call_type` and the decoder's
-  scores;
-  `scoring_result` and `deduplication_result` add their columns, and
+  scores; `scoring_result` and `deduplication_result` add their columns, and
   `filtering_result` adds `accepted` and `rejection_reasons`. `fov.results` maps each
   stage that ran to its result.
-* **On disk:** the `candidates` and `pre_qc` checkpoints, and `run.json` with each
-  stage's config and a summary of the reads under `counts`.
-  `fov.export_spots()` writes `molecules.csv`, the accepted reads with their positions,
-  genes and scores, and `fov.export_spots("reads")` every decoded read.
+* **On disk:** the `candidates` and `pre_qc` checkpoints (below), and `run.json` with
+  each stage's config and, after decoding, a summary of the reads under `counts`.
+  After the filter, `fov.export_spots()` writes `molecules.csv`, the accepted reads
+  with their positions, genes and scores; after decoding, `fov.export_spots("reads")`
+  writes every decoded read.
 
 The reference lists every column.
 
 ## Main options
 
 * `Dataset.readout_mode` and the codebook's `encoding` and `layout` (below).
-* `NeighborhoodSumConfig.neighborhood_radius_zyx`: the size of the summed box.
+* `NeighborhoodSumConfig.neighborhood_radius_zyx`: the summed box.
 * `CodebookAwareDecoderConfig.allow_rescue`: turns rescue on or off.
 * `DeduplicationConfig.distance_voxels`: how close duplicates lie.
 * `ReadFilterConfig`: `call_statuses` (the statuses to accept) and `score_bounds`.
@@ -148,13 +148,12 @@ the workflow, `load_codebook.split_index` gives a two-segment layout
 
 ## Extraction
 
-`NeighborhoodSumConfig` sums a box with half-widths `neighborhood_radius_zyx` around
-each candidate; `box_voxels` counts the voxels summed. By default it
-also measures a local `background`, the median of a ring of voxels around the box, and
-`noise`, 1.4826 times the ring's median absolute deviation, per channel and round, in
-grey levels per voxel. `LocalBackgroundConfig` sets the ring; `background=None` turns
-it off. `valid` is false where a measurement is unavailable, such as the rounds a
-direct-readout candidate was not detected in.
+`NeighborhoodSumConfig` sums a box (`neighborhood_radius_zyx`) around each candidate;
+`box_voxels` counts the voxels summed. By default it also measures a local
+`background`, the median of a ring of voxels around the box, and `noise`, the ring's
+robust spread, per channel and round. `LocalBackgroundConfig` sets the ring;
+`background=None` turns it off. `valid` is false where a measurement is unavailable,
+such as the rounds a direct-readout candidate was not detected in.
 
 ## Decoding
 
@@ -204,11 +203,11 @@ has its `PipelineConfig` field; `None` turns it off.
 
 ## Checkpoints and reruns
 
-With the `candidates` stage, `FOV.run` saves the candidates with their sums, `valid`
-and, when measured, the background; with `pre_qc`, the read table after scoring and
-deduplication, before the filter. After `fov.load_checkpoint("candidates")`,
-`fov.run` can decode, score, deduplicate and filter again without images; after
-`load_checkpoint("pre_qc")` as well, it can score, deduplicate or filter again.
+With the `candidates` stage, `FOV.run` saves the candidates and, when extraction ran,
+their sums and `valid`, with the background when measured. With `pre_qc`, it saves the
+read table before the filter. After loading a `candidates` checkpoint with sums,
+`fov.run` can decode, deduplicate and filter again without images, and score when the
+background was measured.
 {doc}`checkpoints` gives the files and calls ("Reload and continue").
 
 ## Workflow keys
