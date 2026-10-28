@@ -17,7 +17,7 @@ segmentation and assignment work changes them. It is the reference that the gold
 described in [segmentation-contract](../specs/segmentation.md) and [segmentation-algorithms](../specs/segmentation-algorithms.md); neither
 is accepted. Paths are relative to the repository root, and line numbers are at
 `6b384cd`. The assignment half of the work (`reads_assignment.py`, compartments, counts)
-is recorded in [assignment-baseline](../../docs/assignment-baseline.md); this page names it only where segmentation
+is recorded in [assignment-baseline](assignment.md); this page names it only where segmentation
 reaches into it.
 
 % after the §2.8 work; before the Chapter II §2.9 work; The assignment half of §2.9; is recorded by W-308

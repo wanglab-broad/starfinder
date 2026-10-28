@@ -2,7 +2,7 @@
 
 % Status: Accepted (W-309, 2026-10-05, at 3550723)
 
-Note: {doc}`assignment-contract` and {doc}`assignment-algorithms` were accepted at their acceptance review (2026-10-05) and are implemented in `starfinder.assignment`; this page keeps the text of its revision.
+Note: [assignment-contract](../specs/assignment.md) and [assignment-algorithms](../specs/assignment-algorithms.md) were accepted at their acceptance review (2026-10-05) and are implemented in `starfinder.assignment`; this page keeps the text of its revision.
 
 % Note (W-583); accepted at W-309 (2026-10-05)
 
@@ -10,7 +10,7 @@ This page records how molecule-to-cell assignment behaves at revision `6b384cd` 
 `runner/s29-spec-20261004`, on `dev` after the readout work), before the segmentation and
 assignment work changes it. It is the reference that the golden test
 `src/python/test/test_assignment_golden.py` pins. The proposed replacement is described
-in {doc}`assignment-contract` and {doc}`assignment-algorithms`; neither is accepted. The
+in [assignment-contract](../specs/assignment.md) and [assignment-algorithms](../specs/assignment-algorithms.md); neither is accepted. The
 label images assignment reads are specified by the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md), and their
 current production by the [segmentation baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/segmentation.md). Paths are relative to the
 repository root, and line numbers are at `6b384cd`.
@@ -93,7 +93,7 @@ Paths are relative to the output directory.
 | `create_sample_h5ad` | the annotation and the `raw.h5ad` of every FOV of the sample | `expr/{sample}_raw.h5ad` |
 | `create_sample_reads_assignment` | the annotation and the `reads_assignment.csv` of every FOV of the sample | `expr/{sample}_reads_assignment.csv` |
 
-On 2026-10-24 a later change removed `documents/genes.csv` from `reads_assignment`'s inputs: the matrix's genes and their order are the codebook's ({doc}`migration`).
+On 2026-10-24 a later change removed `documents/genes.csv` from `reads_assignment`'s inputs: the matrix's genes and their order are the codebook's ([migration](../../docs/migration.md)).
 
 % W-567 later removed
 
@@ -108,7 +108,7 @@ list; that case was not run here (`anndata` is not installed in the locked envir
 annotation and adds `unique_index = sample_fov_id_seg_label`, so every background
 molecule of a FOV shares the key `…_0`. It writes with the pandas row index.
 
-{doc}`workflow-downstream` ("Tile geometry and sample aggregation") describes the same
+[workflow-downstream](../../docs/workflow-downstream.md) ("Tile geometry and sample aggregation") describes the same
 rules from the workflow side.
 
 ## The legacy examples
@@ -143,7 +143,7 @@ rules from the workflow side.
 
 % heading: The §2.8 molecule outputs assignment reads
 
-The [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md) (accepted at its review) and {doc}`checkpoints` define them:
+The [readout specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md) (accepted at its review) and [checkpoints](../../docs/checkpoints.md) define them:
 
 % (accepted at W-280)
 
@@ -158,7 +158,7 @@ So the package's own goodSpots CSV cannot be read by `reads_assignment.py` (floa
 indices raise; golden test `test_float_coordinates_raise`), and the CSV drops the
 identity, which the package tables keep.
 On 2026-10-23 a later change replaced this export on the Python route: `FOV.export_spots()` writes the zero-based,
-identity-preserving `fovs/{fovID}/molecules.csv` ({doc}`migration`).
+identity-preserving `fovs/{fovID}/molecules.csv` ([migration](../../docs/migration.md)).
 
 % W-562 later replaced
 
@@ -168,15 +168,15 @@ identity-preserving `fovs/{fovID}/molecules.csv` ({doc}`migration`).
 
 | # | Discrepancy | Proposed resolution |
 | --- | --- | --- |
-| 1 | Coordinates index the label image without a bounds check (`:87`, `:89`): one-based 0 reads the far edge, a coordinate beyond the grid raises `IndexError` (golden test). | Every molecule is sampled through one rule with explicit bounds; a molecule off the grid gets the status `outside_grid` and is kept ({doc}`assignment-contract`, "Coordinate sampling"). |
+| 1 | Coordinates index the label image without a bounds check (`:87`, `:89`): one-based 0 reads the far edge, a coordinate beyond the grid raises `IndexError` (golden test). | Every molecule is sampled through one rule with explicit bounds; a molecule off the grid gets the status `outside_grid` and is kept ([assignment-contract](../specs/assignment.md), "Coordinate sampling"). |
 | 2 | The subpixel-to-voxel rule is implicit: integers index directly and floats raise, including the package's own goodSpots output. | A stated rule for zero-based subpixel ZYX positions (recommended: the voxel whose support `[i − 0.5, i + 0.5)` holds the position), applied to the package tables, never to the one-based CSV. |
-| 3 | Expansion is applied here (`:55-57`, `:66-67`) after an earlier expansion in `stardist_segmentation.py`, with its own distance; two expansions are not one (4 then 2 differs from 6 on the golden fixture by 585 voxels). | One expansion through segmentation's `expand_labels`, applied once, by assign, and recorded; assign keeps the original and the expanded territories and refuses a label image already expanded in segmentation, whose original is not kept ({doc}`assignment-contract`, "Label expansion"). |
-| 4 | Expansion of 3D labels is per slice, in pixels: labels never grow in Z, and a plane without labels stays empty. | `expand_labels` with an explicit mode (`planar` reproduces today; `volumetric` in physical units) and unit, recorded ([segmentation reference](segmentation-algorithms.md#input-and-label-functions)). |
-| 5 | Assignment is coupled to the tile configuration, global coordinates and the overlap filter (`:39-42`, `:78-80`, `:141-165`), and the rule needs every sample's tile configuration. | Assignment is FOV-local and reads no tile configuration; stitching and assembly receive cell identities, centroids and statuses ({doc}`assignment-contract`, "Boundary with stitching and assembly"). The workflow adapter keeps today's overlap filter outside the package until stitching and assembly replace it. |
+| 3 | Expansion is applied here (`:55-57`, `:66-67`) after an earlier expansion in `stardist_segmentation.py`, with its own distance; two expansions are not one (4 then 2 differs from 6 on the golden fixture by 585 voxels). | One expansion through segmentation's `expand_labels`, applied once, by assign, and recorded; assign keeps the original and the expanded territories and refuses a label image already expanded in segmentation, whose original is not kept ([assignment-contract](../specs/assignment.md), "Label expansion"). |
+| 4 | Expansion of 3D labels is per slice, in pixels: labels never grow in Z, and a plane without labels stays empty. | `expand_labels` with an explicit mode (`planar` reproduces today; `volumetric` in physical units) and unit, recorded ([segmentation reference](../../docs/segmentation-algorithms.md#input-and-label-functions)). |
+| 5 | Assignment is coupled to the tile configuration, global coordinates and the overlap filter (`:39-42`, `:78-80`, `:141-165`), and the rule needs every sample's tile configuration. | Assignment is FOV-local and reads no tile configuration; stitching and assembly receive cell identities, centroids and statuses ([assignment-contract](../specs/assignment.md), "Boundary with stitching and assembly"). The workflow adapter keeps today's overlap filter outside the package until stitching and assembly replace it. |
 | 6 | No status for unassigned or excluded molecules: label 0 is the only record, the overlap filter drops molecules of dropped cells, and the empty branch writes a different population. | Every molecule keeps exactly one assignment status (`assigned`, `unassigned`, `excluded_cell`, `outside_grid`) in one table, whatever happens to its cell. |
 | 7 | No nucleus–cell correspondence and no compartment counts; the culture example derives compartments from label arithmetic. | A correspondence table, supplied or derived from overlap, with flags and a correspondence status per cell; whole-cell counts always, nuclear and cytoplasmic counts only where correspondence allows, withheld for flagged cells and not produced for a cell without a detected nucleus, with no automatic repair. |
 | 8 | Cell size is reported as `volume` without units; in 2D it is an area, and it is the expanded territory's size. | `size_voxels` of the original and the expanded territory, and a physical size with its unit when the grid is calibrated, unknown otherwise. |
-| 9 | The scripts need packages outside the base package: `parse` (not locked), `anndata` and `scanpy` (locked only through the `spatialdata` extra, which the project environment does not install). | The assignment entry needs only the base dependencies (NumPy, pandas, scikit-image, tifffile); AnnData is written only by the existing per-FOV H5AD output, behind an optional dependency ({doc}`assignment-contract`, "Persistence"). |
+| 9 | The scripts need packages outside the base package: `parse` (not locked), `anndata` and `scanpy` (locked only through the `spatialdata` extra, which the project environment does not install). | The assignment entry needs only the base dependencies (NumPy, pandas, scikit-image, tifffile); AnnData is written only by the existing per-FOV H5AD output, behind an optional dependency ([assignment-contract](../specs/assignment.md), "Persistence"). |
 | 10 | A FOV whose molecules all miss the cells loses every cell (`:111`, golden test). | Cells are kept whatever their counts; a cell with no molecule has a zero row. |
 | 11 | Molecules whose gene is not in `genes.csv` keep a label but are not counted and not recorded; the log's numerator leaves them out while its denominator counts them. | The gene list is the codebook's; a molecule outside it is rejected before assignment with an error naming the genes. |
 | 12 | Centroids are truncated to integers (`:141`). | Float centroids, zero-based index coordinates of the reference grid. |

@@ -61,7 +61,7 @@ neither:
   float64 `origin_z/y/x` in µm, `nominal_*`, links, record, review), the sample frame, the
   index-to-sample rule and `placed_metadata`, the failure policy and
   `PlacementReviewRequiredError`;
-* the per-FOV tables of {doc}`assignment-contract`: `AssignmentResult` (molecule table,
+* the per-FOV tables of the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md): `AssignmentResult` (molecule table,
   cell table, long counts, nuclei, label arrays, record), its statuses
   (`ASSIGNMENT_STATUSES`, `CELL_STATUSES`, `COMPARTMENT_STATES`), its keys
   `(spot_namespace, spot_id)` and `(cell_namespace, cell_id)`, `MoleculeTable`, the grid
@@ -294,7 +294,7 @@ In this order, before any coordinate is computed; each raises and names the FOVs
    of its `cell_namespace`) are `[dataset_id, sample_id, fov_id, subtile_id]` with this
    `fov_id`, one `dataset_id` and `sample_id` for the sample, and `subtile_id` null:
    subtiles are not assembled (`ValueError`).
-6. **Grid.** The input's `grid` equals, by the grid rule of {doc}`assignment-contract`,
+6. **Grid.** The input's `grid` equals, by the grid rule of the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#the-grid-rule),
    the grid the placement recorded for the FOV (`record["inputs"][fov_id]`) and the grid
    of the assignment record, reading `µm`, `um` and `micrometer` as one unit and a grid
    without a direction as having the identity direction; otherwise
@@ -316,7 +316,7 @@ The record of the result (the `assembly` section of `export.json` when saved, "P
   `placement.json` records them;
 * per FOV: `fov_id`, placement status, origin, input kind, the assignment name and the
   SHA-256 of its `assignment.json` (`record_sha256`; for an assignment given in memory, the
-  SHA-256 of its record by the rule of `record_sha256` in {doc}`assignment-contract`, "Run
+  SHA-256 of its record by the rule of `record_sha256` in the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#run-record), "Run
   record") and of its molecule, cell and count tables, the
   molecule table's `sha256` (`MoleculeTable`), the territory label file read for the flags
   as `territories`: its path (absolute, as the assignment loader resolved it) beside its SHA-256,
@@ -397,7 +397,7 @@ reference grid, pushed into the sample frame by the rule of {doc}`stitching-cont
 
 * **Molecules**: `p` is the molecule's `z, y, x` from the assignment molecule table, float64,
   sub-voxel positions included; never the sampled voxel. On a FOV whose reference grid has
-  one plane a molecule is sampled at its `y, x` only ({doc}`assignment-contract`,
+  one plane a molecule is sampled at its `y, x` only ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#coordinate-sampling),
   "Coordinate sampling"), so its `p_z` is 0, the plane: its `sample_z` is the plane's,
   and its recorded `z` stays in the column `z`. An `outside_grid` molecule is
   mapped too (its position is finite) and keeps its coordinates while excluded.
@@ -505,7 +505,7 @@ ownership is a point test ({doc}`assembly-algorithms`, "Ownership").
 ### Ties and boundary inclusivity
 
 Footprints are half-open per axis, `[lower, upper)`, as the voxel supports of
-{doc}`assignment-contract` ("Coordinate sampling") are. A point whose distances to two
+the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#coordinate-sampling) ("Coordinate sampling") are. A point whose distances to two
 centres are exactly equal (float64 comparison, no tolerance) is a tie.
 
 | Option | Rule | Effect on the golden values | Effect on existing outputs |
@@ -701,7 +701,7 @@ With `F` the input FOVs, `C_f` and `M_f` the cell and molecule tables of FOV `f`
    `whole = nucleus + cytoplasm` holds for every counted cell whose `compartments` is
    `available`, counted cells whose compartments are `withheld`, `no_nucleus` or
    `unavailable` have no compartment rows, and the per-molecule compartment identity of
-   {doc}`assignment-contract` ("Count accounting", 3) holds over the retained `assigned`
+   the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#count-accounting) ("Count accounting", 3) holds over the retained `assigned`
    molecules.
 6. **No identity about biological cells.** The number of distinct biological cells or
    molecules is not known and is not claimed ("Flags").
@@ -762,7 +762,7 @@ molecule's `fov_id` and `cell_id`, null where no single row holds them); `sample
 
 % §2.9
 
-**`counts`**, the long table of {doc}`assignment-contract` with `fov_id` and
+**`counts`**, the long table of the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#count-accounting) with `fov_id` and
 `cell_namespace` added: one row per nonzero (counted cell, gene, compartment), with
 `count` int64; `matrix()` on the result gives the dense form in `genes` order.
 
@@ -807,7 +807,7 @@ def write_h5ad(path, obs: pd.DataFrame, keys: pd.DataFrame, counts: pd.DataFrame
 folder, and returns the path. The caller prepares `obs`, one row per cell to write, in
 order, with the `obs_names` as its index, and `keys`, the same rows' key columns that
 `counts` also has (`cell_id` within one FOV; `cell_namespace` and `cell_id` for a sample).
-From the long counts of {doc}`assignment-contract` it builds `X`, float64 whole-cell
+From the long counts of the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#count-accounting) it builds `X`, float64 whole-cell
 counts in `genes` order with 0 where a cell has no row, and, with `layers=True`, the
 `nucleus` and `cytoplasm` layers: float64, 0.0 for a measured zero and NaN for every gene
 of a row whose `obs["compartments"]` is not `available`. `var_names` are `genes`, with the
@@ -823,7 +823,7 @@ It has two callers, and each prepares its own `obs`:
   the adapter applies its tile-box filter to them as today and calls `write_h5ad` with the
   FOV result's counts, `layers` when the result has nuclei, and `uns["assignment"]`.
   `raw.h5ad` keeps the content it has today: the same rows, `obs` columns, `X`, layers and
-  `uns`, which A18 of {doc}`assignment-algorithms` compares with the frozen helper. (Since 2026-10-24:
+  `uns`, which A18 of the [assignment algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment-algorithms.md#checks) compares with the frozen helper. (Since 2026-10-24:
   the adapter writes `raw.h5ad` without an `assembly` block, or with molecules only; on the
   route of a saved assignment it writes the saved folder alone.)
 * **`write_sample_h5ad`**, for `sample.h5ad`. It prepares the sample's `obs` from the sample
@@ -971,7 +971,7 @@ then draws `export/<sample>/previews/{fovID}/assignment.png`, and
 `assignment_single_layer.png` for a ZYX label image, for each FOV of the sample whose
 saved assignment is an input of the rule, with the FOV's ownership region and the
 observations the assembly excluded (`plot_assignment` with the record of `fov_ownership`,
-{doc}`assignment-contract`, "Diagnostics"), through the helper `reads_assignment` uses
+[assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#diagnostics), "Diagnostics"), through the helper `reads_assignment` uses
 for the image and the views. `reads_assignment` draws its own figures, without ownership,
 into `fovs/{fovID}/previews/`: each kind has one writer and its own folder, and each rule
 declares its folder as a directory output. `export_sample` declares

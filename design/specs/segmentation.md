@@ -34,9 +34,9 @@ guide, [segmentation-algorithms](segmentation-algorithms.md) gives each method's
 resources and pinning tests; [segmentation-baseline](../baselines/segmentation.md) is history (`6b384cd`, before
 the package's segmentation and assignment work). The contract is implemented by
 `starfinder.segmentation` and `FOV.segment` ([api/segmentation](../../docs/api/segmentation.rst)), with the checks
-listed in [assignment-algorithms](../../docs/assignment-algorithms.md) ("Implemented checks"); as decided, nothing is
+listed in [assignment-algorithms](assignment-algorithms.md) ("Implemented checks"); as decided, nothing is
 renamed. Assignment, nucleus–cell correspondence, compartments, counts and exports belong
-to the assignment specification ([assignment-contract](../../docs/assignment-contract.md)), which builds on the label
+to the assignment specification ([assignment-contract](assignment.md)), which builds on the label
 contract below and does not redefine it.
 
 % before §2.9; "Implemented checks (W-318)"; belong to W-308
@@ -94,7 +94,7 @@ and by the operator note of its repair):
    not changed. The routine test gate stays on CPU; a batch that needs the GPU names it as
    an exception.
 7. **Two specifications.** The specification is split at the label contract:
-   segmentation (this page), then assignment ([assignment-contract](../../docs/assignment-contract.md)).
+   segmentation (this page), then assignment ([assignment-contract](assignment.md)).
 
 % The decisions above are, in order, D1, D2, D3, D4, D5, D6 and D7: "D1 Separate entries"; "D2 Method registry" on the W-240 mechanism; "D6 GPU. §2.9 allows GPU execution. §2.7's device="cpu" rule"; "D7 Two specification issues", assignment (W-308)
 
@@ -248,7 +248,7 @@ label functions. There is no general step chain; preprocessing of the rounds sta
    [coordination](../../docs/coordination.md)).
 2. `fov.segment(plan, device=…, checkpoints=…)`: the label masks. It builds each
    segmentation input from the reference-frame images and runs the plan.
-3. assign: the cell table and counts. [assignment-contract](../../docs/assignment-contract.md) specifies it; this page
+3. assign: the cell table and counts. [assignment-contract](assignment.md) specifies it; this page
    names only what it receives from segment ("What assign receives from segment").
 
 % The three calls per FOV (D1); W-308 specifies it
@@ -290,7 +290,7 @@ process or in separate ones:
   (`image.ome.tif`, `registration.json`) and nothing else: no sequencing round and no
   `registered` checkpoint. Its reference grid is the grid of that file (source
   `file:<path>`), which is the reference round's grid by the grid rule
-  ([assignment-contract](../../docs/assignment-contract.md), "The grid rule"), so its labels and assignment tables equal
+  ([assignment-contract](assignment.md), "The grid rule"), so its labels and assignment tables equal
   those of the same calls in one process. `fov.assign_molecules(…)` there takes the molecules of
   process 1 from its `candidates` and `pre_qc` checkpoints, with the filter re-applied by
   `FOV.run`; `assign_molecules` with `load_molecules` of the exported `molecules.csv` is the
@@ -374,7 +374,7 @@ record keeps it.
 
 ### What assign receives from segment
 
-The third call, assign ([assignment-contract](../../docs/assignment-contract.md)), builds on these, and on nothing else
+The third call, assign ([assignment-contract](assignment.md)), builds on these, and on nothing else
 from segmentation:
 
 % The third call (W-308)
@@ -398,7 +398,7 @@ from segmentation:
 
 The molecules' `z, y, x` (index coordinates of the reference grid, from the spot table)
 index these label images directly. How a 3D molecule is assigned to a `plane` label
-image is specified by assignment ([assignment-contract](../../docs/assignment-contract.md), "Coordinate sampling").
+image is specified by assignment ([assignment-contract](assignment.md), "Coordinate sampling").
 
 % is W-308's
 
@@ -451,7 +451,7 @@ mapping in `SegmentationResult.record`:
   writes a tuple (`(50, 512, 512)`), followed by the array's C-order bytes, both in native
   byte order. The record hashes every array it names this way: `labels.sha256`,
   `seeds.sha256`, and the `inputs` and `output` of each label operation;
-  [assignment-contract](../../docs/assignment-contract.md) records it as `labels_sha256`.
+  [assignment-contract](assignment.md) records it as `labels_sha256`.
 * Each `input.channels` entry keeps the `InputChannel` key as given (`channel`: a
   pattern, a name or an index) and, beside it, the resolved channel's `name` and
   `wavelength` from `Dataset.channel_info` (`null` and `"unavailable"` when not
@@ -695,7 +695,7 @@ segmentation and is not an alternative (decided at the acceptance review).
 The survey and the dependency study did not call `predict_instances_big`, so no cost,
 memory or agreement figure exists for it. The implementation compares block-wise against whole-image
 prediction on the LN 50×512×512 crop, and the bounded real examples measure one whole LN
-field of view ([assignment-algorithms](../../docs/assignment-algorithms.md), "Bounded real examples").
+field of view ([assignment-algorithms](assignment-algorithms.md), "Bounded real examples").
 
 % W-305 and W-306 did not call
 
@@ -859,7 +859,7 @@ Rules:
   same Y, X grid and returns a ZYX label image whose geometry is `extended`. It is the
   Python form of `create_3d_segmentation.m` per FOV ([segmentation-baseline](../baselines/segmentation.md)),
   without the `Cyto` subtraction, which is a compartment of assignment
-  ([assignment-contract](../../docs/assignment-contract.md), "Compartments").
+  ([assignment-contract](assignment.md), "Compartments").
 
 % which W-306 found; a compartment (W-308)
 
@@ -1129,7 +1129,7 @@ packages added and one version changed.
   lock of 2026-10-07 (Python 3.11 or newer) keeps the last two.
 * The `starfinder` package entry gains the `stardist`, `cellpose` and `anndata` optional
   dependencies and the two constraints in its metadata. The `anndata` extra
-  ([assignment-contract](../../docs/assignment-contract.md)) pins the two versions the `spatialdata` extra already
+  ([assignment-contract](assignment.md)) pins the two versions the `spatialdata` extra already
   locked and adds no package.
 * Python 3.10, which the package supported until 2026-10-07: with the `stardist` extra as
   first proposed (`python_version < '3.14'`), `uv lock` found no solution, because keras
@@ -1157,7 +1157,7 @@ Linux x86_64; `uv lock` resolves every Python version the package allows (from 3
 2026-10-05, from 3.11 since 2026-10-07) and every platform, where it may add
 platform-specific entries or find no solution. It did both, and Jiahao decided
 on 2026-10-05 to narrow the marker of the `stardist` extra and to accept the Intel macOS
-entries. The `learned` parity test is row L10 of [assignment-algorithms](../../docs/assignment-algorithms.md)
+entries. The `learned` parity test is row L10 of [assignment-algorithms](assignment-algorithms.md)
 (`test_segmentation_learned.py`).
 
 % W-305 resolved only Python 3.12; entries (W-322)
@@ -1276,7 +1276,7 @@ as declared.
 % `dapi_round`, W-569
 
 `rules.reads_assignment.parameters.expand_labels` and `dilation_distance` belong to
-assignment ([assignment-contract](../../docs/assignment-contract.md), "Workflow configuration"); this page only requires
+assignment ([assignment-contract](assignment.md), "Workflow configuration"); this page only requires
 that a label image is expanded once.
 
 % are W-308's
@@ -1335,7 +1335,7 @@ there as well:
 ## Exclusions
 
 No assignment, correspondence, compartment, count or export specification (those are
-[assignment-contract](../../docs/assignment-contract.md)'s); no transcript-based or combined segmentation, training or
+[assignment-contract](assignment.md)'s); no transcript-based or combined segmentation, training or
 fine-tuning; no managed CellProfiler execution (its masks enter through `import_labels`);
 no accuracy claim and no comparison between segmenters (they wait on the open question of
 whether two masks are one biological cell, and on annotation, which stays with separate

@@ -1,7 +1,7 @@
 """The §2.9 label contract, external-mask import and label functions (W-311).
 
 Rows L1, L2, L3, L5 and L6 of the engineering validation design in
-docs/assignment-algorithms.md, and ``FOV.reference_grid`` as design/specs/segmentation.md
+design/specs/assignment-algorithms.md, and ``FOV.reference_grid`` as design/specs/segmentation.md
 ("The reference grid") states it. Every fixture is hand-built in the test (at most
 32×64×64 voxels); every expected value comes from the geometry, a formula in the test or
 a pinned golden value (``test_segmentation_golden.py``, ``test_assignment_golden.py``).

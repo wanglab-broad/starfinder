@@ -1,7 +1,7 @@
 """The §2.9 assign entry: sampling, statuses, one expansion, correspondence, compartments and counts (W-314).
 
 Rows L4, A1, A2 (on ``boxes``), A4 to A14, A16, A17, A19 and A20 of the engineering
-validation design in docs/assignment-algorithms.md, the checks of docs/assignment-contract.md
+validation design in design/specs/assignment-algorithms.md, the checks of design/specs/assignment.md
 ("Checks the entry applies") and ``FOV.assign_molecules``. Rows A2 and A3 on ``assign_golden`` are in
 ``test_assignment_golden.py``. The fixtures are hand-built: ``boxes`` (cells and nuclei in
 ``segmentation_fixtures.py``, its molecules here), ``boxes_51_49``, ``boxes_nocal``,
@@ -145,7 +145,7 @@ def as_list(column):
 
 
 def check_accounting(result, given):
-    """Identities 1-5 of docs/assignment-contract.md ("Count accounting"), sentence by sentence (row A2).
+    """Identities 1-5 of design/specs/assignment.md ("Count accounting"), sentence by sentence (row A2).
 
     Every expected number is recomputed from the input molecules ``given`` and the result's
     ``molecules`` table; ``counts``, the cell table and ``record["counts"]`` must equal them exactly.

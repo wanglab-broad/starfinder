@@ -47,7 +47,7 @@ script, Fiji, or a MATLAB example:
 | Fiji run | rule `run_BigStitcher_macro` (`stitching.smk:41-56`), a shell command | Fiji with BigStitcher |
 | `dataset.xml` to the tile configuration and the non-overlap rectangles | rule `create_tile_config` (`stitching.smk:60-70`), `workflow/scripts/create_tile_config.py` | workflow environment (plotly) |
 | The stitching input image | rule `rotate_nuclei` (`workflow/rules/registration-py.smk:95-114`; the same lines in `registration.smk:87-106`): `images/DAPI/{fovID}.tif` | workflow environment |
-| Consumers of the tile configuration | `reads_assignment` through the workflow adapter (global coordinates and the overlap filter; {doc}`assignment-baseline`) | Python package |
+| Consumers of the tile configuration | `reads_assignment` through the workflow adapter (global coordinates and the overlap filter; [assignment baseline](https://github.com/wanglab-broad/starfinder/blob/dev/design/baselines/assignment.md)) | Python package |
 | Legacy Grid/Collection path | `example/sequential_workflow/reads_stitching.m`, `src/matlab/ParseFijiTileConfiguration.m`, `example/sequential_workflow/stitch_clustermap.py`; Fiji Grid/Collection run by hand | MATLAB, Python, Fiji |
 | Unused | `workflow/scripts/create_BigStitcher_macro.py` (an N5 variant no rule calls) and `run_fiji_macros` (`workflow/rules/common.smk:174-178`, no caller) | none |
 

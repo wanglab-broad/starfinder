@@ -1,4 +1,4 @@
-"""Nucleus–cell correspondence by overlap (docs/assignment-algorithms.md, "Overlap correspondence")."""
+"""Nucleus–cell correspondence by overlap (design/specs/assignment-algorithms.md, "Overlap correspondence")."""
 from __future__ import annotations
 
 import numpy as np

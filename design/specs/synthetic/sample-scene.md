@@ -24,7 +24,7 @@ It builds on these pages and redefines none of them:
 * [assembly-contract](../../../docs/assembly-contract.md): footprints, ownership, retention, statuses and the count
   identities;
 * [segmentation-contract](../segmentation.md) ("External-mask import", "Label image") and
-  [assignment-contract](../../../docs/assignment-contract.md) (`MoleculeTable`, `import_legacy_molecules_csv`, "Coordinate
+  [assignment-contract](../assignment.md) (`MoleculeTable`, `import_legacy_molecules_csv`, "Coordinate
   sampling").
 
 It is implemented in `starfinder.synthetic`, no existing generator behavior changes and
@@ -713,7 +713,7 @@ molecule keeps its ID in every FOV that renders it (the FOV namespace differs).
   read with null as 0, that is `v == C(σ)` for the cell label and `v == N(σ)` for the
   nucleus label. A null `v` is never equal to a null truth ID: it says that nothing was
   sampled, not that the molecule is in no cell. The statuses, the sampled voxel and the
-  in-grid test are those of [assignment-contract](../../../docs/assignment-contract.md) ("Coordinate sampling", "Direct
+  in-grid test are those of [assignment-contract](../assignment.md) ("Coordinate sampling", "Direct
   assignment and statuses"), which this page cites and does not redefine; there, too, a
   null `cell_id` stands for both `unassigned` and `outside_grid`, and the status tells
   them apart. `label_agrees` records the rule for the cell label only; `molecule_fovs`

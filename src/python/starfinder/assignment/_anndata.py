@@ -69,7 +69,7 @@ def write_h5ad(path, obs: pd.DataFrame, keys: pd.DataFrame, counts: pd.DataFrame
         The rows' key columns, row for row with ``obs``.
     counts : pandas.DataFrame
         Long counts with the key columns, ``gene_id``, ``compartment`` and
-        ``count`` (docs/assignment-contract.md).
+        ``count`` (design/specs/assignment.md).
     genes : Sequence[str]
         The gene order of ``X``.
     layers : bool

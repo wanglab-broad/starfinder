@@ -383,7 +383,7 @@ In this order; each raises, names the FOVs or keys, and leaves the folder unchan
    accepts and whose placement SHA-256 values equal the placement's (`ValueError`).
 5. **Fusion inputs**, when `fuse` is on: every included FOV has exactly one `FusionInput`
    and no input names another FOV (`ValueError`); each input's grid equals the grid the
-   placement recorded for that FOV, by the grid rule of {doc}`assignment-contract`
+   placement recorded for that FOV, by the grid rule of the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#the-grid-rule)
    reading `µm`, `um` and `micrometer` as one unit and a grid without a direction as
    having the identity direction, with known spacing, unit `µm` and identity direction
    (`IncompatibleGeometryError`); all

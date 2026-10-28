@@ -1,6 +1,6 @@
 """The §2.9 StarDist and Cellpose methods with their models on CPU (W-316): rows L10, L11 and L14.
 
-Rows of the engineering validation design in docs/assignment-algorithms.md, with the
+Rows of the engineering validation design in design/specs/assignment-algorithms.md, with the
 checks of design/specs/segmentation.md ("Checks the stage wrapper applies", "Block-wise
 prediction") and design/specs/segmentation-algorithms.md ("Golden and parity tests"):
 

@@ -1,11 +1,11 @@
 """The §2.9 engineering validation of assignment: the A checks the task groups did not add (W-318).
 
-Rows of the engineering validation design in docs/assignment-algorithms.md ("Checks"). Rows A1
-to A20 are in the modules of their task groups; the section "Implemented checks" of that page
+Rows of the engineering validation design in design/specs/assignment-algorithms.md ("Checks").
+Rows A1 to A20 are in the modules of their task groups; the section "Implemented checks" of that page
 maps every row to its tests, and ``test_every_a_row_names_existing_tests``
 (``test_segmentation_docs_contract.py``, W-602) keeps that map true. This module adds:
 
-* A2 on ``assign_golden`` with every identity of docs/assignment-contract.md ("Count
+* A2 on ``assign_golden`` with every identity of design/specs/assignment.md ("Count
   accounting", 1 to 5) recomputed from the tables, in 3D and 2D, without and with the legacy
   expansion: the fixture without the gene-``Z`` molecule, its statuses from the matching
   subset of the pinned ``SEG_LABELS`` (the unmodified fixture, with gene ``Z``, serves the

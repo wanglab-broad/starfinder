@@ -1,8 +1,8 @@
 """The saved layout of an assignment: ``FOV.assign_molecules(checkpoints=…)`` and ``FOV.load_assignment`` (W-315).
 
-Row A15 of the engineering validation design in docs/assignment-algorithms.md over every
+Row A15 of the engineering validation design in design/specs/assignment-algorithms.md over every
 case of the table "Label images of a checkpointed assignment" of
-docs/assignment-contract.md, in CSV and Parquet; another checkpoint root counts as
+design/specs/assignment.md, in CSV and Parquet; another checkpoint root counts as
 unsaved; the excluded cells are preserved; and the files of ``FOV.run`` and of
 segmentation are untouched by ``FOV.assign_molecules``. The ``boxes`` FOV is synthetic: its
 reference round, spot result, filtering result and codebook are set in memory. Row A15's

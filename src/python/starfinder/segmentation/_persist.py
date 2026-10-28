@@ -136,7 +136,7 @@ def read_run(directory, name) -> SegmentationResult:
 def saved_labels(result, fov_directory) -> Path | None:
     """The ``labels.tif`` of a result saved under its run in this FOV folder, else None.
 
-    The rule of docs/assignment-contract.md ("Label images of a checkpointed
+    The rule of design/specs/assignment.md ("Label images of a checkpointed
     assignment"): the result was returned by :func:`write_run` (``FOV.segment`` with
     checkpoints) or :func:`read_run` (``FOV.load_segmentation``), its file is
     ``<fov_directory>/segmentation/<run>/labels.tif``, and that file's array SHA-256

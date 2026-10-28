@@ -8,7 +8,7 @@ the count accounting, and the sample-level AnnData built from them. Each has its
 parameters, units, defaults, failure behavior and a resource estimate. The behavior before sample assembly is history, in
 {doc}`assembly-baseline`; the placement it starts from is specified in
 {doc}`stitching-contract` and {doc}`stitching-algorithms`, and the per-FOV tables in
-{doc}`assignment-contract` and {doc}`assignment-algorithms`. Each element is implemented in
+the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md) and the [assignment algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment-algorithms.md). Each element is implemented in
 `starfinder.assembly`, and no default here is accepted.
 
 % The behavior before §2.10

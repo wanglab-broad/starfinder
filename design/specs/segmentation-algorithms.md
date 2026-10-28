@@ -9,9 +9,9 @@ configs, label contract and records they plug into are in [segmentation-contract
 the behavior before the package's segmentation and assignment work is history, in
 [segmentation-baseline](../baselines/segmentation.md). The methods and functions specified here are implemented in
 `starfinder.segmentation` ([api/segmentation](../../docs/api/segmentation.rst)), with the engineering checks of
-[assignment-algorithms](../../docs/assignment-algorithms.md) ("Implemented checks"), and nothing here ranks the methods,
+[assignment-algorithms](assignment-algorithms.md) ("Implemented checks"), and nothing here ranks the methods,
 sets a default model or makes an accuracy claim. The validation design for segmentation
-and assignment together is in the assignment specification ([assignment-algorithms](../../docs/assignment-algorithms.md)).
+and assignment together is in the assignment specification ([assignment-algorithms](assignment-algorithms.md)).
 
 % each §2.9 segmentation method; the behavior before §2.9; "Implemented checks (W-318)"; The validation design for the whole section is W-308's
 
@@ -186,7 +186,7 @@ prediction (the dependency study's choice 7, decided at the acceptance review on
 2026-10-05), which the dependency study did not call: its
 cost, its memory and its agreement with whole-image prediction are measured by the
 implementation and by the whole-FOV measurement of the bounded real examples
-([assignment-algorithms](../../docs/assignment-algorithms.md)).
+([assignment-algorithms](assignment-algorithms.md)).
 
 % (W-306 choice 7, decided at W-309 on 2026-10-05), which W-306 did not call
 
@@ -448,7 +448,7 @@ distance transform resolves them.
 (scikit-image 0.26 `expand_labels`, a probe of the segmentation specification in the locked
 environment); expansion is per plane in 3D today (golden test
 `test_expansion_is_per_slice`). `unit="um"` without spacing raises (proposed rule). Applied
-once per run; the assignment never expands again ([assignment-contract](../../docs/assignment-contract.md), "Label
+once per run; the assignment never expands again ([assignment-contract](assignment.md), "Label
 expansion").
 
 % W-307 probe in the locked environment; (W-308)
@@ -480,7 +480,7 @@ translation; MATLAB was not run in this batch, so there is no parity with the ex
 run). Labels with Z>1 raise (the function takes a plane label image, shape (1, Y, X), and a
 ZYX stain with the same Y, X); an empty mask gives an empty label image with `outcome`
 `empty`. The MATLAB `Cyto = Cell − Nuclei` is not reproduced (assignment defines
-compartments, [assignment-contract](../../docs/assignment-contract.md)).
+compartments, [assignment-contract](assignment.md)).
 
 % (W-308 defines compartments)
 
@@ -503,7 +503,7 @@ all-zero mask is a valid `empty` result. The survey's culture references are big
 ## Golden and parity tests
 
 Two tests pin the input and label functions and the `stardist` method to the legacy
-outputs (rows L4, L6, L7 and L10 of [assignment-algorithms](../../docs/assignment-algorithms.md)), with these obligations:
+outputs (rows L4, L6, L7 and L10 of [assignment-algorithms](assignment-algorithms.md)), with these obligations:
 
 * `test/test_segmentation_golden.py`: every pinned digest stays (the float64 shrunk image is
   an explicit expected array since 2026-10-25, compared with the float64 tolerance of

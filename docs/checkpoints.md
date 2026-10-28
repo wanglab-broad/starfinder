@@ -424,14 +424,14 @@ the result `FOV.segment` stored.
 ## Assignments
 
 `fov.assign_molecules(…, name="default", checkpoints=CheckpointConfig(…))` writes
-`assignment/<name>/` (option L1 of {doc}`assignment-contract`, "Persistence"). `directory`,
+`assignment/<name>/` (option L1 of the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#persistence), "Persistence"). `directory`,
 `table_format` and `overwrite` are used, with the same `FileExistsError` and `ImportError`
 rules as `run`, checked before the assignment runs.
 
 * `molecules`, `cells` (every cell, kept and excluded), `counts` and, with nuclei, `nuclei`
   are written in `table_format` with the table writer below; `assignment.json` records
   each file's path, SHA-256 and dtype map under `files`.
-* Label images follow the one rule of {doc}`assignment-contract` ("Label images of a
+* Label images follow the one rule of the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#persistence) ("Label images of a
   checkpointed assignment"): a cell or nucleus run saved under its run in the same
   checkpoint root (written by `FOV.segment(checkpoints=…)` or read by
   `FOV.load_segmentation` there, with an unchanged `labels.tif`) is linked by its relative
@@ -440,7 +440,7 @@ rules as `run`, checked before the assignment runs.
   written as `cell_labels.tif` or `nucleus_labels.tif`. With an expansion the expanded
   territories are `territories.tif`. Label images are ZYX `uint32` with the grid's
   `ImageMetadata`.
-* `assignment.json` is the run record of {doc}`assignment-contract` with every `file`
+* `assignment.json` is the run record of the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#run-record) with every `file`
   entry filled in: `inputs.cells.file` and `inputs.nuclei.file` (path and file SHA-256 of
   the label file that holds each run, with `saved_under_run`), `expansion.original` and
   `expansion.expanded` (their paths and `file_sha256`, beside the label arrays'

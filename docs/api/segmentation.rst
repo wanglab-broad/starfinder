@@ -28,7 +28,7 @@ grid of the saved reference image after ``FOV.load_reference_image()``;
 the FOV's reference image (``fovs/{fovID}/reference.tif`` by default); a caller without a molecule run declares one with
 ``source="declared"``. ``ReferenceGrid.projected()`` is the Z=1 grid of a projection.
 Two grids are one grid when their shapes and metadata are equal; the source and hash are
-recorded, not compared (:doc:`../assignment-contract`, "The grid rule").
+recorded, not compared (`assignment specification <https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#the-grid-rule>`__, "The grid rule").
 
 :py:func:`~starfinder.segmentation.import_labels` brings a mask made elsewhere
 (CellProfiler, an earlier workflow run) onto a grid: the byte order is converted to

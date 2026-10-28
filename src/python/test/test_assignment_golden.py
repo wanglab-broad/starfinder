@@ -27,12 +27,12 @@ read any more (the per-molecule label digests, which ``SEG_LABELS`` states expli
 empty-branch metadata and the two expansions) were deleted in W-574. The tile
 configuration, the global coordinates, the overlap filter (lines 39-42, 78-80, 141-165),
 the plots and the H5AD and CSV writing are §2.10 or output plumbing and are not pinned;
-see docs/assignment-baseline.md.
+see design/baselines/assignment.md.
 
 The digests were produced with the locked project environment (NumPy 2.2.6,
 scikit-image 0.26.0, pandas 3.0.0) and are bit-identical over repeated single-thread
 runs. The §2.9 work may replace the body of ``legacy_assignment`` with calls to the
-assignment entry; every pinned digest stays, except where docs/assignment-algorithms.md
+assignment entry; every pinned digest stays, except where design/specs/assignment-algorithms.md
 ("Golden test") names an edit.
 """
 import hashlib
@@ -51,7 +51,7 @@ from starfinder.segmentation import ExpandLabelsConfig, ReferenceGrid, Segmentat
 from .coordination_helpers import digest
 
 pytestmark = [pytest.mark.workflow, pytest.mark.golden]
-pytestmark += [pytest.mark.segmentation]  # the §2.9 package calls (docs/assignment-contract.md)
+pytestmark += [pytest.mark.segmentation]  # the §2.9 package calls (design/specs/assignment.md)
 
 SHAPE_ZYX = (16, 64, 64)
 DISTANCE = 4  # dilation_distance
@@ -260,7 +260,7 @@ def test_fixture(labels):
     assert digest(labels) == LABELS_DIGEST
 
 
-# --- The package calls of §2.9 (docs/assignment-algorithms.md, "Golden test") -----------------------
+# --- The package calls of §2.9 (design/specs/assignment-algorithms.md, "Golden test") ---------------
 # The gene-Z molecule is left out: genes outside the gene list now raise, and it was never counted.
 # The fixture's grid is uncalibrated, so the legacy expansion is ExpandLabelsConfig(4, "pixel", "planar").
 

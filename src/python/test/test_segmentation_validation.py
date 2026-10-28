@@ -1,7 +1,7 @@
 """The §2.9 engineering validation of segmentation: the L checks the task groups did not add (W-318).
 
-Rows of the engineering validation design in docs/assignment-algorithms.md ("Checks"). Rows L1
-to L11, L13 and L14 are in the modules of their task groups; the section "Implemented checks"
+Rows of the engineering validation design in design/specs/assignment-algorithms.md ("Checks").
+Rows L1 to L11, L13 and L14 are in the modules of their task groups; the section "Implemented checks"
 of that page maps every row to its tests, and ``test_every_l_row_names_existing_tests``
 (``test_segmentation_docs_contract.py``, W-602) keeps that map true. This module adds:
 

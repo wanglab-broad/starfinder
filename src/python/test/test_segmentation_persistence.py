@@ -1,6 +1,6 @@
 """The saved format of a segmentation run: ``FOV.segment(checkpoints=…)`` and ``FOV.load_segmentation`` (W-315).
 
-Row L13 of the engineering validation design in docs/assignment-algorithms.md, on an
+Row L13 of the engineering validation design in design/specs/assignment-algorithms.md, on an
 imported run of the ``seg_golden`` stand-in labels and a ``seeded_watershed`` run on
 ``seeded`` (option F1 of design/specs/segmentation.md, "Saved format"). Each FOV is
 synthetic: its reference round is set in memory, without ``FOV.run``.

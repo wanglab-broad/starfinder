@@ -1,4 +1,4 @@
-"""The assignment configs and status vocabularies (docs/assignment-contract.md, "Names")."""
+"""The assignment configs and status vocabularies (design/specs/assignment.md, "Names")."""
 from __future__ import annotations
 
 import math
@@ -34,7 +34,7 @@ def _share(value, name, low, *, low_open=False):
 
 @dataclass(frozen=True)
 class CorrespondenceConfig:
-    """The overlap rule that relates nuclei to cells (option C2 of docs/assignment-contract.md).
+    """The overlap rule that relates nuclei to cells (option C2 of design/specs/assignment.md).
 
     A nucleus is matched to the cell holding the largest share of its voxels when
     that share is strictly greater than ``match_fraction`` (in [0.5, 1); 0.5 is the

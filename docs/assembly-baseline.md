@@ -13,7 +13,7 @@ specification), before the stitching and assembly work changes it. It is the ref
 described in {doc}`assembly-contract` and {doc}`assembly-algorithms`; neither is accepted.
 The placement that assembly starts from is recorded in {doc}`stitching-baseline` and
 proposed in {doc}`stitching-contract`; the per-FOV tables it reads are those of
-{doc}`assignment-contract`. Paths are relative to the repository root, and line numbers
+the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md). Paths are relative to the repository root, and line numbers
 are at `0f5cbd8` unless a revision is named.
 
 % on `dev` after the §2.9 work and W-325, before the Chapter II §2.10 work changes it
@@ -52,7 +52,7 @@ the assignment workflow adapter and two sample scripts:
 
 % Global coordinates: since W-317 calls `_run_reads_assignment`; before W-317 the script itself
 
-Since the assignment stage, assignment is FOV-local ({doc}`assignment-contract`, its section on the boundary with stitching and assembly):
+Since the assignment stage, assignment is FOV-local ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#boundary-with-stitching-and-assembly), its section on the boundary with stitching and assembly):
 the package's `assign_molecules` reads no tile configuration, and the workflow adapter
 applies the legacy global coordinates and overlap filter to its result, outside the
 package, as the script did.
@@ -215,7 +215,7 @@ datasets' reference outputs.
 
 % What the §2.9 assign entry hands over per FOV
 
-From {doc}`assignment-contract` (its sections on the boundary with stitching and assembly
+From the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md) (its sections on the boundary with stitching and assembly
 and on persistence), per FOV and per assignment name:
 
 % ("Boundary with §2.10", "Persistence")

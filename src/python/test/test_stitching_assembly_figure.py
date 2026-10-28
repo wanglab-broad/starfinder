@@ -1,5 +1,5 @@
 """The FOV ownership region on the §2.9 assignment figure (W-330): ``fov_ownership`` and the ``ownership``
-argument of ``plot_assignment`` (docs/assignment-contract.md, "Diagnostics"; docs/assembly-contract.md,
+argument of ``plot_assignment`` (design/specs/assignment.md, "Diagnostics"; docs/assembly-contract.md,
 "Ownership regions").
 
 The region of each FOV is checked against a mask computed here from the placement origins, the grid

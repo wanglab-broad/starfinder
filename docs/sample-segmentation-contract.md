@@ -92,7 +92,7 @@ It builds on these pages and redefines none of them: {doc}`sample-output-contrac
 export entry, `export/<sample>/`, the fused image, the label export, the SpatialData
 export, the read-back checks), {doc}`assembly-contract` (`assemble`, the sample tables,
 `sample.h5ad`, the duplicate rule of 2026-10-09), the [segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md) (`segment`,
-`SegmentationInput`, the method configs), {doc}`assignment-contract` (`assign_molecules`,
+`SegmentationInput`, the method configs), the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md) (`assign_molecules`,
 `MoleculeTable`, the grid rule) and {doc}`stitching-contract` (the placement and the
 sample frame). The measurements it uses are those of {doc}`cells-across-fovs-proposal`,
 cited there with their limits.
@@ -290,7 +290,7 @@ nothing in the fused files.
   grid, keeps its values with `relabel=False` and refuses a file of another shape, calls
   C17 and C17b), with seeds where a
   run names them, and writes one label OME-TIFF per run and the `segmentation` section. It
-  applies no label operation: an expansion is assign's ({doc}`assignment-contract`,
+  applies no label operation: an expansion is assign's ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#label-expansion),
   "Label expansion"), and no extension through Z is applied, because the labels stay a
   plane. Call C6 ran `segment` on a fused projection unchanged: a `(1, 12, 20, 1)` input
   on the segmentation grid, `seeded_watershed` with nuclei on the same grid as seeds and
@@ -524,8 +524,8 @@ refuses labels whose namespace does not begin with the molecules' identity (call
 
 | Option | How `assign_molecules` takes the sample's molecules | What it changes in the package | What it changes in the outputs |
 | --- | --- | --- | --- |
-| **MT1. A private conversion (recommended)** | The retained rows become one `MoleculeTable`: `spot_namespace` `[dataset_id, sample_id, null, null]` (accepted, call C1), `spot_id` the row's position in the sample molecule table, `z, y, x = (sample_zyx − O) ⊘ S` on the segmentation grid in float64, not rounded, `gene_id` and the sample's genes. `assign_molecules` runs unchanged (call C7) and returns one row per input in input order ({doc}`assignment-contract`, "Molecule table"), which the route maps back to the original keys by position. | One private function in the route. No segmentation or assignment type or check changes. | None: the written tables keep every molecule's original `spot_namespace`, `spot_id` and `fov_id`; the temporary keys never leave memory, and the record names the conversion and its table's SHA-256. |
-| MT2. A public `SampleMoleculeTable` | A new type whose rows keep their own namespaces, and an `assign_molecules` that accepts it. | A new type and a changed assignment entry ({doc}`assignment-contract`, "Inputs", check 6). | None beyond MT1. It buys a public sample-level molecule type for other sample-level callers. |
+| **MT1. A private conversion (recommended)** | The retained rows become one `MoleculeTable`: `spot_namespace` `[dataset_id, sample_id, null, null]` (accepted, call C1), `spot_id` the row's position in the sample molecule table, `z, y, x = (sample_zyx − O) ⊘ S` on the segmentation grid in float64, not rounded, `gene_id` and the sample's genes. `assign_molecules` runs unchanged (call C7) and returns one row per input in input order ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#molecule-table), "Molecule table"), which the route maps back to the original keys by position. | One private function in the route. No segmentation or assignment type or check changes. | None: the written tables keep every molecule's original `spot_namespace`, `spot_id` and `fov_id`; the temporary keys never leave memory, and the record names the conversion and its table's SHA-256. |
+| MT2. A public `SampleMoleculeTable` | A new type whose rows keep their own namespaces, and an `assign_molecules` that accepts it. | A new type and a changed assignment entry ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#inputs), "Inputs", check 6). | None beyond MT1. It buys a public sample-level molecule type for other sample-level callers. |
 | MT3. A relaxed `MoleculeTable` | `MoleculeTable` accepts several namespaces when its source says so. | A changed accepted validation. | None beyond MT1. |
 
 % §2.9

@@ -1,6 +1,6 @@
 """The §2.9 morphology input functions (W-312).
 
-Row L7 of the engineering validation design in docs/assignment-algorithms.md: the
+Row L7 of the engineering validation design in design/specs/assignment-algorithms.md: the
 DAPI–amplicon composite and the Flamingo enhancement against W-307's pinned digests
 (``test_segmentation_golden.py``), ``normalize_percentile_unclipped`` against its formula computed
 here, and ``rescale_input``'s shape and metadata; then input preservation (D4), the shape

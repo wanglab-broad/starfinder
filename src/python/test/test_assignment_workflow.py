@@ -1,6 +1,6 @@
 """The §2.9 assignment workflow key: the legacy reads_assignment translation (row A18), the adapter's
 raw.h5ad and reads_assignment.csv, the intentional changes, the compartment layers, the Python-only
-assignment block and the static schema (W-317; docs/assignment-contract.md, "Workflow configuration")."""
+assignment block and the static schema (W-317; design/specs/assignment.md, "Workflow configuration")."""
 import inspect
 import io
 import json

@@ -242,7 +242,8 @@ Golden tests pin the composite, the Flamingo enhancement, planar expansion and l
 resampling to the legacy scripts' outputs. Tests check the stage checks, the seeded
 watershed on hand-built fixtures, the saved files and the workflow translation; a
 `learned` parity test compares StarDist on the CPU with saved legacy results. The
-validation design for segmentation and assignment is in {doc}`assignment-algorithms`.
+validation design for segmentation and assignment is in
+[`design/specs/assignment-algorithms.md`](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment-algorithms.md).
 
 The full specification is in
 [`design/specs/segmentation.md`](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md).

@@ -2199,12 +2199,12 @@ class FOV:
         genes are the loaded codebook's (the direct panel's in direct readout)
         and the grid is :meth:`reference_grid`: the reference round's, or the
         grid of the saved reference image after :meth:`load_reference_image`
-        (one grid by the grid rule of docs/assignment-contract.md). Calls
+        (one grid by the grid rule of design/specs/assignment.md). Calls
         :func:`~starfinder.assignment.assign_molecules` and stores the result in
         ``assignment_results[name]``; its record names it and holds
         :func:`~starfinder.assignment.summarize_assignment` under ``counts``. It
         never runs registration, detection, decoding or segmentation
-        (docs/assignment-contract.md, "Coordination per FOV").
+        (design/specs/assignment.md, "Coordination per FOV").
 
         Parameters
         ----------
@@ -2221,7 +2221,7 @@ class FOV:
         checkpoints : CheckpointConfig, optional
             None (default) writes nothing. Otherwise the result is also written to
             ``<FOV folder>/assignment/<name>/`` (option L1 of
-            docs/assignment-contract.md, "Persistence"): ``molecules``, ``cells``,
+            design/specs/assignment.md, "Persistence"): ``molecules``, ``cells``,
             ``counts`` and, with nuclei, ``nuclei`` in ``table_format``,
             ``assignment.json``, ``territories.tif`` with an expansion, and
             ``cell_labels.tif`` and ``nucleus_labels.tif`` for inputs that are not

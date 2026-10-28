@@ -1,5 +1,5 @@
 """The §2.9 assignment diagnostics: the four-panel figure of plot_assignment, its two views, and the
-exclusion totals of summarize_assignment (W-332, W-340, W-341; docs/assignment-contract.md, "Diagnostics").
+exclusion totals of summarize_assignment (W-332, W-340, W-341; design/specs/assignment.md, "Diagnostics").
 
 The figure is checked by its artists (axes, titles, colours, point counts, legend texts), not by
 pixels. The fixture is ``boxes`` with nuclei (exclusion on: cells 7 and 8 excluded; and off), its

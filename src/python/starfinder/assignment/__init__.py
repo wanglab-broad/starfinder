@@ -15,7 +15,7 @@ writes it, for the workflow's per-FOV ``raw.h5ad`` and the sample-level AnnData 
 ``starfinder.assembly``. :func:`plot_assignment` draws a FOV's assignment, and with a
 :class:`FOVOwnership` (from :func:`starfinder.assembly.fov_ownership`) its ownership
 region and the cells and molecules the sample assembly excluded. See
-docs/assignment-contract.md and docs/assignment-algorithms.md.
+design/specs/assignment.md and design/specs/assignment-algorithms.md.
 """
 # §2.9
 from ._anndata import write_h5ad

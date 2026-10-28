@@ -1243,8 +1243,8 @@ label image with outcome `empty` instead of an error.
 
 ### The assign entry
 
-Assignment is the third call per FOV, after `FOV.run` and `FOV.segment` (the settled decision "Separate entries" of
-{doc}`assignment-contract`): the new module `starfinder.assignment` holds
+Assignment is the third call per FOV, after `FOV.run` and `FOV.segment` (the settled decision "Separate entries" of the
+[assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#settled-decisions-this-page-follows)): the new module `starfinder.assignment` holds
 {py:func}`~starfinder.assignment.assign_molecules`, which places the molecules of a
 {py:class}`~starfinder.assignment.MoleculeTable` (from
 {py:func}`~starfinder.assignment.molecule_table` or a legacy goodSpots CSV through
@@ -1399,8 +1399,8 @@ package as before (the stitching and assembly work).
 
 ### Default correspondence tolerance
 
-The default `CorrespondenceConfig.outside_tolerance` is 0.1 instead of 0.0 (option C2 of
-{doc}`assignment-contract`, chosen on 2026-10-05 in the assignment review); `match_fraction`
+The default `CorrespondenceConfig.outside_tolerance` is 0.1 instead of 0.0 (option C2 of the
+[assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#nucleuscell-correspondence), chosen on 2026-10-05 in the assignment review); `match_fraction`
 stays 0.5. A matched nucleus is flagged `outside`, and its cell's compartments withheld
 with `nucleus_outside_cell`, only when its share outside its cell is strictly greater than
 0.1, so a nucleus with up to a tenth of its voxels outside its cell no longer withholds the
@@ -1538,7 +1538,7 @@ changes its result:
   fov.segment(plan, checkpoints=checkpoints)        # no sequencing round resident
   ```
 
-* The grid rule is stated in {doc}`assignment-contract` ("The grid rule") and implemented
+* The grid rule is stated in the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#the-grid-rule) ("The grid rule") and implemented
   once: labels and molecules are on one grid when shape and `ImageMetadata` are equal;
   `source` and `sha256` are recorded, not compared. This is the rule assign already
   applied. `FOV.assign_molecules` refuses the Z=1 grid of a projected saved reference image without

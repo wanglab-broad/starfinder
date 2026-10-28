@@ -384,7 +384,7 @@ size_unit(i) = "µm³" when finite and the cell is a volume, "µm²" when finite
 The volume or plane is read from the size unit of the record that wrote the cell: on the
 route per FOV the FOV's `assignment.json` `size_unit` (`µm^3` or `µm^2`, as `assignment/_persist.py` writes it),
 on the route after fusion the export's `segmentation` section (a plane). `size_physical` is
-NaN exactly when that record's `calibration` is `unknown` ({doc}`assignment-contract`), so
+NaN exactly when that record's `calibration` is `unknown` ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#cell-table)), so
 a cell has `voxels` exactly when its calibration was unknown. A sample whose cells have more
 than one unit gets one histogram per unit, in the order µm³, µm², voxels.
 
@@ -418,7 +418,7 @@ Rows and key, as {doc}`report-contract` states them: one row per FOV of the expo
 The FOVs of the export are the entries of `export.json` `assembly.fovs`, in list order;
 `n_z = assembly.fovs[f].grid.shape_zyx[0]` is the number of planes of FOV `f`'s grid. A
 molecule's plane is `floor(z + 0.5)` of its `tables/molecules.csv` `z` (float64; the assignment
-sampling rule of {doc}`assignment-algorithms`, "Sampling"). Every molecule of the table,
+sampling rule of the [assignment algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment-algorithms.md#sampling), "Sampling"). Every molecule of the table,
 retained or not, is counted on its own plane, whether or not that plane lies in the FOV's
 grid, so that a projected sample whose spots were found in 3D shows where its reads lie:
 
@@ -1671,7 +1671,7 @@ the report batch), and step 6 checks for at least 10 GB free before it copies.
 | 1: inventory of the inputs | 1 | 1 CPU, 4 GiB, 3600 s | 122,412,640,023 bytes: the 1,024 raw images of 112,014,708 bytes (the size of each of the 32 files that the source-inventory run hashed, the source-inventory run's `results/inventory/inputs.csv`; one shape for all, the inputs survey's `inputs.md`), the DAPI source images 4,721,387,720 bytes (the own-folder run), the files of Part 2's exports 2,961,471,379 bytes (the source-inventory run's `inputs.csv`, the saved-files run's `results/manifest.json`), the labels of four FOVs and the small files about 27 MB (Position057 and 058 at the size of the larger label file, and 10 MB for the small files, both assumed); at the rate of the source-inventory run's inventory step, 5,486,212,411 bytes from the share in 71.82 s at one CPU (76.39 MB/s; `results/inventory/inputs.json`): 1,603 s, with 10 % for the listing and the share's variation 1,770 s | below 1 MB |
 | 2, 3: the 64 FOVs | 2 in step 2, then 3 | 1 CPU, 32 GiB RSS, 3600 s | one wave of two and 21 waves of three (62 FOVs), about 634 s each (the source-inventory run's `real_fovs.csv`, the slower FOV): 22 × 634 s = 13,948 s; about 68 GiB on the host (the source-inventory run's `sizing_64.csv`, three in parallel: 67.5 GiB, 3.82 h) | records with `candidates` and `pre_qc` 4.25 GiB; rule outputs 6.8 GiB (the source-inventory run's `sizing_64.csv`) |
 | 4: report after the FOVs | 1 | 1 CPU, 16 GiB, 3600 s | 64 run records of about 43 kB; the replay of two rounds of one FOV, 447 MB per round as uint8: about 600 s, below 4 GiB (code-derived) | below 50 MB |
-| 5: block import and assignment | 1 | 1 CPU, 16 GiB, 3600 s per FOV | a 50 × 1496 × 1496 uint32 label image is 448 MB ({doc}`assignment-algorithms`, "Evidence"): about 120 s per FOV, 480 s | labels and territories, about 3.6 GB |
+| 5: block import and assignment | 1 | 1 CPU, 16 GiB, 3600 s per FOV | a 50 × 1496 × 1496 uint32 label image is 448 MB ([assignment algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment-algorithms.md#evidence), "Evidence"): about 120 s per FOV, 480 s | labels and territories, about 3.6 GB |
 | 6: copies and exports | 1 | 4 CPU threads, 32 GiB, 10,800 s | route A: the ZYX copies 130 s (the first stitching run) and the fusion from the copies 1,468 s (the first stitching run); route B: no copy and the fusion from the share 5,903 s (the own-folder run); both: the rest of the export run 239 s (the own-folder run: run 6,142 s less fusion 5,903 s) and the block about 180 s | stack 0.66 GB, `molecules.csv` 0.74 GB (the own-folder run), block below 0.2 GB; route A's copies (6.7 GiB) are scratch, deleted |
 | 7: reports after the export | 1 | 1 CPU, 16 GiB, 3600 s | `molecules.csv` of 3.8 million rows in memory (about 2 GiB with pandas) and the stack read plane by plane (34 MB per plane): about 900 s each, two reports and the comparison page (about 120 s) | below 50 MB each |
 | Part 2: five reports and their comparison page | 1 | 1 CPU, 16 GiB, 3600 s each | the rate of step 7, 900 s for LN's 3,782,580 molecules with its stack, scaled by each export's molecules and at least 120 s (code-derived): `ln_sample1` 900 s, `tissue_2d` 1,274 s (5,353,714 molecules), `cell_culture_3d` 585 s (2,458,865), the two blocks 120 s each, the comparison page 120 s; molecule counts of {doc}`stitching-assembly-validation`, "Results of the real examples" | below 0.3 GiB in all |

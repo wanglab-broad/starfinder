@@ -1015,7 +1015,7 @@ def _nuclei_checkpoints(config):
     return _typed(CheckpointConfig, values, 'rules.nuclei_registration.parameters.checkpoints')
 
 
-# --- §2.9 segmentation and assignment (design/specs/segmentation.md, docs/assignment-contract.md, ---------
+# --- §2.9 segmentation and assignment (design/specs/segmentation.md, design/specs/assignment.md, ---------
 # --- "Workflow configuration"). The rules of segmentation.smk and reads-assignment.smk run for both backends.
 
 # segmentation_input_folder -> the role of the input file's one channel; any other folder is nuclear.
@@ -1294,7 +1294,7 @@ def _assignment_block(config):
     mapping of CheckpointConfig fields); a supplied correspondence table is not
     a YAML value, so correspondence configures the overlap rule. The block needs
     backend: python; a workflow-orchestration rule runs it with FOV.assign_molecules
-    (docs/assignment-contract.md, "Workflow configuration").
+    (design/specs/assignment.md, "Workflow configuration").
     """
     # The §2.13 rule
     from starfinder.assignment import AssignmentConfig, CorrespondenceConfig
@@ -1324,7 +1324,7 @@ def _assignment_block(config):
 def _reads_assignment(config):
     """(AssignmentConfig, cell target, record) of the reads_assignment rule, from its legacy keys.
 
-    The translation table of docs/assignment-contract.md ("Workflow
+    The translation table of design/specs/assignment.md ("Workflow
     configuration"): expand_labels false is no expansion (dilation_distance is
     ignored and recorded); true with dilation_distance d is
     ExpandLabelsConfig(d, pixel, planar) with legacy_pixel_expansion=True, so

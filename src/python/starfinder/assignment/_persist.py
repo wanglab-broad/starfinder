@@ -1,4 +1,4 @@
-"""The saved layout of an assignment (docs/assignment-contract.md, "Persistence", option L1).
+"""The saved layout of an assignment (design/specs/assignment.md, "Persistence", option L1).
 
 ``fovs/<fov_id>/assignment/<name>/`` (the FOV folder) holds ``molecules``, ``cells``,
 ``counts`` and (with nuclei) ``nuclei`` as CSV or Parquet through the checkpoint table

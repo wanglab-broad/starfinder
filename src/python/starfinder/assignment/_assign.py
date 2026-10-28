@@ -173,12 +173,12 @@ class AssignmentResult:
     territories (the cell run's labels), ``territories`` the expanded ones (None
     without expansion) and ``nucleus_labels`` the nucleus labels (None without
     nuclei), all ``uint32`` ZYX. A cell's key is ``(cell_namespace, cell_id)``.
-    ``record`` is the run record of docs/assignment-contract.md.
+    ``record`` is the run record of design/specs/assignment.md.
 
     Raises
     ------
     AssertionError
-        A count identity of docs/assignment-contract.md ("Count accounting")
+        A count identity of design/specs/assignment.md ("Count accounting")
         fails, naming it; it can only come from a defect.
     """
 
@@ -251,7 +251,7 @@ def _tally(cell_ids, keys, counts=None):
 
 
 def check_identities(result: AssignmentResult) -> None:
-    """The count identities 1–5 of docs/assignment-contract.md on a result; AssertionError names a failure."""
+    """The count identities 1–5 of design/specs/assignment.md on a result; AssertionError names a failure."""
     molecules, cells, counts = result.molecules, result.cells, result.counts
     status = molecules.assignment_status.astype(object)
     if status.isna().any() or not status.isin(ASSIGNMENT_STATUSES).all():
@@ -290,7 +290,7 @@ def check_identities(result: AssignmentResult) -> None:
 
 
 def _check_inputs(molecules, cells, grid, nuclei, correspondence, config):
-    """Checks 1–8 of docs/assignment-contract.md, in order, before any sampling."""
+    """Checks 1–8 of design/specs/assignment.md, in order, before any sampling."""
     if not isinstance(config, AssignmentConfig):
         raise TypeError("config must be an AssignmentConfig")
     config.__post_init__()
@@ -363,7 +363,7 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
                      config: AssignmentConfig = AssignmentConfig()) -> AssignmentResult:
     """Assign every molecule of one FOV to the territory that holds its sampled voxel.
 
-    Applies the checks of docs/assignment-contract.md ("Checks the entry applies")
+    Applies the checks of design/specs/assignment.md ("Checks the entry applies")
     in order; expands the cell territories once when ``config.expansion`` is set,
     keeping the original labels; samples each molecule at ``floor(c + 0.5)`` per
     axis; relates the nuclei to the territories by overlap (or by the supplied

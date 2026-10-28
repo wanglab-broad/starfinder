@@ -8,7 +8,7 @@ one rule as the docs state it:
 * ``section_sha256``: an ``export.json`` section (docs/sample-output-contract.md, "Read-back checks", R1);
 * ``store_files`` and ``store_sha256``: an OME-Zarr or SpatialData store's file map and its SHA-256
   (docs/sample-output-contract.md, "The fusion section of `export.json`");
-* ``record_sha256``: the ``record_sha256`` of a record given in memory (docs/assignment-contract.md, "Run record");
+* ``record_sha256``: the ``record_sha256`` of a record given in memory (design/specs/assignment.md, "Run record");
 * ``placement_table_csv`` and ``placement_table_sha256``: a placement table's CSV bytes and their SHA-256
   (docs/stitching-contract.md, "Persistence");
 * ``array_sha256``: the hash of a label or input array (design/specs/segmentation.md, "Run record");

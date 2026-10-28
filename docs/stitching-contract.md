@@ -383,7 +383,7 @@ class StitchingInput:
   saved `reference_stain` of `FOV.prepare_morphology`
   (`fovs/<fov_id>/other_rounds/reference_stain/image.ome.tif`), the nuclear
   stain LN is stitched on. Its grid is the reference grid by the grid rule of
-  {doc}`assignment-contract`: the reference image's stored metadata, or, for a reference
+  the [assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#the-grid-rule): the reference image's stored metadata, or, for a reference
   image that stores none, the grid the dataset's `voxel_size_xy` and `voxel_size_z`
   declare (without them `ValueError` naming them), as `Dataset.export` reads it; the
   workflow's stitching rules read it the same way. A missing reference image raises

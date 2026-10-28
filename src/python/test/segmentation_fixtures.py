@@ -1,4 +1,4 @@
-"""Hand-built segmentation fixtures of the §2.9 validation design (docs/assignment-algorithms.md, "Fixtures").
+"""Hand-built segmentation fixtures of the §2.9 validation design (design/specs/assignment-algorithms.md, "Fixtures").
 
 ``boxes`` holds the cell and nucleus labels of the fixture of that name (its molecules belong
 to the assignment tests); ``seeded`` adds the watershed stain of rows L9 and L13. Every

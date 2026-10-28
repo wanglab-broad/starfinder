@@ -146,7 +146,7 @@ saved folder alone, and the figures only with `previews: true`, into
 rule draws the two figures once the sample is assembled into
 `export/<sample>/previews/{fovID}/`, with the FOV's ownership region as a yellow line, the
 cells and molecules the assembly excluded in grey and, as each panel's x-axis label, how
-many of those drawn it retained ({doc}`assignment-contract`, "Diagnostics"). Without the
+many of those drawn it retained ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#diagnostics), "Diagnostics"). Without the
 block the figures stay as `reads_assignment` draws them.
 
 % the route of a saved assignment: W-568

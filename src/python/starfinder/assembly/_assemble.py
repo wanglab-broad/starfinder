@@ -36,7 +36,7 @@ FORMAT_VERSION = 1
 STAGE = "assembly"
 AXES = ("z", "y", "x")
 
-# The §2.9 tables as assign_molecules writes them (docs/assignment-contract.md), copied unchanged.
+# The §2.9 tables as assign_molecules writes them (design/specs/assignment.md), copied unchanged.
 CELL_DTYPES_29 = {"cell_id": "UInt32", "status": "string", "exclusion_reason": "string", "size_voxels": "int64",
                   "expanded_size_voxels": "Int64", "size_physical": "float64", "expanded_size_physical": "float64",
                   "centroid_z": "float64", "centroid_y": "float64", "centroid_x": "float64",

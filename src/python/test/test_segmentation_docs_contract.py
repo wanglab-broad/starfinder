@@ -1,4 +1,4 @@
-"""The table "Implemented checks" of docs/assignment-algorithms.md, which maps the §2.9 rows to their tests (W-602).
+"""The table "Implemented checks" of design/specs/assignment-algorithms.md, which maps the §2.9 rows to their tests (W-602).
 
 A docs-contract module (docs/contributing.md, "Test markers"): ``test_every_l_row_names_existing_tests`` (from
 ``test_segmentation_validation.py``) and ``test_every_a_row_names_existing_tests`` (from
@@ -16,12 +16,12 @@ from . import docs_pages
 pytestmark = [pytest.mark.segmentation, pytest.mark.contract]
 
 TEST_ROOT = Path(__file__).resolve().parent
-PAGE = "assignment-algorithms.md"
+PAGE = "specs/assignment-algorithms.md"
 
 
 def implemented_checks():
-    """{row: the backticked names of its "Module and tests" cell} from the design page."""
-    text = docs_pages.table(docs_pages.read(PAGE), "assignment-algorithms-implemented-checks")
+    """{row: the backticked names of its "Module and tests" cell} from the design record."""
+    text = docs_pages.table(docs_pages.design(PAGE), "assignment-algorithms-implemented-checks")
     rows = {}
     for line in text.splitlines():
         match = re.match(r"\| ([LA]\d+) \| ([^|]+) \|", line)
