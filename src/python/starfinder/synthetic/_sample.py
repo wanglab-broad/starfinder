@@ -378,7 +378,7 @@ class SampleSceneConfig:
     ambient_density : float
         Nonnegative ambient molecule density per µm³ of the scene domain.
     max_count : int
-        Positive upper guard on the total number of generated molecules.
+        Nonnegative upper guard on the total number of generated molecules.
 
     Notes
     -----

@@ -200,7 +200,8 @@ class PackingConfig:
     contact : float
         Probability of proposing contact with an accepted site, from 0 to 1.
     overlap : float
-        Nonnegative dimensionless overlap factor for a contact proposal.
+        Nonnegative dimensionless overlap factor in the minimum spacing between sites, including
+        binucleate pairs.
     gap : float
         Nonnegative separation gap in µm for cell placement.
     monolayer : bool
@@ -270,7 +271,7 @@ class TerritoryConfig:
         Territory model: ``reach`` for a site sphere extended by the cell reach, ``grown`` for
         enlarged nucleus semi-axes, or ``power`` for the whole power cell.
     growth : ScalarDistribution
-        Distribution of the positive semi-axis increment in µm for the ``grown`` territory model.
+        Distribution of the positive cell-territory growth distance in µm.
     """
 
     __hash__ = None
@@ -300,7 +301,7 @@ class CellTypeConfig:
         Nonnegative number of Voronoi regions for type placement; 0 gives spatially unstructured
         type draws.
     purity : float
-        Probability of taking the anchor region's main type, from 0 to 1.
+        Type-purity parameter for the anchor region, from 0 to 1.
     molecules_per_cell : tuple[float, ...] or None
         Type-specific medians of the Poisson molecule-count mean, in ``types`` order. ``None`` uses
         ``MoleculeConfig.per_cell_median`` when molecule settings are supplied, otherwise
@@ -387,8 +388,7 @@ class MoleculeConfig:
     per_cell_median : float
         Nonnegative baseline median of the Poisson molecule-count mean per cell.
     per_cell_spread : float
-        Nonnegative standard deviation of the log of the Poisson molecule-count mean; 0 gives a
-        fixed mean.
+        Nonnegative lognormal spread parameter for the per-cell Poisson mean; 0 gives a fixed mean.
     nuclear_fraction : float or None
         Baseline nuclear placement probability for a cell with nuclei, from 0 to 1, with the
         remaining probability assigned to cytoplasm. ``None`` requests uniform placement in the cell
