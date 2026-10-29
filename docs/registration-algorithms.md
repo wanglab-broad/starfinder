@@ -3,6 +3,7 @@
 Lookup tables for registration methods, options, transforms, records and files.
 The {doc}`guide <registration-contract>` shows a complete call; the
 {doc}`registration API <api/registration>` documents the classes and precise rules.
+Option descriptions below come from the config class docstrings.
 
 ## Methods
 
@@ -13,7 +14,7 @@ The {doc}`guide <registration-contract>` shows a complete call; the
 
 ### Translation
 
-Estimate a shift by phase correlation. See {py:class}`~starfinder.registration.TranslationConfig` for option details.
+Estimate a shift by phase correlation.
 
 ```{config-options} starfinder.registration.TranslationConfig
 :exclude: method
@@ -21,7 +22,7 @@ Estimate a shift by phase correlation. See {py:class}`~starfinder.registration.T
 
 ### Rigid
 
-Estimate rotation and translation. See {py:class}`~starfinder.registration.RigidConfig` for option details.
+Estimate rotation and translation.
 
 ```{config-options} starfinder.registration.RigidConfig
 :exclude: method
@@ -29,7 +30,7 @@ Estimate rotation and translation. See {py:class}`~starfinder.registration.Rigid
 
 ### Affine
 
-Estimate rotation, translation, scale and shear. See {py:class}`~starfinder.registration.AffineConfig` for option details.
+Estimate rotation, translation, scale and shear.
 
 ```{config-options} starfinder.registration.AffineConfig
 :exclude: method
@@ -37,7 +38,7 @@ Estimate rotation, translation, scale and shear. See {py:class}`~starfinder.regi
 
 ### B-spline
 
-Estimate a smooth deformation on a control grid. See {py:class}`~starfinder.registration.BSplineConfig` for option details.
+Estimate a smooth deformation on a control grid.
 
 ```{config-options} starfinder.registration.BSplineConfig
 :exclude: method
@@ -45,7 +46,7 @@ Estimate a smooth deformation on a control grid. See {py:class}`~starfinder.regi
 
 ### Demons
 
-Estimate a dense deformation with image intensities. See {py:class}`~starfinder.registration.DemonsConfig` for option details.
+Estimate a dense deformation with image intensities.
 
 ```{config-options} starfinder.registration.DemonsConfig
 :exclude: method
@@ -53,7 +54,7 @@ Estimate a dense deformation with image intensities. See {py:class}`~starfinder.
 
 ### TPS
 
-Match landmarks with a thin-plate spline. See {py:class}`~starfinder.registration.TpsConfig` for option details.
+Match landmarks with a thin-plate spline.
 
 ```{config-options} starfinder.registration.TpsConfig
 :exclude: method
@@ -61,7 +62,7 @@ Match landmarks with a thin-plate spline. See {py:class}`~starfinder.registratio
 
 ### CPD
 
-Align landmark sets with coherent point drift. See {py:class}`~starfinder.registration.CpdConfig` for option details.
+Align landmark sets with coherent point drift.
 
 ```{config-options} starfinder.registration.CpdConfig
 :exclude: method
@@ -71,42 +72,30 @@ Align landmark sets with coherent point drift. See {py:class}`~starfinder.regist
 
 ### Recipe
 
-See {py:class}`~starfinder.registration.RegistrationRecipe` for field descriptions.
-
 ```{config-options} starfinder.registration.RegistrationRecipe
 ```
 
 ### Step
-
-See {py:class}`~starfinder.registration.RegistrationStep` for field descriptions.
 
 ```{config-options} starfinder.registration.RegistrationStep
 ```
 
 ### Recovery
 
-See {py:class}`~starfinder.registration.RecoveryConfig` for field descriptions.
-
 ```{config-options} starfinder.registration.RecoveryConfig
 ```
 
 ### Signal
-
-See {py:class}`~starfinder.registration.RegistrationSignalConfig` for field descriptions.
 
 ```{config-options} starfinder.registration.RegistrationSignalConfig
 ```
 
 ### Final resampling
 
-See {py:class}`~starfinder.registration.WarpConfig` for field descriptions.
-
 ```{config-options} starfinder.registration.WarpConfig
 ```
 
 ### QC criteria
-
-See {py:class}`~starfinder.registration.RegistrationQcConfig` for field descriptions.
 
 ```{config-options} starfinder.registration.RegistrationQcConfig
 ```

@@ -24,7 +24,17 @@ def _choice(value, name, choices):
 
 @dataclass(frozen=True)
 class TranslationConfig:
-    """Integer-peak translation estimation (ZYX, including singleton Z)."""
+    """Integer-peak translation estimation (ZYX, including singleton Z).
+
+    Parameters
+    ----------
+    backend : str
+        Phase-correlation backend: ``scipy_fft`` or ``skimage``.
+    fft_workers : int
+        Positive FFT worker count for ``scipy_fft``.
+    method : str
+        Method identifier, ``translation``.
+    """
 
     backend: str = "scipy_fft"
     fft_workers: int = 1
@@ -49,11 +59,22 @@ def _elastix_config(config, metrics):
 class RigidConfig:
     """elastix rigid (Euler) registration in physical space; Z=1 is estimated in 2D.
 
-    metric is "mattes" (Mattes mutual information with histogram_bins bins) or
-    "ncc"; iterations are per pyramid level, samples are the random spatial
-    samples per iteration and random_seed seeds them. levels None takes the
-    largest number of levels, up to 4, at which min(Y, X) is still at least 16
-    at the coarsest level.
+    Parameters
+    ----------
+    metric : str
+        Similarity metric: ``mattes`` mutual information or ``ncc`` normalized correlation.
+    histogram_bins : int
+        Histogram bin count for the ``mattes`` metric.
+    iterations : int
+        Positive optimization iteration budget per pyramid level.
+    samples : int
+        Positive spatial sample count for optimization.
+    levels : int or None
+        Pyramid level count; ``None`` requests an image-size-derived count.
+    random_seed : int
+        Nonnegative random sampling seed.
+    method : str
+        Method identifier, ``rigid``.
     """
 
     metric: str = "mattes"
@@ -73,7 +94,20 @@ class RigidConfig:
 class AffineConfig:
     """elastix affine registration in physical space; Z=1 is estimated in 2D.
 
-    Fields as for RigidConfig; the default metric is normalized correlation.
+    Parameters
+    ----------
+    metric : str
+        Similarity metric: ``mattes`` mutual information or ``ncc`` normalized correlation.
+    iterations : int
+        Positive optimization iteration budget per pyramid level.
+    samples : int
+        Positive spatial sample count for optimization.
+    levels : int or None
+        Pyramid level count; ``None`` requests an image-size-derived count.
+    random_seed : int
+        Nonnegative random sampling seed.
+    method : str
+        Method identifier, ``affine``.
     """
 
     metric: str = "ncc"
@@ -91,9 +125,22 @@ class AffineConfig:
 class BSplineConfig:
     """elastix cubic B-spline registration on a physical control grid; Z=1 is estimated in 2D.
 
-    grid_spacing_physical is the final control-point spacing, in the spatial
-    unit of spacing_zyx and equal on every axis; None uses the physical X
-    extent divided by 8. Other fields as for AffineConfig.
+    Parameters
+    ----------
+    metric : str
+        Similarity metric: ``mattes`` mutual information or ``ncc`` normalized correlation.
+    grid_spacing_physical : float or None
+        Final control-grid spacing in the image's spatial unit; ``None`` requests an image-size-derived spacing.
+    iterations : int
+        Positive optimization iteration budget per pyramid level.
+    samples : int
+        Positive spatial sample count for optimization.
+    levels : int or None
+        Pyramid level count; ``None`` requests an image-size-derived count.
+    random_seed : int
+        Nonnegative random sampling seed.
+    method : str
+        Method identifier, ``bspline``.
     """
 
     metric: str = "ncc"
@@ -112,7 +159,21 @@ class BSplineConfig:
 
 @dataclass(frozen=True)
 class DemonsConfig:
-    """SimpleITK demons; Z=1 is estimated in 2D (Y and X at least four), otherwise 3D with every axis at least four."""
+    """SimpleITK demons; Z=1 is estimated in 2D (Y and X at least four), otherwise 3D with every axis at least four.
+
+    Parameters
+    ----------
+    variant : str
+        Demons variant: ``demons``, ``diffeomorphic``, ``symmetric`` or ``fast_symmetric``.
+    iterations : tuple[int, ...]
+        Positive iteration budgets in coarse-to-fine pyramid order.
+    smoothing_sigma : float
+        Nonnegative displacement-field smoothing scale in voxel units.
+    pyramid_mode : str
+        Pyramid construction mode: ``antialias`` or ``sitk``.
+    method : str
+        Method identifier, ``demons``.
+    """
 
     variant: str = "demons"
     iterations: tuple[int, ...] = (100, 50, 25)
@@ -133,7 +194,31 @@ class DemonsConfig:
 
 @dataclass(frozen=True)
 class TpsConfig:
-    """Thin-plate-spline field from spots matched between the two rounds; 3D only."""
+    """Thin-plate-spline field from spots matched between the two rounds; 3D only.
+
+    Parameters
+    ----------
+    detection_noise_sigma : float
+        Nonnegative noise-scale multiplier for landmark detection.
+    match_distance_voxels : float
+        Positive landmark matching distance in voxels.
+    min_matches : int
+        Required landmark match count.
+    max_control_points : int
+        Control-point count budget for TPS fitting.
+    smoothing : float
+        Nonnegative thin-plate-spline regularization strength.
+    grid_spacing_voxels : int
+        Positive coarse-field sampling stride setting in voxels.
+    interpolation_order : int
+        Spline order for coarse-field expansion.
+    field_smoothing_sigma : float or None
+        Gaussian field-smoothing standard deviation in voxels; ``None`` disables smoothing.
+    clamp_sampling_coordinates : bool
+        Whether to clamp the estimated field's source coordinates to the image grid.
+    method : str
+        Method identifier, ``tps``.
+    """
 
     detection_noise_sigma: float = 3
     match_distance_voxels: float = 10
@@ -157,8 +242,34 @@ class TpsConfig:
 class CpdConfig:
     """Coherent point drift between the spots of the two rounds; 3D only.
 
-    A configuration translated from the MATLAB workflow keys sets
-    detection_noise_sigma 3.0 and grid_spacing_voxels 32 unless it gives them.
+    Parameters
+    ----------
+    detection_noise_sigma : float
+        Nonnegative noise-scale multiplier for landmark detection.
+    max_control_points : int
+        Reference control-point count budget for CPD anchor selection.
+    kernel_width_voxels : float or None
+        Gaussian deformation-kernel width setting in voxels; ``None`` requests a point-density-derived width.
+    regularization_weight : float
+        Positive nonrigid CPD regularization weight.
+    outlier_fraction : float
+        Nonnegative CPD outlier probability weight.
+    affine_first : bool
+        Whether to fit an affine alignment before nonrigid CPD.
+    grid_spacing_voxels : int
+        Positive coarse-field sampling stride setting in voxels.
+    candidate_radius_voxels : float
+        Positive moving-landmark candidate search radius in voxels.
+    neighbors_per_anchor : int
+        Nonnegative reference-neighbor count setting per anchor.
+    interpolation_order : int
+        Spline order for coarse-field expansion.
+    field_smoothing_sigma : float or None
+        Gaussian field-smoothing standard deviation in voxels; ``None`` disables smoothing.
+    clamp_sampling_coordinates : bool
+        Whether to clamp the estimated field's source coordinates to the image grid.
+    method : str
+        Method identifier, ``cpd``.
     """
 
     detection_noise_sigma: float = 5
@@ -206,12 +317,18 @@ def _landmark_config(config):
 class RegistrationQcConfig:
     """Rejection criteria of routine registration QC; every criterion None rejects nothing.
 
-    min_coverage is the smallest valid-overlap fraction in [0, 1];
-    min_ncc_gain the smallest NCC gain (after minus before);
-    max_fold_fraction the largest fraction in [0, 1] of voxels with
-    det(I + grad u) <= 0; max_translation_voxels the largest translation
-    displacement norm in voxels. projections returns the reference, before and
-    after Z maximum projections from registration_qc for overlays.
+    Parameters
+    ----------
+    min_coverage : float or None
+        Minimum valid-overlap fraction criterion; ``None`` disables this criterion.
+    min_ncc_gain : float or None
+        Minimum normalized-correlation gain criterion; ``None`` disables this criterion.
+    max_fold_fraction : float or None
+        Maximum nonpositive-Jacobian voxel fraction criterion; ``None`` disables this criterion.
+    max_translation_voxels : float or None
+        Maximum translation displacement norm criterion in voxels; ``None`` disables this criterion.
+    projections : bool
+        Whether routine QC includes reference, before-registration and after-registration Z maximum projections.
     """
 
     min_coverage: float | None = None
@@ -245,12 +362,14 @@ def _channel(value, name):
 class RegistrationSignalConfig:
     """How one float64 ZYX registration signal is built from a round's ZYXC source image.
 
-    mode "max" takes the channel maximum (MATLAB merged-image), "sum" the
-    float64 channel sum (the earlier Python merged) and "channel" one channel
-    per round: reference_channel for the reference round and moving_channel
-    (None: reference_channel) for the moving round, each a zero-based index or
-    a channel pattern or name of the round (resolved by Dataset.channel_index).
-    Channels are set only for mode "channel".
+    Parameters
+    ----------
+    mode : str
+        Signal construction mode: channel maximum (``max``), channel sum (``sum``) or selected channel (``channel``).
+    reference_channel : int or str or None
+        Reference-round channel selector for ``channel`` mode, as a zero-based index or channel label.
+    moving_channel : int or str or None
+        Moving-round channel selector for ``channel`` mode, as a zero-based index or channel label; ``None`` uses the reference selector.
     """
 
     mode: str = "max"
@@ -271,10 +390,22 @@ class RegistrationSignalConfig:
 class WarpConfig:
     """Resampling policy, with one final nearest-even integer cast.
 
-    Translation supports constant zero fill only and applies translations and
-    chains of translations. Dense backends support constant fill or nearest
-    boundary extrapolation. SciPy uses linear samples; estimator
-    interpolation_order controls coarse field expansion only.
+    Parameters
+    ----------
+    backend : str
+        Resampling backend: ``translation``, ``scipy`` or ``simpleitk``.
+    boundary_mode : str
+        Boundary sampling mode: ``constant`` or ``nearest``.
+    fill_value : float
+        Constant-boundary fill intensity.
+    output_dtype : str
+        Output dtype choice: ``input``, ``float32`` or ``float64``.
+    integer_rounding : str
+        Integer-output rounding policy, ``nearest_even``.
+    clip_to_dtype : bool
+        Integer-output clipping policy, ``True``.
+    fft_workers : int
+        Positive FFT worker count for translation resampling.
     """
 
     backend: str = "translation"

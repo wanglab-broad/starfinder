@@ -41,6 +41,8 @@ change deployment guards without that authorization.
 
 ## Implementation
 
+Every new or changed config field gets a numpydoc `Parameters` entry; the strict documentation build enforces completeness for every config class that has that section.
+
 Change only the authorized slice and maintained callers/tests/docs needed for
 coherence. Verify diagnoses in actual code. Prefer functions and small typed
 configs/results; avoid duplicated algorithms and compatibility shims for replaced

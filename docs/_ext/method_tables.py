@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
+import inspect
+import re
 
 from docutils import nodes
 from docutils.parsers.rst import Directive, directives
@@ -53,6 +55,48 @@ def _default(field):
     else:
         return "required"
     return repr(value)
+
+
+def _parameter_descriptions(config):
+    """Read plain numpydoc Parameters entries and check them against all fields.
+
+    A missing section is allowed during the staged config-docstring rollout.
+    Excluded table columns do not exempt fields from completeness checking.
+    """
+    lines = inspect.cleandoc(config.__doc__ or "").splitlines()
+    sections = [i for i in range(len(lines) - 1)
+                if lines[i] and not lines[i].startswith(" ")
+                and re.fullmatch(r"-{3,}", lines[i + 1])]
+    start = next((i for i in sections if lines[i] == "Parameters"), None)
+    if start is None:
+        return {}
+    end = next((i for i in sections if i > start), len(lines))
+    descriptions = {}
+    names = []
+    text = []
+
+    def save():
+        for name in names:
+            if name in descriptions:
+                raise ValueError(f"{config.__name__}: duplicate Parameters field {name!r}")
+            descriptions[name] = " ".join(text)
+
+    for line in lines[start + 2:end]:
+        if line and not line.startswith(" "):
+            save()
+            names = [name.strip() for name in line.split(":", 1)[0].split(",")]
+            text = []
+        elif line.strip():
+            text.append(line.strip())
+    save()
+    fields = {field.name for field in dataclasses.fields(config)}
+    problems = [f"missing Parameters field {name!r}" for name in sorted(fields - descriptions.keys())]
+    problems += [f"unknown Parameters field {name!r}" for name in sorted(descriptions.keys() - fields)]
+    problems += [f"empty Parameters description for field {name!r}"
+                 for name in sorted(fields & descriptions.keys()) if not descriptions[name]]
+    if problems:
+        raise ValueError(f"{config.__name__}: " + "; ".join(problems))
+    return descriptions
 
 
 def _cell(text, literal=False):
@@ -110,7 +154,7 @@ class MethodTable(Directive):
 
 
 class ConfigOptions(Directive):
-    """One row per field of a config dataclass: name and default."""
+    """One row per field of a config dataclass: name, default and description."""
 
     required_arguments = 1
     has_content = False
@@ -123,9 +167,14 @@ class ConfigOptions(Directive):
             raise self.error(f"config-options: cannot import {self.arguments[0]!r}: {error}")
         if not dataclasses.is_dataclass(config):
             raise self.error(f"config-options: {self.arguments[0]!r} is not a dataclass")
+        try:
+            descriptions = _parameter_descriptions(config)
+        except ValueError as error:
+            raise self.error(f"config-options: {error}")
         excluded = {name.strip() for name in self.options.get("exclude", "").split(",") if name.strip()}
-        rows = [[field.name, _default(field)] for field in dataclasses.fields(config) if field.name not in excluded]
-        return [_table(["Option", "Default"], rows, literal_columns={0, 1})]
+        rows = [[field.name, _default(field), descriptions.get(field.name, "")]
+                for field in dataclasses.fields(config) if field.name not in excluded]
+        return [_table(["Option", "Default", "Description"], rows, literal_columns={0, 1})]
 
 
 def setup(app):

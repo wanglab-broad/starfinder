@@ -21,6 +21,13 @@ class RecoveryConfig:
     Validation, geometry, application and dependency errors never recover.
     RegistrationRejectedError (a configured QC criterion failed) is an
     estimation error, so allowing RegistrationEstimationError allows it too.
+
+    Parameters
+    ----------
+    allowed_errors : tuple[type[RegistrationEstimationError], ...]
+        Recoverable error categories: ``RegistrationEstimationError``, ``InsufficientLandmarksError`` or ``RegistrationRejectedError``.
+    alternatives : tuple[RegistrationConfig, ...]
+        Ordered alternative method configurations to attempt after an allowed estimation failure.
     """
     allowed_errors: tuple[type[RegistrationEstimationError], ...]
     alternatives: tuple[RegistrationConfig, ...]
