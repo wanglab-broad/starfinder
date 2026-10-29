@@ -74,6 +74,20 @@ def _range(value, name):
 class AugmentationConfig:
     """The augmentation of a placed entry (AU1 of design/specs/synthetic/real-appearance.md).
 
+    Parameters
+    ----------
+    scale : tuple[float, float]
+        Positive lower and upper endpoints of the uniform dimensionless size-scale draw. Scaling
+        acts in ZYX for dense 3D nuclei and in Y-X for culture cells and 2D tissue entries.
+    gain : tuple[float, float]
+        Positive lower and upper endpoints of the uniform dimensionless intensity-gain draw.
+    flip_y : float
+        Probability of a Y reflection, from 0 to 1.
+    flip_z : float
+        Probability of a Z reflection for dense 3D nuclei, from 0 to 1.
+
+    Notes
+    -----
     Every proposal draws a rotation ``θ`` about Z uniform in ``[0, 2π)``, a flip in Y with
     probability ``flip_y``, in dense 3D a flip in Z with probability ``flip_z`` (none in X), a
     scale uniform in ``scale`` and a gain uniform in ``gain``. The scale is isotropic for dense
@@ -100,6 +114,33 @@ class AugmentationConfig:
 class LayoutConfig:
     """Placement (PL2), density (DN1 or DN3) and the stop of the appearance scene.
 
+    Parameters
+    ----------
+    density : str
+        Placement target mode: ``visible`` for visible-stain share or ``count`` for object count.
+    count : int or None
+        Positive target number of objects in ``count`` mode. ``None`` leaves the target to the
+        visible-stain settings in ``visible`` mode.
+    target : float or None
+        Target visible-stain fraction in ``visible`` mode. ``None`` uses the median measured from a
+        closed-form bank's source images; stored banks supply an explicit target.
+    threshold : float or None
+        Positive visible-stain threshold relative to the plateau in ``visible`` mode. ``None`` uses
+        the median Otsu threshold relative to plateau measured from a closed-form bank's source
+        images; stored banks supply an explicit threshold.
+    check_every : int
+        Positive number of placements between visible-stain density checks.
+    contact : float
+        Probability of proposing contact when a placed object is available, from 0 to 1.
+    max_proposals : int
+        Positive scene-wide placement proposal budget.
+    max_refusals : int
+        Positive budget of consecutive refused placement proposals.
+    floor : float
+        Positive minimum achieved fraction of the placement aim at a proposal-budget stop.
+
+    Notes
+    -----
     ``density="visible"`` (DN1) places until the composed stain's visible-stain share, with
     the fixed ``threshold`` relative to the plateau, reaches ``target``, checked after every
     ``check_every`` placements; ``target`` and ``threshold`` None take the medians over the

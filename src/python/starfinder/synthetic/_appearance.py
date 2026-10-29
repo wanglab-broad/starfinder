@@ -68,6 +68,22 @@ _PATCH_COLUMNS = ["stain", "lattice_z", "lattice_y", "lattice_x", "patch_id", "s
 class CompositionConfig:
     """How the stains of the appearance scene are composed (design/specs/synthetic/real-appearance.md, "Composition").
 
+    Parameters
+    ----------
+    light : str
+        Out-of-focus light model: ``objects`` for blurred object excess or ``none`` for no added
+        light.
+    light_sigma_um : tuple[float, float, float]
+        Positive Gaussian blur scales for object light in sample-frame ZYX µm.
+    background : str or None
+        Background model: ``patches`` or ``closed-form``. ``None`` uses real patches for a stored
+        bank and the preset's stain background for a closed-form bank.
+    plateau : float or None
+        Positive stain scaling grey level. ``None`` uses the median plateau recorded for the bank's
+        source images.
+
+    Notes
+    -----
     ``light="objects"`` adds the out-of-focus light H2: each placed object's own excess
     blurred by a Gaussian of ``light_sigma_um`` (Z, Y, X) µm in the sample frame, scaled once
     per scene and stain by ``κ``, so that the background plus the light, averaged over the
@@ -104,6 +120,22 @@ class CompositionConfig:
 class AppearanceSceneConfig:
     """A cellular scene with real appearance (design/specs/synthetic/real-appearance.md, E1).
 
+    Parameters
+    ----------
+    context : CellularSceneConfig
+        Cellular-scene settings supplying the acquisition, random streams, cell types, molecules,
+        territories and stain-channel metadata.
+    bank : BankReference
+        Reference to the appearance bank.
+    augmentation : AugmentationConfig
+        Entry-transform and intensity-gain settings.
+    layout : LayoutConfig
+        Object placement, density and stopping settings.
+    composition : CompositionConfig
+        Stain light, background and output-scaling settings.
+
+    Notes
+    -----
     ``context`` is an unchanged ``CellularSceneConfig``: its acquisition, seed, split and scene
     key, cell types, molecules, territory growth law and morphology round are used; its
     nuclei, packing and the stains' geometry, brightness, edge, texture, unevenness,

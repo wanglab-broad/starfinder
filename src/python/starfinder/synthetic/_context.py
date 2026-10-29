@@ -134,6 +134,25 @@ def _weights(value, size, name):
 class NucleusShapeConfig:
     """Lobed nuclei (N1) and the optional harmonic perturbation of lobe 1 (N2), µm and radians.
 
+    Parameters
+    ----------
+    lobed_share : float
+        Probability that a nucleus has additional lobes, from 0 to 1.
+    extra_lobes : tuple[int, int]
+        Inclusive lower and upper counts for the uniform draw of additional lobes in a lobed
+        nucleus.
+    lobe_scale : ScalarDistribution
+        Distribution of the dimensionless semi-axis scale of an additional lobe relative to the
+        first lobe.
+    lobe_offset : ScalarDistribution
+        Distribution of the dimensionless centre-offset factor for an additional lobe.
+    harmonics : int
+        Largest degree of the first lobe's harmonic perturbation; 0 disables the perturbation.
+    harmonic_amplitude : float
+        Nonnegative dimensionless amplitude of the harmonic perturbation.
+
+    Notes
+    -----
     A nucleus has more than one lobe with probability ``lobed_share``; then an integer
     drawn uniformly in ``extra_lobes`` gives its further lobes. Lobe ``l ≥ 2`` has semi-axes
     ``lobe_scale`` times lobe 1's, lobe 1's elongation, an angle of the nucleus angle law and
@@ -170,6 +189,30 @@ class NucleusShapeConfig:
 class PackingConfig:
     """Placement with touching nuclei (K1, P1), a target density and the crowding rule (F2), µm.
 
+    Parameters
+    ----------
+    density : float or None
+        Target nominal nucleus volume fraction, using area fraction for a single plane and for a
+        monolayer. ``None`` uses the seed counts in ``sample.cells``.
+    kind_shares : tuple[float, float, float] or None
+        Relative weights of ordinary, binucleate and empty cells in density mode. ``None`` uses
+        their counts in ``sample.cells`` as weights.
+    contact : float
+        Probability of proposing contact with an accepted site, from 0 to 1.
+    overlap : float
+        Nonnegative dimensionless overlap factor for a contact proposal.
+    gap : float
+        Nonnegative separation gap in µm for cell placement.
+    monolayer : bool
+        Whether to place cell centres in the stack's middle plane.
+    on_crowded : str
+        Crowding response: ``raise`` or ``stop``.
+    floor : float
+        Positive minimum achieved fraction of the placement target for the ``stop`` crowding
+        response.
+
+    Notes
+    -----
     ``density`` is the target nominal nucleus volume fraction of the scene domain (the area
     fraction of its Y-X box with one plane or a monolayer), ``0 < density < 1``; None keeps the
     seed counts of ``CellsConfig``. ``kind_shares`` (ordinary, binucleate, empty) gives
@@ -219,7 +262,16 @@ class PackingConfig:
 class TerritoryConfig:
     """The territory rule: ``"reach"`` (T1, the site sphere plus the cell's reach), ``"grown"``
     (T2, the nucleus with every semi-axis grown by ``δ`` µm, one ``growth`` draw per cell) or
-    ``"power"`` (T3, the whole power cell). Instances are not hashable."""
+    ``"power"`` (T3, the whole power cell). Instances are not hashable.
+
+    Parameters
+    ----------
+    rule : str
+        Territory model: ``reach`` for a site sphere extended by the cell reach, ``grown`` for
+        enlarged nucleus semi-axes, or ``power`` for the whole power cell.
+    growth : ScalarDistribution
+        Distribution of the positive semi-axis increment in µm for the ``grown`` territory model.
+    """
 
     __hash__ = None
 
@@ -236,6 +288,36 @@ class TerritoryConfig:
 class CellTypeConfig:
     """Cell types with a gene abundance per type (G1) and their placement by region (Ty2).
 
+    Parameters
+    ----------
+    types : tuple[str, ...]
+        Cell-type names in the order used by the type-specific settings.
+    abundances : tuple[tuple[float, ...], ...]
+        Relative gene weights, with one row per cell type in codebook gene order.
+    proportions : tuple[float, ...]
+        Relative cell-type weights in ``types`` order.
+    regions : int
+        Nonnegative number of Voronoi regions for type placement; 0 gives spatially unstructured
+        type draws.
+    purity : float
+        Probability of taking the anchor region's main type, from 0 to 1.
+    molecules_per_cell : tuple[float, ...] or None
+        Type-specific medians of the Poisson molecule-count mean, in ``types`` order. ``None`` uses
+        ``MoleculeConfig.per_cell_median`` when molecule settings are supplied, otherwise
+        ``SampleSceneConfig.molecules_per_cell``.
+    nuclear_fraction : tuple[float, ...] or None
+        Type-specific nuclear placement probabilities in ``types`` order. ``None`` uses
+        ``MoleculeConfig.nuclear_fraction`` when molecule settings are supplied, otherwise uniform
+        placement in the cell territory.
+    size_scale : tuple[float, ...] or None
+        Positive dimensionless nucleus-size multipliers in ``types`` order. ``None`` leaves the
+        nucleus size laws unscaled.
+    marker_pairs : tuple[tuple[str, str, str], ...]
+        Gene-pair annotations as ``(gene_a, gene_b, relation)`` triples, with relation ``exclusive``
+        or ``coexpressed``.
+
+    Notes
+    -----
     ``abundances`` holds one row per type over the codebook's genes (rows are normalized);
     ``proportions`` is ``π``. ``regions`` Voronoi regions (0: Ty1, types at random) each have a
     main type, which a cell takes with probability ``purity`` from the region of its anchor.
@@ -300,6 +382,27 @@ class CellTypeConfig:
 class MoleculeConfig:
     """Molecules per cell (M2), the nuclear fraction of reads (NF1) and ambient genes (A2).
 
+    Parameters
+    ----------
+    per_cell_median : float
+        Nonnegative baseline median of the Poisson molecule-count mean per cell.
+    per_cell_spread : float
+        Nonnegative standard deviation of the log of the Poisson molecule-count mean; 0 gives a
+        fixed mean.
+    nuclear_fraction : float or None
+        Baseline nuclear placement probability for a cell with nuclei, from 0 to 1, with the
+        remaining probability assigned to cytoplasm. ``None`` requests uniform placement in the cell
+        territory.
+    ambient_density : float or None
+        Nonnegative ambient molecule density per µm³ of the scene domain. ``None`` uses
+        ``SampleSceneConfig.ambient_density``.
+    ambient_abundances : tuple[float, ...] or None
+        Relative ambient gene weights in codebook gene order. ``None`` uses uniform weights over
+        shared genes when cell types are configured, otherwise the sample template's gene abundance
+        law.
+
+    Notes
+    -----
     The count of cell ``k`` is Poisson with mean ``μ_k ~ lognormal(log m, s)``
     (``per_cell_median`` m, ``per_cell_spread`` s; s = 0 is M1). Each cell molecule lies in
     its cell's nucleus with probability ``nuclear_fraction`` and in the rest of its territory
@@ -331,6 +434,29 @@ class MoleculeConfig:
 class CellularSceneConfig:
     """A sample scene and the parts of the cellular scene; each part None (or empty) is off.
 
+    Parameters
+    ----------
+    sample : SampleSceneConfig
+        Sample scene supplying the FOV template and acquisition settings.
+    nuclei : NucleusShapeConfig or None
+        Lobed-nucleus and harmonic-perturbation settings. ``None`` keeps the sample scene's
+        ellipsoidal nuclei.
+    packing : PackingConfig or None
+        Cell-placement settings. ``None`` keeps the sample scene's seed-count and gap placement.
+    territories : TerritoryConfig or None
+        Cell-territory settings. ``None`` uses the ``reach`` territory model.
+    types : CellTypeConfig or None
+        Cell-type and spatial type-region settings. ``None`` leaves cells untyped.
+    molecules : MoleculeConfig or None
+        Baseline cell and ambient molecule settings. ``None`` retains the sample scene's count
+        defaults and the uniform territory-placement default.
+    stains : tuple[StainChannelConfig, ...]
+        Stain channels for the cellular scene. An empty tuple keeps the sample scene's stain.
+    morphology : MorphologyRoundConfig or None
+        Morphology acquisition round. ``None`` disables that round.
+
+    Notes
+    -----
     ``sample`` is an unchanged ``SampleSceneConfig`` (template, acquisition, seeds, size laws,
     molecules, stain). ``nuclei``, ``packing``, ``territories``, ``types`` and ``molecules``
     are described by their classes and need ``sample.cells``. ``stains`` is a tuple of

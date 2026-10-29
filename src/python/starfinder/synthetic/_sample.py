@@ -92,6 +92,33 @@ def _real(value, name, low=0.0, *, strict=False):
 class AcquisitionConfig:
     """A nominal grid of FOVs acquired from one sample scene at true offsets.
 
+    Parameters
+    ----------
+    columns : int
+        Positive number of FOV grid columns.
+    rows : int
+        Positive number of FOV grid rows.
+    order : str
+        FOV traversal order, ``column_major_down_right``.
+    fov_shape_zyx : tuple[int, int, int]
+        FOV shape as positive voxel counts in ZYX order.
+    spacing_zyx : tuple[float, float, float]
+        Positive voxel spacing in µm in ZYX order.
+    overlap : float or tuple[float, float]
+        Fractional overlap between neighbouring FOVs, as a common value or a ``(y, x)`` pair.
+    jitter : str
+        Origin-jitter mode: ``uniform`` for random offsets or ``supplied`` for explicit offsets.
+    jitter_max_zyx : tuple[float, float, float]
+        Nonnegative absolute origin-jitter bounds in ZYX voxels.
+    jitter_zyx : Mapping[str, tuple[float, float, float]] or None
+        Explicit origin-jitter offsets in ZYX voxels keyed by FOV ID for ``supplied`` mode. ``None``
+        leaves jitter to the ``uniform`` mode.
+    fov_ids : tuple[str, ...] or None
+        FOV identifiers in grid traversal order. ``None`` generates ``FOV_001``, ``FOV_002`` and
+        subsequent numbered identifiers.
+
+    Notes
+    -----
     FOV ``k`` (IDs ``FOV_001``, ``FOV_002``, ... unless ``fov_ids`` is given) sits
     at column ``k // rows``, row ``k % rows``, with nominal origin
     ``(0, row · step_y, col · step_x)`` µm and ``step = (1 − overlap) · n · s``.
@@ -197,6 +224,33 @@ def _lognormal(median, sd):
 class CellsConfig:
     """Seeds, nucleus laws and territories of the minimal cellular scene (µm, radians).
 
+    Parameters
+    ----------
+    nuclei : int
+        Nonnegative count of ordinary cells with one nucleus.
+    binucleate : int
+        Nonnegative count of cells with two nuclei.
+    empty : int
+        Nonnegative count of cells without nuclei.
+    nucleus_axial_radius : ScalarDistribution
+        Distribution of the positive nucleus axial semi-axis in µm.
+    nucleus_lateral_radius : ScalarDistribution
+        Distribution of the positive nucleus lateral semi-axis in µm before elongation.
+    nucleus_elongation : ScalarDistribution
+        Distribution of the dimensionless lateral elongation ratio of a nucleus.
+    nucleus_angle : ScalarDistribution
+        Distribution of the nucleus orientation angle in the Y-X plane, in radians.
+    empty_radius : float
+        Positive virtual-site radius in µm for an empty cell.
+    gap : float
+        Positive minimum gap in µm between seed site spheres.
+    reach : ScalarDistribution
+        Distribution of the positive territory reach beyond the site radius, in µm.
+    max_proposals : int
+        Positive proposal budget per seed and per molecule.
+
+    Notes
+    -----
     Seeds are ordinary cells (one nucleus), binucleate cells (two) and empty
     cells (a virtual site of ``empty_radius``), placed in that order by random
     sequential addition with a minimum ``gap`` between site spheres. Cell
@@ -250,6 +304,21 @@ def _checked_distribution(spec, domain, ids, name):
 class StainConfig:
     """Nuclear stain: a soft-edged ellipsoid per nucleus, then the observation stages.
 
+    Parameters
+    ----------
+    channel_label : str
+        Nuclear-stain channel label.
+    brightness : ScalarDistribution
+        Distribution of plateau intensity per nucleus.
+    edge_width : float
+        Positive Gaussian edge width in µm.
+    background : BackgroundConfig
+        Single-round, single-channel stain background settings in sample-grid index units.
+    noise : NoiseConfig
+        Residual stain-noise model drawn per FOV.
+
+    Notes
+    -----
     ``brightness`` is the plateau intensity per nucleus, ``edge_width`` the
     Gaussian edge ``w`` in µm. ``background`` is a one-round, one-channel
     BackgroundConfig in the sample grid's index units and ``noise`` the residual
@@ -293,6 +362,26 @@ _POPULATION_FIELDS = ("count", "density", "coordinates", "amplicon_ids", "gene_i
 class SampleSceneConfig:
     """One sample scene: a FOV template, the acquisition, cells, stain and molecules.
 
+    Parameters
+    ----------
+    fov : AmpliconSceneConfig
+        Amplicon-scene template for rendering and random-stream settings.
+    acquisition : AcquisitionConfig
+        FOV grid, voxel spacing and origin-jitter settings.
+    cells : CellsConfig or None
+        Cell seeds, nucleus laws and territory settings. ``None`` gives an ambient-molecule scene
+        without cell labels.
+    stain : StainConfig or None
+        Nuclear-stain settings. ``None`` disables the stain image.
+    molecules_per_cell : float
+        Nonnegative Poisson mean of the number of molecules per cell.
+    ambient_density : float
+        Nonnegative ambient molecule density per µm³ of the scene domain.
+    max_count : int
+        Positive upper guard on the total number of generated molecules.
+
+    Notes
+    -----
     ``fov`` supplies dtype, accumulation, property laws, abundances, readout,
     background (in the sample grid's index units), noise, per-round geometry,
     seed, split, scene key and sample ID; its ``shape_zyx`` must equal

@@ -49,6 +49,17 @@ def _plain_name(value, name):
 class BrightRegionConfig:
     """Bright regions of a nucleus stain (Tx1), µm.
 
+    Parameters
+    ----------
+    per_nucleus : float
+        Nonnegative Poisson mean of the number of bright regions per nucleus.
+    size : ScalarDistribution
+        Distribution of the positive Gaussian region size in µm.
+    height : ScalarDistribution
+        Distribution of the positive dimensionless region height relative to the nucleus plateau.
+
+    Notes
+    -----
     A nucleus has ``Poisson(per_nucleus)`` regions, each centred uniformly inside the nucleus
     (by rejection on its label), with size ``s_b`` drawn from ``size`` and height ``h_b`` from
     ``height``; the nucleus's plateau is multiplied by ``1 + Σ_b h_b exp(−½ ‖(σ − c_b) / s_b‖²)``,
@@ -71,6 +82,18 @@ class BrightRegionConfig:
 class UnevennessConfig:
     """A smooth multiplicative unevenness of a stain across the sample (U1), µm.
 
+    Parameters
+    ----------
+    centres_per_area : float
+        Nonnegative Poisson mean of field centres per FOV Y-X area.
+    amplitude : float
+        Nonnegative standard deviation of the dimensionless log-unevenness field with field centres
+        present.
+    length : float or None
+        Positive Gaussian field length in µm. ``None`` uses the larger of the FOV's Y and X widths.
+
+    Notes
+    -----
     ``K_U ~ Poisson(centres_per_area · A_Ω / A_FOV)`` centres lie uniformly in the Y-X box of
     the scene domain at the z of its centre, each with a standard normal ``z_q``; with one
     length ``L`` (``length``, None: the larger of the FOV's Y and X widths),
@@ -96,6 +119,15 @@ class UnevennessConfig:
 class OutputScaleConfig:
     """The 8-bit output of a stain (B1): scale, then round and clip.
 
+    Parameters
+    ----------
+    dtype : str
+        Output integer dtype: ``uint8`` or ``uint16``.
+    plateau : float
+        Positive output scaling grey level for the median of the stain brightness law.
+
+    Notes
+    -----
     After the noise the float64 image is multiplied by ``k = plateau / m_A``, ``m_A`` the
     median of the stain's brightness law, then rounded half to even and clipped to the range
     of ``dtype`` (``uint8`` or ``uint16``); ``plateau`` lies strictly between 0 and the
@@ -120,6 +152,38 @@ class OutputScaleConfig:
 class StainChannelConfig:
     """One stain channel of the cellular scene (S1): a geometry source and its appearance.
 
+    Parameters
+    ----------
+    name : str
+        Stain identifier used to share random draws between channels with the same name.
+    source : str
+        Stain geometry source: ``nucleus``, ``territory`` or ``boundary``.
+    round : str
+        Acquisition round: ``reference`` or ``morphology``.
+    channel : str
+        Channel file pattern for this stain.
+    brightness : ScalarDistribution
+        Distribution of plateau intensity per nucleus for a ``nucleus`` source, and per cell for
+        ``territory`` and ``boundary`` sources.
+    edge_width : float
+        Positive soft-edge width in µm.
+    band_width : float
+        Positive boundary-band width in µm for the ``boundary`` source.
+    nuclear_ratio : float
+        Nonnegative dimensionless nuclear-to-territory intensity ratio for the ``territory`` source.
+    texture : BrightRegionConfig or None
+        Bright-region settings for a nucleus stain. ``None`` adds no bright regions.
+    unevenness : UnevennessConfig or None
+        Multiplicative spatial stain-unevenness settings. ``None`` adds no unevenness field.
+    background : BackgroundConfig
+        Stain background settings in sample-grid index units.
+    noise : NoiseConfig
+        Residual stain-noise model drawn per FOV.
+    output : OutputScaleConfig or None
+        Stain scaling and integer-output settings. ``None`` casts to the sample template's dtype.
+
+    Notes
+    -----
     ``source`` is ``nucleus`` (nucleus interiors with a soft edge of width ``edge_width`` µm
     across the surface and the faces between touching nuclei, optional bright regions
     ``texture``), ``territory`` (cell territories, dimmer inside the nucleus by
@@ -182,6 +246,21 @@ class StainChannelConfig:
 class MorphologyRoundConfig:
     """The morphology round: stain channels acquired with a known translation per FOV.
 
+    Parameters
+    ----------
+    name : str
+        Name of the morphology acquisition round.
+    translation : str
+        Translation mode: ``uniform`` for random translations or ``supplied`` for explicit
+        translations.
+    translation_max_zyx : tuple[float, float, float]
+        Nonnegative absolute translation bounds in ZYX voxels.
+    translation_zyx : Mapping[str, tuple[float, float, float]] or None
+        Explicit ZYX translations in voxels keyed by FOV ID for ``supplied`` mode. ``None`` leaves
+        translations to the ``uniform`` mode.
+
+    Notes
+    -----
     The round ``name`` holds the stains whose ``round`` is ``morphology``; its index ``q`` in
     FOV ``f`` images the sample position ``true_f + τ_f + q ⊙ s``. ``translation="uniform"``
     (MT1) draws ``τ_{f,a} = T_a (2u − 1) s_a`` with ``T`` = ``translation_max_zyx`` (voxels, 0 in
