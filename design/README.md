@@ -10,9 +10,9 @@ the full rules behind it.
 
 | Folder | Holds | Read by tests |
 | --- | --- | --- |
-| `specs/` | The specification of each stage, method family and synthetic scene: the rules the code follows, the options considered and why one was chosen. | `test_report_docs_contract.py` reads the report layout/check tables; `test_sample_segmentation_workflow.py` reads workflow configuration |
+| `specs/` | The specification of each stage, method family and synthetic scene: the rules the code follows, the options considered and why one was chosen. | `test_report_docs_contract.py` reads the report layout/check tables; `test_segmentation_docs_contract.py` reads the assignment check table; `test_sample_segmentation_workflow.py` reads workflow configuration |
 | `specs/synthetic/` | Amplicon, sample, cellular and real-appearance scene specifications. | No direct page reader; their validation tables are read from `validation/` |
-| `validation/` | The validation designs: the checks of a scene or a chain, their thresholds, and the table that maps each check to its tests. | `test_synthetic_cellular_checks.py`, `test_synthetic_appearance_checks.py`, `test_stitching_docs_contract.py` and `test_segmentation_docs_contract.py` read labelled check tables |
+| `validation/` | The validation designs: the checks of a scene or a chain, their thresholds, and the table that maps each check to its tests. | `test_synthetic_cellular_checks.py`, `test_synthetic_appearance_checks.py` and `test_stitching_docs_contract.py` read labelled check tables |
 | `baselines/` | What a stage did at a fixed revision before it was rewritten, with file and line pins. History; not maintained. | No |
 | `proposals/` | Designs proposed and not, or not yet, implemented. | No |
 | `notes/` | Longer notes behind a guide: calibration targets, API behaviour, research scripts, the full migration notes. | No |
