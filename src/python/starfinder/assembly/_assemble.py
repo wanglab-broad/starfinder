@@ -335,7 +335,8 @@ def check_identities(result: AssemblyResult) -> None:
     count_keys = {(f, ns, int(c)) for f, ns, c in zip(counts["fov_id"], counts["cell_namespace"],
                                                       counts["cell_id"].astype("int64"))}
     if not count_keys <= counted_keys:
-        _fail(4, "only counted cells (retained, §2.9 kept) have count rows", _first(count_keys - counted_keys))
+        # §2.9: kept is the assignment status.
+        _fail(4, "only counted cells (retained, assignment kept) have count rows", _first(count_keys - counted_keys))
     # The counts and the molecules meet at the cell key (cell_namespace, cell_id), so a molecule counts in its cell
     # whichever FOV observed it.
     tally_key = ["cell_namespace", "cell_id", "gene_id"]

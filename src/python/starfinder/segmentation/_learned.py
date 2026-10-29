@@ -104,7 +104,8 @@ def _check_blocks(config):
             raise ValueError(f"block-wise prediction needs min_overlap + 2 × context < block_size on every axis; "
                              f"axis {axis}: {o} + 2 × {c} >= {b}")
     if any(s != 1 for s in _scale_zyx(config.scale)):
-        raise ValueError("block fields together with a scale other than 1 are not supported (W-309): nothing has "
+        # W-309
+        raise ValueError("block fields together with a scale other than 1 are not supported: nothing has "
                          "tested that combination")
 
 
@@ -241,7 +242,8 @@ class CellposeConfig:
             raise ValueError("do_3d and bfloat16 must be Boolean")
         if self.do_3d:
             if self.diameter is None:
-                raise ValueError("diameter None (no rescale) is refused with do_3d=True (W-306)")
+                # W-306
+                raise ValueError("diameter None (no rescale) is refused with do_3d=True")
             if self.anisotropy is None:
                 raise ValueError("do_3d=True needs anisotropy (Z spacing over Y, X spacing)")
         elif self.anisotropy is not None:

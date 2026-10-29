@@ -1154,8 +1154,10 @@ def _segmentation(config) -> _LegacySegmentation:
     from starfinder._weights import weights_directory
     if 'segmentation' in config:
         _python_only(config, ['segmentation'])
-        raise ValueError('the segmentation block is run by FOV.segment (the §2.13 rule); the stardist_segmentation '
-                         'rule translates rules.stardist_segmentation.parameters only: remove the block or the rule')
+        # §2.13: workflow orchestration.
+        raise ValueError('the segmentation block is run by FOV.segment (the workflow orchestration rule); '
+                         'the stardist_segmentation rule translates rules.stardist_segmentation.parameters only: '
+                         'remove the block or the rule')
     params = _rule_parameters(config, 'stardist_segmentation')
     _known(params, _STARDIST_KEYS, 'stardist_segmentation parameter')
     _python_only(config, [f'rules.stardist_segmentation.parameters.{k}' for k in ('target', 'device') if k in params])
@@ -1339,8 +1341,10 @@ def _reads_assignment(config):
     from starfinder.segmentation import ExpandLabelsConfig
     if 'assignment' in config:
         _python_only(config, ['assignment'])
-        raise ValueError('the assignment block is run by FOV.assign_molecules (the §2.13 rule); the reads_assignment '
-                         'rule translates rules.reads_assignment.parameters only: remove the block or the rule')
+        # §2.13: workflow orchestration.
+        raise ValueError('the assignment block is run by FOV.assign_molecules (the workflow orchestration rule); '
+                         'the reads_assignment rule translates rules.reads_assignment.parameters only: '
+                         'remove the block or the rule')
     params = _rule_parameters(config, 'reads_assignment')
     _known(params, _READS_ASSIGNMENT_KEYS, 'reads_assignment parameter')
     expand = _flag(params, 'expand_labels', 'reads_assignment')

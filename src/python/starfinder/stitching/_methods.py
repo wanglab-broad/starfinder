@@ -62,7 +62,8 @@ class StitchingSpec:
         if self.devices != ("cpu",):
             raise ValueError(f"devices of {self.name!r} must be ('cpu',): placement runs on the CPU only")
         if self.transform_kind != "translation":
-            raise ValueError(f"transform_kind of {self.name!r} must be 'translation', the only kind §2.10 admits")
+            # §2.10: stitching admits translation only.
+            raise ValueError(f"transform_kind of {self.name!r} must be 'translation', the only kind stitching admits")
 
 
 @dataclass(frozen=True, eq=False)

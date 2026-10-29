@@ -502,8 +502,9 @@ def _views(root, path, tiles):
             raise ValueError(f"{path}: view {view} has no {STITCHING_TRANSFORM!r}; the engine task fails such a run")
         off = _linear_off(composed)
         if not off <= LINEAR_TOLERANCE:
+            # §2.10: stitching admits translation only.
             raise ValueError(f"{path}: view {view} composes {names} to a linear part {off:.3g} off the identity; "
-                             f"§2.10 admits translation only (tolerance {LINEAR_TOLERANCE})")
+                             f"stitching admits translation only (tolerance {LINEAR_TOLERANCE})")
         c_x, c_y, c_z = calibration[0][0], calibration[1][1], calibration[2][2]
         if c_x != c_y:
             raise ValueError(f"{path}: view {view} has a calibration with c_x {c_x!r} ≠ c_y {c_y!r}")
@@ -533,7 +534,8 @@ def _pairwise(root, path, setups):
         shift = _affine(_text(element, "shift"), f"{what}, shift")
         off = _linear_off(shift)
         if not off <= LINEAR_TOLERANCE:
-            raise ValueError(f"{what}: the shift's linear part is {off:.3g} off the identity; §2.10 admits "
+            # §2.10: stitching admits translation only.
+            raise ValueError(f"{what}: the shift's linear part is {off:.3g} off the identity; stitching admits "
                              "translation only")
         correlation = _float(_text(element, "correlation"), f"{what}, correlation")
         results.append((ends[0], ends[1], (shift[0][3], shift[1][3], shift[2][3]), correlation,
