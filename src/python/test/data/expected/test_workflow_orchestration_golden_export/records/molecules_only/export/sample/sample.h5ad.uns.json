@@ -1,0 +1,424 @@
+{
+ "assembly": {
+  "format_version": 1,
+  "stage": "assembly",
+  "sample": "sample",
+  "mode": "molecules_only",
+  "route": "after_fusion",
+  "route_source": "default",
+  "frame": {
+   "frame_id": "sample:sample",
+   "unit": "\u00b5m",
+   "direction": "identity"
+  },
+  "genes": [
+   "balanced-01",
+   "balanced-02",
+   "balanced-03",
+   "balanced-04",
+   "balanced-05",
+   "balanced-06",
+   "balanced-07",
+   "balanced-08",
+   "balanced-09",
+   "balanced-10",
+   "balanced-11",
+   "balanced-12",
+   "balanced-13",
+   "balanced-14",
+   "balanced-15",
+   "balanced-16"
+  ],
+  "placement": {
+   "sample": "sample",
+   "method": "multiview_stitcher",
+   "implementation": "starfinder.stitching._multiview._multiview_stitcher",
+   "config": {
+    "binning_zyx": [
+     1,
+     2,
+     2
+    ],
+    "pairwise": "phase_correlation",
+    "upsample_factor": null,
+    "quality_threshold": -1.0,
+    "drop_nan_quality": true,
+    "pruning": "alternating_pattern",
+    "overlap_tolerance_um": 0.0,
+    "groupwise": "global_optimization",
+    "abs_tol_um": null,
+    "rel_tol": null,
+    "max_iter": null,
+    "method": "multiview_stitcher"
+   },
+   "origins": null,
+   "gauge": "G1",
+   "review": "not_needed",
+   "reasons": [],
+   "approval": null,
+   "fovs_sha256": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b",
+   "links_sha256": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee"
+  },
+  "config": {
+   "ownership": "nearest_center",
+   "centroid": "territory",
+   "tie": "table_order",
+   "conflicts": true,
+   "duplicate_threshold": 0.5
+  },
+  "ownership": {
+   "rule": "nearest_center",
+   "tie": "table_order",
+   "axes": "yx",
+   "owning_fovs": [
+    "FOV_001",
+    "FOV_002",
+    "FOV_003",
+    "FOV_004"
+   ]
+  },
+  "flags": {
+   "computed": [],
+   "conflicts": true
+  },
+  "fovs": [
+   {
+    "fov_id": "FOV_001",
+    "placement_status": "image_supported",
+    "origin_zyx": [
+     0.0,
+     0.0,
+     -0.5000000000000003
+    ],
+    "kind": "molecules",
+    "assignment": null,
+    "molecules_sha256": "41c7b41221ef79e33d234305b8e99bf846e2c561ae36594a917775f9507f24f9",
+    "nuclei": false,
+    "territories": {
+     "path": null,
+     "sha256": null
+    },
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_001\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "1535cd61256c1675ff1188801c7c7c774a741c99ab7f0d73d9be852eeaeb61fd",
+     "source": "file:<work>/output/sample-tiny-v1/golden-molecules-only/fovs/FOV_001/reference.tif",
+     "calibration_source": "grid"
+    },
+    "footprint_yx": [
+     [
+      -0.25,
+      17.75
+     ],
+     [
+      -0.7500000000000003,
+      17.25
+     ]
+    ],
+    "centre_yx": [
+     8.75,
+     8.25
+    ],
+    "owns_points": true
+   },
+   {
+    "fov_id": "FOV_002",
+    "placement_status": "image_supported",
+    "origin_zyx": [
+     0.0,
+     12.000000000000002,
+     0.4999999999999997
+    ],
+    "kind": "molecules",
+    "assignment": null,
+    "molecules_sha256": "ec4e3d6c3ad982c2906c8a43deca10bbad883e70f2fe221ce89f2f2a71a0b1d2",
+    "nuclei": false,
+    "territories": {
+     "path": null,
+     "sha256": null
+    },
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "0dc84800a2bd2c1017888a1ec8e946bc52275042e037c28cbbfb21a023cf7760",
+     "source": "file:<work>/output/sample-tiny-v1/golden-molecules-only/fovs/FOV_002/reference.tif",
+     "calibration_source": "grid"
+    },
+    "footprint_yx": [
+     [
+      11.750000000000002,
+      29.75
+     ],
+     [
+      0.24999999999999972,
+      18.25
+     ]
+    ],
+    "centre_yx": [
+     20.75,
+     9.25
+    ],
+    "owns_points": true
+   },
+   {
+    "fov_id": "FOV_003",
+    "placement_status": "image_supported",
+    "origin_zyx": [
+     0.0,
+     0.0,
+     11.500000000000002
+    ],
+    "kind": "molecules",
+    "assignment": null,
+    "molecules_sha256": "bb2e17e053de9eb49c8c902074bd87535a12940b9e8641ada9e5b2595e041e00",
+    "nuclei": false,
+    "territories": {
+     "path": null,
+     "sha256": null
+    },
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_003\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "329b4e2b18f3cf3cc9de4fc39e356cac261bbce054ad22e1cd88d98215ec04a6",
+     "source": "file:<work>/output/sample-tiny-v1/golden-molecules-only/fovs/FOV_003/reference.tif",
+     "calibration_source": "grid"
+    },
+    "footprint_yx": [
+     [
+      -0.25,
+      17.75
+     ],
+     [
+      11.250000000000002,
+      29.25
+     ]
+    ],
+    "centre_yx": [
+     8.75,
+     20.25
+    ],
+    "owns_points": true
+   },
+   {
+    "fov_id": "FOV_004",
+    "placement_status": "image_supported",
+    "origin_zyx": [
+     0.0,
+     12.000000000000002,
+     12.500000000000002
+    ],
+    "kind": "molecules",
+    "assignment": null,
+    "molecules_sha256": "cbe1464d2872b53f19233c97537e49dd5d53d654580ed417ab4c214c3fa89699",
+    "nuclei": false,
+    "territories": {
+     "path": null,
+     "sha256": null
+    },
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_004\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "5e6fb5a215e423b726e52c6ecbaa54eccccc6e9fe169215f1752fbf443d5a49e",
+     "source": "file:<work>/output/sample-tiny-v1/golden-molecules-only/fovs/FOV_004/reference.tif",
+     "calibration_source": "grid"
+    },
+    "footprint_yx": [
+     [
+      11.750000000000002,
+      29.75
+     ],
+     [
+      12.250000000000002,
+      30.25
+     ]
+    ],
+    "centre_yx": [
+     20.75,
+     21.25
+    ],
+    "owns_points": true
+   }
+  ],
+  "counts": {
+   "cells": {
+    "input": 0,
+    "retained": 0,
+    "excluded": {
+     "not_owner": 0,
+     "fov_not_placed": 0,
+     "duplicate_observation": 0
+    }
+   },
+   "molecules": {
+    "input": 96,
+    "retained": 63,
+    "excluded": {
+     "cell_not_owner": 0,
+     "not_owner": 33,
+     "outside_grid": 0,
+     "fov_not_placed": 0,
+     "cell_duplicate_observation": 0
+    }
+   },
+   "flags": {
+    "fov_edge": null,
+    "z_edge": null,
+    "conflict": null,
+    "unclaimed": null,
+    "outside_owner_region": null,
+    "cell_unclaimed": null
+   }
+  },
+  "files": {},
+  "table_format": "csv"
+ },
+ "frame_id": "sample:sample",
+ "spatial_centroid": {
+  "columns": [
+   "sample_ownership_centroid_x",
+   "sample_ownership_centroid_y"
+  ],
+  "centroid": "territory",
+  "rows": {
+   "expanded": 0,
+   "original": 0
+  }
+ },
+ "spatial_unit": "\u00b5m"
+}

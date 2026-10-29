@@ -47,7 +47,8 @@ The decisions taken at the W-642 checkpoint (Jiahao, 2026-10-29) that this page 
 Evidence, kept with the run records outside the repository and cited by path: the two golden runs
 of invocation D and the comparison across environments (`results/golden/`), the prototype of the
 plan command and the worked example (`scripts/plan_prototype.py`, `results/example/`), the
-comparison with today's planners (`results/example/planner-comparison.json`), the checks of the
+comparison with today's planners (`results/example/planner-comparison.json`), the check of the
+manifests' resolved-file hashes (`results/example/resolved-hashes.csv`), the checks of the
 migration and traceability tables (`results/migration/`, `results/traceability/`), the worker
 notes (`notes.md`) and the run's manifest (`results/manifest.json`).
 
@@ -97,7 +98,14 @@ three more files whose bytes hold absolute paths: `placement.json` (the position
 each FOV's reference image as `file:<absolute path>`), `export.json` and `sample.h5ad` (its `uns`
 holds the export's records). Their digests, and the digests that the export record computes over
 them (`assembly_sha256`), are left out like W-642's varying files; their content is compared
-through the normalized records. The placement record's absolute paths are a discrepancy of the
+instead. The records are normalized as W-642's are. The AnnData file is read with `anndata` and its
+content recorded whole: `X`, every layer and every `obsm`, `varm`, `obsp` and `varp` entry (shape,
+dtype and values; integers exactly, floats with the float64 tolerance), `obs` and `var` with their
+names, columns and dtypes as the tables are recorded, and `uns` as a record whose JSON strings (the
+assembly record and the spatial centroid) are parsed and normalized as the export's records are:
+only the fields of where, when and with which software, the times, the work folder's absolute path
+and the digests of the files that hold such paths are left out (`extract_export`,
+`_anndata_values`). The placement record's absolute paths are a discrepancy of the
 kind O12 describes: under OC4 the stitch task records them relative to the input and output roots.
 The expected values are committed beside W-642's, in
 `src/python/test/data/expected/test_workflow_orchestration_golden_export/`; W-642's folder is
@@ -105,14 +113,18 @@ unchanged.
 
 **Two runs, and A to C across environments.** Each run generates the fixture, runs A, A2, B, C and
 D in the golden environment and extracts both sets of values (about 7 minutes and a peak RSS of
-about 360 MiB per run on one CPU). The comparison:
+about 360 MiB per run on one CPU). D was run twice more for the extraction of the AnnData content,
+each on a new fixture and extracted with the golden environment, which has `anndata` (about 5
+minutes and 360 MiB each); the committed values are those of the first of these. The comparison:
 
 * **D, run 2 against run 1** (same environment, every class, the file digests included): no
-  difference, over 218 values, 54 tables, the normalized records of the three routes and the
-  integer images. A negative control that changes four values, each by more than its tolerance (a
-  cell centroid of the per-FOV route's table by a relative 1e-6, the after-fusion route's retained
-  molecule count by 1, one pixel of a fused projection by 1, one file digest), is reported four
-  times and nothing else.
+  difference, over 251 values, 60 tables, the normalized records and AnnData `uns` of the three
+  routes, the integer images and the AnnData matrices. A negative control that changes five values,
+  each by more than its tolerance (a cell centroid of the per-FOV route's table by a relative 1e-6,
+  the after-fusion route's retained molecule count by 1, one pixel of a fused projection by 1, one
+  count of the per-FOV route's AnnData `X` by 1, one file digest), is reported five times and
+  nothing else. The rerun of D also reproduces every value of the first recording of D, before the
+  AnnData content was added (48 values, tables and records are new; nothing else differs).
 * **A to C, run 2 against run 1** (same environment): no difference, over 335 values and 29
   tables.
 * **A to C across environments**: W-642's committed values (Snakemake environment `starfinder-v9`,
@@ -128,7 +140,19 @@ about 360 MiB per run on one CPU). The comparison:
   are unchanged. Every float of the records and tables is bit-identical across the two
   environments on this fixture.
 
-% results/golden/comparison.json (compare.rerun-2), results/golden/candidates-diagnosis.json (diagnose_candidates,
+### Choice: the stage-record digests in a comparison across environments
+
+| Option | Cost | Consequence |
+| --- | --- | --- |
+| A. Skip the run records' `checkpoints.<stage>.sha256` across environments, as the file digests are skipped (`STAGE_RECORD_DIGEST`; recommended) | One rule in the comparison | The comparison test of task group 2 passes in another environment when every value agrees; within one environment the digests are still compared |
+| B. Keep them exact | None | The comparison fails in every other environment for a software version string (`detection_diagnostics.software.numpy`), which no tolerance covers |
+| C. Change W-642's normalization to drop them from the expected values | W-642's expected values change | Excluded by the issue: W-642's expected values stay unchanged |
+
+Recommendation: A.
+
+% results/golden/comparison.json (compare.rerun-3), results/golden/run<n>/expected-d-r1 and repair-1/ (the reruns of D:
+% workflow_d_run<n>.rerun-1, extract_d_run<n>.rerun-1, collect_d_run<n>), compare_d_first_vs_rerun,
+% results/golden/candidates-diagnosis.json (diagnose_candidates,
 % after workflow_v9 in ~/miniforge3/envs/starfinder-v9), results/golden/run1, run2 (commands, configurations, logs,
 % outputs.csv, jobs.json, expected/, expected-d/), results/golden/installed.json
 
@@ -210,8 +234,8 @@ writes nothing.
 | `segment` | `segment` | `FOV.load_reference_image`, `FOV.load_registered_round`, `FOV.segment` with checkpoints, for one run of the plan | the reference image, the saved forms its inputs name, the seeds' run, an imported label file | `fovs/<fov>/segmentation/<run>/` |
 | `assign` | `assign` | `load_molecules`, the saved segmentation runs, `assign_molecules`, `summarize_assignment`, `write_assignment` (as `_run_reads_assignment` of an assembly block does today) | `fovs/<fov>/molecules.csv`, the reference image, the codebook, the saved cell and nucleus runs | `fovs/<fov>/assignment/<name>/`, previews with `assignment.previews` |
 | `bigstitcher-macro` | `bigstitcher_macro` | `export_bigstitcher` on the sample's stitching images and position table | the stitching images, the reference grids, the position file | `<save dir>/<sample>/BigStitcher_macro.ijm`, `view_map.csv`, `tiles/` |
-| none (engine tool) | `bigstitcher_engine` | Fiji runs the macro (D3); the manifest gives the tool's command line | the macro, the tiles | `<save dir>/<sample>/dataset.xml` |
-| `bigstitcher-import` | `bigstitcher_import` | `_check_bigstitcher_engine`, `import_bigstitcher`, `save_placement` | `dataset.xml` (the engine task's, or a supplied one), the view map, the macro, the reference grids, the position file | `stitching/<sample>/placement.json`, `fovs.csv`, `links.csv` |
+| `bigstitcher-check` | `bigstitcher_engine` | First the engine runs Fiji on the macro from the task's `tool_command` (D3: the engine runs the tool, the package spawns none); then, in the same job, this command runs `_check_bigstitcher_engine` (today called by `_run_bigstitcher_engine`, `_snakemake.py:814`, after Fiji) | `dataset.xml`, the view map | the task record; a failed check removes `dataset.xml` and exits 1 (Fiji exits 0 when its macro fails) |
+| `bigstitcher-import` | `bigstitcher_import` | `_check_bigstitcher_engine`, `import_bigstitcher`, `save_placement` | `dataset.xml` and the view map: the macro and engine tasks' or, with `stitching.dataset_xml`, the supplied pair (`dataset_xml` and `view_map`); the macro when the macro task ran (`import_bigstitcher`'s `macro` is optional); the reference grids, the position file | `stitching/<sample>/placement.json`, `fovs.csv`, `links.csv` |
 | `stitch` | `stitch` | `Dataset.stitch` | the stitching images, the reference grids, the position file | `stitching/<sample>/placement.json`, `fovs.csv`, `links.csv` |
 | `export` | `export` | `Dataset.export`; with `export.previews`, the ownership previews | the placement and, by route, the saved assignments or the molecule tables and reference images, the fusion's source images | `export/<sample>/export.json` (which lists the folder's other files), `export/<sample>/previews/` with `export.previews` |
 | `report` | `report` | `Dataset.report` | the FOVs' `run.json` and checkpoint stages, the placement, `export.json`, the saved assignments | `report/<sample>/report.json` (which lists the folder's other files) |
@@ -219,14 +243,16 @@ writes nothing.
 
 Every command also writes its log, `workflow/logs/<task>.log`, and on success its task record,
 `workflow/tasks/<task>.json` ([logging and records](#logging-and-records)); `<task>` is the task
-id with `/` written `.`.
+id with `/` written `.`. Both are declared outputs of every task kind, so that an engine waits for
+them; the record lists and hashes every other declared output and the closed log, never itself
+([completion](#completion)).
 
 **Exit codes.** The package's console script exits 2 for a usage or input error and 1 for a stage
 failure (`starfinder/__main__.py`, `main`). The workflow commands keep that and add one code:
 
 | Code | Meaning | Engine |
 | --- | --- | --- |
-| 0 | The task succeeded: the API call returned, every declared output exists and is recorded in the task record, which says `succeeded` | Done |
+| 0 | The task succeeded: the API call returned, every declared output exists, and the task record, written last, says `succeeded` and lists every declared output but itself with its SHA-256 | Done |
 | 1 | The task failed: the API call raised, or the completion check found a declared output missing; the declared outputs this attempt wrote are removed | May retry from scratch (D8) |
 | 2 | Refused before any work: usage, an unknown task, a resolved configuration whose hash differs from the manifest's, a `needs` task without a succeeded record, a missing declared input, or a refused configuration (the plan) | Does not retry: the same call refuses again |
 | 3 | A resume refused: `resume_from_checkpoint` is on and the saved record does not match ([checkpoints and resume](#checkpoints-and-resume)) | Does not retry; the user decides |
@@ -345,7 +371,7 @@ strings, `NaN` and infinities refused.
 `configuration` without `execution`, `root_input_path` and `root_output_path`: the settings that
 can change a result. A change of threads, memory, container or retries, or a move of the trees,
 keeps it; a change of any scientific setting changes it. The manifest also records the SHA-256 of
-the whole file, which a task checks.
+the whole file as written (its bytes, the final newline included), which a task checks.
 
 ### Choice: the serialization and the scope of the hash
 
@@ -378,7 +404,7 @@ Recommendation: A.
 | --- | --- |
 | `format` | `starfinder.workflow.manifest/1` |
 | `backend` | `python` |
-| `configuration` | `path` (`workflow/resolved.json`), `sha256` (of the file), `configuration_sha256` (the resolved-configuration hash) |
+| `configuration` | `path` (`workflow/resolved.json`), `sha256` (of the file's bytes as written, the final newline included), `configuration_sha256` (the resolved-configuration hash) |
 | `roots` | `input` and `output`, absolute |
 | `membership` | `fovs` (in the order of `fovs.csv`), `samples` (each sample's FOVs), `selected_fovs` |
 | `inputs` | `files` (`fovs.csv`, the codebook, the supplied files) and `images` (per FOV, round and channel label), each with `path`, `bytes`, `mtime_ns` |
@@ -391,7 +417,8 @@ Recommendation: A.
 | `tasks[].inputs` | Declared inputs: paths relative to the output root, or `input:<path>` relative to the input root, or absolute for a file outside both |
 | `tasks[].outputs` | Declared outputs, relative to the output root (a folder ends in `/`) |
 | `tasks[].record`, `tasks[].log` | `workflow/tasks/<task>.json`, `workflow/logs/<task>.log` |
-| `tasks[].command` | The command line, `["starfinder", "workflow", <command>, "--manifest", <the manifest's absolute path>, "--task", <id>]`, to which the engine adds its context; for `bigstitcher_engine`, the tool's command line with the placeholder `{fiji}`, which the engine replaces by `execution.tool.path` |
+| `tasks[].command` | The command line, `["starfinder", "workflow", <command>, "--manifest", <the manifest's absolute path>, "--task", <id>]`, to which the engine adds its context; for `bigstitcher_engine` it is `bigstitcher-check`, which the engine runs after the tool |
+| `tasks[].tool_command` | `bigstitcher_engine` only: the tool's command line, with the placeholder `{fiji}`, which the engine replaces by `execution.tool.path` and runs before `command` in the same job |
 | `tasks[].execution` | `threads`, `memory_mb`, `runtime_min`, `gpu`, `container` and, for the Fiji task, `tool`; passed through from the execution section, never read by the command |
 
 The manifest is regenerated by every run of the plan command; the plan writes the file only when its
@@ -459,6 +486,8 @@ Each data product has one producer; each consumer `needs` the producer's task:
 | A prepared image (`other_rounds/<name>/`: `reference_stain` and each other round) | `morphology` | `segment` (inputs of other rounds, and the grid without a processing block), `stitch` with `input: reference_stain`, `export` fusing `reference_stain` |
 | A segmentation run (`segmentation/<run>/`) | `segment` (after the run its `seeds` name) | `assign` (`cells`, `nuclei`) |
 | A saved assignment (`assignment/<name>/`) | `assign` | `export` on the route per FOV; `report` |
+| A sample's BigStitcher macro, tiles and view map | `bigstitcher_macro`; none with `stitching.dataset_xml`, whose `view_map` is an input | `bigstitcher_engine` (the macro and tiles), `bigstitcher_import` (the view map, and the macro when it ran) |
+| A sample's `dataset.xml` | `bigstitcher_engine` (Fiji, then `bigstitcher-check`); none with `stitching.dataset_xml` (an input) | `bigstitcher_import` |
 | A sample's placement (`stitching/<sample>/`) | `stitch` or `bigstitcher_import` | `export`, `report` |
 | A sample's export (`export/<sample>/`) | `export` | `report` |
 | A sample's report | `report` | `compare` |
@@ -551,7 +580,7 @@ execution:
 | `morphology` | `rounds` (default every other round), `recipe` (a registration recipe; default one translation step on the shared stain, `MorphologyConfig`), `channel_images` (null; or `{projection: null or max}` to write `images/<round>/<label>/<fov>.tif` as today) | `morphology` |
 | `segmentation` | As today: `device`, `runs` | `segment` per (FOV, run) |
 | `assignment` | As today: the `AssignmentConfig` fields, `cells`, `nuclei`, `name` (default `default`), `population`; and `previews` (P5) | `assign` per FOV |
-| `stitching` | As today; and `dataset_xml` (a supplied file with `{sample}`, which skips the macro and the Fiji task, D3) | `stitch`, or `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import` |
+| `stitching` | As today; and `dataset_xml` with `view_map` (a supplied BigStitcher result and its view map, each a file pattern with `{sample}`, which skip the macro and the Fiji task, D3) | `stitch`, or `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import` |
 | `assembly`, `export` | As today; `export.previews` (P5) | `export` per sample |
 | `report` | As today | `report` per sample, `compare` |
 | `execution` | `defaults` and `tasks.<kind>` (`threads`, `memory_mb`, `runtime_min`, `gpu`), `container`, `fiji`, `resume_from_checkpoint`, `log_level` | none; passed through to each task's `execution` |
@@ -597,7 +626,7 @@ Recommendation: A; `execution` is outside the configuration hash.
 | --- | --- | --- | --- |
 | The previews (P5) | A. `assignment.previews` and `export.previews` (recommended) | Two keys | Each command reads its own block; one can be on without the other |
 | | B. One top-level `previews` | One key | A key outside the blocks that two commands read |
-| The supplied BigStitcher result (D3) | A. `stitching.dataset_xml` with `{sample}` (recommended) | One key | The method stays `bigstitcher`, whose config the import reads; the plan drops the macro and Fiji tasks |
+| The supplied BigStitcher result (D3) | A. `stitching.dataset_xml` with `{sample}` (recommended), with `stitching.view_map` ([its choice](#choice-the-view-map-of-a-supplied-datasetxml)) | One key, two with the view map | The method stays `bigstitcher`, whose config the import reads; the plan drops the macro and Fiji tasks |
 | | B. A method `bigstitcher_import` | A method name outside `STITCHING_METHODS` | Two names for one method config |
 | Verified resume (D8) | A. `execution.resume_from_checkpoint` (recommended) | None | Resuming never changes a result, so it stays outside the configuration hash |
 | | B. `processing.resume_from_checkpoint` | None | Turning resume on would change the hash that resume compares |
@@ -813,7 +842,7 @@ guide's table (written when the implementation lands) is generated from this one
 
 New keys, which no current key maps to: `processing.mode`, `processing.tiled` (W-644),
 `morphology` and its `rounds`, `recipe`, `channel_images`, `assignment.previews`,
-`export.previews`, `stitching.dataset_xml`, and `execution` with `defaults`, `tasks`, `container`,
+`export.previews`, `stitching.dataset_xml`, `stitching.view_map`, and `execution` with `defaults`, `tasks`, `container`,
 `fiji`, `resume_from_checkpoint` and `log_level`.
 
 ## Declared outputs
@@ -835,12 +864,12 @@ The files each task kind declares, resolved through `_layout`, by route and opti
 | `segment` | `segmentation_dir/<run>/labels.tif`, `segmentation.json`, and `input.ome.tif` except for an import | — |
 | `assign` | `assignment_dir/<name>/molecules.csv`, `cells.csv`, `counts.csv`, `assignment.json` (Parquet with `table_format: parquet`) | `nuclei.csv` with `nuclei`; `territories.tif` with `expansion`; `fov_previews_dir` with `assignment.previews` |
 | `bigstitcher_macro` | `<save dir>/<sample>/BigStitcher_macro.ijm`, `view_map.csv`, `tiles/` | Not with `stitching.dataset_xml` |
-| `bigstitcher_engine` | `<save dir>/<sample>/dataset.xml` | Not with `stitching.dataset_xml` |
+| `bigstitcher_engine` | `<save dir>/<sample>/dataset.xml` (Fiji's), and the task record that `bigstitcher-check` writes | Not with `stitching.dataset_xml` |
 | `bigstitcher_import`, `stitch` | `stitching_dir/placement.json`, `fovs.csv`, `links.csv` | — |
 | `export` | `export_dir/export.json` (it lists the folder's files: the tables, `sample.h5ad`, the fused images, the label images and, after fusion, `segmentation_<run>.ome.tif`) | `export_previews_dir` with `export.previews` on the route per FOV with `assemble` |
 | `report` | `report_dir/report.json` (it lists the folder's files) | — |
 | `compare` | `report_root/samples.csv`, `report_root/index.html` | — |
-| every kind | `workflow/tasks/<task>.json`, `workflow/logs/<task>.log` | — |
+| every kind | `workflow/tasks/<task>.json` (the task record: declared, never listed in itself), `workflow/logs/<task>.log` (closed before the record is written, then listed in it with its SHA-256) | — |
 
 `export.json` and `report.json` stay the one declared file of their folders, as today
 (`_export_sample_files`, `_snakemake.py:834`; `_report_sample_files`, `:959`): which parts an
@@ -879,20 +908,28 @@ the fusion's source images without declaring them (`_export_sample_files` declar
 route after fusion only), and the reference stain's saved form is read and not declared by the
 export and the stitching with `input: reference_stain`.
 
-% results/example/planner-comparison.json and .md (step compare_planners.rerun-6), with each variant's
+% results/example/planner-comparison.json and .md (step compare_planners.rerun-7), with each variant's
 % snakemake-detailed-summary.tsv (Snakemake 9.15.0 of the golden scratch environment, --detailed-summary --forceall all)
 
 ## Completion
 
-**The success rule (D8).** A task succeeded when its task record says `status: succeeded` and lists
-every declared output in `outputs`, each with its path and SHA-256; for the `fov` and `tile_merge`
-kinds, `run.json` also says `succeeded` and lists the outputs written after the processing, as
-version 2 already records them (`checkpoints.md`, "run.json"; `FOV._record_output`,
-`dataset/fov.py`). Otherwise the command exits non-zero.
+**The success rule (D8).** A task succeeded when its task record says `status: succeeded` and its
+`outputs` list every declared output of the task except the record itself, each with its path and
+SHA-256. The record cannot hold its own hash, so it never lists itself: its presence with `status:
+succeeded` is the completion token, and the engine sees it as a declared output. The log is the one
+other declared output that the command writes while it runs: the command writes its last line, closes
+the log's handler, hashes the closed file, lists it in `outputs` with that SHA-256, and only then
+writes the record; nothing is written to the log afterwards. For the `fov` and `tile_merge` kinds,
+`run.json` also says `succeeded` and lists the outputs written after the processing, as version 2
+already records them (`checkpoints.md`, "run.json"; `FOV._record_output`, `dataset/fov.py`).
+Otherwise the command exits non-zero.
 
-**On failure.** The command catches the exception, writes the traceback to its log, removes the
-declared outputs this attempt wrote, writes `workflow/tasks/<task>.failed.json` (the failed record,
-not a declared output, kept for diagnosis), and exits 1. Today a rule that raises leaves its files,
+**On failure.** The command catches the exception, writes the traceback to its log, closes the log,
+removes the declared outputs this attempt wrote (the log excepted), and writes
+`workflow/tasks/<task>.failed.json`: the failed record, not a declared output, kept for diagnosis,
+with `status: failed`, the error, the paths it removed, and the closed log with its SHA-256. It then
+exits 1. The task record of an earlier success is removed first, at the start of every attempt, so a
+failed attempt never leaves a `succeeded` record behind. Today a rule that raises leaves its files,
 and Snakemake removes the declared ones and keeps the undeclared (`stitching/<sample>/fovs.csv`,
 the morphology images).
 
@@ -962,6 +999,8 @@ workflow.configuration_sha256 is sha256:3f1c… (recorded), sha256:9a0e… (now)
 sha256 differs; rerun without resume_from_checkpoint, or restore the configuration and inputs it was made with
 ```
 
+The check reads `run.json`, never the task record or the log, so the record's and the log's own
+hashes play no part in a resume; a resumed attempt writes a new log and, on success, a new record.
 Nothing verifies a resume against `run.json` today (`checkpoints.md`, "Reload and continue").
 Resume applies to the `fov` kind (and to the tiled global task, by the tiled record); every other
 kind reruns from scratch.
@@ -978,7 +1017,8 @@ Recommendation: A.
 ## Logging and records
 
 **The per-task log.** `workflow/logs/<task>.log` (`_layout.task_log`), one per task, rewritten by
-each attempt with the attempt number in its first line. The command attaches a file handler to the
+each attempt with the attempt number in its first line, and closed by the command before it writes
+the task record, which lists it with its SHA-256 ([completion](#completion)). The command attaches a file handler to the
 `starfinder` logger, which has none today (`dataset/_logging.py`; `design/notes/workflow-history.md`,
 "Logs, time and memory"), at level `INFO` (`execution.log_level` sets `DEBUG`), and captures Python warnings.
 One line per record:
@@ -993,7 +1033,8 @@ and stderr) stays the engine's.
 
 **The task record**, `workflow/tasks/<task>.json`: `format` (`starfinder.workflow.task/1`), `id`,
 `kind`, `identity`, `status`, `started_at`, `ended_at`, `outputs` (path and SHA-256 of each declared
-output), and the section `workflow` below.
+output except the record itself; the log as closed before the record is written), and the section
+`workflow` below.
 
 **The `run.json` additions (D8)**, a new key `workflow` of the `fov` and `tile_merge` records, also
 written into every task record:
@@ -1118,8 +1159,8 @@ package. The engine reads, for every task: `id`, `kind`, `needs`, `inputs`, `out
 | `segment` | the reference image or saved forms, the seeds' run, the import file, the run | `inputs`, `identity.run`; the resolved configuration | a GPU when `execution.gpu` says so |
 | `assign` | the molecules, the reference image, the codebook, the saved runs, the block | `inputs`; the resolved configuration | nothing |
 | `bigstitcher_macro` | the stitching images, the grids, the position file, the block | `inputs`; the resolved configuration | nothing |
-| `bigstitcher_engine` | the macro, the tiles | `inputs`; the command line in `command` with `execution.tool` | `{fiji}` replaced by `execution.tool.path`; Snakemake only (D3) |
-| `bigstitcher_import`, `stitch` | `dataset.xml`, the view map, the macro, the grids, the position file, the block | `inputs`; the resolved configuration | nothing |
+| `bigstitcher_engine` | the macro and the tiles (Fiji); `dataset.xml` and the view map (`bigstitcher-check`) | `inputs`; `tool_command` with `execution.tool`, then `command` | `{fiji}` replaced by `execution.tool.path`; Snakemake only (D3) |
+| `bigstitcher_import`, `stitch` | `dataset.xml` and the view map (the macro and engine tasks', or the supplied pair), the macro when it ran, the grids, the position file, the block | `inputs`; the resolved configuration | nothing |
 | `export` | the placement, the route's per-FOV files, the fusion's sources, the blocks | `inputs`; the resolved configuration | a GPU when `execution.gpu` says so (the route after fusion on `cuda`) |
 | `report` | the run records and stages, the placement, `export.json`, the assignments, the block | `inputs`; the resolved configuration | nothing |
 | `compare` | every `report.json` | `inputs` | nothing |
@@ -1135,8 +1176,8 @@ manifest" for every kind; a cell that is not "manifest" names the exception:
 | `morphology` | manifest | manifest | resolved configuration | manifest | manifest | none |
 | `segment` | manifest | manifest | resolved configuration | manifest (`gpu` from the run's `device`) | manifest | none |
 | `assign` | manifest | manifest | resolved configuration | manifest | manifest | none |
-| `bigstitcher_macro`, `bigstitcher_import`, `stitch` | manifest | manifest | resolved configuration | manifest | manifest | none |
-| `bigstitcher_engine` | manifest | manifest | the macro the `bigstitcher_macro` task wrote | manifest | manifest, with `{fiji}` from `execution.tool.path` | none |
+| `bigstitcher_macro`, `bigstitcher_import`, `stitch` | manifest (on the supplied route the view map is an input of the manifest) | manifest | resolved configuration | manifest | manifest | none |
+| `bigstitcher_engine` | manifest | manifest | the macro the `bigstitcher_macro` task wrote | manifest | manifest: `tool_command` (with `{fiji}` from `execution.tool.path`), then `command` (`bigstitcher-check`, which writes the record) | none |
 | `export`, `report`, `compare` | manifest | manifest | resolved configuration | manifest | manifest | none |
 
 The engine's context is passed as four arguments and only recorded. The prototype manifests of the
@@ -1184,8 +1225,8 @@ it, or the MATLAB legacy module or frozen MATLAB workflow (D7):
 | `_read_view_map` | `_snakemake.py:702` | runner | The `bigstitcher-import` command |
 | `_run_stitching` | `_snakemake.py:707` | runner | The `stitch` command; The `bigstitcher-import` command (D3) |
 | `_run_bigstitcher_macro` | `_snakemake.py:756` | runner | The `bigstitcher-macro` command (D3) |
-| `_check_bigstitcher_engine` | `_snakemake.py:781` | validation | The `bigstitcher-import` command: it checks `dataset.xml` first (D3) |
-| `_run_bigstitcher_engine` | `_snakemake.py:814` | runner | The task kind `bigstitcher_engine` of the manifest: the engine runs `execution.fiji` (D3); the check moves to `bigstitcher-import` |
+| `_check_bigstitcher_engine` | `_snakemake.py:781` | validation | The `bigstitcher-check` command after the Fiji tool, and the `bigstitcher-import` command, which checks `dataset.xml` first (D3) |
+| `_run_bigstitcher_engine` | `_snakemake.py:814` | runner | The task kind `bigstitcher_engine` of the manifest: the engine runs `execution.fiji` from `tool_command` (D3), then the `bigstitcher-check` command checks `dataset.xml` and writes the task record |
 | `_export_sample_files` | `_snakemake.py:834` | planner | The manifest: the declared inputs and outputs of `export`, by route |
 | `_export_preview_outputs` | `_snakemake.py:873` | planner | The manifest: the declared outputs of `export` (`export.previews`, P5) |
 | `_run_export` | `_snakemake.py:888` | runner | The `export` command |
@@ -1274,13 +1315,15 @@ The manifest of the synthetic fixture W-642 used (`sample-tiny-v1`, seed 42: one
 FOVs, four rounds of four channels, the reference stain `ch04` and the additional round
 `flamingo`), produced by the prototype of the plan command (`scripts/plan_prototype.py`, scratch
 code of the run directory that calls `_layout`, `_membership` and the block translators). Five
-variants cover every task kind and each export route; two more show the refusals:
+variants cover every task kind and each export route, a sixth the supplied BigStitcher route, and
+two more show the refusals:
 
 | Variant | The blocks | Tasks | Kinds |
 | --- | --- | --- | --- |
 | `per-fov` | `processing` (direct, one `percentile_normalization` step with `fit: supplied`), `morphology`, `segmentation` (two imported runs, `cell` and `nucleus`), `assignment` (with nuclei and previews), `stitching` (`multiview_stitcher`), `assembly`, `export` (`route: per_fov`, fusing `reference_merged` and `reference_stain`, previews), `report` | 29 | `summarize` 4, `merge` 1, `fov` 4, `morphology` 4, `segment` 8, `assign` 4, `stitch` 1, `export` 1, `report` 1, `compare` 1 |
 | `after-fusion` | `processing` (`mode: tiled`, four tiles as a placeholder for W-644), `morphology`, `stitching` (`bigstitcher` on a regular grid), `assembly`, `export` (the default route of a projection, one imported cell run), `report` | 34 | `tile_global` 4, `tile` 16, `tile_merge` 4, `morphology` 4, `bigstitcher_macro` 1, `bigstitcher_engine` 1, `bigstitcher_import` 1, `export` 1, `report` 1, `compare` 1 |
 | `molecules-only` | `processing`, `stitching`, `assembly` (`assignment: null`), `export`, `report` | 8 | `fov` 4, `stitch` 1, `export` 1, `report` 1, `compare` 1 |
+| `supplied-xml` (D3) | `processing`, `stitching` (`bigstitcher` with a supplied `dataset_xml` and `view_map`), `assembly` (`assignment: null`), `export`, `report` | 8 | `fov` 4, `bigstitcher_import` 1 (its inputs the two supplied files; no macro or Fiji task), `export` 1, `report` 1, `compare` 1 |
 | `morphology-only` (D4) | `morphology`, `segmentation` (a StarDist nucleus run on the reference stain, `device: cuda`) | 8 | `morphology` 4, `segment` 4 (each `gpu: true`, needing only its FOV's `morphology`) |
 | `reference-only` (D4) | `processing` without `spot_finding` (the reference image), `morphology`, `segmentation` (an imported nucleus run and a seeded watershed on the composite of the reference stain and the reference merged image) | 16 | `fov` 4, `morphology` 4, `segment` 8 |
 | `refused-assignment` | `morphology`, `segmentation`, `assignment`, no `processing` | — | Refused, exit 2: "the assignment block assigns each FOV's molecules, which only the processing block produces (with spot_finding, reads_extraction and reads_filtration): add a processing block" |
@@ -1294,7 +1337,14 @@ barrier), the four `fov` tasks, the `morphology` and `segment` tasks, the four `
 
 % results/example/configs/ (each variant in the proposed shape, and current-<variant>.yaml in today's dialect for
 % the three variants it can express), results/example/<variant>/resolved.json, resolved.sha256 and manifest.json
-% (steps plan_<variant>.rerun-5)
+% (steps plan_<variant>.rerun-6 and plan_supplied-xml); the independent check of each manifest's hashes:
+% results/example/resolved-hashes.csv (step example_hashes)
+
+Each manifest's `configuration.sha256` equals an independent SHA-256 of its saved `resolved.json`
+(the bytes as written, the final newline included), and its `configuration_sha256` equals the hash
+recomputed from the saved file, for all six variants (`results/example/resolved-hashes.csv`). The
+first prototype hashed the serialization before it appended the final newline, so the earlier
+manifests failed the contract's own check; it now hashes exactly the bytes it writes.
 
 Four tasks from the variants' manifests (`results/example/<variant>/manifest.json`), shortened where
 marked `…`; each manifest holds every field for every task:
@@ -1333,8 +1383,10 @@ marked `…`; each manifest holds every field for every task:
  "needs": ["bigstitcher_macro/sample"],
  "inputs": ["<save dir>/sample/BigStitcher_macro.ijm", "<save dir>/sample/tiles/", "<save dir>/sample/view_map.csv"],
  "outputs": ["<save dir>/sample/dataset.xml"],
- "command": ["{fiji}", "-Djava.io.tmpdir=<save dir>/sample", "--ij2", "--headless", "--run",
-             "<save dir>/sample/BigStitcher_macro.ijm"],
+ "tool_command": ["{fiji}", "-Djava.io.tmpdir=<save dir>/sample", "--ij2", "--headless", "--run",
+                  "<save dir>/sample/BigStitcher_macro.ijm"],
+ "command": ["starfinder", "workflow", "bigstitcher-check", "--manifest", "<output root>/workflow/manifest.json",
+             "--task", "bigstitcher_engine/sample"],
  "execution": {"threads": 4, "memory_mb": 8000, "runtime_min": 30, "gpu": false, "container": null,
                "tool": {"name": "fiji", "path": "/stanley/WangLab/Tools/Fiji.app/ImageJ-linux64"}}}
 ```
@@ -1347,7 +1399,9 @@ modification time; the stain `round1/FOV_001/ch04.tif` under the image `referenc
 `morphology` task reads and the `fov` task does not) and `export_route` `per_fov`. The `<save dir>`
 is `stitching.bigstitcher_save_dir`, outside the output root, so its paths are absolute; the
 `{fiji}` placeholder is the one substitution an engine makes, from `execution.tool.path`
-(`_run_bigstitcher_engine`, `_snakemake.py:814`, builds the same command line today).
+(`_run_bigstitcher_engine`, `_snakemake.py:814`, builds the same command line today); the engine
+runs `tool_command`, then `command`, whose `bigstitcher-check` writes the task record that
+`bigstitcher_import` needs.
 
 ## The exception of the golden comparison
 
@@ -1380,6 +1434,16 @@ Each statement of `design/specs/workflows.md`, `workflow-configuration.md`,
 with the old and the proposed wording. The records are not edited by this batch; the
 implementation issue that lands each part edits them.
 
+### Choice: when the changed statements take effect
+
+| Option | Cost | Consequence |
+| --- | --- | --- |
+| A. Accept the proposed wording now, as listed, and apply each row with the implementation issue that lands its part (recommended) | The gate reviews 48 rows once | Each record changes together with the code it describes, as `design/README.md` asks ("update the record and the guide together"); the wording is settled before implementation |
+| B. Accept the wording per record, when the implementation issue that lands that part is reviewed | Five later reviews | The wording can follow the implementation's details; the gate leaves the five records' future open |
+| C. Keep today's wording until the implementation, and write new wording then | None now | The records describe today's workflow until then, as now; the implementation issues write the wording without this list |
+
+Recommendation: A.
+
 (orchestration-changed-statements)=
 
 | Record and place | Old wording | Proposed wording | Why |
@@ -1411,7 +1475,7 @@ implementation issue that lands each part edits them.
 | `workflow-configuration.md:270` | `checkpoints`: "absent or null is `{stages: []}`, `run.json` alone" | `processing.checkpoints`: "a list of stages, default `[candidates, pre_qc]`; the plan adds `registered` when a segmentation input reads a sequencing round" | D8 (O5) |
 | `workflow-configuration.md:296-301` | "Each Python processing rule runs its FOV (or subtile) with `CheckpointConfig(stages=<stages>, overwrite=True)`"; "absent or null it is `{stages: []}`, which writes `run.json` alone" | "Each `fov` task runs its FOV with `CheckpointConfig(stages=<processing.checkpoints>, overwrite=True)`; the default stages are `candidates` and `pre_qc`" | D8 |
 | `workflow-configuration.md:325` | "the schema refuses it with `backend: matlab` or without `backend` (whose default is `matlab`)" | "the schema refuses it with `backend: matlab`" | D7 |
-| `workflow-configuration.md:616-617` | "`fiji_path` is read by `bigstitcher_engine` when it runs, not when the rules are parsed" | "`execution.fiji` is the tool of the `bigstitcher_engine` task, which only Snakemake runs; Nextflow refuses `method: bigstitcher` without `stitching.dataset_xml`" | D3 |
+| `workflow-configuration.md:616-617` | "`fiji_path` is read by `bigstitcher_engine` when it runs, not when the rules are parsed" | "`execution.fiji` is the tool of the `bigstitcher_engine` task, which only Snakemake runs, followed in the same job by `bigstitcher-check`; Nextflow refuses `method: bigstitcher` without `stitching.dataset_xml`" | D3 |
 | `workflow-configuration.md:624-628` | A Python configuration that enables a legacy sample rule without its block "raises when the rule files are parsed, naming the blocks to add" | "a Python configuration has no rule names: the plan refuses `rules`, naming the blocks" | D4, D7 |
 | `workflow-configuration.md:711-713` | "The blocks raise naming the key when the rule files are parsed; so does a route the configuration alone refuses" | "The plan refuses them, naming the key; so does a route the configuration alone refuses" | D2 |
 | `workflow-configuration.md:797-798` | "An unknown key, at any level, raises `ValueError` naming it when the rule files are parsed." | "... when the plan runs." | D2 |
@@ -1427,7 +1491,7 @@ implementation issue that lands each part edits them.
 | `broad-uger.md:46-48` | "conda deployment"; "three retries" | "the image of the lock; retries are the engine's, of exit status 1 only" | D8, D9 (O22) |
 | `broad-uger.md:56-57` | "Logs use a rule log, `params.uger_log`, or `~/snakemake-logs/{rule}/`." | "Each task writes `workflow/logs/<task>.log`; the job's standard output and error stay the profile's" | D8 (O22) |
 | `checkpoints.md:524-526` | "Resuming is always an explicit call; there is no scheduler. Nothing verifies a resume against `run.json` today: verified resume, scheduling and job completion belong to workflow orchestration." | "In the package, resuming is an explicit call. The workflow's `fov` task verifies a resume against `run.json` version 2 when `execution.resume_from_checkpoint` is on, and refuses on a mismatch (exit 3)." | D8 |
-| `checkpoints.md:556-561` | "Two meanings, kept apart": "`status` is the outcome of `FOV.run`'s processing" and `outputs` the files written after it | Adds: "A workflow task succeeded only when its record says `succeeded` and every declared output is recorded" | D8 |
+| `checkpoints.md:556-561` | "Two meanings, kept apart": "`status` is the outcome of `FOV.run`'s processing" and `outputs` the files written after it | Adds: "A workflow task succeeded only when its record says `succeeded` and lists every other declared output with its SHA-256 (the record never lists itself; the log is closed before the record is written)" | D8 |
 | `checkpoints.md:573` | `workflow_config`: "`{path, sha256}` of the workflow configuration file a workflow rule ran with" (the top-level `config_path`) | "... of the resolved configuration a workflow task ran with (`workflow/resolved.json`)" | D2, D8 |
 | `checkpoints.md:585` | "The declared outputs of the Python processing rules are all recorded here" | "The declared outputs of the `fov` and `tile_merge` tasks are all recorded here" | D2, D5 |
 | `checkpoints.md:563-586` | The field table | Adds the row `workflow` ([logging and records](#logging-and-records)) | D8 |
@@ -1441,6 +1505,38 @@ implementation issue that lands each part edits them.
 | --- | --- | --- |
 | A. `fovs/<fov>/molecules.csv` (`load_molecules`), the saved runs and `assign_molecules`, as `_run_reads_assignment` does today for an assembly block (recommended) | The command composes three public calls | It reads the `fov` task's declared output; the golden assignments of W-642's invocation B are produced this way |
 | B. The FOV restored from its checkpoints (`load_checkpoint("candidates")`, `"pre_qc"`) and filtered again, then `FOV.assign_molecules` | Filtering runs again; the stages must exist | The assign task depends on checkpoint stages instead of the molecule table |
+
+Recommendation: A.
+
+### Choice: the view map of a supplied `dataset.xml`
+
+D3 settles that Nextflow imports a supplied `dataset.xml` and runs no Fiji; it does not say where the
+import's view map comes from. `import_bigstitcher` requires it (`view_map`,
+`stitching/_bigstitcher.py`, `import_bigstitcher`), and today's workflow has no supplied route:
+`stitch_sample` of method `bigstitcher` always takes the view map and the macro from
+`bigstitcher_macro_sample` (`workflow/rules/stitching-py.smk:37-79`).
+
+| Option | Cost | Consequence |
+| --- | --- | --- |
+| A. A supplied view map beside the XML, `stitching.view_map` with `{sample}` (recommended) | One more key and file per sample | The pairing of views and FOVs is the one of the macro run that made the XML (a Snakemake run with Fiji, or a manual Fiji run of the macro task's output); the supplied route writes no tiles; the import checks the map against the table as today |
+| B. The macro task still runs; only the Fiji task is skipped | The tiles are written again, for nothing | The view map is the one this plan's table gives; it pairs the supplied XML correctly only if that XML was made from the same grid, FOVs and padding, which nothing checks before the import |
+| C. The import derives the view map from the table and grids (an API addition, the view map of `export_bigstitcher` without its tiles) | An API change | As B without the tiles; the same unchecked assumption |
+
+Recommendation: A.
+
+### Choice: the record of the Fiji task
+
+The import `needs` the engine task, and every `needs` must have a task record that says `succeeded`;
+the engine runs Fiji, which writes no record. D3 keeps the BigStitcher engine task in Snakemake
+"through the CLI": Python writes the macro and imports and checks `dataset.xml`, and the engine runs
+`fiji_path`; the package spawns no other environment (the boundary of 2026-09-28). Today `_run_bigstitcher_engine` (`_snakemake.py:814`) starts Fiji and then
+checks `dataset.xml` (`_check_bigstitcher_engine`), because Fiji exits 0 when its macro fails.
+
+| Option | Cost | Consequence |
+| --- | --- | --- |
+| A. The engine runs `tool_command`, then, in the same job, `starfinder workflow bigstitcher-check`, which checks `dataset.xml` against the view map and writes the record (recommended) | One command; two command lines in one job | The check that today follows Fiji stays right after it, so a failed macro fails its own task and the engine retries it; one completion rule for every kind; no engine file imports the package (the check is a CLI command) |
+| B. A `starfinder workflow` command that starts Fiji from the manifest's command line and writes the record | One command | The package would spawn Fiji, which the boundary and D3 exclude |
+| C. The import does not require a record from a tool task and checks `dataset.xml` itself | A second completion rule | A failed macro (exit 0) passes its own task and fails the import, so the engine retries the import, not Fiji |
 
 Recommendation: A.
 

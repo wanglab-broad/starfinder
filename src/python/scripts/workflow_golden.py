@@ -38,8 +38,9 @@ Subcommands, each run in its own process:
     ``WORK/commands-d.json``.
 ``extract-export WORK OUT`` (W-643)
     The expected values of invocation D in the layout of ``extract``: the records, tables and images of each route's
-    ``stitching/``, ``export/`` and ``report/`` folders and the import file; its per-FOV outputs come from the
-    configurations of A and B, which pin them.
+    ``stitching/``, ``export/`` and ``report/`` folders, the content of each ``sample.h5ad`` (X, layers, obsm, obs,
+    var and the normalized uns) and the import file; its per-FOV outputs come from the configurations of A and B,
+    which pin them. Run with an environment that has anndata.
 ``compare EXPECTED ACTUAL``
     Compare two ``extract`` (or two ``extract-export``) folders; print the differences and exit 1 when there is one.
 
@@ -538,16 +539,109 @@ def _image_values(values, arrays, name, path):
         arrays[name] = pixels
 
 
+def _frame_table(frame):
+    """A DataFrame of an AnnData (obs or var) as an expected table: its index as the first column ``_index``, then
+    its columns as ``_table`` types them (a categorical as strings, an integer column with a missing value as float64,
+    a boolean column with a missing value as strings)."""
+    out = {"_index": pd.array([str(v) for v in frame.index], dtype="string")}
+    for column in frame.columns:
+        series = frame[column]
+        if isinstance(series.dtype, pd.CategoricalDtype):
+            series = series.astype(object)
+        missing = bool(series.isna().any())
+        kind = series.dtype.kind
+        if kind in "iu":
+            out[str(column)] = series.astype("float64" if missing else "int64")
+        elif kind == "f":
+            out[str(column)] = series.astype("float64")
+        elif kind == "b" and not missing:
+            out[str(column)] = series.astype(bool)
+        else:
+            out[str(column)] = pd.array([None if pd.isna(v) else str(v) for v in series], dtype="string")
+    return pd.DataFrame(out)
+
+
+def _matrix_values(values, arrays, name, matrix):
+    """A matrix of an AnnData (X, a layer, an obsm, varm or obsp entry): shape, dtype and format in ``values``, the
+    matrix whole in ``arrays`` (a sparse one as its ``data``, ``indices`` and ``indptr``)."""
+    import scipy.sparse
+    if scipy.sparse.issparse(matrix):
+        matrix = scipy.sparse.csr_matrix(matrix)
+        values[f"{name}:format"] = {"value": "csr", "compare": "exact"}
+        for part in ("data", "indices", "indptr"):
+            arrays[f"{name}/{part}"] = np.asarray(getattr(matrix, part))
+    elif isinstance(matrix, pd.DataFrame):
+        values[f"{name}:format"] = {"value": "dataframe", "compare": "exact"}
+        return _frame_table(matrix)
+    else:
+        matrix = np.asarray(matrix)
+        values[f"{name}:format"] = {"value": "dense", "compare": "exact"}
+        arrays[name] = matrix
+    values[f"{name}:shape"] = {"value": [int(n) for n in matrix.shape], "compare": "exact"}
+    values[f"{name}:dtype"] = {"value": str(matrix.dtype), "compare": "exact"}
+    return None
+
+
+def _uns_value(value):
+    """An ``uns`` entry as JSON values: a string that holds a JSON object or list (the export's records) parsed, arrays
+    as lists, nested mappings recursively."""
+    if isinstance(value, str):
+        text = value.strip()
+        if text[:1] in "{[":
+            try:
+                return json.loads(text)
+            except ValueError:
+                return value
+        return value
+    if isinstance(value, dict) or hasattr(value, "items"):
+        return {str(k): _uns_value(v) for k, v in value.items()}
+    if isinstance(value, np.ndarray):
+        return [_uns_value(v) for v in value.tolist()]
+    if isinstance(value, (list, tuple)):
+        return [_uns_value(v) for v in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def _anndata_values(path, name, values, arrays, frames, records_dir, work):
+    """The content of a ``sample.h5ad`` (W-643, repair 1), read with anndata: ``X``, every layer and every obsm, varm
+    and obsp entry whole (``_matrix_values``); ``obs`` and ``var`` as tables (``_frame_table``), with the obs and var
+    names; and ``uns`` as a JSON record, its JSON strings parsed and normalized as the export's records are
+    (``_normalized`` with VARYING_EXPORT and VARYING_EXPORT_DIGESTS: the fields of where, when and with which software
+    a run was made and its times, the digests of the files that hold absolute paths and of the records over them, and
+    the work folder written ``<work>``), written to ``records_dir``."""
+    import anndata
+    data = anndata.read_h5ad(path)
+    _matrix_values(values, arrays, f"{name}/X", data.X)
+    for group in ("layers", "obsm", "varm", "obsp", "varp"):
+        mapping = getattr(data, group)
+        values[f"{name}/{group}:keys"] = {"value": sorted(mapping.keys()), "compare": "exact"}
+        for key in sorted(mapping.keys()):
+            frame = _matrix_values(values, arrays, f"{name}/{group}/{key}", mapping[key])
+            if frame is not None:
+                frames[f"{name}-{group}-{key}".replace("/", "-")] = frame
+    frames[f"{name}-obs".replace("/", "-")] = _frame_table(data.obs)
+    frames[f"{name}-var".replace("/", "-")] = _frame_table(data.var)
+    uns = _normalized(_uns_value(dict(data.uns)), work, VARYING_EXPORT, VARYING_EXPORT_DIGESTS)
+    records_dir.mkdir(parents=True, exist_ok=True)
+    (records_dir / f"{Path(path).name}.uns.json").write_text(json.dumps(uns, indent=1) + "\n")
+
+
 def extract_export(work, out):
     """The expected values of invocation D in ``out``, in the layout of ``extract``: for each route, the JSON records
     of stitching/, export/ and report/ normalized (``records/<route>/...``), their CSV tables (the report's intensity
     histograms summarized, one row per histogram), every TIFF's shape, dtype, minimum, maximum and sum, each integer
     image whole in ``arrays.npz``, and the digest of every file that holds no time or absolute path; the fixture's
-    file digests; and the import file of the route after fusion."""
+    file digests; and the import file of the route after fusion. The file digest of ``sample.h5ad`` is left out (its
+    ``uns`` holds absolute paths and times), and its content is extracted instead (``_anndata_values``, repair 1):
+    ``X``, the layers and the obsm entries whole, ``obs`` and ``var`` as tables, ``uns`` as a normalized record
+    (``records/<route>/export/sample/sample.h5ad.uns.json``), which leaves out only what ``_normalized`` leaves out
+    of the export's JSON records. Reads ``sample.h5ad`` with anndata (the golden scratch environment's)."""
     work, out = Path(work).resolve(), Path(out)
     out.mkdir(parents=True, exist_ok=True)
     fixture = json.loads((work / "fixture.json").read_text())
-    values, dtypes, arrays, tables = {}, {}, {}, {}
+    values, dtypes, arrays, tables, frames = {}, {}, {}, {}, {}
     for name, entry in fixture["files"].items():
         values[f"fixture:{name}"] = {"value": entry["sha256"], "compare": "exact"}
     _image_values(values, arrays, f"labels/{FUSED_CELLS}", work / "labels" / FUSED_CELLS)
@@ -565,6 +659,9 @@ def extract_export(work, out):
                 tables[f"{route}-{relative.replace('/', '-')}"] = path
             elif path.name.endswith((".tif", ".tiff")):
                 _image_values(values, arrays, name, path)
+            elif path.suffix == ".h5ad":
+                _anndata_values(path, name, values, arrays, frames,
+                                (out / "records" / route / relative).parent, str(work))
             if not any(pattern in relative for pattern in VARYING_EXPORT):
                 values[f"file:{name}"] = {"value": sha256_file(path), "compare": "same_environment"}
     for name, path in tables.items():
@@ -577,6 +674,8 @@ def extract_export(work, out):
                                                          bin_high=("bin_high", "max")).reset_index()
             frame["bins"] = frame["bins"].astype("int64")
         dtypes[name] = EV.write_csv(frame, out / name)
+    for name, frame in frames.items():
+        dtypes[f"{name}.csv"] = EV.write_csv(frame, out / f"{name}.csv")
     (out / "values.json").write_text(json.dumps(values, indent=1, sort_keys=True) + "\n")
     (out / "dtypes.json").write_text(json.dumps({name: dtypes[name] for name in sorted(dtypes)}, indent=1) + "\n")
     np.savez_compressed(out / "arrays.npz", **arrays)
@@ -656,7 +755,14 @@ def compare(expected_dir, actual_dir, *, same_environment=True):
     for name in sorted(set(e) | set(a)):
         if name not in a or name not in e:
             lines.append(f"arrays {name}: only in {'expected' if name in e else 'actual'}")
-        elif e[name].dtype != a[name].dtype or e[name].shape != a[name].shape or not np.array_equal(e[name], a[name]):
+        elif e[name].dtype != a[name].dtype or e[name].shape != a[name].shape:
+            lines.append(f"arrays {name}: differ")
+        elif e[name].dtype.kind == "f":
+            # A float array (an AnnData matrix, repair 1) within the tolerance of its dtype, NaN equal to NaN.
+            tolerance = TOLERANCES["float32" if e[name].dtype == np.float32 else "float64"]
+            if not np.allclose(a[name], e[name], equal_nan=True, **tolerance):
+                lines.append(f"arrays {name}: differ")
+        elif not np.array_equal(e[name], a[name]):
             lines.append(f"arrays {name}: differ")
     return lines
 

@@ -22,6 +22,58 @@
   "compare": "exact",
   "value": 26352.0
  },
+ "after_fusion/export/sample/sample.h5ad/X:dtype": {
+  "compare": "exact",
+  "value": "float64"
+ },
+ "after_fusion/export/sample/sample.h5ad/X:format": {
+  "compare": "exact",
+  "value": "dense"
+ },
+ "after_fusion/export/sample/sample.h5ad/X:shape": {
+  "compare": "exact",
+  "value": [
+   9,
+   16
+  ]
+ },
+ "after_fusion/export/sample/sample.h5ad/layers:keys": {
+  "compare": "exact",
+  "value": []
+ },
+ "after_fusion/export/sample/sample.h5ad/obsm/spatial:dtype": {
+  "compare": "exact",
+  "value": "float64"
+ },
+ "after_fusion/export/sample/sample.h5ad/obsm/spatial:format": {
+  "compare": "exact",
+  "value": "dense"
+ },
+ "after_fusion/export/sample/sample.h5ad/obsm/spatial:shape": {
+  "compare": "exact",
+  "value": [
+   9,
+   2
+  ]
+ },
+ "after_fusion/export/sample/sample.h5ad/obsm:keys": {
+  "compare": "exact",
+  "value": [
+   "spatial"
+  ]
+ },
+ "after_fusion/export/sample/sample.h5ad/obsp:keys": {
+  "compare": "exact",
+  "value": []
+ },
+ "after_fusion/export/sample/sample.h5ad/varm:keys": {
+  "compare": "exact",
+  "value": []
+ },
+ "after_fusion/export/sample/sample.h5ad/varp:keys": {
+  "compare": "exact",
+  "value": []
+ },
  "after_fusion/export/sample/segmentation_cell.ome.tif:dtype": {
   "compare": "exact",
   "value": "uint32"
@@ -843,6 +895,58 @@
   "compare": "exact",
   "value": 26352.0
  },
+ "molecules_only/export/sample/sample.h5ad/X:dtype": {
+  "compare": "exact",
+  "value": "float64"
+ },
+ "molecules_only/export/sample/sample.h5ad/X:format": {
+  "compare": "exact",
+  "value": "dense"
+ },
+ "molecules_only/export/sample/sample.h5ad/X:shape": {
+  "compare": "exact",
+  "value": [
+   0,
+   16
+  ]
+ },
+ "molecules_only/export/sample/sample.h5ad/layers:keys": {
+  "compare": "exact",
+  "value": []
+ },
+ "molecules_only/export/sample/sample.h5ad/obsm/spatial:dtype": {
+  "compare": "exact",
+  "value": "float64"
+ },
+ "molecules_only/export/sample/sample.h5ad/obsm/spatial:format": {
+  "compare": "exact",
+  "value": "dense"
+ },
+ "molecules_only/export/sample/sample.h5ad/obsm/spatial:shape": {
+  "compare": "exact",
+  "value": [
+   0,
+   2
+  ]
+ },
+ "molecules_only/export/sample/sample.h5ad/obsm:keys": {
+  "compare": "exact",
+  "value": [
+   "spatial"
+  ]
+ },
+ "molecules_only/export/sample/sample.h5ad/obsp:keys": {
+  "compare": "exact",
+  "value": []
+ },
+ "molecules_only/export/sample/sample.h5ad/varm:keys": {
+  "compare": "exact",
+  "value": []
+ },
+ "molecules_only/export/sample/sample.h5ad/varp:keys": {
+  "compare": "exact",
+  "value": []
+ },
  "per_fov/export/sample/cell_labels.ome.tif:dtype": {
   "compare": "exact",
   "value": "uint32"
@@ -889,5 +993,57 @@
  "per_fov/export/sample/reference_merged_projection.ome.tif:sum": {
   "compare": "exact",
   "value": 26352.0
+ },
+ "per_fov/export/sample/sample.h5ad/X:dtype": {
+  "compare": "exact",
+  "value": "float64"
+ },
+ "per_fov/export/sample/sample.h5ad/X:format": {
+  "compare": "exact",
+  "value": "dense"
+ },
+ "per_fov/export/sample/sample.h5ad/X:shape": {
+  "compare": "exact",
+  "value": [
+   9,
+   16
+  ]
+ },
+ "per_fov/export/sample/sample.h5ad/layers:keys": {
+  "compare": "exact",
+  "value": []
+ },
+ "per_fov/export/sample/sample.h5ad/obsm/spatial:dtype": {
+  "compare": "exact",
+  "value": "float64"
+ },
+ "per_fov/export/sample/sample.h5ad/obsm/spatial:format": {
+  "compare": "exact",
+  "value": "dense"
+ },
+ "per_fov/export/sample/sample.h5ad/obsm/spatial:shape": {
+  "compare": "exact",
+  "value": [
+   9,
+   2
+  ]
+ },
+ "per_fov/export/sample/sample.h5ad/obsm:keys": {
+  "compare": "exact",
+  "value": [
+   "spatial"
+  ]
+ },
+ "per_fov/export/sample/sample.h5ad/obsp:keys": {
+  "compare": "exact",
+  "value": []
+ },
+ "per_fov/export/sample/sample.h5ad/varm:keys": {
+  "compare": "exact",
+  "value": []
+ },
+ "per_fov/export/sample/sample.h5ad/varp:keys": {
+  "compare": "exact",
+  "value": []
  }
 }

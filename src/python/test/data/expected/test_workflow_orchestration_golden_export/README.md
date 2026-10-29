@@ -9,14 +9,17 @@ core, morphology, assignment and the BigStitcher macro and is not changed. No te
 files yet: the comparison test lands with the lock change that adds Snakemake 9 to a `workflow`
 dependency group. Until then `scripts/workflow_golden.py compare` is the comparison.
 
-They were recorded by W-643 with `src/python/scripts/workflow_golden.py` (SHA-256
-`34cc99152706b7357d65db2972d190e7843629debdfaea21208635fd691255dd` when the runs were made; its
-later change touches the comparison only) at Starfinder `56c35b8b560bfac7bd8b03e0ec7b308ead9a7d89`
-(the package of the worktree equal to it), on host GP099-29C (Intel Xeon Gold 6234), one CPU and
+They were recorded by W-643 with `src/python/scripts/workflow_golden.py` at Starfinder
+`56c35b8b560bfac7bd8b03e0ec7b308ead9a7d89`: invocation D ran with the script of SHA-256
+`3730d87826bea72bf8f84cecc7a037b083c2381b6547511b582f1abcb7eec760` (its `run-export` as in the
+first recording) and was extracted with the script of SHA-256
+`5c0365d4f3838f685c8b7f2bf89f97e6362ff6525cb7af43914c9d231a72e789`, which adds the AnnData
+content (repair 1); the package of the worktree equal to `56c35b8`; on host GP099-29C (Intel Xeon Gold 6234), one CPU and
 one numerical thread. Two environments:
 
-* the fixture is generated and the outputs are read in the locked environment
-  `dev-s210-export-20261007T050852Z` (Python 3.12.12, NumPy 2.2.6, pandas 3.0.0);
+* the fixture is generated in the locked environment `dev-s210-export-20261007T050852Z` (Python
+  3.12.12, NumPy 2.2.6, pandas 3.0.0); since repair 1 the outputs are read in the golden scratch
+  environment below, which has `anndata` for `sample.h5ad`;
 * the workflow runs in the golden scratch environment `w642-golden-20261029T1750Z`: the project
   lock at `56c35b8` with the extras dev, ome, local-registration, checkpoint, anndata,
   multiview-stitcher and spatialdata, and Snakemake 9.15.0 outside the lock (identity
@@ -57,11 +60,18 @@ The files, in the layout of W-642's folder, with each name prefixed by its route
   the tables, without the report's time columns, the report's intensity histograms as one row per
   histogram.
 * `arrays.npz`: every integer image whole (the fused projections, the fused and imported labels,
-  the segmentation of the route after fusion).
+  the segmentation of the route after fusion), and each route's `sample.h5ad` matrices whole: `X`,
+  every layer and every `obsm`, `varm`, `obsp` and `varp` entry (`<route>/export/sample/sample.h5ad/X`,
+  `.../obsm/spatial`, ...), with their shape, dtype and format in `values.json`.
+* `<route>-export-sample-sample.h5ad-obs.csv` and `-var.csv`: the AnnData's `obs` and `var`, its
+  names as the first column `_index`; and `records/<route>/export/sample/sample.h5ad.uns.json`: its
+  `uns`, the JSON strings (`assembly`, `spatial_centroid`) parsed and normalized as the records
+  are. The file's own digest is left out (its `uns` holds absolute paths and times); its content is
+  compared instead (W-643, repair 1).
 
 The comparison follows `docs/contributing.md` ("Expected values and tolerances"), as W-642's:
 integers, strings, booleans, integer images and the fixture's digests exactly, computed float64
-values with `rtol=1e-9`, `atol=1e-12`, and the file digests only in the recording environment
+values (and the float matrices of the AnnData files) with `rtol=1e-9`, `atol=1e-12`, and the file digests only in the recording environment
 (`compare --other-environment` skips them). Since W-643, `--other-environment` also skips the digest a
 run record holds of each checkpoint stage record (`run.json` `checkpoints.<stage>.sha256` in W-642's
 folder): `candidates.json` names the NumPy version it ran with, so that digest is an identity of the
