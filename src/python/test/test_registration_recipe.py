@@ -382,6 +382,20 @@ def test_a_round_is_registered_once(tmp_path):
             registration=RegistrationRecipe((TRANSLATION,), reference_round="round2")))
 
 
+@pytest.mark.parametrize("rounds", [["round1"], ["round2", "round1"]], ids=["reference", "with-moving"])
+def test_the_sequencing_route_refuses_the_reference_round(tmp_path, estimates, rounds):
+    reference, moving = shifted_rounds()
+    fov = small_fov(tmp_path, reference.copy(), moving.copy())
+    recipe = RegistrationRecipe((TRANSLATION,), signal=RegistrationSignalConfig("channel", 0, 1))
+    with pytest.raises(ValueError, match="the reference round 'round1' cannot be registered to itself"):
+        fov.register(recipe, rounds=rounds)
+    # Refused before any estimation or image change.
+    assert estimates == []
+    assert fov.registration_attempts == {} and fov.registration_results == {} and fov.registration_chains == {}
+    np.testing.assert_array_equal(fov.images["round1"], reference)
+    np.testing.assert_array_equal(fov.images["round2"], moving)
+
+
 # --- Persistence -----------------------------------------------------------------------------
 
 RECIPES = {

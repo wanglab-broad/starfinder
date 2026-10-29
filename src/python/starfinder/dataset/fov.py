@@ -643,9 +643,10 @@ class FOV:
         ValueError
             Sequencing and other rounds in one call, an empty sequence, a
             parameter of the other route; a recipe reference round that
-            differs from the reference, a round that is already registered or
-            (other rounds) not loaded, an unknown channel label or a channel
-            index outside a round.
+            differs from the reference, the reference round named in
+            ``rounds`` (it cannot be registered to itself), a round that is
+            already registered or (other rounds) not loaded, an unknown
+            channel label or a channel index outside a round.
         IncompatibleGeometryError
             Other rounds: a moving round and the reference are not on one grid.
         FileExistsError
@@ -684,6 +685,8 @@ class FOV:
         ref = self.rounds.reference_round
         if recipe.reference_round is not None and recipe.reference_round != ref:
             raise ValueError(f'recipe reference round {recipe.reference_round!r} differs from the dataset reference {ref!r}')
+        if ref in rounds:
+            raise ValueError(f'the reference round {ref!r} cannot be registered to itself')
         summary = _recipe_record(recipe)
         if self.registration_record.get('semantics') == 'sequential':
             raise ValueError('this FOV holds a sequential (version-1) registration; it cannot be extended by a recipe')
