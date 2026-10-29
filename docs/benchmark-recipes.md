@@ -30,8 +30,7 @@ For the processing configuration, see the
 
 ### Case fields
 
-{py:class}`~starfinder.benchmark.BenchmarkCase` holds the input paths,
-configuration and optional truth and artifact references.
+Case options come from {py:class}`~starfinder.benchmark.BenchmarkCase`.
 
 ```{config-options} starfinder.benchmark.BenchmarkCase
 ```

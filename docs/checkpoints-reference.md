@@ -5,7 +5,7 @@ Files and fields written by the checkpoint APIs. Start with the
 
 ## Configuration
 
-{py:class}`~starfinder.dataset.CheckpointConfig` documents the parameters.
+Checkpoint options come from {py:class}`~starfinder.dataset.CheckpointConfig`.
 
 ```{config-options} starfinder.dataset.CheckpointConfig
 ```

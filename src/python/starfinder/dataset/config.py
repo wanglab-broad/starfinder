@@ -19,6 +19,17 @@ from starfinder.readout import (DECODING_METHODS, NeighborhoodSumConfig, WtaDeco
 class ExecutionConfig:
     """Batch preloads rounds; streaming loads one at a time.
 
+    Parameters
+    ----------
+    mode : str
+        Round-loading policy: ``batch`` or ``streaming``.
+    retain_images : bool
+        Keep processed round images in memory after streaming.
+    device : str
+        Cross-stage execution device, ``cpu``.
+
+    Notes
+    -----
     retain_images keeps processed rounds (required for subtile creation).
     Otherwise only the reference image remains after streaming. device is
     the cross-stage execution device of the methods; the spot-finding
@@ -39,6 +50,21 @@ class ExecutionConfig:
 class CheckpointConfig:
     """Opt-in per-FOV checkpoints and run record written by FOV.run.
 
+    Parameters
+    ----------
+    stages : tuple of str
+        Checkpoint stages to save: ``registered``, ``candidates`` and ``pre_qc``.
+    directory : pathlib.Path, str or None
+        Parent directory of the FOV folders; ``None`` uses ``<output_root>/fovs``.
+    table_format : str
+        Checkpoint table format: ``csv`` or ``parquet``.
+    hash_inputs : bool
+        Record SHA-256 hashes of loaded TIFF inputs.
+    overwrite : bool
+        Allow replacement of existing output files guarded by the checkpointed call.
+
+    Notes
+    -----
     Stages are registered images, candidates with signals and pre-QC decoding.
     directory is the parent of the FOV folders: a FOV's folder is
     ``<directory>/<fov_id>/`` (``subtile_<n>/`` below it for subtiles), and
@@ -81,6 +107,17 @@ def _check_rotation(value):
 class MorphologyConfig:
     """The other rounds and the reference stain prepared by FOV.prepare_morphology.
 
+    Parameters
+    ----------
+    rotation_degrees : float or None
+        YX rotation angle in degrees for morphology loading; ``None`` leaves images unrotated.
+    recipe : RegistrationRecipe or None
+        Registration recipe for other rounds; ``None`` requests one translation step on the shared stain.
+    rounds : tuple of str or None
+        Other-round names to prepare; ``None`` selects the configured other rounds except the reference round.
+
+    Notes
+    -----
     rotation_degrees rotates every loaded image in YX as FOV.run's
     PipelineConfig.rotation_degrees does (None: no rotation); give FOV.run's
     angle so the prepared images lie on its reference grid. recipe None
@@ -124,6 +161,31 @@ def _pipeline_spot_finding(value):
 class PipelineConfig:
     """One processing sequence. None disables an operation, including loading.
 
+    Parameters
+    ----------
+    load : ImageLoadConfig or None
+        Image-loading settings; ``None`` disables loading.
+    rotation_degrees : float or None
+        YX rotation angle in degrees; ``None`` disables rotation.
+    preprocessing : PreprocessingRecipe or None
+        Preprocessing recipe; ``None`` disables preprocessing.
+    registration : RegistrationRecipe or None
+        Round-registration recipe; ``None`` disables registration.
+    spot_finding : SpotFindingConfig, SpotFindingPlan or None
+        Spot-detection configuration or plan; ``None`` disables detection.
+    extraction : NeighborhoodSumConfig or None
+        Intensity-extraction settings; ``None`` disables extraction.
+    decoding : WtaDecoderConfig, CodebookAwareDecoderConfig, DirectDecoderConfig or None
+        Read-decoding settings; ``None`` disables decoding.
+    filtering : ReadFilterConfig or None
+        Read-filtering settings; ``None`` disables filtering.
+    scoring : ReadScoreConfig or None
+        Read-QC scoring settings; ``None`` disables scoring.
+    deduplication : DeduplicationConfig or None
+        Read-deduplication settings; ``None`` disables deduplication.
+
+    Notes
+    -----
     Order: load, rotate, the preprocessing recipe's steps, the registration
     recipe (None: no registration), the preprocessing recipe's
     post_registration steps, detect, extract, decode, score, deduplicate, filter. spot_finding is a

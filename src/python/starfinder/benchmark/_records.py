@@ -12,6 +12,23 @@ def _json(value):
 class BenchmarkCase:
     """Explicit inputs relative to input_root (registration NPY/TIFF; pipeline TIFF).
 
+    Parameters
+    ----------
+    case_id : str
+        Case identifier used in the run's output directory.
+    task : str
+        Benchmark task: ``registration`` or ``pipeline``.
+    inputs : dict of str to str
+        Named input-file paths relative to ``input_root``.
+    config : dict of str to Any
+        Task-specific processing and evaluation settings.
+    truth : dict of str to str
+        Named ground-truth file paths relative to ``input_root``; an empty mapping supplies no truth files.
+    artifacts : dict of str to str
+        Named auxiliary input-file paths relative to ``input_root``; an empty mapping supplies no auxiliary files.
+
+    Notes
+    -----
     config requires registration, reference_metadata, moving_metadata and
     evaluation entries. truth and artifacts are named file references, never
     inferred from directory names. Pipeline cases supply workflow, sources, fov_id and count evaluation;

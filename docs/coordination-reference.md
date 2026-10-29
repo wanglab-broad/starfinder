@@ -1,6 +1,6 @@
 # Coordination reference
 
-Configuration fields and defaults come from the code. See the
+Configuration fields, defaults and descriptions come from the code. See the
 {doc}`coordination guide <coordination>` for a complete example and the
 {doc}`dataset API <api/dataset>` for signatures and parameter details.
 

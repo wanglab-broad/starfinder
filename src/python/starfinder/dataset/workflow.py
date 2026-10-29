@@ -455,6 +455,29 @@ def _codebook_layout(book, filt, n_rounds):
 class WorkflowConfig:
     """Translated dataset, scientific pipeline and execution/output policies.
 
+    Parameters
+    ----------
+    dataset : Dataset
+        Dataset carrying acquisition inputs and output paths.
+    pipeline : PipelineConfig
+        Scientific processing sequence for the translated rule.
+    execution : ExecutionConfig
+        Round-loading, image-retention and device policy for the translated rule.
+    split_index : int or None
+        Zero-based two-base encoding split position; ``None`` means no split.
+    reference_projection : ProjectionConfig or None
+        Z-projection settings for reference-image output; ``None`` keeps the volume.
+    reference_image : str
+        Reference-image channel view: ``merged`` for the channel maximum or ``single-channel`` for one channel.
+    reference_channel : int
+        Zero-based channel index for the ``single-channel`` reference-image view.
+    encoding : EncodingConfig or OneBaseEncodingConfig
+        Codebook encoding settings.
+    layout : BarcodeLayout or None
+        Codebook segment layout; ``None`` uses one segment or the two-base encoding's legacy split.
+
+    Notes
+    -----
     reference_projection, reference_image and reference_channel are passed to
     FOV.save_reference_image, which writes the file of the dataset's
     reference_image (default ``fovs/{fov_id}/reference.tif``); reference_image

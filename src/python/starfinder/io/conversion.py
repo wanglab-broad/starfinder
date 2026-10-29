@@ -43,6 +43,25 @@ def _cast(values, dtype, rounding):
 class ImageConversionConfig:
     """Explicit cast, clip or linear rescale policy.
 
+    Parameters
+    ----------
+    output_dtype : str
+        Output real numeric dtype.
+    mode : str
+        Intensity-conversion mode: ``cast``, ``clip`` or ``rescale``.
+    input_range : tuple of float or None
+        Lower and upper input intensities for declared rescaling; ``None`` with ``range_policy='data'`` uses the measured minimum and maximum.
+    output_range : tuple of float or None
+        Lower and upper output intensities for clipping and rescaling; ``None`` leaves the output range unset.
+    range_policy : str
+        Rescaling input-range source: ``declared`` or ``data`` for measured minimum and maximum.
+    scope : str
+        Conversion grouping: ``global`` or ``per_channel``.
+    rounding : str
+        Floating-to-integer rounding: ``nearest_even`` or ``truncate``.
+
+    Notes
+    -----
     Rescale requires input_range or range_policy='data', and output_range.
     Constant data-derived ranges map to output_range's lower endpoint. Clip
     requires output_range. Cast rejects range loss. Integer rounding is

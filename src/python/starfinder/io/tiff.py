@@ -65,6 +65,31 @@ def _writes_ome(path: Path) -> bool:
 class ImageLoadConfig:
     """Source selection and optional intensity conversion.
 
+    Parameters
+    ----------
+    channel_labels : tuple of str
+        Ordered channel labels, used as filename patterns by round loading.
+    source_paths : tuple of str or None
+        Explicit round-source paths in channel-label order, relative to the round directory's ``subdir``; ``None`` uses filename patterns.
+    subdir : str
+        Subdirectory of the round directory to search for sources.
+    source_axes : str or None
+        Source axis order: ``YX``, ``ZYX``, ``ZYXC``, ``CZYX`` or ``TZCYX``; ``None`` uses the TIFF axis interpretation.
+    series_index : int or None
+        Nonnegative, zero-based TIFF series index; ``None`` selects an unambiguous series.
+    time_index : int or None
+        Nonnegative, zero-based time index; ``None`` selects an unambiguous time point.
+    channel_index : int or None
+        Nonnegative, zero-based source-channel index; ``None`` selects an unambiguous channel.
+    crop_policy : str
+        Round channel-shape policy: ``error`` or ``minimum`` cropping.
+    conversion : ImageConversionConfig or None
+        Intensity-conversion policy; ``None`` preserves the source dtype and intensities.
+    metadata : ImageMetadata or None
+        Explicit image geometry; ``None`` uses stored STARfinder metadata when present, otherwise unknown geometry.
+
+    Notes
+    -----
     Multiple series, times or channels require explicit indices. Round loading
     uses unique filename patterns in channel_labels, or explicit source_paths
     relative to the round directory. crop_policy='minimum' explicitly crops
