@@ -284,7 +284,6 @@ def positions_from_grid(*, columns: int, rows: int, order: str, tile_shape_yx: t
     ``z = 0``, with ``step = (1 − overlap) × tile_shape_yx × spacing_yx`` per axis
     (µm). No argument has a default.
 
-
     Parameters
     ----------
     columns, rows : int
@@ -412,7 +411,6 @@ def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping
     :func:`positions_from_grid` for the cells, with the snap's step, and the rows'
     ``source`` is ``grid``.
 
-
     Parameters
     ----------
     path : str or Path
@@ -530,7 +528,6 @@ def positions_from_table(path_or_frame, *, unit: str = "µm") -> TilePositionTab
     multiplied by 1000. A CSV is read as text and each value parsed as a float64
     (``float``), so a value written with round-trip precision is read back
     bitwise.
-
 
     Parameters
     ----------

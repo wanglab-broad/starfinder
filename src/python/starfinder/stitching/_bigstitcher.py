@@ -302,7 +302,6 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
     for the engine task) and the voxel size from the reference grids' spacing
     (µm, x and y the grids' X and Y spacing, z their Z spacing). Fiji is not run.
 
-
     Parameters
     ----------
     table : TilePositionTable
@@ -628,7 +627,6 @@ def import_bigstitcher(dataset_xml, *, table: TilePositionTable, view_map: pd.Da
       too (no shift when no FOV is ``image_supported``);
     * :func:`review_placement` applies ``review``.
 
-
     Parameters
     ----------
     dataset_xml : str or Path
@@ -861,7 +859,6 @@ def legacy_tile_config_view(result: PlacementResult, *, img_col: int, img_row: i
     (the 1-based table row when the table has none) and 0 for padding. It reads
     no status, so it is the same for every ``fallback``. ``frame.to_csv()`` is
     the text ``create_tile_config.py`` writes.
-
 
     Parameters
     ----------
