@@ -68,11 +68,11 @@ class ImageLoadConfig:
     Parameters
     ----------
     channel_labels : tuple of str
-        Ordered channel labels, used as filename patterns by round loading.
+        Ordered channel labels. Round loading also uses them as filename patterns when ``source_paths`` is ``None``.
     source_paths : tuple of str or None
         Explicit round-source paths in channel-label order, relative to the round directory's ``subdir``; ``None`` uses filename patterns.
     subdir : str
-        Subdirectory of the round directory to search for sources.
+        Subdirectory of the round directory containing the round's source files.
     source_axes : str or None
         Source axis order: ``YX``, ``ZYX``, ``ZYXC``, ``CZYX`` or ``TZCYX``; ``None`` uses the TIFF axis interpretation.
     series_index : int or None
@@ -92,7 +92,7 @@ class ImageLoadConfig:
     -----
     Multiple series, times or channels require explicit indices. Round loading
     uses unique filename patterns in channel_labels, or explicit source_paths
-    relative to the round directory. crop_policy='minimum' explicitly crops
+    relative to the round directory's subdir. crop_policy='minimum' explicitly crops
     unequal shapes at their low-index corner and records the mapping.
     source_axes can explicitly describe legacy arrays without axis metadata.
     Geometry supplied here overrides stored metadata; absent geometry remains

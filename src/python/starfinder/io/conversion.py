@@ -50,13 +50,13 @@ class ImageConversionConfig:
     mode : str
         Intensity-conversion mode: ``cast``, ``clip`` or ``rescale``.
     input_range : tuple of float or None
-        Lower and upper input intensities for declared rescaling; ``None`` with ``range_policy='data'`` uses the measured minimum and maximum.
+        Lower and upper input intensities for declared rescaling. For data-range rescaling, ``None`` uses per-channel extrema for ZYXC with ``scope='per_channel'`` and whole-image extrema otherwise.
     output_range : tuple of float or None
         Lower and upper output intensities for clipping and rescaling; ``None`` leaves the output range unset.
     range_policy : str
-        Rescaling input-range source: ``declared`` or ``data`` for measured minimum and maximum.
+        Rescaling input-range source: ``declared`` uses ``input_range``; ``data`` measures per-channel extrema for ZYXC with ``scope='per_channel'`` and whole-image extrema otherwise.
     scope : str
-        Conversion grouping: ``global`` or ``per_channel``.
+        Grouping for clipping and rescaling: ``global`` uses the whole image; ``per_channel`` uses individual channels in ZYXC and the whole image in ZYX.
     rounding : str
         Floating-to-integer rounding: ``nearest_even`` or ``truncate``.
 
@@ -65,7 +65,7 @@ class ImageConversionConfig:
     Rescale requires input_range or range_policy='data', and output_range.
     Constant data-derived ranges map to output_range's lower endpoint. Clip
     requires output_range. Cast rejects range loss. Integer rounding is
-    nearest_even or truncate. Scope is global or per_channel (ZYXC only).
+    nearest_even or truncate. Scope is global or per_channel; ZYX inputs form one group.
     Conversion allocates an output plus float64 work per active channel/group.
     """
 

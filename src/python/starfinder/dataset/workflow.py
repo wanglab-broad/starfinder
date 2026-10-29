@@ -485,7 +485,8 @@ class WorkflowConfig:
     for mode max, ``single-channel`` and the channel's index for mode channel). split_index is the
     zero-based EncodingConfig.split_index converted from the shared one-based
     load_codebook.split_index (None without a split); encoding and layout are
-    the codebook's encoding config and segment layout (None: one segment), which
+    the codebook's encoding config and segment layout (None: one segment or
+    the two-base encoding's legacy split), which
     Dataset.load_codebook(path, encoding=..., layout=...) takes.
     """
     dataset: Dataset
