@@ -39,8 +39,8 @@ See {py:class}`~starfinder.spot_finding.StarfishLogConfig`.
 ### Spotiflow
 
 A learned detector that predicts a probability heatmap and finds spots at its peaks,
-optionally refined to sub-voxel positions. It needs the `spotiflow` extra and the
-pretrained weights that `model` names ({doc}`learned-detectors`). See
+optionally refined to sub-voxel positions. It needs the `spotiflow` extra and
+verified pretrained weights ({doc}`learned-detectors`). See
 {py:class}`~starfinder.spot_finding.SpotiflowConfig`.
 
 ```{config-options} starfinder.spot_finding.SpotiflowConfig
@@ -49,8 +49,8 @@ pretrained weights that `model` names ({doc}`learned-detectors`). See
 ### Piscis
 
 A learned detector that predicts a label map on each Z plane, in tiles, and links the
-planes of a volume. It needs the `piscis` extra and the pretrained weights that `model`
-names ({doc}`learned-detectors`). See
+planes of a volume. It needs the `piscis` extra and verified pretrained weights
+({doc}`learned-detectors`). See
 {py:class}`~starfinder.spot_finding.PiscisConfig`.
 
 ```{config-options} starfinder.spot_finding.PiscisConfig

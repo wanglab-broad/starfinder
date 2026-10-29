@@ -26,6 +26,15 @@ def _check_config(config):
 class ChannelOverride:
     """The whole config of one channel, named by its channel label.
 
+    Parameters
+    ----------
+    channel : str
+        Name of the channel whose detection settings are replaced.
+    config : SpotFindingConfig
+        Complete detection configuration for the named channel.
+
+    Notes
+    -----
     config must have the exact type of the plan's config (one method per
     run); its channel_labels must be None or equal to the plan's. It may
     change any setting except one that changes the output columns (the
@@ -44,6 +53,17 @@ class ChannelOverride:
 class SpotFindingPlan:
     """The method and its settings for every channel, and the channels whose whole config is replaced.
 
+    Parameters
+    ----------
+    config : SpotFindingConfig
+        Default detection configuration for the image's channels.
+    channel_overrides : tuple[ChannelOverride, ...]
+        Named channels with replacement detection configurations; an empty tuple keeps the default configuration.
+    rounds : tuple[str, ...] or None
+        Round labels to detect in FOV calls; ``None`` uses the reference round. Direct ``find_spots`` detects its supplied image with ``None``.
+
+    Notes
+    -----
     A bare config means SpotFindingPlan(config). Override channels are
     unique; when config.channel_labels is set they must be among them
     (FOV.find_spots and FOV.run fill the labels from Dataset.channel_order).

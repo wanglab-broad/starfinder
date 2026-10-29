@@ -59,6 +59,27 @@ def _sigma(value, name):
 class LocalMaximaConfig:
     """Local maxima above a threshold, one channel at a time.
 
+    Parameters
+    ----------
+    threshold_mode : str
+        Threshold mode: ``noise``, ``adaptive``, ``adaptive_round`` or ``global``.
+    threshold_value : float
+        Nonnegative noise multiplier in sigma units for ``noise``, or maximum-intensity fraction for ``adaptive``, ``adaptive_round`` and ``global``.
+    min_distance_voxels : int
+        Minimum peak separation in voxels, as a positive integer.
+    exclude_border : bool
+        Whether to exclude peaks near the image border.
+    channel_labels : tuple[str, ...] or None
+        Channel names in image channel-axis order. ``None`` leaves direct calls unnamed; FOV calls fill labels from ``Dataset.channel_order`` when available.
+    measure_peak_intensity : bool
+        Whether to include the original pixel intensity at the peak in the ``peak_intensity`` column.
+    merge_radius_zyx : tuple[float, float, float] or None
+        Positive ZYX ellipsoid radii in voxels for merging maxima within a channel; ``None`` disables merging.
+    method : str
+        Method identifier, fixed to ``local_maxima``.
+
+    Notes
+    -----
     Per-channel pipeline peaks; no spatial deduplication across channels.
 
     noise uses median + value * MAD * 1.4826 (sigma units); adaptive uses
@@ -104,6 +125,27 @@ class LocalMaximaConfig:
 class StarfishLogConfig:
     """Native starfish BlobDetector: Laplacian-of-Gaussian blobs of one channel at a time.
 
+    Parameters
+    ----------
+    min_sigma : float or tuple[float, float, float]
+        Smallest Gaussian sigma in voxels, as a positive scalar or positive ZYX per-axis values.
+    max_sigma : float or tuple[float, float, float]
+        Largest Gaussian sigma in voxels, as a positive scalar or positive ZYX per-axis values.
+    num_sigma : int
+        Number of Gaussian scales, as a positive integer.
+    threshold : float
+        Nonnegative absolute threshold on the scale-normalized LoG response of the dtype-scaled image.
+    overlap : float
+        Fractional blob overlap used for suppression.
+    exclude_border : bool or int
+        Border-exclusion setting for ``blob_log``, as a Boolean or a nonnegative width in voxels.
+    channel_labels : tuple[str, ...] or None
+        Channel names in image channel-axis order. ``None`` leaves direct calls unnamed; FOV calls fill labels from ``Dataset.channel_order`` when available.
+    method : str
+        Method identifier, fixed to ``starfish_log``.
+
+    Notes
+    -----
     Reproduces starfish BlobDetector(is_volume=True, detector_method="blob_log")
     without a reference image (starfish 1fb00cbc). Integer images are scaled by
     their dtype maximum to float32 [0, 1] (skimage img_as_float32); float images
@@ -140,6 +182,29 @@ class StarfishLogConfig:
 class SpotiflowConfig:
     """Spotiflow 0.6.5 with named pretrained weights, one channel at a time (extra ``spotiflow``).
 
+    Parameters
+    ----------
+    model : str
+        Pretrained Spotiflow model name from ``KNOWN_MODELS``.
+    prob_thresh : float or None
+        Heatmap probability threshold; ``None`` uses the threshold stored with the weights.
+    min_distance : int
+        Minimum peak separation in pixels for a 2D model or voxels for a 3D model, as a positive integer.
+    exclude_border : bool
+        Whether to exclude peaks near the image border.
+    subpix : bool or None
+        Whether to refine spot coordinates to subpixel positions; ``None`` uses the model's ``compute_flow`` setting.
+    n_tiles : tuple[int, ...] or None
+        Positive tile counts in YX order for a 2D model or ZYX order for a 3D model. ``None`` infers counts from the image shape on the execution device.
+    scale : float
+        Input image scale factor.
+    channel_labels : tuple[str, ...] or None
+        Channel names in image channel-axis order. ``None`` leaves direct calls unnamed; FOV calls fill labels from ``Dataset.channel_order`` when available.
+    method : str
+        Method identifier, fixed to ``spotiflow``.
+
+    Notes
+    -----
     model names a spotiflow row of KNOWN_MODELS (there is no default): a 3D
     model (synth_3d, smfish_3d) detects Z>1 images in 3D and a 2D model
     (general, hybiss) detects Z=1 images as a YX plane (z=0); any other
@@ -183,6 +248,25 @@ class SpotiflowConfig:
 class PiscisConfig:
     """Piscis 1.1.0 (the Piscis class) with named pretrained weights, one channel at a time (extra ``piscis``).
 
+    Parameters
+    ----------
+    model : str
+        Pretrained Piscis model name from ``KNOWN_MODELS``.
+    threshold : float
+        Threshold on the max-pooled label value.
+    min_distance : int
+        Minimum peak separation in pixels for plane-mode detection, as a positive integer.
+    input_size : int or None
+        Tile side length in pixels, as a positive integer; ``None`` uses the input size stored with the model.
+    scale : float
+        Input image scale factor.
+    channel_labels : tuple[str, ...] or None
+        Channel names in image channel-axis order. ``None`` leaves direct calls unnamed; FOV calls fill labels from ``Dataset.channel_order`` when available.
+    method : str
+        Method identifier, fixed to ``piscis``.
+
+    Notes
+    -----
     model names a piscis row of KNOWN_MODELS (there is no default, and
     Starfinder does not choose between them). A Z=1 image is detected in
     plane mode (z=0) and a Z>1 image in stack mode, where z is an integer and
@@ -216,6 +300,19 @@ class PiscisConfig:
 class NoiseLandmarkConfig:
     """Registration landmarks: maxima above a noise threshold, deduplicated across channels.
 
+    Parameters
+    ----------
+    noise_sigma : float
+        Nonnegative noise multiplier in sigma units for the median-plus-scaled-MAD threshold.
+    min_distance_voxels : int
+        Peak separation and landmark deduplication radius in voxels, as a positive integer.
+    channel_labels : tuple[str, ...] or None
+        Channel names in image channel-axis order; ``None`` leaves labels unspecified.
+    method : str
+        Method identifier, fixed to ``noise_landmark``.
+
+    Notes
+    -----
     Registration MAD peaks with the original per-channel radius deduplication.
     Keep the lower concatenated index for every pair within min_distance_voxels.
     This is intentionally distinct from pipeline channel-local detections.
@@ -235,6 +332,17 @@ class NoiseLandmarkConfig:
 class PercentileCentroidConfig:
     """Intensity-weighted centroids of face-connected voxels above percentile.
 
+    Parameters
+    ----------
+    threshold_percentile : float
+        Intensity percentile in percent for thresholding the channel-summed image.
+    channel_labels : tuple[str, ...] or None
+        Channel names in image channel-axis order; ``None`` leaves labels unspecified.
+    method : str
+        Method identifier, fixed to ``percentile_centroid``.
+
+    Notes
+    -----
     Channels are summed before thresholding; percentile is in [0,100].
     No channel or peak measurement is assigned to a multichannel centroid.
     """
