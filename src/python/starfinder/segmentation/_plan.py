@@ -37,6 +37,23 @@ def _channel_key(value, name):
 class InputChannel:
     """One channel of a run's segmentation input, taken from the FOV's reference-frame images.
 
+    Parameters
+    ----------
+    role : str
+        Channel role: ``nuclear``, ``cytoplasm``, ``membrane``, ``amplicon`` or ``composite``.
+    round : str or None
+        Name of the loaded round supplying the channel.
+    channel : str or int or None
+        Channel pattern, name or zero-based index within the round.
+    reference_merged : bool
+        Select the reference round's channel-maximum image.
+    prepare : CompositeConfig or FlamingoEnhancementConfig or None
+        Input preparation settings; ``None`` leaves the channel unprepared.
+    prepare_channel : str or int or None
+        Flamingo channel pattern, name or zero-based index for Flamingo enhancement.
+
+    Notes
+    -----
     ``role`` is ``nuclear``, ``cytoplasm``, ``membrane``, ``amplicon`` or
     ``composite``. Either ``round`` and ``channel`` name a loaded round in the
     reference frame and one of its channels (a pattern or a name, resolved by
@@ -98,6 +115,25 @@ class InputChannel:
 class SegmentationRun:
     """One run of a plan: a named label image from one method, or one imported mask.
 
+    Parameters
+    ----------
+    name : str
+        Snake_case run name used as the key in ``FOV.segmentation_results``.
+    target : str
+        Label target: ``nucleus`` or ``cell``.
+    inputs : tuple[InputChannel, ...]
+        Segmentation input channels in channel order.
+    method : object
+        Segmentation method config or ``LabelImportConfig`` for a mask import.
+    seeds : str or None
+        Name of an earlier run supplying seed labels; ``None`` selects no seed run.
+    projection : ProjectionConfig or None
+        Z-projection settings for the run's reference grid; ``None`` leaves the grid unprojected.
+    operations : tuple
+        Label operations in application order, using ``ExpandLabelsConfig`` and ``ZExtensionConfig``.
+
+    Notes
+    -----
     ``name`` (snake_case) keys ``FOV.segmentation_results``; ``target`` is
     ``nucleus`` or ``cell``; ``inputs`` are the channels of the segmentation
     input, in channel order (none for an import); ``method`` is a config

@@ -102,6 +102,21 @@ def _positive(value, name):
 class SeededWatershedConfig:
     """A watershed that grows one cell from each nucleus seed over a smoothed stain.
 
+    Parameters
+    ----------
+    sigma_um : float
+        Positive Gaussian smoothing standard deviation for the stain, in micrometres.
+    threshold : str or float
+        Foreground threshold: ``otsu`` or a value on the smoothed stain's ``img_as_float`` scale.
+    compactness : float
+        Nonnegative compactness parameter passed to the watershed.
+    connectivity : int
+        Watershed neighbourhood connectivity: 1, 2 or 3.
+    method : str
+        Method identifier, ``seeded_watershed``.
+
+    Notes
+    -----
     See design/specs/segmentation-algorithms.md ("seeded_watershed").
 
     sigma_um is the standard deviation of the Gaussian smoothing of the stain

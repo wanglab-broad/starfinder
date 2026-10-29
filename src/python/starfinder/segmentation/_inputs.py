@@ -30,6 +30,15 @@ def _quantile(value, name):
 class CompositeConfig:
     """Settings of :func:`composite_nuclei_amplicon`.
 
+    Parameters
+    ----------
+    nuclear_quantile : float
+        Lower stretch quantile for the nuclear image, expressed as a nonnegative fraction.
+    amplicon_quantile : float
+        Lower stretch quantile for the amplicon image, expressed as a nonnegative fraction.
+
+    Notes
+    -----
     Each image is stretched between its q and 1 − q quantiles over the whole
     volume (fractions): ``nuclear_quantile`` for the nuclear (DAPI) image and
     ``amplicon_quantile`` for the amplicon (reference merged) image. The defaults
@@ -48,6 +57,17 @@ class CompositeConfig:
 class FlamingoEnhancementConfig:
     """Settings of :func:`enhance_with_flamingo`.
 
+    Parameters
+    ----------
+    flamingo_quantile : float
+        Lower stretch quantile for the Flamingo image, expressed as a nonnegative fraction.
+    nuclear_quantile : float
+        Lower stretch quantile for the nuclear image, expressed as a nonnegative fraction.
+    median_radius_px : int
+        Nonnegative disk radius in pixels for median filtering the Flamingo image.
+
+    Notes
+    -----
     ``flamingo_quantile`` and ``nuclear_quantile`` are the stretch fractions (q and
     1 − q quantiles over the whole volume); ``median_radius_px`` is the radius in
     pixels of the disk the stretched Flamingo image is median-filtered with in each

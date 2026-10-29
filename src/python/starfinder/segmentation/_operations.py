@@ -78,6 +78,17 @@ EXPANSION_MODES = ("planar", "volumetric")
 class ExpandLabelsConfig:
     """Settings of :func:`expand_labels`, the one label expansion; no field has a default.
 
+    Parameters
+    ----------
+    distance : float
+        Nonnegative label expansion distance in the selected unit.
+    unit : str
+        Distance unit: ``pixel`` for voxel steps or ``um`` for micrometres.
+    mode : str
+        Expansion mode: ``planar`` in YX or ``volumetric`` in ZYX.
+
+    Notes
+    -----
     ``distance`` is how far each label grows into the background, in ``unit``:
     ``"pixel"`` (voxel steps) or ``"um"`` (micrometres, converted with the
     metadata's spacing). ``mode`` is ``"planar"`` (each Z plane on its own, in Y
@@ -181,6 +192,21 @@ def expand_labels(labels, metadata: ImageMetadata | None, *, config: ExpandLabel
 class ZExtensionConfig:
     """Settings of :func:`extend_labels_through_z`, in physical units.
 
+    Parameters
+    ----------
+    median_um : float
+        Positive side length of the stain's square median-filter window in micrometres.
+    threshold : str or float
+        Foreground threshold: ``otsu`` or a value on the stain's ``img_as_float`` scale.
+    min_area_um2 : float
+        Nonnegative minimum foreground object area per plane in square micrometres.
+    dilation_um : float
+        Nonnegative radius of the foreground mask's dilation disk in micrometres.
+    fill_holes : str
+        Hole-filling schedule: ``once`` before area filtering or ``twice`` with a second fill after dilation.
+
+    Notes
+    -----
     ``median_um`` is the side of the square median window applied to each plane
     of the stain [µm]; ``threshold`` is ``"otsu"`` (Otsu's threshold of the
     filtered stack) or a number on the [0, 1] scale of the stain's dtype range, as

@@ -25,8 +25,8 @@ user-trained model; the model's dimensionality decides between 2D and 3D. See
 
 ### Cellpose
 
-Cellpose segments nuclei or whole cells from one or two stains, on one plane or, with
-`do_3d`, in 3D. See {py:class}`~starfinder.segmentation.CellposeConfig`.
+Cellpose segments nuclei or whole cells from stains in 2D and 3D. See
+{py:class}`~starfinder.segmentation.CellposeConfig`.
 
 ```{config-options} starfinder.segmentation.CellposeConfig
 ```
@@ -78,14 +78,34 @@ two make a run's channel through `InputChannel.prepare`; `expand_labels` and
 | `expand_labels` | `ExpandLabelsConfig` | Grows each label into the background, in each plane or in 3D |
 | `extend_labels_through_z` | `ZExtensionConfig` | Extends plane labels through Z where a stain is foreground |
 
+### Composite input
+
+Stretch settings for the nuclei–amplicon composite. See
+{py:class}`~starfinder.segmentation.CompositeConfig`.
+
 ```{config-options} starfinder.segmentation.CompositeConfig
 ```
+
+### Flamingo enhancement
+
+Settings for enhancing the nuclear stain with Flamingo. See
+{py:class}`~starfinder.segmentation.FlamingoEnhancementConfig`.
 
 ```{config-options} starfinder.segmentation.FlamingoEnhancementConfig
 ```
 
+### Label expansion
+
+Settings for growing label territories. See
+{py:class}`~starfinder.segmentation.ExpandLabelsConfig`.
+
 ```{config-options} starfinder.segmentation.ExpandLabelsConfig
 ```
+
+### Z extension
+
+Settings for extending plane labels through a stain volume. See
+{py:class}`~starfinder.segmentation.ZExtensionConfig`.
 
 ```{config-options} starfinder.segmentation.ZExtensionConfig
 ```

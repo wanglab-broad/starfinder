@@ -120,6 +120,35 @@ def _scale_zyx(scale) -> tuple[float, float, float]:
 class StarDistConfig:
     """StarDist 2D or 3D on one ``nuclear`` or ``composite`` channel.
 
+    Parameters
+    ----------
+    scale : float or tuple[float, float, float]
+        Positive dimensionless prediction scale, as a YX factor or ZYX factors.
+    model : str or None
+        Known pretrained model name in the weights cache, such as ``2D_versatile_fluo``.
+    model_path : str or None
+        Path to the user-trained StarDist model folder.
+    model_sha256 : Mapping[str, str] or None
+        Expected SHA-256 values keyed by file name for a model supplied by path.
+    prob_thresh : float or None
+        Nonnegative object probability threshold override; ``None`` uses the model's stored value.
+    nms_thresh : float or None
+        Nonnegative non-maximum suppression threshold override; ``None`` uses the model's stored value.
+    normalize_percentiles : tuple[float, float]
+        Low and high normalization percentiles over the whole input image, in percent.
+    n_tiles : tuple[int, ...] or None
+        Positive prediction tile counts in model-axis order; ``None`` uses the script's tiling.
+    block_size : int or tuple[int, ...] or None
+        Positive prediction block size in input-grid voxels, as a scalar or per-axis values.
+    min_overlap : int or tuple[int, ...] or None
+        Nonnegative minimum prediction block overlap in input-grid voxels, as a scalar or per-axis values.
+    context : int or tuple[int, ...] or None
+        Nonnegative prediction block context in input-grid voxels, as a scalar or per-axis values.
+    method : str
+        Method identifier, ``stardist``.
+
+    Notes
+    -----
     See design/specs/segmentation-algorithms.md ("stardist").
 
     model names a known pretrained model (``2D_versatile_fluo``) in the weights
@@ -194,6 +223,37 @@ class StarDistConfig:
 class CellposeConfig:
     """Cellpose on a ``cytoplasm`` or ``nuclear`` channel, optionally with ``nuclear`` beside ``cytoplasm``.
 
+    Parameters
+    ----------
+    diameter : float or None
+        Positive object diameter in pixels for rescaling; ``None`` requests no rescaling.
+    model : str or None
+        Known pretrained model name in the weights cache, such as ``cpsam_v2``.
+    model_path : str or None
+        Path to the Cellpose model file.
+    model_sha256 : Mapping[str, str] or None
+        Expected SHA-256 keyed by file name for a model supplied by path.
+    do_3d : bool
+        Enable Cellpose's 3D segmentation mode.
+    anisotropy : float or None
+        Positive Z-to-YX voxel-spacing ratio for 3D mode.
+    flow_threshold : float
+        Nonnegative flow-error threshold passed to Cellpose.
+    cellprob_threshold : float
+        Cell-probability threshold passed to Cellpose.
+    tile_overlap : float
+        Positive fractional overlap of prediction tiles passed to Cellpose.
+    bfloat16 : bool
+        Enable bfloat16 precision in the Cellpose model.
+    min_size : int
+        Nonnegative minimum object size in pixels passed to Cellpose.
+    normalize_percentiles : tuple[float, float]
+        Low and high normalization percentiles per input channel, in percent.
+    method : str
+        Method identifier, ``cellpose``.
+
+    Notes
+    -----
     model names a known model (``cpsam_v2``) in the weights cache, model_path a
     model file; exactly one is given, and model_sha256 optionally maps the
     file's name to its expected SHA-256. Cellpose itself would silently load

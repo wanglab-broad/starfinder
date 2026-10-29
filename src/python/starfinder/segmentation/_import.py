@@ -20,6 +20,19 @@ from ._labels import (FORMAT_VERSION, GEOMETRIES, ReferenceGrid, SegmentationRes
 class LabelImportConfig:
     """An imported mask as a run of a segmentation plan; not a segmentation method.
 
+    Parameters
+    ----------
+    path : str
+        Path to the integer TIFF mask to import.
+    target : str
+        Label target: ``nucleus`` or ``cell``.
+    geometry : str or None
+        Label geometry: ``plane``, ``volume`` or ``extended``; ``None`` derives it from the mask's shape.
+    relabel : bool
+        Renumber positive labels consecutively from one in increasing source-value order.
+
+    Notes
+    -----
     ``path`` is a YX or ZYX integer TIFF readable by :func:`starfinder.io.load_volume`;
     ``target`` is ``nucleus`` or ``cell``; ``geometry`` ``None`` derives ``plane``
     (Z=1) or ``volume`` (Z>1), or names ``extended``; ``relabel`` ``False`` keeps the
