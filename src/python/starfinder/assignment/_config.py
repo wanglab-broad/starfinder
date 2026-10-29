@@ -36,6 +36,15 @@ def _share(value, name, low, *, low_open=False):
 class CorrespondenceConfig:
     """The overlap rule that relates nuclei to cells (option C2 of design/specs/assignment.md).
 
+    Parameters
+    ----------
+    match_fraction : float
+        Nucleus voxel-share threshold for matching a nucleus to a cell.
+    outside_tolerance : float
+        Nucleus voxel-share tolerance outside its matched cell for the ``outside`` flag.
+
+    Notes
+    -----
     A nucleus is matched to the cell holding the largest share of its voxels when
     that share is strictly greater than ``match_fraction`` (in [0.5, 1); 0.5 is the
     smallest value that makes the match unique). A matched nucleus whose share
@@ -62,6 +71,20 @@ class CorrespondenceConfig:
 class AssignmentConfig:
     """Settings of :func:`assign_molecules`.
 
+    Parameters
+    ----------
+    expansion : ExpandLabelsConfig or None
+        Cell-territory expansion settings; ``None`` leaves the territories unexpanded.
+    legacy_pixel_expansion : bool
+        Allow pixel-distance expansion on a calibrated grid.
+    correspondence : CorrespondenceConfig
+        Voxel-overlap settings for matching nuclei to cells.
+    exclude_cells_without_nucleus : bool or None
+        Exclude cells with ``no_nucleus`` correspondence when nuclei are supplied.
+        ``None`` enables exclusion with nuclei and disables it without nuclei.
+
+    Notes
+    -----
     ``expansion`` is applied once, by assign, to the cell territories with
     :func:`~starfinder.segmentation.expand_labels`; both masks are kept. A
     ``pixel`` distance on a calibrated grid needs ``legacy_pixel_expansion=True``

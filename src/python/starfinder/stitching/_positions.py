@@ -113,6 +113,17 @@ class TilePositionTable:
 class StageAxisMapping:
     """Where the stage axes go in the image: each of ``x`` and ``y`` is ``"+x"``, ``"-x"``, ``"+y"`` or ``"-y"``.
 
+    Parameters
+    ----------
+    x : str
+        Image direction of stage +X: ``+x``, ``-x``, ``+y`` or ``-y``.
+    y : str
+        Image direction of stage +Y: ``+x``, ``-x``, ``+y`` or ``-y``.
+    source : str
+        Provenance label for the mapping, such as ``declared`` for caller input or ``legacy`` for workflow translation.
+
+    Notes
+    -----
     ``x`` says where stage +X goes, ``y`` where stage +Y goes; the two name
     different image axes. ``source`` says where the mapping comes from
     (``"declared"`` by the caller, ``"legacy"`` for the workflow's translation of
@@ -189,6 +200,17 @@ def _steps(overlap_yx, tile_yx, spacing_yx):
 class GridSnap:
     """Snap stage positions to a regular grid: the step is ``(1 − overlap) × tile_shape_yx × spacing_yx``.
 
+    Parameters
+    ----------
+    overlap : float or tuple of float
+        Nominal overlap fraction, as one value for Y and X or a pair in YX order.
+    tile_shape_yx : tuple of int
+        Positive reference-tile dimensions in YX pixels.
+    spacing_yx : tuple of float
+        Positive reference-tile spacing in YX order, in µm per pixel.
+
+    Notes
+    -----
     ``overlap`` is a fraction, ``0 ≤ overlap < 1``, one value or ``(y, x)``;
     ``tile_shape_yx`` the reference grids' Y and X sizes (integers ≥ 1, px);
     ``spacing_yx`` their Y and X spacing (finite, > 0, µm per px). None of the
@@ -261,6 +283,7 @@ def positions_from_grid(*, columns: int, rows: int, order: str, tile_shape_yx: t
     scanned left). Nominal ``y = row × step_y``, ``x = column × step_x`` and
     ``z = 0``, with ``step = (1 − overlap) × tile_shape_yx × spacing_yx`` per axis
     (µm). No argument has a default.
+
 
     Parameters
     ----------
@@ -389,6 +412,7 @@ def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping
     :func:`positions_from_grid` for the cells, with the snap's step, and the rows'
     ``source`` is ``grid``.
 
+
     Parameters
     ----------
     path : str or Path
@@ -506,6 +530,7 @@ def positions_from_table(path_or_frame, *, unit: str = "µm") -> TilePositionTab
     multiplied by 1000. A CSV is read as text and each value parsed as a float64
     (``float``), so a value written with round-trip precision is read back
     bitwise.
+
 
     Parameters
     ----------

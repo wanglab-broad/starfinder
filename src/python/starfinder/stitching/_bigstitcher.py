@@ -73,6 +73,47 @@ def _check_triple(name, value, *, low=None, integer=False):
 class BigStitcherConfig:
     """The parameters of the BigStitcher macro; the defaults are today's macro (create_BigStitcher_macro_1.py).
 
+    Parameters
+    ----------
+    overlap_percent_xyz : tuple
+        Nominal tile overlap percentages in XYZ order.
+    exclude : int
+        Nonnegative Bioformats loader exclusion setting in the dataset-definition macro.
+    subsampling_factors : tuple
+        Positive integer XYZ subsampling factors for the HDF5 resolution levels.
+    hdf5_chunk_sizes : tuple
+        Positive integer XYZ chunk dimensions, in voxels, for the HDF5 resolution levels.
+    timepoints_per_partition : int
+        Nonnegative timepoint count per HDF5 partition in the macro.
+    setups_per_partition : int
+        Nonnegative setup count per HDF5 partition in the macro.
+    deflate_compression : bool
+        Enable deflate compression for the HDF5 export.
+    downsample_xyz : tuple
+        Positive integer XYZ downsampling factors for pairwise phase correlation.
+    min_r : float
+        Lower link-quality threshold for the BigStitcher pairwise-shift filter.
+    max_r : float
+        Upper link-quality threshold for the BigStitcher pairwise-shift filter.
+    max_shift_xyz : tuple
+        Nonnegative XYZ shift-limit settings passed to the BigStitcher filter.
+        Zero requests no shift limit on that axis.
+    max_displacement : float
+        Nonnegative displacement-limit setting passed to the BigStitcher filter.
+        Zero requests no displacement limit.
+    relative : float
+        Nonnegative relative-error setting for BigStitcher global optimization.
+    absolute : float
+        Nonnegative absolute-error setting for BigStitcher global optimization, in pixels.
+    pad_missing : bool
+        Represent acquired FOVs with absent images as blank placeholder views.
+    global_optimization_strategy : str
+        Macro strategy, ``Two-Round using Metadata to align unconnected Tiles and iterative dropping of bad links``.
+    method : str
+        Method identifier, ``bigstitcher``.
+
+    Notes
+    -----
     Dataset definition: the Bioformats loader on ``tile_{j}.tif`` (files below
     ``exclude`` are skipped, as today), ``Move Tile to Grid`` with ``Down &
     Right`` and ``overlap_percent_xyz`` (10 % in x, y and z), re-saved as
@@ -260,6 +301,7 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
     (``dataset_save_path`` and ``select=<save_dir>/dataset.xml``, a local folder
     for the engine task) and the voxel size from the reference grids' spacing
     (µm, x and y the grids' X and Y spacing, z their Z spacing). Fiji is not run.
+
 
     Parameters
     ----------
@@ -586,6 +628,7 @@ def import_bigstitcher(dataset_xml, *, table: TilePositionTable, view_map: pd.Da
       too (no shift when no FOV is ``image_supported``);
     * :func:`review_placement` applies ``review``.
 
+
     Parameters
     ----------
     dataset_xml : str or Path
@@ -818,6 +861,7 @@ def legacy_tile_config_view(result: PlacementResult, *, img_col: int, img_row: i
     (the 1-based table row when the table has none) and 0 for padding. It reads
     no status, so it is the same for every ``fallback``. ``frame.to_csv()`` is
     the text ``create_tile_config.py`` writes.
+
 
     Parameters
     ----------

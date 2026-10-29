@@ -6,7 +6,8 @@ the {doc}`API <api/assembly>` documents its functions and classes.
 
 ## Configuration
 
-See {py:class}`~starfinder.assembly.AssemblyConfig` for option details.
+Ownership, retention and diagnostics. See
+{py:class}`~starfinder.assembly.AssemblyConfig`.
 
 ```{config-options} starfinder.assembly.AssemblyConfig
 ```

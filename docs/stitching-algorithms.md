@@ -30,9 +30,10 @@ translations by global optimization. See
 
 ### Review and stage conversion
 
-See {py:class}`~starfinder.stitching.ReviewPolicy`,
+Review and position-conversion settings. See
+{py:class}`~starfinder.stitching.ReviewPolicy`,
 {py:class}`~starfinder.stitching.StageAxisMapping` and
-{py:class}`~starfinder.stitching.GridSnap` for their parameter details.
+{py:class}`~starfinder.stitching.GridSnap` for the API reference.
 
 ```{config-options} starfinder.stitching.ReviewPolicy
 ```

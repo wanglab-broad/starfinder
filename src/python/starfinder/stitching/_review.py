@@ -25,6 +25,15 @@ SUPPLIED_REASON = "supplied_placement"
 class ReviewPolicy:
     """Review criterion V1: when a placement needs review before sample assembly.
 
+    Parameters
+    ----------
+    max_correction_fraction : float
+        Nonnegative correction bound as a fraction of nominal overlap width for placement review.
+    max_residual_um : float
+        Nonnegative kept-link residual bound for placement review, in µm.
+
+    Notes
+    -----
     Review is required when any FOV is not ``image_supported``; when a
     correction exceeds ``max_correction_fraction`` of the FOV's nominal overlap
     width in Y or X (the median over its registered pairs); when a kept link's

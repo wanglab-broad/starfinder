@@ -34,6 +34,22 @@ TIES = ("table_order", "half_open")
 class AssemblyConfig:
     """How :func:`assemble` decides ownership and which flags it computes.
 
+    Parameters
+    ----------
+    ownership : str
+        Point-ownership method: ``nearest_center`` or ``midpoint_box``.
+    centroid : str
+        Cell centroid used for ownership: ``territory`` for the sampled territory or ``original`` for the original cell.
+    tie : str
+        Ownership tie policy: ``table_order`` or ``half_open``.
+    conflicts : bool
+        Compute the territory-based ``conflict`` and ``unclaimed`` cell flags.
+    duplicate_threshold : float or None
+        Positive shared-voxel fraction of the smaller sample-grid territory for the cell duplicate rule.
+        ``None`` disables the duplicate rule.
+
+    Notes
+    -----
     ``ownership`` is ``nearest_center`` (O1: the owning FOV whose footprint
     contains the point and whose footprint centre is nearest in Y and X) or
     ``midpoint_box`` (O2: per FOV an axis-aligned box whose edge towards each

@@ -40,6 +40,39 @@ def _number(value, name, *, low=None, strict=False):
 class MultiviewStitcherConfig:
     """Place overlapping FOVs by phase correlation and global translation optimization.
 
+    Parameters
+    ----------
+    binning_zyx : tuple of int
+        Positive mean-binning factors for pairwise registration: ZYX voxels in 3D and YX voxels in 2D.
+    pairwise : str
+        Pairwise registration method, ``phase_correlation``.
+    upsample_factor : int or None
+        Positive subpixel upsampling factor for phase correlation.
+        ``None`` uses the library default: 10 in 2D and 2 in 3D.
+    quality_threshold : float
+        Lower Spearman-correlation quality threshold for keeping a registered link.
+    drop_nan_quality : bool
+        Drop registered links whose quality is NaN.
+    pruning : str or None
+        Overlap-graph pruning method, ``alternating_pattern``; ``None`` disables pruning.
+    overlap_tolerance_um : float
+        Nonnegative box-growth tolerance for neighbour derivation and library overlap regions, in µm.
+    groupwise : str
+        Groupwise resolution method, ``global_optimization``.
+    abs_tol_um : float or None
+        Positive absolute residual tolerance for global optimization, in µm.
+        ``None`` uses the library's maximum voxel diagonal across graph nodes.
+    rel_tol : float or None
+        Positive relative-change tolerance for global optimization.
+        ``None`` uses the library default, 0.0001.
+    max_iter : int or None
+        Positive iteration budget for global optimization.
+        ``None`` uses the library default, 500.
+    method : str
+        Method identifier, ``multiview_stitcher``.
+
+    Notes
+    -----
     Phase correlation on each registered pair's overlap, mean-binned by
     ``binning_zyx`` voxels (z ignored for Z=1 tiles, which are registered as
     planes), each shift quantized to ``binning / upsample_factor`` voxels

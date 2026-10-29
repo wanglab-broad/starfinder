@@ -9,7 +9,7 @@ are read from the code when the site is built. The
 
 ### Assignment
 
-The expansion, the correspondence thresholds and the exclusion. See
+Assignment settings. See
 {py:class}`~starfinder.assignment.AssignmentConfig`.
 
 ```{config-options} starfinder.assignment.AssignmentConfig
