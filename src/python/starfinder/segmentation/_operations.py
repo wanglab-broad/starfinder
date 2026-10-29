@@ -81,7 +81,7 @@ class ExpandLabelsConfig:
     Parameters
     ----------
     distance : float
-        Nonnegative label expansion distance in the selected unit.
+        Nonnegative finite label expansion distance in the selected unit.
     unit : str
         Distance unit: ``pixel`` for voxel steps or ``um`` for micrometres.
     mode : str
@@ -195,13 +195,15 @@ class ZExtensionConfig:
     Parameters
     ----------
     median_um : float
-        Positive side length of the stain's square median-filter window in micrometres.
+        Positive finite side length of the stain's square median-filter window in micrometres, applied per plane.
     threshold : str or float
-        Foreground threshold: ``otsu`` or a value on the stain's ``img_as_float`` scale.
+        Foreground threshold: ``otsu`` for Otsu's threshold of the filtered stack,
+        or a value in [0, 1] on the stain's ``img_as_float`` scale.
     min_area_um2 : float
-        Nonnegative minimum foreground object area per plane in square micrometres.
+        Nonnegative finite minimum foreground object area per plane in square micrometres.
     dilation_um : float
-        Nonnegative radius of the foreground mask's dilation disk in micrometres.
+        Nonnegative finite radius of the foreground mask's dilation disk in micrometres.
+        Zero skips dilation.
     fill_holes : str
         Hole-filling schedule: ``once`` before area filtering or ``twice`` with a second fill after dilation.
 

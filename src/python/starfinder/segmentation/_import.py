@@ -27,7 +27,8 @@ class LabelImportConfig:
     target : str
         Label target: ``nucleus`` or ``cell``.
     geometry : str or None
-        Label geometry: ``plane``, ``volume`` or ``extended``; ``None`` derives it from the mask's shape.
+        Label geometry: ``plane``, ``volume`` or ``extended``.
+        ``None`` selects ``plane`` for Z=1 and ``volume`` for Z>1.
     relabel : bool
         Renumber positive labels consecutively from one in increasing source-value order.
 

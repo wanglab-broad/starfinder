@@ -128,7 +128,8 @@ class SegmentationRun:
     seeds : str or None
         Name of an earlier run supplying seed labels; ``None`` selects no seed run.
     projection : ProjectionConfig or None
-        Z-projection settings for the run's reference grid; ``None`` leaves the grid unprojected.
+        Z-projection settings for the computed input and the run's reference grid;
+        ``None`` leaves them unprojected.
     operations : tuple
         Label operations in application order, using ``ExpandLabelsConfig`` and ``ZExtensionConfig``.
 

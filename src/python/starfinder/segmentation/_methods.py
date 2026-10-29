@@ -105,11 +105,12 @@ class SeededWatershedConfig:
     Parameters
     ----------
     sigma_um : float
-        Positive Gaussian smoothing standard deviation for the stain, in micrometres.
+        Positive finite Gaussian smoothing standard deviation for the stain, in micrometres.
     threshold : str or float
-        Foreground threshold: ``otsu`` or a value on the smoothed stain's ``img_as_float`` scale.
+        Foreground threshold: ``otsu`` for Otsu's threshold of the smoothed stain,
+        or a finite value on the smoothed stain's ``img_as_float`` scale.
     compactness : float
-        Nonnegative compactness parameter passed to the watershed.
+        Nonnegative finite compactness parameter passed to the watershed.
     connectivity : int
         Watershed neighbourhood connectivity: 1, 2 or 3.
     method : str

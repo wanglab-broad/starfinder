@@ -123,27 +123,34 @@ class StarDistConfig:
     Parameters
     ----------
     scale : float or tuple[float, float, float]
-        Positive dimensionless prediction scale, as a YX factor or ZYX factors.
+        Positive finite dimensionless prediction scale: a scalar sets the Y and X factors with Z factor 1,
+        and a three-tuple sets the ZYX factors.
     model : str or None
-        Known pretrained model name in the weights cache, such as ``2D_versatile_fluo``.
+        Known pretrained model name in the weights cache, ``2D_versatile_fluo``.
     model_path : str or None
         Path to the user-trained StarDist model folder.
     model_sha256 : Mapping[str, str] or None
-        Expected SHA-256 values keyed by file name for a model supplied by path.
+        Expected SHA-256 values keyed by file name for a model supplied by path;
+        ``None`` adds no expected hashes.
     prob_thresh : float or None
-        Nonnegative object probability threshold override; ``None`` uses the model's stored value.
+        Object probability threshold override in [0, 1]; ``None`` uses the model's stored value.
     nms_thresh : float or None
-        Nonnegative non-maximum suppression threshold override; ``None`` uses the model's stored value.
+        Non-maximum suppression threshold override in [0, 1]; ``None`` uses the model's stored value.
     normalize_percentiles : tuple[float, float]
-        Low and high normalization percentiles over the whole input image, in percent.
+        Low and high normalization percentiles over the whole input image, in percent,
+        with 0 ≤ low < high ≤ 100.
     n_tiles : tuple[int, ...] or None
-        Positive prediction tile counts in model-axis order; ``None`` uses the script's tiling.
+        Positive integer prediction tile counts in YX order for a 2D model or ZYX order for a 3D model.
+        ``None`` uses (2, 2) for a 2D model and (1, 4, 4) for a 3D model.
     block_size : int or tuple[int, ...] or None
-        Positive prediction block size in input-grid voxels, as a scalar or per-axis values.
+        Positive integer prediction block size in input-grid voxels, shared across axes or specified
+        per axis in YX order for a 2D model or ZYX order for a 3D model.
     min_overlap : int or tuple[int, ...] or None
-        Nonnegative minimum prediction block overlap in input-grid voxels, as a scalar or per-axis values.
+        Nonnegative integer minimum prediction block overlap in input-grid voxels, shared across axes
+        or specified per axis in YX order for a 2D model or ZYX order for a 3D model.
     context : int or tuple[int, ...] or None
-        Nonnegative prediction block context in input-grid voxels, as a scalar or per-axis values.
+        Nonnegative integer prediction block context in input-grid voxels, shared across axes or specified
+        per axis in YX order for a 2D model or ZYX order for a 3D model.
     method : str
         Method identifier, ``stardist``.
 
@@ -226,29 +233,32 @@ class CellposeConfig:
     Parameters
     ----------
     diameter : float or None
-        Positive object diameter in pixels for rescaling; ``None`` requests no rescaling.
+        Positive finite object diameter in pixels, setting the image rescale factor to 30 / diameter;
+        ``None`` requests no rescaling.
     model : str or None
-        Known pretrained model name in the weights cache, such as ``cpsam_v2``.
+        Known pretrained model name in the weights cache, ``cpsam_v2``.
     model_path : str or None
         Path to the Cellpose model file.
     model_sha256 : Mapping[str, str] or None
-        Expected SHA-256 keyed by file name for a model supplied by path.
+        Expected SHA-256 keyed by file name for a model supplied by path;
+        ``None`` adds no expected hashes.
     do_3d : bool
         Enable Cellpose's 3D segmentation mode.
     anisotropy : float or None
-        Positive Z-to-YX voxel-spacing ratio for 3D mode.
+        Positive finite Z-to-YX voxel-spacing ratio for 3D mode.
     flow_threshold : float
-        Nonnegative flow-error threshold passed to Cellpose.
+        Nonnegative finite flow-error threshold passed to Cellpose.
     cellprob_threshold : float
-        Cell-probability threshold passed to Cellpose.
+        Finite cell-probability threshold passed to Cellpose.
     tile_overlap : float
-        Positive fractional overlap of prediction tiles passed to Cellpose.
+        Fractional overlap of prediction tiles passed to Cellpose, in [0.05, 0.5].
     bfloat16 : bool
         Enable bfloat16 precision in the Cellpose model.
     min_size : int
-        Nonnegative minimum object size in pixels passed to Cellpose.
+        Nonnegative integer minimum object size in pixels passed to Cellpose.
     normalize_percentiles : tuple[float, float]
-        Low and high normalization percentiles per input channel, in percent.
+        Low and high normalization percentiles per input channel, in percent,
+        with 0 ≤ low < high ≤ 100.
     method : str
         Method identifier, ``cellpose``.
 

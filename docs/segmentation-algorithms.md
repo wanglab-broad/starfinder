@@ -25,7 +25,7 @@ user-trained model; the model's dimensionality decides between 2D and 3D. See
 
 ### Cellpose
 
-Cellpose segments nuclei or whole cells from stains in 2D and 3D. See
+Cellpose segments nuclei or whole cells from one or two stains in 2D or 3D. See
 {py:class}`~starfinder.segmentation.CellposeConfig`.
 
 ```{config-options} starfinder.segmentation.CellposeConfig

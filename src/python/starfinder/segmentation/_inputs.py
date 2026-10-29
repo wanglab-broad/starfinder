@@ -33,9 +33,11 @@ class CompositeConfig:
     Parameters
     ----------
     nuclear_quantile : float
-        Lower stretch quantile for the nuclear image, expressed as a nonnegative fraction.
+        Stretch fraction q for the nuclear image, in [0, 0.5).
+        The image is stretched between its q and 1 − q quantiles over the whole volume.
     amplicon_quantile : float
-        Lower stretch quantile for the amplicon image, expressed as a nonnegative fraction.
+        Stretch fraction q for the amplicon image, in [0, 0.5).
+        The image is stretched between its q and 1 − q quantiles over the whole volume.
 
     Notes
     -----
@@ -60,11 +62,13 @@ class FlamingoEnhancementConfig:
     Parameters
     ----------
     flamingo_quantile : float
-        Lower stretch quantile for the Flamingo image, expressed as a nonnegative fraction.
+        Stretch fraction q for the Flamingo image, in [0, 0.5).
+        The image is stretched between its q and 1 − q quantiles over the whole volume.
     nuclear_quantile : float
-        Lower stretch quantile for the nuclear image, expressed as a nonnegative fraction.
+        Stretch fraction q for the nuclear image, in [0, 0.5).
+        The image is stretched between its q and 1 − q quantiles over the whole volume.
     median_radius_px : int
-        Nonnegative disk radius in pixels for median filtering the Flamingo image.
+        Nonnegative integer disk radius in pixels for median filtering the Flamingo image in each Z plane.
 
     Notes
     -----
