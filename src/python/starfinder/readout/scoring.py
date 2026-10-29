@@ -26,6 +26,13 @@ NO_BACKGROUND = ("scoring needs the local background measured at extraction, and
 class ReadScoreConfig:
     """The shared read-QC score bgcorr_probability (design D1 of the readout design study); no tunable parameter.
 
+    Parameters
+    ----------
+    method : str
+        Method identifier, ``bgcorr_probability``.
+
+    Notes
+    -----
     The constants 1e-6 (additive) and 1e-12 (probability floor) are the
     codebook-aware decoder's.
     """

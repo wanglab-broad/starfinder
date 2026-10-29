@@ -122,6 +122,13 @@ def load_direct_panel(path: str | Path, *, round_labels: tuple[str, ...],
 class DirectDecoderConfig:
     """Direct readout: the gene of each candidate's own round and channel.
 
+    Parameters
+    ----------
+    method : str
+        Method identifier, ``direct``.
+
+    Notes
+    -----
     No parameters besides the panel. No codeword competition, rescue, required
     rounds, encoding or end-base check applies, and the brightest channel never
     changes the identity.

@@ -27,6 +27,18 @@ def _radius(value, name):
 class LocalBackgroundConfig:
     """Local background and noise of each candidate, per channel and round (estimator local_ring).
 
+    Parameters
+    ----------
+    inner_radius_zyx : tuple[int, int, int]
+        Nonnegative inner box half-widths in ZYX voxels for the local background ring.
+    outer_radius_zyx : tuple[int, int, int]
+        Nonnegative outer box half-widths in ZYX voxels for the local background ring.
+    min_voxels : int
+        Positive minimum number of ring voxels for estimating local background and
+        noise.
+
+    Notes
+    -----
     The ring is the voxels of the outer box (half-widths outer_radius_zyx) that
     lie outside the inner box (inner_radius_zyx) around the rounded centre,
     clipped to the image: by default the extraction box's own three z-planes at
@@ -55,6 +67,20 @@ class LocalBackgroundConfig:
 class NeighborhoodSumConfig:
     """Float64 sums with nearest floor(coord+.5) sampling and zero boundaries.
 
+    Parameters
+    ----------
+    neighborhood_radius_zyx : tuple[int, int, int]
+        Nonnegative extraction box half-widths in ZYX voxels.
+    sampling : str
+        Coordinate sampling mode, ``nearest``.
+    boundary : str
+        Image boundary mode, ``zero``.
+    background : LocalBackgroundConfig or None
+        Local background and noise measurement settings; ``None`` disables these
+        measurements.
+
+    Notes
+    -----
     Half-widths are voxel counts, never physical spacing. Inputs are not mutated.
     A clipped slice is equivalent to zero padding without allocating padded images.
     background measures the local background and noise next to the sums

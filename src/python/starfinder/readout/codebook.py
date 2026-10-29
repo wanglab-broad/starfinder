@@ -71,6 +71,21 @@ def _labels(labels, name):
 class EncodingConfig:
     """two_base encoding: each adjacent pair of bases gives one color, as in STARmap.
 
+    Parameters
+    ----------
+    reverse_bases : bool
+        Whether to reverse bases before encoding.
+    split_index : int or None
+        Zero-based color index for the legacy remove-and-swap split. ``None`` disables
+        the legacy split.
+    pair_to_color : dict[str, str]
+        Mapping of ordered base pairs in read orientation to color symbols ``1`` through
+        ``4``. The default is the active STARmap two-base table.
+    method : str
+        Method identifier, ``two_base``.
+
+    Notes
+    -----
     Reverse bases before encoding; optionally remove/swap at split_index.
 
     pair_to_color maps each of the 16 ordered base pairs (in read orientation) to
@@ -124,6 +139,18 @@ class EncodingConfig:
 class OneBaseEncodingConfig:
     """one_base encoding: each base is one round's color through base_to_color.
 
+    Parameters
+    ----------
+    base_to_color : dict[str, str]
+        Mapping of ``A``, ``C``, ``G`` and ``T`` one-to-one onto color symbols ``1``
+        through ``4``.
+    reverse_bases : bool
+        Whether to reverse a segment's bases before encoding.
+    method : str
+        Method identifier, ``one_base``.
+
+    Notes
+    -----
     base_to_color maps A, C, G and T one-to-one onto the colors "1" to "4" and has
     no default. reverse_bases reverses a segment's bases before encoding.
     """

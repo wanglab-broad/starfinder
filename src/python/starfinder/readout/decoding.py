@@ -37,6 +37,17 @@ class WtaDecoderConfig:
     """Winner-take-all: each round's brightest channel gives its color, and the color
     sequence is looked up in the codebook.
 
+    Parameters
+    ----------
+    negative_policy : str
+        Negative-intensity policy: ``reject`` or ``clip_negative``.
+    diagnostics : bool
+        Whether to retain detailed decoding diagnostics.
+    method : str
+        Method identifier, ``wta``.
+
+    Notes
+    -----
     Exact WTA calls; score is summed -log(max/(L2+epsilon)) across rounds.
 
     Normalization is max / (sqrt(sum(squares)) + 1e-6), matching legacy scores.
@@ -56,6 +67,35 @@ class CodebookAwareDecoderConfig:
     """Probability-scored decoding: exact calls and an optional, gated rescue of reads
     close to a codebook entry.
 
+    Parameters
+    ----------
+    max_hamming : int
+        Nonnegative maximum number of known-color substitutions plus unknown rounds for
+        rescue.
+    max_corrected_round_margin : float or None
+        Upper limit on the original top-minus-second channel probability margin at known
+        corrected rounds. ``None`` disables this rescue gate.
+    min_score_delta : float
+        Nonnegative minimum runner-up minus best candidate negative-log probability
+        score for rescue.
+    min_geomean_probability : float
+        Minimum geometric mean assigned-channel probability of a rescued sequence.
+    max_correction_penalty : float
+        Nonnegative maximum extra negative-log probability score relative to WTA over
+        changed known rounds for rescue.
+    allow_exact : bool
+        Whether to accept exact WTA codebook matches.
+    allow_rescue : bool
+        Whether to attempt rescue to a nearby codebook sequence.
+    negative_policy : str
+        Negative-intensity policy: ``reject`` or ``clip_negative``.
+    diagnostics : bool
+        Whether to retain detailed decoding diagnostics.
+    method : str
+        Method identifier, ``codebook_aware``.
+
+    Notes
+    -----
     Probability-score decoder with exact calls and conservative rescue gates.
 
     Probabilities use additive 1e-6, candidate scores sum -log(p) with 1e-12

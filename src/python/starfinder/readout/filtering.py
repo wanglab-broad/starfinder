@@ -23,6 +23,29 @@ def score_columns() -> tuple[str, ...]:
 class ReadFilterConfig:
     """Explicit status, inclusive score bounds and duplicate predicates; no default cutoff.
 
+    Parameters
+    ----------
+    call_statuses : tuple[str, ...]
+        Accepted call statuses, drawn from ``assigned``, ``unmatched``, ``ambiguous``
+        and ``no_signal``.
+    score_bounds : dict[str, tuple[float or None, float or None]]
+        Mapping of score column names to inclusive lower and upper bounds in that
+        column's units. ``None`` leaves that end unbounded; an empty mapping requests no
+        score predicates.
+    end_bases : str or None
+        First and last bases in read orientation for the whole-sequence endpoint
+        shortcut, as two ``A``/``C``/``G``/``T`` characters. ``None`` uses the codebook
+        layout's segment ends when declared, otherwise no endpoint check.
+    start_base : str
+        Initial base for decoding the whole-sequence endpoint shortcut: ``A``, ``C``,
+        ``G`` or ``T``.
+    exclude_invalid_endpoints : bool
+        Whether to reject reads that fail the endpoint check.
+    exclude_duplicates : bool
+        Whether to reject reads marked as duplicates by deduplication.
+
+    Notes
+    -----
     score_bounds maps a declared score column (score_columns(): a decoder's
     DecodingSpec.score_columns or the shared score's qc_score,
     qc_ambiguity_max, qc_signal_to_background and qc_rounds) to (lower, upper),

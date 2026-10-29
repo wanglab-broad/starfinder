@@ -16,6 +16,18 @@ _BASES = "ACGT"
 class Segment:
     """One separately read part of a barcode.
 
+    Parameters
+    ----------
+    name : str
+        Segment label.
+    bases : int
+        Positive segment length in bases, in barcode order.
+    ends : tuple[tuple[str, str], ...]
+        Allowed first and last base pairs in read orientation, after reversing bases
+        when requested. An empty tuple leaves the ends unchecked.
+
+    Notes
+    -----
     name labels the segment (for example "A"); bases is its length in bases, in
     barcode order; ends holds the allowed (first, last) base pairs in read
     orientation (after reverse_bases), and () leaves the ends unchecked.
@@ -49,6 +61,15 @@ class Segment:
 class BarcodeLayout:
     """Segments of a codebook barcode and the order their colors are acquired.
 
+    Parameters
+    ----------
+    segments : tuple[Segment, ...]
+        Barcode segments in the order written in the codebook file.
+    acquisition_order : tuple[str, ...] or None
+        Segment names in acquisition round order; ``None`` uses barcode order.
+
+    Notes
+    -----
     segments are in barcode order, as written in the codebook file; their lengths
     sum to every entry's barcode length. acquisition_order lists the segment names
     in round order (None: barcode order). Each segment is encoded on its own bases,

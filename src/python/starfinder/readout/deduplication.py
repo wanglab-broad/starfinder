@@ -36,6 +36,15 @@ DIRECT_MODE = ("deduplication is not available in readout mode 'direct': differe
 class DeduplicationConfig:
     """Cross-channel duplicate rule; off unless a config is given (PipelineConfig.deduplication).
 
+    Parameters
+    ----------
+    distance_voxels : float
+        Nonnegative Euclidean linking distance in voxel index space.
+    compatibility : str
+        Signal compatibility rule, ``same_sequence``.
+
+    Notes
+    -----
     distance_voxels is the inclusive Euclidean distance between candidate
     coordinates in zero-based voxel index space (default 1.0, the readout design
     study's choice; index space, not microns). compatibility "same_sequence" links

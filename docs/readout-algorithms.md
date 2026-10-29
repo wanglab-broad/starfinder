@@ -26,8 +26,6 @@ in the codebook; its calls are exact matches. See
 ### Codebook-aware
 
 Scores the codebook entries near the observed sequence with the channel probabilities.
-With `allow_exact` it calls exact matches, and with `allow_rescue` it can rescue a read
-to a nearby entry when its rescue gates pass.
 See {py:class}`~starfinder.readout.CodebookAwareDecoderConfig`.
 
 ```{config-options} starfinder.readout.CodebookAwareDecoderConfig
@@ -74,9 +72,9 @@ acquired.
 
 ## Extraction options
 
-{py:class}`~starfinder.readout.NeighborhoodSumConfig` sets the summed box, and
-{py:class}`~starfinder.readout.LocalBackgroundConfig` the ring of the local background
-and noise.
+Summed neighborhoods and local background measurements use
+{py:class}`~starfinder.readout.NeighborhoodSumConfig` and
+{py:class}`~starfinder.readout.LocalBackgroundConfig`.
 
 ```{config-options} starfinder.readout.NeighborhoodSumConfig
 ```
@@ -86,9 +84,10 @@ and noise.
 
 ## Score, deduplication and filter options
 
-{py:class}`~starfinder.readout.ReadScoreConfig` has no tunable option.
-{py:class}`~starfinder.readout.DeduplicationConfig` sets the duplicate rule, and
-{py:class}`~starfinder.readout.ReadFilterConfig` the predicates of the filter.
+Read scoring, deduplication and filtering use
+{py:class}`~starfinder.readout.ReadScoreConfig`,
+{py:class}`~starfinder.readout.DeduplicationConfig` and
+{py:class}`~starfinder.readout.ReadFilterConfig`.
 
 ```{config-options} starfinder.readout.ReadScoreConfig
 ```
