@@ -1,0 +1,370 @@
+{
+ "format_version": 1,
+ "stage": "assignment",
+ "dataset_id": "sample-tiny-v1",
+ "sample_id": "sample",
+ "fov_id": "FOV_002",
+ "subtile_id": null,
+ "name": "default",
+ "cell_namespace": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",null,\"stardist_segmentation\"]",
+ "territory_source": {
+  "run": "stardist_segmentation",
+  "target": "cell",
+  "origin": "imported",
+  "expanded_by_assign": false
+ },
+ "grid": {
+  "shape_zyx": [
+   5,
+   36,
+   36
+  ],
+  "metadata": {
+   "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+   "spacing_zyx": [
+    1.0,
+    0.5,
+    0.5
+   ],
+   "origin_zyx": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "direction_zyx": [
+    [
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     1.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     1.0
+    ]
+   ],
+   "spatial_unit": "\u00b5m"
+  },
+  "source": "file:<work>/output/sample-tiny-v1/golden/fovs/FOV_002/reference.tif",
+  "sha256": "0dc84800a2bd2c1017888a1ec8e946bc52275042e037c28cbbfb21a023cf7760",
+  "check": "checked"
+ },
+ "inputs": {
+  "molecules": {
+   "population": "final",
+   "n": 13,
+   "sha256": "ec4e3d6c3ad982c2906c8a43deca10bbad883e70f2fe221ce89f2f2a71a0b1d2",
+   "genes": [
+    "balanced-01",
+    "balanced-02",
+    "balanced-03",
+    "balanced-04",
+    "balanced-05",
+    "balanced-06",
+    "balanced-07",
+    "balanced-08",
+    "balanced-09",
+    "balanced-10",
+    "balanced-11",
+    "balanced-12",
+    "balanced-13",
+    "balanced-14",
+    "balanced-15",
+    "balanced-16"
+   ],
+   "source": {
+    "spot_namespace": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",null]",
+    "path": "<work>/output/sample-tiny-v1/golden/fovs/FOV_002/molecules.csv",
+    "sha256": "93c45e3be7e25ffa8cca0e7a082c0aff00c4dfcaf9e276db4dfb300f57e02b2d"
+   }
+  },
+  "cells": {
+   "run": "stardist_segmentation",
+   "target": "cell",
+   "geometry": "volume",
+   "label_namespace": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",null,\"stardist_segmentation\"]",
+   "labels_sha256": "3f784f43912f08c3b5a8df581834033780c359fa3b01e4597ccf4b49d94ecc74",
+   "operations": [],
+   "saved_under_run": false,
+   "file": {
+    "path": "cell_labels.tif",
+    "sha256": "ed7d2ffac215bdc1049698d922580a6da8156b6fbeca9ae435f687047469e6ca"
+   },
+   "record": {
+    "format_version": 1,
+    "stage": "segmentation",
+    "dataset_id": "sample-tiny-v1",
+    "sample_id": "sample",
+    "fov_id": "FOV_002",
+    "subtile_id": null,
+    "run": "stardist_segmentation",
+    "target": "cell",
+    "geometry": "volume",
+    "label_namespace": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",null,\"stardist_segmentation\"]",
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "source": "file:<work>/output/sample-tiny-v1/golden/fovs/FOV_002/reference.tif",
+     "sha256": "0dc84800a2bd2c1017888a1ec8e946bc52275042e037c28cbbfb21a023cf7760"
+    },
+    "input": null,
+    "seeds": null,
+    "methods": [],
+    "import": {
+     "path": "<work>/output/sample-tiny-v1/golden/images/stardist_segmentation/FOV_002.tif",
+     "file_sha256": "1b6a66b205c978b270ee3df909b9e334988fed554df01a135164dab7c5a9f32c",
+     "sha256": "3f784f43912f08c3b5a8df581834033780c359fa3b01e4597ccf4b49d94ecc74",
+     "source_dtype": "uint32",
+     "source_shape": [
+      5,
+      36,
+      36
+     ],
+     "metadata_source": "declared",
+     "relabel": false,
+     "relabel_map": null,
+     "target": "cell",
+     "geometry": "volume"
+    },
+    "operations": [],
+    "outcome": "ok",
+    "labels": {
+     "dtype": "uint32",
+     "sha256": "3f784f43912f08c3b5a8df581834033780c359fa3b01e4597ccf4b49d94ecc74",
+     "n_labels": 6,
+     "max_label": 9
+    }
+   }
+  },
+  "nuclei": null,
+  "correspondence": null
+ },
+ "config": {
+  "expansion": null,
+  "legacy_pixel_expansion": false,
+  "correspondence": {
+   "match_fraction": 0.5,
+   "outside_tolerance": 0.1
+  },
+  "exclude_cells_without_nucleus": false,
+  "exclusion_source": "default",
+  "exclusion_rationale": "possible cell residue; not a biological identity"
+ },
+ "sampling": {
+  "rule": "floor(c + 0.5)",
+  "sampled_axes": "zyx"
+ },
+ "expansion": null,
+ "calibration": "known",
+ "calibration_source": "grid",
+ "size_unit": "\u00b5m^3",
+ "counts": {
+  "molecules": 13,
+  "assigned": 12,
+  "unassigned": 1,
+  "excluded_cell": 0,
+  "outside_grid": 0,
+  "cells": 6,
+  "cells_kept": 6,
+  "cells_excluded": 0,
+  "nuclei": 0,
+  "correspondence": {
+   "matched": 0,
+   "ambiguous": 0,
+   "no_nucleus": 0,
+   "unavailable": 6
+  },
+  "compartments": {
+   "available": 0,
+   "withheld": 0,
+   "no_nucleus": 0,
+   "unavailable": 6
+  },
+  "assigned_by_compartment": {
+   "nucleus": 0,
+   "cytoplasm": 0,
+   "withheld": 0,
+   "no_nucleus": 0,
+   "unavailable": 12
+  },
+  "molecules_by_status": {
+   "assigned": 12,
+   "unassigned": 1,
+   "excluded_cell": 0,
+   "outside_grid": 0
+  },
+  "cells_by_status": {
+   "kept": 6,
+   "excluded_no_nucleus": 0
+  },
+  "cells_by_correspondence": {
+   "matched": 0,
+   "ambiguous": 0,
+   "no_nucleus": 0,
+   "unavailable": 6
+  },
+  "cells_by_flag": {
+   "several_nuclei": 0,
+   "ambiguous_nucleus": 0,
+   "nucleus_outside_cell": 0,
+   "foreign_nucleus": 0
+  },
+  "cells_by_compartments": {
+   "available": 0,
+   "withheld": 0,
+   "no_nucleus": 0,
+   "unavailable": 6
+  },
+  "nuclei_by_status": null,
+  "quantiles": {
+   "size_voxels": {
+    "0.0": 1.0,
+    "0.25": 16.0,
+    "0.5": 102.5,
+    "0.75": 813.0,
+    "1.0": 1413.0
+   },
+   "size_physical": {
+    "0.0": 0.25,
+    "0.25": 4.0,
+    "0.5": 25.625,
+    "0.75": 203.25,
+    "1.0": 353.25
+   },
+   "n_molecules": {
+    "0.0": 0.0,
+    "0.25": 0.0,
+    "0.5": 0.0,
+    "0.75": 4.5,
+    "1.0": 6.0
+   },
+   "n_nuclei": null
+  },
+  "exclusion": {
+   "before": {
+    "cells": 6,
+    "molecules": 12,
+    "whole": 12,
+    "nucleus": 0,
+    "cytoplasm": 0
+   },
+   "after": {
+    "cells": 6,
+    "molecules": 12,
+    "whole": 12,
+    "nucleus": 0,
+    "cytoplasm": 0
+   }
+  }
+ },
+ "outcome": "ok",
+ "files": {
+  "molecules": {
+   "path": "molecules.csv",
+   "sha256": "bc47e0fdbba0db106577d5498958c3a526667d7a3b9dc28ba994d1e533a1e3e7",
+   "dtypes": {
+    "spot_namespace": "string",
+    "spot_id": "string",
+    "z": "float64",
+    "y": "float64",
+    "x": "float64",
+    "gene_id": "string",
+    "voxel_z": "Int64",
+    "voxel_y": "Int64",
+    "voxel_x": "Int64",
+    "assignment_status": "string",
+    "cell_id": "UInt32",
+    "in_expansion": "boolean",
+    "original_cell_id": "UInt32",
+    "nucleus_id": "UInt32",
+    "compartment": "string"
+   }
+  },
+  "cells": {
+   "path": "cells.csv",
+   "sha256": "4f7d4b901e30c17a9f99849077178f3d930f321c445064880710880d641c1001",
+   "dtypes": {
+    "cell_id": "UInt32",
+    "status": "string",
+    "exclusion_reason": "string",
+    "size_voxels": "int64",
+    "expanded_size_voxels": "Int64",
+    "size_physical": "float64",
+    "expanded_size_physical": "float64",
+    "centroid_z": "float64",
+    "centroid_y": "float64",
+    "centroid_x": "float64",
+    "expanded_centroid_z": "float64",
+    "expanded_centroid_y": "float64",
+    "expanded_centroid_x": "float64",
+    "n_molecules": "int64",
+    "n_nuclei": "Int64",
+    "correspondence": "string",
+    "correspondence_flags": "string",
+    "compartments": "string"
+   }
+  },
+  "counts": {
+   "path": "counts.csv",
+   "sha256": "9bac1286347c680fd78d7e536a832fa4a570d046c0d81009dc85685ab780cc00",
+   "dtypes": {
+    "cell_id": "UInt32",
+    "gene_id": "string",
+    "compartment": "string",
+    "count": "int64"
+   }
+  },
+  "cell_labels": {
+   "path": "cell_labels.tif",
+   "sha256": "ed7d2ffac215bdc1049698d922580a6da8156b6fbeca9ae435f687047469e6ca"
+  }
+ },
+ "workflow": {
+  "source": "rules.reads_assignment.parameters",
+  "legacy": {
+   "expand_labels": false
+  },
+  "dilation_distance_ignored": false,
+  "target": "cell",
+  "target_source": "legacy_default"
+ }
+}

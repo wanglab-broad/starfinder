@@ -1,0 +1,10 @@
+cell_id,gene_id,compartment,count
+2,balanced-02,whole,1
+2,balanced-03,whole,1
+2,balanced-04,whole,1
+2,balanced-05,whole,1
+2,balanced-07,whole,1
+2,balanced-12,whole,1
+8,balanced-03,whole,1
+8,balanced-07,whole,3
+8,balanced-13,whole,2

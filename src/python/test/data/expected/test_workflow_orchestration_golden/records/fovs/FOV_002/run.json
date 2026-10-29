@@ -1,0 +1,1910 @@
+{
+ "format_version": 2,
+ "dataset_id": "sample-tiny-v1",
+ "sample_id": "sample",
+ "fov_id": "FOV_002",
+ "subtile_id": null,
+ "status": "succeeded",
+ "error": null,
+ "config": {
+  "pipeline": {
+   "load": {
+    "channel_labels": [
+     "ch00",
+     "ch01",
+     "ch02",
+     "ch03"
+    ],
+    "source_paths": null,
+    "subdir": "",
+    "source_axes": null,
+    "series_index": null,
+    "time_index": null,
+    "channel_index": null,
+    "crop_policy": "error",
+    "conversion": null,
+    "metadata": null
+   },
+   "rotation_degrees": 0,
+   "preprocessing": {
+    "steps": [
+     {
+      "config": {
+       "output_dtype": "uint8",
+       "output_range": [
+        0,
+        255
+       ],
+       "scope": "per_channel",
+       "snr_threshold": null,
+       "rounding": "truncate"
+      },
+      "save_as": null
+     },
+     {
+      "config": {
+       "radius_yx": 3
+      },
+      "save_as": null
+     }
+    ],
+    "post_registration": [],
+    "extraction_source": null,
+    "registration_source": null,
+    "supplied_statistics": null
+   },
+   "registration": {
+    "steps": [
+     {
+      "config": {
+       "backend": "scipy_fft",
+       "fft_workers": 1,
+       "method": "translation"
+      },
+      "recovery": null,
+      "signal": null
+     }
+    ],
+    "signal": {
+     "mode": "max",
+     "reference_channel": null,
+     "moving_channel": null
+    },
+    "warp": null,
+    "reference_round": null,
+    "qc": {
+     "min_coverage": null,
+     "min_ncc_gain": null,
+     "max_fold_fraction": null,
+     "max_translation_voxels": null,
+     "projections": false
+    }
+   },
+   "spot_finding": {
+    "threshold_mode": "noise",
+    "threshold_value": 5.0,
+    "min_distance_voxels": 1,
+    "exclude_border": false,
+    "channel_labels": null,
+    "measure_peak_intensity": true,
+    "merge_radius_zyx": null,
+    "method": "local_maxima"
+   },
+   "extraction": {
+    "neighborhood_radius_zyx": [
+     1,
+     2,
+     2
+    ],
+    "sampling": "nearest",
+    "boundary": "zero",
+    "background": {
+     "inner_radius_zyx": [
+      1,
+      3,
+      3
+     ],
+     "outer_radius_zyx": [
+      1,
+      6,
+      6
+     ],
+     "min_voxels": 16
+    }
+   },
+   "decoding": {
+    "negative_policy": "clip_negative",
+    "diagnostics": true,
+    "method": "wta"
+   },
+   "filtering": {
+    "call_statuses": [
+     "assigned"
+    ],
+    "score_bounds": {},
+    "end_bases": "CC",
+    "start_base": "C",
+    "exclude_invalid_endpoints": false,
+    "exclude_duplicates": true
+   },
+   "scoring": {
+    "method": "bgcorr_probability"
+   },
+   "deduplication": {
+    "distance_voxels": 1.0,
+    "compatibility": "same_sequence"
+   }
+  },
+  "execution": {
+   "mode": "batch",
+   "retain_images": false,
+   "device": "cpu"
+  },
+  "checkpoints": {
+   "stages": [
+    "candidates",
+    "pre_qc"
+   ],
+   "directory": null,
+   "table_format": "csv",
+   "hash_inputs": true,
+   "overwrite": true
+  },
+  "readout_mode": "multiplexed",
+  "encoding": {
+   "method": "two_base",
+   "reverse_bases": true,
+   "pair_to_color": {
+    "AA": "1",
+    "AC": "2",
+    "AG": "3",
+    "AT": "4",
+    "CA": "2",
+    "CC": "1",
+    "CG": "4",
+    "CT": "3",
+    "GA": "3",
+    "GC": "4",
+    "GG": "1",
+    "GT": "2",
+    "TA": "4",
+    "TC": "3",
+    "TG": "2",
+    "TT": "1"
+   }
+  }
+ },
+ "channels": {
+  "round1": [
+   {
+    "channel": "ch00",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch01",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch02",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch03",
+    "name": null,
+    "wavelength": "unavailable"
+   }
+  ],
+  "round2": [
+   {
+    "channel": "ch00",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch01",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch02",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch03",
+    "name": null,
+    "wavelength": "unavailable"
+   }
+  ],
+  "round3": [
+   {
+    "channel": "ch00",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch01",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch02",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch03",
+    "name": null,
+    "wavelength": "unavailable"
+   }
+  ],
+  "round4": [
+   {
+    "channel": "ch00",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch01",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch02",
+    "name": null,
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch03",
+    "name": null,
+    "wavelength": "unavailable"
+   }
+  ],
+  "flamingo": [
+   {
+    "channel": "ch04",
+    "name": "DAPI",
+    "wavelength": "unavailable"
+   },
+   {
+    "channel": "ch05",
+    "name": "Flamingo",
+    "wavelength": "unavailable"
+   }
+  ],
+  "reference_stain": [
+   {
+    "channel": "ch04",
+    "name": "DAPI",
+    "wavelength": "unavailable"
+   }
+  ]
+ },
+ "rounds": {
+  "sequencing_rounds": [
+   "round1",
+   "round2",
+   "round3",
+   "round4"
+  ],
+  "other_rounds": [
+   "flamingo"
+  ],
+  "reference_round": "round1"
+ },
+ "inputs": [
+  {
+   "path": "round1/FOV_002/ch00.ome.tif",
+   "sha256": "31bdedb45c560fdfef054fd44ee0f799e333244e44c2a12b0a1cc30a5e8915f4"
+  },
+  {
+   "path": "round1/FOV_002/ch01.ome.tif",
+   "sha256": "4929ca6fd506f93fa055e816eb3355dd9f8ce4651ba4ca2906bab5cdc108db82"
+  },
+  {
+   "path": "round1/FOV_002/ch02.ome.tif",
+   "sha256": "1a9624c9b02682a32d6e92eb0351aaa8197ce37fb97bf2b776a0104a49183bdf"
+  },
+  {
+   "path": "round1/FOV_002/ch03.ome.tif",
+   "sha256": "c5fd09abaac5c54d9175bb76ab1528fbabe868dd150d20dea47e92a61e96fa09"
+  },
+  {
+   "path": "round2/FOV_002/ch00.ome.tif",
+   "sha256": "d0cd08b9f71408147d2477fa76cf9f993b512297a3262fd213acd808e0875779"
+  },
+  {
+   "path": "round2/FOV_002/ch01.ome.tif",
+   "sha256": "1f5d24268eb018b909631b5fca7c32ce08ed2bf3076b3cc020eda6b80438ca79"
+  },
+  {
+   "path": "round2/FOV_002/ch02.ome.tif",
+   "sha256": "626d3da66bbb944ffab608225e702803b00c15c4b936fad2eafc9d88544abd7f"
+  },
+  {
+   "path": "round2/FOV_002/ch03.ome.tif",
+   "sha256": "f1a861600c4b97c642fc25a9cacb5970f59f07bcd3f67b4229952dd9e7da0f8a"
+  },
+  {
+   "path": "round3/FOV_002/ch00.ome.tif",
+   "sha256": "89e00ac431b9cdc184a37238ba75c559375c698cabcc4b75e3caef7dd3e6cd9d"
+  },
+  {
+   "path": "round3/FOV_002/ch01.ome.tif",
+   "sha256": "dfab459c5f058dee386e87e8ecf308ddeb104283af0999a6922f90d8fe16b3ee"
+  },
+  {
+   "path": "round3/FOV_002/ch02.ome.tif",
+   "sha256": "48d841b88db3caaaf96971f5acc0238fc87f9099e097675f1ee3f6c5e0b877ac"
+  },
+  {
+   "path": "round3/FOV_002/ch03.ome.tif",
+   "sha256": "12cd9f0ebc8e9b5cbea1f145933362f14e1930fabe3cc259b4917a6c5ac467a3"
+  },
+  {
+   "path": "round4/FOV_002/ch00.ome.tif",
+   "sha256": "eadbe2c9b61454830cfc116603035ab48b5eb620a7b886ce5f91b234ffc30692"
+  },
+  {
+   "path": "round4/FOV_002/ch01.ome.tif",
+   "sha256": "26d04567815e080e2ee7b16960d5499eff42d35e2dc539eb588d88d8aadebdd6"
+  },
+  {
+   "path": "round4/FOV_002/ch02.ome.tif",
+   "sha256": "e8e42761664c45a23b701fd6195459235709ceedaca6433c49974263fd068e29"
+  },
+  {
+   "path": "round4/FOV_002/ch03.ome.tif",
+   "sha256": "551c1eecfd099fd4839ac6f13b3b9b04fda5f60bdfae427dcec1f754bbbb524f"
+  }
+ ],
+ "codebook": {
+  "kind": "codebook",
+  "path": "genes.csv",
+  "sha256": "5e632d43b0f379f37e08743714fe18feab1f80808b11a78c3bcb4f14609774fb",
+  "entries": 16,
+  "genes": 16
+ },
+ "steps": [
+  {
+   "name": "load_images",
+   "round": null,
+   "status": "succeeded"
+  },
+  {
+   "name": "rotate_round",
+   "round": "round1",
+   "status": "succeeded"
+  },
+  {
+   "name": "preprocess:min_max_normalization",
+   "round": "round1",
+   "status": "succeeded"
+  },
+  {
+   "name": "preprocess:white_tophat",
+   "round": "round1",
+   "status": "succeeded"
+  },
+  {
+   "name": "find_spots",
+   "round": null,
+   "status": "succeeded",
+   "methods": [
+    {
+     "stage": "spot_finding",
+     "method": "local_maxima",
+     "config_type": "starfinder.spot_finding.LocalMaximaConfig",
+     "implementation": "starfinder.spot_finding._methods._local_maxima",
+     "config": {
+      "threshold_mode": "noise",
+      "threshold_value": 5.0,
+      "min_distance_voxels": 1,
+      "exclude_border": false,
+      "channel_labels": [
+       "ch00",
+       "ch01",
+       "ch02",
+       "ch03"
+      ],
+      "measure_peak_intensity": true,
+      "merge_radius_zyx": null,
+      "method": "local_maxima"
+     },
+     "requires": {},
+     "artifacts": [],
+     "execution": {
+      "device": "cpu",
+      "framework": null,
+      "threads": {
+       "torch_num_threads": null,
+       "torch_num_interop_threads": null,
+       "OMP_NUM_THREADS": "1",
+       "MKL_NUM_THREADS": "1",
+       "OPENBLAS_NUM_THREADS": "1",
+       "NUMEXPR_NUM_THREADS": "1",
+       "NUMBA_NUM_THREADS": "1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "extract_round",
+   "round": "round1",
+   "status": "succeeded"
+  },
+  {
+   "name": "rotate_round",
+   "round": "round2",
+   "status": "succeeded"
+  },
+  {
+   "name": "preprocess:min_max_normalization",
+   "round": "round2",
+   "status": "succeeded"
+  },
+  {
+   "name": "preprocess:white_tophat",
+   "round": "round2",
+   "status": "succeeded"
+  },
+  {
+   "name": "register",
+   "round": "round2",
+   "status": "succeeded"
+  },
+  {
+   "name": "extract_round",
+   "round": "round2",
+   "status": "succeeded"
+  },
+  {
+   "name": "rotate_round",
+   "round": "round3",
+   "status": "succeeded"
+  },
+  {
+   "name": "preprocess:min_max_normalization",
+   "round": "round3",
+   "status": "succeeded"
+  },
+  {
+   "name": "preprocess:white_tophat",
+   "round": "round3",
+   "status": "succeeded"
+  },
+  {
+   "name": "register",
+   "round": "round3",
+   "status": "succeeded"
+  },
+  {
+   "name": "extract_round",
+   "round": "round3",
+   "status": "succeeded"
+  },
+  {
+   "name": "rotate_round",
+   "round": "round4",
+   "status": "succeeded"
+  },
+  {
+   "name": "preprocess:min_max_normalization",
+   "round": "round4",
+   "status": "succeeded"
+  },
+  {
+   "name": "preprocess:white_tophat",
+   "round": "round4",
+   "status": "succeeded"
+  },
+  {
+   "name": "register",
+   "round": "round4",
+   "status": "succeeded"
+  },
+  {
+   "name": "extract_round",
+   "round": "round4",
+   "status": "succeeded"
+  },
+  {
+   "name": "write_checkpoint:candidates",
+   "round": null,
+   "status": "succeeded"
+  },
+  {
+   "name": "decode_reads",
+   "round": null,
+   "status": "succeeded"
+  },
+  {
+   "name": "score_reads",
+   "round": null,
+   "status": "succeeded"
+  },
+  {
+   "name": "deduplicate_reads",
+   "round": null,
+   "status": "succeeded"
+  },
+  {
+   "name": "write_checkpoint:pre_qc",
+   "round": null,
+   "status": "succeeded"
+  },
+  {
+   "name": "filter_reads",
+   "round": null,
+   "status": "succeeded"
+  }
+ ],
+ "preprocessing": {
+  "recipe": {
+   "steps": [
+    "min_max_normalization",
+    "white_tophat"
+   ],
+   "post_registration": [],
+   "extraction_source": null,
+   "registration_source": null
+  },
+  "rounds": {
+   "round1": [
+    {
+     "index": 0,
+     "stage": "steps",
+     "step": "min_max_normalization",
+     "config": {
+      "output_dtype": "uint8",
+      "output_range": [
+       0,
+       255
+      ],
+      "scope": "per_channel",
+      "snr_threshold": null,
+      "rounding": "truncate"
+     },
+     "fitted": {
+      "groups": [
+       {
+        "channel": 0,
+        "min": -3.40982723236084,
+        "max": 98.0008773803711,
+        "mode": "rescale"
+       },
+       {
+        "channel": 1,
+        "min": -3.6447033882141113,
+        "max": 166.9100341796875,
+        "mode": "rescale"
+       },
+       {
+        "channel": 2,
+        "min": -3.948976755142212,
+        "max": 93.65370178222656,
+        "mode": "rescale"
+       },
+       {
+        "channel": 3,
+        "min": -3.8645424842834473,
+        "max": 96.74885559082031,
+        "mode": "rescale"
+       }
+      ]
+     },
+     "diagnostics": {},
+     "input_dtype": "float32",
+     "output_dtype": "uint8",
+     "save_as": null
+    },
+    {
+     "index": 1,
+     "stage": "steps",
+     "step": "white_tophat",
+     "config": {
+      "radius_yx": 3
+     },
+     "fitted": {},
+     "diagnostics": {},
+     "input_dtype": "uint8",
+     "output_dtype": "uint8",
+     "save_as": null
+    }
+   ],
+   "round2": [
+    {
+     "index": 0,
+     "stage": "steps",
+     "step": "min_max_normalization",
+     "config": {
+      "output_dtype": "uint8",
+      "output_range": [
+       0,
+       255
+      ],
+      "scope": "per_channel",
+      "snr_threshold": null,
+      "rounding": "truncate"
+     },
+     "fitted": {
+      "groups": [
+       {
+        "channel": 0,
+        "min": -3.594111442565918,
+        "max": 96.14618682861328,
+        "mode": "rescale"
+       },
+       {
+        "channel": 1,
+        "min": -3.705188512802124,
+        "max": 90.42407989501953,
+        "mode": "rescale"
+       },
+       {
+        "channel": 2,
+        "min": -4.024468421936035,
+        "max": 120.84387969970703,
+        "mode": "rescale"
+       },
+       {
+        "channel": 3,
+        "min": -3.135260581970215,
+        "max": 87.24134063720703,
+        "mode": "rescale"
+       }
+      ]
+     },
+     "diagnostics": {},
+     "input_dtype": "float32",
+     "output_dtype": "uint8",
+     "save_as": null
+    },
+    {
+     "index": 1,
+     "stage": "steps",
+     "step": "white_tophat",
+     "config": {
+      "radius_yx": 3
+     },
+     "fitted": {},
+     "diagnostics": {},
+     "input_dtype": "uint8",
+     "output_dtype": "uint8",
+     "save_as": null
+    }
+   ],
+   "round3": [
+    {
+     "index": 0,
+     "stage": "steps",
+     "step": "min_max_normalization",
+     "config": {
+      "output_dtype": "uint8",
+      "output_range": [
+       0,
+       255
+      ],
+      "scope": "per_channel",
+      "snr_threshold": null,
+      "rounding": "truncate"
+     },
+     "fitted": {
+      "groups": [
+       {
+        "channel": 0,
+        "min": -3.4968924522399902,
+        "max": 90.86392211914062,
+        "mode": "rescale"
+       },
+       {
+        "channel": 1,
+        "min": -3.8726248741149902,
+        "max": 97.15763092041016,
+        "mode": "rescale"
+       },
+       {
+        "channel": 2,
+        "min": -3.9093785285949707,
+        "max": 89.4123764038086,
+        "mode": "rescale"
+       },
+       {
+        "channel": 3,
+        "min": -4.458182334899902,
+        "max": 123.1514892578125,
+        "mode": "rescale"
+       }
+      ]
+     },
+     "diagnostics": {},
+     "input_dtype": "float32",
+     "output_dtype": "uint8",
+     "save_as": null
+    },
+    {
+     "index": 1,
+     "stage": "steps",
+     "step": "white_tophat",
+     "config": {
+      "radius_yx": 3
+     },
+     "fitted": {},
+     "diagnostics": {},
+     "input_dtype": "uint8",
+     "output_dtype": "uint8",
+     "save_as": null
+    }
+   ],
+   "round4": [
+    {
+     "index": 0,
+     "stage": "steps",
+     "step": "min_max_normalization",
+     "config": {
+      "output_dtype": "uint8",
+      "output_range": [
+       0,
+       255
+      ],
+      "scope": "per_channel",
+      "snr_threshold": null,
+      "rounding": "truncate"
+     },
+     "fitted": {
+      "groups": [
+       {
+        "channel": 0,
+        "min": -3.4723825454711914,
+        "max": 87.14058685302734,
+        "mode": "rescale"
+       },
+       {
+        "channel": 1,
+        "min": -3.4464526176452637,
+        "max": 99.10801696777344,
+        "mode": "rescale"
+       },
+       {
+        "channel": 2,
+        "min": -3.5854811668395996,
+        "max": 118.2848129272461,
+        "mode": "rescale"
+       },
+       {
+        "channel": 3,
+        "min": -3.8808484077453613,
+        "max": 96.88005065917969,
+        "mode": "rescale"
+       }
+      ]
+     },
+     "diagnostics": {},
+     "input_dtype": "float32",
+     "output_dtype": "uint8",
+     "save_as": null
+    },
+    {
+     "index": 1,
+     "stage": "steps",
+     "step": "white_tophat",
+     "config": {
+      "radius_yx": 3
+     },
+     "fitted": {},
+     "diagnostics": {},
+     "input_dtype": "uint8",
+     "output_dtype": "uint8",
+     "save_as": null
+    }
+   ]
+  },
+  "transforms": {
+   "round1": {
+    "detection": []
+   },
+   "round2": {
+    "detection": [
+     {
+      "result": 0,
+      "method": "translation",
+      "kind": "translation"
+     }
+    ]
+   },
+   "round3": {
+    "detection": [
+     {
+      "result": 0,
+      "method": "translation",
+      "kind": "translation"
+     }
+    ]
+   },
+   "round4": {
+    "detection": [
+     {
+      "result": 0,
+      "method": "translation",
+      "kind": "translation"
+     }
+    ]
+   }
+  },
+  "supplied_statistics": {
+   "path": null,
+   "sha256": null
+  }
+ },
+ "registration": {
+  "round2": [
+   {
+    "record": "estimation",
+    "step": 0,
+    "attempt": 0,
+    "requested_method": "translation",
+    "actual_method": "translation",
+    "fallback": false,
+    "backend": "scipy_fft",
+    "backend_versions": {},
+    "reference": "round1",
+    "reference_sha256": null,
+    "config": {
+     "backend": "scipy_fft",
+     "fft_workers": 1,
+     "method": "translation"
+    },
+    "outcome": "succeeded",
+    "failure": null,
+    "qc": {
+     "status": "ok",
+     "values": {
+      "coverage": 1.0,
+      "ncc_before": 0.8709474077388998,
+      "ncc_after": 0.8709474077388998,
+      "ncc_gain": 0.0,
+      "ssim_before": 0.8537652862261828,
+      "ssim_after": 0.8537652862261828
+     },
+     "units": {
+      "coverage": "fraction",
+      "ncc_before": "dimensionless",
+      "ncc_after": "dimensionless",
+      "ncc_gain": "dimensionless",
+      "ssim_before": "dimensionless",
+      "ssim_after": "dimensionless"
+     },
+     "counts": {
+      "total": 6480,
+      "valid": 6480,
+      "valid_columns": 1296,
+      "ssim_columns": 900
+     },
+     "reasons": {},
+     "config": {
+      "overlap": "pull point inside the closed box [0, n-1] on every axis",
+      "ssim_policy": "mip",
+      "ssim_window": 7,
+      "ssim_erosion": 3,
+      "data_range": 245.0,
+      "qc": {
+       "min_coverage": null,
+       "min_ncc_gain": null,
+       "max_fold_fraction": null,
+       "max_translation_voxels": null,
+       "projections": false
+      }
+     },
+     "details": {
+      "transform": {
+       "kind": "translation",
+       "displacement_zyx": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "optimizer": {
+       "method": "translation",
+       "backend": "scipy_fft",
+       "converged": null,
+       "iterations_completed": null,
+       "final_metric_value": null,
+       "stop_condition": null,
+       "elapsed_iterations": null,
+       "final_rms_change": null
+      }
+     }
+    }
+   },
+   {
+    "record": "application",
+    "outcome": "succeeded",
+    "application_config": {
+     "backend": "translation",
+     "boundary_mode": "constant",
+     "fill_value": 0,
+     "output_dtype": "input",
+     "integer_rounding": "nearest_even",
+     "clip_to_dtype": true,
+     "fft_workers": 1
+    },
+    "failure": null,
+    "qc": {
+     "status": "ok",
+     "values": {
+      "coverage": 1.0,
+      "ncc_before": 0.8709474077388998,
+      "ncc_after": 0.8709474077388998,
+      "ncc_gain": 0.0,
+      "ssim_before": 0.8537652862261828,
+      "ssim_after": 0.8537652862261828
+     },
+     "units": {
+      "coverage": "fraction",
+      "ncc_before": "dimensionless",
+      "ncc_after": "dimensionless",
+      "ncc_gain": "dimensionless",
+      "ssim_before": "dimensionless",
+      "ssim_after": "dimensionless"
+     },
+     "counts": {
+      "total": 6480,
+      "valid": 6480,
+      "valid_columns": 1296,
+      "ssim_columns": 900
+     },
+     "reasons": {},
+     "config": {
+      "overlap": "pull point inside the closed box [0, n-1] on every axis",
+      "ssim_policy": "mip",
+      "ssim_window": 7,
+      "ssim_erosion": 3,
+      "data_range": 245.0,
+      "qc": {
+       "min_coverage": null,
+       "min_ncc_gain": null,
+       "max_fold_fraction": null,
+       "max_translation_voxels": null,
+       "projections": false
+      }
+     },
+     "details": {
+      "transform": {
+       "kind": "dense",
+       "displacement_voxels": {
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+       },
+       "displacement_physical": {
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+       },
+       "fold_fraction": 0.0
+      },
+      "optimizer": null
+     }
+    }
+   }
+  ],
+  "round3": [
+   {
+    "record": "estimation",
+    "step": 0,
+    "attempt": 0,
+    "requested_method": "translation",
+    "actual_method": "translation",
+    "fallback": false,
+    "backend": "scipy_fft",
+    "backend_versions": {},
+    "reference": "round1",
+    "reference_sha256": null,
+    "config": {
+     "backend": "scipy_fft",
+     "fft_workers": 1,
+     "method": "translation"
+    },
+    "outcome": "succeeded",
+    "failure": null,
+    "qc": {
+     "status": "ok",
+     "values": {
+      "coverage": 0.9722222222222222,
+      "ncc_before": 0.8727962066748175,
+      "ncc_after": 0.919253290173571,
+      "ncc_gain": 0.04645708349875355,
+      "ssim_before": 0.857869210266672,
+      "ssim_after": 0.8944908767682191
+     },
+     "units": {
+      "coverage": "fraction",
+      "ncc_before": "dimensionless",
+      "ncc_after": "dimensionless",
+      "ncc_gain": "dimensionless",
+      "ssim_before": "dimensionless",
+      "ssim_after": "dimensionless"
+     },
+     "counts": {
+      "total": 6480,
+      "valid": 6300,
+      "valid_columns": 1260,
+      "ssim_columns": 870
+     },
+     "reasons": {},
+     "config": {
+      "overlap": "pull point inside the closed box [0, n-1] on every axis",
+      "ssim_policy": "mip",
+      "ssim_window": 7,
+      "ssim_erosion": 3,
+      "data_range": 245.0,
+      "qc": {
+       "min_coverage": null,
+       "min_ncc_gain": null,
+       "max_fold_fraction": null,
+       "max_translation_voxels": null,
+       "projections": false
+      }
+     },
+     "details": {
+      "transform": {
+       "kind": "translation",
+       "displacement_zyx": [
+        0.0,
+        -1.0,
+        0.0
+       ]
+      },
+      "optimizer": {
+       "method": "translation",
+       "backend": "scipy_fft",
+       "converged": null,
+       "iterations_completed": null,
+       "final_metric_value": null,
+       "stop_condition": null,
+       "elapsed_iterations": null,
+       "final_rms_change": null
+      }
+     }
+    }
+   },
+   {
+    "record": "application",
+    "outcome": "succeeded",
+    "application_config": {
+     "backend": "translation",
+     "boundary_mode": "constant",
+     "fill_value": 0,
+     "output_dtype": "input",
+     "integer_rounding": "nearest_even",
+     "clip_to_dtype": true,
+     "fft_workers": 1
+    },
+    "failure": null,
+    "qc": {
+     "status": "ok",
+     "values": {
+      "coverage": 0.9722222222222222,
+      "ncc_before": 0.8727962066748175,
+      "ncc_after": 0.919253290173571,
+      "ncc_gain": 0.04645708349875355,
+      "ssim_before": 0.857869210266672,
+      "ssim_after": 0.8944908767682191
+     },
+     "units": {
+      "coverage": "fraction",
+      "ncc_before": "dimensionless",
+      "ncc_after": "dimensionless",
+      "ncc_gain": "dimensionless",
+      "ssim_before": "dimensionless",
+      "ssim_after": "dimensionless"
+     },
+     "counts": {
+      "total": 6480,
+      "valid": 6300,
+      "valid_columns": 1260,
+      "ssim_columns": 870
+     },
+     "reasons": {},
+     "config": {
+      "overlap": "pull point inside the closed box [0, n-1] on every axis",
+      "ssim_policy": "mip",
+      "ssim_window": 7,
+      "ssim_erosion": 3,
+      "data_range": 245.0,
+      "qc": {
+       "min_coverage": null,
+       "min_ncc_gain": null,
+       "max_fold_fraction": null,
+       "max_translation_voxels": null,
+       "projections": false
+      }
+     },
+     "details": {
+      "transform": {
+       "kind": "dense",
+       "displacement_voxels": {
+        "median": 1.0,
+        "p95": 1.0,
+        "max": 1.0
+       },
+       "displacement_physical": {
+        "median": 0.5,
+        "p95": 0.5,
+        "max": 0.5
+       },
+       "fold_fraction": 0.0
+      },
+      "optimizer": null
+     }
+    }
+   }
+  ],
+  "round4": [
+   {
+    "record": "estimation",
+    "step": 0,
+    "attempt": 0,
+    "requested_method": "translation",
+    "actual_method": "translation",
+    "fallback": false,
+    "backend": "scipy_fft",
+    "backend_versions": {},
+    "reference": "round1",
+    "reference_sha256": null,
+    "config": {
+     "backend": "scipy_fft",
+     "fft_workers": 1,
+     "method": "translation"
+    },
+    "outcome": "succeeded",
+    "failure": null,
+    "qc": {
+     "status": "ok",
+     "values": {
+      "coverage": 0.9722222222222222,
+      "ncc_before": 0.8009083670887779,
+      "ncc_after": 0.9534438849572455,
+      "ncc_gain": 0.15253551786846764,
+      "ssim_before": 0.79880230231954,
+      "ssim_after": 0.9296186039353358
+     },
+     "units": {
+      "coverage": "fraction",
+      "ncc_before": "dimensionless",
+      "ncc_after": "dimensionless",
+      "ncc_gain": "dimensionless",
+      "ssim_before": "dimensionless",
+      "ssim_after": "dimensionless"
+     },
+     "counts": {
+      "total": 6480,
+      "valid": 6300,
+      "valid_columns": 1260,
+      "ssim_columns": 870
+     },
+     "reasons": {},
+     "config": {
+      "overlap": "pull point inside the closed box [0, n-1] on every axis",
+      "ssim_policy": "mip",
+      "ssim_window": 7,
+      "ssim_erosion": 3,
+      "data_range": 245.0,
+      "qc": {
+       "min_coverage": null,
+       "min_ncc_gain": null,
+       "max_fold_fraction": null,
+       "max_translation_voxels": null,
+       "projections": false
+      }
+     },
+     "details": {
+      "transform": {
+       "kind": "translation",
+       "displacement_zyx": [
+        0.0,
+        1.0,
+        0.0
+       ]
+      },
+      "optimizer": {
+       "method": "translation",
+       "backend": "scipy_fft",
+       "converged": null,
+       "iterations_completed": null,
+       "final_metric_value": null,
+       "stop_condition": null,
+       "elapsed_iterations": null,
+       "final_rms_change": null
+      }
+     }
+    }
+   },
+   {
+    "record": "application",
+    "outcome": "succeeded",
+    "application_config": {
+     "backend": "translation",
+     "boundary_mode": "constant",
+     "fill_value": 0,
+     "output_dtype": "input",
+     "integer_rounding": "nearest_even",
+     "clip_to_dtype": true,
+     "fft_workers": 1
+    },
+    "failure": null,
+    "qc": {
+     "status": "ok",
+     "values": {
+      "coverage": 0.9722222222222222,
+      "ncc_before": 0.8009083670887779,
+      "ncc_after": 0.9534438849572455,
+      "ncc_gain": 0.15253551786846764,
+      "ssim_before": 0.79880230231954,
+      "ssim_after": 0.9296186039353358
+     },
+     "units": {
+      "coverage": "fraction",
+      "ncc_before": "dimensionless",
+      "ncc_after": "dimensionless",
+      "ncc_gain": "dimensionless",
+      "ssim_before": "dimensionless",
+      "ssim_after": "dimensionless"
+     },
+     "counts": {
+      "total": 6480,
+      "valid": 6300,
+      "valid_columns": 1260,
+      "ssim_columns": 870
+     },
+     "reasons": {},
+     "config": {
+      "overlap": "pull point inside the closed box [0, n-1] on every axis",
+      "ssim_policy": "mip",
+      "ssim_window": 7,
+      "ssim_erosion": 3,
+      "data_range": 245.0,
+      "qc": {
+       "min_coverage": null,
+       "min_ncc_gain": null,
+       "max_fold_fraction": null,
+       "max_translation_voxels": null,
+       "projections": false
+      }
+     },
+     "details": {
+      "transform": {
+       "kind": "dense",
+       "displacement_voxels": {
+        "median": 1.0,
+        "p95": 1.0,
+        "max": 1.0
+       },
+       "displacement_physical": {
+        "median": 0.5,
+        "p95": 0.5,
+        "max": 0.5
+       },
+       "fold_fraction": 0.0
+      },
+      "optimizer": null
+     }
+    }
+   }
+  ]
+ },
+ "transforms": {
+  "round2": {
+   "reference": "round1",
+   "results": [
+    {
+     "step": 0,
+     "transform": {
+      "reference_shape_zyx": [
+       5,
+       36,
+       36
+      ],
+      "moving_shape_zyx": [
+       5,
+       36,
+       36
+      ],
+      "reference_metadata": {
+       "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
+       "origin_zyx": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "direction_zyx": [
+        [
+         1.0,
+         0.0,
+         0.0
+        ],
+        [
+         0.0,
+         1.0,
+         0.0
+        ],
+        [
+         0.0,
+         0.0,
+         1.0
+        ]
+       ],
+       "spatial_unit": "\u00b5m"
+      },
+      "moving_metadata": {
+       "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
+       "origin_zyx": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "direction_zyx": [
+        [
+         1.0,
+         0.0,
+         0.0
+        ],
+        [
+         0.0,
+         1.0,
+         0.0
+        ],
+        [
+         0.0,
+         0.0,
+         1.0
+        ]
+       ],
+       "spatial_unit": "\u00b5m"
+      },
+      "direction": "reference_to_moving",
+      "units": "voxel_index",
+      "kind": "translation",
+      "displacement_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "diagnostics": {
+      "method": "translation",
+      "backend": "scipy_fft",
+      "effective_config": {
+       "backend": "scipy_fft",
+       "fft_workers": 1,
+       "method": "translation"
+      },
+      "converged": null,
+      "iterations_completed": null,
+      "reference_landmark_count": null,
+      "moving_landmark_count": null,
+      "matched_landmark_count": null,
+      "warnings": [],
+      "final_metric_value": null,
+      "stop_condition": null,
+      "elapsed_iterations": null,
+      "final_rms_change": null,
+      "backend_versions": null,
+      "backend_parameters": null,
+      "spacing_source": null
+     }
+    }
+   ],
+   "application_config": {
+    "backend": "translation",
+    "boundary_mode": "constant",
+    "fill_value": 0,
+    "output_dtype": "input",
+    "integer_rounding": "nearest_even",
+    "clip_to_dtype": true,
+    "fft_workers": 1
+   }
+  },
+  "round3": {
+   "reference": "round1",
+   "results": [
+    {
+     "step": 0,
+     "transform": {
+      "reference_shape_zyx": [
+       5,
+       36,
+       36
+      ],
+      "moving_shape_zyx": [
+       5,
+       36,
+       36
+      ],
+      "reference_metadata": {
+       "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
+       "origin_zyx": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "direction_zyx": [
+        [
+         1.0,
+         0.0,
+         0.0
+        ],
+        [
+         0.0,
+         1.0,
+         0.0
+        ],
+        [
+         0.0,
+         0.0,
+         1.0
+        ]
+       ],
+       "spatial_unit": "\u00b5m"
+      },
+      "moving_metadata": {
+       "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
+       "origin_zyx": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "direction_zyx": [
+        [
+         1.0,
+         0.0,
+         0.0
+        ],
+        [
+         0.0,
+         1.0,
+         0.0
+        ],
+        [
+         0.0,
+         0.0,
+         1.0
+        ]
+       ],
+       "spatial_unit": "\u00b5m"
+      },
+      "direction": "reference_to_moving",
+      "units": "voxel_index",
+      "kind": "translation",
+      "displacement_zyx": [
+       0.0,
+       -1.0,
+       0.0
+      ]
+     },
+     "diagnostics": {
+      "method": "translation",
+      "backend": "scipy_fft",
+      "effective_config": {
+       "backend": "scipy_fft",
+       "fft_workers": 1,
+       "method": "translation"
+      },
+      "converged": null,
+      "iterations_completed": null,
+      "reference_landmark_count": null,
+      "moving_landmark_count": null,
+      "matched_landmark_count": null,
+      "warnings": [],
+      "final_metric_value": null,
+      "stop_condition": null,
+      "elapsed_iterations": null,
+      "final_rms_change": null,
+      "backend_versions": null,
+      "backend_parameters": null,
+      "spacing_source": null
+     }
+    }
+   ],
+   "application_config": {
+    "backend": "translation",
+    "boundary_mode": "constant",
+    "fill_value": 0,
+    "output_dtype": "input",
+    "integer_rounding": "nearest_even",
+    "clip_to_dtype": true,
+    "fft_workers": 1
+   }
+  },
+  "round4": {
+   "reference": "round1",
+   "results": [
+    {
+     "step": 0,
+     "transform": {
+      "reference_shape_zyx": [
+       5,
+       36,
+       36
+      ],
+      "moving_shape_zyx": [
+       5,
+       36,
+       36
+      ],
+      "reference_metadata": {
+       "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
+       "origin_zyx": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "direction_zyx": [
+        [
+         1.0,
+         0.0,
+         0.0
+        ],
+        [
+         0.0,
+         1.0,
+         0.0
+        ],
+        [
+         0.0,
+         0.0,
+         1.0
+        ]
+       ],
+       "spatial_unit": "\u00b5m"
+      },
+      "moving_metadata": {
+       "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
+       "origin_zyx": [
+        0.0,
+        0.0,
+        0.0
+       ],
+       "direction_zyx": [
+        [
+         1.0,
+         0.0,
+         0.0
+        ],
+        [
+         0.0,
+         1.0,
+         0.0
+        ],
+        [
+         0.0,
+         0.0,
+         1.0
+        ]
+       ],
+       "spatial_unit": "\u00b5m"
+      },
+      "direction": "reference_to_moving",
+      "units": "voxel_index",
+      "kind": "translation",
+      "displacement_zyx": [
+       0.0,
+       1.0,
+       0.0
+      ]
+     },
+     "diagnostics": {
+      "method": "translation",
+      "backend": "scipy_fft",
+      "effective_config": {
+       "backend": "scipy_fft",
+       "fft_workers": 1,
+       "method": "translation"
+      },
+      "converged": null,
+      "iterations_completed": null,
+      "reference_landmark_count": null,
+      "moving_landmark_count": null,
+      "matched_landmark_count": null,
+      "warnings": [],
+      "final_metric_value": null,
+      "stop_condition": null,
+      "elapsed_iterations": null,
+      "final_rms_change": null,
+      "backend_versions": null,
+      "backend_parameters": null,
+      "spacing_source": null
+     }
+    }
+   ],
+   "application_config": {
+    "backend": "translation",
+    "boundary_mode": "constant",
+    "fill_value": 0,
+    "output_dtype": "input",
+    "integer_rounding": "nearest_even",
+    "clip_to_dtype": true,
+    "fft_workers": 1
+   }
+  }
+ },
+ "counts": {
+  "spots": 16,
+  "intensities": 16,
+  "call_status": {
+   "assigned": 13,
+   "unmatched": 3
+  },
+  "scoring": {
+   "total": 16,
+   "scored": 13,
+   "no_assignment": 3,
+   "background_unavailable": 0
+  },
+  "deduplication": {
+   "total": 16,
+   "groups": 0,
+   "merged_reads": 0,
+   "conflicting_groups": 0
+  },
+  "filtering": {
+   "total": 16,
+   "accepted": 13,
+   "rejected": 3,
+   "endpoint_valid": 0,
+   "fractions": {
+    "accepted": 0.8125,
+    "endpoint_valid": 0.0
+   }
+  },
+  "summary": {
+   "readout_mode": "multiplexed",
+   "reads": 16,
+   "call_status": {
+    "assigned": 13,
+    "ambiguous": 0,
+    "no_signal": 0,
+    "unmatched": 3
+   },
+   "failure_reason": {
+    "not_in_codebook": 3
+   },
+   "call_type": {
+    "exact": 13,
+    "no_call": 3
+   },
+   "genes": {
+    "balanced-02": 1,
+    "balanced-03": 2,
+    "balanced-04": 1,
+    "balanced-05": 1,
+    "balanced-07": 4,
+    "balanced-11": 1,
+    "balanced-12": 1,
+    "balanced-13": 2
+   },
+   "entries": {
+    "ACAAC": 1,
+    "ACCTC": 1,
+    "ACGCC": 1,
+    "GCATC": 1,
+    "GCGGC": 2,
+    "GCTCC": 2,
+    "TCACC": 1,
+    "TCGAC": 4
+   },
+   "qc_score": {
+    "exact": {
+     "n": 13,
+     "q05": 0.06024558210473443,
+     "q25": 0.09282223264886308,
+     "q50": 0.11624376344991243,
+     "q75": 0.2922885498317295,
+     "q95": 1.8296694772534023
+    }
+   },
+   "scoring": {
+    "scored": 13,
+    "no_assignment": 3,
+    "background_unavailable": 0
+   },
+   "deduplication": {
+    "total": 16,
+    "groups": 0,
+    "merged_reads": 0,
+    "conflicting_groups": 0
+   },
+   "filtering": {
+    "total": 16,
+    "accepted": 13,
+    "rejected": 3,
+    "rejection_reasons": {
+     "call_status": 3
+    }
+   },
+   "intensities": {
+    "candidates": 16,
+    "valid": {
+     "round1": 16,
+     "round2": 16,
+     "round3": 16,
+     "round4": 16
+    },
+    "invalid": {
+     "round1": 0,
+     "round2": 0,
+     "round3": 0,
+     "round4": 0
+    },
+    "background_unavailable": {
+     "round1": 0,
+     "round2": 0,
+     "round3": 0,
+     "round4": 0
+    },
+    "medians": {
+     "round1": {
+      "ch00": {
+       "sum": 258.5,
+       "background": 3.0,
+       "noise": 2.9652
+      },
+      "ch01": {
+       "sum": 174.5,
+       "background": 2.0,
+       "noise": 1.4826
+      },
+      "ch02": {
+       "sum": 205.5,
+       "background": 3.0,
+       "noise": 2.9652
+      },
+      "ch03": {
+       "sum": 286.0,
+       "background": 3.0,
+       "noise": 2.9652
+      }
+     },
+     "round2": {
+      "ch00": {
+       "sum": 277.0,
+       "background": 3.0,
+       "noise": 2.9652
+      },
+      "ch01": {
+       "sum": 213.5,
+       "background": 3.75,
+       "noise": 2.9652
+      },
+      "ch02": {
+       "sum": 589.0,
+       "background": 3.0,
+       "noise": 2.9652
+      },
+      "ch03": {
+       "sum": 287.0,
+       "background": 3.5,
+       "noise": 2.9652
+      }
+     },
+     "round3": {
+      "ch00": {
+       "sum": 228.0,
+       "background": 4.0,
+       "noise": 2.9652
+      },
+      "ch01": {
+       "sum": 227.5,
+       "background": 3.0,
+       "noise": 2.9652
+      },
+      "ch02": {
+       "sum": 240.5,
+       "background": 3.0,
+       "noise": 2.9652
+      },
+      "ch03": {
+       "sum": 225.0,
+       "background": 3.0,
+       "noise": 2.9652
+      }
+     },
+     "round4": {
+      "ch00": {
+       "sum": 249.5,
+       "background": 4.0,
+       "noise": 2.9652
+      },
+      "ch01": {
+       "sum": 254.0,
+       "background": 3.0,
+       "noise": 2.9652
+      },
+      "ch02": {
+       "sum": 241.5,
+       "background": 2.25,
+       "noise": 2.9652
+      },
+      "ch03": {
+       "sum": 244.5,
+       "background": 3.0,
+       "noise": 2.9652
+      }
+     }
+    }
+   },
+   "cross_channel_pairs": {
+    "distance_voxels": 1.0,
+    "pairs": 0
+   }
+  }
+ },
+ "checkpoint_directory": "checkpoints",
+ "checkpoints": {
+  "candidates": {
+   "path": "checkpoints/candidates.json",
+   "sha256": "81ac0b4468f15902cb1e019af4c8228a82887cd42912af5cb175e1ad08296df0"
+  },
+  "pre_qc": {
+   "path": "checkpoints/pre_qc.json",
+   "sha256": "77216728cbc73f89be4a3328f4cfdf8f7513a671e22ab3acba83fcdeade97ee9"
+  }
+ },
+ "outputs": {
+  "reference_image": {
+   "path": "reference.tif",
+   "sha256": "579d5e11ab7769e23c53c579ff6477b3550249829f54f1aab2b77369481c3b3f"
+  },
+  "molecules": {
+   "path": "molecules.csv",
+   "sha256": "93c45e3be7e25ffa8cca0e7a082c0aff00c4dfcaf9e276db4dfb300f57e02b2d",
+   "molecules_sha256": "ec4e3d6c3ad982c2906c8a43deca10bbad883e70f2fe221ce89f2f2a71a0b1d2",
+   "dtypes": {
+    "spot_namespace": "string",
+    "spot_id": "string",
+    "z": "float64",
+    "y": "float64",
+    "x": "float64",
+    "gene_id": "string",
+    "entry_id": "string",
+    "qc_score": "float64"
+   },
+   "rows": 13
+  }
+ }
+}
