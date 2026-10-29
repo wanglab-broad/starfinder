@@ -28,8 +28,20 @@ Subcommands, each run in its own process:
 ``extract WORK OUT``
     Write the expected values of the outputs to ``OUT`` (``values.json``, tables with ``dtypes.json``, ``arrays.npz``).
     Reads the outputs with NumPy, pandas, tifffile and json only.
+``run-export WORK --snakemake EXE`` (W-643)
+    Invocation D, on a fixture of its own: stitching with ``multiview_stitcher`` (B's positions table, the binning
+    ``(1, 2, 2)`` and the link filter of the package's stitching tests), the export on each route the fixture allows
+    and the report after the export, each route in its own output root (``golden-per-fov``, ``golden-molecules-only``,
+    ``golden-after-fusion``) with target ``all``. The per-FOV route exports the saved assignments of
+    ``reads_assignment`` (the truth labels copied first, as in B) with the fused cell labels; their Z maximum, written
+    on the fused projection grid, is the import file of the route after fusion's one cell run. Records the commands in
+    ``WORK/commands-d.json``.
+``extract-export WORK OUT`` (W-643)
+    The expected values of invocation D in the layout of ``extract``: the records, tables and images of each route's
+    ``stitching/``, ``export/`` and ``report/`` folders and the import file; its per-FOV outputs come from the
+    configurations of A and B, which pin them.
 ``compare EXPECTED ACTUAL``
-    Compare two ``extract`` folders; print the differences and exit 1 when there is one.
+    Compare two ``extract`` (or two ``extract-export``) folders; print the differences and exit 1 when there is one.
 
 The comparison classes of ``values.json`` (docs/contributing.md): ``exact`` (integers, counts, strings, statuses,
 booleans, integer images, the fixture's file hashes), ``float64`` (rtol 1e-9, atol 1e-12), ``float32`` (rtol 1e-6,
@@ -43,6 +55,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -252,6 +265,108 @@ def run_workflow(work, snakemake, starfinder_path, cores=1):
     return records
 
 
+# --- invocation D: stitching, the export on each route and the report after the export (W-643) ----------------------
+
+# The routes of export_sample the fixture runs without a learned method: per FOV (the saved assignments of
+# reads_assignment), molecules only (assembly.assignment null) and after fusion (the fused projection segmented by an
+# import run of the per-FOV route's fused cell labels). Each route runs in its own output root, golden-<route>.
+EXPORT_ROUTES = ("per_fov", "molecules_only", "after_fusion")
+# The per-FOV route's fused cell labels (export/<sample>/cell_labels.ome.tif, fuse_labels at the fusion's scale), copied
+# as the label file that the route after fusion imports on the fused projection grid.
+FUSED_CELLS = "fused-cells.ome.tif"
+# The rules invocation D may run: those of A and B, the stitching, export and report rules.
+EXPORT_RULES = ("rsf_single_fov", "rotate_nuclei", "create_nuclei_amplicon_overlay", "nuclei_registration",
+                "reads_assignment", "stitch_sample", "export_sample", "report_sample", "report_dataset")
+
+
+def export_output_root(work, route):
+    return Path(work) / "output" / DATASET_ID / f"{OUTPUT_ID}-{route.replace('_', '-')}"
+
+
+def export_configurations(work, starfinder_path):
+    """{route: configuration} of invocation D: each is configuration A (its processing and morphology rules) with B's
+    stitching block of method multiview_stitcher, an assembly block, an export block and the report block, in its
+    own output root. The export fuses the reference image (``images: [reference_merged]``, a declared output of
+    rsf_single_fov; the default ``reference_stain`` reads the undeclared saved form of the morphology rounds)."""
+    work = Path(work)
+    a, b, _ = configurations(work, starfinder_path)
+    out = {}
+    for route in EXPORT_ROUTES:
+        name = route.replace("_", "-")
+        # The stitching of B with the binning and link filter of the package's stitching tests: the default binning
+        # (4 in Z) leaves one plane of the 5-plane FOVs, on which multiview_stitcher's overlap is undefined.
+        stitching = dict(b["stitching"], config={"binning_zyx": [1, 2, 2], "quality_threshold": -1.0})
+        config = dict(a, config_path=str(work / f"config-d-{name}.yaml"), output_id=f"{OUTPUT_ID}-{name}",
+                      stitching=stitching, report={})
+        if route == "per_fov":
+            # B's rules (reads_assignment saves each FOV's assignment); the fused cell labels at the fusion's scale.
+            config.update(rules=b["rules"], assembly={"assignment": ASSIGNMENT},
+                          export={"route": "per_fov", "images": ["reference_merged"], "fuse_labels": True,
+                                  "labels_scale_yx": 0.5})
+        elif route == "molecules_only":
+            config.update(assembly={"assignment": None}, export={"images": ["reference_merged"]})
+        else:
+            # The default route of dimensionality projection; one cell run imported on the fused projection grid.
+            config.update(assembly={"assignment": ASSIGNMENT}, export={
+                "images": ["reference_merged"],
+                "segmentation": {"cells": "cell", "runs": [
+                    {"name": "cell", "target": "cell", "method": "import", "path": str(work / "labels" / FUSED_CELLS)}]}})
+        out[route] = config
+    return out
+
+
+def _fused_cells(export_dir, target):
+    """The per-FOV route's fused cell labels as the import file of the route after fusion: their Z maximum, written as a
+    uint32 OME-TIFF with the metadata of the fused projection of the same export (the segmentation grid of the route
+    after fusion is that projection's; the label export's own grid is a stack whose origin differs by a fraction of a
+    pixel)."""
+    import numpy as np
+    from starfinder.io import _ome, load_volume
+    labels = load_volume(Path(export_dir) / "cell_labels.ome.tif").image
+    grid = load_volume(Path(export_dir) / "reference_merged_projection.ome.tif")
+    if labels.shape[-2:] != grid.image.shape[-2:]:
+        raise ValueError(f"the fused cell labels {labels.shape} and the fused projection {grid.image.shape} differ in YX")
+    _ome.write_ome_tiff(target, np.ascontiguousarray(labels.max(axis=0)).astype(np.uint32), metadata=grid.metadata,
+                        annotation={"golden": "the Z maximum of the per-FOV route's fused cell labels"})
+
+
+def run_export(work, snakemake, starfinder_path, cores=1):
+    """Invocation D (the module docstring): D-per-fov, then the fused cell labels copied, D-molecules-only and
+    D-after-fusion, each with target all; returns the command records (``WORK/commands-d.json``)."""
+    import yaml
+    work = Path(work)
+    fov_ids = json.loads((work / "fixture.json").read_text())["fov_ids"]
+    configs = export_configurations(work, starfinder_path)
+    for config in configs.values():
+        Path(config["config_path"]).write_text(yaml.safe_dump(config, sort_keys=False))
+    snakefile = Path(starfinder_path) / "workflow" / "Snakefile"
+    common = [str(snakemake), "-s", str(snakefile), "--directory", str(work / "snakemake"), "--cores", str(cores),
+              "--nocolor", "--printshellcmds", "--allowed-rules", *EXPORT_RULES]
+    environment = dict(os.environ, XDG_CACHE_HOME=str(work / "cache"), PYTHONDONTWRITEBYTECODE="1")
+    records = []
+
+    def invoke(name, config):
+        log = work / f"snakemake-{name}.log"
+        command = common + ["--configfile", config["config_path"], "--", "all"]
+        with open(log, "w") as handle:
+            status = subprocess.run(command, stdout=handle, stderr=subprocess.STDOUT, env=environment).returncode
+        records.append({"name": name, "command": command, "exit_status": status, "log": log.name})
+        (work / "commands-d.json").write_text(json.dumps(records, indent=1) + "\n")
+        if status:
+            raise SystemExit(f"invocation {name} exited with status {status}; see {log}")
+
+    root = export_output_root(work, "per_fov")
+    for fov in fov_ids:
+        labels = root / "images" / "stardist_segmentation" / f"{fov}.tif"
+        labels.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(work / "labels" / f"{fov}.tif", labels)
+    invoke("D-per-fov", configs["per_fov"])
+    _fused_cells(root / "export" / SAMPLE_ID, work / "labels" / FUSED_CELLS)
+    invoke("D-molecules-only", configs["molecules_only"])
+    invoke("D-after-fusion", configs["after_fusion"])
+    return records
+
+
 # --- the expected values ------------------------------------------------------------------------------------------
 
 # Output files whose bytes hold a time, a measured duration or an absolute path of the run (the run records, the
@@ -267,20 +382,20 @@ VARYING_COLUMNS = frozenset({"started_at", "ended_at", "run_seconds", "seconds",
 VARYING_DIGESTS = frozenset({"record_sha256"})
 
 
-def _varies(path):
-    return any(pattern in str(path) for pattern in VARYING)
+def _varies(path, varying=VARYING):
+    return any(pattern in str(path) for pattern in varying)
 
 
-def _normalized(value, work):
+def _normalized(value, work, varying=VARYING, digests=VARYING_DIGESTS):
     """A JSON record without the NORMALIZED keys, the digests of varying records and files, with the work folder's
     absolute path written as ``<work>`` wherever a string holds it."""
     if isinstance(value, dict):
         names = value.get("path")
-        drop = {"sha256", "bytes"} if isinstance(names, str) and _varies(names) else set()
-        return {key: _normalized(item, work) for key, item in value.items()
-                if key not in NORMALIZED and key not in VARYING_DIGESTS and key not in drop}
+        drop = {"sha256", "bytes"} if isinstance(names, str) and _varies(names, varying) else set()
+        return {key: _normalized(item, work, varying, digests) for key, item in value.items()
+                if key not in NORMALIZED and key not in digests and key not in drop}
     if isinstance(value, list):
-        return [_normalized(item, work) for item in value]
+        return [_normalized(item, work, varying, digests) for item in value]
     if isinstance(value, str):
         return value.replace(work, "<work>")
     return value
@@ -397,9 +512,84 @@ def extract(work, out):
     return values
 
 
+# The sample folders invocation D adds to what A and B pin: the placement, the export and the report after the export.
+# Its per-FOV outputs (run records, molecule tables, reference images, saved assignments, morphology images) come from
+# the configurations of A and B and are pinned by their expected values, so they are not extracted again.
+EXPORT_FOLDERS = ("stitching", "export", "report")
+# Besides VARYING: the files of invocation D whose bytes hold an absolute path or a time (found by two runs in
+# different folders): the placement record (the absolute paths of the positions table and of each FOV's reference
+# image), the export record and the AnnData file, whose uns holds the export's records.
+VARYING_EXPORT = VARYING + ("placement.json", "export.json", "sample.h5ad")
+# Besides VARYING_DIGESTS: the digest of the export record's assembly section, which holds the AnnData file's digest.
+VARYING_EXPORT_DIGESTS = VARYING_DIGESTS | {"assembly_sha256"}
+
+
+def _image_values(values, arrays, name, path):
+    """The shape, dtype, minimum, maximum and sum of an image; an integer image also whole in ``arrays``."""
+    pixels = _image(path)
+    integer = pixels.dtype.kind in "iub"
+    kind = "exact" if integer else "float32" if pixels.dtype == np.float32 else "float64"
+    values[f"{name}:shape"] = {"value": list(pixels.shape), "compare": "exact"}
+    values[f"{name}:dtype"] = {"value": str(pixels.dtype), "compare": "exact"}
+    values[f"{name}:min"] = {"value": pixels.min().item(), "compare": kind}
+    values[f"{name}:max"] = {"value": pixels.max().item(), "compare": kind}
+    values[f"{name}:sum"] = {"value": float(pixels.sum(dtype=np.float64)), "compare": "exact" if integer else "float64"}
+    if integer:
+        arrays[name] = pixels
+
+
+def extract_export(work, out):
+    """The expected values of invocation D in ``out``, in the layout of ``extract``: for each route, the JSON records
+    of stitching/, export/ and report/ normalized (``records/<route>/...``), their CSV tables (the report's intensity
+    histograms summarized, one row per histogram), every TIFF's shape, dtype, minimum, maximum and sum, each integer
+    image whole in ``arrays.npz``, and the digest of every file that holds no time or absolute path; the fixture's
+    file digests; and the import file of the route after fusion."""
+    work, out = Path(work).resolve(), Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    fixture = json.loads((work / "fixture.json").read_text())
+    values, dtypes, arrays, tables = {}, {}, {}, {}
+    for name, entry in fixture["files"].items():
+        values[f"fixture:{name}"] = {"value": entry["sha256"], "compare": "exact"}
+    _image_values(values, arrays, f"labels/{FUSED_CELLS}", work / "labels" / FUSED_CELLS)
+    for route in EXPORT_ROUTES:
+        root = export_output_root(work, route)
+        for path in sorted(p for folder in EXPORT_FOLDERS for p in (root / folder).rglob("*") if p.is_file()):
+            relative = path.relative_to(root).as_posix()
+            name = f"{route}/{relative}"
+            if path.suffix == ".json":
+                target = out / "records" / route / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                record = _normalized(json.loads(path.read_text()), str(work), VARYING_EXPORT, VARYING_EXPORT_DIGESTS)
+                target.write_text(json.dumps(record, indent=1) + "\n")
+            elif path.suffix == ".csv":
+                tables[f"{route}-{relative.replace('/', '-')}"] = path
+            elif path.name.endswith((".tif", ".tiff")):
+                _image_values(values, arrays, name, path)
+            if not any(pattern in relative for pattern in VARYING_EXPORT):
+                values[f"file:{name}"] = {"value": sha256_file(path), "compare": "same_environment"}
+    for name, path in tables.items():
+        frame = _table(path)
+        if name.endswith("-report-sample-tables-intensity.csv"):
+            name = name.replace("-intensity.csv", "-intensity-summary.csv")
+            keys = ["round", "step_index", "phase", "step", "channel"]
+            frame = frame.groupby(keys, sort=False).agg(bins=("bin", "size"), count=("count", "sum"),
+                                                         bin_low=("bin_low", "min"),
+                                                         bin_high=("bin_high", "max")).reset_index()
+            frame["bins"] = frame["bins"].astype("int64")
+        dtypes[name] = EV.write_csv(frame, out / name)
+    (out / "values.json").write_text(json.dumps(values, indent=1, sort_keys=True) + "\n")
+    (out / "dtypes.json").write_text(json.dumps({name: dtypes[name] for name in sorted(dtypes)}, indent=1) + "\n")
+    np.savez_compressed(out / "arrays.npz", **arrays)
+    return values
+
+
 # --- the comparison -----------------------------------------------------------------------------------------------
 
 TOLERANCES = {"float64": EV.FLOAT64, "float32": {"rtol": 1e-6, "atol": 1e-6}}
+# The digest a run record holds of each checkpoint stage record: candidates.json names the software it ran with
+# (detection_diagnostics.software), so the digest is an identity of the recording environment, like the file digests,
+# and a comparison across environments skips it (W-643: NumPy 2.3.5 against 2.2.6 changed only that leaf).
+STAGE_RECORD_DIGEST = re.compile(r"^records/fovs/[^/]+/run\.json\.checkpoints\.[A-Za-z_]+\.sha256: ")
 
 
 def _close(actual, expected, kind):
@@ -451,7 +641,8 @@ def compare(expected_dir, actual_dir, *, same_environment=True):
             lines.append(f"records/{name}: only in {'expected' if e.is_file() else 'actual'}")
             continue
         lines += [f"records/{name}{line}" for line in record_differences(json.loads(a.read_text()),
-                                                                          json.loads(e.read_text()))]
+                                                                          json.loads(e.read_text()))
+                  if same_environment or not STAGE_RECORD_DIGEST.match(f"records/{name}{line}")]
     dtypes_e = json.loads((expected_dir / "dtypes.json").read_text())
     dtypes_a = json.loads((actual_dir / "dtypes.json").read_text())
     for name in sorted(set(dtypes_e) | set(dtypes_a)):
@@ -489,6 +680,14 @@ def main(argv=None):
     extracting = commands.add_parser("extract")
     extracting.add_argument("work", type=Path)
     extracting.add_argument("out", type=Path)
+    run_d = commands.add_parser("run-export")
+    run_d.add_argument("work", type=Path)
+    run_d.add_argument("--snakemake", required=True)
+    run_d.add_argument("--starfinder-path", type=Path, default=REPO)
+    run_d.add_argument("--cores", type=int, default=1)
+    extracting_d = commands.add_parser("extract-export")
+    extracting_d.add_argument("work", type=Path)
+    extracting_d.add_argument("out", type=Path)
     comparing = commands.add_parser("compare")
     comparing.add_argument("expected", type=Path)
     comparing.add_argument("actual", type=Path)
@@ -503,6 +702,11 @@ def main(argv=None):
             print(record["name"], record["exit_status"])
     elif args.command == "extract":
         print(f"{len(extract(args.work, args.out))} values in {args.out}")
+    elif args.command == "run-export":
+        for record in run_export(args.work, args.snakemake, args.starfinder_path, args.cores):
+            print(record["name"], record["exit_status"])
+    elif args.command == "extract-export":
+        print(f"{len(extract_export(args.work, args.out))} values in {args.out}")
     else:
         lines = compare(args.expected, args.actual, same_environment=not args.other_environment)
         print("\n".join(lines) if lines else "no difference")

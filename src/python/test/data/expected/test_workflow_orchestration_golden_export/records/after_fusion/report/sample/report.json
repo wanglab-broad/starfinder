@@ -1,0 +1,695 @@
+{
+ "format_version": 1,
+ "stage": "report",
+ "sample": "sample",
+ "dataset_id": "sample-tiny-v1",
+ "sample_id": "sample",
+ "fov_ids": [
+  "FOV_001",
+  "FOV_002",
+  "FOV_003",
+  "FOV_004"
+ ],
+ "route": "after_fusion",
+ "assignment": {
+  "name": "default",
+  "folders": {}
+ },
+ "segmentation": {
+  "name": null,
+  "runs": {
+   "cells": "cell",
+   "nuclei": null
+  }
+ },
+ "config": {
+  "markers": [],
+  "marker_pairs": [],
+  "positive_threshold": 1,
+  "example_fovs": null,
+  "limits": {
+   "shift_residual": {
+    "k": 5.0,
+    "floor": 5.0,
+    "absolute": null
+   },
+   "alignment_score": {
+    "k": null,
+    "floor": null,
+    "absolute": null
+   },
+   "correct_form_fraction": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "matched_fraction": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "spots_near_zero": 0.05
+  },
+  "figure_width_px": 1600,
+  "jpeg_quality": 85
+ },
+ "stages": {
+  "run_records": [
+   "FOV_001",
+   "FOV_002",
+   "FOV_003",
+   "FOV_004"
+  ],
+  "version_1_run_records": [],
+  "placement": true,
+  "export": true,
+  "parts": {
+   "assemble": "written",
+   "fuse": "written",
+   "segment": "written",
+   "fuse_labels": "off",
+   "export_spatialdata": "off"
+  }
+ },
+ "inputs": [
+  {
+   "path": "fovs/FOV_001/run.json",
+   "kind": "run_record",
+   "verified": false
+  },
+  {
+   "path": "fovs/FOV_002/run.json",
+   "kind": "run_record",
+   "verified": false
+  },
+  {
+   "path": "fovs/FOV_003/run.json",
+   "kind": "run_record",
+   "verified": false
+  },
+  {
+   "path": "fovs/FOV_004/run.json",
+   "kind": "run_record",
+   "verified": false
+  },
+  {
+   "path": "export/sample/export.json",
+   "kind": "export_record",
+   "verified": false
+  },
+  {
+   "path": "stitching/sample/placement.json",
+   "kind": "placement",
+   "verified": false
+  },
+  {
+   "path": "stitching/sample/fovs.csv",
+   "kind": "placement_table",
+   "sha256": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b",
+   "bytes": 669,
+   "verified": true
+  },
+  {
+   "path": "export/sample/tables/fovs.csv",
+   "kind": "export_table",
+   "verified": true
+  },
+  {
+   "path": "export/sample/tables/molecules.csv",
+   "kind": "export_table",
+   "sha256": "38d9dfb68cabeb452416e6b4d38d4e5c3185c2e6d14484b23615e56d3bba032d",
+   "bytes": 19358,
+   "verified": true
+  },
+  {
+   "path": "export/sample/tables/cells.csv",
+   "kind": "export_table",
+   "sha256": "806c6559a331be8d11b1bf1085b361a80a8a6cf3ae7976e00beb16ac38ba5396",
+   "bytes": 3542,
+   "verified": true
+  },
+  {
+   "path": "stitching/sample/links.csv",
+   "kind": "placement_table",
+   "sha256": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee",
+   "bytes": 703,
+   "verified": true
+  },
+  {
+   "path": "export/sample/sample.h5ad",
+   "kind": "anndata",
+   "verified": true
+  },
+  {
+   "path": "<work>/input/sample-tiny-v1/sample/round1/FOV_001/ch00.ome.tif",
+   "kind": "raw_image",
+   "sha256": "6143e9e8a07d2b3ae427041a548c4df883642cd8e889d5e0ad374329b552527f",
+   "bytes": 27931,
+   "verified": true
+  },
+  {
+   "path": "<work>/input/sample-tiny-v1/sample/round1/FOV_001/ch01.ome.tif",
+   "kind": "raw_image",
+   "sha256": "c2efdb0774e38c5b86e81402508708b793608549e02cc065ed2b5775d4671efb",
+   "bytes": 27931,
+   "verified": true
+  },
+  {
+   "path": "<work>/input/sample-tiny-v1/sample/round1/FOV_001/ch02.ome.tif",
+   "kind": "raw_image",
+   "sha256": "53349f80e5a80e1b16c8ba90e16c62df94df04f223639de59d8961cd488233cb",
+   "bytes": 27931,
+   "verified": true
+  },
+  {
+   "path": "<work>/input/sample-tiny-v1/sample/round1/FOV_001/ch03.ome.tif",
+   "kind": "raw_image",
+   "sha256": "f18cfeb7ae7b333c7ddfd102741a3edfa68ee7e4d3c22f9789c0611a2df80f07",
+   "bytes": 27931,
+   "verified": true
+  },
+  {
+   "path": "<work>/input/sample-tiny-v1/sample/round2/FOV_001/ch00.ome.tif",
+   "kind": "raw_image",
+   "sha256": "d30bd912e56f744821f90ab41e7900ddb9f2ce2e4872b443aa3a1d1cf429b417",
+   "bytes": 27931,
+   "verified": true
+  },
+  {
+   "path": "<work>/input/sample-tiny-v1/sample/round2/FOV_001/ch01.ome.tif",
+   "kind": "raw_image",
+   "sha256": "b1e6a80fcae41976a3f19e07ad5b5fe6d24deff7df433a53118a43187c85e0d1",
+   "bytes": 27931,
+   "verified": true
+  },
+  {
+   "path": "<work>/input/sample-tiny-v1/sample/round2/FOV_001/ch02.ome.tif",
+   "kind": "raw_image",
+   "sha256": "0b3e41d31ecae7d3c03b2014dcc08b07784819bf63ff851e4789ad5286d8f99b",
+   "bytes": 27931,
+   "verified": true
+  },
+  {
+   "path": "<work>/input/sample-tiny-v1/sample/round2/FOV_001/ch03.ome.tif",
+   "kind": "raw_image",
+   "sha256": "df93cb1da86847f2fba292376d2c0c05137181529fea05aa71f0321b026d0ad4",
+   "bytes": 27931,
+   "verified": true
+  },
+  {
+   "path": "export/sample/segmentation_cell.ome.tif",
+   "kind": "label_image",
+   "sha256": "7b28a81e49871e69373546507c9d48a3cb0730cc741ad4eb074baceb264c2a5d",
+   "bytes": 3462,
+   "verified": true
+  },
+  {
+   "path": "export/sample/reference_merged_projection.ome.tif",
+   "kind": "fused_image",
+   "sha256": "c0eef016ba79c18edabf5a9eca1e48340fcebf14c61966e3f6efa1ab1118a864",
+   "bytes": 3233,
+   "verified": true
+  }
+ ],
+ "files": [
+  {
+   "path": "report.html",
+   "budget_bytes": 9502720
+  },
+  {
+   "path": "tables/fovs.csv",
+   "dtypes": {
+    "fov_id": "string",
+    "list_index": "int64",
+    "example": "string",
+    "run_record": "bool",
+    "status": "string",
+    "failed_step": "string",
+    "failed_round": "string",
+    "run_seconds": "float64",
+    "placement_status": "string",
+    "correction_z": "float64",
+    "correction_y": "float64",
+    "correction_x": "float64",
+    "footprint_y0": "float64",
+    "footprint_y1": "float64",
+    "footprint_x0": "float64",
+    "footprint_x1": "float64",
+    "centre_y": "float64",
+    "centre_x": "float64",
+    "spots": "Int64",
+    "correct_form": "Int64",
+    "matched": "Int64",
+    "merged_by_deduplication": "Int64",
+    "passed_filter": "Int64",
+    "correct_form_fraction": "float64",
+    "matched_fraction": "float64",
+    "merged_fraction": "float64",
+    "passed_filter_fraction": "float64",
+    "n_cells": "Int64",
+    "n_cells_retained": "Int64",
+    "n_molecules": "Int64",
+    "n_molecules_retained": "Int64",
+    "reads_in_cells": "Int64",
+    "reads_in_cells_fraction": "float64",
+    "owned_area_um2": "float64",
+    "cell_density_per_mm2": "float64"
+   }
+  },
+  {
+   "path": "tables/registration.csv",
+   "sha256": "bb6894fefddfd7a579ca869613f49e2d90493a893a947052d823334c615b52c3",
+   "bytes": 1162,
+   "dtypes": {
+    "fov_id": "string",
+    "round": "string",
+    "outcome": "string",
+    "fallback": "boolean",
+    "methods": "string",
+    "transform_source": "string",
+    "shift_z": "float64",
+    "shift_y": "float64",
+    "shift_x": "float64",
+    "residual_z": "float64",
+    "residual_y": "float64",
+    "residual_x": "float64",
+    "alignment_score": "float64"
+   }
+  },
+  {
+   "path": "tables/steps.csv",
+   "dtypes": {
+    "scope": "string",
+    "fov_id": "string",
+    "index": "int64",
+    "name": "string",
+    "round": "string",
+    "method": "string",
+    "status": "string"
+   }
+  },
+  {
+   "path": "tables/readout_totals.csv",
+   "sha256": "b5abaed8297671e61f3f2e094c8be3cd91768c89c122af66a45645f6faac01a4",
+   "bytes": 303,
+   "dtypes": {
+    "level": "string",
+    "count": "Int64",
+    "fraction_of_spots": "float64",
+    "fovs": "int64",
+    "overlaps_counted_per_fov": "bool"
+   }
+  },
+  {
+   "path": "tables/population.csv",
+   "sha256": "6e854ddb9c8f17a3c972fcf06fbd6fad98ffd0f861d466390f0b537145495671",
+   "bytes": 264,
+   "dtypes": {
+    "population": "string",
+    "cells": "Int64",
+    "molecules": "Int64"
+   }
+  },
+  {
+   "path": "tables/problematic_fovs.csv",
+   "sha256": "3dcfc23610b2ba9213136d12bcf2c2175d7c0312d151c309cce6fd2d9854a3ee",
+   "bytes": 72,
+   "dtypes": {
+    "fov_id": "string",
+    "section": "string",
+    "rule": "string",
+    "round": "string",
+    "axis": "string",
+    "measured": "float64",
+    "sample_median": "float64",
+    "limit": "float64",
+    "unit": "string",
+    "reason": "string"
+   }
+  },
+  {
+   "path": "tables/cells.csv",
+   "sha256": "0b6e7ddeb6e81ca69cd906186f627ec18492d589129650a57e43a2bbef185d52",
+   "bytes": 393,
+   "dtypes": {
+    "obs_name": "string",
+    "fov_id": "string",
+    "reads": "int64",
+    "genes": "int64",
+    "size": "float64",
+    "size_unit": "string"
+   }
+  },
+  {
+   "path": "tables/mecr.csv",
+   "sha256": "24da709c603819c2e33fe82eef18a3c09fe841650c5c8f063c1e96b6a76047d9",
+   "bytes": 57,
+   "dtypes": {
+    "gene_a": "string",
+    "gene_b": "string",
+    "threshold": "int64",
+    "cells_a": "Int64",
+    "cells_b": "Int64",
+    "both": "Int64",
+    "either": "Int64",
+    "mecr": "float64"
+   }
+  },
+  {
+   "path": "tables/reads_along_z.csv",
+   "sha256": "cdbbd23c991241df00443e7c7c57eac56f5c96d3f71b05c5da00c55d1d6866cc",
+   "bytes": 256,
+   "dtypes": {
+    "fov_id": "string",
+    "z": "int64",
+    "reads": "int64"
+   }
+  },
+  {
+   "path": "tables/intensity.csv",
+   "sha256": "7f3757a41d63d4b78d7fbf27f61ba11b55682f3e9221ba6f11149757c3289255",
+   "bytes": 361297,
+   "dtypes": {
+    "round": "string",
+    "step_index": "int64",
+    "phase": "string",
+    "step": "string",
+    "channel": "string",
+    "bin": "int64",
+    "bin_low": "float64",
+    "bin_high": "float64",
+    "count": "int64"
+   }
+  },
+  {
+   "path": "tables/unavailable.csv",
+   "sha256": "ca6821a95433c1ad028f5b60da7aff3843a0f62c71f90d875bae68d6f3007152",
+   "bytes": 804,
+   "dtypes": {
+    "part": "string",
+    "table": "string",
+    "column": "string",
+    "row_key": "string",
+    "reason": "string",
+    "detail": "string"
+   }
+  }
+ ],
+ "unavailable": [
+  {
+   "part": "rule:alignment_score",
+   "table": null,
+   "column": null,
+   "row_key": "",
+   "reason": "not_configured",
+   "detail": "config.limits.alignment_score sets no limit"
+  },
+  {
+   "part": "workflow.time",
+   "table": "steps",
+   "column": "seconds",
+   "row_key": "scope=sample;fov_id=;index=0",
+   "reason": "not_recorded",
+   "detail": "no record holds the time of stitch"
+  },
+  {
+   "part": "workflow.time",
+   "table": "steps",
+   "column": "seconds",
+   "row_key": "scope=sample;fov_id=;index=1",
+   "reason": "not_recorded",
+   "detail": "export.json assembly records no wall_s"
+  },
+  {
+   "part": "sample.marker_zoom",
+   "table": null,
+   "column": null,
+   "row_key": "fov_id=FOV_001;role=example_1;view=xz",
+   "reason": "no_stack",
+   "detail": "the export has no fused stack of more than one plane"
+  },
+  {
+   "part": "sample.marker_zoom",
+   "table": null,
+   "column": null,
+   "row_key": "fov_id=FOV_002;role=example_2;view=xz",
+   "reason": "no_stack",
+   "detail": "the export has no fused stack of more than one plane"
+  },
+  {
+   "part": "sample.marker_zoom",
+   "table": null,
+   "column": null,
+   "row_key": "fov_id=FOV_004;role=example_3;view=xz",
+   "reason": "no_stack",
+   "detail": "the export has no fused stack of more than one plane"
+  },
+  {
+   "part": "sample.mecr",
+   "table": null,
+   "column": null,
+   "row_key": "",
+   "reason": "no_markers",
+   "detail": "the configuration has no marker_pairs"
+  }
+ ],
+ "examples": {
+  "example_1": {
+   "fov_id": "FOV_001",
+   "chosen_by": "automatic",
+   "rule": "median_reads",
+   "value": 24,
+   "seed": 0,
+   "near_median": 1,
+   "median": 26.0
+  },
+  "example_2": {
+   "fov_id": "FOV_002",
+   "chosen_by": "automatic",
+   "rule": "fewest_cells",
+   "value": 1,
+   "seed": 0
+  },
+  "example_3": {
+   "fov_id": "FOV_004",
+   "chosen_by": "automatic",
+   "rule": "most_cells",
+   "value": 4,
+   "seed": 0
+  }
+ },
+ "replay": {
+  "fov_id": "FOV_001",
+  "rounds": {
+   "reference": "round1",
+   "moving": [
+    "round2"
+   ]
+  },
+  "inputs": [
+   {
+    "round": "round1",
+    "path": "<work>/input/sample-tiny-v1/sample/round1/FOV_001/ch00.ome.tif",
+    "sha256": "6143e9e8a07d2b3ae427041a548c4df883642cd8e889d5e0ad374329b552527f",
+    "recorded_sha256": "6143e9e8a07d2b3ae427041a548c4df883642cd8e889d5e0ad374329b552527f",
+    "verified": true,
+    "equal": true
+   },
+   {
+    "round": "round1",
+    "path": "<work>/input/sample-tiny-v1/sample/round1/FOV_001/ch01.ome.tif",
+    "sha256": "c2efdb0774e38c5b86e81402508708b793608549e02cc065ed2b5775d4671efb",
+    "recorded_sha256": "c2efdb0774e38c5b86e81402508708b793608549e02cc065ed2b5775d4671efb",
+    "verified": true,
+    "equal": true
+   },
+   {
+    "round": "round1",
+    "path": "<work>/input/sample-tiny-v1/sample/round1/FOV_001/ch02.ome.tif",
+    "sha256": "53349f80e5a80e1b16c8ba90e16c62df94df04f223639de59d8961cd488233cb",
+    "recorded_sha256": "53349f80e5a80e1b16c8ba90e16c62df94df04f223639de59d8961cd488233cb",
+    "verified": true,
+    "equal": true
+   },
+   {
+    "round": "round1",
+    "path": "<work>/input/sample-tiny-v1/sample/round1/FOV_001/ch03.ome.tif",
+    "sha256": "f18cfeb7ae7b333c7ddfd102741a3edfa68ee7e4d3c22f9789c0611a2df80f07",
+    "recorded_sha256": "f18cfeb7ae7b333c7ddfd102741a3edfa68ee7e4d3c22f9789c0611a2df80f07",
+    "verified": true,
+    "equal": true
+   },
+   {
+    "round": "round2",
+    "path": "<work>/input/sample-tiny-v1/sample/round2/FOV_001/ch00.ome.tif",
+    "sha256": "d30bd912e56f744821f90ab41e7900ddb9f2ce2e4872b443aa3a1d1cf429b417",
+    "recorded_sha256": "d30bd912e56f744821f90ab41e7900ddb9f2ce2e4872b443aa3a1d1cf429b417",
+    "verified": true,
+    "equal": true
+   },
+   {
+    "round": "round2",
+    "path": "<work>/input/sample-tiny-v1/sample/round2/FOV_001/ch01.ome.tif",
+    "sha256": "b1e6a80fcae41976a3f19e07ad5b5fe6d24deff7df433a53118a43187c85e0d1",
+    "recorded_sha256": "b1e6a80fcae41976a3f19e07ad5b5fe6d24deff7df433a53118a43187c85e0d1",
+    "verified": true,
+    "equal": true
+   },
+   {
+    "round": "round2",
+    "path": "<work>/input/sample-tiny-v1/sample/round2/FOV_001/ch02.ome.tif",
+    "sha256": "0b3e41d31ecae7d3c03b2014dcc08b07784819bf63ff851e4789ad5286d8f99b",
+    "recorded_sha256": "0b3e41d31ecae7d3c03b2014dcc08b07784819bf63ff851e4789ad5286d8f99b",
+    "verified": true,
+    "equal": true
+   },
+   {
+    "round": "round2",
+    "path": "<work>/input/sample-tiny-v1/sample/round2/FOV_001/ch03.ome.tif",
+    "sha256": "df93cb1da86847f2fba292376d2c0c05137181529fea05aa71f0321b026d0ad4",
+    "recorded_sha256": "df93cb1da86847f2fba292376d2c0c05137181529fea05aa71f0321b026d0ad4",
+    "verified": true,
+    "equal": true
+   }
+  ],
+  "verified": true,
+  "steps": [
+   {
+    "round": "round1",
+    "step_index": 1,
+    "phase": "steps",
+    "step": "min_max_normalization",
+    "fitted_equal": true
+   },
+   {
+    "round": "round1",
+    "step_index": 2,
+    "phase": "steps",
+    "step": "white_tophat",
+    "fitted_equal": true
+   },
+   {
+    "round": "round2",
+    "step_index": 1,
+    "phase": "steps",
+    "step": "min_max_normalization",
+    "fitted_equal": true
+   },
+   {
+    "round": "round2",
+    "step_index": 2,
+    "phase": "steps",
+    "step": "white_tophat",
+    "fitted_equal": true
+   }
+  ],
+  "transform_source": "run.json",
+  "fitted_equal": true
+ },
+ "rules": {
+  "fov_failed": {
+   "limit": null,
+   "unit": null,
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "fov_not_run": {
+   "limit": null,
+   "unit": null,
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "shift_residual": {
+   "limit": {
+    "k": 5.0,
+    "floor": 5.0,
+    "absolute": null
+   },
+   "unit": "voxels",
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "alignment_score": {
+   "limit": {
+    "k": null,
+    "floor": null,
+    "absolute": null
+   },
+   "unit": "dimensionless",
+   "evaluated": false,
+   "fovs_marked": null
+  },
+  "registration_rejected": {
+   "limit": null,
+   "unit": null,
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "registration_fallback": {
+   "limit": null,
+   "unit": null,
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "correct_form_fraction": {
+   "limit": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "unit": "fraction",
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "matched_fraction": {
+   "limit": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "unit": "fraction",
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "spots_near_zero": {
+   "limit": {
+    "fraction_of_median": 0.05
+   },
+   "unit": "reads",
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "not_placed": {
+   "limit": null,
+   "unit": null,
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "stage_position_fallback": {
+   "limit": null,
+   "unit": null,
+   "evaluated": true,
+   "fovs_marked": 0
+  },
+  "reads_no_cell": {
+   "limit": null,
+   "unit": null,
+   "evaluated": true,
+   "fovs_marked": 0
+  }
+ },
+ "summary": {
+  "fovs_expected": 4,
+  "fovs_with_run_record": 4,
+  "fovs_succeeded": 4,
+  "spots_median_per_fov": 29.5,
+  "matched_fraction": 0.8434782608695652,
+  "counted_cells": 9,
+  "reads_per_cell_median": 6.0,
+  "genes_per_cell_median": 5.0,
+  "cells_median_per_fov": 2.0,
+  "reads_in_cells": 57,
+  "h5ad_whole_count_sum": 57,
+  "reads_in_cells_equal": true
+ }
+}

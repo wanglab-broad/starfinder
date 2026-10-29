@@ -1,0 +1,10 @@
+population,cells,molecules
+input,<NA>,96
+retained,<NA>,63
+excluded_not_owner,<NA>,33
+excluded_fov_not_placed,<NA>,0
+excluded_duplicate_observation,<NA>,<NA>
+excluded_cell_not_owner,<NA>,0
+excluded_cell_duplicate_observation,<NA>,0
+excluded_outside_grid,<NA>,0
+counted,<NA>,<NA>

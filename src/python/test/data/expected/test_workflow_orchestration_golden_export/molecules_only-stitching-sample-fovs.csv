@@ -1,0 +1,5 @@
+fov_id,status,origin_z,origin_y,origin_x,nominal_z,nominal_y,nominal_x,correction_z,correction_y,correction_x,method_translation_z,method_translation_y,method_translation_x,component,n_links_kept,flags
+FOV_001,image_supported,0,0,-0.50000000000000033,0,0,0,0,0,-0.50000000000000033,0,0,-5.5511151231257847e-16,0,2,<NA>
+FOV_002,image_supported,0,12.000000000000002,0.49999999999999972,0,12.000000000000002,0,0,0,0.49999999999999972,0,0,0.99999999999999944,0,2,<NA>
+FOV_003,image_supported,0,0,11.500000000000002,0,0,12.000000000000002,0,0,-0.5,0,0,0,0,2,<NA>
+FOV_004,image_supported,0,12.000000000000002,12.500000000000002,0,12.000000000000002,12.000000000000002,0,0,0.5,0,0,1,0,2,<NA>

@@ -1,0 +1,7 @@
+level,count,fraction_of_spots,fovs,overlaps_counted_per_fov
+spots,115,1,4,True
+correct_form,22,0.19130434782608691,4,True
+matched,97,0.84347826086956523,4,True
+merged_by_deduplication,2,0.017391304347826,4,True
+passed_filter,96,0.83478260869565213,4,True
+reads_in_cells,54,0.4695652173913043,4,False

@@ -1,0 +1,893 @@
+{
+ "after_fusion/export/sample/reference_merged_projection.ome.tif:dtype": {
+  "compare": "exact",
+  "value": "uint8"
+ },
+ "after_fusion/export/sample/reference_merged_projection.ome.tif:max": {
+  "compare": "exact",
+  "value": 195
+ },
+ "after_fusion/export/sample/reference_merged_projection.ome.tif:min": {
+  "compare": "exact",
+  "value": 0
+ },
+ "after_fusion/export/sample/reference_merged_projection.ome.tif:shape": {
+  "compare": "exact",
+  "value": [
+   30,
+   31
+  ]
+ },
+ "after_fusion/export/sample/reference_merged_projection.ome.tif:sum": {
+  "compare": "exact",
+  "value": 26352.0
+ },
+ "after_fusion/export/sample/segmentation_cell.ome.tif:dtype": {
+  "compare": "exact",
+  "value": "uint32"
+ },
+ "after_fusion/export/sample/segmentation_cell.ome.tif:max": {
+  "compare": "exact",
+  "value": 21
+ },
+ "after_fusion/export/sample/segmentation_cell.ome.tif:min": {
+  "compare": "exact",
+  "value": 0
+ },
+ "after_fusion/export/sample/segmentation_cell.ome.tif:shape": {
+  "compare": "exact",
+  "value": [
+   30,
+   31
+  ]
+ },
+ "after_fusion/export/sample/segmentation_cell.ome.tif:sum": {
+  "compare": "exact",
+  "value": 6468.0
+ },
+ "file:after_fusion/export/sample/reference_merged_projection.ome.tif": {
+  "compare": "same_environment",
+  "value": "c0eef016ba79c18edabf5a9eca1e48340fcebf14c61966e3f6efa1ab1118a864"
+ },
+ "file:after_fusion/export/sample/segmentation_cell.ome.tif": {
+  "compare": "same_environment",
+  "value": "7b28a81e49871e69373546507c9d48a3cb0730cc741ad4eb074baceb264c2a5d"
+ },
+ "file:after_fusion/export/sample/tables/cells.csv": {
+  "compare": "same_environment",
+  "value": "806c6559a331be8d11b1bf1085b361a80a8a6cf3ae7976e00beb16ac38ba5396"
+ },
+ "file:after_fusion/export/sample/tables/counts.csv": {
+  "compare": "same_environment",
+  "value": "fe8f8ccee89361b9c6cb6ca7aa2252969f218a2f33a77993449b8055518b5fc2"
+ },
+ "file:after_fusion/export/sample/tables/molecules.csv": {
+  "compare": "same_environment",
+  "value": "38d9dfb68cabeb452416e6b4d38d4e5c3185c2e6d14484b23615e56d3bba032d"
+ },
+ "file:after_fusion/report/sample/tables/cells.csv": {
+  "compare": "same_environment",
+  "value": "0b6e7ddeb6e81ca69cd906186f627ec18492d589129650a57e43a2bbef185d52"
+ },
+ "file:after_fusion/report/sample/tables/intensity.csv": {
+  "compare": "same_environment",
+  "value": "7f3757a41d63d4b78d7fbf27f61ba11b55682f3e9221ba6f11149757c3289255"
+ },
+ "file:after_fusion/report/sample/tables/mecr.csv": {
+  "compare": "same_environment",
+  "value": "24da709c603819c2e33fe82eef18a3c09fe841650c5c8f063c1e96b6a76047d9"
+ },
+ "file:after_fusion/report/sample/tables/population.csv": {
+  "compare": "same_environment",
+  "value": "6e854ddb9c8f17a3c972fcf06fbd6fad98ffd0f861d466390f0b537145495671"
+ },
+ "file:after_fusion/report/sample/tables/problematic_fovs.csv": {
+  "compare": "same_environment",
+  "value": "3dcfc23610b2ba9213136d12bcf2c2175d7c0312d151c309cce6fd2d9854a3ee"
+ },
+ "file:after_fusion/report/sample/tables/readout_totals.csv": {
+  "compare": "same_environment",
+  "value": "b5abaed8297671e61f3f2e094c8be3cd91768c89c122af66a45645f6faac01a4"
+ },
+ "file:after_fusion/report/sample/tables/reads_along_z.csv": {
+  "compare": "same_environment",
+  "value": "cdbbd23c991241df00443e7c7c57eac56f5c96d3f71b05c5da00c55d1d6866cc"
+ },
+ "file:after_fusion/report/sample/tables/registration.csv": {
+  "compare": "same_environment",
+  "value": "bb6894fefddfd7a579ca869613f49e2d90493a893a947052d823334c615b52c3"
+ },
+ "file:after_fusion/report/sample/tables/unavailable.csv": {
+  "compare": "same_environment",
+  "value": "ca6821a95433c1ad028f5b60da7aff3843a0f62c71f90d875bae68d6f3007152"
+ },
+ "file:after_fusion/stitching/sample/fovs.csv": {
+  "compare": "same_environment",
+  "value": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b"
+ },
+ "file:after_fusion/stitching/sample/links.csv": {
+  "compare": "same_environment",
+  "value": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee"
+ },
+ "file:molecules_only/export/sample/reference_merged_projection.ome.tif": {
+  "compare": "same_environment",
+  "value": "c0eef016ba79c18edabf5a9eca1e48340fcebf14c61966e3f6efa1ab1118a864"
+ },
+ "file:molecules_only/export/sample/tables/cells.csv": {
+  "compare": "same_environment",
+  "value": "9dbee4aa38b6cd1f1e100284be4f4c14b39117645e8af7d4e05cfca5bd510f0e"
+ },
+ "file:molecules_only/export/sample/tables/counts.csv": {
+  "compare": "same_environment",
+  "value": "869d4f9b5514733ee789c81069af2197b3d7d0351c0545611f79c7d27f68393e"
+ },
+ "file:molecules_only/export/sample/tables/molecules.csv": {
+  "compare": "same_environment",
+  "value": "ce168ac0f5060640f65afe018aa2e643fd36df1fb93910a5c91929ed6f97676e"
+ },
+ "file:molecules_only/report/sample/tables/cells.csv": {
+  "compare": "same_environment",
+  "value": "ac015e5b84b14210a442f7bf04eb994c13d7e992b609a358f79ce224b73b9148"
+ },
+ "file:molecules_only/report/sample/tables/intensity.csv": {
+  "compare": "same_environment",
+  "value": "7f3757a41d63d4b78d7fbf27f61ba11b55682f3e9221ba6f11149757c3289255"
+ },
+ "file:molecules_only/report/sample/tables/mecr.csv": {
+  "compare": "same_environment",
+  "value": "24da709c603819c2e33fe82eef18a3c09fe841650c5c8f063c1e96b6a76047d9"
+ },
+ "file:molecules_only/report/sample/tables/population.csv": {
+  "compare": "same_environment",
+  "value": "5c1b18e1d1cb956e41aa1f3da791cd4c9b65bc4d62985f11fa36e4697c9cfde4"
+ },
+ "file:molecules_only/report/sample/tables/problematic_fovs.csv": {
+  "compare": "same_environment",
+  "value": "3dcfc23610b2ba9213136d12bcf2c2175d7c0312d151c309cce6fd2d9854a3ee"
+ },
+ "file:molecules_only/report/sample/tables/readout_totals.csv": {
+  "compare": "same_environment",
+  "value": "3abb9469946aa813969126ddb364b8722584634503790b5648f544843390a684"
+ },
+ "file:molecules_only/report/sample/tables/reads_along_z.csv": {
+  "compare": "same_environment",
+  "value": "cdbbd23c991241df00443e7c7c57eac56f5c96d3f71b05c5da00c55d1d6866cc"
+ },
+ "file:molecules_only/report/sample/tables/registration.csv": {
+  "compare": "same_environment",
+  "value": "bb6894fefddfd7a579ca869613f49e2d90493a893a947052d823334c615b52c3"
+ },
+ "file:molecules_only/report/sample/tables/unavailable.csv": {
+  "compare": "same_environment",
+  "value": "f559f301902d31c4c9bb6f5308682d57d1481585f01964693e3ce5ce4a2b3e32"
+ },
+ "file:molecules_only/stitching/sample/fovs.csv": {
+  "compare": "same_environment",
+  "value": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b"
+ },
+ "file:molecules_only/stitching/sample/links.csv": {
+  "compare": "same_environment",
+  "value": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee"
+ },
+ "file:per_fov/export/sample/cell_labels.ome.tif": {
+  "compare": "same_environment",
+  "value": "b7c94ac814364f1bd650fa6d6923bad59e222383715c79d7a511b6c8c49ba92a"
+ },
+ "file:per_fov/export/sample/reference_merged_projection.ome.tif": {
+  "compare": "same_environment",
+  "value": "c0eef016ba79c18edabf5a9eca1e48340fcebf14c61966e3f6efa1ab1118a864"
+ },
+ "file:per_fov/export/sample/tables/cells.csv": {
+  "compare": "same_environment",
+  "value": "df7fcb57ea96ac33f9ed741a1f5e445fadd33b6c395e17c319842d6b44468fac"
+ },
+ "file:per_fov/export/sample/tables/counts.csv": {
+  "compare": "same_environment",
+  "value": "6646feed541d58c3d03686156a4b72d286b7c71898c756bcf1b25a700f30476b"
+ },
+ "file:per_fov/export/sample/tables/molecules.csv": {
+  "compare": "same_environment",
+  "value": "0e123d1dd1ae60de4180ff80bd54ce9e59eae0a7247e1f98936468ea1ec1b1cb"
+ },
+ "file:per_fov/report/sample/tables/cells.csv": {
+  "compare": "same_environment",
+  "value": "228f9908b34f8c35fdd4846d36c511a8e9e2c6cc686423785f08274ed36ce5b2"
+ },
+ "file:per_fov/report/sample/tables/intensity.csv": {
+  "compare": "same_environment",
+  "value": "7f3757a41d63d4b78d7fbf27f61ba11b55682f3e9221ba6f11149757c3289255"
+ },
+ "file:per_fov/report/sample/tables/mecr.csv": {
+  "compare": "same_environment",
+  "value": "24da709c603819c2e33fe82eef18a3c09fe841650c5c8f063c1e96b6a76047d9"
+ },
+ "file:per_fov/report/sample/tables/population.csv": {
+  "compare": "same_environment",
+  "value": "5be242f262652ba5510af5f8392f9262abd82bb8e3ae47f26782e4eff889acdf"
+ },
+ "file:per_fov/report/sample/tables/problematic_fovs.csv": {
+  "compare": "same_environment",
+  "value": "3dcfc23610b2ba9213136d12bcf2c2175d7c0312d151c309cce6fd2d9854a3ee"
+ },
+ "file:per_fov/report/sample/tables/readout_totals.csv": {
+  "compare": "same_environment",
+  "value": "ab91bf65cf9a9c1915f2649129654ae99993057e6530aee4ec29ab513386b70a"
+ },
+ "file:per_fov/report/sample/tables/reads_along_z.csv": {
+  "compare": "same_environment",
+  "value": "cdbbd23c991241df00443e7c7c57eac56f5c96d3f71b05c5da00c55d1d6866cc"
+ },
+ "file:per_fov/report/sample/tables/registration.csv": {
+  "compare": "same_environment",
+  "value": "bb6894fefddfd7a579ca869613f49e2d90493a893a947052d823334c615b52c3"
+ },
+ "file:per_fov/report/sample/tables/unavailable.csv": {
+  "compare": "same_environment",
+  "value": "8620640460b3e183aa12e5e566b413be0fdac0320c7f742cfbf608d5c08088d4"
+ },
+ "file:per_fov/stitching/sample/fovs.csv": {
+  "compare": "same_environment",
+  "value": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b"
+ },
+ "file:per_fov/stitching/sample/links.csv": {
+  "compare": "same_environment",
+  "value": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee"
+ },
+ "fixture:input/sample-tiny-v1/sample/flamingo/FOV_001/ch04.tif": {
+  "compare": "exact",
+  "value": "732be7d1a9992014d10405cf4d15a8ad692c1b6b13a6f459d2297eb0707030eb"
+ },
+ "fixture:input/sample-tiny-v1/sample/flamingo/FOV_001/ch05.tif": {
+  "compare": "exact",
+  "value": "b14b91f72ff3122df72ffd5023870453292ff8bc48a48b548f43e50d80357a4c"
+ },
+ "fixture:input/sample-tiny-v1/sample/flamingo/FOV_002/ch04.tif": {
+  "compare": "exact",
+  "value": "aca1ae6d961bd45f8b1fee691fdf47d91074bdab0416a2be1ee1ef7d0f835f64"
+ },
+ "fixture:input/sample-tiny-v1/sample/flamingo/FOV_002/ch05.tif": {
+  "compare": "exact",
+  "value": "a11d4ea622562d475f26a83bb087f1c65d71632cbcbe3ef6c1c378333cbbe301"
+ },
+ "fixture:input/sample-tiny-v1/sample/flamingo/FOV_003/ch04.tif": {
+  "compare": "exact",
+  "value": "cada9354558d1d970866ef94c99eb9b5b53052d66996c99ee2ed93e333fde3cf"
+ },
+ "fixture:input/sample-tiny-v1/sample/flamingo/FOV_003/ch05.tif": {
+  "compare": "exact",
+  "value": "20c3d3f2e8d09838f853b03aa535143af8d40dd10723ca19190c9e06bcef3991"
+ },
+ "fixture:input/sample-tiny-v1/sample/flamingo/FOV_004/ch04.tif": {
+  "compare": "exact",
+  "value": "793ea205f358d91a94e41cf7db1eae963fa2e0fa592d39aa3a53c35017c3765a"
+ },
+ "fixture:input/sample-tiny-v1/sample/flamingo/FOV_004/ch05.tif": {
+  "compare": "exact",
+  "value": "e94ea96b2eaff42aa987c6c3e47f46dc6a399815f530439d180769e662b81616"
+ },
+ "fixture:input/sample-tiny-v1/sample/fovs.csv": {
+  "compare": "exact",
+  "value": "85a97d0917cf81d46b721d2c338a6d52751363b70fefdf7405417521c3a39451"
+ },
+ "fixture:input/sample-tiny-v1/sample/genes.csv": {
+  "compare": "exact",
+  "value": "5e632d43b0f379f37e08743714fe18feab1f80808b11a78c3bcb4f14609774fb"
+ },
+ "fixture:input/sample-tiny-v1/sample/positions.csv": {
+  "compare": "exact",
+  "value": "f5ba30fa35adf85d804f58e41a1f031419da7a05054d9edba97eaad84730f39a"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_001/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "6143e9e8a07d2b3ae427041a548c4df883642cd8e889d5e0ad374329b552527f"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_001/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "c2efdb0774e38c5b86e81402508708b793608549e02cc065ed2b5775d4671efb"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_001/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "53349f80e5a80e1b16c8ba90e16c62df94df04f223639de59d8961cd488233cb"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_001/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "f18cfeb7ae7b333c7ddfd102741a3edfa68ee7e4d3c22f9789c0611a2df80f07"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_001/ch04.tif": {
+  "compare": "exact",
+  "value": "732be7d1a9992014d10405cf4d15a8ad692c1b6b13a6f459d2297eb0707030eb"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_002/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "31bdedb45c560fdfef054fd44ee0f799e333244e44c2a12b0a1cc30a5e8915f4"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_002/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "4929ca6fd506f93fa055e816eb3355dd9f8ce4651ba4ca2906bab5cdc108db82"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_002/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "1a9624c9b02682a32d6e92eb0351aaa8197ce37fb97bf2b776a0104a49183bdf"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_002/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "c5fd09abaac5c54d9175bb76ab1528fbabe868dd150d20dea47e92a61e96fa09"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_002/ch04.tif": {
+  "compare": "exact",
+  "value": "aca1ae6d961bd45f8b1fee691fdf47d91074bdab0416a2be1ee1ef7d0f835f64"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_003/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "110645ff133c37e42de40915a75c027327d25ded2e0a66e46e825a671165210b"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_003/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "4a43ac616ecec85f5ef9e2027587e2ba9ec004fac42ea4e1036ccbee08073693"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_003/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "e7e7db741b99ad7b736c45f65a55cf4000a2afbf379bbc60cb98de82ec06b4d8"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_003/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "b635928cf5b437cbf7ed48dc56a1c9b63ff176c527ef794233bfdef1771411d5"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_003/ch04.tif": {
+  "compare": "exact",
+  "value": "cada9354558d1d970866ef94c99eb9b5b53052d66996c99ee2ed93e333fde3cf"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_004/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "d639b0734ac659ee5e2d1992d4fb923dbc5c3df8fc32a1a413eff4bf9731d3d6"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_004/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "acd232b06ea93342145d7b6751dc827252263f2a19dba45bdbd5bc805331e85b"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_004/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "b92963ceabb4452dc906bd1c10d6d02e8b810f374ab2e6e367942b67f6bc24fa"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_004/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "d5a10a38c81e3661e8b9242569cf952782714d09edc13e1778087d52a63fe370"
+ },
+ "fixture:input/sample-tiny-v1/sample/round1/FOV_004/ch04.tif": {
+  "compare": "exact",
+  "value": "793ea205f358d91a94e41cf7db1eae963fa2e0fa592d39aa3a53c35017c3765a"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_001/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "d30bd912e56f744821f90ab41e7900ddb9f2ce2e4872b443aa3a1d1cf429b417"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_001/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "b1e6a80fcae41976a3f19e07ad5b5fe6d24deff7df433a53118a43187c85e0d1"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_001/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "0b3e41d31ecae7d3c03b2014dcc08b07784819bf63ff851e4789ad5286d8f99b"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_001/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "df93cb1da86847f2fba292376d2c0c05137181529fea05aa71f0321b026d0ad4"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_002/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "d0cd08b9f71408147d2477fa76cf9f993b512297a3262fd213acd808e0875779"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_002/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "1f5d24268eb018b909631b5fca7c32ce08ed2bf3076b3cc020eda6b80438ca79"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_002/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "626d3da66bbb944ffab608225e702803b00c15c4b936fad2eafc9d88544abd7f"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_002/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "f1a861600c4b97c642fc25a9cacb5970f59f07bcd3f67b4229952dd9e7da0f8a"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_003/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "cffa540822679c1bc85622d0126a18b96b167f4c8b5006f4ddc093d17286e210"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_003/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "4dc12348fcdcc8f2dbe11b50774a6bafa52f6881fd42547d4e044c5977a8c282"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_003/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "391b5dc15a78cc178e1418a9807e9a0fc3ea067da54f3d76653db5bb58581be3"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_003/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "cc301ab218b3565a2617326a2bd416e0811b63798cc2d295c469f627dc214de1"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_004/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "32e2d3ad217245ad1f17b252102ac3278c81205366aa378a0a91ce50bbea3c7d"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_004/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "02e726c03d62b20b8d20962125ab4c70a8524ed567d660bc3d4cc17594d63914"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_004/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "0c17accce4be3eedb47a1aec874dad1a785d3b2d9b53f9fd8dd5c23d6e879e33"
+ },
+ "fixture:input/sample-tiny-v1/sample/round2/FOV_004/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "6950db718a824ddb814d799801ea3d253efc7680b7a9a4d7aef0a3b436eca016"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_001/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "5903d2fa59aafaff1a8d3e67272a5472caa5ff73204bcaa5a0612d3e55966685"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_001/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "ce3d2d5217a26073a3830742f6d67271213cb3ed2b0b7a6b2ae9c96d7606b34b"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_001/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "c03fac891cd14e3dfaf312c2874dcce523bf60d63fd6dd2e8995ecbd468eabca"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_001/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "a823d6f08f89e0ba8c1b4d998682e0ebecfc4916f93249ef534698f2ad54ad3c"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_002/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "89e00ac431b9cdc184a37238ba75c559375c698cabcc4b75e3caef7dd3e6cd9d"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_002/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "dfab459c5f058dee386e87e8ecf308ddeb104283af0999a6922f90d8fe16b3ee"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_002/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "48d841b88db3caaaf96971f5acc0238fc87f9099e097675f1ee3f6c5e0b877ac"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_002/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "12cd9f0ebc8e9b5cbea1f145933362f14e1930fabe3cc259b4917a6c5ac467a3"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_003/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "6d08ecf4e9b25c4c0daa235a26b4af5163c7e997b060f8e144dc2a49f951efd9"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_003/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "ceec8ec00712f7d3e1a738dfaecfd71897da54b153580c94c3a4961dfa97a165"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_003/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "8d4815622f237ae725bfc014d4b63ab31b70d752323eb7b6d8a320afb4637dab"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_003/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "d778a14d01435d06ea95052f7fc8e7b970466a865bfac1fe03c1a82bb62b2eb6"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_004/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "3d3390cd992c1f543ec99279c1bd2ec1ffa42c9ba099caabaf681dc8ca5d0b49"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_004/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "836a6ad8ca3473ccc9d183798099d73089da877f04abcbdb3c53feafde169797"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_004/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "b98caa1985a9b919c3d3bc8761e549dfd1eda469a97ed92619ad9dffd780ee6c"
+ },
+ "fixture:input/sample-tiny-v1/sample/round3/FOV_004/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "733fa99c6cc5e32264c37641ea42b9e2dc5e925a6fd57cba5feb3e8a9618b021"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_001/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "f84ef19a5057d86ac617cef5beacdc8fb62858e8e40cb8c5bc366f49de149230"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_001/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "70a6d60abd562e2bdde70095be620da1525373e7eb6301f5312694142cdae46b"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_001/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "e281aa2a47634bcafce48707f6303d36a5fa61c13949bc97548886f3d22160a6"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_001/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "8f0f90318f6680f8970c4178bae3fc6850cb0815a038c6bba7d88ec8011be698"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_002/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "eadbe2c9b61454830cfc116603035ab48b5eb620a7b886ce5f91b234ffc30692"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_002/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "26d04567815e080e2ee7b16960d5499eff42d35e2dc539eb588d88d8aadebdd6"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_002/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "e8e42761664c45a23b701fd6195459235709ceedaca6433c49974263fd068e29"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_002/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "551c1eecfd099fd4839ac6f13b3b9b04fda5f60bdfae427dcec1f754bbbb524f"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_003/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "bd3c34a960be35f928e8d1cf59bea0874213cfba914f80d39a49a2e6c3eed7ea"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_003/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "0427e4a26e19dd2aaf139c981f9d899287a5be5746b7333a795cc83c79d0f9fe"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_003/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "07e4d1844304e92fd120e0a62ae85c84ac838ebfb029228f24064dbec97e5b14"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_003/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "a135d7328390e744404883d04910ffbfa609cf8660684c0ecd6ba7141b1d2bba"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_004/ch00.ome.tif": {
+  "compare": "exact",
+  "value": "98f6b0364e4a57807074fd3b37651bc6b8ea184977e7b4e41176360045c62be8"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_004/ch01.ome.tif": {
+  "compare": "exact",
+  "value": "94eb9bb0702c16423a6f92dc49aa334ba60d1facec715b995028743ef5eb7b33"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_004/ch02.ome.tif": {
+  "compare": "exact",
+  "value": "5c57ab46452b0867c82c0085a7c0dfc4f21835602835b71bcafacc933b1c400e"
+ },
+ "fixture:input/sample-tiny-v1/sample/round4/FOV_004/ch03.ome.tif": {
+  "compare": "exact",
+  "value": "bb78333b144d424032c59b9334a0b07ce0c581e12952d70dc67471e7a9bebf91"
+ },
+ "fixture:labels/FOV_001.tif": {
+  "compare": "exact",
+  "value": "41704fa22ace35635d3fd430fffa821fd4ed3b53b45f64138693b089646d2f9b"
+ },
+ "fixture:labels/FOV_002.tif": {
+  "compare": "exact",
+  "value": "1b6a66b205c978b270ee3df909b9e334988fed554df01a135164dab7c5a9f32c"
+ },
+ "fixture:labels/FOV_003.tif": {
+  "compare": "exact",
+  "value": "e402c66c641d594ec868558ba9d0b4e30edf95cf65a43d9b6b4fb206f310d291"
+ },
+ "fixture:labels/FOV_004.tif": {
+  "compare": "exact",
+  "value": "fcb84b6959a5d58783adaec1188d0d06ea42016ede74b2f291dccaec3f36cbec"
+ },
+ "fixture:scene/cell_fovs.csv": {
+  "compare": "exact",
+  "value": "aa90c523d0c1786a80d52e222e1b1f949bda96fb930a4bda6adeeb24d4084830"
+ },
+ "fixture:scene/cells.csv": {
+  "compare": "exact",
+  "value": "9e24b21a55e541aae79ce8b461aecffedc12b863704c31c2390a86a393388aa0"
+ },
+ "fixture:scene/fovs/FOV_001/formed.csv": {
+  "compare": "exact",
+  "value": "9bf1f35b743cbc03cf2699ec49ce11b48bdc08412c216c66e36e17d3dae3a4f8"
+ },
+ "fixture:scene/fovs/FOV_001/images/round1.ome.tif": {
+  "compare": "exact",
+  "value": "68acd36a49ba14ecd593cd33ac29a061da016c480fedc998185e78c9eb8cf645"
+ },
+ "fixture:scene/fovs/FOV_001/images/round2.ome.tif": {
+  "compare": "exact",
+  "value": "692f3933bfe8b959ac948de547202aa6fe3fd587e07ba5ed60022a06919c169c"
+ },
+ "fixture:scene/fovs/FOV_001/images/round3.ome.tif": {
+  "compare": "exact",
+  "value": "c425aad4326634a2093196e476a65a7587c058e5668672776b55a43ba13854aa"
+ },
+ "fixture:scene/fovs/FOV_001/images/round4.ome.tif": {
+  "compare": "exact",
+  "value": "3bd09a66f722c6642b4050816d33107be050766f27a9f964168569fb4ab76a84"
+ },
+ "fixture:scene/fovs/FOV_001/labels/cells.tif": {
+  "compare": "exact",
+  "value": "cd70ba3c869362e6506e35c07ef987e1b9d28228494c30dec698fd3b0f1fbfdc"
+ },
+ "fixture:scene/fovs/FOV_001/labels/nuclei.tif": {
+  "compare": "exact",
+  "value": "8d24e582ed999b6f5709986bd114db3541fbb4119b46816a659609a3ee464da6"
+ },
+ "fixture:scene/fovs/FOV_001/molecules.csv": {
+  "compare": "exact",
+  "value": "8cfe50c4571a2f731100daaa6635bf59f334bf428beab41a29cd9c3d9ed3ed06"
+ },
+ "fixture:scene/fovs/FOV_001/provenance.json": {
+  "compare": "exact",
+  "value": "846523f1f933e258e9e8ece62180eda644f8b58fe13a25d35acd16801c711375"
+ },
+ "fixture:scene/fovs/FOV_001/round_truth.csv": {
+  "compare": "exact",
+  "value": "b4d833666ec38b42843ecdde95101a34d02d4c92b11f9d3f83c398d544c0dd68"
+ },
+ "fixture:scene/fovs/FOV_001/signals.csv": {
+  "compare": "exact",
+  "value": "ed2a1970f93f69fa5738c597f5c15fe5df89ab31002c86041645c7e2991287db"
+ },
+ "fixture:scene/fovs/FOV_001/stain.ome.tif": {
+  "compare": "exact",
+  "value": "7d4c7d9b3700f4b916d262cb4745377d5c0f39a38fd8d88ebdf0dcbaea2a8da7"
+ },
+ "fixture:scene/fovs/FOV_002/formed.csv": {
+  "compare": "exact",
+  "value": "fd863145c8b4a6e1e1bc0c6c041e742be0516767588445fddce3e2ce7f67ef5c"
+ },
+ "fixture:scene/fovs/FOV_002/images/round1.ome.tif": {
+  "compare": "exact",
+  "value": "5fd9b75ff3a81f8c216af38b772fe7742031623f27b527b5f04e4516de4e82a4"
+ },
+ "fixture:scene/fovs/FOV_002/images/round2.ome.tif": {
+  "compare": "exact",
+  "value": "9c12f32dbc02a7211e24d40bd53f0d1b43a9124aeec23da2b0c00aacd937157a"
+ },
+ "fixture:scene/fovs/FOV_002/images/round3.ome.tif": {
+  "compare": "exact",
+  "value": "6558447f529bc6946f805e10895f21a171d6740b57ae80a271d84e60360bb5f7"
+ },
+ "fixture:scene/fovs/FOV_002/images/round4.ome.tif": {
+  "compare": "exact",
+  "value": "273ce99cb9733a9cab329e715ff879011b675e4fb9ff45ea6632515f5bf36e3c"
+ },
+ "fixture:scene/fovs/FOV_002/labels/cells.tif": {
+  "compare": "exact",
+  "value": "f8e3b1e76ddd170cc220fd90daa59d1ccbde303227aca09a9d07094a8875d0c3"
+ },
+ "fixture:scene/fovs/FOV_002/labels/nuclei.tif": {
+  "compare": "exact",
+  "value": "840942bfaccba5bae0f26c55c0c3d1fe6512ed5107de2c5f0946e1384a39e8a1"
+ },
+ "fixture:scene/fovs/FOV_002/molecules.csv": {
+  "compare": "exact",
+  "value": "5b99e5493e173ca1e688fc502e8e9fe7086b489969e7ee6819b9ccb7183b1a06"
+ },
+ "fixture:scene/fovs/FOV_002/provenance.json": {
+  "compare": "exact",
+  "value": "a10118d5c24234889726165280037a9c29bb4ba3db37d3d8e11d4ab3d4b4a244"
+ },
+ "fixture:scene/fovs/FOV_002/round_truth.csv": {
+  "compare": "exact",
+  "value": "ca9c81815c139a46c027621dbcb548bb2d7917c326c48102c51843938247ac5a"
+ },
+ "fixture:scene/fovs/FOV_002/signals.csv": {
+  "compare": "exact",
+  "value": "d5cb0e92fd5ef7445feb52be7984153214271ac63ca505da26a398c3d17e4d76"
+ },
+ "fixture:scene/fovs/FOV_002/stain.ome.tif": {
+  "compare": "exact",
+  "value": "e16d20b1d0a58f73266297e4f554a6fc2ac7f16f40dc32a10a8a9044320409ea"
+ },
+ "fixture:scene/fovs/FOV_003/formed.csv": {
+  "compare": "exact",
+  "value": "324d8ea6edc1e69a81e41edf0c1bf83a6f880720cb921fba859099442213ad3f"
+ },
+ "fixture:scene/fovs/FOV_003/images/round1.ome.tif": {
+  "compare": "exact",
+  "value": "873771fc3ce120eaca378574c9f30217b4b60df0bde4b18665aa42c851c57430"
+ },
+ "fixture:scene/fovs/FOV_003/images/round2.ome.tif": {
+  "compare": "exact",
+  "value": "d6f8424c1b40ad3efb30ea4e707908fd9d4db5dcc0a070a0ad9cda9afb70270d"
+ },
+ "fixture:scene/fovs/FOV_003/images/round3.ome.tif": {
+  "compare": "exact",
+  "value": "3ae932db59796d342f7ed8aca657008ba606e9b6bb6add6e84a88302d5b75cfe"
+ },
+ "fixture:scene/fovs/FOV_003/images/round4.ome.tif": {
+  "compare": "exact",
+  "value": "0f0d1beb0fce89c38a5043ab6e29da175ffac318d65e3ac6a6e9bf0b4ca44452"
+ },
+ "fixture:scene/fovs/FOV_003/labels/cells.tif": {
+  "compare": "exact",
+  "value": "3a0d526a17e3db38f66c4f91266b6eb4ceddf9bc3e7cbd42fbea424e9300323f"
+ },
+ "fixture:scene/fovs/FOV_003/labels/nuclei.tif": {
+  "compare": "exact",
+  "value": "aa6790c02c7080db6625329c4213e9e6586e40fd6799dc480c55b07365bc2b63"
+ },
+ "fixture:scene/fovs/FOV_003/molecules.csv": {
+  "compare": "exact",
+  "value": "628503c0418f8b613f43bcf228a09f008381b8588c54b330f29465062195583d"
+ },
+ "fixture:scene/fovs/FOV_003/provenance.json": {
+  "compare": "exact",
+  "value": "5574f73149c6889ada0a73b2204fee62e50892acfeafc1e981a9b28518c4109e"
+ },
+ "fixture:scene/fovs/FOV_003/round_truth.csv": {
+  "compare": "exact",
+  "value": "e009eff47318daa48c3ae7026060d3df361f760f20602d3067a6bb753b02353f"
+ },
+ "fixture:scene/fovs/FOV_003/signals.csv": {
+  "compare": "exact",
+  "value": "203947a86e82154b0c2f3cbad8eb9c6898769744e541ad66ad52650e5b3e433e"
+ },
+ "fixture:scene/fovs/FOV_003/stain.ome.tif": {
+  "compare": "exact",
+  "value": "87b5b35e4a5fea43f421f35a87951847fcf83eb170636041cffed28036b6b431"
+ },
+ "fixture:scene/fovs/FOV_004/formed.csv": {
+  "compare": "exact",
+  "value": "88615e181e13332d4cfcf47a2c06fdf0746380f76662d3cd04db5f6113c6c434"
+ },
+ "fixture:scene/fovs/FOV_004/images/round1.ome.tif": {
+  "compare": "exact",
+  "value": "47f1478dd5201e2efb101730ff22ca9b1ceee0d67004bf7da148c67c51a8fe0f"
+ },
+ "fixture:scene/fovs/FOV_004/images/round2.ome.tif": {
+  "compare": "exact",
+  "value": "6c9661c84d75411d30a08e6d3007f58b9a29839390442aed91a9a54841fdfd0b"
+ },
+ "fixture:scene/fovs/FOV_004/images/round3.ome.tif": {
+  "compare": "exact",
+  "value": "fa0788b5cc98373eec0a879f603a1805e8d1ae6f136a73c6f1e7e8e97e931c05"
+ },
+ "fixture:scene/fovs/FOV_004/images/round4.ome.tif": {
+  "compare": "exact",
+  "value": "81a9c1c800f24ac2b63b0d89a08c753384e4abc9f88a09d91ebe0e841165d43e"
+ },
+ "fixture:scene/fovs/FOV_004/labels/cells.tif": {
+  "compare": "exact",
+  "value": "d270eb318a2bdfac6afb57ee02f77fd1e5119b9bef1baa69c686ec1baca710a3"
+ },
+ "fixture:scene/fovs/FOV_004/labels/nuclei.tif": {
+  "compare": "exact",
+  "value": "ff0ce12d1372936d298947193476ff553f4f3e9d21622b0f931562d3c51489c9"
+ },
+ "fixture:scene/fovs/FOV_004/molecules.csv": {
+  "compare": "exact",
+  "value": "0362ed4200dca1e226e6e0bc56eb59be4b2b5b3a9b9980223dfb68f7a34fb7e2"
+ },
+ "fixture:scene/fovs/FOV_004/provenance.json": {
+  "compare": "exact",
+  "value": "fca188d9b7862ef128acf715379e90f77afb98eba378ba8c20197981de1b265d"
+ },
+ "fixture:scene/fovs/FOV_004/round_truth.csv": {
+  "compare": "exact",
+  "value": "059d872e256e16d2c4f1f0060178904b86f92ceacdc5aa19ca4d95d67a94fb74"
+ },
+ "fixture:scene/fovs/FOV_004/signals.csv": {
+  "compare": "exact",
+  "value": "72b228f770ac3cfbf59f029592e43ed90d834628245fe06cda8b333d9d5d68bf"
+ },
+ "fixture:scene/fovs/FOV_004/stain.ome.tif": {
+  "compare": "exact",
+  "value": "9bc5ca0b22146315304232e219317f46cd16f2b5eaf58b7e0bca88b37c0fe4a7"
+ },
+ "fixture:scene/labels/sample_cells.tif": {
+  "compare": "exact",
+  "value": "9a551c033aa6b7a5fd827e26c33ecd67e1000e3b4f70121ad616023b6503607c"
+ },
+ "fixture:scene/labels/sample_nuclei.tif": {
+  "compare": "exact",
+  "value": "2a89b9e271cfcd2a6aef78fb4168d7f1225aa5286ef0a8554a94f27f475df805"
+ },
+ "fixture:scene/molecule_fovs.csv": {
+  "compare": "exact",
+  "value": "dcdc7bec07e467b84b153f2de66fe4f9b5c0f4e2577aedac7d50d4980ad10eb1"
+ },
+ "fixture:scene/molecules.csv": {
+  "compare": "exact",
+  "value": "1082790ab14af6cb4fc10885dc5ee46a6f9ba3fbbb11f75dc939281eaff7223c"
+ },
+ "fixture:scene/nuclei.csv": {
+  "compare": "exact",
+  "value": "6fecb4f07de8573477c8beb32661d416fdd3fd63de1dc95d6e75e91fd08ba13e"
+ },
+ "fixture:scene/placement_truth.csv": {
+  "compare": "exact",
+  "value": "66c5542e91b0a78b32270fb7744b80f5df20e2e419d9669d6efe8e5058926cc2"
+ },
+ "fixture:scene/positions.csv": {
+  "compare": "exact",
+  "value": "f5ba30fa35adf85d804f58e41a1f031419da7a05054d9edba97eaad84730f39a"
+ },
+ "fixture:scene/sample.json": {
+  "compare": "exact",
+  "value": "ab254b1f00df92b7c293208a79c23ddf13b2cf2b7629906f2fa0aa581dd0ebe7"
+ },
+ "labels/fused-cells.ome.tif:dtype": {
+  "compare": "exact",
+  "value": "uint32"
+ },
+ "labels/fused-cells.ome.tif:max": {
+  "compare": "exact",
+  "value": 21
+ },
+ "labels/fused-cells.ome.tif:min": {
+  "compare": "exact",
+  "value": 0
+ },
+ "labels/fused-cells.ome.tif:shape": {
+  "compare": "exact",
+  "value": [
+   30,
+   31
+  ]
+ },
+ "labels/fused-cells.ome.tif:sum": {
+  "compare": "exact",
+  "value": 6468.0
+ },
+ "molecules_only/export/sample/reference_merged_projection.ome.tif:dtype": {
+  "compare": "exact",
+  "value": "uint8"
+ },
+ "molecules_only/export/sample/reference_merged_projection.ome.tif:max": {
+  "compare": "exact",
+  "value": 195
+ },
+ "molecules_only/export/sample/reference_merged_projection.ome.tif:min": {
+  "compare": "exact",
+  "value": 0
+ },
+ "molecules_only/export/sample/reference_merged_projection.ome.tif:shape": {
+  "compare": "exact",
+  "value": [
+   30,
+   31
+  ]
+ },
+ "molecules_only/export/sample/reference_merged_projection.ome.tif:sum": {
+  "compare": "exact",
+  "value": 26352.0
+ },
+ "per_fov/export/sample/cell_labels.ome.tif:dtype": {
+  "compare": "exact",
+  "value": "uint32"
+ },
+ "per_fov/export/sample/cell_labels.ome.tif:max": {
+  "compare": "exact",
+  "value": 21
+ },
+ "per_fov/export/sample/cell_labels.ome.tif:min": {
+  "compare": "exact",
+  "value": 0
+ },
+ "per_fov/export/sample/cell_labels.ome.tif:shape": {
+  "compare": "exact",
+  "value": [
+   5,
+   30,
+   31
+  ]
+ },
+ "per_fov/export/sample/cell_labels.ome.tif:sum": {
+  "compare": "exact",
+  "value": 26604.0
+ },
+ "per_fov/export/sample/reference_merged_projection.ome.tif:dtype": {
+  "compare": "exact",
+  "value": "uint8"
+ },
+ "per_fov/export/sample/reference_merged_projection.ome.tif:max": {
+  "compare": "exact",
+  "value": 195
+ },
+ "per_fov/export/sample/reference_merged_projection.ome.tif:min": {
+  "compare": "exact",
+  "value": 0
+ },
+ "per_fov/export/sample/reference_merged_projection.ome.tif:shape": {
+  "compare": "exact",
+  "value": [
+   30,
+   31
+  ]
+ },
+ "per_fov/export/sample/reference_merged_projection.ome.tif:sum": {
+  "compare": "exact",
+  "value": 26352.0
+ }
+}

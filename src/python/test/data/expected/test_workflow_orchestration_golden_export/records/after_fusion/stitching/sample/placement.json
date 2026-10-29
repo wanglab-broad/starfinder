@@ -1,0 +1,356 @@
+{
+ "format_version": 1,
+ "stage": "stitching",
+ "sample": "sample",
+ "frame": {
+  "frame_id": "sample:sample",
+  "unit": "\u00b5m",
+  "direction": "identity"
+ },
+ "gauge": "G1",
+ "gauge_mean_correction_zyx": [
+  0.0,
+  0.0,
+  0.4999999999999997
+ ],
+ "method": {
+  "stage": "stitching",
+  "method": "multiview_stitcher",
+  "config_type": "starfinder.stitching.MultiviewStitcherConfig",
+  "implementation": "starfinder.stitching._multiview._multiview_stitcher",
+  "config": {
+   "binning_zyx": [
+    1,
+    2,
+    2
+   ],
+   "pairwise": "phase_correlation",
+   "upsample_factor": null,
+   "quality_threshold": -1.0,
+   "drop_nan_quality": true,
+   "pruning": "alternating_pattern",
+   "overlap_tolerance_um": 0.0,
+   "groupwise": "global_optimization",
+   "abs_tol_um": null,
+   "rel_tol": null,
+   "max_iter": null,
+   "method": "multiview_stitcher"
+  },
+  "requires": {
+   "multiview-stitcher": "0.1.62"
+  },
+  "artifacts": []
+ },
+ "method_diagnostics": {
+  "components": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "outcome": "completed",
+  "registration_dims": "zyx",
+  "overlap_pairs": [
+   [
+    "FOV_001",
+    "FOV_002"
+   ],
+   [
+    "FOV_001",
+    "FOV_003"
+   ],
+   [
+    "FOV_001",
+    "FOV_004"
+   ],
+   [
+    "FOV_002",
+    "FOV_003"
+   ],
+   [
+    "FOV_002",
+    "FOV_004"
+   ],
+   [
+    "FOV_003",
+    "FOV_004"
+   ]
+  ],
+  "overlap_rows_outside_neighbor_pairs": [],
+  "pruned_pairs": [
+   [
+    "FOV_001",
+    "FOV_004"
+   ],
+   [
+    "FOV_002",
+    "FOV_003"
+   ]
+  ],
+  "optimizer_removed_links": [],
+  "edge_residuals_um": [
+   [
+    "FOV_001",
+    "FOV_002",
+    1.3945222387368396e-31
+   ],
+   [
+    "FOV_001",
+    "FOV_003",
+    0.0
+   ],
+   [
+    "FOV_002",
+    "FOV_004",
+    0.0
+   ],
+   [
+    "FOV_003",
+    "FOV_004",
+    0.0
+   ]
+  ]
+ },
+ "table": {
+  "converter": "positions_from_table",
+  "source": "table:<work>/input/sample-tiny-v1/sample/positions.csv",
+  "unit": "\u00b5m",
+  "path": "<work>/input/sample-tiny-v1/sample/positions.csv",
+  "sha256": "f5ba30fa35adf85d804f58e41a1f031419da7a05054d9edba97eaad84730f39a"
+ },
+ "inputs": {
+  "FOV_001": {
+   "source": "reference_merged",
+   "file_sha256": "a44227f244b0ff29dcd37abc4b74b7aa4acf46d64351cd59850bcca0ef66a79d",
+   "grid": {
+    "shape_zyx": [
+     5,
+     36,
+     36
+    ],
+    "metadata": {
+     "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_001\",\"formed\"]/reference/rotate:0",
+     "spacing_zyx": [
+      1.0,
+      0.5,
+      0.5
+     ],
+     "origin_zyx": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "direction_zyx": [
+      [
+       1.0,
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       1.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0,
+       1.0
+      ]
+     ],
+     "spatial_unit": "\u00b5m"
+    },
+    "source": "file:<work>/output/sample-tiny-v1/golden-after-fusion/fovs/FOV_001/reference.tif",
+    "sha256": "1535cd61256c1675ff1188801c7c7c774a741c99ab7f0d73d9be852eeaeb61fd"
+   }
+  },
+  "FOV_002": {
+   "source": "reference_merged",
+   "file_sha256": "579d5e11ab7769e23c53c579ff6477b3550249829f54f1aab2b77369481c3b3f",
+   "grid": {
+    "shape_zyx": [
+     5,
+     36,
+     36
+    ],
+    "metadata": {
+     "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+     "spacing_zyx": [
+      1.0,
+      0.5,
+      0.5
+     ],
+     "origin_zyx": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "direction_zyx": [
+      [
+       1.0,
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       1.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0,
+       1.0
+      ]
+     ],
+     "spatial_unit": "\u00b5m"
+    },
+    "source": "file:<work>/output/sample-tiny-v1/golden-after-fusion/fovs/FOV_002/reference.tif",
+    "sha256": "0dc84800a2bd2c1017888a1ec8e946bc52275042e037c28cbbfb21a023cf7760"
+   }
+  },
+  "FOV_003": {
+   "source": "reference_merged",
+   "file_sha256": "42865bb2613659ca17e1b44ad956f4739a999ccf75e6374c2f95ed3d3b9fdf62",
+   "grid": {
+    "shape_zyx": [
+     5,
+     36,
+     36
+    ],
+    "metadata": {
+     "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_003\",\"formed\"]/reference/rotate:0",
+     "spacing_zyx": [
+      1.0,
+      0.5,
+      0.5
+     ],
+     "origin_zyx": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "direction_zyx": [
+      [
+       1.0,
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       1.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0,
+       1.0
+      ]
+     ],
+     "spatial_unit": "\u00b5m"
+    },
+    "source": "file:<work>/output/sample-tiny-v1/golden-after-fusion/fovs/FOV_003/reference.tif",
+    "sha256": "329b4e2b18f3cf3cc9de4fc39e356cac261bbce054ad22e1cd88d98215ec04a6"
+   }
+  },
+  "FOV_004": {
+   "source": "reference_merged",
+   "file_sha256": "3cdc6fede186f34371e230a3415d4d5c0a1aa4ca2d0e24f7453bb5610261fd2e",
+   "grid": {
+    "shape_zyx": [
+     5,
+     36,
+     36
+    ],
+    "metadata": {
+     "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_004\",\"formed\"]/reference/rotate:0",
+     "spacing_zyx": [
+      1.0,
+      0.5,
+      0.5
+     ],
+     "origin_zyx": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "direction_zyx": [
+      [
+       1.0,
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       1.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0,
+       1.0
+      ]
+     ],
+     "spatial_unit": "\u00b5m"
+    },
+    "source": "file:<work>/output/sample-tiny-v1/golden-after-fusion/fovs/FOV_004/reference.tif",
+    "sha256": "5e6fb5a215e423b726e52c6ecbaa54eccccc6e9fe169215f1752fbf443d5a49e"
+   }
+  }
+ },
+ "fallback": null,
+ "review": {
+  "state": "not_needed",
+  "reasons": [],
+  "policy": {
+   "max_correction_fraction": 0.5,
+   "max_residual_um": 1.0
+  },
+  "flagged": {},
+  "approvals": []
+ },
+ "tables": {
+  "fovs": {
+   "path": "fovs.csv",
+   "sha256": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b",
+   "dtypes": {
+    "fov_id": "str",
+    "status": "str",
+    "origin_z": "float64",
+    "origin_y": "float64",
+    "origin_x": "float64",
+    "nominal_z": "float64",
+    "nominal_y": "float64",
+    "nominal_x": "float64",
+    "correction_z": "float64",
+    "correction_y": "float64",
+    "correction_x": "float64",
+    "method_translation_z": "float64",
+    "method_translation_y": "float64",
+    "method_translation_x": "float64",
+    "component": "int64",
+    "n_links_kept": "int64",
+    "flags": "str"
+   }
+  },
+  "links": {
+   "path": "links.csv",
+   "sha256": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee",
+   "dtypes": {
+    "fov_a": "str",
+    "fov_b": "str",
+    "overlap_z0": "float64",
+    "overlap_z1": "float64",
+    "overlap_y0": "float64",
+    "overlap_y1": "float64",
+    "overlap_x0": "float64",
+    "overlap_x1": "float64",
+    "shift_z": "float64",
+    "shift_y": "float64",
+    "shift_x": "float64",
+    "quality": "float64",
+    "kept": "bool",
+    "reason": "str",
+    "residual": "float64"
+   }
+  }
+ }
+}
