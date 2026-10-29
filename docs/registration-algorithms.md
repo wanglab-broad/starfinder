@@ -16,6 +16,8 @@ Option descriptions below come from the config class docstrings.
 
 Estimate a shift by phase correlation.
 
+See {py:class}`~starfinder.registration.TranslationConfig` for the precise rules.
+
 ```{config-options} starfinder.registration.TranslationConfig
 :exclude: method
 ```
@@ -23,6 +25,8 @@ Estimate a shift by phase correlation.
 ### Rigid
 
 Estimate rotation and translation.
+
+See {py:class}`~starfinder.registration.RigidConfig` for the precise rules.
 
 ```{config-options} starfinder.registration.RigidConfig
 :exclude: method
@@ -32,6 +36,8 @@ Estimate rotation and translation.
 
 Estimate rotation, translation, scale and shear.
 
+See {py:class}`~starfinder.registration.AffineConfig` for the precise rules.
+
 ```{config-options} starfinder.registration.AffineConfig
 :exclude: method
 ```
@@ -39,6 +45,8 @@ Estimate rotation, translation, scale and shear.
 ### B-spline
 
 Estimate a smooth deformation on a control grid.
+
+See {py:class}`~starfinder.registration.BSplineConfig` for the precise rules.
 
 ```{config-options} starfinder.registration.BSplineConfig
 :exclude: method
@@ -48,6 +56,8 @@ Estimate a smooth deformation on a control grid.
 
 Estimate a dense deformation with image intensities.
 
+See {py:class}`~starfinder.registration.DemonsConfig` for the precise rules.
+
 ```{config-options} starfinder.registration.DemonsConfig
 :exclude: method
 ```
@@ -55,6 +65,8 @@ Estimate a dense deformation with image intensities.
 ### TPS
 
 Match landmarks with a thin-plate spline.
+
+See {py:class}`~starfinder.registration.TpsConfig` for the precise rules.
 
 ```{config-options} starfinder.registration.TpsConfig
 :exclude: method
@@ -64,6 +76,8 @@ Match landmarks with a thin-plate spline.
 
 Align landmark sets with coherent point drift.
 
+See {py:class}`~starfinder.registration.CpdConfig` for the precise rules.
+
 ```{config-options} starfinder.registration.CpdConfig
 :exclude: method
 ```
@@ -72,30 +86,42 @@ Align landmark sets with coherent point drift.
 
 ### Recipe
 
+See {py:class}`~starfinder.registration.RegistrationRecipe` for the precise rules.
+
 ```{config-options} starfinder.registration.RegistrationRecipe
 ```
 
 ### Step
+
+See {py:class}`~starfinder.registration.RegistrationStep` for the precise rules.
 
 ```{config-options} starfinder.registration.RegistrationStep
 ```
 
 ### Recovery
 
+See {py:class}`~starfinder.registration.RecoveryConfig` for the precise rules.
+
 ```{config-options} starfinder.registration.RecoveryConfig
 ```
 
 ### Signal
+
+See {py:class}`~starfinder.registration.RegistrationSignalConfig` for the precise rules.
 
 ```{config-options} starfinder.registration.RegistrationSignalConfig
 ```
 
 ### Final resampling
 
+See {py:class}`~starfinder.registration.WarpConfig` for the precise rules.
+
 ```{config-options} starfinder.registration.WarpConfig
 ```
 
 ### QC criteria
+
+See {py:class}`~starfinder.registration.RegistrationQcConfig` for the precise rules.
 
 ```{config-options} starfinder.registration.RegistrationQcConfig
 ```

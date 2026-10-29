@@ -329,6 +329,11 @@ class RegistrationQcConfig:
         Maximum translation displacement norm criterion in voxels; ``None`` disables this criterion.
     projections : bool
         Whether routine QC includes reference, before-registration and after-registration Z maximum projections.
+
+    Notes
+    -----
+    Coverage and fold-fraction criteria are fractions in [0, 1].
+    NCC gain is the correlation after registration minus the correlation before.
     """
 
     min_coverage: float | None = None
@@ -370,6 +375,10 @@ class RegistrationSignalConfig:
         Reference-round channel selector for ``channel`` mode, as a zero-based index or channel label.
     moving_channel : int or str or None
         Moving-round channel selector for ``channel`` mode, as a zero-based index or channel label; ``None`` uses the reference selector.
+
+    Notes
+    -----
+    Channels are set only for mode ``channel``.
     """
 
     mode: str = "max"
@@ -406,6 +415,10 @@ class WarpConfig:
         Integer-output clipping policy, ``True``.
     fft_workers : int
         Positive FFT worker count for translation resampling.
+
+    Notes
+    -----
+    Estimator ``interpolation_order`` controls coarse-field expansion only.
     """
 
     backend: str = "translation"

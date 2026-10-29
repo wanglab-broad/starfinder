@@ -46,8 +46,14 @@ class RecoveryConfig:
 class RegistrationStep:
     """One position of a recipe: a registered method config, optional recovery and signal.
 
-    signal None uses the recipe's signal. Recovery alternatives must have the
-    step kind of config, so recovery never changes an allowed sequence.
+    Parameters
+    ----------
+    config : RegistrationConfig
+        Method configuration to estimate at this position.
+    recovery : RecoveryConfig or None
+        Estimation recovery settings; ``None`` disables recovery.
+    signal : RegistrationSignalConfig or None
+        Step-specific round-signal construction settings; ``None`` uses the recipe's signal.
     """
     config: RegistrationConfig
     recovery: RecoveryConfig | None = None
@@ -74,17 +80,18 @@ class RegistrationStep:
 class RegistrationRecipe:
     """Ordered registration steps that compose into one pull transform per moving round.
 
-    steps is zero or more global steps (translation, rigid, affine) followed
-    by at most one local step (demons, bspline, tps, cpd), at least one step;
-    the step kind is the step_kind of the method's REGISTRATION_METHODS
-    entry. Step k is estimated on the moving signal resampled in float64
-    through steps 1 to k-1; after the last step every image of the moving
-    round is resampled once through the composed TransformChain. signal
-    builds the registration signals (default: the channel maximum). warp is
-    the final resampling; None derives WarpConfig(backend="translation") for a
-    chain of translations and WarpConfig(backend="scipy") otherwise.
-    reference_round None uses the dataset reference round; when set it must
-    equal it. qc holds the routine QC rejection criteria (none by default).
+    Parameters
+    ----------
+    steps : tuple[RegistrationStep, ...]
+        Ordered registration steps.
+    signal : RegistrationSignalConfig
+        Default round-signal construction settings.
+    warp : WarpConfig or None
+        Final resampling settings; ``None`` requests a transform-derived policy.
+    reference_round : str or None
+        Default reference-round name; ``None`` leaves the default to the FOV.
+    qc : RegistrationQcConfig
+        Routine registration QC and rejection settings.
     """
     steps: tuple[RegistrationStep, ...]
     signal: RegistrationSignalConfig = RegistrationSignalConfig()
