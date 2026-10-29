@@ -5,7 +5,7 @@ page, and the {doc}`API <api/report>` for configuration details.
 
 ## Configuration
 
-These tables read the field names and defaults from the configuration classes.
+These tables read the field names, defaults and descriptions from the configuration classes.
 
 ### Report
 

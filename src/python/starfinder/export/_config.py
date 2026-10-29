@@ -80,6 +80,26 @@ def _bool(value, name):
 class FusionConfig:
     """What ``fuse`` writes: source images, dimensionality, projection, scale and file options.
 
+    Parameters
+    ----------
+    images : tuple of str
+        Source images to fuse: ``reference_stain``, ``reference_merged``, or
+        ``<name>=file:<pattern>`` with ``{fov_id}`` in the pattern.
+    dimensionality : str
+        Output dimensionality: ``projection``, ``stack``, or ``both``.
+    projection : str
+        Z projection operator: ``max`` or ``sum``.
+    scale_yx : float
+        Fusion scale in Y and X, expressed as ``1/k`` for a positive integer ``k``.
+    ome_zarr : bool
+        Write standalone OME-Zarr outputs beside the OME-TIFF outputs.
+    ome_zarr_version : str
+        NGFF version of standalone OME-Zarr outputs: ``"0.5"`` or ``"0.4"``.
+    pyramid_levels : int
+        Nonnegative number of reduced OME-TIFF SubIFD levels.
+
+    Notes
+    -----
     ``images`` names the source images (``reference_stain`` by default,
     ``reference_merged``, or ``<name>=file:<pattern>`` with ``{fov_id}``);
     ``dimensionality`` is ``projection`` (the 2D projection, the default),
@@ -143,6 +163,11 @@ class FusionConfig:
 class LabelConfig:
     """The label export's scale ``1/k`` in Y and X (default 0.25), used by ``fuse_labels``.
 
+    Parameters
+    ----------
+    scale_yx : float
+        Label export scale in Y and X, expressed as ``1/k`` for a positive integer ``k``.
+
     Raises
     ------
     ValueError
@@ -163,6 +188,11 @@ class LabelConfig:
 @dataclass(frozen=True)
 class SpatialDataExportConfig:
     """The Zarr format of the SpatialData store: 3 (spatialdata's default, Z2) or 2 (Z1).
+
+    Parameters
+    ----------
+    zarr_format : int
+        Zarr storage format for the SpatialData store: 3 or 2.
 
     Raises
     ------
@@ -193,6 +223,21 @@ def _segmentation_spec(method):
 class SampleSegmentationRun:
     """One run of the segmentation of the fused projection: a named label image from one method, or one import.
 
+    Parameters
+    ----------
+    name : str
+        Run name in snake_case, used in ``segmentation_<name>.ome.tif`` and the label namespace.
+    target : str
+        Label target: ``nucleus`` or ``cell``.
+    inputs : tuple of (str, str)
+        Channel-ordered ``(role, image)`` pairs naming fused projections from ``FusionConfig.images``.
+    method : object
+        Registered segmentation configuration or ``LabelImportConfig``; pixel lengths use acquired-grid pixels.
+    seeds : str or None
+        Earlier nucleus run supplying seed labels; ``None`` supplies no seeds.
+
+    Notes
+    -----
     ``name`` (snake_case) names the label file ``segmentation_<name>.ome.tif``
     and the run of the label namespace; ``target`` is ``nucleus`` or
     ``cell``; ``inputs`` are ``(role, image)`` pairs in channel order, each
@@ -279,6 +324,21 @@ class SampleSegmentationRun:
 class SampleSegmentationConfig:
     """The settings of the route after fusion: the runs, which labels are the cells, and the assignment.
 
+    Parameters
+    ----------
+    runs : tuple of SampleSegmentationRun
+        Named segmentation runs in execution order.
+    cells : str
+        Run whose labels define the cells for assignment.
+    nuclei : str or None
+        Nucleus run for correspondence and compartments; ``None`` supplies no separate nucleus labels.
+    assignment : AssignmentConfig
+        Molecule assignment settings on the sample segmentation grid.
+    device : str
+        Segmentation execution device: ``cpu`` or ``cuda``.
+
+    Notes
+    -----
     ``runs`` are the :class:`SampleSegmentationRun` in order (a run's seeds
     name an earlier run, of target ``nucleus``); ``cells`` names the run whose
     labels are the cells (a ``cell`` run, or a ``nucleus`` run as territories);
@@ -347,6 +407,36 @@ class SampleSegmentationConfig:
 class ExportConfig:
     """Which parts ``Dataset.export`` runs and the configuration of each.
 
+    Parameters
+    ----------
+    assemble : bool
+        Enable sample-table assembly.
+    fuse : bool
+        Enable source-image fusion.
+    fuse_labels : bool
+        Enable the inspection label-image export.
+    export_spatialdata : bool
+        Enable the SpatialData store export.
+    assembly : AssemblyConfig
+        Sample-table assembly settings.
+    table_format : str
+        Sample-table file format: ``csv`` or ``parquet``.
+    fusion : FusionConfig
+        Source-image fusion settings.
+    labels : LabelConfig
+        Inspection label-image export settings.
+    spatialdata : SpatialDataExportConfig
+        SpatialData store settings.
+    route : str or None
+        Cell route: ``per_fov`` or ``after_fusion``; ``None`` uses ``after_fusion`` for
+        ``projection`` and ``per_fov`` for ``stack`` and ``both`` fusion dimensionalities.
+    segment : bool
+        Enable segmentation on the route after fusion; false reuses the saved sample segmentation.
+    segmentation : SampleSegmentationConfig or None
+        Segmentation settings for the route after fusion; ``None`` supplies no settings.
+
+    Notes
+    -----
     ``assemble``, ``fuse``, ``fuse_labels`` (off by default) and
     ``export_spatialdata`` (off by default) turn the four parts on or off;
     ``assembly`` and ``table_format`` (``csv`` or ``parquet``) configure the

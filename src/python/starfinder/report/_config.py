@@ -20,6 +20,13 @@ def _name(value) -> bool:
 class MarkerGroup:
     """One figure of the marker patterns: a title and one to four distinct gene names.
 
+    Parameters
+    ----------
+    name : str
+        Marker figure title and group name.
+    genes : tuple of str
+        Gene names displayed in the marker figure.
+
     Raises
     ------
     TypeError
@@ -52,6 +59,20 @@ class MarkerGroup:
 class RuleLimit:
     """The limit of one problematic-FOV rule.
 
+    Parameters
+    ----------
+    k : float or None
+        Nonnegative, dimensionless multiplier of the robust sample spread in the relative limit;
+        ``None`` contributes zero to that limit.
+    floor : float or None
+        Nonnegative floor of the relative limit, in the rule's measurement unit;
+        ``None`` contributes zero to that limit.
+    absolute : float or None
+        Nonnegative absolute limit in the rule's measurement unit; ``None`` selects the
+        relative limit when ``k`` or ``floor`` is set, and otherwise disables the rule.
+
+    Notes
+    -----
     ``absolute`` set: that limit alone. ``k`` and ``floor`` set: a deviation from
     the sample median larger than ``max(k × 1.4826 × MAD, floor)``. All three None:
     the rule is not evaluated. Each given value is a finite number ≥ 0.
@@ -84,6 +105,19 @@ class RuleLimit:
 class ReportLimits:
     """The limits of the problematic-FOV rules; the defaults are the provisional limits of choice 14.
 
+    Parameters
+    ----------
+    shift_residual : RuleLimit
+        Limit for registration shift residuals, measured in voxels.
+    alignment_score : RuleLimit
+        Limit for low registration alignment scores, measured as dimensionless scores.
+    correct_form_fraction : RuleLimit
+        Limit for low correct-form read fractions, measured as fractions.
+    matched_fraction : RuleLimit
+        Limit for low codebook-matched read fractions, measured as fractions.
+    spots_near_zero : float
+        Positive fraction of the sample median spot count used as the near-zero spot limit.
+
     Raises
     ------
     TypeError
@@ -114,6 +148,25 @@ class ReportLimits:
 class ReportConfig:
     """What the user supplies to the sample report.
 
+    Parameters
+    ----------
+    markers : tuple of MarkerGroup
+        Marker groups to display; an empty tuple requests up to three most abundant genes.
+    marker_pairs : tuple of (str, str)
+        Gene pairs for MECR; an empty tuple leaves MECR unavailable.
+    positive_threshold : int
+        Positive integer gene count per cell at which the cell is positive for that gene.
+    example_fovs : tuple of (str, str, str) or None
+        Example FOV IDs; ``None`` requests automatic example selection from read and cell counts.
+    limits : ReportLimits
+        Limits for the problematic-FOV rules.
+    figure_width_px : int
+        Positive width of whole-sample marker figures in pixels.
+    jpeg_quality : int
+        JPEG quality setting for report images.
+
+    Notes
+    -----
     ``markers``: groups of one to four genes, each one figure, names unique;
     empty shows the three most abundant genes. ``marker_pairs``: pairs of two
     distinct genes for MECR; empty makes MECR unavailable (``no_markers``).
