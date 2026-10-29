@@ -16,6 +16,56 @@ _TERM_AXES = tuple(('zyx'.index(t[0]), 'zyx'.index(t[1])) for t in POLYNOMIAL_TE
 class GeometryConfig:
     """Absolute reference-to-round translations plus local, affine and polynomial maps.
 
+    Parameters
+    ----------
+    translation_enabled : bool
+        Whether to enable reference-to-round translations.
+    translations_zyx : array_like or None
+        Supplied translations of shape (R, 3) in codebook round order and ZYX voxel
+        indices; ``None`` uses zeros without a random translation range.
+    translation_max_zyx : array_like or None
+        Nonnegative uniform translation half-ranges in ZYX voxel indices; ``None`` uses
+        zero ranges.
+    local_enabled : bool
+        Whether to enable Gaussian radial-basis local displacement.
+    centers_zyx : array_like
+        Reference local-control centers of shape (K, 3) in ZYX voxel indices.
+    scales : array_like or None
+        Positive isotropic Gaussian local-control scales of shape (K,) in voxel indices;
+        ``None`` uses 8 voxels per control.
+    vectors_zyx : array_like or None
+        Supplied local-control displacement vectors of shape (R, K, 3) in codebook round
+        order and ZYX voxel indices; ``None`` uses zeros without random local controls.
+    strength : float
+        Nonnegative normal local-vector component standard deviation in voxel indices,
+        for YX with singleton Z and ZYX otherwise.
+    local_magnitude : float or None
+        Nonnegative random-direction local-vector length in voxel indices; ``None``
+        uses supplied vectors or the normal-component ``strength`` setting.
+    affine_enabled : bool
+        Whether to enable affine displacement about the grid center.
+    affine_zyx : array_like or None
+        Supplied dimensionless affine displacement matrices of shape (R, 3, 3), in
+        codebook round order and ZYX output/input order; ``None`` uses zeros without a
+        random affine bound.
+    affine_max_zyx : array_like or None
+        Nonnegative random affine displacement bounds in ZYX voxel indices; ``None``
+        uses zero bounds.
+    polynomial_enabled : bool
+        Whether to enable second-order polynomial displacement about the grid center.
+    polynomial_zyx : array_like or None
+        Supplied polynomial displacement coefficients of shape (R, 3, 6) in codebook
+        round order and ZYX voxel indices, with columns ``zz, yy, xx, zy, zx, yx`` of
+        normalized coordinates; ``None`` uses zeros without a random polynomial bound.
+    polynomial_max_zyx : array_like or None
+        Nonnegative random polynomial displacement bounds in ZYX voxel indices; ``None``
+        uses zero bounds.
+    reference_round : str or None
+        Codebook round label held at identity; ``None`` leaves no round explicitly held
+        at identity.
+
+    Notes
+    -----
     Supplied translations have shape (R,3); alternatively translation_max_zyx
     sets componentwise uniform half-ranges. Local centers are (K,3), scales (K,)
     default to 8 voxels, and supplied vectors are (R,K,3). Alternatively strength

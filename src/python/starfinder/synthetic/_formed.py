@@ -35,6 +35,46 @@ _COMPONENTS = ("count", "placement", "identity", "brightness", "width.axial",
 class ReadoutEffectsConfig:
     """Optional effective readout controls; every enable flag defaults false.
 
+    Parameters
+    ----------
+    dropout_enabled : bool
+        Whether to enable temporary amplicon dropout.
+    dropout_probability : tuple[float, ...] or None
+        Dropout probability by round in codebook order; ``None`` uses zero
+        probabilities.
+    weakening_enabled : bool
+        Whether to enable temporary amplicon weakening.
+    weakening_probability : tuple[float, ...] or None
+        Weakening probability by round in codebook order; ``None`` uses zero
+        probabilities.
+    weak_factor : tuple[float, ...] or None
+        Dimensionless weakening multiplier by round in codebook order; ``None`` uses
+        unit multipliers.
+    trend_enabled : bool
+        Whether to enable the progressive round trend.
+    trend_base : float
+        Dimensionless base of the trend multiplier ``trend_base**r``, with zero-based
+        round index ``r``.
+    loss_enabled : bool
+        Whether to enable persistent amplicon loss.
+    loss_probability : float
+        Probability of persistent loss for an amplicon.
+    loss_start : int or None
+        Zero-based first round index of persistent loss; ``None`` uses 1 for multiple
+        rounds and 0 for a single round.
+    gain_enabled : bool
+        Whether to enable source-channel gain.
+    gains : array_like or None
+        Nonnegative dimensionless gains of shape (R, C), in codebook round and channel
+        order; ``None`` uses unit gains.
+    mixing_enabled : bool
+        Whether to enable spectral mixing.
+    mixing : array_like or None
+        Nonnegative dimensionless mixing matrices of shape (R, C, C), with destination
+        rows and source columns in codebook order; ``None`` uses identity matrices.
+
+    Notes
+    -----
     Probabilities/factors are length-R sequences (None selects zero probability
     or unit weakening). Trend is b**r, b in [0,1]. Loss is one draw per ID,
     starting at zero-based loss_start (None means 1 for R>1, else 0).
@@ -134,6 +174,83 @@ def _readout_effects(config, intended, ids, labels, stream):
 class AmpliconSceneConfig:
     """Inputs for one formed-amplicon FOV; every effect defaults disabled.
 
+    Parameters
+    ----------
+    dataset_version : str
+        Dataset version label in the formed-population namespace.
+    sample_id : str
+        Sample identifier in the formed-population namespace.
+    FOV_id : str
+        FOV identifier in the formed-population namespace.
+    scene_key : str
+        Scene label in the random-stream key.
+    seed : int
+        Nonnegative root seed for the random streams.
+    split : str
+        Split label in the random-stream key.
+    shape_zyx : tuple[int, int, int]
+        Output grid shape in ZYX order, in positive integer voxel counts.
+    dtype : str
+        Output image dtype: ``float32``, ``float64``, ``uint8`` or ``uint16``.
+    accumulation : str or None
+        Rendering dtype, ``float32`` or ``float64``; ``None`` uses ``float64`` for
+        ``float64`` output and ``float32`` for the other output dtypes.
+    count : int or None
+        Nonnegative fixed amplicon count; ``None`` uses eight when density and
+        coordinates are unset.
+    density : float or None
+        Nonnegative Poisson population density in amplicons per voxel; ``None`` disables
+        density-based sampling.
+    coordinates : array_like or None
+        Supplied reference positions of shape (N, 3), in ZYX voxel indices and amplicon
+        ID order; ``None`` requests sampled placement.
+    max_count : int
+        Nonnegative amplicon-count allocation guard.
+    amplicon_ids : tuple[str, ...] or None
+        Ordered amplicon identifiers; ``None`` uses ``amplicon-0``, ``amplicon-1`` and
+        so on.
+    gene_ids : dict[str, str] or None
+        Codebook gene identifiers keyed by amplicon ID; ``None`` requests gene sampling
+        from abundance weights.
+    abundances : tuple[float, ...] or None
+        Nonnegative relative gene-sampling weights in codebook gene order; ``None`` uses
+        equal weights.
+    placement : str
+        Position-sampling mode: ``uniform``, ``weighted`` or ``clustered``.
+    spatial_weights : array_like or None
+        Nonnegative relative voxel-sampling weights on the ZYX grid for weighted
+        placement.
+    cluster_centers : array_like or None
+        Cluster centers of shape (K, 3) in reference ZYX voxel indices for clustered
+        placement.
+    cluster_weights : tuple[float, ...] or None
+        Positive relative cluster-selection weights in cluster-center order for
+        clustered placement.
+    spread_zyx : tuple[float, float, float]
+        Positive Gaussian cluster-offset standard deviations in ZYX voxel indices for
+        clustered placement.
+    brightness : ScalarDistribution
+        Nonnegative amplicon peak-intensity distribution in image intensity units.
+    axial_width : ScalarDistribution
+        Positive axial Gaussian standard-deviation distribution in voxel indices.
+    lateral_width : ScalarDistribution
+        Positive lateral Gaussian minor-axis standard-deviation distribution in voxel
+        indices.
+    elongation : ScalarDistribution
+        Dimensionless lateral major-to-minor width-ratio distribution.
+    angle : ScalarDistribution
+        In-plane Gaussian orientation distribution in radians.
+    readout : ReadoutEffectsConfig
+        Amplicon readout-effect settings.
+    background : BackgroundConfig
+        Analytic background settings.
+    noise : NoiseConfig
+        Residual observation-noise settings.
+    geometry : GeometryConfig
+        Reference-to-round geometry settings.
+
+    Notes
+    -----
     Select coordinates, count or density (all None defaults to count=8).
     Explicit coordinates are N by 3 in the order of amplicon_ids; default IDs
     are amplicon-0, amplicon-1, etc. Gene/property overrides are ID-keyed.

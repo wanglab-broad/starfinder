@@ -12,6 +12,43 @@ from ._common import (ScalarDistribution, _array, _distribution, _draw, _integer
 class TextureConfig:
     """Persistent Gaussian blobs, independent of formed molecules.
 
+    Parameters
+    ----------
+    count : int or None
+        Nonnegative fixed blob count; ``None`` uses four when density and coordinates
+        are unset.
+    density : float or None
+        Nonnegative Poisson blob density in blobs per voxel; ``None`` disables
+        density-based sampling.
+    coordinates : array_like or None
+        Supplied reference blob centers of shape (N, 3) in ZYX voxel indices; ``None``
+        requests sampled placement.
+    max_count : int
+        Nonnegative blob-count allocation guard.
+    placement : str
+        Blob position-sampling mode: ``uniform``, ``weighted`` or ``clustered``.
+    spatial_weights : array_like or None
+        Nonnegative relative voxel-sampling weights on the ZYX grid for weighted
+        placement.
+    cluster_centers : array_like or None
+        Cluster centers of shape (K, 3) in reference ZYX voxel indices for clustered
+        placement.
+    cluster_weights : array_like or None
+        Positive relative cluster-selection weights in cluster-center order for
+        clustered placement.
+    spread_zyx : tuple[float, float, float]
+        Positive Gaussian cluster-offset standard deviations in ZYX voxel indices for
+        clustered placement.
+    axial_width : ScalarDistribution
+        Positive blob axial Gaussian standard-deviation distribution in voxel indices.
+    lateral_width : ScalarDistribution
+        Positive blob lateral Gaussian standard-deviation distribution in voxel indices,
+        shared by Y and X.
+    brightness : ScalarDistribution
+        Nonnegative blob peak-intensity distribution in image intensity units.
+
+    Notes
+    -----
     Count/density/coordinates and placement follow AmpliconSceneConfig. Default
     enabled count is four. Width distributions are axial/lateral (YX shared),
     in voxel indices; brightness is peak intensity. Supplied values use blob-N
@@ -40,6 +77,39 @@ class TextureConfig:
 class BackgroundConfig:
     """Analytic reference background and destination-frame R×C baseline.
 
+    Parameters
+    ----------
+    baseline_enabled : bool
+        Whether to enable the destination-frame baseline.
+    baseline : array_like or None
+        Nonnegative baseline intensities of shape (R, C) in codebook round and channel
+        order; ``None`` uses zeros.
+    gradient_enabled : bool
+        Whether to enable the reference-frame gradient component.
+    gradient_intercept : float
+        Nonnegative gradient intercept in image intensity units.
+    gradient_slopes_zyx : tuple[float, float, float]
+        Signed gradient coefficients in intensity units per normalized ZYX coordinate.
+    regions_enabled : bool
+        Whether to enable Gaussian reference-background regions.
+    region_centers : array_like
+        Reference Gaussian-region centers of shape (K, 3) in ZYX voxel indices.
+    region_sigma_zyx : array_like or None
+        Positive Gaussian-region standard deviations of shape (K, 3) in ZYX voxel
+        indices; ``None`` uses (2, 8, 8) per region.
+    region_heights : array_like or None
+        Nonnegative Gaussian-region peak intensities of shape (K,); ``None`` uses 10
+        intensity units per region.
+    texture_enabled : bool
+        Whether to enable persistent Gaussian texture blobs.
+    texture : TextureConfig
+        Persistent Gaussian texture-blob settings.
+    tissue_weights : array_like or None
+        Nonnegative dimensionless reference-background multipliers of shape (R, C) in
+        codebook round and channel order; ``None`` uses zeros.
+
+    Notes
+    -----
     All flags default false. Gradient is max(0, intercept + slopes dot
     normalized ZYX). Regions are supplied K×3 centers, positive sigma_zyx
     triples and nonnegative heights (None gives (2,8,8), 10 per region).
@@ -69,6 +139,29 @@ class BackgroundConfig:
 class NoiseConfig:
     """Separate residuals: signal-dependent first, then sigma*Z_ind (read noise).
 
+    Parameters
+    ----------
+    dependent_enabled : bool
+        Whether to enable signal-dependent noise.
+    alpha : float
+        Nonnegative signal-dependent variance coefficient in intensity units.
+    independent_enabled : bool
+        Whether to enable independent Gaussian read noise.
+    sigma : float
+        Nonnegative independent read-noise standard deviation in image intensity units.
+    model : str
+        Signal-dependent noise model: ``gaussian`` or ``poisson``.
+    correlated_enabled : bool
+        Whether to enable spatially correlated Gaussian noise.
+    correlated_sigma : float
+        Nonnegative spatially correlated residual standard deviation in image intensity
+        units.
+    correlation_length_zyx : tuple[float, float, float]
+        Nonnegative nominal Gaussian autocorrelation standard deviations in ZYX voxel
+        indices.
+
+    Notes
+    -----
     ``model`` selects the dependent residual: "gaussian" adds sqrt(alpha*J)*Z_dep;
     "poisson" replaces J by alpha*Poisson(J/alpha), with the same mean and
     variance (alpha is intensity per detected count). J includes signal,
