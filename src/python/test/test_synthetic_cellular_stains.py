@@ -1,4 +1,4 @@
-"""Generator checks of the cellular scene's stains and morphology round (docs/synthetic-cellular-scene-validation.md).
+"""Generator checks of the cellular scene's stains and morphology round (design/validation/synthetic-cellular-scene.md).
 
 GN13 (the stain identities against the test oracle and the point evaluator, the plateau, the signs, the integer
 shift), GN14 (the band at every boundary, on ``band_cases`` and ctx_stains), GN15 (bright regions), GN16 (the field),

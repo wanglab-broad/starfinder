@@ -1,6 +1,6 @@
-"""Test oracle of the cellular scene (docs/synthetic-cellular-scene-validation.md, "Two test helpers").
+"""Test oracle of the cellular scene (design/validation/synthetic-cellular-scene.md, "Two test helpers").
 
-Written from the formulas of docs/synthetic-cellular-scene.md and the truth tables alone: it
+Written from the formulas of design/specs/synthetic/cellular-scene.md and the truth tables alone: it
 imports nothing from ``starfinder.synthetic`` and reads a scene through its tables
 (``nuclei``, ``lobes``, ``harmonics``, ``cells``, ``cell_context``) and its two records.
 It recomputes the nucleus and cell labels ``N`` and ``C`` with its own arithmetic and reports
@@ -306,7 +306,7 @@ def grids(scene):
 # ---------------------------------------------------------------------- identities 1 to 5 of the sample scene
 
 def check_sample_identities(scene, oracle):
-    """Identities 1 to 5 of docs/synthetic-sample-scene.md on the scene's tables with the cellular labels.
+    """Identities 1 to 5 of design/specs/synthetic/sample-scene.md on the scene's tables with the cellular labels.
 
     Returns the number of boundary positions met (molecules and anchors), which the caller reports.
     """

@@ -1,6 +1,6 @@
-"""GA1 (b): golden digests of the six accepted context presets (docs/synthetic-real-appearance-validation.md, GA1).
+"""GA1 (b): golden digests of the six accepted context presets (design/validation/synthetic-real-appearance-scene.md, GA1).
 
-The real-appearance scene is opt-in (E1 of docs/synthetic-real-appearance.md): a scene without its settings is exactly
+The real-appearance scene is opt-in (E1 of design/specs/synthetic/real-appearance.md): a scene without its settings is exactly
 the accepted cellular scene, and the six ``context-*-v1`` presets keep their outputs. This file pins what
 ``save_cellular_scene`` writes for each of them, as generated at the base revision of the implementation batch
 (8bf9a5b, before W-516's first change), so that a change of any generated value of an accepted preset fails here.
@@ -15,7 +15,7 @@ Digests are of content, by group of files, as the golden test of the sample pres
   ``numpy_version`` and without the ``files`` map of ``sample.json`` and ``context.json`` (the SHA-256 of the files
   as written); the array digests they hold stay in.
 
-Repeatability is that of the formed model (docs/synthetic-specification.md, "Random streams"): exact for a pinned NumPy
+Repeatability is that of the formed model (design/specs/synthetic/amplicon-scene.md, "Random streams"): exact for a pinned NumPy
 build on one CPU. NumPy's vectorised functions differ in the last bit between CPUs, so the floating-point values of the
 CSV files and the JSON records are compared to 6 significant digits, with magnitudes below 1e-9 taken as 0
 (amendment of 2026-10-19 to GA1: a GitHub runner differed from the lab machine only there). Integers, strings and

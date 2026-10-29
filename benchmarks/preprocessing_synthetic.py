@@ -2073,7 +2073,7 @@ def _run_calibrated(output, scope, reductions, issue, shape, count, log, recorde
                                                    for label, planned in PROJECTION_PLANS})
     mad_zero = sorted({(r["condition"], r["dtype"], r["arm"]) for r in diag_ref.to_dict("records") if r["mad_zero"]})
     manifest = dict(schema=CALIBRATED_SCHEMA, issue=issue, design="calibrated", scope=scope,
-        specification="docs/preprocessing-algorithms.md, Evaluation design amendment for the calibrated rerun "
+        specification="design/specs/preprocessing-algorithms.md, Evaluation design amendment for the calibrated rerun "
                       "(Accepted, W-243), with the approved resolutions C1-C8",
         qualification="development evidence on calibrated synthetic presets; not scientific acceptance; no "
                       "recommended defaults; the low-benefit rule and its 0.02 threshold are provisional",
@@ -2107,7 +2107,7 @@ def _run_calibrated(output, scope, reductions, issue, shape, count, log, recorde
                                    r_z_cap=RZ_CAP),
             image_statistics=dict(tool="benchmarks/image_statistics.py (W-238)", selection="adaptive",
                                   seeds="development seeds run, pooled per condition (multi-FOV: per set)",
-                                  targets="W-238 development min-max ranges, docs/image-statistics.md (Target "
+                                  targets="W-238 development min-max ranges, design/notes/image-statistics.md (Target "
                                           "ranges); uint16 intensity targets x 16 (unverified)")),
         plan=dict(approved_matrix=_plan_record(calibrated_plan("full")),
                   approved_after_R3=_plan_record(calibrated_plan("full", ("R3",))), run=_plan_record(plan),

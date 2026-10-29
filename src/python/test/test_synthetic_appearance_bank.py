@@ -1,4 +1,4 @@
-"""Generator checks of the appearance bank (docs/synthetic-real-appearance-validation.md, "Generator checks").
+"""Generator checks of the appearance bank (design/validation/synthetic-real-appearance-scene.md, "Generator checks").
 
 GA3 (the bank's refusals), GA4 (the build is deterministic and recorded), GA5 (the selection rules), GA6 (what an
 entry carries), GA14 (brightness: the bank's part) and GA22 (the closed-form bank reads no real data: the bank's

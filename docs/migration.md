@@ -294,20 +294,10 @@ The [workflow guide](workflows.md) and
 
 ## Runtime error messages
 
-If your code matches error text, update these eight messages. Exception types
-and the conditions that raise them stay the same. Braced fields below keep their
-runtime values.
-
-| Source | Before | After |
-| --- | --- | --- |
-| `assembly/_assemble.py` | `only counted cells (retained, §2.9 kept) have count rows` | `only counted cells (retained, assignment kept) have count rows` |
-| `dataset/workflow.py` | `the segmentation block is run by FOV.segment (the §2.13 rule); the stardist_segmentation rule translates rules.stardist_segmentation.parameters only: remove the block or the rule` | `the segmentation block is run by FOV.segment (the workflow orchestration rule); the stardist_segmentation rule translates rules.stardist_segmentation.parameters only: remove the block or the rule` |
-| `dataset/workflow.py` | `the assignment block is run by FOV.assign_molecules (the §2.13 rule); the reads_assignment rule translates rules.reads_assignment.parameters only: remove the block or the rule` | `the assignment block is run by FOV.assign_molecules (the workflow orchestration rule); the reads_assignment rule translates rules.reads_assignment.parameters only: remove the block or the rule` |
-| `segmentation/_learned.py` | `block fields together with a scale other than 1 are not supported (W-309): nothing has tested that combination` | `block fields together with a scale other than 1 are not supported: nothing has tested that combination` |
-| `segmentation/_learned.py` | `diameter None (no rescale) is refused with do_3d=True (W-306)` | `diameter None (no rescale) is refused with do_3d=True` |
-| `stitching/_bigstitcher.py` | `{path}: view {view} composes {names} to a linear part {off:.3g} off the identity; §2.10 admits translation only (tolerance {LINEAR_TOLERANCE})` | `{path}: view {view} composes {names} to a linear part {off:.3g} off the identity; stitching admits translation only (tolerance {LINEAR_TOLERANCE})` |
-| `stitching/_bigstitcher.py` | `{what}: the shift's linear part is {off:.3g} off the identity; §2.10 admits translation only` | `{what}: the shift's linear part is {off:.3g} off the identity; stitching admits translation only` |
-| `stitching/_methods.py` | `transform_kind of {self.name!r} must be 'translation', the only kind §2.10 admits` | `transform_kind of {self.name!r} must be 'translation', the only kind stitching admits` |
+Some exception messages have changed while their types and trigger conditions stay
+the same. Code that matches error text should use exception types instead. The
+[message migration record](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/migration.md#runtime-error-messages)
+lists the old and current strings.
 
 ## Synthetic and evaluation calls
 

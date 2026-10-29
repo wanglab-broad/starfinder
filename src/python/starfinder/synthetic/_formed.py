@@ -1,4 +1,4 @@
-"""Formed-amplicon scene model; see docs/synthetic-specification.md.
+"""Formed-amplicon scene model; see design/specs/synthetic/amplicon-scene.md.
 
 Every synthetic image is rendered here: oracle fixtures (float64 accumulation)
 and the benchmark presets in _presets (float32 accumulation, round by round).
@@ -555,7 +555,7 @@ def generate_amplicon_scene(codebook: Codebook, *, config: AmpliconSceneConfig =
                             metadata: ImageMetadata | None = None) -> AmpliconScene:
     """Generate an in-memory formed population and controlled readout images.
 
-    Stages and effect order follow docs/synthetic-specification.md. Readout,
+    Stages and effect order follow design/specs/synthetic/amplicon-scene.md. Readout,
     background, noise and geometry are all optional and default disabled, so
     the default geometry is identity; nothing is enabled implicitly. Invalid
     input or nonfinite generation raises ValueError (wrong typed objects raise

@@ -1,5 +1,5 @@
 """Generator checks of the appearance scene's augmentation, layout and labels
-(docs/synthetic-real-appearance-validation.md, "Generator checks").
+(design/validation/synthetic-real-appearance-scene.md, "Generator checks").
 
 GA7 (transforms recorded and in range), GA8 (labels against the placements), GA9 (ownership and anchors), GA10
 (placement and its stop; DN1's stop is A3's, on ``app_dn1``), GA11 (territories), GA18 (projection truth: the

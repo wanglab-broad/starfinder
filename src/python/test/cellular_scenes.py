@@ -1,4 +1,4 @@
-"""Fixtures of the cellular scene's generator checks (docs/synthetic-cellular-scene-validation.md, "Fixtures").
+"""Fixtures of the cellular scene's generator checks (design/validation/synthetic-cellular-scene.md, "Fixtures").
 
 Each fixture is built in the session from the values of the validation page on ``sample-tiny-v1`` (seed 42) and
 cached by name, so the test files that share one generate it once. Nothing is read from disk.
@@ -31,7 +31,7 @@ TEXTURE = BrightRegionConfig(per_nucleus=2, size=ScalarDistribution("lognormal",
 FIELD = UnevennessConfig(centres_per_area=4, amplitude=0.74)
 WHOLE = (0.0, 2.0, -3.0)
 FOVS = ("FOV_001", "FOV_002", "FOV_003", "FOV_004")
-# The worked example of identity 2 of docs/synthetic-sample-scene.md moved by T = (0.5, 6, 6): FOV_001 at δ = (1, 8, 6)
+# The worked example of identity 2 of design/specs/synthetic/sample-scene.md moved by T = (0.5, 6, 6): FOV_001 at δ = (1, 8, 6)
 # and FOV_002 at δ = (1, 31, 8) on the sample grid, so the two differ by whole voxels and both are aligned crops.
 PAIR = {"FOV_001": (0.1, 0.5, -1.5), "FOV_002": (0.1, -0.5, 0.5), "FOV_003": (0.2, 1.0, -1.0),
         "FOV_004": (-0.3, 0.0, 0.0)}
@@ -152,7 +152,7 @@ NOISE = NoiseConfig(dependent_enabled=True, model="poisson", alpha=1.0, independ
 
 
 def stain_config(name):
-    """The fixtures of the stains and the morphology round (docs/synthetic-cellular-scene-validation.md, "Fixtures"):
+    """The fixtures of the stains and the morphology round (design/validation/synthetic-cellular-scene.md, "Fixtures"):
 
     * ``stains-<rule>-<whole|drawn>``: ctx_stains, ctx_shapes of the rule with noise off, the template dtype float64,
       no output scale, and the morphology translation (0, 2, −3) voxels or MT1's drawn one;

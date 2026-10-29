@@ -1,6 +1,6 @@
 """Multi-FOV sample scene: one continuous scene, FOVs at true offsets, cellular truth.
 
-See docs/synthetic-sample-scene.md. Every FOV is rendered by the unchanged formed
+See design/specs/synthetic/sample-scene.md. Every FOV is rendered by the unchanged formed
 generator from a per-FOV AmpliconSceneConfig composed from public fields (molecules
 at their FOV index positions, background components moved into the FOV frame).
 Labels and the nuclear stain are closed-form functions of the sample position,
@@ -44,7 +44,7 @@ _IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 # Label points per power-diagram block.
 _BLOCK = 1 << 18
 _PROPERTIES = ("brightness", "width.axial", "width.lateral", "elongation", "angle")
-# The new stream components: entity and draws of each (docs/synthetic-sample-scene.md).
+# The new stream components: entity and draws of each (design/specs/synthetic/sample-scene.md).
 _SAMPLE_COMPONENTS = {
     "sample.jitter": ("FOV ID", "u_z, u_y, u_x"),
     "sample.nucleus.axial": ("nucleus-<n>", "one value"),
@@ -347,7 +347,7 @@ class SampleScene:
 
     ``fovs``, ``stains`` and ``fov_labels`` are keyed by FOV ID in tile position
     table order and are empty when the FOVs were handed to ``on_fov``. The
-    tables are described in docs/synthetic-sample-scene.md ("Placement truth",
+    tables are described in design/specs/synthetic/sample-scene.md ("Placement truth",
     "Truth schema"); ``record`` holds versions, the requested and effective
     configuration, the stream scheme and descriptors, the sample grid, the
     bounds of the scene domain and covered region, and per-FOV digests.
@@ -422,9 +422,9 @@ def _rho(points, centre, axial, lateral, elongation, angle):
 def _label_functions(points, sites, omega):
     """Cell label C and nucleus label N at (..., 3) sample positions in µm (rule L1).
 
-    Sites of the cellular scene (docs/synthetic-cellular-scene.md) carry their nucleus shapes and territory
+    Sites of the cellular scene (design/specs/synthetic/cellular-scene.md) carry their nucleus shapes and territory
     rule and are labelled by that page's rule; sites of the real-appearance scene
-    (docs/synthetic-real-appearance.md) carry their own label function, the placed objects in placement order; every
+    (design/specs/synthetic/real-appearance.md) carry their own label function, the placed objects in placement order; every
     other call is the rule L1 below.
     """
     appearance = getattr(sites, "appearance", None)
@@ -1041,7 +1041,7 @@ def _assemble(config, codebook, layout, sample, jitter, true, ids, population, s
 def save_sample_scene(scene: SampleScene, directory: Path | str) -> Path:
     """Write a sample scene to a new or empty directory and return its path.
 
-    Layout (docs/synthetic-sample-scene.md, "Truth schema"): ``sample.json``
+    Layout (design/specs/synthetic/sample-scene.md, "Truth schema"): ``sample.json``
     (the record plus the SHA-256 of every other file), ``positions.csv``,
     ``placement_truth.csv``, ``nuclei.csv`` (with a cellular scene),
     ``cells.csv``, ``molecules.csv``, ``cell_fovs.csv``, ``molecule_fovs.csv``,

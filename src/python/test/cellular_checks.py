@@ -1,4 +1,4 @@
-"""Checks of the cellular scene's generator that two test files run (docs/synthetic-cellular-scene-validation.md).
+"""Checks of the cellular scene's generator that two test files run (design/validation/synthetic-cellular-scene.md).
 
 ``check_lobes`` is GN5 for a scene whose nucleus shapes come from a configuration with ``lobed_share`` below 1: the
 routine presets (test_synthetic_cellular_routine.py) and the ``slow`` presets (test_synthetic_cellular_presets.py,

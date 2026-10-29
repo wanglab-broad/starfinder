@@ -1,4 +1,4 @@
-"""Augmentation, layout and truth labels of the real-appearance scene (docs/synthetic-real-appearance.md).
+"""Augmentation, layout and truth labels of the real-appearance scene (design/specs/synthetic/real-appearance.md).
 
 Bank entries are placed on the accepted acquisition layout (``_sample._layout``: the FOV grid, the scene domain Ω,
 the covered region K and the FOV jitter) by PL2 with its anchor rule, one proposal at a time, until DN3's count or
@@ -46,7 +46,7 @@ _LAYOUT_COMPONENTS = {
                                                                 "the sphere, one on the circle); else z, y, x"),
     "context.appearance.growth": ("cell-<k>", "one value of CT1's growth"),
 }
-# PL2's constants (docs/synthetic-real-appearance.md, "Layout"; proto.py::place_all), compared on voxel counts in
+# PL2's constants (design/specs/synthetic/real-appearance.md, "Layout"; proto.py::place_all), compared on voxel counts in
 # whole percent: refused below 35 % of the mask in Ω, or above 1 % of it on earlier masks.
 _OVERLAP_MAX = 1
 _DOMAIN_SHARE = 35
@@ -72,7 +72,7 @@ def _range(value, name):
 
 @dataclass(frozen=True)
 class AugmentationConfig:
-    """The augmentation of a placed entry (AU1 of docs/synthetic-real-appearance.md).
+    """The augmentation of a placed entry (AU1 of design/specs/synthetic/real-appearance.md).
 
     Every proposal draws a rotation ``θ`` about Z uniform in ``[0, 2π)``, a flip in Y with
     probability ``flip_y``, in dense 3D a flip in Z with probability ``flip_z`` (none in X), a

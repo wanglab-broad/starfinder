@@ -1,4 +1,4 @@
-"""Generator checks of the cellular scene on the routine presets (docs/synthetic-cellular-scene-validation.md).
+"""Generator checks of the cellular scene on the routine presets (design/validation/synthetic-cellular-scene.md).
 
 The GN rows whose fixture list names ``context_routine`` beside the tiny fixtures: GN4 (labels against the test
 oracle and the point evaluator, identities 1 to 5), GN5 (lobes and LB1), GN6 (no overlap; a nucleus inside its own
@@ -291,7 +291,7 @@ def test_gn11_molecules_per_cell_and_the_count_guard_on_the_routine_presets(name
 
 def quiet(config):
     """The preset with the formed template's noise and background off and float64 accumulation: the conditions of the
-    rendering identity of docs/synthetic-sample-scene.md ("Rendering each FOV at its true offset")."""
+    rendering identity of design/specs/synthetic/sample-scene.md ("Rendering each FOV at its true offset")."""
     fov = replace(config.sample.fov, noise=NoiseConfig(), background=BackgroundConfig(), accumulation="float64")
     return replace(config, sample=replace(config.sample, fov=fov))
 

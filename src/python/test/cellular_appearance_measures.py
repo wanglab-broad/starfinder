@@ -1,4 +1,4 @@
-"""GA23's measures of an appearance scene (docs/synthetic-real-appearance-validation.md, "Target definitions").
+"""GA23's measures of an appearance scene (design/validation/synthetic-real-appearance-scene.md, "Target definitions").
 
 The rows TR1 to TR12 are W-393's measures as GN23 rebuilds them (``cellular_measures.scene_targets``), on the truth
 labels and the stain of each FOV, each object measured once. The rows the appearance page adds are rebuilt here from

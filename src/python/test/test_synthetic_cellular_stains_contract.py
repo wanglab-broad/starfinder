@@ -1,6 +1,6 @@
 """Configuration, refusals and persistence of the cellular scene's stains and morphology round.
 
-docs/synthetic-cellular-scene-validation.md: GN2 (the names and fields of "Names" this issue adds), GN3 (the refusals
+design/validation/synthetic-cellular-scene.md: GN2 (the names and fields of "Names" this issue adds), GN3 (the refusals
 of the stains and the morphology round) and GN22 (the truth tables, the stain images of ``save_cellular_scene``, and
 the dataset of ``save_cellular_dataset`` read by ``Dataset``, ``FOV.load_images`` and ``FOV.prepare_morphology``).
 """

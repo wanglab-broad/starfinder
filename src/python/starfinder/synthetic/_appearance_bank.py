@@ -1,4 +1,4 @@
-"""The appearance bank of the real-appearance cellular scene (docs/synthetic-real-appearance.md).
+"""The appearance bank of the real-appearance cellular scene (design/specs/synthetic/real-appearance.md).
 
 A bank is a set of entries cut from source images with their method labels, with background patches, stored as
 one ``.npz`` file outside the repository and identified by its SHA-256 (ST1), or built in memory from scenes of the
@@ -64,7 +64,7 @@ _CLOSED_FORM_BUILD = {
 
 @dataclass(frozen=True)
 class BankReference:
-    """Which appearance bank a scene uses (ST1, CF1 of docs/synthetic-real-appearance.md).
+    """Which appearance bank a scene uses (ST1, CF1 of design/specs/synthetic/real-appearance.md).
 
     A stored bank is named by ``name`` and ``sha256``: the file ``<name>.npz`` in ``directory``,
     or with ``directory=None`` in the directory that the environment variable
@@ -673,7 +673,7 @@ def build_appearance_bank(config: Mapping | str | Path, path: str | Path) -> dic
     ``keep_z``, ``margin_um``,
     ``selection``, ``fall_off``, ``patches``, ``guard`` and ``seed``. A file is a path or a
     mapping with ``path`` and ``channel``. The rules are those of
-    docs/synthetic-real-appearance.md: SEL1 on every label, BR1 with BR4's guard (a refused
+    design/specs/synthetic/real-appearance.md: SEL1 on every label, BR1 with BR4's guard (a refused
     source raises ValueError naming it and its two numbers), OUT1 outside each mask and the
     patch rule of BG1. ``path`` must be ``<bank>.npz``; the bank is written there and its
     record (the configuration, every input with its path, size and SHA-256, the counts per
@@ -764,7 +764,7 @@ def _closed_form_config(preset, seed):
     A source image is scaled by one number, its plateau (BR1), and BR4 refuses a source outside a factor 1.5; the
     culture preset's field (amplitude 0.74 over about 50 µm) scales a whole routine scene by more than that (its
     plateaus at the seeds 42 to 44 are 31, 4 and 53 grey levels), so the sources are rendered as one exposure
-    (docs/synthetic-real-appearance.md, "The bank without real data", the amendment of 2026-10-17). The
+    (design/specs/synthetic/real-appearance.md, "The bank without real data", the amendment of 2026-10-17). The
     bank reads no molecule, and the molecule draws are streams of their own, so leaving them out changes neither its
     stains nor its labels."""
     from ._context_presets import cellular_scene_preset

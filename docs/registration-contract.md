@@ -1,18 +1,15 @@
 # Registration
 
-Registration aligns each moving round of a FOV with its reference round. It builds a
-registration signal for each round, estimates a transform in one or more steps, and then
-resamples the round once onto the reference grid for spot finding and readout. The
-reference round is never changed.
+Registration aligns moving rounds of a FOV with a reference image for spot finding
+and readout. A `RegistrationRecipe` builds registration signals, estimates transforms
+in steps and resamples the moving images through the resulting transform chain.
 
-It runs inside `FOV.run`, after the preprocessing steps and before the preprocessing
-recipe's `post_registration` steps and spot finding. A
-`RegistrationRecipe` in `PipelineConfig.registration` says what to do; `None`, the
-default, means no registration. A recipe also registers other rounds, such as a
-morphology round, to a reference round or an external reference image. The
-{doc}`registration reference <registration-algorithms>` lists every method, option,
-transform and record; the {doc}`registration API <api/registration>` documents the
-classes.
+In `FOV.run`, registration sits between preprocessing and the recipe's
+`post_registration` steps. Set `PipelineConfig.registration` to a recipe to enable
+it. Use {py:meth}`~starfinder.dataset.FOV.register` for a separate registration call,
+including other rounds and external references; its API documents round selection
+and reference handling. The {doc}`registration reference <registration-algorithms>`
+lists methods, options and saved files.
 
 ## Quick start
 
@@ -44,8 +41,7 @@ for name, results in fov.registration_results.items():
     print(name, results[0].transform.displacement_zyx)   # the detected shift, ZYX voxels
 ```
 
-A recipe can add more steps after the translation and set QC criteria. Affine, like
-rigid and B-spline, needs the `registration-elastix` extra when it runs:
+This recipe adds affine refinement and a QC criterion after translation:
 
 ```python
 from starfinder.registration import AffineConfig, RegistrationQcConfig
@@ -58,155 +54,77 @@ recipe = RegistrationRecipe(
 
 ## What it does
 
-1. **Signal.** Each round gives a float64 ZYX signal: by default the maximum over its
-   channels, or their sum, or one chosen channel; a step may set its own. In `FOV.run`
-   it is built from the preprocessing recipe's `registration_source` snapshot, or from
-   the detection image when there is none; on the other-round route, from the round's
-   image. A Z=1 round stays one plane.
-2. **Steps.** A recipe has at least one step: zero or more global steps (`translation`,
-   `rigid`, `affine`) followed by at most one local step (`demons`, `bspline`, `tps`,
-   `cpd`). Step k is estimated on the moving signal resampled through steps 1 to k−1.
-3. **QC.** Every step estimate, and then the round's whole chain once it is resampled,
-   gets a routine QC record. Nothing is rejected unless the recipe sets a criterion.
-4. **Recovery.** A step may name alternatives of the same kind to try when it fails
-   with an error it allows. Nothing else falls back.
-5. **One resampling.** The step transforms compose into one `TransformChain`. The
-   moving round's image, every channel, and every snapshot preprocessing keeps for it
-   are resampled once through that chain, from their pre-registration arrays.
+1. **Signal.** Build a ZYX registration image from the round's channels.
+2. **Steps.** Estimate transforms in the recipe's order, refining the alignment.
+3. **QC.** Measure alignment quality and apply configured rejection criteria.
+4. **Recovery.** Try configured alternatives after an allowed estimation failure.
+5. **Resampling.** Apply the composed transform to the moving image and its saved
+   preprocessing snapshots.
 
-Every transform is a pull map from reference to moving voxel coordinates: the
-registered image at reference index `p` is the moving image sampled at `T(p)`.
+The [application specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration.md)
+gives the signal, composition, recovery and resampling rules.
 
 ## Methods
 
 ```{method-table} starfinder.registration.REGISTRATION_METHODS
 ```
 
-Start with `translation`, which needs no extra and corrects shifts only. Add `rigid`
-after it when rounds are also rotated, or `affine` when they are also scaled or
-sheared, and a local step when the misalignment varies across the field. Rigid, affine
-and B-spline are estimated in physical units from the voxel spacing; the Dimensions
-column shows which methods take a Z=1 round.
+Start with `translation` for shifts. Consider `rigid` for rotation, `affine` for
+scale or shear, and a local method for misalignment that varies across the field.
+The generated table lists dimensions and optional extras; the
+{doc}`reference <registration-algorithms>` links each method's API documentation.
 
 ## What you get
 
-* **In memory**, per moving round of the FOV:
-  * `fov.images[round]`: the registered image, in the input dtype by default;
-  * `fov.registration_results[round]`: one `RegistrationResult` per step, with its
-    transform and diagnostics;
-  * `fov.registration_chains[round]`: the composed `TransformChain`; its
-    `pull_field()` is the whole displacement field;
-  * `fov.registration_attempts[round]`: one estimation entry per attempt (method,
-    backend, outcome, failure and QC) and, once every step has succeeded, one
-    application entry, with the chain's QC when the resampling succeeds;
-  * `fov.registration_record`: the recipe summary and the resampling of each round.
-* **On disk.** With the `registered` checkpoint stage, `FOV.run` writes the registered
-  images, `transforms.json` and, for dense and B-spline transforms,
-  `<round>_field.npz` under the FOV's `checkpoints/registered/` folder
-  ({doc}`checkpoints`). With any `checkpoints`, `run.json` records the transforms of
-  the rounds `FOV.run` registered, and the attempts.
+* `fov.images[round]` holds the registered image.
+* `fov.registration_results[round]` holds step results with transforms and diagnostics.
+* `fov.registration_chains[round]` holds the composed transform.
+* `fov.registration_attempts[round]` records estimation and application attempts.
+* `fov.registration_record` summarizes the recipe and application settings.
+
+The `registered` checkpoint stage of `FOV.run` saves images and transform records;
+`run.json` records the run when checkpoints are enabled. Other-round registration
+can save prepared images for reuse. The {doc}`reference <registration-algorithms>`
+lists the files, and {doc}`checkpoints` shows how to reload them.
 
 ## Main options
 
-| Option | Default | What it sets |
-| --- | --- | --- |
-| `RegistrationRecipe.steps` | required | The ordered `RegistrationStep`s, each with a method config, optional `recovery` and optional per-step `signal` |
-| `RegistrationRecipe.signal` | `RegistrationSignalConfig()`: `mode="max"` | `"max"`, `"sum"`, or `"channel"` with `reference_channel` and `moving_channel` (index or label) |
-| `RegistrationRecipe.warp` | `None`: translation for a chain of translations, linear SciPy otherwise | The final resampling: `backend`, `boundary_mode`, `fill_value`, `output_dtype` ({py:class}`~starfinder.registration.WarpConfig`) |
-| `RegistrationRecipe.reference_round` | `None`: the dataset's reference round | Sequencing rounds: must equal the dataset's reference round when set. Other rounds: must equal the call's `reference` round, and must be `None` with an `ExternalReference` |
-| `RegistrationRecipe.qc` | `RegistrationQcConfig()`: rejects nothing | `min_coverage`, `min_ncc_gain`, `max_fold_fraction`, `max_translation_voxels` |
-| `RecoveryConfig` | no recovery | `allowed_errors` and ordered `alternatives` |
+* `steps`: the methods to run.
+* `signal`: the channels used to estimate alignment.
+* `warp`: the final image resampling.
+* `qc`: rejection criteria for alignment quality.
+* A step's `recovery`: alternatives after an estimation failure.
 
-The reference gives each method's options.
-
-## Routine QC
-
-`registration_qc` (`starfinder.evaluation.registration`) measures, on the signals only:
-
-* **coverage**: the fraction of reference voxels whose pull point falls inside the
-  moving grid (the valid overlap);
-* **NCC** before and after the step (or the whole chain), over the same valid overlap,
-  and their gain;
-* **SSIM** before and after, on the Z maximum projections with a 7 × 7 window;
-* a **transform summary**: the displacement of a translation step; the matrix, offset
-  and determinant of an affine or rigid step, with the largest singular value of
-  `A − I`, and for a rigid step only, the rotation angle; displacement statistics and
-  the fraction of folded voxels of a B-spline or dense step, and of a whole chain;
-* for a step, the optimizer's diagnostics, where the backend reports them.
-
-An NCC or SSIM value that cannot be computed is `None`, with a reason. A step that
-fails a criterion set in `RegistrationQcConfig` raises `RegistrationRejectedError`,
-which its recovery can allow; the reference says which criteria apply to which steps.
-
-## Other rounds and external references
-
-`FOV.register(recipe, rounds=[...])` registers named rounds. When they are sequencing
-rounds, they are registered to the reference round as in `FOV.run`, from their images
-or the snapshot `source` names. When none of them
-is, it takes the other-round route: each round is registered to `reference`, any
-loaded round's name (default the recipe's `reference_round`, else the dataset's
-reference round) or an `ExternalReference` holding a ZYX image on the same grid with a
-label. Mixing both kinds raises `ValueError`.
-
-The recipe usually registers a shared stain, with
-`RegistrationSignalConfig("channel", reference_channel=..., moving_channel=...)`
-naming it in each round; the chain found on the stain is applied to every channel. With `checkpoints`, each registered round is saved under
-`other_rounds/<round>/` in the FOV folder, and `FOV.load_registered_round(name)`
-restores it.
-
-`FOV.prepare_morphology(MorphologyConfig(rotation_degrees, recipe, rounds))` prepares
-the morphology images: when the dataset names reference stains, it loads them
-from the reference round's folder and rotates them by `rotation_degrees`; then it
-loads, rotates and registers each round of `rounds` (default: every other round).
-Without a recipe it uses one translation step on the dataset's single reference stain
-and the round's one channel of that name, as the MATLAB `nuclei_registration` does.
-
-## Workflow keys
-
-On the Python backend, the `registration` parameter of the five Python processing rules
-holds the recipe. Each step names a method and gives that config's fields:
-
-```yaml
-backend: python
-rules:
-  rsf_single_fov:
-    parameters:
-      registration:
-        signal: {mode: max}
-        qc: {min_coverage: 0.8}
-        steps:
-          - method: translation
-          - method: demons
-            iterations: [100, 50, 25]
-            recovery: {allowed_errors: [RegistrationEstimationError], alternatives: [{method: tps}]}
-```
-
-`signal`, `warp` and `qc` take the fields of their classes, and `reference_round`, when
-given, must equal the dataset's reference round; YAML lists become tuples. The MATLAB keys
-`global_registration` and `local_registration` raise under `backend: python`. The Python-only rule parameter `reference_image_view` (`{mode: max}`, or
-`{mode: channel, channel: <index or label>}`) chooses the reference image the rule
-writes; the resident subtile rules write none and refuse it.
-The [workflow specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#explicit-registration-recipe) describes the rules.
+{py:class}`~starfinder.registration.RegistrationRecipe` documents the recipe.
+For other rounds, external references and morphology preparation, see
+{py:meth}`~starfinder.dataset.FOV.register`,
+{py:class}`~starfinder.registration.ExternalReference` and
+{py:meth}`~starfinder.dataset.FOV.prepare_morphology`.
+The {doc}`workflow reference <workflow-configuration>` lists workflow keys.
 
 ## Limits
 
-* The reference and moving rounds must share one grid: the same shape, spacing,
-  origin, direction and unit; nothing converts between grids.
-* The translation estimator finds whole voxels.
-* At most one local step per recipe.
-* Rigid, affine and B-spline need at least 16 × 16 in Y and X; demons needs at least
-  4 × 4. In 3D, all four need at least 4 planes. TPS and
-  CPD reject Z=1 and need at least 2 in every axis.
-* Rigid, affine and B-spline sample randomly with `random_seed` (1 by default); the
-  tests check exact repeats at one thread only.
+Registration does not convert between image grids or establish biological accuracy.
+Consult the [algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration-algorithms.md)
+for geometry requirements and method limitations, and
+{py:class}`~starfinder.registration.WarpConfig` for resampling choices.
+
+### Troubleshooting
+
+| Error | When you may see it | What to do |
+| --- | --- | --- |
+| `IncompatibleGeometryError` | Image grids or dimensions do not fit the method | Check image metadata and the method's geometry requirements |
+| `RegistrationBackendUnavailableError` | An optional backend is missing | Install the extra shown in the methods table |
+| `InsufficientLandmarksError` | Landmark estimation lacks usable matches | Inspect the registration signal and consider another method |
+| `RegistrationRejectedError` | Alignment fails a configured quality criterion | Inspect the QC record before adjusting the recipe |
 
 ## How it is checked
 
-Known-answer synthetic tests check that translation, rigid, affine, B-spline and
-demons (on one plane) recover a known shift, rotation, affine map or deformation within
-fixed bounds. All seven methods are checked against the Z=1 and small-Z rules, the
-composition against exact examples, and checkpoints against re-application. They are listed in the
-[registration algorithms record](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration-algorithms.md).
+Known-answer synthetic tests exercise shift, rotation and deformation recovery.
+Separate checks cover transform composition, geometry handling, recovery and
+checkpoint re-application. The
+[algorithms record](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration-algorithms.md#engineering-validation-design-task-group-6)
+describes the validation design.
 
 The full specification is in
 [`design/specs/registration.md`](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/registration.md).

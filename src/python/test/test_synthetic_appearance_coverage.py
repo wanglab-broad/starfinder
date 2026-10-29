@@ -1,6 +1,6 @@
 """Generator checks of the appearance scene on the fixtures their rows name and no earlier module ran (W-520).
 
-docs/synthetic-real-appearance-validation.md, "Generator checks". GA13 (κ and the rim background) and GA17 (types and
+design/validation/synthetic-real-appearance-scene.md, "Generator checks". GA13 (κ and the rim background) and GA17 (types and
 molecules, GN8 to GN12) on ``app_routine``, the three routine appearance presets as generated; GA20's ``app_streams``
 copy with type 2's abundance row changed (the molecules of the other types and the ambient ones unchanged, GN21);
 GA21 on the culture copies of ``app_plane`` and of ``app_morph`` with MT1's drawn round; GA22's subprocess that, beside

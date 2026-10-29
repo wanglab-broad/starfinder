@@ -1,4 +1,4 @@
-"""The six appearance presets of the real-appearance scene (docs/synthetic-real-appearance.md, "Presets", PR1).
+"""The six appearance presets of the real-appearance scene (design/specs/synthetic/real-appearance.md, "Presets", PR1).
 
 One routine and one ``slow`` preset per context, beside the six accepted cellular presets, which stay as they are.
 Each takes the accepted cellular preset of its context and tier unchanged (its grid, spacing, jitter, overlap, seed,
@@ -38,7 +38,7 @@ _REAL_BANKS = {
 # target and threshold are those of W-513's LN rows of the middle 16 planes (tables/visible_share_ln.csv,
 # ln/<FOV>/slab16_z17/DAPI-3D/nuclei-3D): the preset's sample grid holds 16 planes.
 # The culture slow preset stops after 500 refused proposals in a row instead of the prototype's 4,000
-# (docs/synthetic-real-appearance.md, "Presets", the amendment of 2026-10-17): whole cell masks saturate below its
+# (design/specs/synthetic/real-appearance.md, "Presets", the amendment of 2026-10-17): whole cell masks saturate below its
 # target, so the stop by refusals ends its placement, and 4,000 refusals took more than 15 minutes on one CPU.
 _PRESET_SPECS = {
     "appearance-dense3d-v1": dict(
@@ -85,7 +85,7 @@ APPEARANCE_PRESETS = {name: _entry(name) for name in _PRESET_SPECS}
 def appearance_scene_preset(name: str) -> tuple[Codebook, AppearanceSceneConfig]:
     """Return (codebook, config) for an APPEARANCE_PRESETS name: an ``AppearanceSceneConfig``.
 
-    The six presets of docs/synthetic-real-appearance.md ("Presets", PR1). The routine presets
+    The six presets of design/specs/synthetic/real-appearance.md ("Presets", PR1). The routine presets
     ``appearance-dense3d-v1``, ``appearance-tissue2d-v1`` and ``appearance-culture-v1``
     place a fixed count of entries (DN3) of the closed-form bank of their context's routine
     preset (``BankReference(preset=..., n=4)``); they read no real data. The ``slow`` presets

@@ -1,6 +1,6 @@
-"""Test oracle of the real-appearance scene (docs/synthetic-real-appearance-validation.md, "Conventions").
+"""Test oracle of the real-appearance scene (design/validation/synthetic-real-appearance-scene.md, "Conventions").
 
-The bank's part (W-516): written from the formulas of docs/synthetic-real-appearance.md ("Terms", "The appearance
+The bank's part (W-516): written from the formulas of design/specs/synthetic/real-appearance.md ("Terms", "The appearance
 bank", "What an entry carries", "Composition" for the patch rule) and the bank's record alone. It imports nothing
 from ``starfinder.synthetic``; it reads a bank through ``AppearanceBank``'s arrays and record and recomputes, from
 the source arrays, which rule leaves out each label, the plateau and the median over the visible stain of each
@@ -236,7 +236,7 @@ def stored(bank, entry_id):
 
 
 # ------------------------------------------------------------------------------------------------ the label part
-# (W-517) Written from docs/synthetic-real-appearance.md ("Terms", "Augmentation", "Layout", "Truth", "Random
+# (W-517) Written from design/specs/synthetic/real-appearance.md ("Terms", "Augmentation", "Layout", "Truth", "Random
 # streams") and the layout's own record of its draw order; it reads the bank through ``stored`` and recomputes the
 # transforms with its own matrices and inverse, the entries' distances with ``scipy.interpolate``'s linear
 # interpolator on the entry frame (µm), the streams from their descriptors and the labels, territories, masks and
@@ -521,7 +521,7 @@ def widening(bank, entry_id, scale_z, scale_yx):
 
 
 # ------------------------------------------------------------------------------------------------ the composition part
-# (W-518) Written from docs/synthetic-real-appearance.md ("Composition": I = B + κH + S, H2, BG1, BG2, OB1, O8;
+# (W-518) Written from design/specs/synthetic/real-appearance.md ("Composition": I = B + κH + S, H2, BG1, BG2, OB1, O8;
 # "Augmentation": IN2's prefilter) and the truth alone: placements.csv, the bank's stored arrays, background_patches.csv
 # with the lattice the bank's patch settings and Ω give, the closed-form preset's stain background for BG2 given as
 # input (read by the fixtures from their own configuration; this part imports nothing from ``starfinder.synthetic``),

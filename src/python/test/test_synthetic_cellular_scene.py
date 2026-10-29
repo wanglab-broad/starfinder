@@ -1,4 +1,4 @@
-"""Generator checks of the cellular scene's geometry and molecules (docs/synthetic-cellular-scene-validation.md).
+"""Generator checks of the cellular scene's geometry and molecules (design/validation/synthetic-cellular-scene.md).
 
 GN1(b), GN4 to GN12, GN19 and GN21 for lobed nuclei, packing with touching nuclei, territories,
 cell types and molecules by compartment. Labels are recomputed by the test oracle

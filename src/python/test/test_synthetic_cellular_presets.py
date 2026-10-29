@@ -1,4 +1,4 @@
-"""Generator checks of the six context presets (docs/synthetic-cellular-scene-validation.md).
+"""Generator checks of the six context presets (design/validation/synthetic-cellular-scene.md).
 
 GN7 on the presets (``context_routine``, ``context_slow``): K1 for every pair of sites recomputed by the test oracle,
 the placement record, and F2's floor reached, with the reached density read back from the saved ``context.json``.

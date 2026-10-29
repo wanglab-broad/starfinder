@@ -1,4 +1,4 @@
-"""Golden digests of the saved sample presets (docs/synthetic-cellular-scene.md, "Opt-in").
+"""Golden digests of the saved sample presets (design/specs/synthetic/cellular-scene.md, "Opt-in").
 
 The richer cellular scene is opt-in: a sample scene without its settings is exactly
 today's. This file pins what ``save_sample_scene`` writes for ``sample-tiny-v1`` and
@@ -12,7 +12,7 @@ an existing preset fails here. Digests are of content, by group of files:
   ``numpy_version`` and without the ``files`` map of ``sample.json`` (the SHA-256 of the
   TIFF files as written); the array digests they hold stay in.
 
-Repeatability is that of the formed model (docs/synthetic-specification.md, "Random
+Repeatability is that of the formed model (design/specs/synthetic/amplicon-scene.md, "Random
 streams"): exact for a pinned NumPy build on one CPU. NumPy's vectorised functions differ
 in the last bit between CPUs, so the floating-point values of the CSV files and the JSON
 records are compared to 6 significant digits, with magnitudes below 1e-9 taken as 0

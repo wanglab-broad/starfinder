@@ -1,4 +1,4 @@
-"""W-393's measures of a nuclear stain and its labels, rebuilt for GN23 (docs/synthetic-cellular-scene-validation.md).
+"""W-393's measures of a nuclear stain and its labels, rebuilt for GN23 (design/validation/synthetic-cellular-scene.md).
 
 Written from the definitions of W-393 ``notes.md`` §2 ("Real measurements", "Bright regions"), not from its scripts;
 the functions take arrays and the voxel spacing (µm), so they apply to a real image or to a generated one alike:
@@ -257,7 +257,7 @@ def composite_shares(cells, nuclear, amplicon, ids):
 
 # ---------------------------------------------------------------------------------------------- a generated scene
 
-# The target ranges of GN23 (docs/synthetic-cellular-scene-validation.md, "Target ranges of the generator checks",
+# The target ranges of GN23 (design/validation/synthetic-cellular-scene.md, "Target ranges of the generator checks",
 # TR1 to TR12): per quantity the TR row, the kind of object it is measured on (V12) and the range by context.
 TARGETS = {
     "touching share": ("TR1", "nuclei", dict(dense3d=(0.44, 0.57), tissue2d=(0.76, 0.82), culture=(0.33, 0.72))),

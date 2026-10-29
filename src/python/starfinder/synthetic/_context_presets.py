@@ -1,4 +1,4 @@
-"""The six cellular presets of the cellular scene (docs/synthetic-cellular-scene.md, "Presets", option PS1).
+"""The six cellular presets of the cellular scene (design/specs/synthetic/cellular-scene.md, "Presets", option PS1).
 
 One routine and one ``slow`` preset per context of the stains-and-contexts decision: dense 3D tissue, 2D tissue
 (projection samples) and the sparse culture. Each value is the page's table of its context; the routine and ``slow``
@@ -128,7 +128,7 @@ def _stains(spec, background):
 def cellular_scene_preset(name: str) -> tuple[Codebook, CellularSceneConfig]:
     """Return (codebook, config) for a CELLULAR_PRESETS name: a ``CellularSceneConfig``.
 
-    The six presets of docs/synthetic-cellular-scene.md ("Presets", option PS1):
+    The six presets of design/specs/synthetic/cellular-scene.md ("Presets", option PS1):
     ``context-dense3d-v1`` and ``context-dense3d-slow-v1`` (dense 3D tissue, the LN grid),
     ``context-tissue2d-v1`` and ``context-tissue2d-slow-v1`` (2D tissue, a monolayer for
     projection samples; the ``slow`` preset at 0.18927 µm in Y and X) and

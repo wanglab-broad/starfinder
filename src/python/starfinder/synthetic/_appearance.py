@@ -1,6 +1,6 @@
 """Composition, output, the morphology round and the truth of the real-appearance scene.
 
-See docs/synthetic-real-appearance.md ("Composition", "Truth", "The morphology round", "Random streams").
+See design/specs/synthetic/real-appearance.md ("Composition", "Truth", "The morphology round", "Random streams").
 ``generate_appearance_scene`` places bank entries on the acquisition layout of an unchanged ``CellularSceneConfig``
 (``_appearance_layout._place_appearance``), runs the sample scene's generation with the placed objects as its cells,
 one ordinary cell with one nucleus each (the accepted cell types and molecules of ``_context._Context``, placed by
@@ -51,7 +51,7 @@ from ._sample import _cast, _generate, _layout, _real, _streams
 #: Version of the appearance truth files (appearance.json, placements.csv, background_patches.csv); any change to a
 #: column, a key or a rule bumps it.
 APPEARANCE_TRUTH_VERSION = "1"
-# The version of the appearance presets (docs/synthetic-real-appearance.md, "Presets"), recorded in appearance.json.
+# The version of the appearance presets (design/specs/synthetic/real-appearance.md, "Presets"), recorded in appearance.json.
 _APPEARANCE_PRESET_VERSION = "appearance-presets-v1"
 _LIGHT = ("objects", "none")
 _BACKGROUNDS = ("patches", "closed-form")
@@ -66,7 +66,7 @@ _PATCH_COLUMNS = ["stain", "lattice_z", "lattice_y", "lattice_x", "patch_id", "s
 
 @dataclass(frozen=True)
 class CompositionConfig:
-    """How the stains of the appearance scene are composed (docs/synthetic-real-appearance.md, "Composition").
+    """How the stains of the appearance scene are composed (design/specs/synthetic/real-appearance.md, "Composition").
 
     ``light="objects"`` adds the out-of-focus light H2: each placed object's own excess
     blurred by a Gaussian of ``light_sigma_um`` (Z, Y, X) µm in the sample frame, scaled once
@@ -102,7 +102,7 @@ class CompositionConfig:
 
 @dataclass(frozen=True)
 class AppearanceSceneConfig:
-    """A cellular scene with real appearance (docs/synthetic-real-appearance.md, E1).
+    """A cellular scene with real appearance (design/specs/synthetic/real-appearance.md, E1).
 
     ``context`` is an unchanged ``CellularSceneConfig``: its acquisition, seed, split and scene
     key, cell types, molecules, territory growth law and morphology round are used; its
@@ -138,7 +138,7 @@ class AppearanceSceneConfig:
 
 @dataclass
 class AppearanceScene:
-    """A generated appearance scene (docs/synthetic-real-appearance.md, "Truth").
+    """A generated appearance scene (design/specs/synthetic/real-appearance.md, "Truth").
 
     ``context`` is a ``CellularScene`` whose tables and layout are those of the placed objects
     (one ordinary cell with one nucleus each, the shape columns null, the closed-form stain
@@ -1041,7 +1041,7 @@ def _point_evaluator(scene, bank):
 def save_appearance_scene(scene: AppearanceScene, directory: Path | str) -> Path:
     """Write an appearance scene to a new or empty directory and return its path.
 
-    Layout (docs/synthetic-real-appearance.md, AT2): the ``save_cellular_scene`` layout of
+    Layout (design/specs/synthetic/real-appearance.md, AT2): the ``save_cellular_scene`` layout of
     ``scene.context`` (``nuclei.csv`` and ``cells.csv`` with their columns, the shape columns
     null; ``lobes.csv``, ``harmonics.csv``, ``stain_objects.csv``, ``bright_regions.csv`` and
     ``unevenness.csv`` empty; ``fovs/<fov_id>/stains/<name>.ome.tif`` the composed stains;

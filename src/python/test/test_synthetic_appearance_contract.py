@@ -1,8 +1,8 @@
 """Contract checks of the appearance scene's truth schema, persistence and refusals
-(docs/synthetic-real-appearance-validation.md, GA21 with the dataset of GA16, and the refusals and names of GA2 and
+(design/validation/synthetic-real-appearance-scene.md, GA21 with the dataset of GA16, and the refusals and names of GA2 and
 GA3 for the new entry).
 
-``save_appearance_scene`` writes the AT2 layout of docs/synthetic-real-appearance.md ("Truth schema"): the
+``save_appearance_scene`` writes the AT2 layout of design/specs/synthetic/real-appearance.md ("Truth schema"): the
 ``save_cellular_scene`` layout with the shape columns null and the closed-form tables empty, ``placements.csv``,
 ``background_patches.csv`` and ``appearance.json`` with its versions and the SHA-256 of every file. The tables reload
 equal, and the labels rebuilt by the test oracle from the saved files and the bank alone equal the saved label images.

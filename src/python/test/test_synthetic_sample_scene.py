@@ -1,4 +1,4 @@
-"""The multi-FOV synthetic sample scene against its page (docs/synthetic-sample-scene.md).
+"""The multi-FOV synthetic sample scene against its page (design/specs/synthetic/sample-scene.md).
 
 Label functions, the stain signal, nominal positions, bounds and stream draws
 are recomputed here from the saved tables and the page's formulas; the

@@ -1,4 +1,4 @@
-"""Fixtures of the real-appearance scene's generator checks (docs/synthetic-real-appearance-validation.md, "Fixtures").
+"""Fixtures of the real-appearance scene's generator checks (design/validation/synthetic-real-appearance-scene.md, "Fixtures").
 
 The bank's part (W-516): ``bank_cases`` and ``fall_off_cases`` are hand-made label and stain arrays with a known outcome;
 ``cf_banks`` are the closed-form banks of the three routine context presets (CF1, ``n`` = 4: the seeds 42 to 45, the
@@ -244,7 +244,7 @@ def write_config(config, path):
 
 
 # ------------------------------------------------------------------------------------------------ the layout's part
-# (W-517) docs/synthetic-real-appearance-validation.md, "Fixtures": ``app_tiny`` (sample-tiny-v1, contact 1.0, DN3) in
+# (W-517) design/validation/synthetic-real-appearance-scene.md, "Fixtures": ``app_tiny`` (sample-tiny-v1, contact 1.0, DN3) in
 # three copies on the closed-form banks, ``app_plane`` (the same on ``scene_plane``), ``app_morph`` (the culture copy
 # with a morphology round), ``app_crowded`` and ``app_streams`` (copies of the dense 3D one), ``app_cu_offset`` and
 # ``app_cases`` (hand-made banks). Each DN3 count is the count reached by the same configuration when placement first
@@ -395,7 +395,7 @@ def case_placements(rows):
 
 
 # ---------------------------------------------------------------------------------------------- the composition's part
-# (W-518) docs/synthetic-real-appearance-validation.md, "Fixtures": the generated scenes of ``app_tiny`` (float64, cast
+# (W-518) design/validation/synthetic-real-appearance-scene.md, "Fixtures": the generated scenes of ``app_tiny`` (float64, cast
 # off) and ``app_tiny_uint8`` (the 8-bit cast), ``app_plane``, ``app_morph``, ``app_coarse`` (the dense 3D copy at
 # twice the bank's source spacing in Y and X, 0.388796 µm, so that IN2's prefilter is active on every object),
 # ``app_bg1`` (BG1 from the closed-form bank's patches instead of BG2), ``app_dn1`` (DN1 with its target and threshold
@@ -519,7 +519,7 @@ def bg2_settings(preset, name):
 
 
 # -------------------------------------------------------------------------------------------------- the presets' part
-# (W-519) docs/synthetic-real-appearance-validation.md, "Fixtures": ``app_routine`` (the three routine appearance
+# (W-519) design/validation/synthetic-real-appearance-scene.md, "Fixtures": ``app_routine`` (the three routine appearance
 # presets on their closed-form banks, DN3, as generated), ``real_banks`` (the three bank files with their build
 # records and configurations, read through STARFINDER_APPEARANCE_BANKS), ``app_slow`` and ``app_slow_acquired`` (the
 # ``slow`` presets on the real banks, and the 2D tissue and culture presets at the acquired pixel, each generated in its

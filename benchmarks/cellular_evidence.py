@@ -1,6 +1,6 @@
 """The cellular checks GN23 and the ``slow`` and acquired cases of GN24 as an evidence script (W-536).
 
-These checks of docs/synthetic-cellular-scene-validation.md ran in the controller's ``pytest-slow-synthetic``
+These checks of design/validation/synthetic-cellular-scene.md ran in the controller's ``pytest-slow-synthetic``
 selection until W-536 moved them to the Chapter II evidence project: GN23 compares the ``slow`` context presets and
 their acquired-pixel variants with W-393's target ranges (TR1 to TR12), and GN24 generates each ``slow`` preset and
 each acquired-pixel variant in its own process within RG1 (one CPU, 16 GiB and 3,600 s per step). They read no real
@@ -46,14 +46,14 @@ ACQUIRED = {"context-tissue2d-slow-v1": (0.346255, 0.094635, 0.094635),
             "context-culture-slow-v1": (0.346255, 0.194398, 0.194398)}
 CONTEXT = {"dense3d": ("DAPI", False), "tissue2d": ("PI", True), "culture": ("DAPI", True)}
 # Compared quantities that GN23 reports with their value, range and count and does not assert: TR7 of dense 3D
-# tissue, a known limit of the scene (docs/synthetic-cellular-scene-validation.md, the amendment of 2026-10-15 after
+# tissue, a known limit of the scene (design/validation/synthetic-cellular-scene.md, the amendment of 2026-10-15 after
 # the TR table).
 KNOWN_LIMITS = {("dense3d", "within-nucleus CV")}
 
 
 def parse(argv):
     parser = argparse.ArgumentParser(
-        description="Run GN23 and the slow and acquired cases of GN24 of docs/synthetic-cellular-scene-validation.md, "
+        description="Run GN23 and the slow and acquired cases of GN24 of design/validation/synthetic-cellular-scene.md, "
                     "moved out of the test suite by W-536. Reads no real data; RG1 allows one CPU, 16 GiB and "
                     "3,600 s per step.",
         epilog="Run from src/python: uv run python ../../benchmarks/cellular_evidence.py --output <run dir>/cellular")

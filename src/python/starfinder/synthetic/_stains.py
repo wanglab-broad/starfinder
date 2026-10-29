@@ -1,4 +1,4 @@
-"""Stains and the morphology round of the cellular scene (docs/synthetic-cellular-scene.md, "Stains", "The morphology
+"""Stains and the morphology round of the cellular scene (design/specs/synthetic/cellular-scene.md, "Stains", "The morphology
 round").
 
 Every stain is a point function of the sample position, built from the scene's truth tables: the nucleus, territory

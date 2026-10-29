@@ -1,7 +1,7 @@
 """Chain checks of the cellular scene with real appearance (W-487): the §2.9 methods through each context's route.
 
-docs/synthetic-cellular-scene-validation.md ("Chain checks", CD0 to CD4, CT0 to CT4, CU0 to CU4) as amended by
-docs/synthetic-real-appearance-validation.md ("Consequences for the chain checks", with CD5, CT5 and CU5): one chain
+design/validation/synthetic-cellular-scene.md ("Chain checks", CD0 to CD4, CT0 to CT4, CU0 to CU4) as amended by
+design/validation/synthetic-real-appearance-scene.md ("Consequences for the chain checks", with CD5, CT5 and CU5): one chain
 per context on the appearance presets (VA1), each step its own test so that a miss in one step does not hide the
 others. It is an engineering check of the wiring from stain to segmentation, assignment, assembly and report against
 the scene's truth; it claims no accuracy and compares no methods. The truth nuclei and culture cells of the `slow`
@@ -78,7 +78,7 @@ from .test_segmentation_validation import l12_agreement
 
 pytestmark = [pytest.mark.integration, pytest.mark.validation]
 
-# --- The thresholds (docs/synthetic-cellular-scene-validation.md, "Thresholds and where they come from"), as the
+# --- The thresholds (design/validation/synthetic-cellular-scene.md, "Thresholds and where they come from"), as the
 # gate W-515 approved them for the appearance presets, unchanged.
 TH1_MATCHED = 0.9        # matched fraction at IoU >= 0.5 of the interior truth nuclei, at least
 TH2_MERGED = 0.10        # merged truth nuclei over the truth count, at most
@@ -123,7 +123,7 @@ EXTENSION_PX = {"nucleus": dict(median=10, min_area=10, dilation=5, fill_holes="
 MORPHOLOGY = "organelle"
 REPORT_PAIRS = (("balanced-01", "balanced-03"), ("balanced-01", "balanced-02"))   # exclusive, co-expressed (C8)
 
-# --- The models (docs/synthetic-cellular-scene-validation.md, "Execution conditions"): each file's SHA-256 as W-392's
+# --- The models (design/validation/synthetic-cellular-scene.md, "Execution conditions"): each file's SHA-256 as W-392's
 # inventory/models.json records it (runs/W-392/20261009T0323Z-inputs/), checked before the first call.
 MODELS = {
     "3D_spleen": dict(variable="STARFINDER_STARDIST_3D_SPLEEN", folder="", path="", files={

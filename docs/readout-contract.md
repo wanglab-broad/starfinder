@@ -245,7 +245,7 @@ readout, the background, the score, deduplication, checkpoints and reruns; exten
 checks run on calibrated synthetic scenes. The validation design is in the
 [algorithms specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout-algorithms.md#engineering-validation-design-task-group-6).
 
-The full specification is in
+Full specification:
 [`design/specs/readout.md`](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/readout.md).
 
 ```{toctree}

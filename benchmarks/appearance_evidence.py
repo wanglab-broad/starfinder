@@ -1,6 +1,6 @@
 """The real-bank appearance checks GA23, GA24 (``slow`` part), GA26 and GA27 as an evidence script (W-536).
 
-These checks of docs/synthetic-real-appearance-validation.md ran in the controller's ``pytest-slow-synthetic``
+These checks of design/validation/synthetic-real-appearance-scene.md ran in the controller's ``pytest-slow-synthetic``
 selection until W-536 moved them to the Chapter II evidence project. They read the three real banks, rebuild them from
 real images, and allow up to 3,600 s and 16 GiB per step (RG1), so they are evidence workloads rather than software
 checks. The bodies are the tests of ``src/python/test/test_synthetic_appearance_presets.py`` at revision
@@ -54,7 +54,7 @@ W392_INVENTORY = Path("/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmar
                       "inventory")
 # SRC2's held-out image of each bank, never a source.
 HELD_OUT = {"ln-sample1-v1": "Position048", "tissue2d-v1": "crop_y18432_x0", "culture3d-v1": "Position397"}
-# SEL1's counts per source image, W-513 tables/bank_selection_<context>.csv (docs/synthetic-real-appearance.md,
+# SEL1's counts per source image, W-513 tables/bank_selection_<context>.csv (design/specs/synthetic/real-appearance.md,
 # "Selection of entries"): labels, left out by rule 1 (by the Z end alone, in LN where that rule applies), by rule 2,
 # by rule 3, by rule 4, kept; and the plateau.
 W513 = {
@@ -85,7 +85,7 @@ GA23_ROWS = {"dense3d": {"TR1", "TR2", "TR2v", "TR3", "TR4", "TR5", "TR6", "TR7"
 def parse(argv):
     parser = argparse.ArgumentParser(
         description="Run the real-bank appearance checks GA23, GA24 (slow presets, acquired variants, bank builds), "
-                    "GA26 and GA27 of docs/synthetic-real-appearance-validation.md, moved out of the test suite by "
+                    "GA26 and GA27 of design/validation/synthetic-real-appearance-scene.md, moved out of the test suite by "
                     "W-536. Reads the real banks through STARFINDER_APPEARANCE_BANKS; RG1 allows one CPU, 16 GiB and "
                     "3,600 s per step.",
         epilog="Run from src/python: STARFINDER_APPEARANCE_BANKS=<bank directory> uv run python "

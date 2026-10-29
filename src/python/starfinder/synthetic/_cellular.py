@@ -1,6 +1,6 @@
 """Shape functions of the cellular scene: lobed nuclei, extents, contact distances, labels.
 
-See docs/synthetic-cellular-scene.md ("Nucleus shape", "Packing", "Cell territories").
+See design/specs/synthetic/cellular-scene.md ("Nucleus shape", "Packing", "Cell territories").
 A nucleus is a union of ellipsoids (lobe 1 optionally perturbed by real spherical
 harmonics, N2); every function here is a closed form of the sample position and the
 drawn values, so labels stay point functions evaluated at voxel centres. This module

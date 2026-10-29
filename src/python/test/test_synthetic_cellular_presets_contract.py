@@ -1,6 +1,6 @@
-"""The six context presets against the page's tables (docs/synthetic-cellular-scene-validation.md, GN2, preset part).
+"""The six context presets against the page's tables (design/validation/synthetic-cellular-scene.md, GN2, preset part).
 
-Every value of ``cellular_scene_preset`` is compared with the PS1 tables of docs/synthetic-cellular-scene.md
+Every value of ``cellular_scene_preset`` is compared with the PS1 tables of design/specs/synthetic/cellular-scene.md
 ("Presets": the common parameters and the table of each context, with the ``slow`` pixels of the decision of
 2026-10-15), written here from the page, not from the module; no preset uses the ``boundary`` source (O2).
 Floats are compared within the project's absolute 1e-9 (the page states no other bound for a configuration value).

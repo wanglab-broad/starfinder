@@ -411,7 +411,7 @@ def route_config(*, route=None, dimensionality="projection", projection="max", s
 # --- scene_plane (W-427) ----------------------------------------------------------------------------------------
 
 def scene_plane_config():
-    """The single-plane case of docs/synthetic-sample-scene.md on ``sample-tiny-v1`` (seed 42): FOVs of 1 × 36 × 36
+    """The single-plane case of design/specs/synthetic/sample-scene.md on ``sample-tiny-v1`` (seed 42): FOVs of 1 × 36 × 36
     and jitter (0, 1.5, 1.5) voxels, everything else unchanged; no preset is added."""
     from dataclasses import replace
 

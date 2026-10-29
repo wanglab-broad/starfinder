@@ -1,7 +1,7 @@
 """The ``slow`` tier of the cellular chain checks CD, CT and CU as an evidence script (W-603).
 
-These checks of docs/synthetic-cellular-scene-validation.md ("Chain checks", as
-docs/synthetic-real-appearance-validation.md amends them) ran in the controller's ``learned`` chain selections and
+These checks of design/validation/synthetic-cellular-scene.md ("Chain checks", as
+design/validation/synthetic-real-appearance-scene.md amends them) ran in the controller's ``learned`` chain selections and
 in ``pytest-slow-other`` until W-603 moved them to the Chapter II evidence project. They run the whole chain on the
 appearance ``slow`` presets, whose banks are built from real images: about 2 h on one CPU and up to 13 GiB per step
 (W-542's F5 measurement), so they are evidence workloads rather than software checks. The suite keeps the routine tier
@@ -93,7 +93,7 @@ def node_id(test, seed):
 
 def parse(argv):
     parser = argparse.ArgumentParser(
-        description="Run the slow tier of the chain checks CD, CT and CU of docs/synthetic-cellular-scene-validation.md "
+        description="Run the slow tier of the chain checks CD, CT and CU of design/validation/synthetic-cellular-scene.md "
                     "on the real banks, moved out of the test suite by W-603. Each step runs in its own process "
                     "under /usr/bin/time -v; W-542 measured about 2 h on one CPU and up to 13 GiB.",
         epilog="Run from src/python: uv run python ../../benchmarks/cellular_chain_evidence.py --output <run dir>/chain")

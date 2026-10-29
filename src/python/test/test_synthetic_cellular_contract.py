@@ -1,4 +1,4 @@
-"""Configuration, refusals and persistence of the cellular scene (docs/synthetic-cellular-scene-validation.md).
+"""Configuration, refusals and persistence of the cellular scene (design/validation/synthetic-cellular-scene.md).
 
 GN2 (the fields of the existing configurations as at 943bb6b, the new names and fields), GN3 (the
 refusals of the geometry and molecule parts) and GN22 (the truth schema and ``save_cellular_scene``)
@@ -25,7 +25,7 @@ from .cellular_scenes import SHAPES, config_of, plane, scene, tiny
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.contract]
 
-# The columns of "Truth schema" of docs/synthetic-cellular-scene.md, in order.
+# The columns of "Truth schema" of design/specs/synthetic/cellular-scene.md, in order.
 TABLES = {
     "lobes": ["nucleus_id", "lobe", "offset_z", "offset_y", "offset_x", "axial_radius", "lateral_radius",
               "elongation", "angle"],

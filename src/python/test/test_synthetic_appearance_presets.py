@@ -1,4 +1,4 @@
-"""Generator checks of the routine appearance presets (docs/synthetic-real-appearance-validation.md).
+"""Generator checks of the routine appearance presets (design/validation/synthetic-real-appearance-scene.md).
 
 GA8 (labels against the placements), GA9 (ownership and anchors), GA10 (placement and its stop), GA11 (territories) and
 GA18 (projection truth) on ``app_routine``, the three routine appearance presets on their closed-form banks (DN3), as

@@ -1,5 +1,5 @@
 """Generator checks of the appearance scene's composition, output, morphology round and molecules
-(docs/synthetic-real-appearance-validation.md, "Generator checks").
+(design/validation/synthetic-real-appearance-scene.md, "Generator checks").
 
 GA12 (composition), GA13 (out-of-focus light and the rim background), GA14 (brightness within a scene: the scene's
 part), GA15 (8-bit output), GA16 (the morphology round), GA17 (molecules and types), the stain parts of GA19 (``Z=1``;
@@ -593,7 +593,7 @@ def test_ga17_zero_spread_gives_the_median_mean(copy):
 @pytest.mark.parametrize("copy", ["tissue2d", "culture", pytest.param("dense3d", marks=slow)])
 def test_ga17_rendering_identity_of_the_reference_round(copy):
     """GN11: the amplicon images of the reference round, without FOV noise, equal the rendering identity of
-    docs/synthetic-sample-scene.md: each molecule's Gaussian kernel (formed_oracle.kernel_radius, cut at a normalized
+    design/specs/synthetic/sample-scene.md: each molecule's Gaussian kernel (formed_oracle.kernel_radius, cut at a normalized
     radius² of 16) times its brightness, summed into its colour's channel; the formed generator renders the appearance
     scene's molecules unchanged."""
     book, config, scene, _ = generated(f"{copy}-types-light-quiet")

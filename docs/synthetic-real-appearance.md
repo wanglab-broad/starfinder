@@ -40,7 +40,7 @@ truth tables to `save_cellular_dataset`, works on it.
   matching cellular preset at a few seeds, without noise. Nothing is read from disk.
 * **Variation.** Each placed entry is rotated, may be flipped, and is scaled and
   brightened by up to 10 %.
-* **Layout.** Entries are proposed one at a time, mostly against an object already
+* **Layout.** Entries are tried one at a time, mostly against an object already
   placed. A proposal is refused if it overlaps another object by more than 1 %, falls
   mostly outside the sample, or (culture) puts two nuclei in contact. Placement stops
   at a target count or visible stain share. Cells grow from the placed nuclei in dense
