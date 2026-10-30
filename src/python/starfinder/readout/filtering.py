@@ -178,9 +178,9 @@ def filter_reads(
     config : ReadFilterConfig
         Read acceptance predicates.
     codebook : Codebook or None
-        Codebook providing the encoding and segment ends for endpoint checks. ``None``
-        provides no segment ends and uses the default two-base table for the
-        whole-sequence shortcut.
+        Optional codebook reference for endpoint checks. ``None`` provides no
+        segment ends and uses the default two-base table for the whole-sequence
+        shortcut.
 
     Returns
     -------

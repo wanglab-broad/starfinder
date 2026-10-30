@@ -326,7 +326,7 @@ def summarize_reads(reads, *, intensity_result: IntensityExtractionResult | None
     Returns
     -------
     dict
-        JSON-safe read population summary with counts and available measurement
+        Read population summary with counts and available measurement
         statistics.
 
     Notes
