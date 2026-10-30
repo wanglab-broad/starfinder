@@ -290,8 +290,8 @@ group and its Nextflow process, or the reason it is not covered:
 
 | Task kind | Command | Snakemake | Nextflow | Reason when not covered |
 | --- | --- | --- | --- | --- |
-| `summarize` | `summarize` | group `summarize.<step>` (wildcards `sample`, `step`, `fov`) | `SUMMARIZE` | — |
-| `merge` | `merge` | group `merge.<step>` (`sample`, `step`), local rule | `MERGE` | — |
+| `summarize` | `summarize` | group `summarize.<step>` (wildcards `sample`, `step`, `fov`) | `SUMMARIZE_<p>`, one alias per supplied-step position up to 3 ([below](#choice-repeated-summarize-and-merge-stages)) | — |
+| `merge` | `merge` | group `merge.<step>` (`sample`, `step`), local rule | `MERGE_<p>`, as `SUMMARIZE_<p>` | — |
 | `fov` | `fov` | group `fov` (`sample`, `fov`) | `FOV` | — |
 | `tile_global` | `tile-global` | group `tile_global` (`sample`, `fov`), `registered.h5` `temp()` unless kept | `TILE_GLOBAL` | — |
 | `tile` | `tile` | group `tile` (`sample`, `fov`, `tile`) | `TILE` | — |
@@ -308,7 +308,8 @@ group and its Nextflow process, or the reason it is not covered:
 | `compare` | `compare` | group `compare` (no wildcard), local rule | `COMPARE` | — |
 
 The plan itself is not a task kind: Snakemake runs it at parse time, Nextflow as its first step
-(`PLAN`, [below](#the-plan-in-nextflow)). The MATLAB legacy workflow is Snakemake only (D1).
+(`PLAN`, [below](#the-plan-in-nextflow)); neither are Nextflow's two `VERIFY` jobs, which check
+completion ([below](#-resume-and-the-completion-rule-d8)). The MATLAB legacy workflow is Snakemake only (D1).
 
 ### Fiji: the BigStitcher task in Snakemake only
 
@@ -453,11 +454,31 @@ folder and emits it, which is the one file Nextflow tracks per task.
 
 `main.nf` reads the manifest with `groovy.json.JsonSlurper` and builds, per kind, a channel of
 `(task_id, task)` from `manifest.tasks`. A task starts when every task it `needs` has emitted its
-record: the edges `(need, task)` are joined with the emitted `(id, record)` of every upstream
-process and grouped per task with `groupTuple` and `groupKey(task_id, needs.size())`, so tasks of
-one FOV proceed without waiting for the other FOVs. A task without `needs` starts at once. Kinds
-feed each other in the fixed order of the contract's graph (`orchestration.md`, "The task graph from
-data dependencies").
+record. One producer often feeds several tasks (a `tile_global` feeds every `tile` of its FOV, a
+`merge` every `fov` of its sample, a `fov` its `assign` and the sample's `stitch`), so the channel of edges `(need, task)` holds the same key many times. `join` does not
+support duplicate keys on tuples (Nextflow's operator reference, `join`); `combine` with `by` is the
+operator that pairs every matching item, one output per edge. The edges are therefore combined with the
+emitted `(id, record)` of every upstream process and grouped per task with a `groupKey` that carries the
+number of its needs, so that `groupTuple` emits the task as soon as its last need is done and tasks of
+one FOV proceed without waiting for the other FOVs:
+
+```groovy
+// done: (id, record) emitted once by each upstream process, mixed into one channel
+ready = tasks_of_kind
+    .filter { id, t -> t.needs }
+    .flatMap { id, t -> t.needs.collect { need -> tuple(need, id, t) } }  // one item per edge
+    .combine(done, by: 0)                                                   // (need, id, t, record), one per edge
+    .map { need, id, t, record -> tuple(groupKey(id, t.needs.size()), t, record) }
+    .groupTuple()                                                           // emitted when all needs are done
+    .map { key, ts, records -> tuple(key.toString(), ts[0], records) }
+    .mix(tasks_of_kind.filter { id, t -> !t.needs }.map { id, t -> tuple(id, t, []) })
+```
+
+This uses tuples and the operators of Nextflow 26.10.4 as they are, with no preview feature; the
+record form of `join` with static typing, which emits every matching combination, would need the
+typed-workflow preview and is not used. Kinds feed each other in the fixed order of the contract's
+graph (`orchestration.md`, "The task graph from data dependencies"), with one alias per position
+where a kind feeds itself or a kind that feeds it back (below).
 
 A `segment` task may need another `segment` task (the seeds' run, ordered by seeds, D6), and a DSL2
 process cannot feed itself. `main.nf` computes each segment task's seed depth from its `needs` (0
@@ -472,6 +493,27 @@ depth is ordering, the engine's (the boundary).
 | A. One alias of `SEGMENT` per seed depth, up to 3, deeper chains refused (recommended) | Three includes | Covers nucleus → cell and one more level; the refusal names the chain |
 | B. One process per segmentation run name | Run names are configuration values; includes are static | Not expressible without generating `main.nf` |
 | C. Nextflow's experimental process recursion | An experimental feature | May change between Nextflow releases |
+
+Recommendation: A.
+
+A preprocessing recipe may hold more than one step with `fit: supplied`. The `summarize` tasks of a
+later supplied step then need the earlier step's `merge` (the contract, "The two-pass statistics
+tasks", item 3), so `SUMMARIZE` feeds `MERGE`, which feeds `SUMMARIZE` again: a cycle between two
+processes, which DSL2 cannot express, as for seeded segmentation runs. `main.nf` computes each
+statistics task's position `p` (0 for the first supplied step, 1 for the next) from its `needs`, includes
+the pair once per position (`SUMMARIZE_0` and `MERGE_0`, `SUMMARIZE_1` and `MERGE_1`, `SUMMARIZE_2` and
+`MERGE_2`), each pair fed by the `MERGE` of the position before it, and refuses before any task a recipe
+with more than three supplied steps, naming the step. Snakemake needs no change: its graph follows the
+groups `summarize.<step>` and `merge.<step>` through their files.
+
+#### Choice: repeated summarize and merge stages
+
+| Option | Cost | Consequence |
+| --- | --- | --- |
+| A. One alias pair per supplied-step position, up to 3, deeper recipes refused naming the step (recommended) | Six includes | Covers every recipe in use (one supplied step; two with a later step summarized on the earlier one's statistics) and one more; each sample's FOVs still run their `summarize` tasks in parallel |
+| B. One `STATISTICS` process per sample that runs every pass of every supplied step in one job | A task the manifest does not have | Breaks the contract's one command per task; the passes of one sample run one after another in one job, the summaries of its FOVs no longer in parallel |
+| C. Nextflow's experimental process recursion | An experimental feature | May change between Nextflow releases |
+| D. Refuse more than one supplied step under Nextflow | None | A D1 exclusion for a configuration Snakemake runs, without an engine reason |
 
 Recommendation: A.
 
@@ -519,36 +561,77 @@ maxRetries params.max_retries
 
 ### `-resume` and the completion rule (D8)
 
-Nextflow's `-resume` reuses a task whose work folder and hash match: the hash covers the process
-script and the inputs, here the `needs`' records, staged by path, size and modification time. The
-completion rule of D8 stays the authority:
+**What `-resume` detects and what it does not.** Nextflow's `-resume` reuses a task when the hash of
+its process script and inputs matches a cached task whose work folder still holds its outputs. Here a
+task's inputs are its `needs`' emitted records, staged from the producers' work folders and hashed by
+path, size and modification time (the default `cache` mode), and the one output Nextflow tracks is the
+copy of the task record in the work folder ([above](#the-directory-and-the-modules)). So `-resume`
+reruns a task when its script, its task entry or a producer's emitted record changes, or when its own
+work folder is gone. It does not see the output root: a deleted or truncated `molecules.csv`, a deleted
+`report/index.html` or a deleted task record under `roots.output` changes no input and no work folder,
+so the task is reused and emits its cached record copy, and so is every consumer, whose inputs (those
+copies) are unchanged too. A consumer's command, which would check its `needs`' records and declared
+inputs (the contract, "Common arguments"), never runs; a terminal task (`compare`, or the last task of
+a selected run) has no consumer at all. A cache that outlived its outputs therefore passes silently
+under `-resume` alone.
 
-* A task that `-resume` skips emits its cached record; its consumers run their command, which checks
-  that every `needs` task has a record with `status: succeeded` in the output root and that every
-  declared input exists (the contract, "Common arguments"), and refuses with exit 2 otherwise. A
-  cache that outlived its outputs therefore fails loudly at the first consumer, never silently.
-* A task that reruns removes its earlier record first and writes it last (the contract,
-  "Completion"), so a consumer cannot read a half-made predecessor.
-* `-resume` is not verified resume: `execution.resume_from_checkpoint` (the `fov` task's resume from
-  its stages against `run.json`) is a setting of the command and works the same under both engines.
+What still holds: a task that runs removes its earlier record first and writes it last (the contract,
+"Completion"), so a consumer that does run never reads a half-made predecessor; and `-resume` is not
+verified resume (`execution.resume_from_checkpoint`, the `fov` task's resume from its stages against
+`run.json`, is a setting of the command and works the same under both engines). Snakemake needs no
+counterpart: its rule groups declare every output, and Snakemake reruns a task whose output is missing.
+
+**The design (option D below).** One more command, `starfinder workflow verify --manifest M
+[--hash] [--final]`, applies D8's completion rule to every task of the manifest from the output root
+alone: the task record says `succeeded`, and every output it lists exists with its recorded size (with
+`--hash`, its SHA-256). Outputs the manifest marks `temporary` and the merge removed are exempt. Two
+uncached processes run it (`cache false`, one local job each):
+
+1. **`VERIFY_BEFORE`, after `PLAN` and before fan-out**, writes `workflow/verify.json` and emits one token
+   per task: the SHA-256 of the task's manifest entry when the task is complete or shows no trace of a
+   run (no record, no failed record, no declared output), and `rerun:<SHA-256 of verify.json>` when it is
+   damaged (a record whose outputs are missing or differ in size or hash, outputs without a record, a
+   failed record, or a task the previous run's final check listed as missing). Every process takes its
+   task's token as a `val` input, so the token is part of the cache hash: a complete task keeps its
+   token and its cache; a damaged task misses the cache and reruns, and its consumers rerun because its
+   emitted record changes. A task that ran once and is intact gets the same token it ran with (the
+   entry's hash), so a second invocation reruns nothing.
+2. **`VERIFY_AFTER`, after the last task**, runs with `--final`: every task of the manifest must be
+   complete, or the run fails (exit 1) naming each task that is not and recording them in
+   `workflow/verify.json`. This catches the one case `VERIFY_BEFORE` cannot tell from a task never run:
+   a task whose record and every output were deleted while its work folder remains, which `-resume`
+   reuses; the next invocation's `VERIFY_BEFORE` reads the list and gives those tasks a `rerun:` token.
+
+D8's rule stays the authority: completion is decided by the `verify` command on the records and files
+in the output root, the same rule the commands apply; Nextflow's cache only saves rerunning a task that
+the rule already finds complete. `verify` is a contract addition
+([additions to the contract](#additions-to-the-contract)).
 
 #### Choice: Nextflow's cache and a deleted output
 
+The cost of a check is what it reads: the measured direct outputs of one full-size FOV (aging
+Position400 at `9a0ec77`, `runs/W-644/20261029T200039Z-9454d4c8/results/scratch/cleanup_aging9a0ec77.files.csv`)
+are `reference.tif` 151,001,250 bytes, `molecules.csv` 25,017,203 bytes and the candidates table
+24,581,676 bytes, about 200 MB per FOV with the records and stages; the chunked checkpoint (5.4 GB per
+FOV) is temporary and exempt.
+
 | Option | Cost | Consequence |
 | --- | --- | --- |
-| A. `-resume` as above; a deleted output is found by the consumer's check (exit 2), and the user reruns that task without its cache (recommended) | A manual step after deleting outputs by hand | No second completion rule; the contract's check is the guard |
-| B. `storeDir` on `workflow/tasks/`, so the presence of the record skips the task | The record is written in place by the command and moved again by Nextflow | Two writers of one file |
-| C. A `starfinder workflow status` command run first in each process, which exits 0 at once when the record and its hashes match | One more command and a hash of every output per check | Robust to deleted outputs; hashes large outputs at every resume |
+| A. `-resume` alone, the gap documented, with the manual remedy: rerun without `-resume`, or delete the work folders of the affected tasks (`nextflow log <run> -f workdir,tag`) and resume | None | A deleted output under `roots.output` goes unnoticed until someone reads it; a terminal output never; D8 holds only for tasks that run |
+| B. `cache 'deep'` on the `needs` records | Nextflow reads each staged record (a few kB) | The records are hashed by content instead of path, size and time, so a producer that reran with a new record reruns its consumers even if the file's time was kept; it sees nothing under `roots.output`, so no deleted output is caught: the gap of A stays |
+| C. A status check inside each process: every process `cache false`, its script first runs `starfinder workflow verify --task <id>` and exits 0 when the task is complete | One scheduler job per task at every invocation (on UGER thousands of queued jobs for a resumed full dataset, each waiting in the queue to stat or hash about 200 MB per FOV) | Catches every deletion, terminal tasks included, and reruns the damaged task; Nextflow's cache is off, and a consumer of a rerun producer is not rerun by Nextflow but only by its own check |
+| D. Two uncached `VERIFY` jobs, before fan-out and at the end, with a token per task in the cache hash (recommended) | Two local jobs per invocation; a stat of every listed output (a few thousand for a dataset; seconds), or with `--hash` a read of about 200 MB per FOV (on `/stanley` about 2 s per FOV at 100 MB/s, about 35 min for 1,000 FOVs) | Catches a deleted, truncated or resized output, a deleted record and a failed task before fan-out and reruns exactly the damaged tasks and their consumers; the end check makes a task deleted whole fail the run loudly, and the next invocation reruns it; a same-size corruption is caught only with `--hash` |
 
-Recommendation: A; C is the remedy if deleted outputs prove common.
+Recommendation: D, with sizes by default and `--hash` before results are delivered.
 
 ### The stub-run
 
 Each process's `stub:` block runs `nextflow/bin/stub_task.sh`, which reads the task from the
 manifest and writes empty files at its declared outputs and a task record with `status: succeeded`
 and `"stub": true`, without the package. `nextflow run nextflow/main.nf -stub-run -profile local
---manifest <manifest>` then exercises the channels, the ordering, the seed depths and the refusals
-on every manifest the plan writes, in seconds and without data; it is the validation design's N
+--manifest <manifest>` then exercises the channels (including a producer that feeds several
+tasks), the ordering, the seed depths, the supplied-step positions and the refusals on every manifest
+the plan writes, in seconds and without data; it is the validation design's N
 layer, in its own CI job with Java and Nextflow.
 
 ### The profiles
@@ -908,7 +991,7 @@ Jiahao says the backup is still used.
 
 ## Additions to the contract
 
-The engines need four additions to the contract of W-643 (Proposed). Each is listed for the gate;
+The engines need five additions to the contract of W-643 (Proposed). Each is listed for the gate;
 the implementation of task group 2 lands them with the contract.
 
 | Addition | Why | Options | Recommendation |
@@ -917,6 +1000,7 @@ the implementation of task group 2 lands them with the contract.
 | The manifest's `groups`: per group the kind, wildcards, output templates, record and log templates, and the temporary outputs; each task names its group | Snakemake needs output patterns ([the choice](#choice-how-snakemake-knows-each-tasks-files)) | A. In the manifest, checked by the plan; B. derived by `tasks.smk` from the tasks (logic in an engine file) | A |
 | A `temporary` flag on declared outputs | Snakemake's `temp()` for the chunked checkpoint | A. Per group in `groups`; B. per task | A |
 | The plan reads one configuration file | `workflow.configfiles` may hold several, and `--config` overrides change nothing in the file the plan reads | A. The Snakefile refuses several files and `--config` for the Python backend, naming the edit; B. the plan merges them | A (the contract's changed statement for `workflow-configuration.md:864-866`) |
+| A command `verify` (`--manifest`, `--task`, `--hash`, `--final`) that applies D8's completion rule from the output root and, for Nextflow, writes the per-task tokens | Nextflow's `-resume` does not see the output root ([the choice](#choice-nextflows-cache-and-a-deleted-output)) | A. A package command; B. a check written in `main.nf` (completion logic in an engine file); C. none (the gap documented) | A |
 
 ## The site pages for task group 6
 
