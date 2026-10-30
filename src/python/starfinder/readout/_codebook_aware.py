@@ -8,8 +8,9 @@ is both unique and well supported by the raw channel intensities.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
-from math import exp, log
+from collections.abc import Iterable, Iterator
+from itertools import combinations, product
+from math import comb, exp, log
 
 import numpy as np
 import pandas as pd
@@ -213,12 +214,37 @@ def _unknown_count(observed: str, unknown_chars: str) -> int:
     return sum(char in unknown_chars for char in observed)
 
 
+def _neighbour_count(observed: str, unknown: list[int], edits: int, labels: str) -> int:
+    """Number of sequences _neighbours yields."""
+    known = [k for k in range(len(observed)) if k not in unknown]
+    others = len(labels) - 1 if all(observed[k] in labels for k in known) else len(labels)
+    return len(labels) ** len(unknown) * sum(
+        comb(len(known), j) * others**j for j in range(min(edits, len(known)) + 1)
+    )
+
+
+def _neighbours(observed: str, unknown: list[int], edits: int, labels: str) -> Iterator[str]:
+    """Each sequence of labels at the unknown positions and at most edits other known ones, once."""
+    chars = list(observed)
+    known = [k for k in range(len(chars)) if k not in unknown]
+    for j in range(min(edits, len(known)) + 1):
+        for changed in combinations(known, j):
+            positions = [*unknown, *changed]
+            choices = [labels] * len(unknown) + [[c for c in labels if c != chars[k]] for k in changed]
+            for fill in product(*choices):
+                mutated = chars.copy()
+                for k, c in zip(positions, fill):
+                    mutated[k] = c
+                yield "".join(mutated)
+
+
 def _candidate_sequences(
     wta_seq: str,
     one_error_index: dict[str, list[str]],
     seq_to_gene: dict[str, str],
     unknown_chars: str = "MN",
     max_hamming: int = 1,
+    labels: str | None = None,
 ) -> list[str]:
     """Return valid codebook candidates near an observed WTA sequence.
 
@@ -234,11 +260,19 @@ def _candidate_sequences(
         Labels counted as unknown edits, default ``MN``.
     max_hamming : int
         Maximum known mismatches plus unknown positions, default 1.
+    labels : str or None
+        Every color label of the codebook's sequences (``1234``), as
+        :func:`starfinder.readout._build_one_error_index` validates them. With
+        labels, the candidates are looked up among the read's nearby sequences
+        when they are fewer than the codebook's entries; otherwise, and without
+        labels, every codebook sequence is compared with the read.
 
     Returns
     -------
     list[str]
         Exact match alone when present; otherwise sorted nearby sequences.
+        A read with more unknown positions than max_hamming, or with none at
+        max_hamming 0, has no nearby sequence and returns at once.
 
     Raises
     ------
@@ -250,9 +284,16 @@ def _candidate_sequences(
     if wta_seq in seq_to_gene:
         return [wta_seq]
 
-    unknowns = _unknown_count(wta_seq, unknown_chars)
+    unknown = [k for k, char in enumerate(wta_seq) if char in unknown_chars]
+    unknowns = len(unknown)
     if unknowns == 0 and max_hamming == 1:
         return one_error_index.get(wta_seq, [])
+    # Not an exact match: at max_hamming 0 no sequence is near, nor with more unknown positions than edits.
+    if unknowns > max_hamming or (unknowns == 0 and max_hamming == 0):
+        return []
+    edits = max_hamming - unknowns
+    if labels is not None and _neighbour_count(wta_seq, unknown, edits, labels) <= len(seq_to_gene):
+        return sorted(seq for seq in _neighbours(wta_seq, unknown, edits, labels) if seq in seq_to_gene)
 
     candidates = []
     for seq in seq_to_gene:
@@ -279,6 +320,39 @@ def _sequence_score(
         probability = float(probs_for_spot[channel, round_idx])
         score += -log(max(probability, eps))
     return score
+
+
+def _candidate_scores(
+    probs_for_spot: np.ndarray,
+    candidates: list[str],
+    eps: float = 1e-12,
+) -> list[tuple[str, float, float]]:
+    """(seq, score, geomean_prob) of each candidate, in the order of :func:`_score_candidates`.
+
+    The rows of :func:`_score_candidates` without its table, for the per-read
+    loops of the decoders; the same checks and ValueErrors.
+    """
+    if probs_for_spot.ndim != 2:
+        raise ValueError(
+            f"Expected one-spot probabilities shape (C, R), got {probs_for_spot.shape}"
+        )
+    n_channels, n_rounds = probs_for_spot.shape
+    rows = []
+    for seq in candidates:
+        if len(seq) != n_rounds:
+            raise ValueError(
+                f"Candidate sequence {seq!r} has length {len(seq)}, expected {n_rounds}"
+            )
+        for color in seq:
+            channel = int(color) - 1
+            if channel < 0 or channel >= n_channels:
+                raise ValueError(
+                    f"Candidate sequence {seq!r} uses channel {color}, "
+                    f"outside 1..{n_channels}"
+                )
+        score = _sequence_score(probs_for_spot, seq, eps)
+        rows.append((seq, score, exp(-score / n_rounds) if n_rounds else np.nan))
+    return sorted(rows, key=lambda row: (row[1], row[0]))
 
 
 def _score_candidates(
@@ -316,30 +390,12 @@ def _score_candidates(
     if not candidates:
         return pd.DataFrame(columns=["seq", "score", "geomean_prob"])
 
-    n_channels, n_rounds = probs_for_spot.shape
-    rows = []
-    for seq in candidates:
-        if len(seq) != n_rounds:
-            raise ValueError(
-                f"Candidate sequence {seq!r} has length {len(seq)}, expected {n_rounds}"
-            )
-        for color in seq:
-            channel = int(color) - 1
-            if channel < 0 or channel >= n_channels:
-                raise ValueError(
-                    f"Candidate sequence {seq!r} uses channel {color}, "
-                    f"outside 1..{n_channels}"
-                )
-        score = _sequence_score(probs_for_spot, seq, eps)
-        rows.append(
-            {
-                "seq": seq,
-                "score": score,
-                "geomean_prob": exp(-score / n_rounds) if n_rounds else np.nan,
-            }
-        )
-
-    return pd.DataFrame(rows).sort_values(["score", "seq"]).reset_index(drop=True)
+    rows = _candidate_scores(probs_for_spot, candidates, eps)
+    return (
+        pd.DataFrame(rows, columns=["seq", "score", "geomean_prob"])
+        .sort_values(["score", "seq"])
+        .reset_index(drop=True)
+    )
 
 
 def _base_row(
@@ -464,11 +520,18 @@ def _decode_codebook_aware(
     probs = _channel_probabilities(intensity_tensor)
     wta_seqs, diagnostics = _wta_color_sequences(probs)
     one_error_index = _build_one_error_index(seq_to_gene, n_channels, n_rounds)
+    labels = "".join(str(i + 1) for i in range(n_channels))
 
     values = np.asarray(intensity_tensor, dtype=np.float64)
     values = np.where(np.isfinite(values), values, 0.0)
     values = np.clip(values, 0.0, None)
     mean_total_intensities = values.sum(axis=1).mean(axis=1)
+    # Column arrays, read per spot below instead of a pandas row per spot.
+    min_round_margins = diagnostics["min_round_margin"].to_numpy(dtype=np.float64)
+    round_margins = [
+        diagnostics[f"round{round_idx}_margin"].to_numpy(dtype=np.float64)
+        for round_idx in range(n_rounds)
+    ]
 
     rows = []
     for spot_idx, spot_id in enumerate(spot_ids):
@@ -478,7 +541,7 @@ def _decode_codebook_aware(
             spot_id,
             wta_seq,
             gene_wta,
-            float(diagnostics.iloc[spot_idx]["min_round_margin"]),
+            float(min_round_margins[spot_idx]),
             float(mean_total_intensities[spot_idx]),
         )
         probs_for_spot = probs[spot_idx]
@@ -509,24 +572,20 @@ def _decode_codebook_aware(
             seq_to_gene,
             unknown_chars=unknown_chars,
             max_hamming=max_hamming,
+            labels=labels,
         )
         candidates = [seq for seq in candidates if seq != wta_seq]
         if not candidates:
             rows.append(_reject(row, "no_candidate"))
             continue
 
-        scores = _score_candidates(probs_for_spot, candidates)
-        best = scores.iloc[0]
-        score_delta = (
-            float(scores.iloc[1]["score"] - best["score"])
-            if len(scores) > 1
-            else np.inf
-        )
+        scores = _candidate_scores(probs_for_spot, candidates)
+        best_seq, best_score, best_geomean = scores[0]
+        score_delta = float(scores[1][1] - best_score) if len(scores) > 1 else np.inf
         if np.isfinite(score_delta) and (score_delta <= 1e-12 or score_delta < min_score_delta):
             rows.append(_reject(row, "ambiguous_candidate"))
             continue
 
-        best_seq = str(best["seq"])
         known_changed_rounds = [
             round_idx
             for round_idx, (observed, decoded) in enumerate(zip(wta_seq, best_seq))
@@ -543,10 +602,7 @@ def _decode_codebook_aware(
         corrected_margin = np.nan
         if known_changed_rounds:
             corrected_margin = float(
-                max(
-                    diagnostics.iloc[spot_idx][f"round{round_idx}_margin"]
-                    for round_idx in known_changed_rounds
-                )
+                max(round_margins[round_idx][spot_idx] for round_idx in known_changed_rounds)
             )
             if (
                 min_corrected_round_margin is not None
@@ -569,7 +625,7 @@ def _decode_codebook_aware(
                 rows.append(_reject(row, "correction_penalty_too_high"))
                 continue
 
-        geomean_prob = float(best["geomean_prob"])
+        geomean_prob = float(best_geomean)
         if geomean_prob < min_geomean_prob:
             rows.append(_reject(row, "geomean_prob_too_low"))
             continue
@@ -583,7 +639,7 @@ def _decode_codebook_aware(
                 "call_type": call_type,
                 "hamming_to_wta": len(known_changed_rounds),
                 "corrected_rounds": ",".join(str(idx) for idx in corrected_rounds),
-                "score": float(best["score"]),
+                "score": float(best_score),
                 "score_delta": score_delta,
                 "geomean_prob": geomean_prob,
                 "corrected_round_margin": corrected_margin,
