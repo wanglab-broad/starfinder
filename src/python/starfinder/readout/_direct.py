@@ -21,6 +21,14 @@ _COLUMNS = ("round", "channel", "gene_id")
 class DirectPanel:
     """The gene of each (round, channel) of a direct-readout assay.
 
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Direct-assay gene assignments in columns round, channel and gene_id, using
+        labels for rounds and channels.
+
+    Notes
+    -----
     table has the columns round, channel (a channel label) and gene_id, all
     nonempty strings. Each (round, channel) appears once and each gene once; a
     repeated one raises ValueError naming it. A (round, channel) may be absent
@@ -83,6 +91,22 @@ def load_direct_panel(path: str | Path, *, round_labels: tuple[str, ...],
                       channel_labels: tuple[str, ...]) -> DirectPanel:
     """Read a direct panel CSV with the header round,channel,gene_id (UTF-8 BOM accepted).
 
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the direct-panel CSV.
+    round_labels : tuple[str, ...]
+        Unique, non-empty sequencing-round labels available to the panel.
+    channel_labels : tuple[str, ...]
+        Unique, non-empty channel labels available to the panel.
+
+    Returns
+    -------
+    DirectPanel
+        Validated panel mapping acquisition round and channel labels to genes.
+
+    Notes
+    -----
     Rounds must be among round_labels (the sequencing rounds) and channels among
     channel_labels. Errors identify the source row; a repeated (round, channel) or
     gene names it and both rows. Blank lines are skipped.

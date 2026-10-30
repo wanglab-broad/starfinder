@@ -107,6 +107,24 @@ class ReadFilterConfig:
 class ReadFilteringResult:
     """Complete annotated table, accepted view and nullable summary fractions.
 
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Read table annotated with acceptance flags and rejection reasons.
+    spot_namespace : str
+        Namespace of the spot identities in the table.
+    config : ReadFilterConfig
+        Settings used for read acceptance.
+    counts : dict[str, int]
+        Counts of total, accepted and rejected reads.
+    fractions : dict[str, float or None]
+        Population fractions for acceptance and any endpoint check; ``None`` denotes
+        an undefined fraction.
+    diagnostics : dict
+        Filtering diagnostics.
+
+    Notes
+    -----
     The repr is a one-line accepted fraction and rejection-reason count. It
     never reports precision or accuracy, which require truth.
     """
@@ -152,6 +170,26 @@ def filter_reads(
 ) -> ReadFilteringResult:
     """Apply independent predicates without extracting or decoding again.
 
+    Parameters
+    ----------
+    decoding_result : ReadDecodingResult or ReadScoringResult or ReadDeduplicationResult
+        Read calls to filter, including retained scoring and deduplication
+        annotations.
+    config : ReadFilterConfig
+        Read acceptance predicates.
+    codebook : Codebook or None
+        Codebook providing the encoding and segment ends for endpoint checks. ``None``
+        provides no segment ends and uses the default two-base table for the
+        whole-sequence shortcut.
+
+    Returns
+    -------
+    ReadFilteringResult
+        Annotated read table with acceptance flags, rejection reasons and population
+        summaries.
+
+    Notes
+    -----
     With a codebook whose layout declares segment ends, each read's observed
     colors are cut into the layout's segments and each segment with ends is
     checked on its own: decoded from each allowed first base, it must end in the

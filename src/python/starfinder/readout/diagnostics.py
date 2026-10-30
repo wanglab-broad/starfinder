@@ -109,6 +109,26 @@ def inspect_read(intensity_result: IntensityExtractionResult, reads, spot_id: st
                  reference: Codebook | DirectPanel) -> pd.DataFrame:
     """One read's measurements and colors, one row per (round, channel), in round-major order.
 
+    Parameters
+    ----------
+    intensity_result : IntensityExtractionResult
+        Extracted sums and retained background measurements for the read.
+    reads : ReadDecodingResult or ReadScoringResult or ReadDeduplicationResult or ReadFilteringResult or Mapping
+        Read result or mapping of stage names to retained results, such as
+        FOV.results.
+    spot_id : str
+        Identifier of the spot to inspect.
+    reference : Codebook or DirectPanel
+        Assay reference used for calling the reads.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Measurements and read annotations in round-major order, with one row per round
+        and channel.
+
+    Notes
+    -----
     Columns: spot_id, round, channel, color (the channel's color symbol, missing
     in readout mode direct), valid, box_voxels (voxels the box summed), sum (the
     extracted neighborhood sum), background (grey levels per voxel),
@@ -222,6 +242,27 @@ def plot_read(intensity_result: IntensityExtractionResult, reads, spot_id: str, 
               reference: Codebook | DirectPanel, ax=None):
     """Draw inspect_read's table with matplotlib and return the Figure.
 
+    Parameters
+    ----------
+    intensity_result : IntensityExtractionResult
+        Extracted sums and retained background measurements for the read.
+    reads : ReadDecodingResult or ReadScoringResult or ReadDeduplicationResult or ReadFilteringResult or Mapping
+        Read result or mapping of stage names to retained results, such as
+        FOV.results.
+    spot_id : str
+        Identifier of the spot to inspect.
+    reference : Codebook or DirectPanel
+        Assay reference used for calling the reads.
+    ax : matplotlib.axes.Axes or None
+        Axes for the plot. ``None`` creates a new figure and axes.
+
+    Returns
+    -------
+    matplotlib.figure.Figure or matplotlib.figure.SubFigure
+        New figure when ax is None, otherwise the supplied axes' parent figure.
+
+    Notes
+    -----
     One group of bars per round: each channel's sum, with the background sum
     (background x box_voxels) as a black tick; the observed channel is outlined
     and the assigned channel is marked with a star. ax None draws on a new
@@ -266,6 +307,30 @@ def summarize_reads(reads, *, intensity_result: IntensityExtractionResult | None
                     spots: SpotFindingResult | None = None, distance_voxels: float | None = None) -> dict:
     """Population summary of a read table: a JSON-safe dict of counts, quantiles and medians.
 
+    Parameters
+    ----------
+    reads : ReadDecodingResult or ReadScoringResult or ReadDeduplicationResult or ReadFilteringResult or Mapping
+        Read result or mapping of stage names to retained results, such as
+        FOV.results.
+    intensity_result : IntensityExtractionResult or None
+        Intensities for measurement summaries. ``None`` uses the mapping's extraction
+        result when present, otherwise omits the intensity summary.
+    spots : SpotFindingResult or None
+        Candidates for cross-channel pair counts. ``None`` uses the mapping's
+        spot_finding result when present, otherwise omits pair counts.
+    distance_voxels : float or None
+        Cross-channel pair distance in voxel index units. ``None`` uses the retained
+        deduplication setting, or the default DeduplicationConfig distance when that
+        stage is absent.
+
+    Returns
+    -------
+    dict
+        JSON-safe read population summary with counts and available measurement
+        statistics.
+
+    Notes
+    -----
     Keys: readout_mode; reads; call_status (each status, zeros included),
     failure_reason (nonempty reasons) and call_type counts; genes and entries
     (assigned reads per gene_id and per entry_id); qc_score (per call_type of
@@ -379,6 +444,28 @@ def explain_read(reads, spot_id: str, *, intensity_result: IntensityExtractionRe
                  reference: Codebook | DirectPanel | None = None) -> pd.DataFrame:
     """The ordered decisions of one read and their inputs, one row per decision.
 
+    Parameters
+    ----------
+    reads : ReadDecodingResult or ReadScoringResult or ReadDeduplicationResult or ReadFilteringResult or Mapping
+        Read result or mapping of stage names to retained results, such as
+        FOV.results.
+    spot_id : str
+        Identifier of the spot whose decisions to inspect.
+    intensity_result : IntensityExtractionResult or None
+        Intensities for decision details. ``None`` uses the mapping's extraction
+        result when present, otherwise leaves intensity-dependent details unavailable.
+    reference : Codebook or DirectPanel or None
+        Assay reference for lookup and encoding details. ``None`` leaves
+        reference-dependent details unavailable.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Decision details for the read, with stages, values, limits and comparison
+        outcomes.
+
+    Notes
+    -----
     Columns: step (1, 2, ...), stage (decoding or assignment, end_bases,
     scoring, deduplication, filtering), item, value and limit (float64, NaN
     when not numeric), relation (how value is compared with limit), passed

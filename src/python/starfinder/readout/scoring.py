@@ -49,6 +49,27 @@ class ReadScoreConfig:
 class ReadScoringResult:
     """The read table with the score columns appended; every row and identity unchanged.
 
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Read table annotated with the shared quality score, its components and scoring
+        reasons.
+    spot_namespace : str
+        Namespace of the spot identities in the table.
+    channel_labels : tuple[str, ...]
+        Acquisition channel labels in extraction-axis order.
+    round_labels : tuple[str, ...]
+        Acquisition round labels in extraction-axis order.
+    config : ReadScoreConfig
+        Settings used for the shared quality score.
+    counts : dict[str, int]
+        Counts of total reads, scored reads, unassigned reads and assigned reads with
+        unavailable background.
+    readout_mode : str
+        Readout mode, ``multiplexed`` or ``direct``; the default is ``multiplexed``.
+
+    Notes
+    -----
     The score columns are qc_score (lower ranks as more reliable),
     qc_ambiguity_max, qc_signal_to_background, qc_rounds (float64; NaN for a
     read without a score) and qc_reason ("" when scored, no_assignment or
@@ -120,6 +141,33 @@ def score_reads(
 ) -> ReadScoringResult:
     """Score every assigned read; append the score columns without changing any identity.
 
+    Parameters
+    ----------
+    decoding_result : ReadDecodingResult
+        Read calls to score.
+    intensity_result : IntensityExtractionResult
+        Extracted sums and background measurements for the reads.
+    reference : Codebook or DirectPanel
+        Assay reference used for calling the reads.
+    config : ReadScoreConfig
+        Shared quality-score settings.
+
+    Returns
+    -------
+    ReadScoringResult
+        Read table with shared quality scores, their components, scoring reasons and
+        population counts.
+
+    Raises
+    ------
+    TypeError
+        Wrong argument types, or a reference of the other readout mode.
+    ValueError
+        The intensities have no background measurements (rerun extraction), or
+        identities or labels differ between the reads, intensities and reference.
+
+    Notes
+    -----
     The score of an assigned read (design D1 of the readout design study,
     bgcorr_probability) is the decoder's probability NLL of the assigned entry
     recomputed on background-subtracted sums: per used round,
@@ -138,14 +186,6 @@ def score_reads(
 
     reference is the Codebook (multiplexed) or the DirectPanel (direct) the reads
     were called with.
-
-    Raises
-    ------
-    TypeError
-        Wrong argument types, or a reference of the other readout mode.
-    ValueError
-        The intensities have no background measurements (rerun extraction), or
-        identities or labels differ between the reads, intensities and reference.
     """
     # W-278 design D1
     if not isinstance(decoding_result, ReadDecodingResult) or not isinstance(
