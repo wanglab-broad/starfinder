@@ -503,6 +503,24 @@ class WorkflowConfig:
 def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> WorkflowConfig:
     """Validate and translate one shared rule; never mutate shared MATLAB keys.
 
+    Parameters
+    ----------
+    config : dict
+        Shared workflow configuration containing acquisition settings and rule
+        parameters.
+    rule : str
+        Rule to translate: ``"rsf_single_fov"``, ``"gr_single_fov_subtile"``,
+        ``"lrsf_single_fov_subtile"``, ``"deep_create_subtile"`` or
+        ``"deep_rsf_subtile"``.
+
+    Returns
+    -------
+    WorkflowConfig
+        Translated dataset, pipeline, execution and reference-output settings,
+        with codebook encoding and layout.
+
+    Notes
+    -----
     Other rules/top-level acquisition/downstream keys are shared with MATLAB.
     Unknown fields in this Python rule's parameters raise instead of disappearing.
     With backend: python the rule takes one dialect, the native keys: the

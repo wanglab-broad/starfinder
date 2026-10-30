@@ -114,6 +114,59 @@ def _check_qc(qc, config, transform):
 class FOV:
     """Mutable per-FOV coordinator. Public operations own the algorithms.
 
+    Parameters
+    ----------
+    dataset : Dataset
+        Shared sample configuration and reference data.
+    fov_id : str
+        FOV identifier used in input paths, output paths and spot namespaces.
+    images : dict[str, numpy.ndarray]
+        Resident ZYXC images keyed by round name; the default is empty.
+    snapshots : dict[str, dict[str, numpy.ndarray]]
+        Round names mapped to named ZYXC preprocessing images in that round's
+        current coordinates; the default is empty.
+    metadata : dict[str, ImageMetadata]
+        Spatial metadata keyed by resident image name; the default is empty.
+    registration_results : dict[str, list[RegistrationResult]]
+        Ordered registration results keyed by moving round; the default is
+        empty.
+    registration_attempts : dict[str, list[dict]]
+        Registration attempt records keyed by moving round; the default is
+        empty.
+    registration_chains : dict[str, TransformChain]
+        Applied transform chains keyed by moving round; the default is empty.
+    registration_record : dict
+        Registration semantics, recipe summary and per-round warp records; the
+        default is empty.
+    spot_result : SpotFindingResult or None
+        Detected spots with their identities; None represents absent detections.
+    subtile_id : int or None
+        One-based subtile identifier; None denotes the whole FOV.
+    intensity_result : IntensityExtractionResult or None
+        Extracted spot intensities; None represents an absent extraction result.
+    decoding_result : ReadDecodingResult or None
+        Decoded reads; None represents an absent decoding result.
+    filtering_result : ReadFilteringResult or None
+        Read filtering result; None represents an absent filtering result.
+    scoring_result : ReadScoringResult or None
+        Read quality scores; None represents an absent scoring result.
+    deduplication_result : ReadDeduplicationResult or None
+        Read duplicate annotations; None represents an absent deduplication
+        result.
+    load_diagnostics : dict[str, dict]
+        Image loading and geometry-operation diagnostics keyed by image name;
+        the default is empty.
+    preprocessing_record : dict
+        Preprocessing recipe, step records and snapshot transform records; the
+        default is empty.
+    segmentation_results : dict[str, SegmentationResult]
+        Segmentation results keyed by run name; the default is empty.
+    assignment_results : dict[str, AssignmentResult]
+        Molecule assignment results keyed by assignment name; the default is
+        empty.
+
+    Notes
+    -----
     Stores round images/metadata, recipe snapshots (per round, snapshot name
     to image, in the round's current coordinates), structured scientific
     results, ordered registration results and attempts, the TransformChain
@@ -177,6 +230,11 @@ class FOV:
 
     def encoding_table(self) -> pd.DataFrame:
         """The barcode encoding table of the dataset codebook (:meth:`Dataset.encoding_table`).
+
+        Returns
+        -------
+        pandas.DataFrame
+            Loaded codebook encoding table with bases, color and channel columns.
 
         Raises
         ------
@@ -427,7 +485,20 @@ class FOV:
 
     @_log_step
     def normalize_min_max(self, *, config=MinMaxNormalizationConfig('uint8', (0, 255)), rounds=None):
-        """Min-max normalize selected rounds with an explicit output policy (normalize_min_max)."""
+        """Min-max normalize selected rounds with an explicit output policy (normalize_min_max).
+
+        Parameters
+        ----------
+        config : MinMaxNormalizationConfig
+            Intensity normalization and output policy.
+        rounds : list[str] or None
+            Round names to process; None selects dataset.rounds.all_rounds.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+        """
         from starfinder.preprocessing import normalize_min_max
         self._apply_to_rounds(lambda image: normalize_min_max(image, config=config), rounds)
         return self
@@ -436,6 +507,23 @@ class FOV:
     def match_histogram(self, *, config=HistogramMatchingConfig(), rounds=None, reference=None):
         """Match selected rounds to one reference channel; retain its pre-match copy.
 
+        Parameters
+        ----------
+        config : HistogramMatchingConfig
+            Histogram matching settings, including the reference channel.
+        rounds : list[str] or None
+            Round names to process; None selects dataset.rounds.all_rounds.
+        reference : numpy.ndarray or None
+            ZYX reference intensity image. None takes a copy of
+            config.reference_channel from the resident reference round.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Notes
+        -----
         None uses channel config.reference_channel of the reference round.
         """
         from starfinder.preprocessing import match_histogram
@@ -446,21 +534,60 @@ class FOV:
 
     @_log_step
     def correct_background(self, *, config=ReconstructionConfig(), rounds=None):
-        """Correct the background of selected rounds by morphological reconstruction (correct_background)."""
+        """Correct the background of selected rounds by morphological reconstruction (correct_background).
+
+        Parameters
+        ----------
+        config : ReconstructionConfig
+            Morphological reconstruction settings for background correction.
+        rounds : list[str] or None
+            Round names to process; None selects dataset.rounds.all_rounds.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+        """
         from starfinder.preprocessing import correct_background
         self._apply_to_rounds(lambda image: correct_background(image, config=config), rounds)
         return self
 
     @_log_step
     def filter_tophat(self, *, config=TophatConfig(), rounds=None):
-        """Apply public tophat to selected rounds."""
+        """Apply public tophat to selected rounds.
+
+        Parameters
+        ----------
+        config : TophatConfig
+            Tophat filtering settings.
+        rounds : list[str] or None
+            Round names to process; None selects dataset.rounds.all_rounds.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+        """
         from starfinder.preprocessing import filter_tophat
         self._apply_to_rounds(lambda image: filter_tophat(image, config=config), rounds)
         return self
 
     @_log_step
     def project_image(self, *, config=ProjectionConfig(), rounds=None):
-        """Project selected rounds, retaining singleton Z and source mapping."""
+        """Project selected rounds, retaining singleton Z and source mapping.
+
+        Parameters
+        ----------
+        config : ProjectionConfig
+            Z projection settings for the resident round images.
+        rounds : list[str] or None
+            Resident image names to project; None selects the keys of images.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+        """
         from starfinder.preprocessing import project_image
         if config.axis != 'z':
             raise ValueError('FOV rounds stay ZYXC; only a z projection applies to them')
@@ -954,6 +1081,21 @@ class FOV:
                    device: str = "cpu") -> FOV:
         """Detect reference-round spots, or the spots of a plan's rounds, with explicit config and FOV identity.
 
+        Parameters
+        ----------
+        config : SpotFindingConfig or SpotFindingPlan
+            Pipeline spot-finding settings, optionally wrapped in a plan with
+            channel overrides and detection rounds.
+        device : str
+            Execution device for spot finding: ``"cpu"``.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Notes
+        -----
         config is a config of a SPOT_FINDING_METHODS method with
         pipeline=True, or a SpotFindingPlan of one; channel_labels None is
         filled from dataset.channel_order, and override channels must be
@@ -1024,6 +1166,21 @@ class FOV:
     def extract_intensities(self, *, config=NeighborhoodSumConfig(), rounds=None):
         """Extract labeled intensities; decoding is a separate reusable stage.
 
+        Parameters
+        ----------
+        config : NeighborhoodSumConfig
+            Spot-neighborhood intensity extraction settings.
+        rounds : list[str] or None
+            Round names in extraction order; None selects
+            dataset.rounds.sequencing_rounds.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Notes
+        -----
         In readout mode direct each candidate is read in its own round only
         (see :func:`starfinder.readout.extract_intensities`).
         """
@@ -1069,6 +1226,18 @@ class FOV:
     def decode_reads(self, *, config=WtaDecoderConfig(diagnostics=True)):
         """Decode (multiplexed) or assign (direct) the stored intensities; retain every spot identity.
 
+        Parameters
+        ----------
+        config : WtaDecoderConfig, CodebookAwareDecoderConfig or DirectDecoderConfig
+            Read decoding settings for the dataset's readout mode.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Notes
+        -----
         In readout mode multiplexed a spot table with a ``round`` column
         (detection in several rounds) raises ValueError naming the readout
         mode. In readout mode direct, config must be a
@@ -1093,6 +1262,18 @@ class FOV:
     def score_reads(self, *, config=ReadScoreConfig()):
         """Add the shared read-QC score to the stored reads, from the stored intensities and background.
 
+        Parameters
+        ----------
+        config : ReadScoreConfig
+            Read quality scoring settings.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Notes
+        -----
         The reference is the dataset codebook (multiplexed) or direct panel
         (direct). Identities are never changed (see
         :func:`starfinder.readout.score_reads`). Intensities without background
@@ -1115,6 +1296,18 @@ class FOV:
     def deduplicate_reads(self, *, config=DeduplicationConfig()):
         """Mark cross-channel reads of one amplicon as duplicates of one representative read.
 
+        Parameters
+        ----------
+        config : DeduplicationConfig
+            Cross-channel read deduplication settings.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Notes
+        -----
         The reads are the scored reads when scoring ran, otherwise the decoded
         reads; the candidates without a ``round`` column were detected in the
         reference round. Nothing is removed or changed: the deduplication columns
@@ -1140,6 +1333,18 @@ class FOV:
     def filter_reads(self, *, config=ReadFilterConfig()):
         """Rerun explicit read predicates without decoding or image access.
 
+        Parameters
+        ----------
+        config : ReadFilterConfig
+            Read acceptance predicates.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Notes
+        -----
         The reads are the deduplicated reads when deduplication ran, else the
         scored reads when scoring ran (their score and deduplication columns are
         kept), otherwise the decoded reads. The dataset codebook, when loaded,
@@ -1158,6 +1363,23 @@ class FOV:
             checkpoints: CheckpointConfig | None = None):
         """Run one scientific sequence with batch or streaming residency.
 
+        Parameters
+        ----------
+        config : PipelineConfig
+            Scientific processing stages and their settings.
+        execution : ExecutionConfig
+            Image residency and execution device settings.
+        checkpoints : CheckpointConfig or None
+            Checkpoint and run-record persistence settings. None disables these
+            writes.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Notes
+        -----
         The run processes the reference round and the sequencing rounds only:
         reference first, then the other sequencing rounds in declared order. It
         neither loads nor changes an other round (a reference round that is an
@@ -1925,6 +2147,13 @@ class FOV:
     def reference_grid(self) -> ReferenceGrid:
         """The grid of the resident reference round, on which every label image of this FOV lies.
 
+        Returns
+        -------
+        ReferenceGrid
+            Reference shape in ZYX order, spatial metadata, source and image hash.
+
+        Notes
+        -----
         A :class:`~starfinder.segmentation.ReferenceGrid` with
         ``images[reference_round].shape[:3]``, ``metadata[reference_round]``, source
         ``"fov:<reference round>"`` and the SHA-256 of the reference image's C-order
@@ -2354,6 +2583,24 @@ class FOV:
                              reference_image: str = 'merged', reference_channel: int = 0) -> Path:
         """Save the reference merged image to the file of the dataset's ``reference_image``.
 
+        Parameters
+        ----------
+        projection : ProjectionConfig or None
+            Z projection settings for the saved reference view. None saves the ZYX
+            volume without projection.
+        reference_image : str
+            Reference view: ``"merged"`` for the channel maximum or
+            ``"single-channel"`` for reference_channel.
+        reference_channel : int
+            Zero-based channel index for the ``"single-channel"`` reference view.
+
+        Returns
+        -------
+        pathlib.Path
+            Path of the written reference-image TIFF.
+
+        Notes
+        -----
         The file is ``fovs/{fov_id}/reference.tif`` by default; a dataset that
         declares ``reference_image_import`` reads its reference image from that
         file, which is never written, so the call raises. Writes the reference
@@ -2412,6 +2659,25 @@ class FOV:
     def export_spots(self, slot='molecules', columns=None, *, path=None):
         """Write the FOV's molecule or read table as a typed, zero-based CSV; return its path.
 
+        Parameters
+        ----------
+        slot : str
+            Table to write: ``"molecules"`` for accepted reads or ``"reads"`` for
+            the detection/read join.
+        columns : sequence of str or None
+            Output column names in order. None uses the molecule columns for
+            ``"molecules"`` or the complete detection/read join for ``"reads"``.
+        path : pathlib.Path, str or None
+            Destination CSV path. None uses the FOV output folder's molecules.csv
+            for ``"molecules"`` or reads.csv for ``"reads"``.
+
+        Returns
+        -------
+        pathlib.Path
+            Path of the written CSV table.
+
+        Notes
+        -----
         ``slot="molecules"`` writes the accepted reads of the filtering result
         (``spot_namespace, spot_id, z, y, x, gene_id, entry_id, qc_score``);
         ``slot="reads"``, on request, every read of the decoding result joined
@@ -2450,6 +2716,19 @@ class FOV:
     def save_registration_record(self, path: Path | str | None = None) -> Path:
         """Write the registration record of the other rounds as JSON; return its path.
 
+        Parameters
+        ----------
+        path : pathlib.Path, str or None
+            Destination JSON path. None uses
+            ``<output_root>/fovs/<fov_id>/nuclei_registration.json``.
+
+        Returns
+        -------
+        pathlib.Path
+            Path of the written registration record.
+
+        Notes
+        -----
         The default path is ``<output_root>/fovs/<fov_id>/nuclei_registration.json``.
         The record holds ``fov_id``; ``rounds``, the round roles
         (RoundState); ``registered_rounds``, the entries of

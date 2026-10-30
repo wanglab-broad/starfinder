@@ -43,6 +43,65 @@ def _check_fov_pattern(pattern):
 class Dataset:
     """Sample paths, ordered rounds/channels, codebook and FOV factory.
 
+    Parameters
+    ----------
+    input_root : pathlib.Path
+        Root directory of the sample acquisition images.
+    output_root : pathlib.Path
+        Root directory of the sample processing outputs.
+    dataset_id : str
+        Dataset identifier used in provenance and spot namespaces.
+    sample_id : str
+        Sample identifier used in provenance and spot namespaces.
+    output_id : str
+        Output identifier used in the declared reference frame.
+    rounds : RoundState
+        Acquisition round roles and ordering; the default is an empty
+        RoundState.
+    channel_order : tuple[str, ...]
+        Sequencing channels in C order, supplied as a sequence of patterns,
+        ChannelInfo objects or mappings. Construction stores their patterns; the
+        default sequence is empty.
+    codebook : Codebook or None
+        Codebook for multiplexed readout; None means no codebook is loaded.
+    subtile : SubtileConfig or None
+        Subtile partition settings; None means no partition settings are
+        supplied.
+    fov_pattern : str
+        FOV name pattern using the ``{i}`` format field; the default is
+        ``Position{i:03d}``.
+    other_channel_order : dict[str, tuple[str, ...]]
+        Other-round names mapped to channel sequences in C order; sequence
+        entries are patterns, ChannelInfo objects or mappings. Construction
+        stores patterns; an empty mapping leaves other rounds using the
+        sequencing channels.
+    readout_mode : str
+        Read identity mode: ``"multiplexed"`` for codebook decoding or
+        ``"direct"`` for round/channel panel assignment.
+    direct_panel : DirectPanel or None
+        Gene panel for direct readout; None means no panel is loaded.
+    reference_stains : tuple[ChannelInfo, ...]
+        Non-sequencing stain channels in the reference-round folder, in C order.
+        Sequence entries are ChannelInfo objects, pattern strings or mappings;
+        the default sequence is empty.
+    voxel_size_xy : float or None
+        Positive finite Y/X voxel size in micrometres for files without stored
+        calibration. None leaves the Y/X calibration undeclared.
+    voxel_size_z : float or None
+        Positive finite Z voxel size in micrometres for files without stored
+        calibration. None leaves the Z calibration undeclared.
+    reference_image : str
+        Reference-image file pattern with ``{fov_id}``, absolute or relative to
+        output_root. The default is ``fovs/{fov_id}/reference.tif``.
+    reference_image_import : str or None
+        Imported reference-image file pattern with ``{fov_id}``, absolute or
+        relative to output_root. None selects the reference_image setting.
+    image_dir_template : str
+        Acquisition folder layout under input_root: ``"{round}/{fov}"`` or
+        ``"{fov}/{round}"``.
+
+    Notes
+    -----
     Processing options belong to PipelineConfig, residency to ExecutionConfig.
     Shared workflow YAML is translated by from_workflow_config.
     The channels come in three groups (design/specs/coordination.md, "Channels"):

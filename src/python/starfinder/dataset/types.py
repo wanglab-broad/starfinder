@@ -106,7 +106,14 @@ class ChannelInfo:
         raise TypeError(f"a channel is a pattern string, a ChannelInfo or a mapping; got {value!r}")
 
     def record(self) -> dict:
-        """The written form: channel, name (None as null) and wavelength (None as ``"unavailable"``)."""
+        """The written form: channel, name (None as null) and wavelength (None as ``"unavailable"``).
+
+        Returns
+        -------
+        dict
+            Channel pattern, content name and wavelength in nanometres, with None
+            encoded as null for the name and ``"unavailable"`` for the wavelength.
+        """
         return {"channel": self.channel, "name": self.name,
                 "wavelength": UNAVAILABLE if self.wavelength is None else self.wavelength}
 
@@ -200,7 +207,15 @@ class CropWindow:
     x_end: int  # exclusive
 
     def to_slice(self) -> tuple[slice, slice]:
-        """Return (slice_y, slice_x) for array indexing."""
+        """Return (slice_y, slice_x) for array indexing.
+
+        Returns
+        -------
+        slice_y : slice
+            Y slice from y_start inclusive to y_end exclusive.
+        slice_x : slice
+            X slice from x_start inclusive to x_end exclusive.
+        """
         return (
             slice(self.y_start, self.y_end),
             slice(self.x_start, self.x_end),
