@@ -39,7 +39,7 @@ class RegistrationSpec:
     requires : tuple[Dependency, ...]
         Declared optional dependencies; an empty tuple declares none.
     min_shape_zyx : tuple[int, int, int]
-        Minimum Y and X sizes, and the minimum Z size of a 3D grid, as positive integers in ZYX voxel counts.
+        Minimum Y and X sizes, and the minimum Z size of 3D input, as positive integers in ZYX voxel counts.
 
     Notes
     -----

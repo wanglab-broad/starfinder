@@ -74,7 +74,7 @@ class SegmentationSpec:
     requires : tuple of Dependency
         Optional method dependencies; the empty default declares none.
     min_shape_zyx : tuple of int
-        Minimum Y and X sizes, and the minimum Z size of a 3D grid, as positive integers in ZYX voxel counts.
+        Minimum Y and X sizes, and the minimum Z size of 3D input, as positive integers in ZYX voxel counts.
     targets : frozenset of str
         Supported object targets from ``nucleus`` and ``cell``.
     roles : frozenset of str
