@@ -437,10 +437,13 @@ def explain_read(reads, spot_id: str, *, intensity_result: IntensityExtractionRe
                 "a round summing to 0 in every channel gives no_signal with zero_signal_round")
         observed = _text(row.observed_color_sequence)
         add("decoding", "observed_color_sequence", detail=observed or "")
+        # The codebook lookups are built once here, not per candidate.
+        seq_to_gene = reference.seq_to_gene if isinstance(reference, Codebook) else None
+        seq_to_entry = reference.seq_to_entry if isinstance(reference, Codebook) else None
         if isinstance(reference, Codebook):
-            hit = reference.seq_to_entry.get(observed) if observed else None
+            hit = seq_to_entry.get(observed) if observed else None
             add("decoding", "exact_match", passed=hit is not None,
-                detail=(f"entry {hit} gene {reference.seq_to_gene[observed]}" if hit is not None
+                detail=(f"entry {hit} gene {seq_to_gene[observed]}" if hit is not None
                         else "not in the codebook"))
         if observed and ("M" in observed or "N" in observed):
             add("decoding", "tied_or_unknown_rounds", passed=False,
@@ -456,18 +459,18 @@ def explain_read(reads, spot_id: str, *, intensity_result: IntensityExtractionRe
             probabilities = (_color_probabilities(i, intensity_result, reference, decoding) if i is not None
                              else None)
             if candidates is None and probabilities is not None and observed:
-                index = _build_one_error_index(reference.seq_to_gene, 4, len(observed))
-                seqs = _candidate_sequences(observed, index, reference.seq_to_gene,
-                                            max_hamming=config.max_hamming if config else 1)
+                index = _build_one_error_index(seq_to_gene, 4, len(observed))
+                seqs = _candidate_sequences(observed, index, seq_to_gene,
+                                            max_hamming=config.max_hamming if config else 1, labels="1234")
                 scored = _score_candidates(probabilities, seqs)
-                candidates = [(r.seq, reference.seq_to_gene[r.seq], r.score, r.geomean_prob)
+                candidates = [(r.seq, seq_to_gene[r.seq], r.score, r.geomean_prob)
                               for r in scored.itertuples()]
             if candidates is None:
                 add("decoding", "candidates", detail="unavailable: decode with diagnostics=True or pass "
                                                      "intensity_result and reference")
             else:
                 for rank, (seq, candidate_gene, score, geomean) in enumerate(candidates):
-                    entry_of = reference.seq_to_entry.get(seq) if isinstance(reference, Codebook) else None
+                    entry_of = seq_to_entry.get(seq) if seq_to_entry is not None else None
                     add("decoding", "candidate", score, detail=f"rank {rank}: {seq} gene {candidate_gene}"
                         + (f" entry {entry_of}" if entry_of else "") + f", geomean probability {geomean:.6g}")
             if call_type != "exact":

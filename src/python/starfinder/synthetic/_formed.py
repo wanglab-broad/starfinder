@@ -450,14 +450,16 @@ def _prepare(codebook, config, metadata, stream_log):
         raise ValueError("amplicon_ids must be a unique tuple of length N")
     for identity in ids:
         _label(identity)
+    # The codebook lookups are built once here, not per amplicon.
+    book_genes, n_genes = codebook.genes, codebook.n_genes
     if config.gene_ids is not None:
         if (not isinstance(config.gene_ids, dict) or set(config.gene_ids) != set(ids)
-                or any(g not in codebook.genes for g in config.gene_ids.values())):
+                or any(g not in book_genes for g in config.gene_ids.values())):
             raise ValueError("gene_ids must map every amplicon ID to a codebook gene")
         if config.abundances is not None:
             raise ValueError("supplied genes and abundance draws are mutually exclusive")
-    abundances = _probabilities(config.abundances if config.abundances is not None else np.ones(codebook.n_genes),
-                               codebook.n_genes, "abundances")
+    abundances = _probabilities(config.abundances if config.abundances is not None else np.ones(n_genes),
+                               n_genes, "abundances")
     specs = (config.brightness, config.axial_width, config.lateral_width, config.elongation, config.angle)
     properties = _COMPONENTS[3:]
     for name, spec in zip(properties, specs):
@@ -469,11 +471,13 @@ def _prepare(codebook, config, metadata, stream_log):
         points[i] = (coordinates[i] if coordinates is not None else
                      _position(config, shape, stream("placement", identity), weights, centers, spread))
         genes.append(config.gene_ids[identity] if config.gene_ids is not None else
-                     codebook.genes[stream("identity", identity).choice(codebook.n_genes, p=abundances)])
+                     book_genes[stream("identity", identity).choice(n_genes, p=abundances)])
         values[i] = [_draw(spec, name, identity, stream) for name, spec in zip(properties, specs)]
     if not np.isfinite(points).all() or not np.isfinite(values).all() or (values[:, 1:3] <= 0).any():
         raise ValueError("nonfinite or out-of-domain generated properties")
-    sequences = [codebook.gene_to_seq[g] for g in genes]
+    # Built once, not per amplicon; without amplicons it is never read (it raises for repeated genes).
+    gene_to_seq = codebook.gene_to_seq if len(genes) else {}
+    sequences = [gene_to_seq[g] for g in genes]
     formed = pd.DataFrame(dict(namespace=[namespace]*n, amplicon_id=ids, gene_id=genes,
                                color_sequence=sequences, frame_id=[metadata.frame_id]*n,
                                formed_index=np.arange(n, dtype=np.int64),

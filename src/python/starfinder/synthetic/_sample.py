@@ -670,11 +670,13 @@ def _molecules(config, layout, codebook, cells, sites, stream):
     specs = (template.brightness, template.axial_width, template.lateral_width, template.elongation, template.angle)
     for name, spec in zip(_PROPERTIES, specs):
         _checked_distribution(spec, name, tuple(ids), f"fov.{name}")
+    # The codebook lookups are built once here, not per molecule.
+    book_genes, n_genes = codebook.genes, codebook.n_genes
     abundances = _probabilities(template.abundances if template.abundances is not None
-                                else np.ones(codebook.n_genes), codebook.n_genes, "abundances")
+                                else np.ones(n_genes), n_genes, "abundances")
     genes, values = [], np.empty((len(ids), 5), dtype=np.float64)
     for i, identity in enumerate(ids):
-        genes.append(codebook.genes[stream("sample.identity", identity).choice(codebook.n_genes, p=abundances)])
+        genes.append(book_genes[stream("sample.identity", identity).choice(n_genes, p=abundances)])
         values[i] = [_draw(spec, name, identity, lambda component, entity: stream("sample." + component, entity))
                      for name, spec in zip(_PROPERTIES, specs)]
     if not np.isfinite(values).all() or (values[:, 1:3] <= 0).any():
@@ -1033,9 +1035,11 @@ def _assemble(config, codebook, layout, sample, jitter, true, ids, population, s
                       if has_cells else {})
     compartment = (["nucleus" if v else "cytoplasm" if c else "outside" for c, v in zip(cell_of, nucleus_of)]
                    if has_cells else [None] * len(ids))
+    # Built once, not per molecule; without molecules it is never read (it raises for repeated genes).
+    gene_to_seq = codebook.gene_to_seq if len(genes) else {}
     molecules = pd.DataFrame(dict(
         amplicon_id=list(ids), population=population, in_sample=in_sample.astype(bool), gene_id=genes,
-        color_sequence=[codebook.gene_to_seq[g] for g in genes],
+        color_sequence=[gene_to_seq[g] for g in genes],
         sample_z=sigma[:, 0], sample_y=sigma[:, 1], sample_x=sigma[:, 2],
         **{key: values[:, j] for j, key in enumerate(("A", "sz", "sl", "e", "theta"))},
         true_cell_id=true_cell,

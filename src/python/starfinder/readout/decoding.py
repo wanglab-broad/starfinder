@@ -16,8 +16,8 @@ from ._codebook_aware import (
     _channel_probabilities,
     _wta_color_sequences,
     _build_one_error_index,
+    _candidate_scores,
     _candidate_sequences,
-    _score_candidates,
 )
 
 
@@ -251,7 +251,8 @@ def _run_wta(values, codebook, config, spot_ids, diagnostics):
     with np.errstate(divide="ignore"):
         scores = -np.log(maximum / norm)
     scores[ties] = np.inf
-    genes = [codebook.seq_to_gene.get(seq) for seq in observed]
+    seq_to_gene = codebook.seq_to_gene  # built once per call, not per read
+    genes = [seq_to_gene.get(seq) for seq in observed]
     table = pd.DataFrame(
         {
             "spot_id": spot_ids,
@@ -443,40 +444,45 @@ def decode_reads(
         # Public probabilities follow acquisition channel order, never implicit color order.
         inverse = np.argsort([codebook.color_to_channel[c] for c in "1234"])
         diagnostics["probabilities"] = probs[:, inverse, :]
-        per_round = []
+        # One row per spot and round, spot-major, from the margin columns.
+        def by_round(name):
+            if not r:
+                return np.empty(0, dtype=np.float64)
+            columns = [margins[f"round{j}_{name}"].to_numpy(dtype=np.float64) for j in range(r)]
+            return np.stack(columns, axis=1).ravel()
+
+        per_round = dict(
+            spot_id=np.repeat(np.array(result.spot_ids, dtype=object), r),
+            spot_namespace=[result.spot_namespace] * (n * r),
+            round_label=np.tile(np.array(result.round_labels, dtype=object), n),
+            top_color=[str(int(c)) for c in by_round("top_channel")],
+            top_probability=by_round("top_prob"),
+            second_probability=by_round("second_prob"),
+            margin=by_round("margin"),
+        )
         candidates = []
-        index = _build_one_error_index(codebook.seq_to_gene, 4, r)
+        # Each codebook lookup is built once per call, not per read or candidate.
+        seq_to_gene = codebook.seq_to_gene
+        index = _build_one_error_index(seq_to_gene, 4, r)
         for i, spot_id in enumerate(result.spot_ids):
-            for j, label in enumerate(result.round_labels):
-                per_round.append(
-                    dict(
-                        spot_id=spot_id,
-                        spot_namespace=result.spot_namespace,
-                        round_label=label,
-                        top_color=str(int(margins.iloc[i][f"round{j}_top_channel"])),
-                        top_probability=margins.iloc[i][f"round{j}_top_prob"],
-                        second_probability=margins.iloc[i][f"round{j}_second_prob"],
-                        margin=margins.iloc[i][f"round{j}_margin"],
-                    )
-                )
             seqs = _candidate_sequences(
                 str(observed[i]),
                 index,
-                codebook.seq_to_gene,
+                seq_to_gene,
                 max_hamming=config.max_hamming
                 if isinstance(config, CodebookAwareDecoderConfig)
                 else 0,
+                labels="1234",
             )
-            scored = _score_candidates(probs[i], seqs)
-            for rank, row in enumerate(scored.to_dict("records")):
+            for rank, (seq, score, geomean) in enumerate(_candidate_scores(probs[i], seqs)):
                 candidates.append(
                     dict(
                         spot_id=spot_id,
                         spot_namespace=result.spot_namespace,
-                        color_sequence=row["seq"],
-                        gene_id=codebook.seq_to_gene[row["seq"]],
-                        probability_nll=row["score"],
-                        geomean_probability=row["geomean_prob"],
+                        color_sequence=seq,
+                        gene_id=seq_to_gene[seq],
+                        probability_nll=score,
+                        geomean_probability=geomean,
                         rank=rank,
                     )
                 )
