@@ -74,6 +74,20 @@ _INTENSITY_SCALE = {"uint16": 1.0, "uint8": 1 / 16, "float32": 1.0, "float64": 1
 def generate_codebook(n_genes: int, *, rounds: int | None = None) -> Codebook:
     """Return a Codebook of n_genes CNNNC barcodes with distinct color sequences.
 
+    Parameters
+    ----------
+    n_genes : int
+        Positive number of genes to include.
+    rounds : int or None
+        Explicit color-sequence length in rounds; None uses the encoded sequence length.
+
+    Returns
+    -------
+    Codebook
+        Generated gene identities and color sequences with round and channel labels.
+
+    Notes
+    -----
     Barcodes enumerate C-{A,C,G,T}^3-C (at most 64 genes), encoded with
     reverse_bases=True as four-color sequences. Round labels are round1..round4
     (the color sequence length; ``rounds`` may state it explicitly) and the
@@ -144,6 +158,22 @@ def _preset(name):
 def benchmark_scene_preset(name: str, *, dtype: str = "uint16") -> tuple[Codebook, AmpliconSceneConfig]:
     """Return (codebook, config) for one FOV of an e2e benchmark preset.
 
+    Parameters
+    ----------
+    name : str
+        Benchmark preset name from BENCHMARK_PRESETS.
+    dtype : str
+        Output image dtype: uint8, uint16, float32 or float64.
+
+    Returns
+    -------
+    codebook : Codebook
+        Codebook defining the scene identities, rounds and channels.
+    config : AmpliconSceneConfig
+        Configuration for generating the preset scene.
+
+    Notes
+    -----
     Rounds follow the codebook (four), round1 is the reference and every other
     round receives a uniform translation within the preset's e2e half-range.
     Appearance follows PRESET_VERSION; uint8 scales every intensity by 1/16.
@@ -167,6 +197,25 @@ def deformation_geometry(name: str, shape_zyx, *, reference_round: str | None = 
                          translation_max_zyx=None) -> GeometryConfig:
     """Map a historical deformation name onto GeometryConfig for one grid shape.
 
+    Parameters
+    ----------
+    name : str
+        Deformation name: shift or a key in DEFORMATION_PRESETS.
+    shape_zyx : array_like
+        Grid dimensions in ZYX order, in voxels.
+    reference_round : str or None
+        Round label held at identity; None leaves no designated reference round.
+    translation_max_zyx : array_like or None
+        Non-negative translation half-ranges in ZYX voxel units; None disables
+        translation.
+
+    Returns
+    -------
+    GeometryConfig
+        Geometry controls for the requested deformation and grid.
+
+    Notes
+    -----
     YX magnitudes are percent of min(Y, X) capped at cap_px, Z magnitudes are
     percent of Z. polynomial_* and linear_small draw bounded polynomial or
     affine coefficients; gaussian_* and multi_point use Gaussian RBF controls
@@ -205,6 +254,24 @@ def registration_scene_preset(name: str, deformation: str = "shift", *,
                               dtype: str = "uint16") -> tuple[Codebook, AmpliconSceneConfig]:
     """Return (codebook, config) for a reference/moving registration pair.
 
+    Parameters
+    ----------
+    name : str
+        Benchmark preset name from BENCHMARK_PRESETS.
+    deformation : str
+        Deformation name: shift or a key in DEFORMATION_PRESETS.
+    dtype : str
+        Output image dtype: uint8, uint16, float32 or float64.
+
+    Returns
+    -------
+    codebook : Codebook
+        Codebook defining the scene identities, rounds and channels.
+    config : AmpliconSceneConfig
+        Configuration for generating the preset scene.
+
+    Notes
+    -----
     The codebook has rounds (reference, <deformation>) and one gene whose
     signal is in ch00; only the moving round is moved. Every pair of a preset
     shares the scene key, so reference images and amplicons are identical.

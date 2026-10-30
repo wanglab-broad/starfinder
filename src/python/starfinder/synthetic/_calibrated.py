@@ -80,6 +80,18 @@ _UNBALANCED = ("1211", "1232", "1244", "1334", "1424", "1431", "1442", "2134",
 def development_codebook(variant: str = "balanced") -> Codebook:
     """Return a four-round, four-channel development codebook of 16 genes.
 
+    Parameters
+    ----------
+    variant : str
+        Codeword balance variant: balanced or unbalanced.
+
+    Returns
+    -------
+    Codebook
+        Sixteen gene identities with four-round color sequences and four channel labels.
+
+    Notes
+    -----
     ``balanced``: the codewords (a, b, a+b, a+w*b) over GF(4) (colors 1-4 for
     0, 1, w, w^2), so every color appears exactly four times in every round and
     any two codewords differ in at least three rounds. ``unbalanced`` is a
@@ -106,6 +118,26 @@ def calibrated_scene_preset(condition: str = "clean", dtype: str = "uint8", *, s
                             codebook: str = "balanced") -> tuple[Codebook, AmpliconSceneConfig]:
     """Return (codebook, config) for one FOV of calibrated-development-v1.
 
+    Parameters
+    ----------
+    condition : str
+        Development condition name from CALIBRATED_CONDITIONS.
+    dtype : str
+        Output image dtype: uint8 or uint16.
+    seed : int
+        Non-negative root seed for the scene random streams.
+    codebook : str
+        Development codebook variant: balanced or unbalanced.
+
+    Returns
+    -------
+    codebook : Codebook
+        Codebook defining the scene identities, rounds and channels.
+    config : AmpliconSceneConfig
+        Configuration for generating the preset scene.
+
+    Notes
+    -----
     A development calibration against the development target table of
     design/notes/image-statistics.md, which records every target -> parameter step;
     not D04 and not a benchmark calibration. One 8x64x64 ZYX FOV holds 80

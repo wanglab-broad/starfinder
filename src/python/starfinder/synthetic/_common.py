@@ -41,6 +41,19 @@ def _json(value):
 class ScalarDistribution:
     """Persistent per-ID scalar law in voxel/intensity units.
 
+    Parameters
+    ----------
+    mode : str
+        Scalar law: constant, uniform, lognormal, folded_lognormal or supplied.
+    parameters : tuple of float
+        Law parameters: (value,) for constant, (low, high) for uniform, (log_median,
+        log_sd) for lognormal and folded_lognormal, or an empty tuple for supplied.
+    values : dict of str to float or None
+        Supplied scalar values keyed by amplicon ID, in the property's units; None
+        leaves values to the parametric law.
+
+    Notes
+    -----
     Modes and parameters: constant (value,), uniform (low, high), lognormal
     (log_median, log_sd), folded_lognormal (log_median, log_sd), or supplied
     (no parameters, values keyed by amplicon ID). Folded lognormal is only for

@@ -18,6 +18,21 @@ from ._presets import PRESET_VERSION
 def save_amplicon_scene(scene: AmpliconScene, directory: Path | str) -> Path:
     """Write one amplicon scene to a new or empty directory and return its path.
 
+    Parameters
+    ----------
+    scene : AmpliconScene
+        Scene containing round images, truth tables, signal tensors and provenance to
+        save.
+    directory : pathlib.Path or str
+        Destination directory for the scene files.
+
+    Returns
+    -------
+    pathlib.Path
+        Path of the directory containing the saved scene.
+
+    Notes
+    -----
     Files: ``images/<round_label>.ome.tif`` (ZYXC OME-TIFF in the scene dtype,
     written by ``starfinder.io.save_volume`` with that round's ``round_metadata``),
     ``formed.csv``, ``round_truth.csv``, ``signals.csv`` (one row per amplicon,
@@ -112,6 +127,21 @@ def _write_channels(directory, image, channel_labels):
 def save_amplicon_dataset(dataset: SyntheticDataset, directory: Path | str) -> Path:
     """Write an in-memory amplicon dataset as a raw dataset that ``Dataset`` and ``FOV`` read; return its path.
 
+    Parameters
+    ----------
+    dataset : SyntheticDataset
+        In-memory amplicon dataset from generate_amplicon_dataset, including its round
+        images.
+    directory : pathlib.Path or str
+        Destination directory for the raw dataset and truth files.
+
+    Returns
+    -------
+    pathlib.Path
+        Path of the directory containing the saved dataset.
+
+    Notes
+    -----
     ``dataset`` is a ``SyntheticDataset`` from ``generate_amplicon_dataset`` that holds its round
     images. Layout: ``<round>/<fov_id>/<channel>.tif`` (one ZYX ImageJ TIFF per codebook channel),
     ``codebook.csv`` (``entry_id``, ``gene_id``, ``color_sequence``; the entry ID is the base

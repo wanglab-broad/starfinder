@@ -305,6 +305,40 @@ class AmpliconSceneConfig:
 class AmpliconScene:
     """Complete formed and per-round truth, images and reproducibility payload.
 
+    Parameters
+    ----------
+    rounds : dict of str to numpy.ndarray
+        Round images in ZYXC order, keyed by acquisition label.
+    metadata : ImageMetadata
+        Spatial metadata of the reference grid.
+    formed : pandas.DataFrame
+        Formed amplicon identities, reference ZYX voxel coordinates and appearance
+        properties.
+    round_truth : pandas.DataFrame
+        Per-round amplicon truth with transformed ZYX voxel coordinates and readout
+        state.
+    intended : numpy.ndarray
+        Intended peak amplitudes in intensity units, as float64 NCR (amplicon, channel,
+        round).
+    pre_mix : numpy.ndarray
+        Peak amplitudes after readout modulation and before channel mixing, in intensity
+        units as float64 NCR.
+    realized : numpy.ndarray
+        Peak amplitudes after channel mixing, in intensity units as float64 NCR.
+    amplicon_ids : tuple of str
+        Amplicon identities in signal-tensor N-axis order.
+    round_labels : tuple of str
+        Round labels in signal-tensor R-axis order.
+    channel_labels : tuple of str
+        Channel labels in signal-tensor C-axis order.
+    codebook : Codebook
+        Gene identities, color sequences and round/channel ordering used for the scene.
+    provenance : dict
+        Generation configuration, random-stream records, image digests and geometry
+        transforms.
+
+    Notes
+    -----
     rounds maps acquisition labels to ZYXC arrays in codebook order. Signal
     tensors are float64 NCR, indexed by the explicit amplicon_ids/channel_labels/
     round_labels axes. Tables join on (namespace, amplicon_id), never row number.
@@ -676,6 +710,24 @@ def generate_amplicon_scene(codebook: Codebook, *, config: AmpliconSceneConfig =
                             metadata: ImageMetadata | None = None) -> AmpliconScene:
     """Generate an in-memory formed population and controlled readout images.
 
+    Parameters
+    ----------
+    codebook : Codebook
+        Gene identities, color sequences and round/channel labels for generation.
+    config : AmpliconSceneConfig
+        Population, appearance, readout and observation controls for the scene.
+    metadata : ImageMetadata or None
+        Reference-grid metadata; None creates metadata with a reference frame derived
+        from the population namespace.
+
+    Returns
+    -------
+    AmpliconScene
+        In-memory round images, formed and per-round truth, signal tensors and
+        generation provenance.
+
+    Notes
+    -----
     Stages and effect order follow design/specs/synthetic/amplicon-scene.md. Readout,
     background, noise and geometry are all optional and default disabled, so
     the default geometry is identity; nothing is enabled implicitly. Invalid
@@ -693,6 +745,20 @@ def generate_amplicon_scene(codebook: Codebook, *, config: AmpliconSceneConfig =
 def amplicon_scene_preset(name: str = "formed-small-v1") -> tuple[Codebook, AmpliconSceneConfig]:
     """Return a registered scene preset as (codebook, config).
 
+    Parameters
+    ----------
+    name : str
+        Registered scene name from SCENE_PRESETS.
+
+    Returns
+    -------
+    codebook : Codebook
+        Codebook defining the scene identities, rounds and channels.
+    config : AmpliconSceneConfig
+        Configuration for generating the preset scene.
+
+    Notes
+    -----
     Every SCENE_PRESETS name is accepted. Fixture tier: the clean 3D
     (formed-small-v1) or singleton-Z (formed-z1-v1) scene, N=8 uniform
     amplicons, seed 42, float64 accumulation and every effect disabled.

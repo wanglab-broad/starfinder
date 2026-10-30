@@ -27,6 +27,30 @@ _HISTORICAL_NAMES = {"gene_id": "gene", "color_sequence": "color_seq"}
 class SyntheticDataset:
     """Amplicon scenes for several FOVs, their truth tables and provenance.
 
+    Parameters
+    ----------
+    rounds : dict of str to dict of str to numpy.ndarray
+        ZYXC round images keyed by FOV and round label; streamed FOVs have empty image
+        mappings.
+    metadata : dict of str to dict of str to ImageMetadata
+        Round-grid metadata keyed by FOV and round label.
+    codebook : Codebook
+        Gene identities, color sequences and round/channel ordering for the dataset.
+    formed : pandas.DataFrame
+        Formed amplicon truth across FOVs, including reference ZYX voxel coordinates.
+    round_truth : pandas.DataFrame
+        Per-round amplicon truth across FOVs, including transformed ZYX voxel
+        coordinates.
+    spot_truth : pandas.DataFrame
+        Per-round spot truth with channel labels and realized intensities for the
+        encoded colors.
+    provenance : dict of str to dict
+        Scene generation provenance keyed by FOV.
+    historical_truth : dict
+        Historical-layout truth payload for an amplicon dataset or a registration pair.
+
+    Notes
+    -----
     ``rounds[fov][round_label]`` holds ZYXC arrays in codebook order, or is
     empty for every FOV when images were handed to ``on_round``. ``metadata``
     has the same keys. ``formed``/``round_truth`` concatenate every FOV (the
@@ -110,6 +134,27 @@ def generate_amplicon_dataset(codebook: Codebook, config: AmpliconSceneConfig, *
                               on_round: Callable | None = None) -> SyntheticDataset:
     """Generate one amplicon scene per FOV ID and derive historical truth.
 
+    Parameters
+    ----------
+    codebook : Codebook
+        Gene identities, color sequences and round/channel labels for generation.
+    config : AmpliconSceneConfig
+        Scene-generation controls shared by the FOVs.
+    fov_ids : tuple of str
+        FOV identifiers for the generated scenes.
+    preset : str or None
+        Preset label recorded in historical truth; None records no preset label.
+    on_round : Callable or None
+        Callback receiving (fov_id, round_label, image, metadata) for generated rounds;
+        None retains images in the result.
+
+    Returns
+    -------
+    SyntheticDataset
+        FOV scenes with truth tables, spatial metadata and generation provenance.
+
+    Notes
+    -----
     Each FOV uses ``config`` with ``FOV_id`` set and its own stream namespace,
     scene key ``["<config.scene_key>", "<FOV ID>"]``; appending IDs never
     changes the draws of earlier FOVs. Rounds follow the codebook. The
@@ -162,6 +207,33 @@ def generate_registration_pair(preset: str = "small", *, deformation: str = "shi
                                on_round: Callable | None = None) -> SyntheticDataset:
     """Generate one reference/moving pair of a benchmark preset.
 
+    Parameters
+    ----------
+    preset : str
+        Benchmark preset name from BENCHMARK_PRESETS.
+    deformation : str
+        Moving-round deformation: shift or a key in DEFORMATION_PRESETS.
+    seed : int or None
+        Non-negative root seed for scene random streams; None keeps the preset seed.
+    dtype : str
+        Output image dtype: uint8, uint16, float32 or float64.
+    noise : bool
+        Whether to retain the preset noise controls; False disables the noise residuals.
+    include_reference : bool
+        Whether to render the reference image; False keeps its truth without rendering
+        it.
+    on_round : Callable or None
+        Callback receiving (preset, round_label, image, metadata) for rendered rounds;
+        None retains images in the result.
+
+    Returns
+    -------
+    SyntheticDataset
+        Registration scene and truth under the preset FOV key, with pair details in
+        historical truth.
+
+    Notes
+    -----
     Both rounds image the same amplicon scene; only the moving round (labelled
     by the deformation name) is moved, by a translation (``shift``) or one of
     DEFORMATION_PRESETS. The forward map is recorded in the scene transforms
@@ -199,6 +271,23 @@ def generate_registration_pair(preset: str = "small", *, deformation: str = "shi
 def forward_displacement(transform: dict, shape_zyx, *, z: slice | None = None) -> np.ndarray:
     """Evaluate a recorded forward map F(q) - q on reference voxels q.
 
+    Parameters
+    ----------
+    transform : dict
+        Recorded forward-map transform from scene provenance.
+    shape_zyx : array_like
+        Reference-grid dimensions in ZYX order, in voxels.
+    z : slice or None
+        Z-plane selection on the reference grid; None selects the whole Z axis.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float32 displacement array of shape (Z, Y, X, 3), with components (dz, dy, dx)
+        in voxel units, for the selected Z planes.
+
+    Notes
+    -----
     Returns a float32 array (Z×Y×X×3, ZYX voxel displacements) for the whole
     grid or for the Z planes selected by ``z``, evaluated block by block.
     ``transform`` is a record from a scene's ``provenance['transforms']``.
