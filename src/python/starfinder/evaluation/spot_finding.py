@@ -11,6 +11,24 @@ __all__ = ["evaluate_spots", "localization_errors", "classify_detections"]
 def evaluate_spots(detected, truth, **matching_config):
     """Evaluate supplied (N,3) detections against truth; see match_points.
 
+    Parameters
+    ----------
+    detected : array_like
+        Finite (N, 3) ZYX detected coordinates in the matching units.
+    truth : array_like
+        Finite (N, 3) ZYX truth coordinates in the matching units.
+    **matching_config : dict
+        Keyword arguments to match_points, including policy, threshold, units, and spatial
+        metadata.
+
+    Returns
+    -------
+    EvaluationResult
+        Detection recall, precision, mean matched distance, counts, and truth-to-detection matched
+        pairs.
+
+    Notes
+    -----
     All matching policy, threshold, units and geometry arguments are required
     by match_points. Reference means truth, observed means detected.
     """
@@ -38,6 +56,23 @@ def _pairs(match_result, detected, truth):
 def localization_errors(match_result, detected, truth):
     """Per-axis localization errors of the matched pairs of an evaluate_spots result.
 
+    Parameters
+    ----------
+    match_result : EvaluationResult
+        Matching result from evaluate_spots for the supplied detected and truth populations.
+    detected : array_like
+        Finite (N, 3) ZYX detected coordinates in the matching units.
+    truth : array_like
+        Finite (N, 3) ZYX truth coordinates in the matching units.
+
+    Returns
+    -------
+    EvaluationResult
+        Maximum and 95th-percentile localization errors in matching units, with matched and
+        large-Z-error counts.
+
+    Notes
+    -----
     match_result comes from evaluate_spots(detected, truth, ...) on the same
     (N,3) ZYX points. Over the matched pairs, values hold the maximum and the
     95th percentile (numpy.quantile, linear) of the absolute Z, Y and X
@@ -69,6 +104,28 @@ def localization_errors(match_result, detected, truth):
 def classify_detections(match_result, detected, truth, *, radius, groups=None, boundary="exclusive"):
     """Count matched, duplicate and spurious detections of an evaluate_spots result.
 
+    Parameters
+    ----------
+    match_result : EvaluationResult
+        Matching result from evaluate_spots for the supplied detected and truth populations.
+    detected : array_like
+        Finite (N, 3) ZYX detected coordinates in the matching units.
+    truth : array_like
+        Finite (N, 3) ZYX truth coordinates in the matching units.
+    radius : float
+        Non-negative duplicate-search radius in the matching units.
+    groups : array_like or None
+        One group label per detection; None omits group-specific duplicate counts.
+    boundary : str
+        Radius comparison mode: "inclusive" or "exclusive".
+
+    Returns
+    -------
+    EvaluationResult
+        Detection classification counts and effective radius settings.
+
+    Notes
+    -----
     A detection in a matched pair is matched. An unmatched detection is a
     duplicate when it lies within radius of a matched truth point (strictly
     for boundary "exclusive", the duplicate classification of the spot-finding

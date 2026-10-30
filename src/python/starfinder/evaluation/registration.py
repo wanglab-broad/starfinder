@@ -18,6 +18,35 @@ def evaluate_translation(detected, truth, *, reference_metadata, observed_metada
                          units, tolerance, eligible_rounds=None, failed_rounds=()):
     """Compare labeled ZYX displacements in the same convention and units.
 
+    Parameters
+    ----------
+    detected : mapping
+        Round labels mapped to estimated ZYX displacement triples in units; None denotes a
+        missing estimate.
+    truth : mapping
+        Round labels mapped to finite truth ZYX displacement triples in units.
+    reference_metadata : ImageMetadata
+        Spatial description of the reference displacement frame.
+    observed_metadata : ImageMetadata
+        Spatial description of the estimated displacement frame.
+    units : str
+        Displacement and error unit label, "voxel" or the metadata spatial unit.
+    tolerance : float or None
+        Non-negative per-axis error tolerance in units; None requests errors without a pass/fail
+        gate.
+    eligible_rounds : iterable or None
+        Round labels selected for comparison; None selects the truth labels.
+    failed_rounds : iterable
+        Round labels identifying upstream failures; defaults to no failures.
+
+    Returns
+    -------
+    EvaluationResult
+        Displacement errors, the requested tolerance gate, population counts, and per-round
+        comparisons.
+
+    Notes
+    -----
     No sign inversion or integer rounding is performed. Explicitly exclude the
     reference round using eligible_rounds; absent estimates are missing, not
     silently treated as reference rounds. Passing uses strict per-axis tolerance.
@@ -106,6 +135,22 @@ def _masked_ncc(ref, observed, mask):
 def normalized_cross_correlation(ref, observed, *, mask=None):
     """Centered NCC on supplied equal-shaped arrays; constants are undefined.
 
+    Parameters
+    ----------
+    ref : array_like
+        Finite real reference intensities.
+    observed : array_like
+        Finite real observed intensities on the reference array's grid.
+    mask : array_like or None
+        Boolean mask selecting array elements; None uses the full arrays.
+
+    Returns
+    -------
+    EvaluationResult
+        Dimensionless centered correlation and population counts, with a reason when undefined.
+
+    Notes
+    -----
     With a Boolean mask of the arrays' shape, the Pearson correlation in
     float64 over the masked elements; undefined when fewer than two are
     masked or either side is constant there. Without it, all elements.
@@ -129,6 +174,32 @@ def normalized_cross_correlation(ref, observed, *, mask=None):
 def structural_similarity(ref, observed, *, data_range, policy, win_size=None, slice_index=None, mask=None):
     """SSIM with required positive data range and explicit spatial reduction.
 
+    Parameters
+    ----------
+    ref : array_like
+        Finite real reference intensities in ZYX order, or YX for plane policy.
+    observed : array_like
+        Finite real observed intensities on the reference array's grid.
+    data_range : float
+        Positive intensity range in the image intensity units.
+    policy : str
+        Spatial reduction policy: "volume", "mip", "slice", or "plane".
+    win_size : int or None
+        Positive odd window width in pixels or voxels; None derives an odd width from the selected
+        domain.
+    slice_index : int or None
+        Zero-based Z index for slice policy; None denotes no selected slice.
+    mask : array_like or None
+        Boolean mask on the selected domain, ZYX for volume and YX otherwise; None uses the
+        unmasked SSIM summary.
+
+    Returns
+    -------
+    EvaluationResult
+        Dimensionless SSIM, population counts, and effective spatial-reduction settings.
+
+    Notes
+    -----
     Policies: volume (ZYX), mip (max over Z), slice (explicit Z index), or
     plane (already supplied YX). Small/empty domains are undefined. Default
     window is the largest odd size <=7 fitting the selected domain, at least 3.
@@ -175,7 +246,20 @@ def structural_similarity(ref, observed, *, data_range, policy, win_size=None, s
 
 
 def evaluate_mask_overlap(ref, observed):
-    """IoU and Dice from supplied Boolean masks; empty unions are undefined."""
+    """IoU and Dice from supplied Boolean masks; empty unions are undefined.
+
+    Parameters
+    ----------
+    ref : array_like
+        Boolean reference mask.
+    observed : array_like
+        Boolean observed mask on the reference mask's grid.
+
+    Returns
+    -------
+    EvaluationResult
+        IoU and Dice fractions with mask population counts.
+    """
     ref, observed = np.asarray(ref), np.asarray(observed)
     if ref.dtype != bool or observed.dtype != bool or ref.shape != observed.shape:
         raise ValueError("mask overlap requires equal-shaped Boolean masks")
@@ -190,7 +274,24 @@ def evaluate_mask_overlap(ref, observed):
 
 
 def evaluate_landmark_alignment(reference, observed, **matching_config):
-    """Evaluate supplied landmarks using an explicit match_points policy."""
+    """Evaluate supplied landmarks using an explicit match_points policy.
+
+    Parameters
+    ----------
+    reference : array_like
+        Finite (N, 3) ZYX reference landmarks in the matching units.
+    observed : array_like
+        Finite (N, 3) ZYX observed landmarks in the matching units.
+    **matching_config : dict
+        Keyword arguments to match_points, including policy, threshold, units, and spatial
+        metadata.
+
+    Returns
+    -------
+    EvaluationResult
+        Landmark recall, precision, mean matched distance, counts, and matched pairs from
+        match_points.
+    """
     return match_points(reference, observed, **matching_config)
 
 
@@ -201,6 +302,58 @@ def evaluate_registration(ref, before, after, *, reference_spots, before_spots, 
                           win_size=None, slice_index=None):
     """Combine before/after metrics; never detect, threshold, register or write.
 
+    Parameters
+    ----------
+    ref : array_like
+        Finite real reference intensities in ZYX order, or YX for plane SSIM.
+    before : array_like
+        Finite real moving intensities before registration on the reference grid.
+    after : array_like
+        Finite real moving intensities after registration on the reference grid.
+    reference_spots : array_like
+        Finite (N, 3) ZYX reference coordinates in units.
+    before_spots : array_like
+        Finite (N, 3) ZYX coordinates before registration in units.
+    after_spots : array_like
+        Finite (N, 3) ZYX coordinates after registration in units.
+    reference_mask : array_like
+        Boolean reference measurement mask.
+    before_mask : array_like
+        Boolean measurement mask before registration on the reference mask's grid.
+    after_mask : array_like
+        Boolean measurement mask after registration on the reference mask's grid.
+    reference_metadata : ImageMetadata
+        Spatial description of the reference coordinate frame.
+    before_metadata : ImageMetadata
+        Spatial description of the coordinate frame before registration.
+    after_metadata : ImageMetadata
+        Spatial description of the coordinate frame after registration.
+    data_range : float
+        Positive SSIM intensity range in the image intensity units.
+    ssim_policy : str
+        SSIM reduction policy: "volume", "mip", "slice", or "plane".
+    matching_policy : str
+        Point-matching policy: "nearest_candidate" or "greedy".
+    match_threshold : float
+        Non-negative point-matching distance threshold in units.
+    units : str
+        Point-coordinate and distance unit label, "voxel" or the metadata spatial unit.
+    boundary : str
+        Point-matching threshold comparison mode: "inclusive" or "exclusive".
+    win_size : int or None
+        Positive odd SSIM window width in pixels or voxels; None derives an odd width from the
+        selected domain.
+    slice_index : int or None
+        Zero-based Z index for slice SSIM; None denotes no selected slice.
+
+    Returns
+    -------
+    EvaluationResult
+        Before and after image, mask, and landmark metrics with population counts and effective
+        policies.
+
+    Notes
+    -----
     Images share a grid. Supplied masks/points describe the caller's explicitly
     chosen measurement domain (e.g. projected detections); config records SSIM
     and matching policies. NCC always measures the full supplied arrays.
@@ -398,6 +551,29 @@ def _optimizer(diagnostics):
 def registration_qc(reference, before, after, transform, *, config=None, diagnostics=None):
     """Routine QC of one registration step or chain on supplied ZYX signals.
 
+    Parameters
+    ----------
+    reference : array_like
+        Finite real ZYX reference signal on the transform's reference grid.
+    before : array_like
+        Finite real ZYX moving signal at the start of the step on the transform's reference grid.
+    after : array_like
+        Finite real ZYX moving signal resampled by the transform on its reference grid.
+    transform : object
+        Pull transform describing the evaluated registration step or chain.
+    config : RegistrationQcConfig or None
+        QC settings; None omits projections from the returned details.
+    diagnostics : RegistrationDiagnostics or None
+        Optimizer diagnostics; None records unknown optimizer information.
+
+    Returns
+    -------
+    EvaluationResult
+        Overlap coverage, NCC and SSIM summaries, counts, transform information, and optimizer
+        details.
+
+    Notes
+    -----
     reference is the reference signal, before the moving signal at the start
     of the step and after that signal resampled by transform, all on the
     transform's reference grid. The valid overlap is the set of reference
@@ -487,6 +663,28 @@ def _field(value, name):
 def evaluate_displacement_field(estimated, truth, *, mask, spacing_zyx=None):
     """Error of an estimated pull field against a supplied truth pull field.
 
+    Parameters
+    ----------
+    estimated : array_like or object
+        Estimated pull displacement in voxel units, as a (Z, Y, X, 3) array with ZYX components or
+        an object exposing displacement_zyx.
+    truth : array_like or object
+        Truth pull displacement on the estimated field's grid, as a (Z, Y, X, 3) array with ZYX
+        components in voxels or an object exposing displacement_zyx.
+    mask : array_like or None
+        Boolean ZYX comparison mask; None includes every voxel.
+    spacing_zyx : array_like or None
+        Positive voxel spacings in ZYX order, in physical units per voxel; None omits physical
+        error summaries.
+
+    Returns
+    -------
+    EvaluationResult
+        Median, 95th-percentile, and maximum displacement-error norms in voxels and, with spacing,
+        physical units.
+
+    Notes
+    -----
     estimated and truth are (Z, Y, X, 3) ZYX displacement arrays in voxels
     (or transforms with displacement_zyx) on the same grid, for example
     forward_displacement of a synthetic pair. The median, 95th percentile

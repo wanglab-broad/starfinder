@@ -12,6 +12,38 @@ def match_points(reference, observed, *, policy, threshold, units,
                  eligible_reference=None, eligible_observed=None):
     """Match finite (N,3) ZYX coordinates already expressed in ``units``.
 
+    Parameters
+    ----------
+    reference : array_like
+        Finite (N, 3) ZYX reference coordinates in the supplied units.
+    observed : array_like
+        Finite (N, 3) ZYX observed coordinates in the supplied units.
+    policy : str
+        Matching policy: "nearest_candidate" or "greedy".
+    threshold : float
+        Non-negative distance threshold in the supplied units.
+    units : str
+        Coordinate and distance unit label, "voxel" or the metadata spatial unit.
+    reference_metadata : ImageMetadata
+        Spatial description of the reference coordinate frame.
+    observed_metadata : ImageMetadata
+        Spatial description of the observed coordinate frame.
+    boundary : str
+        Threshold comparison mode: "inclusive" or "exclusive".
+    eligible_reference : array_like or None
+        Boolean eligibility vector for reference points; None includes the full reference
+        population.
+    eligible_observed : array_like or None
+        Boolean eligibility vector for observed points; None includes the full observed population.
+
+    Returns
+    -------
+    EvaluationResult
+        Recall, precision, mean matched distance, population counts, and original-index matched
+        pairs.
+
+    Notes
+    -----
     ``nearest_candidate`` proposes only the nearest observed point per reference,
     then excludes duplicate observed assignments (registration's historical
     KDTree policy). ``greedy`` sorts all admissible pairs by distance, reference

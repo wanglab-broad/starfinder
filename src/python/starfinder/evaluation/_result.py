@@ -9,6 +9,25 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 class EvaluationResult:
     """Metric values (None if undefined), units, populations and provenance.
 
+    Parameters
+    ----------
+    values : dict of str to float or bool or None
+        Metric names mapped to values, with None for undefined metrics.
+    units : dict of str to str
+        Metric names mapped to unit labels.
+    counts : dict of str to int
+        Named population counts.
+    status : str
+        Evaluation state: "ok", "undefined", "missing", or "failed".
+    reasons : dict of str to str
+        Reasons for unavailable metrics or comparisons.
+    config : dict of str to object
+        Effective evaluation settings and policy provenance.
+    details : dict of str to object
+        Supplementary comparison data; defaults to an empty dictionary.
+
+    Notes
+    -----
     Status is ok, undefined (at least one unavailable metric), missing (an
     input is absent), or failed (an explicitly supplied upstream failure).
     Details contain per-item comparisons/pairs; config records effective policy.

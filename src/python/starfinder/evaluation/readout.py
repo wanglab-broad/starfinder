@@ -13,6 +13,25 @@ __all__ = ["evaluate_decoding", "evaluate_deduplication", "ranking_quality"]
 def evaluate_decoding(decoded, truth, *, matches, sequence_column="observed_color_sequence"):
     """Compare decoded gene IDs and color sequences with truth using match_points results.
 
+    Parameters
+    ----------
+    decoded : pandas.DataFrame
+        Predicted labels, using gene_id and the selected sequence column.
+    truth : pandas.DataFrame
+        Truth labels in gene_id and color_sequence columns.
+    matches : EvaluationResult
+        Spatial matching result with truth as reference and decoded rows as observed.
+    sequence_column : str
+        Nonempty name of the predicted sequence column; defaults to observed_color_sequence.
+
+    Returns
+    -------
+    EvaluationResult
+        Conditional gene and color-sequence accuracies, population counts, and gene-confusion
+        details.
+
+    Notes
+    -----
     ``decoded`` names them ``gene_id`` and ``sequence_column`` (by default
     ``observed_color_sequence``, as in decoding results); ``truth`` names them
     ``gene_id`` and ``color_sequence``, as in synthetic ``spot_truth`` and
@@ -86,6 +105,24 @@ def _error_at_retention(score, incorrect, q):
 def ranking_quality(score, correct, *, orientation, retention=(0.5, 0.8, 0.9, 1.0)):
     """How well a score ranks correct calls above incorrect ones.
 
+    Parameters
+    ----------
+    score : array_like
+        One-dimensional score vector, with one value per call.
+    correct : array_like
+        One-dimensional Boolean vector indicating correct calls.
+    orientation : str
+        Score direction denoting greater reliability: "lower" or "higher".
+    retention : iterable of float
+        Retained fractions in (0, 1] for error-rate summaries.
+
+    Returns
+    -------
+    EvaluationResult
+        AUROC, its standard error, retention error rates, and scored population counts.
+
+    Notes
+    -----
     The measures of scores.csv of the readout design study of 2026-10-02.
 
     score holds one value per call and correct whether the call is correct;
@@ -149,6 +186,22 @@ def _labels(values, name, n=None):
 def evaluate_deduplication(groups, source, *, pairs):
     """Missed duplicates and false merges over a stated pair population.
 
+    Parameters
+    ----------
+    groups : iterable
+        Duplicate-group label per read; a missing label denotes an ungrouped read.
+    source : iterable
+        True-source label per read; a missing label denotes an unattributed read.
+    pairs : iterable of tuple of int
+        Read-index pairs defining the comparison population.
+
+    Returns
+    -------
+    EvaluationResult
+        Missed-duplicate and false-merge counts and rates, population counts, and offending pairs.
+
+    Notes
+    -----
     The measures of duplicates.csv of the readout design study of 2026-10-02.
 
     groups gives each read's duplicate group (reads with equal labels were
