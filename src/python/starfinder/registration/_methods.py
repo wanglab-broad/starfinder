@@ -22,6 +22,27 @@ _SIMPLEITK = Dependency("SimpleITK", "SimpleITK", "local-registration")
 class RegistrationSpec:
     """Registered method: stable snake_case name, private estimator and declared capabilities.
 
+    Parameters
+    ----------
+    name : str
+        Stable snake_case method identifier.
+    run : collections.abc.Callable
+        Estimator callable taking reference image, moving image, config and geometry and returning the transform, backend and application settings, optionally followed by diagnostics.
+    step_kind : str
+        Recipe step category: ``global`` or ``local``.
+    dimensions : frozenset[int]
+        Supported estimation dimensions, drawn from ``2`` and ``3``.
+    transform_kind : str
+        Returned transform kind: ``translation``, ``affine``, ``bspline`` or ``dense``.
+    space : str
+        Estimation coordinate space: ``index`` or ``physical``.
+    requires : tuple[Dependency, ...]
+        Declared optional dependencies; an empty tuple declares none.
+    min_shape_zyx : tuple[int, int, int]
+        Minimum input shape as positive voxel counts in ZYX order.
+
+    Notes
+    -----
     run(reference, moving, config, geometry) returns the transform, the
     backend that ran and its application WarpConfig, optionally followed by a
     dict of further RegistrationDiagnostics fields; estimate_transform calls

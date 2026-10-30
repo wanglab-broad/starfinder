@@ -134,6 +134,17 @@ class RegistrationRecipe:
 class ExternalReference:
     """A reference signal that is not a round of the dataset, for FOV.register on other rounds.
 
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Finite reference intensity signal in ZYX order.
+    metadata : ImageMetadata
+        Spatial geometry of the external reference image.
+    label : str
+        Nonempty reference label used in registration attempt records.
+
+    Notes
+    -----
     image is a finite ZYX array on the grid of the rounds it registers: the
     same shape, and metadata with the same spacing, origin, direction and
     unit. It is the reference signal of every step as given, whatever the

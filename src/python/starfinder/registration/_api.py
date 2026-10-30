@@ -36,6 +36,26 @@ def estimate_transform(
 ) -> RegistrationResult:
     """Estimate from finite ZYX arrays on equal grids without mutating inputs.
 
+    Parameters
+    ----------
+    reference_image : numpy.ndarray
+        Finite reference intensity image in ZYX order.
+    moving_image : numpy.ndarray
+        Finite moving intensity image in ZYX order.
+    config : RegistrationConfig
+        Typed registration method settings.
+    reference_metadata : ImageMetadata
+        Spatial geometry of the reference image.
+    moving_metadata : ImageMetadata
+        Spatial geometry of the moving image.
+
+    Returns
+    -------
+    RegistrationResult
+        Estimated transform, estimator diagnostics and matching application settings.
+
+    Notes
+    -----
     The exact config type selects the method in REGISTRATION_METHODS. Its
     declared dimensions and min_shape_zyx are checked before it runs:
     translation supports singleton axes; rigid, affine, B-spline and demons
@@ -82,6 +102,22 @@ def apply_transform(
 ) -> np.ndarray:
     """Apply once to ZYX/ZYXC, reusing the transform across channels.
 
+    Parameters
+    ----------
+    moving_image : numpy.ndarray
+        Finite moving intensity image in ZYX or ZYXC order.
+    transform : TranslationTransform or AffineTransform or BSplineTransform or DenseDisplacementTransform or TransformChain
+        Pull map from the reference grid to the moving grid in voxel indices.
+    config : WarpConfig
+        Resampling settings, including the application backend and output dtype.
+
+    Returns
+    -------
+    numpy.ndarray
+        Resampled intensities on the reference grid, in the input axis and channel order.
+
+    Notes
+    -----
     Returns an array on transform.reference_metadata/grid, preserving channel
     order and input dtype by default. Translations stay compact; SciPy uses
     slice-sized coordinate arrays; SimpleITK prepares one field/resampler.

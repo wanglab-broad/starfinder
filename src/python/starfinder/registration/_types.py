@@ -44,6 +44,25 @@ def _geometry(reference_shape, moving_shape, reference_metadata, moving_metadata
 class TranslationTransform:
     """Compact pull map: moving index = reference index + displacement_zyx.
 
+    Parameters
+    ----------
+    displacement_zyx : tuple[float, float, float]
+        Detected displacement of moving content in ZYX voxel indices.
+    reference_shape_zyx : tuple[int, int, int]
+        Reference-grid shape as positive voxel counts in ZYX order.
+    moving_shape_zyx : tuple[int, int, int]
+        Moving-grid shape as positive voxel counts in ZYX order.
+    reference_metadata : ImageMetadata
+        Spatial geometry of the reference grid.
+    moving_metadata : ImageMetadata
+        Spatial geometry of the moving grid.
+    direction : str
+        Pull-map direction label, ``reference_to_moving``.
+    units : str
+        Pull-map coordinate unit, ``voxel_index``.
+
+    Notes
+    -----
     displacement_zyx is the detected displacement of the moving content, ZYX
     in voxel indices, like every other transform's pull displacement.
     """
@@ -68,6 +87,25 @@ class TranslationTransform:
 class DenseDisplacementTransform:
     """Pull field: moving index = reference index + displacement_zyx[index].
 
+    Parameters
+    ----------
+    displacement_zyx : numpy.ndarray
+        Finite float32 or float64 pull displacement on the reference grid, shaped ``(Z, Y, X, 3)`` with components ``(dz, dy, dx)`` in voxel indices.
+    reference_shape_zyx : tuple[int, int, int]
+        Reference-grid shape as positive voxel counts in ZYX order.
+    moving_shape_zyx : tuple[int, int, int]
+        Moving-grid shape as positive voxel counts in ZYX order.
+    reference_metadata : ImageMetadata
+        Spatial geometry of the reference grid.
+    moving_metadata : ImageMetadata
+        Spatial geometry of the moving grid.
+    direction : str
+        Pull-map direction label, ``reference_to_moving``.
+    units : str
+        Pull-map coordinate unit, ``voxel_index``.
+
+    Notes
+    -----
     Components are ZYX, in voxel indices on the reference grid. No inversion
     or physical-unit conversion is implicit. The owned field is read-only.
     """
@@ -117,6 +155,27 @@ def _embed_field(field_xyz, shape, spacing_zyx):
 class AffineTransform:
     """Linear pull map: moving index = A @ reference index + b (ZYX voxel indices).
 
+    Parameters
+    ----------
+    matrix_zyx : numpy.ndarray
+        Homogeneous 4-by-4 index-space pull matrix in ZYX order, stored as read-only float64.
+    reference_shape_zyx : tuple[int, int, int]
+        Reference-grid shape as positive voxel counts in ZYX order.
+    moving_shape_zyx : tuple[int, int, int]
+        Moving-grid shape as positive voxel counts in ZYX order.
+    reference_metadata : ImageMetadata
+        Spatial geometry of the reference grid.
+    moving_metadata : ImageMetadata
+        Spatial geometry of the moving grid.
+    physical : dict or None
+        Recorded physical-space estimation parameters; ``None`` means no physical parameter record was supplied.
+    direction : str
+        Pull-map direction label, ``reference_to_moving``.
+    units : str
+        Pull-map coordinate unit, ``voxel_index``.
+
+    Notes
+    -----
     matrix_zyx is the 4x4 float64 index-space matrix [[A, b], [0, 0, 0, 1]];
     it is read-only. physical holds the parameters of a physical-space
     estimate (matrix_xyz, center_xyz, translation_xyz of the pull map
@@ -144,7 +203,13 @@ class AffineTransform:
             raise IncompatibleGeometryError("physical must be a dict or None")
 
     def dense(self):
-        """The pull displacement A p + b - p on the reference grid as a float64 DenseDisplacementTransform."""
+        """The pull displacement A p + b - p on the reference grid as a float64 DenseDisplacementTransform.
+
+        Returns
+        -------
+        DenseDisplacementTransform
+            Float64 ZYX pull displacement in voxel indices on the reference grid.
+        """
         q = np.moveaxis(np.indices(self.reference_shape_zyx, dtype=np.float64), 0, -1)
         a, b = self.matrix_zyx[:3, :3], self.matrix_zyx[:3, 3]
         return DenseDisplacementTransform(q @ (a - np.eye(3)).T + b, **_geometry_fields(self))
@@ -154,6 +219,37 @@ class AffineTransform:
 class BSplineTransform:
     """Cubic B-spline pull map on a physical control grid: p + S^-1 P v(P S p).
 
+    Parameters
+    ----------
+    grid_size_xyz : tuple[int, ...]
+        Positive control-point counts in XYZ order.
+    grid_origin_xyz : tuple[float, ...]
+        Control-grid origin in XYZ physical coordinates.
+    grid_spacing_xyz : tuple[float, ...]
+        Positive control-grid spacings in XYZ physical units.
+    grid_direction_xyz : tuple[float, ...]
+        Row-major direction matrix of the control grid in XYZ order.
+    coefficients : numpy.ndarray
+        Control-point displacements in physical units, stored as read-only float64 with shape ``(dimension, *grid_size_xyz[::-1])`` and XYZ component order.
+    spacing_zyx : tuple[float, float, float]
+        Positive image voxel spacings in ZYX physical units used to convert the pull map to voxel indices.
+    reference_shape_zyx : tuple[int, int, int]
+        Reference-grid shape as positive voxel counts in ZYX order.
+    moving_shape_zyx : tuple[int, int, int]
+        Moving-grid shape as positive voxel counts in ZYX order.
+    reference_metadata : ImageMetadata
+        Spatial geometry of the reference grid.
+    moving_metadata : ImageMetadata
+        Spatial geometry of the moving grid.
+    order : int
+        B-spline degree, ``3`` for a cubic spline.
+    direction : str
+        Pull-map direction label, ``reference_to_moving``.
+    units : str
+        Pull-map coordinate unit, ``voxel_index``.
+
+    Notes
+    -----
     S is diag(spacing_zyx), P reverses ZYX to the XYZ order of ITK and v is
     the B-spline displacement in physical XYZ units. The grid fields are the
     ITK fixed parameters (XYZ order, dimension 2 for a Z=1 estimate):
@@ -199,7 +295,13 @@ class BSplineTransform:
                            _readonly(self.coefficients, np.float64, (dim, *size[::-1]), "coefficients"))
 
     def dense(self):
-        """Evaluate the grid on the reference grid with SimpleITK; a float64 DenseDisplacementTransform."""
+        """Evaluate the grid on the reference grid with SimpleITK; a float64 DenseDisplacementTransform.
+
+        Returns
+        -------
+        DenseDisplacementTransform
+            Float64 ZYX pull displacement in voxel indices evaluated on the reference grid.
+        """
         from ._demons import _import_sitk
 
         sitk = _import_sitk()
@@ -240,6 +342,43 @@ def _validate_transform(transform, direction):
 class RegistrationDiagnostics:
     """Estimator identity and measured diagnostics; unknown values stay None.
 
+    Parameters
+    ----------
+    method : str
+        Registration method identifier.
+    backend : str
+        Identifier of the backend that performed estimation.
+    effective_config : RegistrationConfig
+        Method configuration used for estimation.
+    converged : bool or None
+        Recorded convergence status; ``None`` means convergence is unknown.
+    iterations_completed : int or tuple[int, ...] or None
+        Recorded iteration count as a scalar or per-level tuple; ``None`` means unreported.
+    reference_landmark_count : int or None
+        Recorded number of reference landmarks; ``None`` means unreported.
+    moving_landmark_count : int or None
+        Recorded number of moving landmarks; ``None`` means unreported.
+    matched_landmark_count : int or None
+        Recorded number of matched landmarks; ``None`` means unreported.
+    warnings : tuple[str, ...]
+        Estimator warning messages; an empty tuple records no warnings.
+    final_metric_value : tuple[float, ...] or None
+        Recorded final similarity metric values per pyramid level; ``None`` means unreported.
+    stop_condition : tuple[str, ...] or None
+        Recorded stopping-condition descriptions per pyramid level; ``None`` means unreported.
+    elapsed_iterations : tuple[int, ...] or None
+        Recorded demons iteration counts per pyramid level; ``None`` means unreported.
+    final_rms_change : tuple[float, ...] or None
+        Recorded demons final RMS displacement changes in voxel units per pyramid level; ``None`` means unreported.
+    backend_versions : dict[str, str or None] or None
+        Recorded backend distribution versions, with ``None`` for an unavailable version; a ``None`` mapping means unreported.
+    backend_parameters : dict[str, str] or None
+        Recorded effective backend parameter map; ``None`` means unreported.
+    spacing_source : str or None
+        Recorded spacing provenance, ``metadata`` or ``unknown_unit``; ``None`` means unreported.
+
+    Notes
+    -----
     The elastix methods (rigid, affine, bspline) record converged=None (fixed
     iterations, no convergence test), iterations_completed, final_metric_value
     and stop_condition per pyramid level, backend_versions, the effective
@@ -271,6 +410,17 @@ class RegistrationDiagnostics:
 class RegistrationResult:
     """Estimated transform and its matching application policy.
 
+    Parameters
+    ----------
+    transform : TranslationTransform or AffineTransform or BSplineTransform or DenseDisplacementTransform
+        Estimated pull transform in voxel indices.
+    diagnostics : RegistrationDiagnostics
+        Estimator identity, settings and recorded diagnostics.
+    application_config : WarpConfig
+        Matching resampling policy returned by the estimator.
+
+    Notes
+    -----
     Applied arrays have transform.reference_metadata, never moving metadata.
     The repr is a one-line method and transform summary without field values.
     """

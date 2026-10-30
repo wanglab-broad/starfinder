@@ -32,6 +32,17 @@ def _affine(matrix, q):
 class TransformChain:
     """The ordered step transforms of one moving round, composed into one pull map.
 
+    Parameters
+    ----------
+    transforms : tuple
+        Step transforms in estimation order.
+    direction : str
+        Pull-map direction label, ``reference_to_moving``.
+    units : str
+        Pull-map coordinate unit, ``voxel_index``.
+
+    Notes
+    -----
     Step k is estimated on the moving signal resampled through steps 1 to
     k-1, so the composite pull map is Phi(p) = T1(T2(...Tn(p))): the last
     transform is evaluated at reference grid points and every earlier one
@@ -80,6 +91,13 @@ class TransformChain:
     def translation(self):
         """The one TranslationTransform a chain of translations reduces to, else None.
 
+        Returns
+        -------
+        TranslationTransform or None
+            Translation with the summed displacement for a chain of translations; ``None`` when the chain contains a different transform type.
+
+        Notes
+        -----
         Its displacement is the sum of the displacements, in step order.
         """
         if not all(isinstance(t, TranslationTransform) for t in self.transforms):
@@ -104,7 +122,18 @@ class TransformChain:
         return None
 
     def pull_points(self, z):
-        """Float64 pull points Phi(p) of reference plane z, shape (3, Y, X) in ZYX order."""
+        """Float64 pull points Phi(p) of reference plane z, shape (3, Y, X) in ZYX order.
+
+        Parameters
+        ----------
+        z : int
+            Reference-plane Z index in voxel units.
+
+        Returns
+        -------
+        numpy.ndarray
+            Float64 moving-grid pull coordinates in ZYX voxel indices, shaped ``(3, Y, X)``.
+        """
         _, ny, nx = self.reference_shape_zyx
         q = np.empty((3, ny, nx), dtype=np.float64)
         q[0] = z
@@ -124,7 +153,13 @@ class TransformChain:
         return q
 
     def pull_field(self):
-        """The composite pull displacement u(p) = Phi(p) - p as a float64 DenseDisplacementTransform."""
+        """The composite pull displacement u(p) = Phi(p) - p as a float64 DenseDisplacementTransform.
+
+        Returns
+        -------
+        DenseDisplacementTransform
+            Float64 composite ZYX pull displacement in voxel indices on the reference grid.
+        """
         shape = self.reference_shape_zyx
         field = np.empty((*shape, 3), dtype=np.float64)
         grid = np.stack(np.meshgrid(*(np.arange(n, dtype=np.float64) for n in shape[1:]), indexing="ij"))
