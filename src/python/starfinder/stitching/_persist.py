@@ -43,14 +43,6 @@ def _write_file(path, data: bytes) -> None:
 def save_placement(result: PlacementResult, directory) -> Path:
     """Write a placement folder: ``placement.json``, ``fovs.csv`` and ``links.csv``; return the folder.
 
-    The tables are the checkpoint CSV form (float64 as ``%.17g``, so origins
-    read back bit for bit); ``placement.json`` is the record with ``tables``,
-    the path, SHA-256 and dtypes of each table. A BigStitcher import also gets
-    ``view_map.csv`` (``view``, ``grid_column``, ``grid_row``, ``fov_id``,
-    ``kind``, from ``record["method"]["views"]``), listed in ``tables`` with
-    its SHA-256; the record keeps the macro's and ``dataset.xml``'s SHA-256. An
-    existing placement folder is replaced as a whole.
-
     Parameters
     ----------
     result : PlacementResult
@@ -58,6 +50,21 @@ def save_placement(result: PlacementResult, directory) -> Path:
         ``placement_from_table``.
     directory : str or Path
         The folder, by convention ``<OUTPUT>/stitching/<sample>/``.
+
+    Returns
+    -------
+    pathlib.Path
+        Placement folder containing the saved record and tables.
+
+    Notes
+    -----
+    The tables are the checkpoint CSV form (float64 as ``%.17g``, so origins
+    read back bit for bit); ``placement.json`` is the record with ``tables``,
+    the path, SHA-256 and dtypes of each table. A BigStitcher import also gets
+    ``view_map.csv`` (``view``, ``grid_column``, ``grid_row``, ``fov_id``,
+    ``kind``, from ``record["method"]["views"]``), listed in ``tables`` with
+    its SHA-256; the record keeps the macro's and ``dataset.xml``'s SHA-256. An
+    existing placement folder is replaced as a whole.
 
     Raises
     ------
@@ -112,6 +119,18 @@ def save_placement(result: PlacementResult, directory) -> Path:
 def load_placement(directory) -> PlacementResult:
     """Read a placement folder written by :func:`save_placement`, checking both tables' SHA-256.
 
+    Parameters
+    ----------
+    directory : str or pathlib.Path
+        Saved placement folder containing ``placement.json`` and its tables.
+
+    Returns
+    -------
+    PlacementResult
+        Placement reconstructed from the saved tables and record.
+
+    Notes
+    -----
     Returns a :class:`PlacementResult` whose tables equal the saved ones
     (float64 bit for bit) and whose record equals the saved record without
     ``tables``. A BigStitcher import's ``view_map.csv`` is checked too: against

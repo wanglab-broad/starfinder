@@ -470,6 +470,18 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
 def load_sample_segmentation(output_dir) -> SampleSegmentation:
     """The saved sample segmentation of an export folder, each label file checked against its SHA-256.
 
+    Parameters
+    ----------
+    output_dir : str or pathlib.Path
+        Sample export folder containing the segmentation record and label files.
+
+    Returns
+    -------
+    SampleSegmentation
+        Segmentation grid, loaded segmentation runs and saved section record.
+
+    Notes
+    -----
     Reads the ``segmentation`` section of ``export.json`` (status ``written``
     or ``reused``), rebuilds the segmentation grid from it and reads each run's
     ``segmentation_<run>.ome.tif`` (uint32, the grid's shape).

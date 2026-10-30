@@ -727,6 +727,23 @@ def _export(assembly, record, config, output_dir, timer, *, requested_images):
 def lookup_source(folder, *, spot=None, cell=None) -> dict:
     """Find where a molecule or a cell of an export folder came from.
 
+    Parameters
+    ----------
+    folder : str or pathlib.Path
+        Sample export folder containing the assembly to query.
+    spot : tuple or None
+        Molecule identity ``(spot_namespace, spot_id)``; ``None`` selects the cell query.
+    cell : tuple or None
+        Cell identity ``(cell_namespace, cell_id)``; ``None`` selects the molecule query.
+
+    Returns
+    -------
+    dict
+        Source information for the queried identity, including its source row and route-
+        dependent provenance.
+
+    Notes
+    -----
     design/specs/sample-output.md ("Identities and source lookup"). Reads
     ``export.json``, verifies its hashes, finds the row by ``spot =
     (spot_namespace, spot_id)`` or ``cell = (cell_namespace, cell_id)`` and

@@ -18,6 +18,21 @@ from ._positions import TilePositionTable, _names
 class NeighborPair:
     """Two FOVs whose nominal boxes overlap, ``fov_a`` before ``fov_b`` in table order.
 
+    Parameters
+    ----------
+    fov_a : str
+        Identifier of the earlier FOV in tile-table order.
+    fov_b : str
+        Identifier of the later FOV in tile-table order.
+    overlap_zyx : tuple of tuple of float
+        Nominal overlap intervals ``((z0, z1), (y0, y1), (x0, x1))`` in micrometres.
+    index_a : int
+        Zero-based tile-table row of ``fov_a``.
+    index_b : int
+        Zero-based tile-table row of ``fov_b``.
+
+    Notes
+    -----
     ``overlap_zyx`` is the nominal overlap box, ``((z0, z1), (y0, y1), (x0,
     x1))`` in µm: the intersection of the two boxes without the tolerance (for a
     pair found only through a positive tolerance, an end may precede its start).

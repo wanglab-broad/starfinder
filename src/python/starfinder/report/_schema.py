@@ -130,7 +130,15 @@ def row_key(table: str, row) -> str:
 
 @dataclass(frozen=True)
 class ReportRecord:
-    """The result of ``Dataset.report``: the report folder and the content of its ``report.json``."""
+    """The result of ``Dataset.report``: the report folder and the content of its ``report.json``.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Sample report folder.
+    record : dict
+        Content of the sample's ``report.json``.
+    """
 
     path: Path
     record: dict
@@ -140,7 +148,15 @@ class ReportRecord:
 class ComparisonRecord:
     """The result of ``Dataset.compare_samples``: the report root holding ``index.html`` and ``samples.csv``, and
     the record of what was written (``samples``: the rows of ``samples.csv``; ``files``: each file with its SHA-256,
-    bytes and, for ``samples.csv``, its dtypes; ``box_plots``: per box plot, its slots in sample order)."""
+    bytes and, for ``samples.csv``, its dtypes; ``box_plots``: per box plot, its slots in sample order).
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Report root containing the dataset comparison page and sample table.
+    record : dict
+        Record of comparison samples, written files and box-plot slots.
+    """
 
     path: Path
     record: dict

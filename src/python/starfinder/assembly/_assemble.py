@@ -409,6 +409,27 @@ def check_identities(result: AssemblyResult) -> None:
 class AssemblyResult:
     """The assembled sample: the four sample tables, the gene list and the record.
 
+    Parameters
+    ----------
+    sample : str
+        Identifier of the assembled sample.
+    fovs : pandas.DataFrame
+        Sample FOV table with placement and assembly accounting.
+    cells : pandas.DataFrame
+        Sample cell observations with assembly retention information.
+    molecules : pandas.DataFrame
+        Sample molecule observations with sample-frame coordinates in micrometres and
+        retention information.
+    counts : pandas.DataFrame
+        Long-form gene counts of counted cells, separated by compartment.
+    genes : tuple of str
+        Gene identifiers in count-matrix column order.
+    record : Mapping[str, Any]
+        Assembly provenance and accounting record, stored in the ``assembly`` section of
+        ``export.json``.
+
+    Notes
+    -----
     ``fovs`` has one row per FOV of the placement; ``cells`` one row per cell of
     every input FOV, in placement table order then increasing ``cell_id``;
     ``molecules`` one row per molecule of every input FOV, in placement table
@@ -453,7 +474,13 @@ class AssemblyResult:
         return self.record.get("mode", "cells")
 
     def counted_cells(self) -> pd.DataFrame:
-        """The cell-table rows of the counted cells (retained, assignment ``kept``), in table order."""
+        """The cell-table rows of the counted cells (retained, assignment ``kept``), in table order.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Counted cell rows in table order, with a reset index.
+        """
         # §2.9
         cells = self.cells
         return cells[(cells["assembly_status"].eq("retained") & cells["status"].eq("kept")).to_numpy(dtype=bool)
@@ -462,6 +489,20 @@ class AssemblyResult:
     def matrix(self, compartment: str = "whole") -> tuple[np.ndarray, pd.DataFrame]:
         """A dense counted cells × genes ``int64`` matrix in ``genes`` order, with its cell-table rows.
 
+        Parameters
+        ----------
+        compartment : str
+            Count compartment: ``whole``, ``nucleus`` or ``cytoplasm``.
+
+        Returns
+        -------
+        matrix : numpy.ndarray
+            Dense int64 counts with cells along rows and ``genes`` along columns.
+        rows : pandas.DataFrame
+            Cell-table rows corresponding to the matrix rows for the selected compartment.
+
+        Notes
+        -----
         ``compartment`` is ``whole`` (every counted cell) or ``nucleus`` or
         ``cytoplasm`` (the counted cells whose compartments are ``available``).
 

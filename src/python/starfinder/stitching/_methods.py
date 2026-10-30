@@ -26,6 +26,26 @@ LINEAR_TOLERANCE = 1e-9
 class StitchingSpec:
     """Registered stitching method: stable snake_case name, private method function and declared capabilities.
 
+    Parameters
+    ----------
+    name : str
+        Stable lowercase snake_case method identifier.
+    run : Callable
+        Method implementation returning a ``MethodPlacement``.
+    requires : tuple of Dependency
+        Optional library dependencies imported for execution; the empty default declares
+        none.
+    min_shape_zyx : tuple of int
+        Minimum accepted axis sizes as positive integers in ZYX order.
+    dimensions : frozenset of int
+        Supported spatial dimensions, drawn from 2 and 3.
+    devices : tuple of str
+        Execution devices, ``("cpu",)``.
+    transform_kind : str
+        Transform family, ``translation``.
+
+    Notes
+    -----
     ``run(tiles, grids, nominal_zyx, pairs, *, config)`` receives the tiles (ZYX
     arrays in table order, ``None`` for an absent image, which the method must
     leave unplaced), their reference grids, the ``(n, 3)`` nominal origins in µm
@@ -70,6 +90,20 @@ class StitchingSpec:
 class MethodPlacement:
     """What a stitching method returns in its one call.
 
+    Parameters
+    ----------
+    translations_zyx : numpy.ndarray
+        Shape ``(n, 3)`` translations in micrometres and ZYX order, giving nominal-origin
+        corrections before the gauge in tile-table order.
+    components : numpy.ndarray
+        Shape ``(n,)`` method component labels in tile-table order.
+    links : pandas.DataFrame
+        Method neighbour-link measurements, with ZYX shifts in micrometres.
+    diagnostics : dict
+        Library-specific diagnostic values; defaults to an empty mapping.
+
+    Notes
+    -----
     ``translations_zyx`` is ``(n, 3)`` float64 in µm, view to common frame, in
     table order: the FOV's correction of its nominal origin before the gauge
     (NaN where not placed). ``components`` is ``(n,)`` int, the method's own

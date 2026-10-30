@@ -65,6 +65,17 @@ CHUNKS = {"stack": {"z": 1, "y": 512, "x": 512}, "plane": {"y": 512, "x": 512}}
 class LabelRecord:
     """The ``labels`` section ``fuse_labels`` wrote to ``export.json`` and the files it wrote.
 
+    Parameters
+    ----------
+    status : str
+        Label export outcome: ``written``, ``empty``, ``not_run`` or ``failed``.
+    section : Any
+        Labels section as recorded in ``export.json``.
+    paths : tuple of pathlib.Path
+        Written label output paths; empty when no label file was written.
+
+    Notes
+    -----
     ``status`` is ``written``, ``empty``, ``not_run`` or ``failed``;
     ``section`` the section as written (JSON values); ``paths`` the written
     files (``cell_labels.ome.tif``, or none).

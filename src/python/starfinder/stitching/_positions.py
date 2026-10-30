@@ -42,6 +42,19 @@ def _names(values, limit=10):
 class TilePositionTable:
     """One row per acquired FOV, in acquisition order, with its nominal origin in µm.
 
+    Parameters
+    ----------
+    positions : pandas.DataFrame
+        Acquisition-order FOV positions with nominal ZYX origins in micrometres.
+    source : str
+        Converter input label: ``leica:<path>``, ``grid`` or ``table:<path>``.
+    record : dict
+        Converter provenance as JSON values; defaults to an empty record.
+    unit : str
+        Coordinate unit, ``µm``.
+
+    Notes
+    -----
     ``positions`` has the columns ``fov_id`` (unique), ``position_id`` (the
     acquisition's own identifier, ``Int64``, missing when there is none),
     ``nominal_z``, ``nominal_y``, ``nominal_x`` (float64, µm, finite), ``source``
@@ -105,7 +118,14 @@ class TilePositionTable:
         return list(self.positions["fov_id"])
 
     def nominal_zyx(self) -> np.ndarray:
-        """The ``(n, 3)`` float64 array of nominal origins (z, y, x), µm, a copy."""
+        """The ``(n, 3)`` float64 array of nominal origins (z, y, x), µm, a copy.
+
+        Returns
+        -------
+        numpy.ndarray
+            Float64 copy of nominal origins in micrometres, shape ``(n, 3)`` in ZYX order and
+            table row order.
+        """
         return self.positions[list(NOMINAL)].to_numpy(dtype=np.float64, copy=True)
 
 

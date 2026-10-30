@@ -56,6 +56,21 @@ ROUTE_NAMES = ("per_fov", "after_fusion")
 class RouteComparison:
     """The report of :func:`compare_routes`.
 
+    Parameters
+    ----------
+    summary : Mapping[str, Any]
+        Summary statistics comparing the per-FOV and after-fusion routes.
+    pairs : pandas.DataFrame
+        Cell-pair overlap measurements and matching decisions.
+    counts : pandas.DataFrame
+        Count differences for matched cell pairs.
+    molecules : pandas.DataFrame
+        Molecule correspondence and retention categories across the routes.
+    record : Mapping[str, Any]
+        Comparison provenance and settings, including source-file hashes.
+
+    Notes
+    -----
     ``summary``: the counted cells of each route (``cells``), the pairs with a
     share above 0 (``pairs``), the matched pairs (``matched_pairs``), the
     cells of each route in no matched pair (``cells_in_no_matched_pair``),

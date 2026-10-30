@@ -228,6 +228,15 @@ class Timer:
 class ExportRecord:
     """The record ``export.json`` of an export folder, as ``Dataset.export`` wrote it.
 
+    Parameters
+    ----------
+    folder : pathlib.Path
+        Sample export folder containing ``export.json``.
+    record : Mapping[str, Any]
+        Parsed export record describing the sample's export parts.
+
+    Notes
+    -----
     ``folder`` is the export folder; ``record`` the parsed ``export.json``:
     ``format_version``, ``stage``, ``sample``, ``frame_id``, ``complete``,
     ``parts`` (each part's status: ``written``, ``reused``, ``off``,

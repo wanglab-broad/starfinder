@@ -66,6 +66,20 @@ def _flag_text(flags):
 def review_placement(result: PlacementResult, policy: ReviewPolicy = ReviewPolicy()) -> PlacementResult:
     """Apply the review criterion to a placement; return it with its flags and ``record["review"]``.
 
+    Parameters
+    ----------
+    result : PlacementResult
+        Placement to review.
+    policy : ReviewPolicy
+        Criteria for computing review flags and reasons.
+
+    Returns
+    -------
+    PlacementResult
+        Placement with recomputed review flags and review record.
+
+    Notes
+    -----
     The flags ``correction_above_bound``, ``residual_above_tolerance``,
     ``nan_quality_link`` and ``optimizer_removed_link`` are recomputed from the
     tables (``fallback`` and ``supplied`` are kept): the correction bound
@@ -141,6 +155,22 @@ def review_placement(result: PlacementResult, policy: ReviewPolicy = ReviewPolic
 def approve_placement(result: PlacementResult, *, reviewer: str, note: str) -> PlacementResult:
     """Record an approval of the placement as it is; return a new result.
 
+    Parameters
+    ----------
+    result : PlacementResult
+        Placement to approve.
+    reviewer : str
+        Nonempty reviewer name.
+    note : str
+        Review note recorded with the approval.
+
+    Returns
+    -------
+    PlacementResult
+        Placement with the approval appended to its review record.
+
+    Notes
+    -----
     The approval holds the reviewer, the UTC time, the note and the SHA-256 of
     the per-FOV and link tables it approves (the bytes ``save_placement``
     writes). No origin, correction, status or flag changes.

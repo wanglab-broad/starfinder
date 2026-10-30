@@ -80,6 +80,17 @@ def grid_cells(placement: PlacementResult) -> dict[str, tuple[int, int]] | None:
 class OwnershipMap:
     """The ownership regions of one placement, a point test.
 
+    Parameters
+    ----------
+    sample : str
+        Identifier of the sample whose placement supplies the regions.
+    geometry : pandas.DataFrame
+        Per-FOV ownership geometry with footprints and centres in micrometres.
+    config : AssemblyConfig
+        Ownership and tie settings used for point tests.
+
+    Notes
+    -----
     ``geometry`` has one row per FOV of the placement, in table order:
     ``fov_id``, ``placement_status``, the half-open footprint
     ``footprint_y0/y1/x0/x1`` and centre ``centre_y/x`` (µm, NaN for a FOV that
@@ -108,6 +119,20 @@ class OwnershipMap:
     def owner(self, points_zyx) -> np.ndarray:
         """The owning ``fov_id`` of each sample-frame point, or None where no candidate owns it.
 
+        Parameters
+        ----------
+        points_zyx : array-like
+            Sample-frame points in micrometres, in ZYX order, as shape ``(m, 3)`` or a single
+            shape ``(3,)`` point.
+
+        Returns
+        -------
+        numpy.ndarray
+            One-dimensional object array of owning FOV identifiers, with ``None`` for a point
+            without an owner.
+
+        Notes
+        -----
         ``points_zyx`` is ``(m, 3)`` (µm, ZYX); only Y and X are read. A point
         with a non-finite Y or X has no owner. Returns an object array of
         length ``m``.

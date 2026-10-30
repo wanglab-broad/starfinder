@@ -97,6 +97,20 @@ class AssemblyConfig:
 class AssemblyInput:
     """One FOV's input of :func:`assemble`: its reference grid and one of two kinds.
 
+    Parameters
+    ----------
+    fov_id : str
+        Nonempty identifier of the input FOV.
+    grid : ReferenceGrid
+        Reference grid that locates the FOV's index coordinates.
+    assignment : AssignmentResult or str or pathlib.Path or None
+        Per-FOV assignment result or saved assignment folder; ``None`` leaves this input
+        unset.
+    molecules : MoleculeTable or None
+        Molecules for assembly without segmentation; ``None`` leaves this input unset.
+
+    Notes
+    -----
     ``assignment`` is the FOV's :class:`~starfinder.assignment.AssignmentResult`
     or the path of its saved folder (``fovs/<fov_id>/assignment/<name>/``,
     loaded with the assignment loader, which checks every recorded SHA-256);

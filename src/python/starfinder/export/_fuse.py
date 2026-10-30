@@ -70,6 +70,18 @@ ZARR_CHUNKS = {"projection": {"t": 1, "c": 1, "y": 1024, "x": 1024},
 class FusionInput:
     """One included FOV's input of :func:`fuse_images`: its reference grid and its source images.
 
+    Parameters
+    ----------
+    fov_id : str
+        Nonempty identifier of the included FOV.
+    grid : ReferenceGrid
+        Reference grid of the source images.
+    images : Mapping[str, Any]
+        Source-image names mapped to ZYX arrays, YX arrays for one-plane grids, or TIFF
+        paths.
+
+    Notes
+    -----
     ``images`` maps each source-image name of ``FusionConfig.images`` to the
     image on the FOV's reference grid: a ZYX (or YX for a one-plane grid)
     numpy array, or the path of a TIFF file read lazily. A name that is
@@ -104,6 +116,17 @@ class FusionInput:
 class FusionRecord:
     """The ``fusion`` section ``fuse_images`` wrote to ``export.json`` and the files it wrote.
 
+    Parameters
+    ----------
+    status : str
+        Fusion outcome: ``written``, ``empty``, ``not_run`` or ``failed``.
+    section : Mapping[str, Any]
+        Fusion section as recorded in ``export.json``.
+    paths : tuple of pathlib.Path
+        Written output paths in writing order.
+
+    Notes
+    -----
     ``status`` is ``written``, ``empty``, ``not_run`` or ``failed``;
     ``section`` the section as written (JSON values); ``paths`` the written
     files and folders, in writing order.

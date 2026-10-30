@@ -30,6 +30,23 @@ FALLBACKS = (None, "nominal")
 class StitchingInput:
     """One FOV's stitching image on its reference grid.
 
+    Parameters
+    ----------
+    fov_id : str
+        Nonempty identifier of the input FOV.
+    image : numpy.ndarray or None
+        ZYX stitching image, with YX accepted for a one-plane grid; ``None`` represents an
+        absent image.
+    grid : ReferenceGrid
+        Reference grid of the stitching image.
+    source : str
+        Image source label: ``reference_merged``, ``reference_stain`` or ``file:<path>``.
+    file_sha256 : str or None
+        SHA-256 of the source file as lowercase hexadecimal text; ``None`` means no file
+        hash was supplied.
+
+    Notes
+    -----
     ``image`` is a ZYX array with ``image.shape == grid.shape_zyx`` (a YX array is
     read as one plane, Z=1), or ``None`` for a FOV whose image is absent (status
     ``missing``). ``source`` is ``"reference_merged"``, ``"reference_stain"`` or

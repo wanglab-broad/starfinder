@@ -33,6 +33,29 @@ def _names(values):
 class FusedGrid:
     """The library's union grid of the included FOVs, and the output levels of a factor ``k`` in Y and X.
 
+    Parameters
+    ----------
+    sample : str
+        Identifier of the fused sample.
+    fov_ids : tuple of str
+        Included FOV identifiers in placement table order.
+    spacing_zyx : tuple of float
+        Shared input voxel spacing in micrometres, in ZYX order.
+    origin_zyx : tuple of float
+        Union-grid origin in the sample frame, in micrometres and ZYX order.
+    shape_zyx : tuple of int
+        Union-grid voxel counts in ZYX order before output scaling.
+    one_plane : bool
+        Whether the included FOVs have singleton Z.
+    slab_z : tuple of float
+        Lower and upper Z edges of the projection slab in sample-frame micrometres.
+    origins_z : tuple of float
+        Included FOV origins along Z, in micrometres and ``fov_ids`` order.
+    factor_yx : int
+        Output downsampling factor along Y and X; 1 leaves their spacing unchanged.
+
+    Notes
+    -----
     ``spacing_zyx`` is the FOVs' shared spacing ``s``, ``origin_zyx`` the
     smallest included origin per axis ``o`` and ``shape_zyx`` the number of grid
     voxel centres ``n0`` up to the last voxel centre of any included FOV;
@@ -64,6 +87,22 @@ class FusedGrid:
                                                   tuple[int, int, int]]:
         """``(S, O, N)`` per axis Z, Y, X of the ``stack`` or ``projection`` at ``factor_yx``.
 
+        Parameters
+        ----------
+        dimensionality : str
+            Output form: ``stack`` or ``projection``.
+
+        Returns
+        -------
+        spacing_zyx : tuple of float
+            Output voxel spacing in micrometres, in ZYX order.
+        origin_zyx : tuple of float
+            Output origin in sample-frame micrometres, in ZYX order.
+        shape_zyx : tuple of int
+            Output voxel counts in ZYX order.
+
+        Notes
+        -----
         Y and X: ``S = k·s``, ``O = o + s·(k − 1)/2``, ``N = ceil(n0/k)``. Z of
         the stack: ``s_z``, ``o_z``, ``n0_z``; of the projection: the slab,
         ``n0_z·s_z`` and ``o_z + s_z·(n0_z − 1)/2``, one plane. For one-plane
@@ -85,7 +124,18 @@ class FusedGrid:
         return ((z[0], yx[0][0], yx[1][0]), (z[1], yx[0][1], yx[1][1]), (z[2], yx[0][2], yx[1][2]))
 
     def level_metadata(self, dimensionality: str) -> ImageMetadata:
-        """The ``ImageMetadata`` of the stack or projection at ``factor_yx`` in the sample frame."""
+        """The ``ImageMetadata`` of the stack or projection at ``factor_yx`` in the sample frame.
+
+        Parameters
+        ----------
+        dimensionality : str
+            Output form: ``stack`` or ``projection``.
+
+        Returns
+        -------
+        ImageMetadata
+            Output grid metadata in the sample frame, with micrometre units.
+        """
         spacing, origin, _ = self.level(dimensionality)
         return ImageMetadata(f"sample:{self.sample}", spacing, origin, IDENTITY, "µm")
 

@@ -128,6 +128,19 @@ def save_assembly(result: AssemblyResult, folder, *, table_format: str = "csv") 
 def load_assembly(folder) -> AssemblyResult:
     """Read the assembly of an export folder, checking every recorded SHA-256.
 
+    Parameters
+    ----------
+    folder : str or pathlib.Path
+        Sample export folder containing ``export.json`` and the saved assembly files.
+
+    Returns
+    -------
+    AssemblyResult
+        Assembly reconstructed from the saved record and tables, with saved fused
+        territories when present.
+
+    Notes
+    -----
     Every file of the section's ``files`` and every territory label file a
     FOV's entry records beside its SHA-256 (``conflicts=True`` with a saved
     assignment folder; the inputs of the assembly, read again by the label

@@ -92,6 +92,20 @@ def table_sha256(frame) -> str:
 class PlacementResult:
     """One placement of a sample's FOVs, whichever backend made it.
 
+    Parameters
+    ----------
+    sample : str
+        Nonempty sample identifier.
+    fovs : pandas.DataFrame
+        Per-FOV placement table, with sample-frame origins and corrections in ZYX
+        micrometres.
+    links : pandas.DataFrame
+        Neighbour-link table, with overlap bounds, shifts and residuals in micrometres.
+    record : dict
+        Placement provenance and review record as JSON values.
+
+    Notes
+    -----
     ``fovs`` has one row per row of the tile position table, in the same order,
     with the columns ``fov_id``, ``status`` (``image_supported``,
     ``metadata_only``, ``placeholder``, ``missing`` or ``failed``),
@@ -222,6 +236,20 @@ def check_grids(grids: Mapping[str, ReferenceGrid]) -> None:
 def placed_metadata(result: PlacementResult, fov_id: str) -> ImageMetadata:
     """The FOV's reference-grid metadata in the sample frame.
 
+    Parameters
+    ----------
+    result : PlacementResult
+        Placement supplying the recorded grid and sample-frame origin.
+    fov_id : str
+        Identifier of the FOV whose placed metadata is requested.
+
+    Returns
+    -------
+    ImageMetadata
+        FOV reference-grid metadata with the sample frame and placement origin.
+
+    Notes
+    -----
     ``dataclasses.replace(grid.metadata, frame_id="sample:<sample>",
     origin_zyx=origin)``, with the grid recorded in ``record["inputs"]`` and the
     FOV's placement origin, read as the stitching checks read a grid (a spelling of the
