@@ -31,12 +31,13 @@ class StitchingSpec:
     name : str
         Stable lowercase snake_case method identifier.
     run : Callable
-        Method implementation returning a ``MethodPlacement``.
+        Implementation callable for the stitching operation.
     requires : tuple of Dependency
         Optional library dependencies imported for execution; the empty default declares
         none.
     min_shape_zyx : tuple of int
-        Minimum accepted axis sizes as positive integers in ZYX order.
+        Minimum Y and X sizes, and the minimum Z size of a 3D grid, as positive
+        integers in ZYX order.
     dimensions : frozenset of int
         Supported spatial dimensions, drawn from 2 and 3.
     devices : tuple of str

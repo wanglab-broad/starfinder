@@ -732,9 +732,9 @@ def lookup_source(folder, *, spot=None, cell=None) -> dict:
     folder : str or pathlib.Path
         Sample export folder containing the assembly to query.
     spot : tuple or None
-        Molecule identity ``(spot_namespace, spot_id)``; ``None`` selects the cell query.
+        Molecule identity ``(spot_namespace, spot_id)`` to look up.
     cell : tuple or None
-        Cell identity ``(cell_namespace, cell_id)``; ``None`` selects the molecule query.
+        Cell identity ``(cell_namespace, cell_id)`` to look up.
 
     Returns
     -------

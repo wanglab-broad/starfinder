@@ -160,7 +160,7 @@ def approve_placement(result: PlacementResult, *, reviewer: str, note: str) -> P
     result : PlacementResult
         Placement to approve.
     reviewer : str
-        Nonempty reviewer name.
+        Nonblank reviewer name.
     note : str
         Review note recorded with the approval.
 
