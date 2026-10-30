@@ -1,0 +1,417 @@
+{
+ "dataset_id": "session",
+ "sample_id": "small",
+ "fov_id": "FOV_002",
+ "subtile_id": null,
+ "rounds": {
+  "sequencing_rounds": [
+   "round1",
+   "round2",
+   "round3",
+   "round4"
+  ],
+  "other_rounds": [],
+  "reference_round": "round1"
+ },
+ "channel_labels": [
+  "ch00",
+  "ch01",
+  "ch02",
+  "ch03"
+ ],
+ "readout_mode": "multiplexed",
+ "stage": "candidates",
+ "format_version": 3,
+ "table": "candidates.csv",
+ "dtypes": {
+  "spot_namespace": "string",
+  "spot_id": "string",
+  "z": "float64",
+  "y": "float64",
+  "x": "float64",
+  "channel": "int64",
+  "peak_intensity": "float64",
+  "sig_round1_ch00": "float64",
+  "sig_round1_ch01": "float64",
+  "sig_round1_ch02": "float64",
+  "sig_round1_ch03": "float64",
+  "sig_round2_ch00": "float64",
+  "sig_round2_ch01": "float64",
+  "sig_round2_ch02": "float64",
+  "sig_round2_ch03": "float64",
+  "sig_round3_ch00": "float64",
+  "sig_round3_ch01": "float64",
+  "sig_round3_ch02": "float64",
+  "sig_round3_ch03": "float64",
+  "sig_round4_ch00": "float64",
+  "sig_round4_ch01": "float64",
+  "sig_round4_ch02": "float64",
+  "sig_round4_ch03": "float64",
+  "valid_round1": "bool",
+  "valid_round2": "bool",
+  "valid_round3": "bool",
+  "valid_round4": "bool",
+  "bg_round1_ch00": "float64",
+  "bg_round1_ch01": "float64",
+  "bg_round1_ch02": "float64",
+  "bg_round1_ch03": "float64",
+  "bg_round2_ch00": "float64",
+  "bg_round2_ch01": "float64",
+  "bg_round2_ch02": "float64",
+  "bg_round2_ch03": "float64",
+  "bg_round3_ch00": "float64",
+  "bg_round3_ch01": "float64",
+  "bg_round3_ch02": "float64",
+  "bg_round3_ch03": "float64",
+  "bg_round4_ch00": "float64",
+  "bg_round4_ch01": "float64",
+  "bg_round4_ch02": "float64",
+  "bg_round4_ch03": "float64",
+  "noise_round1_ch00": "float64",
+  "noise_round1_ch01": "float64",
+  "noise_round1_ch02": "float64",
+  "noise_round1_ch03": "float64",
+  "noise_round2_ch00": "float64",
+  "noise_round2_ch01": "float64",
+  "noise_round2_ch02": "float64",
+  "noise_round2_ch03": "float64",
+  "noise_round3_ch00": "float64",
+  "noise_round3_ch01": "float64",
+  "noise_round3_ch02": "float64",
+  "noise_round3_ch03": "float64",
+  "noise_round4_ch00": "float64",
+  "noise_round4_ch01": "float64",
+  "noise_round4_ch02": "float64",
+  "noise_round4_ch03": "float64",
+  "bgvox_round1": "int64",
+  "bgvox_round2": "int64",
+  "bgvox_round3": "int64",
+  "bgvox_round4": "int64",
+  "boxvox_round1": "int64",
+  "boxvox_round2": "int64",
+  "boxvox_round3": "int64",
+  "boxvox_round4": "int64"
+ },
+ "files": [
+  {
+   "path": "candidates.csv",
+   "sha256": "716d0043b52d0dce8ada065c29e30ea79b72bba179bc958fa8e65db5cba31d75"
+  }
+ ],
+ "spot_namespace": "[\"session\",\"small\",\"FOV_002\",null]",
+ "spot_columns": [
+  "spot_id",
+  "z",
+  "y",
+  "x",
+  "channel",
+  "peak_intensity"
+ ],
+ "metadata": {
+  "frame_id": "<work>/input/session/small/FOV_002/round1/rotate:0",
+  "spacing_zyx": null,
+  "origin_zyx": null,
+  "direction_zyx": null,
+  "spatial_unit": null
+ },
+ "detection_config": {
+  "threshold_mode": "noise",
+  "threshold_value": 5.0,
+  "min_distance_voxels": 1,
+  "exclude_border": false,
+  "channel_labels": [
+   "ch00",
+   "ch01",
+   "ch02",
+   "ch03"
+  ],
+  "measure_peak_intensity": true,
+  "merge_radius_zyx": null,
+  "method": "local_maxima"
+ },
+ "detection_rounds": null,
+ "detection_plan": [],
+ "execution": {
+  "device": "cpu",
+  "framework": null,
+  "threads": {
+   "torch_num_threads": null,
+   "torch_num_interop_threads": null,
+   "OMP_NUM_THREADS": "1",
+   "MKL_NUM_THREADS": "1",
+   "OPENBLAS_NUM_THREADS": "1",
+   "NUMEXPR_NUM_THREADS": "1",
+   "NUMBA_NUM_THREADS": "1"
+  }
+ },
+ "weights": [],
+ "detection_diagnostics": {
+  "method": "local_maxima",
+  "channel_labels": [
+   "ch00",
+   "ch01",
+   "ch02",
+   "ch03"
+  ],
+  "thresholds": [
+   9.413,
+   9.413,
+   9.413,
+   8.413
+  ],
+  "coordinate_units": "voxel_index",
+  "singleton_z_policy": "YX plane; Z=0",
+  "measurements": {
+   "peak_intensity": "original pixel intensity at the detected channel maximum"
+  },
+  "counts": {
+   "ch00": 12,
+   "ch01": 39,
+   "ch02": 30,
+   "ch03": 23
+  },
+  "outcomes": {
+   "ch00": "ok",
+   "ch01": "ok",
+   "ch02": "ok",
+   "ch03": "ok"
+  },
+  "noise": {
+   "ch00": {
+    "zero_fraction": 0.2026958465576172,
+    "median": 2.0,
+    "mad": 1.0,
+    "threshold": 9.413
+   },
+   "ch01": {
+    "zero_fraction": 0.17809677124023438,
+    "median": 2.0,
+    "mad": 1.0,
+    "threshold": 9.413
+   },
+   "ch02": {
+    "zero_fraction": 0.1740398406982422,
+    "median": 2.0,
+    "mad": 1.0,
+    "threshold": 9.413
+   },
+   "ch03": {
+    "zero_fraction": 0.20687484741210938,
+    "median": 1.0,
+    "mad": 1.0,
+    "threshold": 8.413
+   }
+  },
+  "effective_settings": {
+   "ch00": {
+    "threshold_mode": "noise",
+    "threshold_value": 5.0,
+    "min_distance_voxels": 1,
+    "exclude_border": false,
+    "channel_labels": [
+     "ch00",
+     "ch01",
+     "ch02",
+     "ch03"
+    ],
+    "measure_peak_intensity": true,
+    "merge_radius_zyx": null,
+    "method": "local_maxima"
+   },
+   "ch01": {
+    "threshold_mode": "noise",
+    "threshold_value": 5.0,
+    "min_distance_voxels": 1,
+    "exclude_border": false,
+    "channel_labels": [
+     "ch00",
+     "ch01",
+     "ch02",
+     "ch03"
+    ],
+    "measure_peak_intensity": true,
+    "merge_radius_zyx": null,
+    "method": "local_maxima"
+   },
+   "ch02": {
+    "threshold_mode": "noise",
+    "threshold_value": 5.0,
+    "min_distance_voxels": 1,
+    "exclude_border": false,
+    "channel_labels": [
+     "ch00",
+     "ch01",
+     "ch02",
+     "ch03"
+    ],
+    "measure_peak_intensity": true,
+    "merge_radius_zyx": null,
+    "method": "local_maxima"
+   },
+   "ch03": {
+    "threshold_mode": "noise",
+    "threshold_value": 5.0,
+    "min_distance_voxels": 1,
+    "exclude_border": false,
+    "channel_labels": [
+     "ch00",
+     "ch01",
+     "ch02",
+     "ch03"
+    ],
+    "measure_peak_intensity": true,
+    "merge_radius_zyx": null,
+    "method": "local_maxima"
+   }
+  },
+  "warnings": [],
+  "execution": {
+   "device": "cpu",
+   "framework": null,
+   "threads": {
+    "torch_num_threads": null,
+    "torch_num_interop_threads": null,
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "NUMBA_NUM_THREADS": "1"
+   }
+  }
+ },
+ "signals": {
+  "round_labels": [
+   "round1",
+   "round2",
+   "round3",
+   "round4"
+  ],
+  "channel_labels": [
+   "ch00",
+   "ch01",
+   "ch02",
+   "ch03"
+  ],
+  "metadata": {
+   "frame_id": "<work>/input/session/small/FOV_002/round1/rotate:0",
+   "spacing_zyx": null,
+   "origin_zyx": null,
+   "direction_zyx": null,
+   "spatial_unit": null
+  },
+  "extraction_config": {
+   "neighborhood_radius_zyx": [
+    1,
+    2,
+    2
+   ],
+   "sampling": "nearest",
+   "boundary": "zero"
+  },
+  "diagnostics": {
+   "rounds": {
+    "round1": {
+     "source_shape_zyx": [
+      16,
+      256,
+      256
+     ],
+     "calculation_dtype": "float64",
+     "sampling": "floor(coord+.5)"
+    },
+    "round2": {
+     "source_shape_zyx": [
+      16,
+      256,
+      256
+     ],
+     "calculation_dtype": "float64",
+     "sampling": "floor(coord+.5)"
+    },
+    "round3": {
+     "source_shape_zyx": [
+      16,
+      256,
+      256
+     ],
+     "calculation_dtype": "float64",
+     "sampling": "floor(coord+.5)"
+    },
+    "round4": {
+     "source_shape_zyx": [
+      16,
+      256,
+      256
+     ],
+     "calculation_dtype": "float64",
+     "sampling": "floor(coord+.5)"
+    }
+   }
+  }
+ },
+ "background_config": {
+  "inner_radius_zyx": [
+   1,
+   3,
+   3
+  ],
+  "outer_radius_zyx": [
+   1,
+   6,
+   6
+  ],
+  "min_voxels": 16
+ },
+ "image_background": {
+  "round1": {
+   "ch00": 2.0,
+   "ch01": 2.0,
+   "ch02": 2.0,
+   "ch03": 1.0
+  },
+  "round2": {
+   "ch00": 2.0,
+   "ch01": 1.0,
+   "ch02": 1.0,
+   "ch03": 2.0
+  },
+  "round3": {
+   "ch00": 2.0,
+   "ch01": 2.0,
+   "ch02": 1.0,
+   "ch03": 1.0
+  },
+  "round4": {
+   "ch00": 2.0,
+   "ch01": 1.0,
+   "ch02": 2.0,
+   "ch03": 2.0
+  }
+ },
+ "image_noise": {
+  "round1": {
+   "ch00": 1.4826,
+   "ch01": 1.4826,
+   "ch02": 1.4826,
+   "ch03": 1.4826
+  },
+  "round2": {
+   "ch00": 1.4826,
+   "ch01": 1.4826,
+   "ch02": 1.4826,
+   "ch03": 1.4826
+  },
+  "round3": {
+   "ch00": 1.4826,
+   "ch01": 1.4826,
+   "ch02": 1.4826,
+   "ch03": 1.4826
+  },
+  "round4": {
+   "ch00": 1.4826,
+   "ch01": 1.4826,
+   "ch02": 1.4826,
+   "ch03": 1.4826
+  }
+ }
+}

@@ -1,0 +1,214 @@
+{
+ "FOV_001/reference:dtype": {
+  "compare": "exact",
+  "value": "uint8"
+ },
+ "FOV_001/reference:shape": {
+  "compare": "exact",
+  "value": [
+   16,
+   256,
+   256
+  ]
+ },
+ "FOV_002/reference:dtype": {
+  "compare": "exact",
+  "value": "uint8"
+ },
+ "FOV_002/reference:shape": {
+  "compare": "exact",
+  "value": [
+   16,
+   256,
+   256
+  ]
+ },
+ "file:fovs/FOV_001/checkpoints/candidates.csv": {
+  "compare": "same_environment",
+  "value": "d471d3ff0f6c48555e68be740d70cfbecf782e451192f1df600e8acc59bf8705"
+ },
+ "file:fovs/FOV_001/checkpoints/pre_qc.csv": {
+  "compare": "same_environment",
+  "value": "f3395c1835f3a01f81e804884e8bf1b24d186a45c6fccc6002799b3a3e778a18"
+ },
+ "file:fovs/FOV_001/checkpoints/pre_qc.json": {
+  "compare": "same_environment",
+  "value": "bc24f8d719e80880b21483c9c015e3f6e9a1f91982f1c287f0299190598be393"
+ },
+ "file:fovs/FOV_001/molecules.csv": {
+  "compare": "same_environment",
+  "value": "7e3ce44dc608bc6f1716d324e9a99dfb5907cbfcbca8594f815eabe8d64c0157"
+ },
+ "file:fovs/FOV_002/checkpoints/candidates.csv": {
+  "compare": "same_environment",
+  "value": "716d0043b52d0dce8ada065c29e30ea79b72bba179bc958fa8e65db5cba31d75"
+ },
+ "file:fovs/FOV_002/checkpoints/pre_qc.csv": {
+  "compare": "same_environment",
+  "value": "c0514120b246b33646db8d203e7ff2256147e6219aeca77de8000a971f8a2bc3"
+ },
+ "file:fovs/FOV_002/checkpoints/pre_qc.json": {
+  "compare": "same_environment",
+  "value": "cc1cccabdac32a1937e35fff4cdae1245d7ec31badfc979d6536b9f48ef64f3e"
+ },
+ "file:fovs/FOV_002/molecules.csv": {
+  "compare": "same_environment",
+  "value": "f1a2ac6b65b9d7ddd83ec624c95dddebbd18e1aa8b33b63c4a4e870d2c836299"
+ },
+ "fixture:input/session/small/FOV_001/round1/ch00.tif": {
+  "compare": "exact",
+  "value": "95e53d4359c3132a16725c313a53f2daca20f2903b405d5b3796c5555bca2c03"
+ },
+ "fixture:input/session/small/FOV_001/round1/ch01.tif": {
+  "compare": "exact",
+  "value": "a544927babb73dcde8d3a9a42f76023a2c51131e748ff97186e7d18824b40fcd"
+ },
+ "fixture:input/session/small/FOV_001/round1/ch02.tif": {
+  "compare": "exact",
+  "value": "9929f42c53e76bf77b14c0c212c823df6180a237c8ada0371284f62d5959131b"
+ },
+ "fixture:input/session/small/FOV_001/round1/ch03.tif": {
+  "compare": "exact",
+  "value": "346a666d3bad18f67483e8c40c490269cdce909726930665c11a4260101b1c21"
+ },
+ "fixture:input/session/small/FOV_001/round2/ch00.tif": {
+  "compare": "exact",
+  "value": "095e6b48cb21028d9ec87b7b37b9fb01ac8b5370197db027b97a63a13f522c8d"
+ },
+ "fixture:input/session/small/FOV_001/round2/ch01.tif": {
+  "compare": "exact",
+  "value": "852244a2e9187285bc3c3760bfc124dac65e07c8759bc99a58b6cf94f093273a"
+ },
+ "fixture:input/session/small/FOV_001/round2/ch02.tif": {
+  "compare": "exact",
+  "value": "6da506dc826fc88a44643ca30dee84d8f89fade6cda6ded5211b137c47b27376"
+ },
+ "fixture:input/session/small/FOV_001/round2/ch03.tif": {
+  "compare": "exact",
+  "value": "d5a11a2c2b09c72d9e0f1e39c46cd74c1c0069721adb1aa9813c4ce2a4187c36"
+ },
+ "fixture:input/session/small/FOV_001/round3/ch00.tif": {
+  "compare": "exact",
+  "value": "cc38ef0fdb26aa8716de177e187775913e82721ad9fa11eedfc3df8fc2dcc1b9"
+ },
+ "fixture:input/session/small/FOV_001/round3/ch01.tif": {
+  "compare": "exact",
+  "value": "4b68e98b5e100c5e4b98c12d0e71e53d4d3aeb123ea49b9aef42572d014dfe38"
+ },
+ "fixture:input/session/small/FOV_001/round3/ch02.tif": {
+  "compare": "exact",
+  "value": "8507044b85a4057a3e637929f23e9a2790b6ef60149119f5eb96571259bd5cb2"
+ },
+ "fixture:input/session/small/FOV_001/round3/ch03.tif": {
+  "compare": "exact",
+  "value": "87b3e26b8e4dc6fd24a211373f2514c68a9d317b65c89131a518f147128a4137"
+ },
+ "fixture:input/session/small/FOV_001/round4/ch00.tif": {
+  "compare": "exact",
+  "value": "d0e98c09342d6df07e2392b61a5704ec420dd8826a4540e14e4f8709589c3b6e"
+ },
+ "fixture:input/session/small/FOV_001/round4/ch01.tif": {
+  "compare": "exact",
+  "value": "06f22615cdce6c09cc27ba12d9d7841184dd67d76f0307295f178b9ed84c2f2f"
+ },
+ "fixture:input/session/small/FOV_001/round4/ch02.tif": {
+  "compare": "exact",
+  "value": "0eaf55a86fc595b699944ec5db04999b91932e91de2deb34f38bf94ee216b7c4"
+ },
+ "fixture:input/session/small/FOV_001/round4/ch03.tif": {
+  "compare": "exact",
+  "value": "4aa54465888cb4249b39937d29d63d608867d6ea0f072bcf3af278b291119983"
+ },
+ "fixture:input/session/small/FOV_002/round1/ch00.tif": {
+  "compare": "exact",
+  "value": "0c121a1c35b223b108193f890058168c47e89e41ee7fe1284376cb0eaee86ec0"
+ },
+ "fixture:input/session/small/FOV_002/round1/ch01.tif": {
+  "compare": "exact",
+  "value": "c933047ef647461f2fc3d48320e9e2bd1303ce3ce3bc783075825594c10d2915"
+ },
+ "fixture:input/session/small/FOV_002/round1/ch02.tif": {
+  "compare": "exact",
+  "value": "ef07be860bf32ca6430ef99032be5ab5126317f66594ee636d37fd0a438d8b4d"
+ },
+ "fixture:input/session/small/FOV_002/round1/ch03.tif": {
+  "compare": "exact",
+  "value": "4e5a782e105573969229ce42c5e8459b6c79579a138ece6dc26c8ca04d355041"
+ },
+ "fixture:input/session/small/FOV_002/round2/ch00.tif": {
+  "compare": "exact",
+  "value": "2c01c1834472531ce6e62986c0a23a261300e51aedc2d7a5963ebca300ac9bbd"
+ },
+ "fixture:input/session/small/FOV_002/round2/ch01.tif": {
+  "compare": "exact",
+  "value": "67bcf4a6b6e8506ae39317abd3a43867dc6b791fc85a2dd41a3f0538f38878f9"
+ },
+ "fixture:input/session/small/FOV_002/round2/ch02.tif": {
+  "compare": "exact",
+  "value": "ac2fb3fc9c95dd9c9c057907e487194059cd0e744dbca99a9d8e1ba730714dd3"
+ },
+ "fixture:input/session/small/FOV_002/round2/ch03.tif": {
+  "compare": "exact",
+  "value": "f14260ed7eb8a0d611ff636a44b38e811fa27f380f8e108f4441c882a4599616"
+ },
+ "fixture:input/session/small/FOV_002/round3/ch00.tif": {
+  "compare": "exact",
+  "value": "9f1c584691e9b0e348ac42df6433fd87fd7a592beb31a94ae0087599adf14ddc"
+ },
+ "fixture:input/session/small/FOV_002/round3/ch01.tif": {
+  "compare": "exact",
+  "value": "a5ca0b147f82290cb18f963b84996db37879e0040489299c192235ef8a17f77a"
+ },
+ "fixture:input/session/small/FOV_002/round3/ch02.tif": {
+  "compare": "exact",
+  "value": "63900789a49ff2e0e7ef6c6a7c81a99ad8b179eb2ce7070774be1370d4fa5b8e"
+ },
+ "fixture:input/session/small/FOV_002/round3/ch03.tif": {
+  "compare": "exact",
+  "value": "83aa652b63b34eb2078c51bfaea891bcdfb98c9bd4049c3eb00aec6b53f25af3"
+ },
+ "fixture:input/session/small/FOV_002/round4/ch00.tif": {
+  "compare": "exact",
+  "value": "2269be4d41ce2ab321273a72fa7a61591ac6a0b51981726d09414816e1352d13"
+ },
+ "fixture:input/session/small/FOV_002/round4/ch01.tif": {
+  "compare": "exact",
+  "value": "5830e2d8675c7a6169bd2812944f357fe353e33ccf364aba2d6672804afcf6d8"
+ },
+ "fixture:input/session/small/FOV_002/round4/ch02.tif": {
+  "compare": "exact",
+  "value": "0791403c40946b57689783ba92d78723882c3f194cfa07f42185b5d39fea6aca"
+ },
+ "fixture:input/session/small/FOV_002/round4/ch03.tif": {
+  "compare": "exact",
+  "value": "da4919a25f52435f5133eb95d6e03526bd76c61024d3b1de85da33534fb2251a"
+ },
+ "fixture:input/session/small/codebook.csv": {
+  "compare": "exact",
+  "value": "097967fc5bdaef0997c065ba1e210da33de64abcccb6c1098815aa2180108349"
+ },
+ "fixture:input/session/small/formed.csv": {
+  "compare": "exact",
+  "value": "8463e7f752c31ce769f21636c7b3faa5ac94854fedf786beadb2268a1384edf5"
+ },
+ "fixture:input/session/small/fovs.csv": {
+  "compare": "exact",
+  "value": "7bc1c7935a80ca3af23ff714f5c19f406b74b97533391c53dcf67f4e07535ecd"
+ },
+ "fixture:input/session/small/generation.json": {
+  "compare": "exact",
+  "value": "8563ce2efcd721a7ef281781aa889043637260a62789ab3b9f4e31d0474cd51b"
+ },
+ "fixture:input/session/small/ground_truth.json": {
+  "compare": "exact",
+  "value": "57b1251765c3bc3f3da8d98ed62d3a32ebb962d13add1a9f58c4cf300a6bf910"
+ },
+ "fixture:input/session/small/round_truth.csv": {
+  "compare": "exact",
+  "value": "3d83ef0681838cb4a666ad85e832451e9a9afca34c6696def03f8c954a03084a"
+ },
+ "fixture:input/session/small/scene_truth.csv": {
+  "compare": "exact",
+  "value": "a31b772c66751fec6d19072b634a89b50169d3c53e087de1df56b24b5b3467c3"
+ }
+}

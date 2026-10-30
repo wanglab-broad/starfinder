@@ -1,6 +1,6 @@
 [project]
 name = "starfinder"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Spatial transcriptomics data processing pipeline for STARmap"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,6 +18,8 @@ dependencies = [
     "matplotlib>=3.7",
     "bioio>=1.0",
     "bioio-tifffile>=1.0",
+    "jsonschema>=4.18",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -69,8 +71,13 @@ dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
 [project.scripts]
 starfinder = "starfinder.__main__:main"
 
+[tool.hatch.version]
+# The version comes from v* tags (design/specs/orchestration.md, "The code identity"); the archive/* tags are not versions.
+source = "vcs"
+raw-options = { root = "../..", tag_regex = "^v(?P<version>[0-9.]+)$", git_describe_command = "git describe --dirty --tags --long --match v*" }
+
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -91,6 +98,11 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "ruff>=0.1",
+    "pytest-xdist>=3.8,<4",
+]
+workflow = [
+    "snakemake==9.15.0",
+    "snakemake-executor-plugin-cluster-generic==1.0.9",
 ]
 
 [tool.uv]

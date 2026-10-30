@@ -40,13 +40,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
           version: '0.9.28'
           enable-cache: true
           cache-dependency-glob: src/python/uv.lock
-      - name: Install locked dependencies with the dev, local-registration and checkpoint extras
-        run: uv sync --locked --extra dev --extra local-registration --extra checkpoint
+      - name: Install locked dependencies with the dev, local-registration and checkpoint extras and the workflow group
+        run: uv sync --locked --extra dev --extra local-registration --extra checkpoint --group workflow
       - name: Install GNU time for the RSS measurement
         run: command -v /usr/bin/time >/dev/null || { sudo apt-get update && sudo apt-get install -y time; }
       - name: Inventory the optional backends
@@ -88,13 +89,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
           version: '0.9.28'
           enable-cache: true
           cache-dependency-glob: src/python/uv.lock
-      - name: Install locked dependencies with the dev, local-registration and checkpoint extras
-        run: uv sync --locked --extra dev --extra local-registration --extra checkpoint
+      - name: Install locked dependencies with the dev, local-registration and checkpoint extras and the workflow group
+        run: uv sync --locked --extra dev --extra local-registration --extra checkpoint --group workflow
       - name: Install GNU time for the RSS measurement
         run: command -v /usr/bin/time >/dev/null || { sudo apt-get update && sudo apt-get install -y time; }
       - name: Inventory the optional backends

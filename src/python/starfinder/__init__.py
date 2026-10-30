@@ -1,5 +1,7 @@
 """STARfinder: Spatial transcriptomics data processing pipeline."""
 
+from importlib.metadata import PackageNotFoundError, version as _package_version
+
 from starfinder.image import ImageMetadata
 from starfinder import readout, preprocessing, registration, spot_finding
 from starfinder.readout import decode_reads, extract_intensities, filter_reads, load_codebook
@@ -15,7 +17,10 @@ from starfinder.registration import estimate_transform, apply_transform
 from starfinder.spot_finding import find_spots
 from starfinder.preprocessing import project_image
 
-__version__ = "0.1.0"
+try:
+    __version__ = _package_version("starfinder")
+except PackageNotFoundError:
+    __version__ = "0+unknown"
 
 __all__ = [
     "ImageMetadata",

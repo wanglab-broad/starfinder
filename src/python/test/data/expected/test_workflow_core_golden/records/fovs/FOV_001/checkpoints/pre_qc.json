@@ -1,0 +1,121 @@
+{
+ "dataset_id": "session",
+ "sample_id": "small",
+ "fov_id": "FOV_001",
+ "subtile_id": null,
+ "rounds": {
+  "sequencing_rounds": [
+   "round1",
+   "round2",
+   "round3",
+   "round4"
+  ],
+  "other_rounds": [],
+  "reference_round": "round1"
+ },
+ "channel_labels": [
+  "ch00",
+  "ch01",
+  "ch02",
+  "ch03"
+ ],
+ "layout": {
+  "segments": [
+   {
+    "name": "A",
+    "bases": 5,
+    "ends": []
+   }
+  ],
+  "acquisition_order": null
+ },
+ "encoding": {
+  "method": "two_base",
+  "reverse_bases": true,
+  "pair_to_color": {
+   "AA": "1",
+   "AC": "2",
+   "AG": "3",
+   "AT": "4",
+   "CA": "2",
+   "CC": "1",
+   "CG": "4",
+   "CT": "3",
+   "GA": "3",
+   "GC": "4",
+   "GG": "1",
+   "GT": "2",
+   "TA": "4",
+   "TC": "3",
+   "TG": "2",
+   "TT": "1"
+  }
+ },
+ "stage": "pre_qc",
+ "format_version": 3,
+ "table": "pre_qc.csv",
+ "dtypes": {
+  "spot_id": "string",
+  "observed_color_sequence": "string",
+  "decoded_color_sequence": "string",
+  "gene_id": "string",
+  "entry_id": "string",
+  "call_status": "string",
+  "failure_reason": "string",
+  "wta_l2_nll": "float64",
+  "call_type": "string",
+  "spot_namespace": "string",
+  "qc_score": "float64",
+  "qc_ambiguity_max": "float64",
+  "qc_signal_to_background": "float64",
+  "qc_rounds": "float64",
+  "qc_reason": "string",
+  "duplicate_group": "string",
+  "duplicate_of": "string",
+  "is_representative": "bool",
+  "duplicate_reason": "string"
+ },
+ "files": [
+  {
+   "path": "pre_qc.csv",
+   "sha256": "f3395c1835f3a01f81e804884e8bf1b24d186a45c6fccc6002799b3a3e778a18"
+  }
+ ],
+ "spot_namespace": "[\"session\",\"small\",\"FOV_001\",null]",
+ "channel_labels_decoded": [
+  "ch00",
+  "ch01",
+  "ch02",
+  "ch03"
+ ],
+ "round_labels": [
+  "round1",
+  "round2",
+  "round3",
+  "round4"
+ ],
+ "decoding_config": {
+  "negative_policy": "clip_negative",
+  "diagnostics": true,
+  "method": "wta"
+ },
+ "decoding_diagnostics": {
+  "negative_policy": "clip_negative",
+  "clipped_count": 0,
+  "clipped_range": null,
+  "candidate_order": "probability_nll then color_sequence; tied candidates are ambiguous"
+ },
+ "readout_mode": "multiplexed",
+ "scoring_config": {
+  "method": "bgcorr_probability"
+ },
+ "deduplication_config": {
+  "distance_voxels": 1.0,
+  "compatibility": "same_sequence"
+ },
+ "stages_applied": [
+  "decoding",
+  "scoring",
+  "deduplication"
+ ]
+}
