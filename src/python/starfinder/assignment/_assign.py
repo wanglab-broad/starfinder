@@ -165,6 +165,32 @@ def _nullable(values, mask, dtype):
 class AssignmentResult:
     """The result of :func:`assign_molecules` for one FOV.
 
+    Parameters
+    ----------
+    molecules : pandas.DataFrame
+        Assignment status, cell, nucleus and compartment for the input molecule rows.
+    cells : pandas.DataFrame
+        Territory rows with status, sizes, centroids and nucleus correspondence.
+    counts : pandas.DataFrame
+        Nonzero long counts by cell, gene and compartment for kept cells.
+    nuclei : pandas.DataFrame or None
+        Nucleus correspondence rows; ``None`` represents assignment without nuclei.
+    cell_labels : numpy.ndarray
+        Original cell territories as a uint32 ZYX label image.
+    territories : numpy.ndarray or None
+        Expanded territories as a uint32 ZYX label image; ``None`` means no assignment
+        expansion.
+    nucleus_labels : numpy.ndarray or None
+        Nucleus labels as a uint32 ZYX image; ``None`` means no nuclei were supplied.
+    genes : tuple of str
+        Gene names in count-matrix column order.
+    cell_namespace : str
+        Identity scope paired with a cell label value to identify a cell.
+    record : Mapping[str, Any]
+        Assignment run provenance and count accounting.
+
+    Notes
+    -----
     ``molecules`` has one row per input molecule (its status, cell, nucleus and
     compartment); ``cells`` one row per territory (status, sizes, centroids,
     correspondence, compartments); ``counts`` the nonzero long counts (``cell_id``,
@@ -199,6 +225,23 @@ class AssignmentResult:
     def matrix(self, compartment: str = "whole", *, cells: str = "kept") -> tuple[np.ndarray, pd.DataFrame]:
         """A dense cells × genes ``int64`` count matrix in ``genes`` order, with its cell-table rows.
 
+        Parameters
+        ----------
+        compartment : str
+            Count compartment: ``whole``, ``nucleus`` or ``cytoplasm``.
+        cells : str
+            Cell selection: ``kept`` or ``all`` for whole-cell counts; compartment counts use
+            kept cells with available compartments.
+
+        Returns
+        -------
+        matrix : numpy.ndarray
+            Dense int64 counts with cells on rows and ``genes`` on columns.
+        rows : pandas.DataFrame
+            Cell-table rows in matrix row order.
+
+        Notes
+        -----
         ``compartment`` is ``whole``, ``nucleus`` or ``cytoplasm``. ``cells="kept"``
         gives the kept cells; ``cells="all"`` adds the excluded cells to the
         ``whole`` matrix (their ``excluded_cell`` molecules), for the totals before

@@ -38,6 +38,21 @@ _EXCLUDED_LEGEND = "excluded from sample"
 class FOVOwnership:
     """What the sample assembly decided for one FOV, for :func:`plot_assignment`.
 
+    Parameters
+    ----------
+    region : numpy.ndarray
+        Boolean YX ownership mask on the FOV grid, true at pixel centres owned by the FOV.
+    excluded_cells : frozenset of int
+        Nonnegative cell identities excluded by sample assembly; the empty default records
+        no exclusions.
+    excluded_molecules : frozenset of str
+        Molecule spot identities excluded by sample assembly; the empty default records no
+        exclusions.
+    fov_id : str or None
+        FOV name, with ``None`` representing an unspecified name.
+
+    Notes
+    -----
     ``region`` is a boolean Y, X array on the FOV's grid: True at the pixels
     whose centres the FOV owns in the sample. ``excluded_cells`` holds the
     ``cell_id`` of each of the FOV's cells and ``excluded_molecules`` the
@@ -157,6 +172,18 @@ def _outline_segments(plane):
 def summarize_assignment(result: AssignmentResult) -> dict:
     """Counts of an assignment: the record's totals, then flags, nuclei, quantiles and the exclusion.
 
+    Parameters
+    ----------
+    result : AssignmentResult
+        Assignment whose totals and diagnostics are summarized.
+
+    Returns
+    -------
+    dict
+        Assignment totals, status counts, quantiles and exclusion accounting.
+
+    Notes
+    -----
     Keys: the totals of ``record["counts"]`` (molecules per status, cells, kept
     and excluded cells, nuclei, cells per correspondence status, kept cells per
     compartment state, assigned molecules per compartment value); ``cells_by_status``
@@ -212,6 +239,28 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None,
                     ownership: FOVOwnership | None = None):
     """One row of four panels: cell centres, molecules by status, voxels and molecules per cell.
 
+    Parameters
+    ----------
+    result : AssignmentResult
+        Assignment to inspect.
+    image : numpy.ndarray or None
+        YX or ZYX background intensity image; ``None`` draws no background.
+    view : str or None
+        Display view, ``z_max`` or ``single_layer``; ``None`` selects ``z_max`` without
+        ``z`` and ``single_layer`` with ``z``.
+    z : int or None
+        Zero-based plane index for ``single_layer``; ``None`` uses the middle plane in that
+        view.
+    ownership : FOVOwnership or None
+        Sample ownership overlay; ``None`` draws the assignment without an ownership overlay.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure containing the four assignment diagnostic panels.
+
+    Notes
+    -----
     Panel 1 shows ``image`` in grey scale (scaled between its 0.5 and 99.5
     percentiles; none by default) with the territory outlines as green lines
     0.8 points wide and one dot of 30 points² with a thin black edge per cell
@@ -246,10 +295,6 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None,
     one), every other keeps the colour of its status; and each panel's x-axis
     label states how many of the cells (panel 1) or molecules (panel 2) it
     draws the assembly retained. Panels 3 and 4 do not change.
-
-    Returns
-    -------
-    matplotlib.figure.Figure
 
     Raises
     ------

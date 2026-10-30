@@ -27,6 +27,22 @@ DEVICES = ("cpu", "cuda")
 class MethodContext:
     """What segment passes to a method function besides the image and config.
 
+    Parameters
+    ----------
+    roles : tuple of str
+        Channel roles in input channel order: ``nuclear``, ``cytoplasm``, ``membrane``,
+        ``amplicon`` or ``composite``.
+    seeds : numpy.ndarray or None
+        Seed labels as a uint32 ZYX image on the input grid; ``None`` means no seeds.
+    grid : ReferenceGrid
+        Reference grid of the method input.
+    device : str
+        Execution device: ``cpu`` or ``cuda``.
+    model : pathlib.Path or None
+        Resolved model folder or file; ``None`` means no model.
+
+    Notes
+    -----
     roles are the channel roles in channel order; seeds is the seed run's
     ``uint32`` label array on the input grid, or None; grid is the input's
     ReferenceGrid; device is the checked device; model is the resolved model
@@ -48,6 +64,35 @@ def _subset(value, allowed, name, spec_name):
 class SegmentationSpec:
     """Registered segmentation method: stable snake_case name, private method function and declared capabilities.
 
+    Parameters
+    ----------
+    name : str
+        Stable snake_case identifier of the segmentation method.
+    run : callable
+        Method function taking image, config and context and returning labels and a details
+        mapping.
+    requires : tuple of Dependency
+        Optional method dependencies; the empty default declares none.
+    min_shape_zyx : tuple of int
+        Positive minimum input sizes in ZYX voxels.
+    targets : frozenset of str
+        Supported object targets from ``nucleus`` and ``cell``.
+    roles : frozenset of str
+        Accepted channel roles from ``nuclear``, ``cytoplasm``, ``membrane``, ``amplicon``
+        and ``composite``.
+    required_roles : tuple of frozenset of str
+        Role requirements, with one accepted alternative needed from each frozenset.
+    seeds : str
+        Seed capability: ``none``, ``optional`` or ``required``.
+    dimensions : frozenset of int
+        Supported spatial dimensionalities: 2 for planes and 3 for volumes.
+    models : bool
+        Whether the method uses a model named by its config.
+    devices : frozenset of str
+        Supported execution devices from ``cpu`` and ``cuda``.
+
+    Notes
+    -----
     run(image, config, context) receives the validated ZYXC image, the config
     and a :class:`MethodContext`, and returns an integer label array of the
     image's ZYX shape (a method may drop the Z axis of a Z=1 input; the wrapper

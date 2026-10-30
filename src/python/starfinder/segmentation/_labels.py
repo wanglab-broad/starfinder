@@ -53,6 +53,18 @@ def _json(value):
 def to_label_dtype(labels) -> np.ndarray:
     """Convert an integer label array to C-contiguous ``uint32`` without wrapping.
 
+    Parameters
+    ----------
+    labels : array_like
+        Integer label array with nonnegative values.
+
+    Returns
+    -------
+    numpy.ndarray
+        C-contiguous uint32 labels with the input shape and values.
+
+    Notes
+    -----
     The label dtype rule of design/specs/segmentation.md: every label image is
     ``uint32``. Values are kept as they are; the shape is not checked.
 
@@ -108,6 +120,19 @@ def _namespace_ids(label_namespace):
 class ReferenceGrid:
     """The grid every label image of a FOV is on: shape, geometry, source and hash.
 
+    Parameters
+    ----------
+    shape_zyx : tuple of int
+        Grid dimensions in ZYX voxels, as three positive integers.
+    metadata : ImageMetadata
+        Spatial interpretation of the reference grid.
+    source : str
+        Grid source, ``fov:<round>``, ``file:<path>`` or ``declared``.
+    sha256 : str or None
+        SHA-256 of the reference image's C-order bytes; ``None`` represents an unrecorded hash.
+
+    Notes
+    -----
     ``ImageMetadata`` carries no shape, so the grid holds both. ``source`` is
     ``"fov:<reference round>"`` (:meth:`starfinder.dataset.FOV.reference_grid`),
     ``"file:<path>"`` (:func:`reference_grid_from_file`) or ``"declared"`` (built by
@@ -148,6 +173,18 @@ class ReferenceGrid:
     def projected(self, *, method: str = "max") -> ReferenceGrid:
         """The Z=1 grid of a projection: shape (1, Y, X) and ``metadata.projected(method=method)``.
 
+        Parameters
+        ----------
+        method : str
+            Z-projection method recorded in the derived metadata: ``max`` or ``sum``.
+
+        Returns
+        -------
+        ReferenceGrid
+            Singleton-Z grid with projected metadata and the original source and hash.
+
+        Notes
+        -----
         The source and hash stay those of the image the grid was read from.
         """
         return ReferenceGrid((1, *self.shape_zyx[1:]), self.metadata.projected(method=method),
@@ -174,6 +211,22 @@ def _grid_record(grid):
 def reference_grid_from_file(path: Path | str, *, metadata: ImageMetadata | None = None) -> ReferenceGrid:
     """The reference grid of a ZYX or YX TIFF, read with :func:`starfinder.io.load_volume`.
 
+    Parameters
+    ----------
+    path : pathlib.Path or str
+        Path to the reference intensity TIFF, with ZYX or YX axes.
+    metadata : ImageMetadata or None
+        Spatial interpretation supplied for a file without stored metadata; ``None`` uses
+        the file's stored metadata.
+
+    Returns
+    -------
+    ReferenceGrid
+        Loaded ZYX grid with the reference image's metadata, resolved file source and
+        pixel-byte SHA-256.
+
+    Notes
+    -----
     The shape is the array's (a YX file gives a Z=1 grid); the metadata is the
     file's ``starfinder_metadata`` description, or ``metadata`` when the file has
     none. The natural file is the FOV's reference image (``fovs/{fovID}/reference.tif``
@@ -211,6 +264,26 @@ def reference_grid_from_file(path: Path | str, *, metadata: ImageMetadata | None
 class SegmentationResult:
     """One label image on its grid, with its target, geometry, identity scope and record.
 
+    Parameters
+    ----------
+    labels : numpy.ndarray
+        C-contiguous uint32 ZYX label image, with zero as background and positive values
+        identifying objects.
+    grid : ReferenceGrid
+        Reference grid of the label image.
+    target : str
+        Object target: ``nucleus`` or ``cell``.
+    geometry : str
+        Label geometry: ``volume``, ``plane`` or ``extended``.
+    label_namespace : str
+        Nonempty identity scope paired with a label value to identify an object.
+    record : Mapping[str, Any]
+        Segmentation run provenance.
+    diagnostics : Mapping[str, Any]
+        Method-specific diagnostics; the default is an empty mapping.
+
+    Notes
+    -----
     ``labels`` is a C-contiguous ``uint32`` ZYX array (a plane is 1×Y×X), 0 is
     background and each positive value one object; values are never relabelled.
     ``grid`` is the :class:`ReferenceGrid` the labels are on (``labels.shape ==
@@ -274,6 +347,17 @@ class SegmentationResult:
 class SampleSegmentation:
     """The sample segmentation of the route after fusion: its grid, one label image per run, and its section.
 
+    Parameters
+    ----------
+    grid : ReferenceGrid or None
+        Segmentation grid of the fused projection; ``None`` represents an unavailable grid.
+    runs : Mapping[str, SegmentationResult]
+        Run names mapped to label results in run order.
+    record : Mapping[str, Any]
+        The ``segmentation`` section of the sample export record.
+
+    Notes
+    -----
     ``grid`` is the segmentation grid (the fused projection's, frame
     ``sample:<sample>``), None when no run was made; ``runs`` maps each run
     name, in run order, to its

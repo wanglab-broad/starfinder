@@ -26,18 +26,29 @@ def _target_shape(target_shape):
 def resample_labels(labels, *, target_shape) -> tuple[np.ndarray, dict]:
     """Map a label image onto exactly ``target_shape`` by nearest neighbour at pixel centres.
 
+    Parameters
+    ----------
+    labels : array_like
+        Integer ZYX label image with nonnegative values.
+    target_shape : tuple of int or list of int
+        Output shape as three positive integers in ZYX voxels.
+
+    Returns
+    -------
+    output : numpy.ndarray
+        C-contiguous uint32 ZYX labels on the target shape.
+    record : dict
+        Operation record with ``function``, ``config``, ``inputs``, ``output``,
+        ``source_shape`` and ``target_shape``; ``inputs`` and ``output`` are array SHA-256
+        values.
+
+    Notes
+    -----
     Per axis the source index of output index i is ⌊(i + 0.5) × n_source / n_target⌋,
     computed in integers, so an odd size keeps its grid (unlike the legacy rescale
     round trip, which turns 61×63 into 60×64). For a direct caller that detected
     nuclei on a shrunk input with a method without its own scale; the caller
     attaches the target grid. Values are kept and the output is ``uint32``.
-
-    Returns
-    -------
-    tuple[numpy.ndarray, dict]
-        The C-contiguous ``uint32`` ZYX labels, and the record ``{"function",
-        "config", "inputs", "output", "source_shape", "target_shape"}`` whose
-        ``inputs`` and ``output`` are array SHA-256 values.
 
     Raises
     ------

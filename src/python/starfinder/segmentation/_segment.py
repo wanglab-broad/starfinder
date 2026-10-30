@@ -28,6 +28,20 @@ _WHAT = "segmentation method"
 class SegmentationInput:
     """One ZYXC image on one grid whose channels each carry a declared role.
 
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Finite real intensity image in ZYXC order.
+    grid : ReferenceGrid
+        Reference grid describing the image's spatial axes.
+    roles : tuple of str
+        Channel roles in channel order: ``nuclear``, ``cytoplasm``, ``membrane``,
+        ``amplicon`` or ``composite``.
+    sources : tuple of Mapping
+        Channel provenance in channel order; the empty default supplies no channel provenance.
+
+    Notes
+    -----
     ``image`` is finite and real (Z=1 for a plane) with ``image.shape[:3] ==
     grid.shape_zyx``; ``roles`` holds one role per channel, in channel order,
     each of ``nuclear``, ``cytoplasm``, ``membrane``, ``amplicon`` and

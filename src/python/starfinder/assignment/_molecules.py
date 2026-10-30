@@ -53,6 +53,22 @@ def molecules_sha256(table: pd.DataFrame) -> str:
 class MoleculeTable:
     """The molecules of one FOV that assign places in cells.
 
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Molecule rows with string identities and genes, and float64 zero-based ZYX voxel
+        coordinates.
+    genes : tuple of str
+        Ordered gene names defining the count-matrix columns.
+    population : str
+        Read population: ``final`` for accepted reads or ``called`` for assigned calls.
+    source : Mapping[str, Any]
+        Molecule provenance including the FOV's ``spot_namespace``.
+    sha256 : str
+        Canonical SHA-256 of the molecule columns, computed at construction.
+
+    Notes
+    -----
     ``table`` has exactly the columns ``spot_namespace``, ``spot_id`` and
     ``gene_id`` (pandas string) and ``z``, ``y``, ``x`` (float64, zero-based voxel
     coordinates of the molecule run's reference grid), one row per molecule.
@@ -157,13 +173,6 @@ def _genes(genes):
 def molecule_table(detection, reads, *, genes, population: str = "final") -> MoleculeTable:
     """The molecules of a detection and a read result, joined by ``(spot_namespace, spot_id)``.
 
-    The join and its checks are those of :func:`starfinder.readout.export_spots`.
-    ``population="final"`` takes the accepted reads of a
-    :class:`~starfinder.readout.ReadFilteringResult` (the molecules.csv population);
-    ``"called"`` takes the reads whose ``call_status`` is ``assigned`` from a
-    :class:`~starfinder.readout.ReadDecodingResult` or a filtering result,
-    before filtering. Positions are the detection's zero-based ``z, y, x``.
-
     Parameters
     ----------
     detection : SpotFindingResult
@@ -174,6 +183,20 @@ def molecule_table(detection, reads, *, genes, population: str = "final") -> Mol
         The ordered gene list (``Codebook.genes``).
     population : str
         ``final`` (default) or ``called``.
+
+    Returns
+    -------
+    MoleculeTable
+        Molecules joined to detection positions for the requested read population.
+
+    Notes
+    -----
+    The join and its checks are those of :func:`starfinder.readout.export_spots`.
+    ``population="final"`` takes the accepted reads of a
+    :class:`~starfinder.readout.ReadFilteringResult` (the molecules.csv population);
+    ``"called"`` takes the reads whose ``call_status`` is ``assigned`` from a
+    :class:`~starfinder.readout.ReadDecodingResult` or a filtering result,
+    before filtering. Positions are the detection's zero-based ``z, y, x``.
 
     Raises
     ------
@@ -205,14 +228,6 @@ def molecule_table(detection, reads, *, genes, population: str = "final") -> Mol
 def load_molecules(path: Path | str, *, genes, spot_namespace: str | None = None) -> MoleculeTable:
     """The molecules of a ``molecules.csv`` that ``FOV.export_spots`` wrote, with their identities.
 
-    The file is the typed, zero-based CSV of the columns ``spot_namespace,
-    spot_id, z, y, x, gene_id, entry_id, qc_score``; the table keeps the six
-    molecule columns, rows in file order, and its population is ``final``.
-    ``spot_namespace`` is the FOV's namespace: given, every row must have it;
-    None takes the rows' one namespace (an empty file then needs it). The
-    source records the namespace, the path and the file's SHA-256. For a
-    legacy one-based ``x, y, z, gene`` file use :func:`import_legacy_molecules_csv`.
-
     Parameters
     ----------
     path : str or Path
@@ -221,6 +236,22 @@ def load_molecules(path: Path | str, *, genes, spot_namespace: str | None = None
         The ordered gene list (``Codebook.genes``).
     spot_namespace : str or None
         The FOV's spot namespace, or None to read it from the rows.
+
+    Returns
+    -------
+    MoleculeTable
+        The file's molecule rows with their identities, ordered gene list and population
+        ``final``.
+
+    Notes
+    -----
+    The file is the typed, zero-based CSV of the columns ``spot_namespace,
+    spot_id, z, y, x, gene_id, entry_id, qc_score``; the table keeps the six
+    molecule columns, rows in file order, and its population is ``final``.
+    ``spot_namespace`` is the FOV's namespace: given, every row must have it;
+    None takes the rows' one namespace (an empty file then needs it). The
+    source records the namespace, the path and the file's SHA-256. For a
+    legacy one-based ``x, y, z, gene`` file use :func:`import_legacy_molecules_csv`.
 
     Raises
     ------
@@ -254,6 +285,22 @@ def load_molecules(path: Path | str, *, genes, spot_namespace: str | None = None
 def import_legacy_molecules_csv(path: Path | str, *, spot_namespace: str, genes) -> MoleculeTable:
     """The molecules of a legacy one-based ``x, y, z, gene`` CSV (``goodSpots``).
 
+    Parameters
+    ----------
+    path : pathlib.Path or str
+        Path to the legacy CSV containing one-based ``x, y, z`` voxel coordinates and ``gene``.
+    spot_namespace : str
+        FOV identity as the JSON list ``[dataset_id, sample_id, fov_id, subtile_id]``.
+    genes : sequence of str
+        Ordered gene names defining the count-matrix columns.
+
+    Returns
+    -------
+    MoleculeTable
+        Imported molecules with zero-based ZYX voxel coordinates and population ``final``.
+
+    Notes
+    -----
     Integer and float coordinates are both read; 1 is subtracted from each, and
     the row with zero-based index ``i`` gets the identity ``spot_id = "csv:<i>"``.
     The population is ``final`` (a goodSpots file); the source records the file

@@ -31,7 +31,17 @@ REQUIRED_FILES = {"stardist": ("config.json", "thresholds.json", "weights_best.h
 
 @dataclass(frozen=True)
 class ModelFile:
-    """A file the library loads: path relative to the model folder, SHA-256 and size in bytes."""
+    """A file the library loads: path relative to the model folder, SHA-256 and size in bytes.
+
+    Parameters
+    ----------
+    path : str
+        Model file path relative to its model folder.
+    sha256 : str
+        Expected SHA-256 digest of the file.
+    bytes : int
+        Recorded file size in bytes.
+    """
     path: str
     sha256: str
     bytes: int
@@ -41,6 +51,37 @@ class ModelFile:
 class KnownModel:
     """One row of the known-models table (design/specs/segmentation.md, "Known-models table").
 
+    Parameters
+    ----------
+    method : str
+        Segmentation method identifier.
+    model : str
+        Known model identifier within the method.
+    url : str
+        Download URL of the model artifact.
+    sha256 : str
+        Expected SHA-256 digest of the download.
+    bytes : int or None
+        Recorded download size in bytes; ``None`` means the size is unrecorded.
+    archive : bool
+        Whether the download is a zip archive to extract into the model folder.
+    files : tuple of ModelFile
+        Model files loaded by the library, with paths relative to the model folder.
+    dimensionality : str
+        Documented spatial dimensionality of the model.
+    channels : str
+        Documented input channel count.
+    grid : tuple of int or None
+        Documented model grid factors; ``None`` means no grid is recorded.
+    stored_thresholds : Mapping[str, float] or None
+        Documented ``prob`` and ``nms`` thresholds; ``None`` means none are recorded.
+    training_pixel_size : str
+        Description of the model's training pixel size and its documentation status.
+    source : str
+        Provenance of the known-model table entry's hashes.
+
+    Notes
+    -----
     url is the file ``starfinder weights fetch`` downloads, with its SHA-256 and
     size (None when not recorded); archive is True when the download is a zip
     extracted into the model folder (StarDist) and False when it is the loaded

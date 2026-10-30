@@ -211,6 +211,11 @@ class SegmentationRun:
 class SegmentationPlan:
     """The ordered runs of one FOV's segmentation; a run's seeds name an earlier run.
 
+    Parameters
+    ----------
+    runs : tuple of SegmentationRun
+        Named segmentation runs in execution order.
+
     Raises
     ------
     ValueError

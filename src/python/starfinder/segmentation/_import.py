@@ -60,6 +60,29 @@ def import_labels(path: Path | str, *, grid: ReferenceGrid, target: str, geometr
                   relabel: bool = False, label_namespace: str) -> SegmentationResult:
     """Import a label mask made elsewhere (CellProfiler, an earlier workflow run) onto a grid.
 
+    Parameters
+    ----------
+    path : pathlib.Path or str
+        Path to the integer label TIFF with YX or ZYX axes.
+    grid : ReferenceGrid
+        Reference grid for the imported label image.
+    target : str
+        Object target: ``nucleus`` or ``cell``.
+    geometry : str or None
+        Label geometry, ``plane``, ``volume`` or ``extended``; ``None`` derives ``plane``
+        for Z=1 and ``volume`` for Z>1.
+    relabel : bool
+        Renumber positive labels consecutively from one in increasing source-value order.
+    label_namespace : str
+        Nonempty identity scope for the imported labels.
+
+    Returns
+    -------
+    SegmentationResult
+        Imported uint32 ZYX labels on the supplied grid, with import provenance.
+
+    Notes
+    -----
     Validation, in order: the file exists and is read with its byte order converted
     to native; a YX file is read as 1×Y×X and needs a grid with Z=1 (for a volume
     FOV, ``grid.projected()``); the dtype is integer; no value is negative; the
