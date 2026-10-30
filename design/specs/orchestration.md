@@ -44,6 +44,15 @@ The decisions taken at the W-642 checkpoint (Jiahao, 2026-10-29) that this page 
 | P1 | The rest of the golden baseline is recorded first ([below](#the-rest-of-the-golden-baseline)) |
 | P5 | Previews are options of the assign and export commands, off by default |
 
+The amendments of the specification gate (W-646, Jiahao, 2026-10-30) that this page carries. A1 and
+the engines' side of A3 and A4 are in the [engine record](orchestration-engines.md):
+
+| Amendment | Decision | Where |
+| --- | --- | --- |
+| A2 | The package version comes from Git tags, and it is the code identity | [the code identity](#the-code-identity) |
+| A3 | A task's configuration hash covers only the blocks its kind reads; the same map limits what the command can read | [the blocks of a task kind](#the-blocks-of-a-task-kind) |
+| A4 | `execution.code_version`, `keep` by default | [the Python configuration shape](#the-python-configuration-shape); the engine record, "The task fingerprint" |
+
 Evidence, kept with the run records outside the repository and cited by path: the two golden runs
 of invocation D and the comparison across environments (`results/golden/`), the prototype of the
 plan command and the worked example (`scripts/plan_prototype.py`, `results/example/`), the
@@ -371,7 +380,38 @@ strings, `NaN` and infinities refused.
 `configuration` without `execution`, `root_input_path` and `root_output_path`: the settings that
 can change a result. A change of threads, memory, container or retries, or a move of the trees,
 keeps it; a change of any scientific setting changes it. The manifest also records the SHA-256 of
-the whole file as written (its bytes, the final newline included), which a task checks.
+the whole file as written (its bytes, the final newline included), which a task checks. This run-wide
+hash identifies a run's settings in the records and reports; whether one task's result is current
+is decided by the narrower hash below.
+
+#### The blocks of a task kind
+
+`tasks[].blocks_sha256` is the SHA-256 of the canonical serialization of the **common part** and of
+the blocks the task's kind reads, an absent block written as null. The common part is every top-level
+key of `configuration` outside the blocks, `execution` and the two roots: the dataset keys such as
+`n_rounds`, `ref_round`, `seq_channel_order`, `rotate_angle` and `voxel_size_xy`, which every kind may
+read.
+
+(orchestration-task-blocks)=
+
+| Task kinds | Blocks | Why |
+| --- | --- | --- |
+| `summarize`, `merge`, `fov`, `tile_global`, `tile`, `tile_merge` | `processing` | The per-FOV core and its supplied statistics |
+| `morphology` | `morphology` | |
+| `segment` | `segmentation` | |
+| `assign` | `assignment` | |
+| `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import`, `stitch` | `stitching` | |
+| `export` | `assembly`, `export`, `assignment`, `stitching` | `_export_config` reads `assembly`; `_assembly_block` needs `stitching` present; the route after fusion reads `assignment` (`_sample_segmentation_block`, `workflow.py:1715`) |
+| `report`, `compare` | `report` | They read the other steps through their records |
+
+**The map is also the command's access.** A command reads `configuration` and `api` only through a
+view limited to the common part and its kind's blocks; reading anything else raises, in every run,
+with no switch to turn it off. So a block missing from the map cannot silently leave a stale result:
+the command that reads it fails the first time it runs, in the tests and in the end-to-end checks
+(the validation design, C2 and X1). The map lives in the package, beside the commands, and the plan
+writes each task's `blocks` from it. A change in one block reaches other kinds only through their
+`needs`: changing `processing` reruns `fov` and everything downstream of it; changing `export` reruns
+`export` and `report`, and leaves every FOV as it is.
 
 ### Choice: the serialization and the scope of the hash
 
@@ -405,6 +445,7 @@ Recommendation: A.
 | `format` | `starfinder.workflow.manifest/1` |
 | `backend` | `python` |
 | `configuration` | `path` (`workflow/resolved.json`), `sha256` (of the file's bytes as written, the final newline included), `configuration_sha256` (the resolved-configuration hash) |
+| `package` | `version`, `git_commit`, `git_dirty` of the package that planned ([the code identity](#the-code-identity)) |
 | `roots` | `input` and `output`, absolute |
 | `membership` | `fovs` (in the order of `fovs.csv`), `samples` (each sample's FOVs), `selected_fovs` |
 | `inputs` | `files` (`fovs.csv`, the codebook, the supplied files) and `images` (per FOV, round and channel label), each with `path`, `bytes`, `mtime_ns` |
@@ -420,12 +461,15 @@ Recommendation: A.
 | `tasks[].command` | The command line, `["starfinder", "workflow", <command>, "--manifest", <the manifest's absolute path>, "--task", <id>]`, to which the engine adds its context; for `bigstitcher_engine` it is `bigstitcher-check`, which the engine runs after the tool |
 | `tasks[].tool_command` | `bigstitcher_engine` only: the tool's command line, with the placeholder `{fiji}`, which the engine replaces by `execution.tool.path` and runs before `command` in the same job |
 | `tasks[].execution` | `threads`, `memory_mb`, `runtime_min`, `gpu`, `container` and, for the Fiji task, `tool`; passed through from the execution section, never read by the command |
+| `tasks[].blocks`, `tasks[].blocks_sha256` | The configuration blocks its kind reads and their hash ([the blocks of a task kind](#the-blocks-of-a-task-kind)) |
+| `tasks[].fingerprint` | The key by which both engines and `verify` decide that a task's result is current (the engine record, "The task fingerprint") |
 
 The manifest is regenerated by every run of the plan command; the plan writes the file only when its
 content changes, so that an engine that compares modification times reruns nothing on an unchanged
 plan. A change of the configuration file, of `fovs.csv`, of an input's path, size or modification
-time, of a supplied file or of the package version changes the manifest. Which tasks then rerun is
-the engine's decision, on the declared inputs and outputs (and, for Snakemake, its own records).
+time, of a supplied file or of the package version changes the manifest. Which tasks then rerun
+follows each task's `fingerprint`, not the manifest as a whole: a change of the export block, for
+example, changes the manifest and reruns only the tasks that read that block and their downstream.
 
 ### Choice: the manifest format
 
@@ -570,6 +614,7 @@ execution:
   container: null               # the image by digest (D9)
   fiji: null                    # the BigStitcher engine task's tool (D3)
   resume_from_checkpoint: false
+  code_version: keep            # or rerun: a new code version reruns the tasks (A4)
 ```
 
 **The blocks.**
@@ -583,7 +628,7 @@ execution:
 | `stitching` | As today; and `dataset_xml` with `view_map` (a supplied BigStitcher result and its view map, each a file pattern with `{sample}`, which skip the macro and the Fiji task, D3) | `stitch`, or `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import` |
 | `assembly`, `export` | As today; `export.previews` (P5) | `export` per sample |
 | `report` | As today | `report` per sample, `compare` |
-| `execution` | `defaults` and `tasks.<kind>` (`threads`, `memory_mb`, `runtime_min`, `gpu`), `container`, `fiji`, `resume_from_checkpoint`, `log_level` | none; passed through to each task's `execution` |
+| `execution` | `defaults` and `tasks.<kind>` (`threads`, `memory_mb`, `runtime_min`, `gpu`), `container`, `fiji`, `resume_from_checkpoint`, `code_version`, `log_level` | none; passed through to each task's `execution`, except `code_version`, which the plan reads for the fingerprint |
 
 No scientific default changes: scoring stays on whenever the block decodes, deduplication stays
 off without its block, and every translator default (for example the WTA decoder's `diagnostics:
@@ -843,7 +888,7 @@ guide's table (written when the implementation lands) is generated from this one
 New keys, which no current key maps to: `processing.mode`, `processing.tiled` (W-644),
 `morphology` and its `rounds`, `recipe`, `channel_images`, `assignment.previews`,
 `export.previews`, `stitching.dataset_xml`, `stitching.view_map`, and `execution` with `defaults`, `tasks`, `container`,
-`fiji`, `resume_from_checkpoint` and `log_level`.
+`fiji`, `resume_from_checkpoint`, `code_version` and `log_level`.
 
 ## Declared outputs
 
@@ -981,8 +1026,8 @@ the latest stage the earlier attempt wrote, only when the earlier `run.json` mat
 | --- | --- |
 | `format_version` | 2 (a version-1 record is never resumed, as `checkpoints.md` says) |
 | `dataset_id`, `sample_id`, `fov_id`, `subtile_id` | The task's identity |
-| `workflow.configuration_sha256` (new) | The manifest's resolved-configuration hash |
-| `code.version`, `code.git_commit` (when recorded) | The running package's |
+| `workflow.blocks_sha256` (new) | The task's `blocks_sha256`: a change of a block this task does not read does not stop its resume |
+| `code.version`, `code.git_commit` (when recorded) | The running package's ([the code identity](#the-code-identity)); a `git_dirty` record or package, a dirty build's version (a local part with `.d<date>`) or a version that cannot be established refuses, on either side |
 | `inputs[].path`, `inputs[].sha256` | The task's inputs, hashed again (the full hashes are computed inside the task) |
 | `codebook.path`, `codebook.sha256` | The codebook the task loads |
 | `preprocessing.supplied_statistics.sha256` | The supplied file the task reads |
@@ -995,7 +1040,7 @@ example:
 
 ```text
 resume_from_checkpoint refused for fov/sample/FOV_001: fovs/FOV_001/run.json does not match this task:
-workflow.configuration_sha256 is sha256:3f1c… (recorded), sha256:9a0e… (now); inputs round2/FOV_001/ch01.tif
+workflow.blocks_sha256 is sha256:3f1c… (recorded), sha256:9a0e… (now); inputs round2/FOV_001/ch01.tif
 sha256 differs; rerun without resume_from_checkpoint, or restore the configuration and inputs it was made with
 ```
 
@@ -1009,10 +1054,47 @@ kind reruns from scratch.
 
 | Option | Cost | Consequence |
 | --- | --- | --- |
-| A. The table above, the package version included (recommended) | A package update forces a full rerun | A resumed result is the result of one package version and one configuration |
+| A. The table above, the package version included (recommended) | A task resumed under a new package version starts over | A resumed result is the result of one package version and one state of the blocks it reads |
 | B. Without the package version | Faster recovery after an update | A stage written by another version is continued by this one; a changed method would mix two versions in one result |
 
-Recommendation: A.
+Recommendation: A. Decided at the gate (W-646), with the code identity below. `execution.code_version`
+does not change this: a resume continues inside one task, so that task's stages must come from one
+version whichever way the setting points.
+
+### The code identity
+
+Today the version is written by hand, `0.1.0` in `src/python/pyproject.toml` and in
+`starfinder/__init__.py`, and has never changed; `_records.code()` finds `git_commit` only when the
+package sits inside a Starfinder checkout, so in an installed wheel or an image it is `None` and two
+builds of different code look the same (`_records.py:220-242`).
+
+**The version comes from Git tags (amendment A2).** `pyproject.toml` declares `dynamic = ["version"]`
+with `hatch-vcs` on the existing `hatchling` backend, the repository root as its root, and tags of the
+form `vX.Y.Z`:
+
+| State | Version | Measured in a scratch clone |
+| --- | --- | --- |
+| On a tag `v0.2.0` | `0.2.0` | not run: no tag was made |
+| Commits after the last tag | `X.Y.(Z+1).devN+g<commit>` | |
+| No tag reachable | `0.1.devN+g<commit>` | `0.1.dev630+g98675e434` |
+| Uncommitted changes | The above with `.d<date>` | `0.1.dev629+g20470040f.d20261030` |
+| A build without `.git`, the version passed in | As given | `SETUPTOOLS_SCM_PRETEND_VERSION=0.2.0.dev3+gabc1234` gave `0.2.0.dev3+gabc1234` |
+
+`v0.1.0` (2024-09-03) is not an ancestor of `dev`, so the versions read `0.1.devN+g<commit>` until the
+first tag. Tags are made at milestones: at the close of a results gate and at the thesis freeze. Making
+and pushing a tag is a publication and keeps its own authorization.
+
+* `starfinder/__init__.py` reads `__version__` from the package metadata
+  (`importlib.metadata`), so `spot_finding/__init__.py:328` records the same string.
+* The code identity is `_records.code()`: the metadata's version, which an image carries, and the live
+  `git_commit` and `git_dirty` in a checkout, because an editable install's metadata stays as it was
+  when installed.
+* The image gets its version as a build argument, from `git describe` on the build host, because its
+  build context has no `.git` (the engine record, "The image").
+* CI's checkout needs `fetch-depth: 0` to see the tags.
+* `uv lock` on a scratch copy changes only the project's own entry: its `version` line goes (uv writes
+  dynamic versions so) and `provides-extras` is sorted (`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-646/20261030T1610Z-amendments/results/hatch_vcs/uv-lock.diff`). No
+  dependency moves. The change lands with the batch-preparation issue.
 
 ## Logging and records
 
@@ -1045,7 +1127,10 @@ written into every task record:
 | `backend` | `python`, and the device the API ran on (`cpu` or `cuda`) |
 | `fallback` | null, or `{requested, used, reason}` when the task ran on another device than the configuration requested (no entry of the package falls back today, so null) |
 | `configuration_sha256` | The resolved-configuration hash |
+| `blocks_sha256` | The hash of the common part and the blocks this task's kind reads |
 | `manifest_sha256` | The manifest's hash |
+| `fingerprint`, `token` | The fingerprint the task ran with, and for Nextflow its cache token (the engine record, "The task fingerprint" and "`-resume` and the completion rule") |
+| `code` | `version`, `git_commit`, `git_dirty` of the package that ran the task; a tree with more than one is flagged by the report |
 | `execution_context` | `engine`, `engine_version`, `job_id`, `attempt`, `image` (by digest), `host` |
 | `wall_s`, `cpu_s`, `peak_rss_kib` | The task's wall time, user and system CPU time of the process and its children, and peak resident memory (`resource.getrusage`), as `export.json` records them for its parts |
 
@@ -1073,7 +1158,7 @@ Recommendation: A; the machine-readable facts are in the task record.
 
 | Option | Cost | Consequence |
 | --- | --- | --- |
-| A. Additive within version 2 (recommended) | None for readers | A version-2 record with or without `workflow` loads; verified resume needs `workflow.configuration_sha256`, so a record without it is not resumed |
+| A. Additive within version 2 (recommended) | None for readers | A version-2 record with or without `workflow` loads; verified resume needs `workflow.blocks_sha256`, so a record without it is not resumed |
 | B. Version 3 | Every reader accepts 3; the replay and the report change their version lists | The version says whether the workflow section exists; old records stay readable |
 
 Recommendation: A.

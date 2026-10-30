@@ -44,6 +44,17 @@ The decisions taken at the W-642 checkpoint (Jiahao, 2026-10-29) that this page 
 | P5 | Previews are options of the assign and export commands, off by default; every real-data check turns them on | the validation design |
 | D9 | No release of `snakemake-interface-common` accepts the lock's `packaging==26.0`; the plan resolves it explicitly | [the lock change](#the-lock-change) |
 
+The amendments and decisions of the specification gate (W-646, Jiahao, 2026-10-30) that this page
+carries. A2 and the map of A3 are in the [contract](orchestration.md):
+
+| Point | Decision | Where |
+| --- | --- | --- |
+| A1 | A complete task keeps the token it ran with; every other task gets a token fresh to the invocation | [`-resume` and the completion rule](#-resume-and-the-completion-rule-d8) |
+| A3 | The fingerprint covers only the blocks a task's kind reads | [the task fingerprint](#the-task-fingerprint) |
+| A4 | The code version enters the fingerprint only with `execution.code_version: rerun` | [the task fingerprint](#the-task-fingerprint) |
+| #17 | Two images, CPU and learned | [the image](#the-image) |
+| Snakemake | Stays at 9.15.0; an upgrade is a later decision | [the lock change](#the-lock-change) |
+
 Evidence, kept with the run records outside the repository and cited by path: the scratch
 resolutions of the `workflow` group (`results/lock/<variant>/`: the edited `pyproject.toml`, the
 resolved `uv.lock`, `uv-lock.log`, `export.txt`, `diff.json`), the image preflight
@@ -139,9 +150,9 @@ no insignificant whitespace) of an object with:
 | Component | What it makes a task rerun on |
 | --- | --- |
 | `entry`: the task entry without `fingerprint`, `execution` and `command` | A change of its kind, identity, `needs`, declared inputs or outputs, record, log, group or Fiji command line |
-| `configuration_sha256`: the resolved-configuration hash | A change of any scientific setting (the hash's scope, `orchestration.md`, "The resolved configuration") |
+| `blocks_sha256`: the hash of the common part and the blocks the kind reads (`orchestration.md`, "The blocks of a task kind") | A change of a setting this task reads; a change of another block reaches it only through `needs` |
 | `inputs`: for every declared input outside the output root (each `input:` path and each absolute path: the raw images, the codebook, the supplied files), its `path`, `bytes` and `mtime_ns` from `manifest.inputs` | An input replaced at the same path with another size or another modification time, older included |
-| `package`: the package's version, and its git commit when recorded | A new package version, as verified resume requires (`orchestration.md`, "Choice: what a resume must match", A) |
+| `package`: only with `execution.code_version: rerun`, the code identity (`orchestration.md`, "The code identity"); with `keep`, the default, nothing | With `rerun`, a new code version; with `keep`, a finished task is kept across versions |
 | `needs`: the fingerprints of the tasks in `needs`, in their order | Any of the above upstream: staleness is transitive, so `verify` and a person find the consumers of a stale task as well as the engines do |
 
 Left out, with the reason: `execution` (threads, memory, runtime, GPU, container, retries), which the
@@ -153,6 +164,17 @@ read (it lists sizes and times only; the tasks hash their inputs and `run.json` 
 replaced by another of the same size whose modification time is set back to the old one exactly is
 therefore not seen; verified resume, which compares `run.json`'s input hashes, still refuses it for the
 `fov` task.
+
+Changing `execution.code_version` itself changes every fingerprint once, because the `package`
+component appears or goes. Each task record keeps its `code` whichever way the setting points, and the
+report flags an output tree with more than one version.
+
+One limit under Nextflow, which costs time and never leaves a stale result: the process takes the whole
+task entry `t` as a `val` input, and `t` holds `execution` and `command`, so a changed resource request or a moved
+tree misses Nextflow's cache and reruns the task, although the fingerprint is the same and `verify` calls the task
+complete. Snakemake reruns nothing in those cases. Task group 5 tries to take `t` out of the hashed inputs (the id,
+fingerprint and token as `val`s, the entry looked up by id); if Nextflow's directives cannot do that, the limit stays
+and the Nextflow guide names it.
 
 The plan computes the fingerprints in the manifest's task order, which respects `needs`. Each task
 record keeps the fingerprint it ran with, `workflow.fingerprint`, beside `configuration_sha256` and
@@ -168,11 +190,24 @@ process's cache hash.
 
 | Option | Cost | Consequence |
 | --- | --- | --- |
-| A. The five components above, with the run-wide resolved-configuration hash (recommended) | One SHA-256 per task at plan time | Any scientific change reruns every task, as verified resume already refuses every stage after one; an input reruns its tasks and their downstream only |
-| B. As A, with a hash of only the configuration blocks the task's kind reads instead of the run-wide hash | A map from kind to blocks in the plan, kept in step with the commands | A change of the report block reruns only `report` and `compare`; a wrong map silently keeps stale results |
+| A. The five components, with the run-wide resolved-configuration hash | One SHA-256 per task at plan time | Any scientific change reruns every task: tuning an export or report setting costs every FOV again, about 30 minutes each on the real FOV |
+| B. As A, with a hash of only the configuration blocks the task's kind reads (decided) | A map from kind to blocks, which is also what each command may read | A change of the report block reruns only `report` and `compare`; a block missing from the map makes the command fail when it reads it, so a wrong map cannot silently keep a stale result |
 | C. As A, with the inputs' content hashes | The plan reads every raw image at every invocation (5.2 GiB per aging FOV) | Catches a same-size replacement with the old time kept, at the cost of the plan's input scan, which the contract keeps to sizes and times |
 
-Recommendation: A.
+Decided at the gate (W-646, A3): B, with the map as the command's access (`orchestration.md`, "The blocks
+of a task kind").
+
+#### Choice: the code version in the fingerprint
+
+| Option | Cost | Consequence |
+| --- | --- | --- |
+| A. Always in the fingerprint | Every new version reruns every task | An output tree always holds one code version; a full rerun on every code change is not practical in production |
+| B. Only the release part `X.Y.Z` | Tasks rerun at a tag, not between tags | Development versions mix in one tree without any choice having been made |
+| C. Never | None | A new version never reruns; there is no way to ask for it short of a new `output_id` |
+| D. `execution.code_version`: `keep` by default, `rerun` to put it in (decided) | One setting | Production on a stable version reruns nothing on an upgrade; a development or test run sets `rerun`. Each record keeps its version and the report flags a mixed tree |
+
+Decided at the gate (W-646, A4): D. Verified resume is not affected: it still requires one version
+(`orchestration.md`, "What a resume must match").
 
 ## Snakemake
 
@@ -236,7 +271,7 @@ fields as wildcards:
 | `input` | a function of the wildcards: the task's `inputs` (with `input:` resolved against `roots.input`) and the `record` of each task in `needs` | The records make the order the contract's: a consumer starts after its producers' records exist |
 | `output` | the group's `outputs` and `record`, each under `roots.output`; `temp()` for the group's `temporary` outputs | The record is an output, so a job that exits 0 without it fails Snakemake's own check |
 | `log` | the group's `log` | Snakemake keeps a `log` file of a failed job and removes failed `output` files; the command writes the log itself |
-| `params` | `command` and `fingerprint` of the task ([the task fingerprint](#the-task-fingerprint)), which covers the entry, the resolved-configuration hash, the declared inputs outside the output root by size and modification time, the package version and the `needs`' fingerprints | Snakemake's `params` rerun trigger reruns exactly the tasks whose fingerprint changed: a changed scientific setting, an input replaced at the same path (also with an older modification time, which the `mtime` trigger alone misses), a new package version, and every task downstream of one of these. The profile sets `rerun-triggers: [mtime, params, input]`; not `code` (the rules are generated from the manifest, and the fingerprint carries the package version) or `software-env` (no conda) |
+| `params` | `command` and `fingerprint` of the task ([the task fingerprint](#the-task-fingerprint)), which covers the entry, the hash of the blocks its kind reads, the declared inputs outside the output root by size and modification time, with `execution.code_version: rerun` the code version, and the `needs`' fingerprints | Snakemake's `params` rerun trigger reruns exactly the tasks whose fingerprint changed: a changed setting of a block the task reads, an input replaced at the same path (also with an older modification time, which the `mtime` trigger alone misses), with `rerun` a new code version, and every task downstream of one of these. The profile sets `rerun-triggers: [mtime, params, input]`; not `code` (the rules are generated from the manifest, and the fingerprint decides about the code version) or `software-env` (no conda) |
 | `threads`, `resources` | `execution.threads`; `mem_mb` and `runtime` from `execution.memory_mb` and `runtime_min` × attempt; `gpu=1` when `execution.gpu`; `attempt` | No default lives in the rule: a task without a value takes the plan's resolved `execution.defaults` |
 | `shell` | `{params.command} --engine snakemake --engine-version <v> --job-id "${{JOB_ID:-{jobid}}}" --attempt {resources.attempt} --image "${{STARFINDER_IMAGE:-none}}"` | The `bigstitcher_engine` group runs `tool_command` first ([Fiji](#fiji-the-bigstitcher-task-in-snakemake-only)) |
 
@@ -482,7 +517,8 @@ process FOV {
     script:
     """
     ${t.command.join(' ')} --engine nextflow --engine-version ${nextflow.version} \\
-        --job-id \${JOB_ID:-${task.hash}} --attempt ${task.attempt} --image ${task.container ?: 'none'}
+        --job-id \${JOB_ID:-${task.hash}} --attempt ${task.attempt} --image ${task.container ?: 'none'} \\
+        --cache-token ${t.token}
     cp ${params.output_root}/${t.record} .
     """
     stub:
@@ -619,8 +655,9 @@ copy of the task record in the work folder ([above](#the-directory-and-the-modul
 reruns a task when its script, its task entry or a producer's emitted record changes, or when its own
 work folder is gone. Without the [fingerprint](#the-task-fingerprint) it would not see a changed
 scientific setting or an input replaced at the same path either, because the configuration hash and
-the inputs' sizes and times live outside the task entries; with it in the entry and in the token below,
-both change the cache key. It does not see the output root: a deleted or truncated `molecules.csv`, a deleted
+the inputs' sizes and times live outside the task entries. The fingerprint alone is not enough: a
+configuration restored to an earlier value brings back an earlier fingerprint and so an earlier cache
+entry, whose outputs the other configuration has since overwritten. And `-resume` does not see the output root: a deleted or truncated `molecules.csv`, a deleted
 `report/index.html` or a deleted task record under `roots.output` changes no input and no work folder,
 so the task is reused and emits its cached record copy, and so is every consumer, whose inputs (those
 copies) are unchanged too. A consumer's command, which would check its `needs`' records and declared
@@ -632,7 +669,8 @@ What still holds: a task that runs removes its earlier record first and writes i
 "Completion"), so a consumer that does run never reads a half-made predecessor; and `-resume` is not
 verified resume (`execution.resume_from_checkpoint`, the `fov` task's resume from its stages against
 `run.json`, is a setting of the command and works the same under both engines). Snakemake needs no
-counterpart: its rule groups declare every output, and Snakemake reruns a task whose output is missing.
+counterpart: its rule groups declare every output, Snakemake reruns a task whose output is missing,
+and its `params` trigger compares with the last run's value, so a restored configuration reruns too.
 
 **The design (option D below).** One more command, `starfinder workflow verify --manifest M
 [--hash] [--final]`, applies D8's completion rule to every task of the manifest from the output root
@@ -643,23 +681,35 @@ merge removed are exempt. Two
 uncached processes run it (`cache false`, one local job each):
 
 1. **`VERIFY_BEFORE`, after `PLAN` and before fan-out**, writes `workflow/verify.json` and emits one token
-   per task: the task's current fingerprint when the task is complete, shows no trace of a run (no
-   record, no failed record, no declared output) or is stale (its record carries another fingerprint);
-   and `rerun:<SHA-256 of verify.json>` when it is damaged with the current fingerprint (a record whose
-   outputs are missing or differ in size or hash, outputs without a record, a failed record, or a task
-   the previous run's final check listed as missing). Every process takes its task's token as a `val`
-   input, so the token is part of the cache hash. A complete task keeps its token and its cache. A stale
-   task's token is a fingerprint it never ran with, so it misses the cache and reruns; using the new
-   fingerprint itself, not a `rerun:` token, means that the next invocation finds its cache under the
-   same key and does not run it a second time. A damaged task misses the cache and reruns. The consumers
-   of a rerun task rerun because its emitted record changes, and a stale task's consumers are stale
-   too (their fingerprints include its). A task that ran once and is intact gets the token it ran with,
-   so a second invocation reruns nothing.
+   per task, by one rule (amendment A1):
+   * a task that is **complete** under the staleness rule gets the token its record says it ran with,
+     `workflow.token`;
+   * **every other task** gets `rerun:<id>`, where `<id>` is fresh to this invocation (a random UUID
+     that `verify` writes into `verify.json`): a task with no record, a failed record, outputs without a
+     record, a record whose outputs are missing or differ in size or hash, or a record that carries
+     another fingerprint.
+
+   `main.nf` puts each task's token into its entry `t`, a `val` input, so the token is part of the cache
+   hash, and the process passes it on as `--cache-token`, which the task record keeps. So the cache can
+   only re-emit the record of the run that wrote what is in the output root now. A task that is not
+   complete can never match an earlier entry, because its token is new; once it has run, its record
+   carries that token, and the next invocation finds its cache under it and runs nothing. A consumer of a
+   rerun task reruns because the emitted record it stages changes, and a stale task's consumers are
+   stale too (their fingerprints include its). A record with no token, written by another engine or by
+   hand, counts as not complete here: Nextflow has no cache entry to re-emit, and the task reruns once.
 2. **`VERIFY_AFTER`, after the last task**, runs with `--final`: every task of the manifest must be
    complete, or the run fails (exit 1) naming each task that is not and recording them in
-   `workflow/verify.json`. This catches the one case `VERIFY_BEFORE` cannot tell from a task never run:
-   a task whose record and every output were deleted while its work folder remains, which `-resume`
-   reuses; the next invocation's `VERIFY_BEFORE` reads the list and gives those tasks a `rerun:` token.
+   `workflow/verify.json`. By the rule above it should never fire on a run that ended normally; it is the
+   check that D8's rule held at the end, for an output removed during the run or a task that lied. The
+   next invocation reruns whatever it named, by the same rule.
+
+Why not the alternatives: with the current fingerprint as a stale task's token (the reviewed revision
+`2047004`), configuration A, then B, then A again matches the first run's cache entry while B's files
+stay in the output root, and every later invocation repeats it. With `rerun:` taken from a hash of
+statuses and fingerprints (the first wording of A1), A, B, A, B, A repeats a state and so a token, and
+fails at its third change. A model of the three rules (`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-646/20261030T1610Z-amendments/scripts/token_model.py`, 2,000 random
+sequences of twelve changes with kills) leaves every tree current and complete only under the rule above
+(`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-646/20261030T1610Z-amendments/results/token_model/`), and a toy of the same rules on real Nextflow 26.10.4 (`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-646/20261030T1610Z-amendments/scripts/nextflow_toy/`, four tasks, its record in `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-646/20261030T1610Z-amendments/results/nextflow_toy/`) agrees: on A, B, A, B, A the reviewed rule reuses the cache and fails at the first restored A, the first wording fails at the third change, and the rule above reruns all four tasks at every change and nothing when nothing changed; a deleted output, a deleted terminal output and a task deleted whole each rerun that task and its consumer only. This checks the rule on the engine's cache, not the implementation, which X10 and X11 check.
 
 D8's rule stays the authority: completion is decided by the `verify` command on the records and files
 in the output root, the same rule the commands apply; Nextflow's cache only saves rerunning a task that
@@ -681,7 +731,7 @@ FOV) is temporary and exempt.
 | A. `-resume` alone, the gap documented, with the manual remedy: rerun without `-resume`, or delete the work folders of the affected tasks (`nextflow log <run> -f workdir,tag`) and resume | None | With the fingerprint in each task entry, a changed scientific setting or an input replaced at the same path (another size or time, older included) changes the cache key, so those tasks and their consumers rerun; a deleted output under `roots.output` goes unnoticed until someone reads it, a terminal output never; a record stale for any other reason is not checked; D8 holds only for tasks that run |
 | B. `cache 'deep'` on the `needs` records | Nextflow reads each staged record (a few kB) | The records are hashed by content instead of path, size and time, so a producer that reran with a new record reruns its consumers even if the file's time was kept; for a changed setting or a replaced input it adds nothing to the fingerprint; it sees nothing under `roots.output`, so no deleted output is caught: the gap of A stays |
 | C. A status check inside each process: every process `cache false`, its script first runs `starfinder workflow verify --task <id>` and exits 0 when the task is complete | One scheduler job per task at every invocation (on UGER thousands of queued jobs for a resumed full dataset, each waiting in the queue to stat or hash about 200 MB per FOV) | Catches every deletion, terminal tasks included, and every stale record (its fingerprint against the manifest's), and reruns the task; Nextflow's cache is off, and a consumer of a rerun producer reruns only because its own fingerprint changed with its producer's |
-| D. Two uncached `VERIFY` jobs, before fan-out and at the end, with a token per task in the cache hash (recommended) | Two local jobs per invocation; a stat of every listed output (a few thousand for a dataset; seconds), or with `--hash` a read of about 200 MB per FOV (on `/stanley` about 2 s per FOV at 100 MB/s, about 35 min for 1,000 FOVs) | Catches a changed scientific setting, an input replaced at the same path (another size or an older or newer time), a deleted, truncated or resized output, a deleted record and a failed task before fan-out, and reruns exactly the stale or damaged tasks and their consumers; a record whose fingerprint differs fails `verify`; the end check makes a task deleted whole fail the run loudly, and the next invocation reruns it; a same-size corruption is caught only with `--hash` |
+| D. Two uncached `VERIFY` jobs, before fan-out and at the end, with a token per task in the cache hash (recommended) | Two local jobs per invocation; a stat of every listed output (a few thousand for a dataset; seconds), or with `--hash` a read of about 200 MB per FOV (on `/stanley` about 2 s per FOV at 100 MB/s, about 35 min for 1,000 FOVs) | Catches a changed scientific setting, a configuration restored to an earlier value, an input replaced at the same path (another size or an older or newer time), a deleted, truncated or resized output, a deleted record, a task deleted whole and a failed task before fan-out, and reruns exactly the stale or damaged tasks and their consumers; a record whose fingerprint differs fails `verify`; the end check confirms D8's rule; a same-size corruption is caught only with `--hash` |
 
 Recommendation: D, with sizes by default and `--hash` before results are delivered.
 
@@ -751,7 +801,10 @@ today (`src/python/pyproject.toml`, `[project] dependencies`), so the recommende
 | C. Snakemake 9.27.1 (the newest 9.x on 2026-10-30) | Two more packages than A | `packaging` 25.0 by the resolver; the golden baseline was recorded with 9.15.0 and would be compared across a Snakemake change |
 
 Recommendation: A. The batch-preparation draft lands it with the golden comparison tests and the CI
-change, under the complete suite.
+change, under the complete suite. Decided at the gate (W-646): A, with Snakemake staying at 9.15.0, the
+version of the golden baseline, of W-641's UGER dry runs and of this page's citations. 9.27.1, the newest
+on 2026-10-30, resolves only by moving `packaging` back to 25.0; an upgrade is a later decision of its
+own. The same draft lands the contract's code identity (`hatch-vcs`, a build requirement outside the lock).
 
 **The CI change.** The CI installs `--extra dev --extra local-registration --extra checkpoint`
 (`.github/workflows/tests.yml:48-49`, `:96-97`). With the lock change both jobs add `--group
@@ -774,6 +827,9 @@ RUN uv sync --no-install-project --no-default-groups --group workflow \
       --extra ome --extra local-registration --extra checkpoint --extra anndata \
       --extra multiview-stitcher --extra spatialdata
 COPY src/python/ ./
+# The build context has no .git: the version is `git describe`'s on the build host (the contract's code identity).
+ARG STARFINDER_VERSION
+ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_STARFINDER=$STARFINDER_VERSION
 RUN uv sync --no-default-groups --group workflow --no-editable \
       --extra ome --extra local-registration --extra checkpoint --extra anndata \
       --extra multiview-stitcher --extra spatialdata
@@ -815,8 +871,9 @@ build):
 | B. A and the learned extras, about 4.4 GB | Three times the size; TensorFlow and torch in one image | Learned methods run on CPU in the image (the lock takes torch from the CPU index on Linux, `[tool.uv.sources]` of `pyproject.toml`) |
 | C. Two images, A and B | Two builds and digests | A small default image and a learned one chosen per task by `execution.tasks.segment.container` |
 
-Recommendation: C if learned segmentation is run on UGER in the first implementation, A otherwise;
-the gate chooses.
+Decided at the gate (W-646): C. The learned image holds the learned extras on CPU, so that the
+pipeline runs end to end with StarDist or Cellpose on UGER before any GPU variant exists; the two images
+are built from the same lock and each has its own digest.
 
 **A GPU variant.** W-641 shows UGER's GPUs usable with conditions (RHEL 8 nodes; Apptainer `--nv`
 there not verified). A GPU image also cannot come from today's lock: torch is locked from the CPU
@@ -1052,8 +1109,8 @@ Jiahao says the backup is still used.
 
 ## Additions to the contract
 
-The engines need six additions to the contract of W-643 (Proposed). Each is listed for the gate;
-the implementation of task group 2 lands them with the contract.
+The engines need seven additions to the contract of W-643. Each is listed for the gate; the
+implementation of task group 2 lands them with the contract.
 
 | Addition | Why | Options | Recommendation |
 | --- | --- | --- | --- |
@@ -1062,6 +1119,7 @@ the implementation of task group 2 lands them with the contract.
 | A `temporary` flag on declared outputs | Snakemake's `temp()` for the chunked checkpoint | A. Per group in `groups`; B. per task | A |
 | The plan reads one configuration file | `workflow.configfiles` may hold several, and `--config` overrides change nothing in the file the plan reads | A. The Snakefile refuses several files and `--config` for the Python backend, naming the edit; B. the plan merges them | A (the contract's changed statement for `workflow-configuration.md:864-866`) |
 | A command `verify` (`--manifest`, `--task`, `--hash`, `--final`) that applies D8's completion rule and the staleness rule (the record's fingerprint against the manifest's) from the output root and, for Nextflow, writes the per-task tokens | Nextflow's `-resume` does not see the output root ([the choice](#choice-nextflows-cache-deleted-outputs-and-stale-results)) | A. A package command; B. a check written in `main.nf` (completion logic in an engine file); C. none (the gap documented) | A |
+| A sixth context argument, `--cache-token`, recorded as `workflow.token` | The cache must re-emit only the record of the run that wrote what is in the output root ([`-resume` and the completion rule](#-resume-and-the-completion-rule-d8)); Snakemake passes none | A. The argument and the record field; B. a file the process writes beside the record | A (A1) |
 | `tasks[].fingerprint` in the manifest and `workflow.fingerprint` in the task record | The configuration hash and the inputs' sizes and times are outside the task entries, so neither engine's cache nor `verify` would see a changed setting or a replaced input ([the task fingerprint](#the-task-fingerprint)) | A. One fingerprint per task, written by the plan and kept in the record; B. each engine derives its own key from the manifest's top-level fields (logic in the engine files, two rules); C. none | A |
 
 ## The site pages for task group 6

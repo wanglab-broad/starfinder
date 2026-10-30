@@ -675,5 +675,7 @@ after its local registration), `exact` (true: refuse operations without a finite
   made the decoding of a large codebook take hours at `56c35b8`. W-722 fixed it (commit `9a0ec77`, branch
   `runner/ot4-decode-20261029`); the fix is not yet merged into the base this page describes, and the real-FOV
   measurements above were made with it.
-* **OT5.** The global task's memory, set by whole-volume registration: lowering it (registering a projection or a
-  reduced scale, as MATLAB's deep script registers at 0.25) changes results and needs its own design and validation.
+* **OT5.** The global task's memory, set by whole-volume registration. The gate (W-646, follow-up F1) splits it:
+  memory cuts that keep every result (a smaller transform type, in-place transforms, release between rounds) are a
+  draft issue of §2.13, checked against identical shifts; registering a projection or a reduced scale, as MATLAB's
+  deep script registers at 0.25, changes results and stays a registration follow-up with its own design and benchmark.
