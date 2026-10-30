@@ -37,6 +37,22 @@ def _supplied_index(recipe, name):
 def summary_recipe(recipe: PreprocessingRecipe, step: str) -> tuple[PreprocessingRecipe, tuple[dict, ...]]:
     """Recipe to run for the summary pass of a supplied step, and its summarized_after record.
 
+    Parameters
+    ----------
+    recipe : PreprocessingRecipe
+        Preprocessing recipe containing the supplied step.
+    step : str
+        Registered name of the step whose input histograms will be summarized.
+
+    Returns
+    -------
+    prefix : PreprocessingRecipe
+        Recipe containing the steps preceding the named supplied step.
+    summarized_after : tuple of dict
+        Preceding-step records for the histogram summary.
+
+    Notes
+    -----
     Statistics for the step named step (with fit="supplied") are summarized
     at its input: after every preceding step of the recipe, each in its own
     fit mode. The returned recipe holds exactly those preceding steps (with
@@ -62,6 +78,23 @@ def summary_recipe(recipe: PreprocessingRecipe, step: str) -> tuple[Preprocessin
 def fit_supplied_section(config, merged: HistogramSummary, *, reference_round: str | None = None) -> dict:
     """Fit one step's supplied section from merged histograms, with the step's SuppliedSpec.fit hook.
 
+    Parameters
+    ----------
+    config : object
+        Configuration of the preprocessing step to fit.
+    merged : HistogramSummary
+        Histograms from which to fit the step's supplied statistics.
+    reference_round : str or None
+        Reference round name for histogram matching; ``None`` leaves the name unset for
+        steps fitted per round.
+
+    Returns
+    -------
+    dict
+        Step section containing ``summarized_after``, ``params`` and ``fitted`` records.
+
+    Notes
+    -----
     PercentileNormalizationConfig: params {"p_low", "p_high"} and, per
     round, {"low": [...], "high": [...]} from the merged counts by the
     inverted-CDF definition. ScalarBackgroundConfig: params {"percentile"}
@@ -133,6 +166,20 @@ def _validate(document):
 def supplied_statistics(merged: HistogramSummary, sections: Mapping[str, Mapping]) -> dict[str, Any]:
     """Supplied-statistics document: the envelope from merged and sections keyed by step name.
 
+    Parameters
+    ----------
+    merged : HistogramSummary
+        Summary providing the dtype, channel labels and FOV provenance for the document.
+    sections : Mapping[str, Mapping]
+        Supplied-statistics sections keyed by registered step name.
+
+    Returns
+    -------
+    dict[str, Any]
+        Validated supplied-statistics document with its envelope and step sections.
+
+    Notes
+    -----
     The envelope takes dtype, channel labels and the FOVs used and excluded
     from merged. Sections come from fit_supplied_section; for a later summary
     pass, add its section to the document's "steps" and write it again.
@@ -150,7 +197,20 @@ def supplied_statistics(merged: HistogramSummary, sections: Mapping[str, Mapping
 
 
 def save_supplied_statistics(statistics: Mapping[str, Any], path: Path | str) -> Path:
-    """Validate a supplied-statistics document and write it as JSON in one full-file write."""
+    """Validate a supplied-statistics document and write it as JSON in one full-file write.
+
+    Parameters
+    ----------
+    statistics : Mapping[str, Any]
+        Supplied-statistics document to validate and serialize.
+    path : Path or str
+        Destination path for the JSON document.
+
+    Returns
+    -------
+    Path
+        Path of the written supplied-statistics document.
+    """
     document = _validate(dict(statistics))
     path = Path(path)
     path.write_text(json.dumps(document, indent=1) + "\n")
@@ -162,6 +222,28 @@ def load_supplied_statistics(path: Path | str, recipe: PreprocessingRecipe | Non
                              rounds: Sequence[str] | None = None) -> dict[str, Any]:
     """Read and validate a supplied-statistics file.
 
+    Parameters
+    ----------
+    path : Path or str
+        Path of the supplied-statistics JSON document to read.
+    recipe : PreprocessingRecipe or None
+        Recipe to check against the document; ``None`` omits recipe-specific checks.
+    dtype : str or None
+        Expected image dtype; ``None`` omits comparison with an expected dtype.
+    channel_labels : Sequence[str] or None
+        Expected channel labels in image channel order; ``None`` omits comparison with
+        expected labels.
+    rounds : Sequence[str] or None
+        Expected round names for per-round supplied sections when a recipe is given;
+        ``None`` omits the requested-round coverage check.
+
+    Returns
+    -------
+    dict[str, Any]
+        Validated supplied-statistics document read from the file.
+
+    Notes
+    -----
     The envelope and every section are always validated. When given, dtype
     and channel_labels must equal the file's. With a recipe, every step with
     fit="supplied" must have a section whose summarized_after equals the

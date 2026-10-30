@@ -118,6 +118,24 @@ def subtract_scalar_background(volume: np.ndarray, *, config: ScalarBackgroundCo
                                fitted: Mapping | None = None) -> np.ndarray:
     """Subtract one background level b per channel: max(x - b, 0) in the input dtype.
 
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        Finite intensity image in ZYX or ZYXC axis order.
+    config : ScalarBackgroundConfig
+        Background percentile and fitting source; the default fits the 10th percentile
+        per channel.
+    fitted : Mapping or None
+        Supplied ``background`` intensities in channel order for ``fit="supplied"``;
+        ``None`` uses volume-fitted values with ``fit="fov"``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Scalar background-subtracted image with the input shape and dtype.
+
+    Notes
+    -----
     With fit="fov", b is the config's percentile of all voxels of the channel
     by the inverted-CDF definition, from the integer histogram for uint8 and
     uint16 and numpy.percentile(method="inverted_cdf") otherwise; a constant
@@ -148,6 +166,24 @@ def scalar_background_histograms(summary: HistogramSummary, config: ScalarBackgr
                                  supplied: Mapping | None = None) -> HistogramSummary:
     """Histograms after a scalar background step, derived exactly from those at its input.
 
+    Parameters
+    ----------
+    summary : HistogramSummary
+        Input histograms for the scalar background step.
+    config : ScalarBackgroundConfig
+        Background percentile and fitting source.
+    supplied : Mapping or None
+        Scalar-background supplied-statistics section for ``fit="supplied"``; ``None``
+        fits backgrounds from the summary with ``fit="fov"``.
+
+    Returns
+    -------
+    HistogramSummary
+        Background-subtracted histograms with the scalar step appended to the
+        preceding-step record.
+
+    Notes
+    -----
     The histogram of max(x - b, 0) follows from the histogram of x: bins
     above b shift down by b and bins at or below b accumulate in bin 0. With
     fit="fov", b is fitted per round and channel from the summary's own
@@ -298,6 +334,23 @@ def subtract_background_3d(volume: np.ndarray, *, config: Background3DConfig,
                            metadata: ImageMetadata | None = None) -> np.ndarray:
     """Volumetric white top-hat: max(x - grey_opening(x), 0) per channel, in the input dtype.
 
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        Finite intensity image in ZYX or ZYXC axis order.
+    config : Background3DConfig
+        Ellipsoidal footprint radii in voxels or micrometres, in ZYX order.
+    metadata : ImageMetadata or None
+        Spatial metadata for converting micrometre radii to voxels; ``None`` leaves
+        spacing unavailable for that conversion.
+
+    Returns
+    -------
+    numpy.ndarray
+        Volumetric background-subtracted image with the input shape and dtype.
+
+    Notes
+    -----
     The background is scipy.ndimage.grey_opening with an ellipsoidal
     footprint of semi-axes (r_z, r_y, r_x) voxels, reflect boundaries. Radii
     in micrometres are converted with metadata.spacing_zyx and rounded half

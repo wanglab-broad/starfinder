@@ -52,6 +52,22 @@ class ProjectionConfig:
 def project_image(volume: np.ndarray, *, config: ProjectionConfig = ProjectionConfig()) -> np.ndarray:
     """Reduce Z to (1,Y,X[,C]) or channels to (Z,Y,X); input remains unchanged.
 
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        Finite intensity image in ZYX or ZYXC axis order.
+    config : ProjectionConfig
+        Reduction axis, method and output conversion; the default takes the maximum
+        along Z.
+
+    Returns
+    -------
+    numpy.ndarray
+        Projected image in ZYX or ZYXC order with singleton Z for a Z projection, or in
+        ZYX order for a channel projection.
+
+    Notes
+    -----
     Axis ``"channel"`` requires a ZYXC image. Allocates a reduced array with
     an adequate accumulator for sum. No spatial padding. Empty/nonfinite images
     error; constants retain their max or sum. No implicit normalization or

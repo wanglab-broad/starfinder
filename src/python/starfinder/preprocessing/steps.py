@@ -34,6 +34,22 @@ _DTYPE_POLICIES = ("preserve", "declared")
 class StepContext:
     """What a step may read besides its own round's image.
 
+    Parameters
+    ----------
+    round_name : str
+        Name of the round being processed.
+    reference_round : str
+        Name of the reference acquisition round.
+    metadata : ImageMetadata
+        Spatial metadata of the input image.
+    reference : numpy.ndarray or None
+        Reference-channel image in ZYX order; ``None`` leaves the reference image unset.
+    supplied : Mapping[str, Any] or None
+        Supplied-statistics section for this step; ``None`` leaves supplied statistics
+        unset.
+
+    Notes
+    -----
     reference is the reference round's input to this step, restricted to the
     configured channel (ZYX); it is set only for needs_reference steps with
     fit="fov". supplied is this step's section of the supplied-statistics
@@ -49,7 +65,17 @@ class StepContext:
 
 @dataclass(frozen=True)
 class StepResult:
-    """Step output with the input's shape and axes, plus JSON-serializable records."""
+    """Step output with the input's shape and axes, plus JSON-serializable records.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Processed intensity image in the input image's ZYX or ZYXC axis order.
+    fitted : Mapping[str, Any]
+        JSON-serializable record of fitted processing values.
+    diagnostics : Mapping[str, Any]
+        JSON-serializable record of processing diagnostics.
+    """
     image: np.ndarray
     fitted: Mapping[str, Any]
     diagnostics: Mapping[str, Any]
@@ -75,6 +101,33 @@ class SuppliedSpec:
 class PreprocessingSpec:
     """Registered step: stable snake_case name, implementation and declared policies.
 
+    Parameters
+    ----------
+    name : str
+        Stable lowercase snake_case step name.
+    run : Callable[..., StepResult]
+        Implementation callable taking the volume, config and step context and returning
+        a step result.
+    category : str
+        Processing intent: ``background``, ``intensity`` or ``contrast``.
+    scope : str
+        Processing scope: ``per_channel``, ``per_round`` or ``needs_reference``.
+    dtype_policy : str
+        Output dtype policy: ``preserve`` or ``declared``.
+    requires : tuple of Dependency
+        Optional dependencies imported when the step runs; the empty tuple declares
+        none.
+    min_shape_zyx : tuple of int
+        Smallest accepted input axis sizes in ZYX order, in voxels, as positive
+        integers.
+    post_registration : bool
+        Whether the step is eligible for the recipe's post-registration list.
+    supplied : SuppliedSpec or None
+        Supplied-statistics hooks; ``None`` means the step has no supplied-statistics
+        support.
+
+    Notes
+    -----
     run(volume, config, context) returns a StepResult. category documents
     intent and imposes no order. dtype_policy "preserve" requires the input
     dtype; "declared" requires the config's output_dtype (legacy min-max only).
@@ -175,6 +228,16 @@ def _supplied(config) -> bool:
 def step_spec(config) -> PreprocessingSpec:
     """Registered PreprocessingSpec for type(config) exactly; subclasses are not matched.
 
+    Parameters
+    ----------
+    config : object
+        Configuration instance for the preprocessing step.
+
+    Returns
+    -------
+    PreprocessingSpec
+        Registry specification associated with the configuration.
+
     Raises
     ------
     TypeError
@@ -185,6 +248,16 @@ def step_spec(config) -> PreprocessingSpec:
 
 def step_config_type(name: str) -> type:
     """Config type of the step called name, derived from PREPROCESSING_METHODS.
+
+    Parameters
+    ----------
+    name : str
+        Registered preprocessing step name.
+
+    Returns
+    -------
+    type
+        Configuration class registered under the step name.
 
     Raises
     ------
@@ -206,6 +279,23 @@ def _jsonable(value, what, name):
 def run_step(volume: np.ndarray, config, context: StepContext) -> StepResult:
     """Run the step registered for config and enforce the step contract.
 
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        Finite intensity image in ZYX or ZYXC axis order.
+    config : object
+        Configuration of the registered preprocessing step.
+    context : StepContext
+        Round identity, spatial metadata and auxiliary inputs for the step.
+
+    Returns
+    -------
+    StepResult
+        Processed image with fitted values and diagnostics, checked against the step
+        contract.
+
+    Notes
+    -----
     Checks that the output has the input's shape (and so its axis order), the
     input dtype ("preserve") or the config's output_dtype ("declared"), only
     finite values, that context.metadata is unchanged, and that fitted and

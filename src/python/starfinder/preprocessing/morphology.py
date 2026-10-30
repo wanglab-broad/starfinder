@@ -80,6 +80,20 @@ def _morph(volume, radius, reconstruct):
 def filter_tophat(volume: np.ndarray, *, config: TophatConfig = TophatConfig()) -> np.ndarray:
     """White tophat per XY slice/channel, preserving source dtype and shape.
 
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        Finite intensity image in ZYX or ZYXC axis order.
+    config : TophatConfig
+        XY disk radius for the white top-hat; the default is 3 pixels.
+
+    Returns
+    -------
+    numpy.ndarray
+        White top-hat image with the input shape and dtype.
+
+    Notes
+    -----
     Allocates an output and float64 slice work. Reflect boundaries (skimage
     default), disk footprint. Constants give zero; empty/nonfinite inputs error.
     Inputs are not mutated. Results saturate to source dtype representability.
@@ -90,6 +104,20 @@ def filter_tophat(volume: np.ndarray, *, config: TophatConfig = TophatConfig()) 
 def correct_background(volume: np.ndarray, *, config: ReconstructionConfig = ReconstructionConfig()) -> np.ndarray:
     """Correct the background by morphological reconstruction; return the corrected image.
 
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        Finite intensity image in ZYX or ZYXC axis order.
+    config : ReconstructionConfig
+        XY disk radius for reconstruction; the default is 3 pixels.
+
+    Returns
+    -------
+    numpy.ndarray
+        Background-corrected image with the input shape and dtype.
+
+    Notes
+    -----
     Per XY slice and channel: subtract the background reconstructed by dilation
     from the slice eroded with a disk of ``config.radius_yx``, then add the white
     top-hat and subtract the black top-hat of the result. The step's registry ID

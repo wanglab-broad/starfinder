@@ -41,6 +41,27 @@ def _steps_record(entries):
 class HistogramSummary:
     """Per-channel integer histograms of one or more FOVs at a fitted step's input.
 
+    Parameters
+    ----------
+    counts : numpy.ndarray
+        Nonnegative integer voxel counts in round, channel, intensity-bin order.
+    dtype : str
+        Source image dtype: ``uint8`` or ``uint16``.
+    round_names : tuple of str
+        Acquisition round names in count-array order.
+    channel_labels : tuple of str
+        Channel labels in count-array order.
+    summarized_after : tuple
+        Preceding recipe steps as ``step`` and ``config`` records; the empty tuple
+        records no preceding steps.
+    fovs_used : tuple of str
+        Identifiers of FOVs contributing counts.
+    fovs_excluded : tuple of str
+        Identifiers of FOVs deliberately excluded from the merge; the empty tuple
+        records none.
+
+    Notes
+    -----
     counts has shape (rounds, channels, bins) with one bin per representable
     value of dtype (uint8 or uint16): bin v counts the voxels equal to v.
     summarized_after lists the preceding recipe steps as
@@ -81,6 +102,27 @@ def summarize_histograms(images: Mapping[str, np.ndarray], *, channel_labels: Se
                          summarized_after: Sequence[Mapping] = ()) -> HistogramSummary:
     """Record the per-channel histograms of one FOV's rounds.
 
+    Parameters
+    ----------
+    images : Mapping[str, numpy.ndarray]
+        Round names mapped in iteration order to ZYX or ZYXC intensity images of a
+        shared ``uint8`` or ``uint16`` dtype.
+    channel_labels : Sequence[str]
+        Channel labels in image channel order.
+    fov_id : str
+        Identifier of the FOV contributing the images.
+    summarized_after : Sequence[Mapping]
+        Preceding recipe steps as ``step`` and ``config`` records; the empty sequence
+        records no preceding steps.
+
+    Returns
+    -------
+    HistogramSummary
+        Integer histograms by round and channel, with the FOV identity and
+        preceding-step record.
+
+    Notes
+    -----
     images maps round names, in order, to finite ZYXC (or single-channel ZYX)
     uint8 or uint16 volumes of one dtype, taken at the fitted step's input:
     after the preceding recipe steps (see summary_recipe). Each histogram is
@@ -117,6 +159,20 @@ def summarize_histograms(images: Mapping[str, np.ndarray], *, channel_labels: Se
 def merge_histograms(summaries: Sequence[HistogramSummary], *, exclude: Sequence[str] = ()) -> HistogramSummary:
     """Sum the histograms of the selected FOVs elementwise.
 
+    Parameters
+    ----------
+    summaries : Sequence[HistogramSummary]
+        Histogram summaries to combine across FOVs.
+    exclude : Sequence[str]
+        FOV identifiers to exclude from the sum; the empty sequence excludes none.
+
+    Returns
+    -------
+    HistogramSummary
+        Summed histograms with contributing and excluded FOV identities.
+
+    Notes
+    -----
     Every summary must share dtype, round names, channel labels (hence the bin
     layout) and summarized_after. Summaries of the FOVs named in exclude (for
     example near-empty tissue-edge fields) are left out of the sum and recorded
@@ -171,6 +227,20 @@ def _rank(n, p):
 def histogram_percentile(counts: np.ndarray, p: float) -> int:
     """Inverted-CDF percentile of the values counted by a histogram.
 
+    Parameters
+    ----------
+    counts : numpy.ndarray
+        One-dimensional nonnegative integer voxel counts indexed by intensity value.
+    p : float
+        Intensity percentile in percent.
+
+    Returns
+    -------
+    int
+        Intensity value at the requested inverted-CDF percentile.
+
+    Notes
+    -----
     counts[v] is the number of voxels equal to v. The result is the smallest
     value whose cumulative count reaches p/100 of the total (for p = 0, the
     smallest value with a nonzero count). It equals
@@ -199,6 +269,20 @@ def histogram_percentile(counts: np.ndarray, p: float) -> int:
 def save_histograms(summary: HistogramSummary, path: Path | str) -> Path:
     """Save a summary as .npz: counts (rounds, channels, bins), labels, FOVs and preceding steps.
 
+    Parameters
+    ----------
+    summary : HistogramSummary
+        Histogram summary to serialize.
+    path : Path or str
+        Destination path for the compressed NumPy archive.
+
+    Returns
+    -------
+    Path
+        Path of the written histogram archive.
+
+    Notes
+    -----
     The file is written in one full-file write and read back by load_histograms.
     """
     if not isinstance(summary, HistogramSummary):
@@ -216,7 +300,18 @@ def save_histograms(summary: HistogramSummary, path: Path | str) -> Path:
 
 
 def load_histograms(path: Path | str) -> HistogramSummary:
-    """Load a summary written by save_histograms, revalidating it."""
+    """Load a summary written by save_histograms, revalidating it.
+
+    Parameters
+    ----------
+    path : Path or str
+        Path of the histogram archive to read.
+
+    Returns
+    -------
+    HistogramSummary
+        Revalidated histogram summary read from the archive.
+    """
     with np.load(Path(path), allow_pickle=False) as data:
         return HistogramSummary(data["counts"], str(data["dtype"]), tuple(data["round_names"].tolist()),
                                 tuple(data["channel_labels"].tolist()), tuple(json.loads(str(data["summarized_after"]))),

@@ -55,6 +55,20 @@ class MinMaxNormalizationConfig:
 def normalize_min_max(volume: np.ndarray, *, config: MinMaxNormalizationConfig) -> np.ndarray:
     """Min-max normalize finite nonempty ZYX/ZYXC data without input mutation.
 
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        Finite intensity image in ZYX or ZYXC axis order.
+    config : MinMaxNormalizationConfig
+        Output dtype and intensity range, grouping, SNR gate and rounding settings.
+
+    Returns
+    -------
+    numpy.ndarray
+        Normalized image with the input shape in the configured output dtype.
+
+    Notes
+    -----
     Maps each group's data range (per channel, or the whole volume for global
     scope) linearly onto ``config.output_range`` in ``config.output_dtype``. The
     SNR gate is kept: a nonconstant group whose max/mean is below
@@ -138,6 +152,24 @@ class HistogramMatchingConfig:
 def match_histogram(volume: np.ndarray, reference: np.ndarray, *, config: HistogramMatchingConfig = HistogramMatchingConfig()) -> np.ndarray:
     """Match each ZYX channel to one finite ZYX reference CDF.
 
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        Finite intensity image in ZYX or ZYXC axis order.
+    reference : numpy.ndarray
+        Finite reference intensity image in ZYX axis order.
+    config : HistogramMatchingConfig
+        Histogram-matching settings; the default retains the input dtype and truncates
+        integer output.
+
+    Returns
+    -------
+    numpy.ndarray
+        Histogram-matched image with the input shape and the configured output dtype, or
+        the input dtype when unset.
+
+    Notes
+    -----
     Allocates output plus float64/skimage CDF work for one channel at a time;
     inputs are unchanged. Reference spatial shape may differ. Empty/nonfinite
     inputs error; constant inputs use skimage's exact CDF mapping. No bins or
@@ -267,6 +299,24 @@ def normalize_percentile(volume: np.ndarray, *, config: PercentileNormalizationC
                          fitted: Mapping | None = None) -> np.ndarray:
     """Map each channel's [low, high] percentile range linearly onto the output range.
 
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        Finite intensity image in ZYX or ZYXC axis order.
+    config : PercentileNormalizationConfig
+        Intensity percentiles and fitting source; the default fits the 1st and 99.9th
+        percentiles per channel.
+    fitted : Mapping or None
+        Supplied ``low`` and ``high`` intensity values in channel order for
+        ``fit="supplied"``; ``None`` uses volume-fitted values with ``fit="fov"``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Percentile-normalized image with the input shape and dtype.
+
+    Notes
+    -----
     Unsigned and signed integer output is
     rint(clip((x - low) / (high - low), 0, 1) * dtype_max) (round half to
     even) in the input dtype; float input maps to [0, 1] in its own dtype.
