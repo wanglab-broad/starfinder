@@ -85,6 +85,20 @@ APPEARANCE_PRESETS = {name: _entry(name) for name in _PRESET_SPECS}
 def appearance_scene_preset(name: str) -> tuple[Codebook, AppearanceSceneConfig]:
     """Return (codebook, config) for an APPEARANCE_PRESETS name: an ``AppearanceSceneConfig``.
 
+    Parameters
+    ----------
+    name : str
+        Preset name from ``APPEARANCE_PRESETS``.
+
+    Returns
+    -------
+    codebook : Codebook
+        Sequencing codebook for the preset.
+    config : AppearanceSceneConfig
+        Scene settings for the preset.
+
+    Notes
+    -----
     The six presets of design/specs/synthetic/real-appearance.md ("Presets", PR1). The routine presets
     ``appearance-dense3d-v1``, ``appearance-tissue2d-v1`` and ``appearance-culture-v1``
     place a fixed count of entries (DN3) of the closed-form bank of their context's routine
