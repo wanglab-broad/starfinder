@@ -121,23 +121,23 @@ class FOV:
     fov_id : str
         FOV identifier used in input paths, output paths and spot namespaces.
     images : dict[str, numpy.ndarray]
-        Resident ZYXC images keyed by round name; the default is empty.
+        Resident ZYXC images keyed by resident image name; the default is empty.
     snapshots : dict[str, dict[str, numpy.ndarray]]
-        Round names mapped to named ZYXC preprocessing images in that round's
+        Image names mapped to named ZYXC preprocessing images in that image's
         current coordinates; the default is empty.
     metadata : dict[str, ImageMetadata]
         Spatial metadata keyed by resident image name; the default is empty.
     registration_results : dict[str, list[RegistrationResult]]
-        Ordered registration results keyed by moving round; the default is
+        Ordered registration results keyed by moving image name; the default is
         empty.
     registration_attempts : dict[str, list[dict]]
-        Registration attempt records keyed by moving round; the default is
+        Registration attempt records keyed by moving image name; the default is
         empty.
     registration_chains : dict[str, TransformChain]
-        Applied transform chains keyed by moving round; the default is empty.
+        Applied transform chains keyed by moving image name; the default is empty.
     registration_record : dict
-        Registration semantics, recipe summary and per-round warp records; the
-        default is empty.
+        Registration semantics, recipe summaries, per-image warp settings and
+        preparation records; the default is empty.
     spot_result : SpotFindingResult or None
         Detected spots with their identities; None represents absent detections.
     subtile_id : int or None
@@ -157,8 +157,8 @@ class FOV:
         Image loading and geometry-operation diagnostics keyed by image name;
         the default is empty.
     preprocessing_record : dict
-        Preprocessing recipe, step records and snapshot transform records; the
-        default is empty.
+        Preprocessing recipe, step records, image transform records and
+        supplied-statistics provenance; the default is empty.
     segmentation_results : dict[str, SegmentationResult]
         Segmentation results keyed by run name; the default is empty.
     assignment_results : dict[str, AssignmentResult]
@@ -492,7 +492,7 @@ class FOV:
         config : MinMaxNormalizationConfig
             Intensity normalization and output policy.
         rounds : list[str] or None
-            Round names to process; None selects dataset.rounds.all_rounds.
+            Resident image names to process; None selects dataset.rounds.all_rounds.
 
         Returns
         -------
@@ -512,7 +512,7 @@ class FOV:
         config : HistogramMatchingConfig
             Histogram matching settings, including the reference channel.
         rounds : list[str] or None
-            Round names to process; None selects dataset.rounds.all_rounds.
+            Resident image names to process; None selects dataset.rounds.all_rounds.
         reference : numpy.ndarray or None
             ZYX reference intensity image. None takes a copy of
             config.reference_channel from the resident reference round.
@@ -541,7 +541,7 @@ class FOV:
         config : ReconstructionConfig
             Morphological reconstruction settings for background correction.
         rounds : list[str] or None
-            Round names to process; None selects dataset.rounds.all_rounds.
+            Resident image names to process; None selects dataset.rounds.all_rounds.
 
         Returns
         -------
@@ -561,7 +561,7 @@ class FOV:
         config : TophatConfig
             Tophat filtering settings.
         rounds : list[str] or None
-            Round names to process; None selects dataset.rounds.all_rounds.
+            Resident image names to process; None selects dataset.rounds.all_rounds.
 
         Returns
         -------
@@ -579,7 +579,7 @@ class FOV:
         Parameters
         ----------
         config : ProjectionConfig
-            Z projection settings for the resident round images.
+            Z projection settings for the resident images.
         rounds : list[str] or None
             Resident image names to project; None selects the keys of images.
 
@@ -1171,7 +1171,7 @@ class FOV:
         config : NeighborhoodSumConfig
             Spot-neighborhood intensity extraction settings.
         rounds : list[str] or None
-            Round names in extraction order; None selects
+            Resident image names in extraction order; None selects
             dataset.rounds.sequencing_rounds.
 
         Returns
