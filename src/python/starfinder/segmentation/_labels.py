@@ -61,7 +61,7 @@ def to_label_dtype(labels) -> np.ndarray:
     Returns
     -------
     numpy.ndarray
-        C-contiguous uint32 labels with the input shape and values.
+        C-contiguous uint32 labels with the input values.
 
     Notes
     -----
