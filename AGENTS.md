@@ -41,7 +41,7 @@ change deployment guards without that authorization.
 
 ## Implementation
 
-Every config dataclass requires a complete numpydoc `Parameters` section with an entry for every field; the strict documentation build enforces completeness for every class shown by `config-options`.
+Every config dataclass and every public function, method and dataclass on the API pages requires a complete numpydoc `Parameters` section with an entry for every public field or parameter (excluding `self` and `cls`), and a `Returns` or `Yields` section when it returns a value; the strict documentation build enforces parameter completeness and annotated returns for API objects, and field completeness for every class shown by `config-options`.
 
 Change only the authorized slice and maintained callers/tests/docs needed for
 coherence. Verify diagnoses in actual code. Prefer functions and small typed

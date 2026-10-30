@@ -17,9 +17,11 @@ read well to a user.
 from __future__ import annotations
 
 import dataclasses
+import enum
 import importlib
 import inspect
 import re
+from pathlib import Path
 
 from docutils import nodes
 from docutils.parsers.rst import Directive, directives
@@ -57,21 +59,36 @@ def _default(field):
     return repr(value)
 
 
-def _parameter_descriptions(config):
-    """Read plain numpydoc Parameters entries and check them against all fields.
+def _parameter_descriptions(obj):
+    """Read numpydoc Parameters once, against public fields or a signature.
 
-    Every config dataclass requires a complete Parameters section.
-    Excluded table columns do not exempt fields from completeness checking.
+    Excluded option-table columns do not exempt fields from checking. A callable
+    with no parameters may omit the section, as there are no entries to describe.
     """
-    lines = inspect.cleandoc(config.__doc__ or "").splitlines()
+    if inspect.isclass(obj) and dataclasses.is_dataclass(obj):
+        expected = {field.name for field in dataclasses.fields(obj)
+                    if not field.name.startswith("_")}
+        kind = "field"
+    else:
+        expected = set()
+        for parameter in inspect.signature(obj).parameters.values():
+            if parameter.name in ("self", "cls"):
+                continue
+            stars = {inspect.Parameter.VAR_POSITIONAL: "*",
+                     inspect.Parameter.VAR_KEYWORD: "**"}.get(parameter.kind, "")
+            expected.add(stars + parameter.name)
+        kind = "parameter"
+    label = obj.__qualname__
+    lines = inspect.cleandoc(obj.__doc__ or "").splitlines()
     sections = [i for i in range(len(lines) - 1)
                 if lines[i] and not lines[i].startswith(" ")
                 and re.fullmatch(r"-{3,}", lines[i + 1])]
-    start = next((i for i in sections if lines[i] == "Parameters"), None)
-    if start is None:
-        fields = ", ".join(f"field {field.name!r}" for field in dataclasses.fields(config))
-        raise ValueError(f"{config.__name__}: missing Parameters section ({fields})")
-    end = next((i for i in sections if i > start), len(lines))
+    starts = [i for i in sections if lines[i] == "Parameters"]
+    if not starts:
+        if not expected:
+            return {}
+        missing = ", ".join(f"{kind} {name!r}" for name in sorted(expected))
+        raise ValueError(f"{label}: missing Parameters section ({missing})")
     descriptions = {}
     names = []
     text = []
@@ -79,25 +96,103 @@ def _parameter_descriptions(config):
     def save():
         for name in names:
             if name in descriptions:
-                raise ValueError(f"{config.__name__}: duplicate Parameters field {name!r}")
+                raise ValueError(f"{label}: duplicate Parameters {kind} {name!r}")
             descriptions[name] = " ".join(text)
 
-    for line in lines[start + 2:end]:
-        if line and not line.startswith(" "):
-            save()
-            names = [name.strip() for name in line.split(":", 1)[0].split(",")]
-            text = []
-        elif line.strip():
-            text.append(line.strip())
-    save()
-    fields = {field.name for field in dataclasses.fields(config)}
-    problems = [f"missing Parameters field {name!r}" for name in sorted(fields - descriptions.keys())]
-    problems += [f"unknown Parameters field {name!r}" for name in sorted(descriptions.keys() - fields)]
-    problems += [f"empty Parameters description for field {name!r}"
-                 for name in sorted(fields & descriptions.keys()) if not descriptions[name]]
+    for start in starts:
+        end = next((i for i in sections if i > start), len(lines))
+        names, text = [], []
+        for line in lines[start + 2:end]:
+            if line and not line.startswith(" "):
+                save()
+                names = [name.strip() for name in line.split(":", 1)[0].split(",")]
+                text = []
+            elif line.strip():
+                text.append(line.strip())
+        save()
+    problems = [f"missing Parameters {kind} {name!r}"
+                for name in sorted(expected - descriptions.keys())]
+    problems += [f"unknown Parameters {kind} {name!r}"
+                 for name in sorted(descriptions.keys() - expected)]
+    problems += [f"empty Parameters description for {kind} {name!r}"
+                 for name in sorted(expected & descriptions.keys()) if not descriptions[name]]
     if problems:
-        raise ValueError(f"{config.__name__}: " + "; ".join(problems))
+        raise ValueError(f"{label}: " + "; ".join(problems))
     return descriptions
+
+
+def _api_objects(api_dir):
+    """Resolve every autosummary entry, following every currentmodule on a page.
+
+    Class templates render :members:, so include public methods defined on the
+    class itself, including class/static methods, but not properties or inherited
+    methods. Exceptions (including warnings), enums and constants are exempt.
+    """
+    objects = {}
+    for path in sorted(Path(api_dir).glob("*.rst")):
+        module = None
+        lines = path.read_text().splitlines()
+        i = 0
+        while i < len(lines):
+            match = re.match(r"\.\. (?:current)?module:: (\S+)", lines[i])
+            if match:
+                module = match.group(1)
+            if not lines[i].startswith(".. autosummary::"):
+                i += 1
+                continue
+            i += 1
+            while i < len(lines) and (lines[i].startswith("   ") or not lines[i].strip()):
+                name = lines[i].strip()
+                i += 1
+                if not name or name.startswith(":"):
+                    continue
+                obj = importlib.import_module(module)
+                for part in name.split("."):
+                    obj = getattr(obj, part)
+                if inspect.isclass(obj) and issubclass(obj, (BaseException, enum.Enum)):
+                    continue
+                qualified = f"{module}.{name}"
+                if inspect.isclass(obj):
+                    objects[qualified] = obj
+                    for member_name, member in sorted(vars(obj).items()):
+                        if member_name.startswith("_"):
+                            continue
+                        func = (member.__func__ if isinstance(member, (classmethod, staticmethod))
+                                else member)
+                        if inspect.isfunction(func):
+                            objects[f"{qualified}.{member_name}"] = func
+                elif callable(obj):
+                    objects[qualified] = obj
+    return objects
+
+
+def _check_api_object(name, obj):
+    """Check the original docstring, before Napoleon transforms it."""
+    try:
+        _parameter_descriptions(obj)
+    except ValueError as error:
+        raise ValueError(f"{name}: {error}") from error
+    if inspect.isclass(obj):
+        return
+    annotation = inspect.signature(obj).return_annotation
+    if annotation in (inspect.Signature.empty, None, type(None), "None", "NoneType"):
+        return
+    if not re.search(r"^(?:Returns|Yields)\n-{3,}\s*$",
+                     inspect.cleandoc(obj.__doc__ or ""), re.MULTILINE):
+        raise ValueError(f"{name}: missing Returns or Yields section for return annotation "
+                         f"{annotation!r}")
+
+
+def _check_api_docs(app):
+    """Validate all API targets on every build, including incremental builds."""
+    from sphinx.util import logging
+
+    logger = logging.getLogger(__name__)
+    for name, obj in _api_objects(Path(app.srcdir) / "api").items():
+        try:
+            _check_api_object(name, obj)
+        except ValueError as error:
+            logger.warning("API parameter documentation: %s", error)
 
 
 def _cell(text, literal=False):
@@ -179,6 +274,7 @@ class ConfigOptions(Directive):
 
 
 def setup(app):
+    app.connect("builder-inited", _check_api_docs)
     app.add_directive("method-table", MethodTable)
     app.add_directive("config-options", ConfigOptions)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

@@ -73,6 +73,32 @@ def run_benchmark(cases, *, input_root, output_root, owner, repetitions=1,
                   run_id=None, resume=False, provenance=None):
     """Process explicit cases into a unique run directory and return its Path.
 
+    Parameters
+    ----------
+    cases : iterable of BenchmarkCase
+        Explicit benchmark cases with distinct case identifiers.
+    input_root : str or pathlib.Path
+        Root directory containing the cases' input files.
+    output_root : str or pathlib.Path
+        Root directory for benchmark run directories.
+    owner : str
+        Run owner, supplied as a string containing non-whitespace text.
+    repetitions : int
+        Positive number of processing trials per case.
+    run_id : str or None
+        Run directory identifier; ``None`` generates a UTC timestamp and UUID for a new run.
+    resume : bool
+        Whether to continue the run identified by ``run_id``.
+    provenance : dict or None
+        User-supplied run provenance; ``None`` records an empty mapping.
+
+    Returns
+    -------
+    pathlib.Path
+        Absolute path to the benchmark run directory.
+
+    Notes
+    -----
     Resume requires the original run_id and identical schema, config, roots,
     owner, provenance and input hashes. Completed records (including failures)
     are verified and skipped. An interrupted directory without a record blocks
@@ -202,6 +228,18 @@ def run_benchmark(cases, *, input_root, output_root, owner, repetitions=1,
 def evaluate_benchmark(run_dir):
     """Evaluate checksummed saved artifacts, returning a new evaluation directory.
 
+    Parameters
+    ----------
+    run_dir : str or pathlib.Path
+        Benchmark run directory containing the saved manifest and trial records.
+
+    Returns
+    -------
+    pathlib.Path
+        Absolute path to the newly created evaluation directory.
+
+    Notes
+    -----
     Processing failures become skipped evaluations. Invalid metrics become
     evaluation failures; undefined metric results retain null/reasons. Missing
     or corrupt required artifacts raise before any evaluation output is made.
@@ -251,6 +289,18 @@ def evaluate_benchmark(run_dir):
 def report_benchmark(evaluation_dir):
     """Report only saved evaluation records into a new JSON/CSV directory.
 
+    Parameters
+    ----------
+    evaluation_dir : str or pathlib.Path
+        Evaluation directory containing the saved manifest and results.
+
+    Returns
+    -------
+    pathlib.Path
+        Absolute path to the newly created report directory.
+
+    Notes
+    -----
     Every trial remains visible, including failures, fallback results and null
     metrics. No implicit ranking or aggregation across incompatible methods.
     """

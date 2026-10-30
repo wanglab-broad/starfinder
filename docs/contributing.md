@@ -31,13 +31,19 @@ code where possible using the directives in `docs/_ext/`: `method-table`,
 `config-options` and `synthetic-presets`. Link config classes to their API
 pages for further details rather than copying parameter descriptions.
 
-Every config dataclass requires a complete numpydoc `Parameters` section in its
-class docstring, with an entry for every field: what it sets, its unit and simple
-valid values, in one or two plain sentences. Keep precise rules in the specification and the first line
-of the class docstring unchanged. `config-options` reads these descriptions;
-the strict build checks that every field has an entry and every entry names
-a field for every class shown by `config-options`. A quick-gate contract test
-checks all public config dataclasses and every class shown by `config-options`.
+Every config dataclass and every public function, method and dataclass on the
+API pages requires a complete numpydoc `Parameters` section, with an entry for
+every public field or parameter (excluding `self` and `cls`): what it sets, its
+unit and simple valid values, in one or two plain sentences. Variadic parameters
+keep their stars. Add a `Returns` or `Yields` section when the callable returns a
+value. Keep precise rules in the specification and the first docstring line
+unchanged. `config-options` reads these descriptions; the strict build rejects
+missing, unknown, duplicate or empty entries for its targets and API objects,
+and requires a return section when an API callable's annotation denotes a value.
+Unannotated callables have no automated return check. Exceptions, warnings,
+enums, constants and private dataclass fields are exempt. The quick-gate contract
+test checks all public config dataclasses, every `config-options` target and
+every API object, including public methods defined by listed classes.
 
 Specifications, validation designs, baselines and proposals are design records
 in [design/](https://github.com/wanglab-broad/starfinder/blob/dev/design/README.md),
