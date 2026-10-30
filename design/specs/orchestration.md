@@ -1,9 +1,6 @@
 # Workflow orchestration contract: the CLI, the plan and manifest, the configuration, completion, resume and logging
 
-% Status: Proposed (W-643, 2026-10-29, at 56c35b8)
-
-Status: Proposed. This record is reviewed at the specification gate of workflow orchestration
-(W-646) before any implementation; approval publishes nothing.
+% Status: Accepted (W-646, 2026-10-30, at 1ad3f7d)
 
 This page specifies the engine-neutral contract that replaces the code that talks to Snakemake
 today: a command group of the package, a plan command that writes a resolved configuration and a

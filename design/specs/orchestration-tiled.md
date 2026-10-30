@@ -1,9 +1,6 @@
 # Native tiled execution: the global task, the tile grid, the tile task, the merge and the deep-tissue recipe
 
-% Status: Proposed (W-644, 2026-10-29, at 56c35b8)
-
-Status: Proposed. This record is reviewed at the specification gate of workflow orchestration
-(W-646) before any implementation; approval publishes nothing.
+% Status: Accepted (W-646, 2026-10-30, at 1ad3f7d)
 
 This page specifies how one FOV that does not fit one job runs as tasks (decision D5): a global
 task per FOV that loads, preprocesses and registers the rounds and writes them once as a chunked

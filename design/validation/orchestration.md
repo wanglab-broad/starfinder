@@ -1,9 +1,6 @@
 # Validation design: workflow orchestration
 
-% Status: Proposed (W-645, 2026-10-30, at 56c35b8)
-
-Status: Proposed. This record is reviewed at the specification gate of workflow orchestration
-(W-646) before any implementation; approval publishes nothing.
+% Status: Accepted (W-646, 2026-10-30, at 1ad3f7d)
 
 This page designs the validation of the §2.13 workflow by the layers of decision D10: contract
 tests in the quick selection Q; a Nextflow stub-run under its own marker, in a CI job that installs

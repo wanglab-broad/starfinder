@@ -1,9 +1,6 @@
 # Workflow orchestration baseline: rules, adapters, boundary, configuration and the golden baseline
 
-% Status: Proposed (W-642, 2026-10-29, at 56c35b8)
-
-Status: Proposed. This record is reviewed at the specification gate of workflow orchestration
-before any implementation; approval publishes nothing.
+% Status: Accepted (W-646, 2026-10-30, at 1ad3f7d)
 
 This page records what the Snakemake workflow does at revision `56c35b8` (Starfinder `dev`, the
 base of the workflow orchestration specification batch), before workflow orchestration replaces the
