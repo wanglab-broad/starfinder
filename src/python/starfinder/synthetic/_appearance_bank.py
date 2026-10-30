@@ -75,7 +75,7 @@ class BankReference:
     preset : str or None
         Cellular preset name from ``CELLULAR_PRESETS`` for a closed-form bank; None denotes a stored bank.
     n : int
-        Positive number of scenes rendered for a closed-form bank.
+        Number of scenes rendered for a closed-form bank.
     directory : str or None
         Stored-bank directory; None uses ``STARFINDER_APPEARANCE_BANKS``.
 
@@ -906,7 +906,7 @@ def generate_closed_form_bank(preset: str, n: int = 4) -> AppearanceBank:
     preset : str
         Cellular scene preset name from ``CELLULAR_PRESETS``.
     n : int
-        Positive number of scenes rendered, including the held-out scene.
+        Number of scenes rendered, including the held-out scene.
 
     Returns
     -------
