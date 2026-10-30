@@ -104,6 +104,21 @@ class ImageConversionConfig:
 def convert_image(image, *, config: ImageConversionConfig):
     """Convert finite ZYX/ZYXC data without mutating the input.
 
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Finite real intensity array in ZYX or ZYXC order.
+    config : ImageConversionConfig
+        Output dtype and explicit intensity-conversion policy.
+
+    Returns
+    -------
+    numpy.ndarray
+        Converted intensity array with the input shape and the configured output
+        dtype.
+
+    Notes
+    -----
     Declared rescale rejects values outside input_range; clip is explicit.
     Floating calculations use float64; integer outputs use configured rounding.
     """

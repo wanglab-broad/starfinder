@@ -50,6 +50,24 @@ _NATIVE_COLUMNS = ("probability", "radius")
 class SpotFindingResult:
     """Typed spot table, source geometry, identity scope and effective policy.
 
+    Parameters
+    ----------
+    spots : pandas.DataFrame
+        Spot table with string ``spot_id`` and finite float64 ``z``, ``y``, ``x``
+        columns in zero-based voxel indices.
+    metadata : ImageMetadata
+        Source image geometry for the spot coordinates.
+    spot_namespace : str
+        Nonempty identity scope for the spot identifiers.
+    config : SpotFindingConfig
+        Registered base detection configuration.
+    diagnostics : dict
+        Detection settings, measurements and execution details.
+    plan : SpotFindingPlan or None
+        Detection plan; ``None`` constructs ``SpotFindingPlan(config)``.
+
+    Notes
+    -----
     Required columns: spot_id (pandas string), z/y/x (float64). Optional channel
     (int64) indexes diagnostics['channel_labels']; peak_intensity (float64)
     means the original sampled pixel value. No universal detection score is
@@ -117,6 +135,27 @@ def find_spots(
 ) -> SpotFindingResult:
     """Detect finite ZYX/ZYXC images with a registered config or a SpotFindingPlan.
 
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Finite real intensity array in ZYX or ZYXC order.
+    config : SpotFindingConfig or SpotFindingPlan
+        Registered detection configuration or detection plan.
+    metadata : ImageMetadata
+        Spatial geometry of the input image.
+    spot_namespace : str
+        Nonempty identity scope for the detected spots.
+    device : str
+        Execution device: ``cpu``.
+
+    Returns
+    -------
+    SpotFindingResult
+        Detected spot table with source geometry, identities, effective policy and
+        diagnostics.
+
+    Notes
+    -----
     The method is the SPOT_FINDING_METHODS entry of the config's exact type;
     a plan's overrides replace the whole config of their channels (a plan
     with overrides needs config.channel_labels). device must be "cpu".

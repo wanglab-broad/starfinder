@@ -131,7 +131,22 @@ class ImageLoadConfig:
 
 @dataclass(frozen=True)
 class ImageLoadResult:
-    """Loaded array, geometry, ordered channel/source identities and diagnostics."""
+    """Loaded array, geometry, ordered channel/source identities and diagnostics.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Loaded finite real intensity array in ZYX or ZYXC order.
+    metadata : ImageMetadata
+        Spatial geometry of the loaded image.
+    channel_labels : tuple of str
+        Channel identities in image channel order.
+    source_paths : tuple of pathlib.Path
+        TIFF paths contributing to the loaded image, in channel order for round
+        loading.
+    diagnostics : dict
+        Loading and conversion details; an empty dictionary is the default.
+    """
 
     image: np.ndarray
     metadata: ImageMetadata
@@ -194,6 +209,22 @@ def _ome_zyxc(tif, path):
 def load_volume(path: Path | str, *, config: ImageLoadConfig = ImageLoadConfig()) -> ImageLoadResult:
     """Load one finite ZYX channel, preserving dtype by default.
 
+    Parameters
+    ----------
+    path : pathlib.Path or str
+        Path to the source TIFF.
+    config : ImageLoadConfig
+        Source selection, channel identity, geometry and intensity-conversion
+        settings.
+
+    Returns
+    -------
+    ImageLoadResult
+        Loaded ZYX channel with geometry, channel identity, source path and
+        diagnostics.
+
+    Notes
+    -----
     OME/ImageJ axes and explicitly saved axes select series/T/C, with ambiguity
     errors. Plain TIFF arrays are ZYX (YX gains singleton Z). Allocates one
     loaded volume; optional conversion adds output and float64 work buffers.
@@ -285,6 +316,22 @@ def _volume_header(path: Path | str, *, floating: bool = False) -> tuple[tuple[i
 def load_round(round_dir: Path | str, *, config: ImageLoadConfig) -> ImageLoadResult:
     """Load unique ordered channel TIFFs into ZYXC.
 
+    Parameters
+    ----------
+    round_dir : pathlib.Path or str
+        Round directory containing the configured source subdirectory.
+    config : ImageLoadConfig
+        Ordered channel selection, source geometry, cropping and
+        intensity-conversion settings.
+
+    Returns
+    -------
+    ImageLoadResult
+        Loaded ZYXC round with geometry, ordered channel labels, source paths and
+        diagnostics.
+
+    Notes
+    -----
     Rejects ambiguous/missing matches, mixed source dtypes, unequal dimensions
     without explicit crop policy, and inconsistent stored geometry. No silent
     channel reordering or type promotion. Stacking allocates a new array.
@@ -334,6 +381,22 @@ def load_round(round_dir: Path | str, *, config: ImageLoadConfig) -> ImageLoadRe
 def load_volume_zyxc(path: Path | str, *, channel_labels: tuple[str, ...] | None = None) -> ImageLoadResult:
     """Load a whole ZYXC TIFF written by save_volume in one read, preserving dtype.
 
+    Parameters
+    ----------
+    path : pathlib.Path or str
+        Path to the source multi-channel TIFF.
+    channel_labels : tuple of str or None
+        Unique labels in C-axis order; ``None`` generates ``channel0``,
+        ``channel1``, and so on.
+
+    Returns
+    -------
+    ImageLoadResult
+        Loaded ZYXC image with geometry, ordered channel labels, source path and
+        diagnostics.
+
+    Notes
+    -----
     Reads OME-TIFF (one image; axes other than Z, C, Y and X must be singleton)
     and the earlier tifffile layout that declares ZYXC axes in its JSON
     description. Singleton Z and C are kept. channel_labels must match C; None
@@ -364,6 +427,23 @@ def load_volume_zyxc(path: Path | str, *, channel_labels: tuple[str, ...] | None
 def save_volume(image: np.ndarray, path: Path | str, compress: bool = False, *, metadata: ImageMetadata | None = None, conversion: ImageConversionConfig | None = None) -> None:
     """Write finite ZYX TIFF or ZYXC OME-TIFF with explicit axes and optional geometry.
 
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Finite real intensity array in ZYX or ZYXC order.
+    path : pathlib.Path or str
+        Destination TIFF path.
+    compress : bool
+        Whether to apply zlib compression.
+    metadata : ImageMetadata or None
+        Geometry to store with the image; ``None`` omits STARfinder geometry
+        metadata.
+    conversion : ImageConversionConfig or None
+        Intensity-conversion settings; ``None`` preserves the input dtype and
+        intensities.
+
+    Notes
+    -----
     ZYX is a tifffile TIFF with a JSON description. ZYXC is OME-TIFF: every
     page is one YX plane (DimensionOrder XYCZT), the OME-XML declares SizeZ,
     SizeC and the pixel type, and metadata is a JSON CommentAnnotation. Name

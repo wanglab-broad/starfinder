@@ -39,6 +39,33 @@ class MethodContext:
 class SpotFindingSpec:
     """Registered method: stable snake_case name, private method function and declared capabilities.
 
+    Parameters
+    ----------
+    name : str
+        Stable snake_case method identifier.
+    run : callable
+        Method function taking image, config and context, and returning a spot table
+        and diagnostics.
+    pipeline : bool
+        Whether the method is available for pipeline spot finding.
+    dimensions : frozenset of int
+        Supported image dimensionalities drawn from 2 and 3.
+    output_columns : tuple of str
+        Ordered method-output column names, with a trailing ``?`` marking an
+        optional column.
+    column_fields : mapping of str to str
+        Optional-column names mapped to the Boolean config fields that enable them;
+        an empty mapping is the default.
+    weights : bool
+        Whether the config names pretrained weights; defaults to false.
+    requires : tuple of Dependency
+        Optional dependencies for the method; the default empty tuple declares no
+        dependencies.
+    min_shape_zyx : tuple of int
+        Positive minimum axis sizes in ZYX voxel counts; defaults to (1, 1, 1).
+
+    Notes
+    -----
     run(image, config, context) receives the validated ZYX or ZYXC image
     (a ZYX image has one channel) and returns the method's table (the declared columns,
     without spot_id) and its diagnostics: ``thresholds``, one value per

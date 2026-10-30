@@ -25,7 +25,17 @@ _OPERATOR = ("operator-retrieved on 2026-10-01 (a recovery note of the spot-find
 
 @dataclass(frozen=True)
 class ModelFile:
-    """A file of a model folder that the library loads: path relative to the folder, SHA-256 and size."""
+    """A file of a model folder that the library loads: path relative to the folder, SHA-256 and size.
+
+    Parameters
+    ----------
+    path : str
+        Model-file path relative to its model folder.
+    sha256 : str
+        Expected SHA-256 digest of the file.
+    bytes : int
+        Recorded file size in bytes.
+    """
     path: str
     sha256: str
     bytes: int
@@ -35,6 +45,45 @@ class ModelFile:
 class KnownModel:
     """One row of the known-weights table.
 
+    Parameters
+    ----------
+    method : str
+        Spot-finding method identifier.
+    model : str
+        Model identifier within the method.
+    dimensionality : str
+        Description of the model's spatial dimensionality.
+    url : str
+        Source URL of the model download.
+    revision : str
+        Source release or revision identifying the model download.
+    sha256 : str
+        Expected SHA-256 digest of the download.
+    bytes : int
+        Expected download size in bytes.
+    md5 : str or None
+        Library-registered MD5 checksum for Spotiflow archives; ``None`` records no
+        library MD5 for Piscis downloads.
+    archive : bool
+        Whether the download is a ZIP archive.
+    files : tuple of ModelFile
+        Files loaded by the model library, with paths relative to the model folder.
+    min_shape_zyx : tuple of int
+        Observed minimum input shape in ZYX voxel counts.
+    training_pixel_size : str
+        Training pixel-size description, including units when available.
+    training_pixel_size_provenance : str
+        Source and retrieval provenance for the training pixel-size description.
+    native_threshold : float
+        Detection threshold stored with the weights or supplied by the library
+        default.
+    extracted : tuple of ModelFile
+        Inventory of extracted Spotiflow archive files with relative paths, SHA-256
+        digests and byte sizes; the default empty tuple describes no extracted
+        files.
+
+    Notes
+    -----
     url is the file Starfinder downloads, with its SHA-256 and size; md5 is
     the checksum the library registers for it (Spotiflow archives), or None.
     archive is True when the download is a zip extracted into the model
@@ -160,6 +209,27 @@ def listed_files(method: str, model: str) -> tuple[str, ...]:
 def resolve_model(method: str, model: str, *, directory=None, extracted: tuple[str, ...] = ()) -> Path:
     """Verified local folder of a known model, without using the network or the library.
 
+    Parameters
+    ----------
+    method : str
+        Spot-finding method identifier in ``KNOWN_MODELS``.
+    model : str
+        Known model identifier for the method.
+    directory : pathlib.Path or str or None
+        Weights-cache root; ``None`` uses ``STARFINDER_WEIGHTS_DIR``, then
+        ``XDG_CACHE_HOME/starfinder/weights`` with ``~/.cache`` as the default cache
+        home.
+    extracted : tuple of str
+        Additional extracted-file paths relative to the model folder to verify; the
+        default empty tuple adds no files.
+
+    Returns
+    -------
+    pathlib.Path
+        Verified local folder of the requested model.
+
+    Notes
+    -----
     Checks that the folder and every file the table lists exist, and
     recomputes each file's SHA-256; extracted names further files of the
     entry's extracted list (paths in the folder) to check the same way;
@@ -195,6 +265,24 @@ def weights_artifacts(method: str, model: str, folder, extracted: tuple[str, ...
 def fetch_model(method: str, model: str, *, directory=None) -> Path:
     """Download, verify and install one known model into the cache; return its folder.
 
+    Parameters
+    ----------
+    method : str
+        Spot-finding method identifier in ``KNOWN_MODELS``.
+    model : str
+        Known model identifier for the method.
+    directory : pathlib.Path or str or None
+        Weights-cache root; ``None`` uses ``STARFINDER_WEIGHTS_DIR``, then
+        ``XDG_CACHE_HOME/starfinder/weights`` with ``~/.cache`` as the default cache
+        home.
+
+    Returns
+    -------
+    pathlib.Path
+        Verified local folder of the requested model.
+
+    Notes
+    -----
     The source file is downloaded to a temporary name in the target
     directory, its size, SHA-256 and (Spotiflow) library MD5 are checked,
     and only then is it extracted (Spotiflow) or moved (Piscis) into

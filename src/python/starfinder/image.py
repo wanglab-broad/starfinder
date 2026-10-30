@@ -34,6 +34,24 @@ def _triple(value, name):
 class ImageMetadata:
     """Spatial geometry independent of image shape and intensity.
 
+    Parameters
+    ----------
+    frame_id : str
+        Nonempty coordinate-frame identifier.
+    spacing_zyx : tuple of float or None
+        Positive voxel spacings in ZYX order, measured in ``spatial_unit``; ``None``
+        means unknown spacing.
+    origin_zyx : tuple of float or None
+        Physical origin in ZYX order, measured in ``spatial_unit``; ``None`` means
+        unknown origin.
+    direction_zyx : tuple of tuple of float or None
+        Orthonormal 3-by-3 direction matrix mapping scaled ZYX indices to physical
+        ZYX axes; ``None`` means unknown orientation.
+    spatial_unit : str or None
+        Nonempty physical-unit label; ``None`` means unknown calibration.
+
+    Notes
+    -----
     Unknown physical fields remain None. World coordinates are
     ``origin + direction @ (index * spacing)`` in ZYX order. All physical
     fields, including unit, are required for physical conversion.
@@ -64,13 +82,37 @@ class ImageMetadata:
             raise IncompatibleGeometryError("spatial_unit must be a nonempty string or None")
 
     def index_to_world(self, index_zyx):
-        """Convert finite (..., 3) voxel indices to physical ZYX coordinates."""
+        """Convert finite (..., 3) voxel indices to physical ZYX coordinates.
+
+        Parameters
+        ----------
+        index_zyx : array_like
+            Finite zero-based voxel coordinates in ZYX order, with shape (..., 3).
+
+        Returns
+        -------
+        numpy.ndarray
+            Physical ZYX coordinates with shape (..., 3), measured in this
+            metadata's ``spatial_unit``.
+        """
         self._require_physical()
         points = self._points(index_zyx)
         return np.asarray(self.origin_zyx) + (points * self.spacing_zyx) @ np.asarray(self.direction_zyx).T
 
     def world_to_index(self, world_zyx):
-        """Convert finite (..., 3) physical coordinates to voxel indices."""
+        """Convert finite (..., 3) physical coordinates to voxel indices.
+
+        Parameters
+        ----------
+        world_zyx : array_like
+            Finite physical ZYX coordinates with shape (..., 3), measured in this
+            metadata's ``spatial_unit``.
+
+        Returns
+        -------
+        numpy.ndarray
+            Zero-based voxel coordinates in ZYX order, with shape (..., 3).
+        """
         self._require_physical()
         return ((self._points(world_zyx) - self.origin_zyx) @ np.asarray(self.direction_zyx)) / self.spacing_zyx
 
@@ -88,6 +130,20 @@ class ImageMetadata:
     def cropped(self, start_zyx, *, frame_id):
         """Map output indices to source indices by adding the crop start.
 
+        Parameters
+        ----------
+        start_zyx : array_like
+            Finite crop-start offset in source ZYX voxel indices.
+        frame_id : str
+            Nonempty identifier for the cropped coordinate frame.
+
+        Returns
+        -------
+        ImageMetadata
+            Geometry of the cropped frame.
+
+        Notes
+        -----
         Origin is updated only if spacing, origin and direction are known;
         otherwise it stays unknown. No unit calibration is invented.
         """
@@ -100,6 +156,22 @@ class ImageMetadata:
     def rotated(self, shape_zyx, angle, *, frame_id):
         """Geometry for XY rotation: rot90 expands; other angles keep shape.
 
+        Parameters
+        ----------
+        shape_zyx : array_like
+            Source image shape in ZYX voxel counts.
+        angle : float
+            Finite XY rotation angle in degrees.
+        frame_id : str
+            Nonempty identifier for the rotated coordinate frame.
+
+        Returns
+        -------
+        ImageMetadata
+            Geometry of the rotated frame.
+
+        Notes
+        -----
         Pull map is source = R @ (output - output_center) + source_center,
         R in YX is [[cos, sin], [-sin, cos]]. Known anisotropic XY spacing
         at non-right angles would require shear and is rejected.
@@ -134,6 +206,18 @@ class ImageMetadata:
     def projected(self, *, method):
         """Derived singleton-Z frame: (0,y,x) represents all source (z,y,x).
 
+        Parameters
+        ----------
+        method : str
+            Z reduction used for the projection: ``max`` or ``sum``.
+
+        Returns
+        -------
+        ImageMetadata
+            Singleton-Z projection frame with unknown physical calibration.
+
+        Notes
+        -----
         A collapsed column has no unique 3D physical position. Physical fields
         are unknown in the derived frame; source frame and reduction appear in
         its identifier. The source metadata must be retained by the caller.
