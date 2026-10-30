@@ -147,6 +147,26 @@ class CodebookAwareDecoderConfig:
 class ReadDecodingResult:
     """One row per identity, labeled axes, effective config and optional diagnostics.
 
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Read calls with spot identities, observed and decoded colors, gene
+        assignments, statuses and failure reasons.
+    spot_namespace : str
+        Namespace of the spot identities in the table.
+    channel_labels : tuple[str, ...]
+        Acquisition channel labels in extraction-axis order.
+    round_labels : tuple[str, ...]
+        Acquisition round labels in extraction-axis order.
+    config : WtaDecoderConfig or CodebookAwareDecoderConfig or DirectDecoderConfig
+        Decoder settings used for the calls.
+    diagnostics : dict
+        Retained decoding diagnostics.
+    readout_mode : str
+        Readout mode, ``multiplexed`` or ``direct``; the default is ``multiplexed``.
+
+    Notes
+    -----
     table carries observed/decoded_color_sequence, nullable gene_id, call_status,
     failure_reason, and method-specific named scores. Diagnostics expose
     probabilities (N,C,R), per_round and candidates tables only when requested.
@@ -280,6 +300,25 @@ def _run_wta(values, codebook, config, spot_ids, diagnostics):
 class DecodingSpec:
     """Registered decoder: stable name, private implementation and declared capabilities.
 
+    Parameters
+    ----------
+    name : str
+        Registered decoder identifier.
+    run : callable
+        Decoder implementation invoked by the readout entry point.
+    modes : frozenset[str]
+        Supported readout-mode identifiers.
+    encodings : frozenset[str]
+        Supported encoding symbol-kind identifiers from EncodingSpec.symbols.
+    rescue : bool
+        Whether the decoder can change an observed color.
+    score_columns : tuple[str, ...]
+        Names of the numeric score columns written by the decoder.
+    requires : tuple[Dependency, ...]
+        Optional dependency declarations; the default declares none.
+
+    Notes
+    -----
     run is called by the entry point of the decoder's mode, never by callers. For
     a multiplexed decoder, decode_reads calls run(values, codebook, config,
     spot_ids, diagnostics) with the clipped (N, 4, R) sums in color order 1-4,
@@ -352,6 +391,23 @@ def decode_reads(
 ) -> ReadDecodingResult:
     """Decode without changing extraction; reject invalid labels/values explicitly.
 
+    Parameters
+    ----------
+    intensity_result : IntensityExtractionResult
+        Extracted neighborhood sums and their spot and acquisition identities.
+    codebook : Codebook
+        Barcode entries, acquisition labels and color-to-channel mapping.
+    config : WtaDecoderConfig or CodebookAwareDecoderConfig
+        Multiplexed decoder settings.
+
+    Returns
+    -------
+    ReadDecodingResult
+        Multiplexed read calls with spot identities, acquisition labels and decoding
+        diagnostics.
+
+    Notes
+    -----
     The decoder is looked up in DECODING_METHODS by exact config type; a codebook
     whose encoding kind (EncodingSpec.symbols) the decoder does not declare raises
     TypeError. Any unavailable or zero-total round prevents assignment. WTA ties
@@ -552,6 +608,33 @@ def decode_direct(
 ) -> ReadDecodingResult:
     """Direct readout: each candidate's gene from its own round and channel.
 
+    Parameters
+    ----------
+    intensity_result : IntensityExtractionResult
+        Extracted neighborhood sums and measurement availability.
+    spots : SpotFindingResult
+        Detected candidates with their detection round and zero-based channel index.
+    panel : DirectPanel
+        Gene assignments keyed by acquisition round and channel labels.
+    config : DirectDecoderConfig
+        Direct-readout decoder settings.
+
+    Returns
+    -------
+    ReadDecodingResult
+        Direct read calls with candidate round and channel labels and decoding
+        diagnostics.
+
+    Raises
+    ------
+    TypeError
+        Wrong argument types, or a config of a decoder without readout mode direct.
+    ValueError
+        Candidates without round and channel columns, mismatched identities, or
+        panel labels outside the extraction's rounds and channels.
+
+    Notes
+    -----
     spots is the SpotFindingResult the intensities were extracted from, with its
     round and channel columns (a SpotFindingPlan with explicit rounds); its
     identities must match intensity_result in order. The read table has one row
@@ -567,14 +650,6 @@ def decode_direct(
     or sums to 0. The brightest channel never changes the identity, and nothing
     is merged or reassigned. Negative sums count as 0. Color sequences are
     missing values.
-
-    Raises
-    ------
-    TypeError
-        Wrong argument types, or a config of a decoder without readout mode direct.
-    ValueError
-        Candidates without round and channel columns, mismatched identities, or
-        panel labels outside the extraction's rounds and channels.
     """
     if not isinstance(intensity_result, IntensityExtractionResult) or not isinstance(panel, DirectPanel):
         raise TypeError("expected IntensityExtractionResult and DirectPanel")

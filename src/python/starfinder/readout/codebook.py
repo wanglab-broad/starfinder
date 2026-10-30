@@ -123,7 +123,18 @@ class EncodingConfig:
         return hash((self.reverse_bases, self.split_index, tuple(self.pair_to_color.items()), self.method))
 
     def encode(self, bases: str) -> str:
-        """Encode one validated base sequence with this declared policy."""
+        """Encode one validated base sequence with this declared policy.
+
+        Parameters
+        ----------
+        bases : str
+            Base sequence in barcode order, using uppercase ``A``, ``C``, ``G`` and ``T``.
+
+        Returns
+        -------
+        str
+            Color sequence encoded with this configuration.
+        """
         if not isinstance(bases, str) or len(bases) < 2 or any(b not in "ACGT" for b in bases):
             raise ValueError("base_sequence must contain at least two uppercase A/C/G/T bases")
         seq = encode_pairs(bases[::-1] if self.reverse_bases else bases, self.pair_to_color)
@@ -177,6 +188,33 @@ class OneBaseEncodingConfig:
 class EncodingSpec:
     """Registered barcode encoding: stable name, the bases/colors maps and declared capabilities.
 
+    Parameters
+    ----------
+    name : str
+        Registered encoding identifier.
+    encode : callable
+        Function ``encode(bases, config)`` returning one segment's colors in
+        acquisition order from bases in barcode order.
+    decode : callable
+        Function ``decode(colors, config, first_base)`` returning one segment's bases
+        in barcode order.
+    colors_for : callable
+        Function mapping a segment's base count to its acquired color count.
+    needs_first_base : bool
+        Whether decoding needs the segment's first base in read orientation.
+    junction_colors : int
+        Non-negative number of unacquired colors spanning adjacent segments.
+    table : callable
+        Function ``table(config)`` returning the encoding's base-to-color mapping.
+    alphabet : str
+        Non-empty string of color symbols; the default is ``1234``.
+    symbols : str
+        Non-empty encoding symbol-kind identifier; the default is ``color``.
+    requires : tuple[Dependency, ...]
+        Optional dependency declarations; the default declares none.
+
+    Notes
+    -----
     encode(bases, config) gives the colors of one segment's bases (barcode order) in
     acquisition order; decode(colors, config, first_base) gives the segment's bases
     in barcode order, where first_base is the segment's first base in read
@@ -359,6 +397,26 @@ def _collision(seen, column, value, row):
 class Codebook:
     """Ordered entry table, labels, channel mapping, encoding and segment layout.
 
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Barcode entries with gene_id and color_sequence, plus optional entry_id and
+        base_sequence columns.
+    round_labels : tuple[str, ...]
+        Unique, non-empty round labels in acquisition order.
+    channel_labels : tuple[str, ...]
+        Unique, non-empty channel labels in acquisition order.
+    color_to_channel : dict[str, int]
+        Mapping of color symbols ``1`` through ``4`` to distinct zero-based channel
+        indices; the default maps them to indices 0 through 3.
+    encoding : EncodingConfig or OneBaseEncodingConfig
+        Base-to-color encoding policy; the default is the STARmap two-base encoding.
+    layout : BarcodeLayout or None
+        Barcode segment layout. ``None`` derives one segment over the barcode, or two
+        segments from a legacy encoding split.
+
+    Notes
+    -----
     The table has entry_id (unique), gene_id (may repeat), color_sequence (unique)
     and an optional base_sequence (unique), which is checked against the encoding
     and layout. Without an entry_id column, entry_id is the color_sequence.
@@ -524,6 +582,30 @@ def load_codebook(
 ) -> Codebook:
     """Read headerless gene,barcode or gene/barcode CSV (UTF-8 BOM accepted).
 
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the codebook CSV.
+    round_labels : tuple[str, ...]
+        Unique, non-empty round labels in acquisition order.
+    channel_labels : tuple[str, ...]
+        Unique, non-empty channel labels in acquisition order.
+    encoding : EncodingConfig or OneBaseEncodingConfig
+        Base-to-color encoding policy; the default is the STARmap two-base encoding.
+    color_to_channel : dict[str, int] or None
+        Mapping of color symbols ``1`` through ``4`` to zero-based channel indices.
+        ``None`` maps them to indices 0 through 3.
+    layout : BarcodeLayout or None
+        Barcode segment layout. ``None`` derives one segment over the barcode, or two
+        segments from a legacy encoding split.
+
+    Returns
+    -------
+    Codebook
+        Validated codebook with acquisition labels and the effective segment layout.
+
+    Notes
+    -----
     Labels are required; no acquisition order is inferred from sequence length.
     A gene,barcode row is one entry: gene_id is the first column and entry_id the
     barcode as written. Canonical entry_id,gene_id,color_sequence[,base_sequence]

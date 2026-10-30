@@ -62,7 +62,7 @@ class SpotFindingSpec:
         Optional dependencies for the method; the default empty tuple declares no
         dependencies.
     min_shape_zyx : tuple of int
-        Positive minimum axis sizes in ZYX voxel counts; defaults to (1, 1, 1).
+        Minimum Y and X sizes, and the minimum Z size of a 3D grid, as positive integers in ZYX voxel counts. Defaults to (1, 1, 1).
 
     Notes
     -----

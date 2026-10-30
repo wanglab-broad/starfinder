@@ -128,6 +128,20 @@ def _stains(spec, background):
 def cellular_scene_preset(name: str) -> tuple[Codebook, CellularSceneConfig]:
     """Return (codebook, config) for a CELLULAR_PRESETS name: a ``CellularSceneConfig``.
 
+    Parameters
+    ----------
+    name : str
+        Preset name from ``CELLULAR_PRESETS``.
+
+    Returns
+    -------
+    codebook : Codebook
+        Sequencing codebook for the preset.
+    config : CellularSceneConfig
+        Scene settings for the preset.
+
+    Notes
+    -----
     The six presets of design/specs/synthetic/cellular-scene.md ("Presets", option PS1):
     ``context-dense3d-v1`` and ``context-dense3d-slow-v1`` (dense 3D tissue, the LN grid),
     ``context-tissue2d-v1`` and ``context-tissue2d-slow-v1`` (2D tissue, a monolayer for

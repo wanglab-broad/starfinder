@@ -42,12 +42,29 @@ class BenchmarkCase:
     artifacts: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self):
-        """Return a strict JSON-compatible record."""
+        """Return a strict JSON-compatible record.
+
+        Returns
+        -------
+        dict
+            Case fields converted to strict JSON-compatible values.
+        """
         return _json(asdict(self))
 
     @classmethod
     def from_dict(cls, value):
-        """Load a record, rejecting unknown fields."""
+        """Load a record, rejecting unknown fields.
+
+        Parameters
+        ----------
+        value : dict
+            JSON-compatible case fields to load.
+
+        Returns
+        -------
+        BenchmarkCase
+            Case constructed from the supplied fields.
+        """
         return cls(**_json(value))
 
 
@@ -55,6 +72,37 @@ class BenchmarkCase:
 class BenchmarkTrialResult:
     """One processing trial, with distinct processing and evaluation states.
 
+    Parameters
+    ----------
+    run_id : str
+        Identifier of the benchmark run.
+    case_id : str
+        Identifier of the benchmark case.
+    trial_id : str
+        Identifier of the processing repetition within the case.
+    requested_method : str
+        Requested registration method name or ``pipeline`` for a pipeline case.
+    actual_method : str or None
+        Method used for processing; ``None`` when no method has been recorded.
+    status : dict of str to str
+        Processing and evaluation states.
+    errors : dict of str to Any
+        Error records for processing and evaluation.
+    effective_configs : dict of str to Any
+        Processing settings recorded for the trial.
+    resources : dict of str to Any
+        Resource records with value, unit, source and scope.
+    artifacts : dict of str to Any
+        Named saved-artifact references with paths relative to the run.
+    attempts : list of dict of str to Any
+        Processing attempt records; defaults to an empty list.
+    metrics : dict of str to Any
+        Evaluation metric results; defaults to an empty mapping.
+    provenance : dict of str to Any
+        Source and evaluation provenance; defaults to an empty mapping.
+
+    Notes
+    -----
     Resources carry value/unit/source/scope. Artifact paths are relative to the
     run; metric results retain undefined values as null with reasons.
     """
@@ -73,10 +121,27 @@ class BenchmarkTrialResult:
     provenance: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self):
-        """Serialize statuses/configs/metadata without lossy string coercion."""
+        """Serialize statuses/configs/metadata without lossy string coercion.
+
+        Returns
+        -------
+        dict
+            Trial fields converted to strict JSON-compatible values.
+        """
         return _json(asdict(self))
 
     @classmethod
     def from_dict(cls, value):
-        """Reload the complete saved trial record."""
+        """Reload the complete saved trial record.
+
+        Parameters
+        ----------
+        value : dict
+            JSON-compatible trial fields to load.
+
+        Returns
+        -------
+        BenchmarkTrialResult
+            Trial record constructed from the supplied fields.
+        """
         return cls(**_json(value))

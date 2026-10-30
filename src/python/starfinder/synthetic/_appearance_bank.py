@@ -66,6 +66,21 @@ _CLOSED_FORM_BUILD = {
 class BankReference:
     """Which appearance bank a scene uses (ST1, CF1 of design/specs/synthetic/real-appearance.md).
 
+    Parameters
+    ----------
+    name : str or None
+        Stored bank file stem; None for a closed-form bank.
+    sha256 : str or None
+        Lowercase hexadecimal SHA-256 of the stored bank file; None for a closed-form bank.
+    preset : str or None
+        Cellular preset name from ``CELLULAR_PRESETS`` for a closed-form bank; None denotes a stored bank.
+    n : int
+        Number of scenes rendered for a closed-form bank.
+    directory : str or None
+        Stored-bank directory; None uses ``STARFINDER_APPEARANCE_BANKS``.
+
+    Notes
+    -----
     A stored bank is named by ``name`` and ``sha256``: the file ``<name>.npz`` in ``directory``,
     or with ``directory=None`` in the directory that the environment variable
     ``STARFINDER_APPEARANCE_BANKS`` names; ``load_appearance_bank`` refuses a file whose SHA-256
@@ -662,6 +677,20 @@ def _source(image, stains, labels, nucleus_labels, spacing, project_z=False):
 def build_appearance_bank(config: Mapping | str | Path, path: str | Path) -> dict:
     """Build an appearance bank from configured source images and write it; return its build record.
 
+    Parameters
+    ----------
+    config : Mapping or str or pathlib.Path
+        Bank build configuration as a mapping or a JSON file path.
+    path : str or pathlib.Path
+        Destination bank archive path.
+
+    Returns
+    -------
+    dict
+        Build record describing the configuration, inputs, bank contents and written archive.
+
+    Notes
+    -----
     ``config`` is a mapping or the path of a JSON file (the build configuration, kept with the
     bank outside the repository): ``bank`` (its name), ``channels`` (stain names, the nuclear
     stain first), ``spacing_zyx`` (µm), ``entry`` (``"nucleus"``, or ``"cell"`` for culture
@@ -872,6 +901,20 @@ def _closed_form_bank(preset, n):
 def generate_closed_form_bank(preset: str, n: int = 4) -> AppearanceBank:
     """A bank built in memory from scenes of the accepted closed-form generator (CF1); no file is read or written.
 
+    Parameters
+    ----------
+    preset : str
+        Cellular scene preset name from ``CELLULAR_PRESETS``.
+    n : int
+        Number of scenes rendered, including the held-out scene.
+
+    Returns
+    -------
+    AppearanceBank
+        In-memory appearance bank built from the cellular preset.
+
+    Notes
+    -----
     The cellular preset ``preset`` (``CELLULAR_PRESETS``) is rendered at ``n`` seeds, the
     preset's seed and the ``n − 1`` after it, with noise off and without the stains'
     unevenness field (one exposure per source image, as BR1 scales it), and, because the bank
@@ -897,6 +940,18 @@ def _load_arrays(path):
 def load_appearance_bank(reference: BankReference) -> AppearanceBank:
     """The bank ``reference`` names: a closed-form bank built in memory, or a stored bank file checked by its SHA-256.
 
+    Parameters
+    ----------
+    reference : BankReference
+        Stored or closed-form bank identity and location settings.
+
+    Returns
+    -------
+    AppearanceBank
+        Appearance bank loaded from the reference.
+
+    Notes
+    -----
     A stored bank is ``<name>.npz`` in ``reference.directory`` or, when that is None, in the
     directory named by ``STARFINDER_APPEARANCE_BANKS``. ValueError when the variable is unset,
     when the file's SHA-256 differs from ``reference.sha256`` (naming the file and both values)

@@ -311,6 +311,7 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
         image. All grids share one shape, spacing, unit µm and identity
         direction.
     config : BigStitcherConfig
+        Settings for the BigStitcher macro and handling FOVs with absent images.
     tile_dir : str or Path
         The folder of ``tile_{j}.tif``; created if absent, and it may hold no
         other TIFF file.
@@ -641,6 +642,7 @@ def import_bigstitcher(dataset_xml, *, table: TilePositionTable, view_map: pd.Da
     config : BigStitcherConfig
         The config that rendered the macro; recorded.
     review : ReviewPolicy
+        Policy used to compute review flags and the review record for the imported placement.
     fallback : str or None
         ``None`` (default) or ``"nominal"`` (opt-in, flagged).
     sample : str

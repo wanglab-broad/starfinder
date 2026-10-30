@@ -201,7 +201,13 @@ class AcquisitionConfig:
         return tuple(result)
 
     def ids(self) -> tuple[str, ...]:
-        """The FOV IDs in tile position table order."""
+        """The FOV IDs in tile position table order.
+
+        Returns
+        -------
+        tuple of str
+            FOV identifiers in tile position table order.
+        """
         count = self.columns * self.rows
         if self.fov_ids is None:
             return tuple(f"FOV_{k + 1:03d}" for k in range(count))
@@ -289,7 +295,13 @@ class CellsConfig:
             _checked_distribution(getattr(self, name), domain, ids, name)
 
     def nucleus_ids(self) -> tuple[str, ...]:
-        """Stream entities of the nuclei, ``nucleus-1`` ... in seed order."""
+        """Stream entities of the nuclei, ``nucleus-1`` ... in seed order.
+
+        Returns
+        -------
+        tuple of str
+            Nucleus stream identifiers in seed order.
+        """
         return tuple(f"nucleus-{n}" for n in range(1, self.nuclei + 2 * self.binucleate + 1))
 
 
@@ -434,6 +446,41 @@ class SampleSceneConfig:
 class SampleScene:
     """A generated sample scene: per-FOV amplicon scenes, stains, labels and sample truth.
 
+    Parameters
+    ----------
+    sample : str
+        Sample identifier.
+    fovs : dict of str to AmpliconScene
+        Retained amplicon scenes keyed by FOV ID; empty with an ``on_fov`` callback.
+    stains : dict of str to numpy.ndarray
+        Retained ZYX nuclear stain images keyed by FOV ID; empty with an ``on_fov`` callback.
+    fov_metadata : dict of str to ImageMetadata
+        Reference-grid metadata keyed by FOV ID, with spacing and origin in micrometres.
+    placement : pandas.DataFrame
+        FOV placement truth, with sample positions in micrometres and jitter in voxels.
+    positions : pandas.DataFrame
+        Nominal FOV positions in sample coordinates, in micrometres.
+    nuclei : pandas.DataFrame
+        Nucleus geometry and ownership truth, with sample coordinates and radii in micrometres.
+    cells : pandas.DataFrame
+        Cell geometry, membership and population truth, with sample coordinates and reach in micrometres.
+    molecules : pandas.DataFrame
+        Molecule identities and cellular ownership, with sample coordinates in micrometres.
+    cell_fovs : pandas.DataFrame
+        Cell visibility and label coverage by FOV.
+    molecule_fovs : pandas.DataFrame
+        Molecule rendering and footprint membership by FOV, with ZYX coordinates in FOV voxels.
+    sample_grid : ImageMetadata
+        Sample label-grid metadata, with spacing and origin in micrometres.
+    sample_labels : dict of str to numpy.ndarray
+        ZYX sample-grid label images keyed by ``nucleus`` and ``cell``; empty without cells.
+    fov_labels : dict of str to dict of str to numpy.ndarray
+        Retained ZYX label images keyed by FOV ID, then ``nucleus`` and ``cell``; empty with an ``on_fov`` callback.
+    record : dict
+        Generation provenance, configuration and truth record.
+
+    Notes
+    -----
     ``fovs``, ``stains`` and ``fov_labels`` are keyed by FOV ID in tile position
     table order and are empty when the FOVs were handed to ``on_fov``. The
     tables are described in design/specs/synthetic/sample-scene.md ("Placement truth",
@@ -838,6 +885,23 @@ def generate_sample_scene(codebook: Codebook, *, config: SampleSceneConfig = Sam
                           on_fov: Callable | None = None) -> SampleScene:
     """Generate one sample scene and acquire it as a grid of FOVs at true offsets.
 
+    Parameters
+    ----------
+    codebook : Codebook
+        Gene identities, color sequences and acquisition round and channel labels.
+    config : SampleSceneConfig
+        Sample acquisition, cellular population and rendering settings.
+    on_fov : callable or None
+        Callback receiving ``(fov_id, scene, stain, labels)`` as a sample FOV completes.
+        None retains the sample FOV scenes, stains and labels in the result.
+
+    Returns
+    -------
+    SampleScene
+        Generated scene and its truth records.
+
+    Notes
+    -----
     The scene (seeds, nuclei, cell territories, molecules, background) is
     generated once in continuous sample coordinates over the scene domain Ω;
     each FOV is rendered by ``generate_amplicon_scene`` at its true origin, with
@@ -1134,6 +1198,20 @@ def _assemble(config, codebook, layout, sample, jitter, true, ids, population, s
 def save_sample_scene(scene: SampleScene, directory: Path | str) -> Path:
     """Write a sample scene to a new or empty directory and return its path.
 
+    Parameters
+    ----------
+    scene : SampleScene
+        Sample scene to save.
+    directory : pathlib.Path or str
+        Destination directory.
+
+    Returns
+    -------
+    pathlib.Path
+        Path of the written directory.
+
+    Notes
+    -----
     Layout (design/specs/synthetic/sample-scene.md, "Truth schema"): ``sample.json``
     (the record plus the SHA-256 of every other file), ``positions.csv``,
     ``placement_truth.csv``, ``nuclei.csv`` (with a cellular scene),
@@ -1216,6 +1294,20 @@ SAMPLE_PRESETS = {name: dict(version=SAMPLE_PRESET_VERSION, seed=42, split="deve
 def sample_scene_preset(name: str) -> tuple[Codebook, SampleSceneConfig]:
     """Return (codebook, config) for a SAMPLE_PRESETS name.
 
+    Parameters
+    ----------
+    name : str
+        Preset name from ``SAMPLE_PRESETS``.
+
+    Returns
+    -------
+    codebook : Codebook
+        Sequencing codebook for the preset.
+    config : SampleSceneConfig
+        Scene settings for the preset.
+
+    Notes
+    -----
     Both presets use ``development_codebook("balanced")``, seed 42, split
     ``development``, float32 output, the scene key of their name, a
     translation-only per-round geometry about ``round1`` and the default

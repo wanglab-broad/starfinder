@@ -22,6 +22,22 @@ DEVELOPMENT_FIXTURES = {f"{size}-{condition}": (condition, size)
 def development_scene_preset(condition="clean", *, size="small"):
     """Return a codebook/config for controlled-development-v1.
 
+    Parameters
+    ----------
+    condition : str
+        Controlled scene condition: clean, combined or a name in DEVELOPMENT_FACTORS.
+    size : str
+        Grid size name: z1 or small.
+
+    Returns
+    -------
+    codebook : Codebook
+        Codebook defining the scene identities, rounds and channels.
+    config : AmpliconSceneConfig
+        Configuration for generating the preset scene.
+
+    Notes
+    -----
     ``condition`` is clean, combined or one of DEVELOPMENT_FACTORS. ``size``
     is z1 or small. Each size shares one reference scene across conditions,
     with seed 42 and a fixed scene key; variant names never enter random keys.
@@ -83,7 +99,18 @@ def development_scene_preset(condition="clean", *, size="small"):
 
 
 def development_preset_factors(condition):
-    """Return the exact named enabled factors; reject unknown conditions."""
+    """Return the exact named enabled factors; reject unknown conditions.
+
+    Parameters
+    ----------
+    condition : str
+        Controlled scene condition: clean, combined or a name in DEVELOPMENT_FACTORS.
+
+    Returns
+    -------
+    tuple of str
+        Names of the enabled factors for the requested condition.
+    """
     if condition == "clean":
         return ()
     if condition == "combined":

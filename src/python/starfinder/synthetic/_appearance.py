@@ -172,6 +172,19 @@ class AppearanceSceneConfig:
 class AppearanceScene:
     """A generated appearance scene (design/specs/synthetic/real-appearance.md, "Truth").
 
+    Parameters
+    ----------
+    context : CellularScene
+        Cellular scene containing the placed-object truth and composed stains.
+    placements : pandas.DataFrame
+        Placed appearance objects and their augmentation and placement truth.
+    background_patches : pandas.DataFrame
+        Background patch assignments by stain and lattice cell; empty for a closed-form background.
+    record : dict
+        Appearance generation provenance, configuration, bank and composition record.
+
+    Notes
+    -----
     ``context`` is a ``CellularScene`` whose tables and layout are those of the placed objects
     (one ordinary cell with one nucleus each, the shape columns null, the closed-form stain
     tables empty) and whose stains are the composed ones; ``save_cellular_dataset(scene.context,
@@ -815,6 +828,23 @@ def generate_appearance_scene(codebook: Codebook, *, config: AppearanceSceneConf
                               on_fov: Callable | None = None) -> AppearanceScene:
     """Generate one cellular scene with real appearance and acquire it as a grid of FOVs.
 
+    Parameters
+    ----------
+    codebook : Codebook
+        Gene identities, color sequences and acquisition round and channel labels.
+    config : AppearanceSceneConfig
+        Cellular context, appearance bank, placement and composition settings.
+    on_fov : callable or None
+        Callback receiving ``(fov_id, scene, stain, labels)`` as a sample FOV completes.
+        None retains the sample FOV scenes, stains and labels in the result.
+
+    Returns
+    -------
+    AppearanceScene
+        Generated scene and its truth records.
+
+    Notes
+    -----
     The bank ``config.bank`` is loaded (``load_appearance_bank``) and its entries placed on the
     acquisition layout of ``config.context`` by PL2 (AU1's augmentation, BS2's draws, DN1's
     visible-stain target or DN3's count, the stop of "When placement stops"). The placed
@@ -1073,6 +1103,20 @@ def _point_evaluator(scene, bank):
 def save_appearance_scene(scene: AppearanceScene, directory: Path | str) -> Path:
     """Write an appearance scene to a new or empty directory and return its path.
 
+    Parameters
+    ----------
+    scene : AppearanceScene
+        Appearance scene to save.
+    directory : pathlib.Path or str
+        Destination directory.
+
+    Returns
+    -------
+    pathlib.Path
+        Path of the written directory.
+
+    Notes
+    -----
     Layout (design/specs/synthetic/real-appearance.md, AT2): the ``save_cellular_scene`` layout of
     ``scene.context`` (``nuclei.csv`` and ``cells.csv`` with their columns, the shape columns
     null; ``lobes.csv``, ``harmonics.csv``, ``stain_objects.csv``, ``bright_regions.csv`` and

@@ -67,6 +67,27 @@ class DeduplicationConfig:
 class ReadDeduplicationResult:
     """The read table with the deduplication columns appended; every row and identity unchanged.
 
+    Parameters
+    ----------
+    table : pandas.DataFrame
+        Read table annotated with duplicate groups, representatives and reasons.
+    spot_namespace : str
+        Namespace of the spot identities in the table.
+    channel_labels : tuple[str, ...]
+        Acquisition channel labels in extraction-axis order.
+    round_labels : tuple[str, ...]
+        Acquisition round labels in extraction-axis order.
+    config : DeduplicationConfig
+        Settings used to group duplicate reads.
+    counts : dict[str, int]
+        Counts of total reads, merged groups, merged reads and conflicting groups.
+    readout_mode : str
+        Readout mode, ``multiplexed``.
+    diagnostics : dict
+        Deduplication diagnostics; the default is an empty dictionary.
+
+    Notes
+    -----
     duplicate_group is the spot_id of the group's representative (missing for a
     read that is linked to no other), duplicate_of the representative's spot_id
     for a merged member (missing otherwise), is_representative is true for
@@ -150,6 +171,36 @@ def deduplicate_reads(
 ) -> ReadDeduplicationResult:
     """Group cross-channel reads of one amplicon and keep one original read per group.
 
+    Parameters
+    ----------
+    result : ReadDecodingResult or ReadScoringResult
+        Decoded reads, optionally with shared quality scores.
+    spots : SpotFindingResult
+        Detected candidates with zero-based ZYX voxel coordinates and detection
+        channels.
+    intensity_result : IntensityExtractionResult
+        Extracted sums used to choose group representatives.
+    config : DeduplicationConfig
+        Duplicate-linking settings.
+    detection_round : str or None
+        Detection-round label for candidates without a round column. ``None`` uses the
+        first round of the intensities.
+
+    Returns
+    -------
+    ReadDeduplicationResult
+        Read table with duplicate annotations, group counts and pair diagnostics.
+
+    Raises
+    ------
+    TypeError
+        Wrong argument types (a result without decoding).
+    ValueError
+        Readout mode direct, candidates without a channel column, mismatched
+        identities, or a detection round the intensities do not hold.
+
+    Notes
+    -----
     Pairs are candidates of the same detection round in different detection
     channels (the spot table's channel column); same-channel pairs are never
     grouped (that is the spot-finding merge_radius_zyx). Two reads are linked when their
@@ -170,14 +221,6 @@ def deduplicate_reads(
     identities must match the result and intensity_result in order.
     detection_round is the round of candidates without a round column (FOV
     passes the reference round); None takes the first round of the intensities.
-
-    Raises
-    ------
-    TypeError
-        Wrong argument types (a result without decoding).
-    ValueError
-        Readout mode direct, candidates without a channel column, mismatched
-        identities, or a detection round the intensities do not hold.
     """
     # §2.7
     if not isinstance(result, (ReadDecodingResult, ReadScoringResult)):

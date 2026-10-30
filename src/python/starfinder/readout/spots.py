@@ -129,6 +129,27 @@ def export_spots(detection: SpotFindingResult, reads: ReadDecodingResult | ReadF
                  columns: list[str] | None = None) -> Path:
     """Join complete results by namespace/ID and write a typed, zero-based CSV.
 
+    Parameters
+    ----------
+    detection : SpotFindingResult
+        Detected spots with zero-based ZYX coordinates in voxel units.
+    reads : ReadDecodingResult or ReadFilteringResult or None
+        Read calls to join by spot identity. ``None`` exports the detection table.
+    path : pathlib.Path or str
+        Destination path for the typed CSV.
+    accepted_only : bool
+        Whether to export accepted reads as a molecule table.
+    columns : list[str] or None
+        Output column names in the requested order. ``None`` uses the full table for
+        the selected export.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the written CSV.
+
+    Notes
+    -----
     With ``accepted_only`` (a filtering result) the file is the molecule table
     (``molecules.csv``): the accepted reads with the columns ``spot_namespace,
     spot_id, z, y, x, gene_id, entry_id, qc_score`` (``entry_id`` and

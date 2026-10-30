@@ -112,6 +112,52 @@ class NeighborhoodSumConfig:
 class IntensityExtractionResult:
     """Finite float64 N×C×R sums, stable identities and explicit acquisition axes.
 
+    Parameters
+    ----------
+    values : numpy.ndarray
+        Finite float64 neighborhood sums with shape (N, C, R), ordered by spot,
+        channel and round.
+    spot_ids : tuple[str, ...]
+        Unique, non-empty spot identifiers in the order of the N axis.
+    spot_namespace : str
+        Spot identity namespace containing a non-whitespace character.
+    channel_labels : tuple[str, ...]
+        Unique, non-empty channel labels in C-axis order.
+    round_labels : tuple[str, ...]
+        Unique, non-empty round labels in R-axis order.
+    metadata : ImageMetadata
+        Spatial metadata for the extraction grid.
+    config : NeighborhoodSumConfig
+        Settings used for neighborhood sums and background measurement.
+    valid : numpy.ndarray
+        Boolean measurement availability with shape (N, R), ordered by spot and round.
+    diagnostics : dict
+        Extraction diagnostics.
+    box_voxels : numpy.ndarray or None
+        Non-negative int64 extraction-box voxel counts with shape (N, R), ordered by
+        spot and round. ``None`` means counts were not recorded.
+    background : numpy.ndarray or None
+        Float64 local background in grey levels per voxel, with shape (N, C, R) in
+        spot, channel and round order. ``None`` means background measurements were not
+        recorded.
+    noise : numpy.ndarray or None
+        Float64 local noise in grey levels per voxel, with shape (N, C, R) in spot,
+        channel and round order. ``None`` means background measurements were not
+        recorded.
+    background_voxels : numpy.ndarray or None
+        Non-negative int64 background-ring voxel counts with shape (N, R), ordered by
+        spot and round. ``None`` means background measurements were not recorded.
+    image_background : numpy.ndarray or None
+        Float64 whole-image background in grey levels per voxel, with shape (C, R) in
+        channel and round order. ``None`` means background measurements were not
+        recorded.
+    image_noise : numpy.ndarray or None
+        Float64 whole-image noise in grey levels per voxel, with shape (C, R) in
+        channel and round order. ``None`` means background measurements were not
+        recorded.
+
+    Notes
+    -----
     valid is Boolean N×R; false marks an unavailable measurement, not zero signal
     (in readout mode direct, every round but a candidate's own). box_voxels is
     int64 N×R, the number of voxels each box summed (fewer where the box is
@@ -261,6 +307,25 @@ def extract_intensities(
 ) -> IntensityExtractionResult:
     """Sum ordered, labeled ZYXC rounds at spot coordinates on their common grid.
 
+    Parameters
+    ----------
+    rounds : Mapping[str, ImageLoadResult]
+        Round labels mapped to loaded ZYXC images, in acquisition order.
+    spots : SpotFindingResult
+        Detected spots with zero-based ZYX coordinates in voxel units.
+    config : NeighborhoodSumConfig
+        Neighborhood-sum and background measurement settings.
+    readout_mode : str
+        Readout mode, ``multiplexed`` or ``direct``.
+
+    Returns
+    -------
+    IntensityExtractionResult
+        Neighborhood sums, measurement availability, spot identities and acquisition
+        labels, with background measurements when configured.
+
+    Notes
+    -----
     Mapping insertion order defines R. Every round must have exactly the same
     shape, metadata and channel order. Coordinates must lie within voxel-center
     bounds [0, size-1] before rounding. Empty spots retain shape (0,C,R).
