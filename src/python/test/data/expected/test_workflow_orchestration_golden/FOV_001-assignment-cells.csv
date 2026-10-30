@@ -1,0 +1,4 @@
+cell_id,status,exclusion_reason,size_voxels,expanded_size_voxels,size_physical,expanded_size_physical,centroid_z,centroid_y,centroid_x,expanded_centroid_z,expanded_centroid_y,expanded_centroid_x,n_molecules,n_nuclei,correspondence,correspondence_flags,compartments
+1,kept,<NA>,538,<NA>,134.5,<NA>,1.6022304832713754,12.886617100371748,32.302973977695167,<NA>,<NA>,<NA>,3,<NA>,unavailable,<NA>,unavailable
+4,kept,<NA>,1499,<NA>,374.75,<NA>,1.8225483655770516,15.236157438292194,18.142094729819881,<NA>,<NA>,<NA>,10,<NA>,unavailable,<NA>,unavailable
+8,kept,<NA>,1097,<NA>,274.25,<NA>,2.5168641750227896,27.103008204193252,27.313582497721058,<NA>,<NA>,<NA>,5,<NA>,unavailable,<NA>,unavailable

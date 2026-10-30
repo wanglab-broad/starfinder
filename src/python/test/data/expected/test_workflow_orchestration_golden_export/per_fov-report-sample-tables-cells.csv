@@ -1,0 +1,10 @@
+obs_name,fov_id,reads,genes,size,size_unit
+sample_FOV_001_4,FOV_001,10,8,374.75,µm³
+sample_FOV_002_2,FOV_002,6,6,353.25,µm³
+sample_FOV_003_1,FOV_003,8,7,400,µm³
+sample_FOV_003_5,FOV_003,4,4,148.5,µm³
+sample_FOV_003_8,FOV_003,5,3,324,µm³
+sample_FOV_004_3,FOV_004,11,7,301.75,µm³
+sample_FOV_004_6,FOV_004,5,5,140.5,µm³
+sample_FOV_004_7,FOV_004,3,3,102,µm³
+sample_FOV_004_9,FOV_004,2,2,240.75,µm³

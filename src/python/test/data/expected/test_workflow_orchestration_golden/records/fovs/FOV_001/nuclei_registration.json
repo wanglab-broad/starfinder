@@ -1,0 +1,193 @@
+{
+ "fov_id": "FOV_001",
+ "rounds": {
+  "sequencing_rounds": [
+   "round1",
+   "round2",
+   "round3",
+   "round4"
+  ],
+  "other_rounds": [
+   "flamingo"
+  ],
+  "reference_round": "round1"
+ },
+ "registered_rounds": {
+  "flamingo": {
+   "recipe": {
+    "steps": [
+     "translation"
+    ],
+    "signal": {
+     "mode": "channel",
+     "reference_channel": "ch04",
+     "moving_channel": "ch04"
+    },
+    "step_signals": [
+     null
+    ],
+    "warp": null,
+    "reference_round": null,
+    "qc": {
+     "min_coverage": null,
+     "min_ncc_gain": null,
+     "max_fold_fraction": null,
+     "max_translation_voxels": null,
+     "projections": false
+    }
+   },
+   "reference": "round1:ch04",
+   "reference_sha256": "09258ec5c15611761e4cd2b40b80fc947c5561f4edd2ce041afc1dd7d3d1cde8"
+  }
+ },
+ "registration": {
+  "flamingo": [
+   {
+    "record": "estimation",
+    "step": 0,
+    "attempt": 0,
+    "requested_method": "translation",
+    "actual_method": "translation",
+    "fallback": false,
+    "backend": "scipy_fft",
+    "backend_versions": {},
+    "reference": "round1:ch04",
+    "reference_sha256": "09258ec5c15611761e4cd2b40b80fc947c5561f4edd2ce041afc1dd7d3d1cde8",
+    "config": {
+     "backend": "scipy_fft",
+     "fft_workers": 1,
+     "method": "translation"
+    },
+    "outcome": "succeeded",
+    "failure": null,
+    "qc": {
+     "status": "ok",
+     "values": {
+      "coverage": 1.0,
+      "ncc_before": 1.0000000000000002,
+      "ncc_after": 1.0000000000000002,
+      "ncc_gain": 0.0,
+      "ssim_before": 1.0,
+      "ssim_after": 1.0
+     },
+     "units": {
+      "coverage": "fraction",
+      "ncc_before": "dimensionless",
+      "ncc_after": "dimensionless",
+      "ncc_gain": "dimensionless",
+      "ssim_before": "dimensionless",
+      "ssim_after": "dimensionless"
+     },
+     "counts": {
+      "total": 6480,
+      "valid": 6480,
+      "valid_columns": 1296,
+      "ssim_columns": 900
+     },
+     "reasons": {},
+     "config": {
+      "overlap": "pull point inside the closed box [0, n-1] on every axis",
+      "ssim_policy": "mip",
+      "ssim_window": 7,
+      "ssim_erosion": 3,
+      "data_range": 280.0,
+      "qc": {
+       "min_coverage": null,
+       "min_ncc_gain": null,
+       "max_fold_fraction": null,
+       "max_translation_voxels": null,
+       "projections": false
+      }
+     },
+     "details": {
+      "transform": {
+       "kind": "translation",
+       "displacement_zyx": [
+        0.0,
+        0.0,
+        0.0
+       ]
+      },
+      "optimizer": {
+       "method": "translation",
+       "backend": "scipy_fft",
+       "converged": null,
+       "iterations_completed": null,
+       "final_metric_value": null,
+       "stop_condition": null,
+       "elapsed_iterations": null,
+       "final_rms_change": null
+      }
+     }
+    }
+   },
+   {
+    "record": "application",
+    "outcome": "succeeded",
+    "application_config": {
+     "backend": "translation",
+     "boundary_mode": "constant",
+     "fill_value": 0,
+     "output_dtype": "input",
+     "integer_rounding": "nearest_even",
+     "clip_to_dtype": true,
+     "fft_workers": 1
+    },
+    "failure": null,
+    "qc": {
+     "status": "ok",
+     "values": {
+      "coverage": 1.0,
+      "ncc_before": 1.0000000000000002,
+      "ncc_after": 1.0000000000000002,
+      "ncc_gain": 0.0,
+      "ssim_before": 1.0,
+      "ssim_after": 1.0
+     },
+     "units": {
+      "coverage": "fraction",
+      "ncc_before": "dimensionless",
+      "ncc_after": "dimensionless",
+      "ncc_gain": "dimensionless",
+      "ssim_before": "dimensionless",
+      "ssim_after": "dimensionless"
+     },
+     "counts": {
+      "total": 6480,
+      "valid": 6480,
+      "valid_columns": 1296,
+      "ssim_columns": 900
+     },
+     "reasons": {},
+     "config": {
+      "overlap": "pull point inside the closed box [0, n-1] on every axis",
+      "ssim_policy": "mip",
+      "ssim_window": 7,
+      "ssim_erosion": 3,
+      "data_range": 280.0,
+      "qc": {
+       "min_coverage": null,
+       "min_ncc_gain": null,
+       "max_fold_fraction": null,
+       "max_translation_voxels": null,
+       "projections": false
+      }
+     },
+     "details": {
+      "transform": {
+       "kind": "dense",
+       "displacement_voxels": {
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+       },
+       "displacement_physical": null,
+       "fold_fraction": 0.0
+      },
+      "optimizer": null
+     }
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,13 @@
+fov_id,round,outcome,fallback,methods,transform_source,shift_z,shift_y,shift_x,residual_z,residual_y,residual_x,alignment_score
+FOV_001,round2,succeeded,False,translation,run.json,0,0,1,0,0,0.5,0.98294710369456817
+FOV_001,round3,succeeded,False,translation,run.json,0,-1,-1,0,0,-1,0.96871284361053156
+FOV_001,round4,succeeded,False,translation,run.json,0,0,1,0,-0.5,0,0.96845190003336623
+FOV_002,round2,succeeded,False,translation,run.json,0,0,0,0,0,-0.5,0.87094740773889967
+FOV_002,round3,succeeded,False,translation,run.json,0,-1,0,0,0,0,0.91925329017357105
+FOV_002,round4,succeeded,False,translation,run.json,0,1,0,0,0.5,-1,0.95344388495724564
+FOV_003,round2,succeeded,False,translation,run.json,0,0,0,0,0,-0.5,0.92850363808674341
+FOV_003,round3,succeeded,False,translation,run.json,0,-1,0,0,0,0,0.88888414243840541
+FOV_003,round4,succeeded,False,translation,run.json,0,1,1,0,0.5,0,0.92817084098195801
+FOV_004,round2,succeeded,False,translation,run.json,0,-1,1,0,-1,0.5,0.91043700882911482
+FOV_004,round3,succeeded,False,translation,run.json,0,1,0,0,2,0,0.94544004406203919
+FOV_004,round4,succeeded,False,translation,run.json,0,0,1,0,-0.5,0,0.90412668063612844

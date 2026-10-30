@@ -1,0 +1,16 @@
+part,table,column,row_key,reason,detail
+rule:alignment_score,<NA>,<NA>,<NA>,not_configured,config.limits.alignment_score sets no limit
+workflow.time,steps,seconds,scope=fov;fov_id=FOV_001;index=27,not_recorded,no record holds the time of segment
+workflow.time,steps,seconds,scope=fov;fov_id=FOV_001;index=28,not_recorded,no record holds the time of assign_molecules
+workflow.time,steps,seconds,scope=fov;fov_id=FOV_002;index=27,not_recorded,no record holds the time of segment
+workflow.time,steps,seconds,scope=fov;fov_id=FOV_002;index=28,not_recorded,no record holds the time of assign_molecules
+workflow.time,steps,seconds,scope=fov;fov_id=FOV_003;index=27,not_recorded,no record holds the time of segment
+workflow.time,steps,seconds,scope=fov;fov_id=FOV_003;index=28,not_recorded,no record holds the time of assign_molecules
+workflow.time,steps,seconds,scope=fov;fov_id=FOV_004;index=27,not_recorded,no record holds the time of segment
+workflow.time,steps,seconds,scope=fov;fov_id=FOV_004;index=28,not_recorded,no record holds the time of assign_molecules
+workflow.time,steps,seconds,scope=sample;fov_id=;index=0,not_recorded,no record holds the time of stitch
+workflow.time,steps,seconds,scope=sample;fov_id=;index=1,not_recorded,export.json assembly records no wall_s
+sample.marker_zoom,<NA>,<NA>,fov_id=FOV_001;role=example_1;view=xz,no_stack,the export has no fused stack of more than one plane
+sample.marker_zoom,<NA>,<NA>,fov_id=FOV_002;role=example_2;view=xz,no_stack,the export has no fused stack of more than one plane
+sample.marker_zoom,<NA>,<NA>,fov_id=FOV_004;role=example_3;view=xz,no_stack,the export has no fused stack of more than one plane
+sample.mecr,<NA>,<NA>,<NA>,no_markers,the configuration has no marker_pairs

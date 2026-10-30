@@ -1,0 +1,49 @@
+part,table,column,row_key,reason,detail
+summary.key_numbers,summary,counted_cells,<NA>,no_segmentation,no assignment
+summary.key_numbers,summary,reads_per_cell_median,<NA>,no_segmentation,no assignment
+summary.key_numbers,summary,genes_per_cell_median,<NA>,no_segmentation,no assignment
+summary.key_numbers,summary,cells_median_per_fov,<NA>,no_segmentation,no assignment
+summary.key_numbers,summary,reads_in_cells,<NA>,no_segmentation,no assignment
+summary.key_numbers,summary,h5ad_whole_count_sum,<NA>,no_segmentation,no assignment
+summary.key_numbers,summary,reads_in_cells_equal,<NA>,no_segmentation,no assignment
+rule:alignment_score,<NA>,<NA>,<NA>,not_configured,config.limits.alignment_score sets no limit
+rule:reads_no_cell,<NA>,<NA>,<NA>,no_segmentation,no assignment
+workflow.time,steps,seconds,scope=sample;fov_id=;index=0,not_recorded,no record holds the time of stitch
+workflow.time,steps,seconds,scope=sample;fov_id=;index=1,not_recorded,export.json assembly records no wall_s
+readout.totals,readout_totals,count,level=reads_in_cells,no_segmentation,no assignment
+readout.totals,readout_totals,fraction_of_spots,level=reads_in_cells,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,n_cells,fov_id=FOV_001,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,n_cells,fov_id=FOV_002,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,n_cells,fov_id=FOV_003,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,n_cells,fov_id=FOV_004,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,n_cells_retained,fov_id=FOV_001,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,n_cells_retained,fov_id=FOV_002,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,n_cells_retained,fov_id=FOV_003,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,n_cells_retained,fov_id=FOV_004,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,reads_in_cells,fov_id=FOV_001,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,reads_in_cells,fov_id=FOV_002,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,reads_in_cells,fov_id=FOV_003,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,reads_in_cells,fov_id=FOV_004,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,reads_in_cells_fraction,fov_id=FOV_001,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,reads_in_cells_fraction,fov_id=FOV_002,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,reads_in_cells_fraction,fov_id=FOV_003,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,reads_in_cells_fraction,fov_id=FOV_004,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,cell_density_per_mm2,fov_id=FOV_001,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,cell_density_per_mm2,fov_id=FOV_002,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,cell_density_per_mm2,fov_id=FOV_003,no_segmentation,no assignment
+assembly.cells_per_fov,fovs,cell_density_per_mm2,fov_id=FOV_004,no_segmentation,no assignment
+assembly.examples,<NA>,<NA>,fov_id=FOV_001;role=example_1,part_not_written,segment: off
+assembly.examples,<NA>,<NA>,fov_id=FOV_002;role=example_2,part_not_written,segment: off
+assembly.examples,<NA>,<NA>,fov_id=FOV_004;role=example_3,part_not_written,segment: off
+assembly.accounting,population,cells,population=input,no_segmentation,no assignment
+assembly.accounting,population,cells,population=retained,no_segmentation,no assignment
+assembly.accounting,population,cells,population=excluded_not_owner,no_segmentation,no assignment
+assembly.accounting,population,cells,population=excluded_fov_not_placed,no_segmentation,no assignment
+assembly.accounting,population,cells,population=excluded_duplicate_observation,no_segmentation,no assignment
+assembly.accounting,population,cells,population=counted,no_segmentation,no assignment
+assembly.accounting,population,molecules,population=counted,no_segmentation,no assignment
+sample.per_cell,<NA>,<NA>,<NA>,no_segmentation,no assignment
+sample.marker_zoom,<NA>,<NA>,fov_id=FOV_001;role=example_1;view=xz,no_stack,the export has no fused stack of more than one plane
+sample.marker_zoom,<NA>,<NA>,fov_id=FOV_002;role=example_2;view=xz,no_stack,the export has no fused stack of more than one plane
+sample.marker_zoom,<NA>,<NA>,fov_id=FOV_004;role=example_3;view=xz,no_stack,the export has no fused stack of more than one plane
+sample.mecr,<NA>,<NA>,<NA>,no_segmentation,no assignment

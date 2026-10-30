@@ -1,0 +1,1145 @@
+{
+ "format_version": 1,
+ "stage": "export",
+ "sample": "sample",
+ "frame_id": "sample:sample",
+ "complete": true,
+ "parts": {
+  "assemble": "written",
+  "fuse": "written",
+  "segment": "off",
+  "fuse_labels": "written",
+  "export_spatialdata": "off"
+ },
+ "viewer_qualification": "deferred",
+ "assembly": {
+  "format_version": 1,
+  "stage": "assembly",
+  "sample": "sample",
+  "mode": "cells",
+  "route": "per_fov",
+  "route_source": "set",
+  "frame": {
+   "frame_id": "sample:sample",
+   "unit": "\u00b5m",
+   "direction": "identity"
+  },
+  "genes": [
+   "balanced-01",
+   "balanced-02",
+   "balanced-03",
+   "balanced-04",
+   "balanced-05",
+   "balanced-06",
+   "balanced-07",
+   "balanced-08",
+   "balanced-09",
+   "balanced-10",
+   "balanced-11",
+   "balanced-12",
+   "balanced-13",
+   "balanced-14",
+   "balanced-15",
+   "balanced-16"
+  ],
+  "placement": {
+   "sample": "sample",
+   "method": "multiview_stitcher",
+   "implementation": "starfinder.stitching._multiview._multiview_stitcher",
+   "config": {
+    "binning_zyx": [
+     1,
+     2,
+     2
+    ],
+    "pairwise": "phase_correlation",
+    "upsample_factor": null,
+    "quality_threshold": -1.0,
+    "drop_nan_quality": true,
+    "pruning": "alternating_pattern",
+    "overlap_tolerance_um": 0.0,
+    "groupwise": "global_optimization",
+    "abs_tol_um": null,
+    "rel_tol": null,
+    "max_iter": null,
+    "method": "multiview_stitcher"
+   },
+   "origins": null,
+   "gauge": "G1",
+   "review": "not_needed",
+   "reasons": [],
+   "approval": null,
+   "fovs_sha256": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b",
+   "links_sha256": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee"
+  },
+  "config": {
+   "ownership": "nearest_center",
+   "centroid": "territory",
+   "tie": "table_order",
+   "conflicts": true,
+   "duplicate_threshold": 0.5
+  },
+  "ownership": {
+   "rule": "nearest_center",
+   "tie": "table_order",
+   "axes": "yx",
+   "owning_fovs": [
+    "FOV_001",
+    "FOV_002",
+    "FOV_003",
+    "FOV_004"
+   ]
+  },
+  "flags": {
+   "computed": [
+    "fov_edge",
+    "z_edge",
+    "conflict",
+    "unclaimed",
+    "outside_owner_region",
+    "cell_unclaimed"
+   ],
+   "conflicts": true
+  },
+  "fovs": [
+   {
+    "fov_id": "FOV_001",
+    "placement_status": "image_supported",
+    "origin_zyx": [
+     0.0,
+     0.0,
+     -0.5000000000000003
+    ],
+    "kind": "assignment",
+    "assignment": {
+     "name": "default",
+     "folder": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_001/assignment/default",
+     "source": "folder",
+     "tables": {
+      "molecules": "8d3a01d02299267a6f88ca0f16819e3243052d0a222909131d5412ba4dc6d2a6",
+      "cells": "bc3bd8cddf5bf5d0362dd8c81c124568b9f60acfcf7b670ba690c43f7e06ddb1",
+      "counts": "050ab3536ebd78f6577fd3f70f19eb3da5ab9cd00ac56b4b5ab6dc379bc09ce3"
+     }
+    },
+    "molecules_sha256": "41c7b41221ef79e33d234305b8e99bf846e2c561ae36594a917775f9507f24f9",
+    "nuclei": false,
+    "territories": {
+     "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_001/assignment/default/cell_labels.tif",
+     "sha256": "933a300705dcf8cb3d3b9536c08040443fdc28d4f5d6373630418ff75b952ff2"
+    },
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_001\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "1535cd61256c1675ff1188801c7c7c774a741c99ab7f0d73d9be852eeaeb61fd",
+     "source": "file:<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_001/reference.tif",
+     "calibration_source": "grid"
+    },
+    "footprint_yx": [
+     [
+      -0.25,
+      17.75
+     ],
+     [
+      -0.7500000000000003,
+      17.25
+     ]
+    ],
+    "centre_yx": [
+     8.75,
+     8.25
+    ],
+    "owns_points": true
+   },
+   {
+    "fov_id": "FOV_002",
+    "placement_status": "image_supported",
+    "origin_zyx": [
+     0.0,
+     12.000000000000002,
+     0.4999999999999997
+    ],
+    "kind": "assignment",
+    "assignment": {
+     "name": "default",
+     "folder": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_002/assignment/default",
+     "source": "folder",
+     "tables": {
+      "molecules": "bc47e0fdbba0db106577d5498958c3a526667d7a3b9dc28ba994d1e533a1e3e7",
+      "cells": "4f7d4b901e30c17a9f99849077178f3d930f321c445064880710880d641c1001",
+      "counts": "9bac1286347c680fd78d7e536a832fa4a570d046c0d81009dc85685ab780cc00"
+     }
+    },
+    "molecules_sha256": "ec4e3d6c3ad982c2906c8a43deca10bbad883e70f2fe221ce89f2f2a71a0b1d2",
+    "nuclei": false,
+    "territories": {
+     "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_002/assignment/default/cell_labels.tif",
+     "sha256": "ed7d2ffac215bdc1049698d922580a6da8156b6fbeca9ae435f687047469e6ca"
+    },
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "0dc84800a2bd2c1017888a1ec8e946bc52275042e037c28cbbfb21a023cf7760",
+     "source": "file:<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_002/reference.tif",
+     "calibration_source": "grid"
+    },
+    "footprint_yx": [
+     [
+      11.750000000000002,
+      29.75
+     ],
+     [
+      0.24999999999999972,
+      18.25
+     ]
+    ],
+    "centre_yx": [
+     20.75,
+     9.25
+    ],
+    "owns_points": true
+   },
+   {
+    "fov_id": "FOV_003",
+    "placement_status": "image_supported",
+    "origin_zyx": [
+     0.0,
+     0.0,
+     11.500000000000002
+    ],
+    "kind": "assignment",
+    "assignment": {
+     "name": "default",
+     "folder": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_003/assignment/default",
+     "source": "folder",
+     "tables": {
+      "molecules": "986397f445908bd47812ed76b5faa36387a448f3acc5279c9544a94612e5dbf9",
+      "cells": "deb88f3cd258ad1a14fee20b0c3e375886ef3ba87527d64cb38fd7bb306166bb",
+      "counts": "28b31032a32b0df53c4e63865eab4d5e80943ac189a0309e7c2d22bba51d7b33"
+     }
+    },
+    "molecules_sha256": "bb2e17e053de9eb49c8c902074bd87535a12940b9e8641ada9e5b2595e041e00",
+    "nuclei": false,
+    "territories": {
+     "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_003/assignment/default/cell_labels.tif",
+     "sha256": "eb00dedf8576aa19abba2b755b0c587202517848939d9a24261575f9c95447e2"
+    },
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_003\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "329b4e2b18f3cf3cc9de4fc39e356cac261bbce054ad22e1cd88d98215ec04a6",
+     "source": "file:<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_003/reference.tif",
+     "calibration_source": "grid"
+    },
+    "footprint_yx": [
+     [
+      -0.25,
+      17.75
+     ],
+     [
+      11.250000000000002,
+      29.25
+     ]
+    ],
+    "centre_yx": [
+     8.75,
+     20.25
+    ],
+    "owns_points": true
+   },
+   {
+    "fov_id": "FOV_004",
+    "placement_status": "image_supported",
+    "origin_zyx": [
+     0.0,
+     12.000000000000002,
+     12.500000000000002
+    ],
+    "kind": "assignment",
+    "assignment": {
+     "name": "default",
+     "folder": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_004/assignment/default",
+     "source": "folder",
+     "tables": {
+      "molecules": "f87663674ba3e7b78d9c4056ab97a29e98197bd4cf0c6fa8cf46a24e5009bfde",
+      "cells": "7ee395e906ad2741bd604b86be9e7241a043044b93f65dfcd13c2c4a9851c5ca",
+      "counts": "7913c91c816b52b79833a7ecc58b04343544c3c0daa884877dae6081fdeec4b1"
+     }
+    },
+    "molecules_sha256": "cbe1464d2872b53f19233c97537e49dd5d53d654580ed417ab4c214c3fa89699",
+    "nuclei": false,
+    "territories": {
+     "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_004/assignment/default/cell_labels.tif",
+     "sha256": "706a5fdec0b70a839edc4dadf9e841a2916f78d5dd95cc9bbb2b456175730057"
+    },
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_004\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "5e6fb5a215e423b726e52c6ecbaa54eccccc6e9fe169215f1752fbf443d5a49e",
+     "source": "file:<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_004/reference.tif",
+     "calibration_source": "grid"
+    },
+    "footprint_yx": [
+     [
+      11.750000000000002,
+      29.75
+     ],
+     [
+      12.250000000000002,
+      30.25
+     ]
+    ],
+    "centre_yx": [
+     20.75,
+     21.25
+    ],
+    "owns_points": true
+   }
+  ],
+  "counts": {
+   "cells": {
+    "input": 21,
+    "retained": 9,
+    "excluded": {
+     "not_owner": 9,
+     "fov_not_placed": 0,
+     "duplicate_observation": 3
+    }
+   },
+   "molecules": {
+    "input": 96,
+    "retained": 60,
+    "excluded": {
+     "cell_not_owner": 16,
+     "not_owner": 4,
+     "outside_grid": 0,
+     "fov_not_placed": 0,
+     "cell_duplicate_observation": 16
+    }
+   },
+   "flags": {
+    "fov_edge": 18,
+    "z_edge": 21,
+    "conflict": 0,
+    "unclaimed": 0,
+    "outside_owner_region": 8,
+    "cell_unclaimed": 0
+   }
+  },
+  "files": {
+   "fovs": {
+    "path": "tables/fovs.csv",
+    "dtypes": {
+     "fov_id": "string",
+     "placement_status": "string",
+     "origin_z": "float64",
+     "origin_y": "float64",
+     "origin_x": "float64",
+     "kind": "string",
+     "footprint_y0": "float64",
+     "footprint_y1": "float64",
+     "footprint_x0": "float64",
+     "footprint_x1": "float64",
+     "centre_y": "float64",
+     "centre_x": "float64",
+     "owns_points": "bool",
+     "n_cells": "int64",
+     "n_cells_retained": "int64",
+     "n_molecules": "int64",
+     "n_molecules_retained": "int64"
+    }
+   },
+   "cells": {
+    "path": "tables/cells.csv",
+    "sha256": "df7fcb57ea96ac33f9ed741a1f5e445fadd33b6c395e17c319842d6b44468fac",
+    "dtypes": {
+     "fov_id": "string",
+     "cell_namespace": "string",
+     "cell_id": "UInt32",
+     "obs_name": "string",
+     "status": "string",
+     "exclusion_reason": "string",
+     "size_voxels": "int64",
+     "expanded_size_voxels": "Int64",
+     "size_physical": "float64",
+     "expanded_size_physical": "float64",
+     "centroid_z": "float64",
+     "centroid_y": "float64",
+     "centroid_x": "float64",
+     "expanded_centroid_z": "float64",
+     "expanded_centroid_y": "float64",
+     "expanded_centroid_x": "float64",
+     "n_molecules": "int64",
+     "n_nuclei": "Int64",
+     "correspondence": "string",
+     "correspondence_flags": "string",
+     "compartments": "string",
+     "sample_centroid_z": "float64",
+     "sample_centroid_y": "float64",
+     "sample_centroid_x": "float64",
+     "sample_expanded_centroid_z": "float64",
+     "sample_expanded_centroid_y": "float64",
+     "sample_expanded_centroid_x": "float64",
+     "ownership_centroid": "string",
+     "sample_ownership_centroid_z": "float64",
+     "sample_ownership_centroid_y": "float64",
+     "sample_ownership_centroid_x": "float64",
+     "owner_fov_id": "string",
+     "assembly_status": "string",
+     "assembly_reason": "string",
+     "assembly_flags": "string",
+     "conflict_with": "string",
+     "duplicate_of": "string"
+    }
+   },
+   "molecules": {
+    "path": "tables/molecules.csv",
+    "sha256": "0e123d1dd1ae60de4180ff80bd54ce9e59eae0a7247e1f98936468ea1ec1b1cb",
+    "dtypes": {
+     "fov_id": "string",
+     "spot_namespace": "string",
+     "spot_id": "string",
+     "z": "float64",
+     "y": "float64",
+     "x": "float64",
+     "gene_id": "string",
+     "voxel_z": "Int64",
+     "voxel_y": "Int64",
+     "voxel_x": "Int64",
+     "assignment_status": "string",
+     "cell_id": "UInt32",
+     "in_expansion": "boolean",
+     "original_cell_id": "UInt32",
+     "nucleus_id": "UInt32",
+     "compartment": "string",
+     "cell_namespace": "string",
+     "sample_z": "float64",
+     "sample_y": "float64",
+     "sample_x": "float64",
+     "owner_fov_id": "string",
+     "assembly_status": "string",
+     "assembly_reason": "string",
+     "assembly_flags": "string"
+    }
+   },
+   "counts": {
+    "path": "tables/counts.csv",
+    "sha256": "6646feed541d58c3d03686156a4b72d286b7c71898c756bcf1b25a700f30476b",
+    "dtypes": {
+     "fov_id": "string",
+     "cell_namespace": "string",
+     "cell_id": "UInt32",
+     "gene_id": "string",
+     "compartment": "string",
+     "count": "int64"
+    }
+   },
+   "anndata": {
+    "path": "sample.h5ad"
+   }
+  },
+  "table_format": "csv"
+ },
+ "fusion": {
+  "status": "written",
+  "placement": {
+   "method": "multiview_stitcher",
+   "gauge": "G1",
+   "review": "not_needed",
+   "approval": null,
+   "fovs_sha256": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b",
+   "links_sha256": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee"
+  },
+  "fovs": [
+   {
+    "fov_id": "FOV_001",
+    "placement_status": "image_supported",
+    "included": true,
+    "reason": null,
+    "origin_zyx": [
+     0.0,
+     0.0,
+     -0.5000000000000003
+    ],
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_001\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "1535cd61256c1675ff1188801c7c7c774a741c99ab7f0d73d9be852eeaeb61fd",
+     "source": "file:<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_001/reference.tif"
+    },
+    "images": {
+     "reference_merged": {
+      "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_001/reference.tif",
+      "sha256": "a44227f244b0ff29dcd37abc4b74b7aa4acf46d64351cd59850bcca0ef66a79d",
+      "sha256_of": "file",
+      "dtype": "uint8"
+     }
+    }
+   },
+   {
+    "fov_id": "FOV_002",
+    "placement_status": "image_supported",
+    "included": true,
+    "reason": null,
+    "origin_zyx": [
+     0.0,
+     12.000000000000002,
+     0.4999999999999997
+    ],
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "0dc84800a2bd2c1017888a1ec8e946bc52275042e037c28cbbfb21a023cf7760",
+     "source": "file:<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_002/reference.tif"
+    },
+    "images": {
+     "reference_merged": {
+      "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_002/reference.tif",
+      "sha256": "579d5e11ab7769e23c53c579ff6477b3550249829f54f1aab2b77369481c3b3f",
+      "sha256_of": "file",
+      "dtype": "uint8"
+     }
+    }
+   },
+   {
+    "fov_id": "FOV_003",
+    "placement_status": "image_supported",
+    "included": true,
+    "reason": null,
+    "origin_zyx": [
+     0.0,
+     0.0,
+     11.500000000000002
+    ],
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_003\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "329b4e2b18f3cf3cc9de4fc39e356cac261bbce054ad22e1cd88d98215ec04a6",
+     "source": "file:<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_003/reference.tif"
+    },
+    "images": {
+     "reference_merged": {
+      "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_003/reference.tif",
+      "sha256": "42865bb2613659ca17e1b44ad956f4739a999ccf75e6374c2f95ed3d3b9fdf62",
+      "sha256_of": "file",
+      "dtype": "uint8"
+     }
+    }
+   },
+   {
+    "fov_id": "FOV_004",
+    "placement_status": "image_supported",
+    "included": true,
+    "reason": null,
+    "origin_zyx": [
+     0.0,
+     12.000000000000002,
+     12.500000000000002
+    ],
+    "grid": {
+     "shape_zyx": [
+      5,
+      36,
+      36
+     ],
+     "metadata": {
+      "frame_id": "[\"sample-tiny-v1\",\"sample\",\"FOV_004\",\"formed\"]/reference/rotate:0",
+      "spacing_zyx": [
+       1.0,
+       0.5,
+       0.5
+      ],
+      "origin_zyx": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "direction_zyx": [
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ]
+      ],
+      "spatial_unit": "\u00b5m"
+     },
+     "sha256": "5e6fb5a215e423b726e52c6ecbaa54eccccc6e9fe169215f1752fbf443d5a49e",
+     "source": "file:<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_004/reference.tif"
+    },
+    "images": {
+     "reference_merged": {
+      "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_004/reference.tif",
+      "sha256": "3cdc6fede186f34371e230a3415d4d5c0a1aa4ca2d0e24f7453bb5610261fd2e",
+      "sha256_of": "file",
+      "dtype": "uint8"
+     }
+    }
+   }
+  ],
+  "library": {
+   "multiview_stitcher": "0.1.62",
+   "fusion_func": "weighted_average_fusion",
+   "interpolation_order": 1,
+   "blending_widths_um": {
+    "z": 3,
+    "y": 10,
+    "x": 10
+   },
+   "route": "level1",
+   "inputs_2d": false,
+   "transform_key": "placed"
+  },
+  "config": {
+   "images": [
+    "reference_merged"
+   ],
+   "dimensionality": "projection",
+   "projection": "max",
+   "scale_yx": 0.5,
+   "ome_zarr": false,
+   "ome_zarr_version": "0.5",
+   "pyramid_levels": 0
+  },
+  "grid": {
+   "shape_zyx": [
+    5,
+    60,
+    62
+   ],
+   "spacing_zyx": [
+    1.0,
+    0.5,
+    0.5
+   ],
+   "origin_zyx": [
+    0.0,
+    0.0,
+    -0.5000000000000003
+   ],
+   "inputs_2d": false,
+   "slab_z": null,
+   "origins_z": {
+    "FOV_001": 0.0,
+    "FOV_002": 0.0,
+    "FOV_003": 0.0,
+    "FOV_004": 0.0
+   },
+   "factor_yx": 2,
+   "fov_ids": [
+    "FOV_001",
+    "FOV_002",
+    "FOV_003",
+    "FOV_004"
+   ]
+  },
+  "outputs": [
+   {
+    "path": "reference_merged_projection.ome.tif",
+    "format": "ome_tiff",
+    "image": "reference_merged",
+    "dimensionality": "projection",
+    "projection": "max",
+    "factor_yx": 2,
+    "shape_zyx": [
+     1,
+     30,
+     31
+    ],
+    "dtype": "uint8",
+    "spacing_zyx": [
+     5.0,
+     1.0,
+     1.0
+    ],
+    "origin_zyx": [
+     2.0,
+     0.25,
+     -0.25000000000000033
+    ],
+    "slab_z": [
+     -0.5,
+     4.5
+    ],
+    "inputs_2d": true,
+    "library_grid": {
+     "spacing": {
+      "y": 1.0,
+      "x": 1.0
+     },
+     "origin": {
+      "y": 0.25,
+      "x": -0.25000000000000033
+     },
+     "shape": {
+      "y": 30,
+      "x": 31
+     }
+    },
+    "output_stack_properties": {
+     "spacing": {
+      "y": 1.0,
+      "x": 1.0
+     },
+     "origin": {
+      "y": 0.25,
+      "x": -0.25000000000000033
+     },
+     "shape": {
+      "y": 30,
+      "x": 31
+     }
+    },
+    "output_chunksize": {
+     "y": 512,
+     "x": 512
+    },
+    "levels": [],
+    "tile_yx": [
+     512,
+     512
+    ],
+    "compression": "zlib",
+    "axes": "YX",
+    "annotation": {
+     "sample": "sample",
+     "image": "reference_merged",
+     "dimensionality": "projection",
+     "projection": "max",
+     "factor_yx": 2,
+     "placement_fovs_sha256": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b",
+     "placement_links_sha256": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee"
+    },
+    "sha256": "c0eef016ba79c18edabf5a9eca1e48340fcebf14c61966e3f6efa1ab1118a864"
+   }
+  ],
+  "viewer_qualification": "deferred"
+ },
+ "segmentation": {
+  "status": "off",
+  "reason": "route_per_fov",
+  "route": "per_fov",
+  "route_source": "set"
+ },
+ "labels": {
+  "status": "written",
+  "library": {
+   "multiview_stitcher": "0.1.62",
+   "fusion_func": "_first_positive",
+   "interpolation_order": 0,
+   "route": "output_spacing",
+   "transform_key": "placed"
+  },
+  "fovs": [
+   {
+    "fov_id": "FOV_001",
+    "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_001/assignment/default/cell_labels.tif",
+    "sha256": "933a300705dcf8cb3d3b9536c08040443fdc28d4f5d6373630418ff75b952ff2",
+    "source": "assembly_record",
+    "n_retained": 1
+   },
+   {
+    "fov_id": "FOV_002",
+    "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_002/assignment/default/cell_labels.tif",
+    "sha256": "ed7d2ffac215bdc1049698d922580a6da8156b6fbeca9ae435f687047469e6ca",
+    "source": "assembly_record",
+    "n_retained": 1
+   },
+   {
+    "fov_id": "FOV_003",
+    "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_003/assignment/default/cell_labels.tif",
+    "sha256": "eb00dedf8576aa19abba2b755b0c587202517848939d9a24261575f9c95447e2",
+    "source": "assembly_record",
+    "n_retained": 3
+   },
+   {
+    "fov_id": "FOV_004",
+    "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_004/assignment/default/cell_labels.tif",
+    "sha256": "706a5fdec0b70a839edc4dadf9e841a2916f78d5dd95cc9bbb2b456175730057",
+    "source": "assembly_record",
+    "n_retained": 4
+   }
+  ],
+  "outputs": [
+   {
+    "path": "cell_labels.ome.tif",
+    "format": "ome_tiff",
+    "image": "cell_labels",
+    "dimensionality": "stack",
+    "inputs_2d": false,
+    "factor_yx": 2,
+    "shape_zyx": [
+     5,
+     30,
+     31
+    ],
+    "dtype": "uint32",
+    "spacing_zyx": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "origin_zyx": [
+     0.0,
+     0.0,
+     -0.5000000000000003
+    ],
+    "slab_z": null,
+    "levels": [],
+    "tile_yx": [
+     512,
+     512
+    ],
+    "compression": "zlib",
+    "axes": "ZYX",
+    "annotation": {
+     "sample": "sample",
+     "image": "cell_labels",
+     "rule": "retained_cells",
+     "factor_yx": 2,
+     "placement_fovs_sha256": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b",
+     "placement_links_sha256": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee"
+    },
+    "output_spacing": {
+     "z": 1.0,
+     "y": 1.0,
+     "x": 1.0
+    },
+    "output_chunksize": {
+     "z": 1,
+     "y": 512,
+     "x": 512
+    },
+    "sha256": "b7c94ac814364f1bd650fa6d6923bad59e222383715c79d7a511b6c8c49ba92a"
+   }
+  ],
+  "territory_geometry": "volume",
+  "grid": {
+   "fusion": {
+    "shape_zyx": [
+     5,
+     60,
+     62
+    ],
+    "spacing_zyx": [
+     1.0,
+     0.5,
+     0.5
+    ],
+    "origin_zyx": [
+     0.0,
+     0.0,
+     -0.5000000000000003
+    ],
+    "inputs_2d": false,
+    "slab_z": [
+     -0.5,
+     4.5
+    ],
+    "fov_ids": [
+     "FOV_001",
+     "FOV_002",
+     "FOV_003",
+     "FOV_004"
+    ]
+   },
+   "library": {
+    "spacing": {
+     "z": 1.0,
+     "y": 1.0,
+     "x": 1.0
+    },
+    "origin": {
+     "z": 0.0,
+     "y": 0.0,
+     "x": -0.5000000000000003
+    },
+    "shape": {
+     "z": 5,
+     "y": 30,
+     "x": 31
+    }
+   },
+   "formula": {
+    "spacing": {
+     "y": 1.0,
+     "x": 1.0,
+     "z": 1.0
+    },
+    "origin": {
+     "y": 0.0,
+     "x": -0.5000000000000003,
+     "z": 0.0
+    },
+    "shape": {
+     "y": 30,
+     "x": 31,
+     "z": 5
+    }
+   }
+  },
+  "n_ids_input": 9,
+  "n_ids_output": 9,
+  "absent_ids": [],
+  "n_absent_ids": 0,
+  "n_conflict": 0,
+  "rule": "retained_cells",
+  "placement": {
+   "fovs_sha256": "9bfef94bfad1a819cce6d55c6185554118637a7d54f7cd9f3fe666eef8dc107b",
+   "links_sha256": "dfe73521ef0c9108c9661f17c1d11ca7c2f26fd1a8733feec8fe649fe54e2fee"
+  },
+  "conflicts_computed": true,
+  "labels_scale_yx": 0.5,
+  "factor_yx": 2,
+  "viewer_qualification": "deferred"
+ },
+ "spatialdata": {
+  "status": "off"
+ }
+}

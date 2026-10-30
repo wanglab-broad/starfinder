@@ -1,0 +1,5 @@
+fov_id,placement_status,origin_z,origin_y,origin_x,kind,footprint_y0,footprint_y1,footprint_x0,footprint_x1,centre_y,centre_x,owns_points,n_cells,n_cells_retained,n_molecules,n_molecules_retained
+FOV_001,image_supported,0,0,-0.50000000000000033,molecules,-0.25,17.75,-0.75000000000000033,17.25,8.75,8.25,True,0,0,24,17
+FOV_002,image_supported,0,12.000000000000002,0.49999999999999972,molecules,11.750000000000002,29.75,0.24999999999999969,18.25,20.75,9.25,True,0,0,13,5
+FOV_003,image_supported,0,0,11.500000000000002,molecules,-0.25,17.75,11.250000000000002,29.25,8.75,20.25,True,0,0,28,16
+FOV_004,image_supported,0,12.000000000000002,12.500000000000002,molecules,11.750000000000002,29.75,12.250000000000002,30.25,20.75,21.25,True,0,0,31,25

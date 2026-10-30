@@ -1,0 +1,2 @@
+sample,report,route,fovs_expected,fovs_succeeded,spots_median_per_fov,matched_fraction,counted_cells,cells_median_per_fov
+sample,present,after_fusion,4,4,29.5,0.84347826086956523,<NA>,<NA>

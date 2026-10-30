@@ -1,0 +1,14 @@
+spot_namespace,spot_id,z,y,x,gene_id,voxel_z,voxel_y,voxel_x,assignment_status,cell_id,in_expansion,original_cell_id,nucleus_id,compartment
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",0,2,26,32,balanced-02,2,26,32,assigned,2,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",1,2,3,19,balanced-03,2,3,19,assigned,8,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",2,1,20,20,balanced-03,1,20,20,assigned,2,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",3,0,18,35,balanced-04,0,18,35,assigned,2,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",4,3,18,32,balanced-07,3,18,32,assigned,2,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",5,3,9,25,balanced-07,3,9,25,assigned,8,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",6,0,4,30,balanced-07,0,4,30,assigned,8,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",7,0,22,35,balanced-05,0,22,35,assigned,2,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",8,2,0,30,balanced-07,2,0,30,assigned,8,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",11,1,31,7,balanced-11,1,31,7,unassigned,<NA>,<NA>,<NA>,<NA>,<NA>
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",12,3,27,25,balanced-12,3,27,25,assigned,2,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",13,3,4,15,balanced-13,3,4,15,assigned,8,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",14,0,6,24,balanced-13,0,6,24,assigned,8,<NA>,<NA>,<NA>,unavailable
