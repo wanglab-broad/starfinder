@@ -16,6 +16,13 @@ def _radius(radius):
 class ReconstructionConfig:
     """Background removal by morphological reconstruction in XY, on each Z plane and channel.
 
+    Parameters
+    ----------
+    radius_yx : int
+        Nonnegative disk radius in XY pixels.
+
+    Notes
+    -----
     Disk radius in XY pixels, independently applied to each Z/channel slice.
     """
     radius_yx: int = 3
@@ -28,6 +35,13 @@ class ReconstructionConfig:
 class TophatConfig:
     """White top-hat background removal in XY, on each Z plane and channel.
 
+    Parameters
+    ----------
+    radius_yx : int
+        Nonnegative disk radius in XY pixels.
+
+    Notes
+    -----
     Disk radius in XY pixels; no filtering along Z or channels.
     """
     radius_yx: int = 3

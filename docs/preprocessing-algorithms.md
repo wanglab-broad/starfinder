@@ -44,8 +44,7 @@ Both remove background in XY, on each Z plane and channel separately. See
 
 ### Scalar background
 
-Subtracts one background level per channel and round, estimated from the channel's
-intensities or read from a supplied-statistics file. See
+Subtracts one background level per channel and round. See
 {py:class}`~starfinder.preprocessing.ScalarBackgroundConfig`.
 
 ```{config-options} starfinder.preprocessing.ScalarBackgroundConfig
@@ -71,14 +70,15 @@ keeping the input dtype. See
 
 ## Recipe options
 
+Configure the ordered recipe and its entries. See
+{py:class}`~starfinder.preprocessing.PreprocessingRecipe` and
+{py:class}`~starfinder.preprocessing.PreprocessingStep`.
+
 ```{config-options} starfinder.preprocessing.PreprocessingRecipe
 ```
 
 ```{config-options} starfinder.preprocessing.PreprocessingStep
 ```
-
-See {py:class}`~starfinder.preprocessing.PreprocessingRecipe` and
-{py:class}`~starfinder.preprocessing.PreprocessingStep`.
 
 ## Records
 

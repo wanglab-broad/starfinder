@@ -41,7 +41,7 @@ change deployment guards without that authorization.
 
 ## Implementation
 
-Every new or changed config field gets a numpydoc `Parameters` entry; the strict documentation build enforces completeness for every config class that has that section.
+Every config dataclass requires a complete numpydoc `Parameters` section with an entry for every field; the strict documentation build enforces completeness for every class shown by `config-options`.
 
 Change only the authorized slice and maintained callers/tests/docs needed for
 coherence. Verify diagnoses in actual code. Prefer functions and small typed

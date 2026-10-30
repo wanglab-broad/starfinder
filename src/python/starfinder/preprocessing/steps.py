@@ -264,6 +264,15 @@ _SNAPSHOT_NAME = re.compile(r"[a-z][a-z0-9]*(_[a-z0-9]+)*")
 class PreprocessingStep:
     """One recipe entry: a frozen config whose exact type is registered in PREPROCESSING_METHODS.
 
+    Parameters
+    ----------
+    config : object
+        Registered preprocessing method configuration.
+    save_as : str or None
+        Snapshot name for a kept copy of this step's output; ``None`` keeps no snapshot.
+
+    Notes
+    -----
     save_as names a snapshot, a kept copy of this step's output. Snapshot
     names are lowercase snake_case (they name checkpoint directories) and
     must not be "detection", the name of the detection image.
@@ -285,6 +294,21 @@ class PreprocessingStep:
 class PreprocessingRecipe:
     """Ordered steps run on each round before registration.
 
+    Parameters
+    ----------
+    steps : tuple of PreprocessingStep
+        Ordered preprocessing steps before registration.
+    post_registration : tuple of PreprocessingStep
+        Ordered preprocessing steps after registration, or after ``steps`` when registration is absent.
+    extraction_source : str or None
+        Snapshot name for intensity extraction; ``None`` uses the detection image.
+    registration_source : str or None
+        Snapshot name for building registration signals; ``None`` uses the detection image.
+    supplied_statistics : path-like or None
+        Path to the supplied-statistics JSON file; ``None`` leaves the file unset.
+
+    Notes
+    -----
     The output of the last step is the detection image; with no steps it is
     the loaded image. Steps with save_as keep named snapshots of their
     output; names are unique within the recipe. extraction_source and

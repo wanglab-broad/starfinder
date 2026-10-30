@@ -29,6 +29,15 @@ def _cast_subtracted(values, dtype):
 class ScalarBackgroundConfig:
     """One background level per channel and round, subtracted uniformly.
 
+    Parameters
+    ----------
+    percentile : float
+        Intensity percentile in percent used to estimate the scalar background.
+    fit : str
+        Background statistics source: ``fov`` or ``supplied``.
+
+    Notes
+    -----
     percentile is an intensity percent in [0, 100) (provisional default 10);
     the level is that percentile of all voxels of the channel by the
     inverted-CDF definition. fit="fov" estimates it on each round of each
@@ -213,6 +222,15 @@ def _radii(value, name, integer):
 class Background3DConfig:
     """Volumetric white top-hat with an ellipsoidal footprint, for background that also varies along Z.
 
+    Parameters
+    ----------
+    radius_um_zyx : tuple of float or None
+        Nonnegative ellipsoidal radii in ZYX order, in micrometres; ``None`` leaves physical radii unset.
+    radius_voxels_zyx : tuple of int or None
+        Nonnegative ellipsoidal radii in ZYX order, in voxels; ``None`` derives voxel radii from ``radius_um_zyx`` and image spacing.
+
+    Notes
+    -----
     Anisotropic ellipsoidal radii (z, y, x) of a volumetric white top-hat.
     Exactly one of radius_um_zyx (micrometres, converted with
     ImageMetadata.spacing_zyx) and radius_voxels_zyx (voxels) must be set;

@@ -60,7 +60,7 @@ def _default(field):
 def _parameter_descriptions(config):
     """Read plain numpydoc Parameters entries and check them against all fields.
 
-    A missing section is allowed during the staged config-docstring rollout.
+    Every config dataclass requires a complete Parameters section.
     Excluded table columns do not exempt fields from completeness checking.
     """
     lines = inspect.cleandoc(config.__doc__ or "").splitlines()
@@ -69,7 +69,8 @@ def _parameter_descriptions(config):
                 and re.fullmatch(r"-{3,}", lines[i + 1])]
     start = next((i for i in sections if lines[i] == "Parameters"), None)
     if start is None:
-        return {}
+        fields = ", ".join(f"field {field.name!r}" for field in dataclasses.fields(config))
+        raise ValueError(f"{config.__name__}: missing Parameters section ({fields})")
     end = next((i for i in sections if i > start), len(lines))
     descriptions = {}
     names = []

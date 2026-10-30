@@ -10,6 +10,19 @@ from starfinder.io.conversion import ImageConversionConfig, convert_image, _dtyp
 class ProjectionConfig:
     """Reduction axis and method, with optional explicit output conversion.
 
+    Parameters
+    ----------
+    method : str
+        Reduction method: ``max`` or ``sum``.
+    output_dtype : str or None
+        Output real numeric dtype for checked casting; with ``None``, ``conversion`` determines the output dtype when set, otherwise the reduction result's dtype is retained.
+    conversion : ImageConversionConfig or None
+        Explicit output conversion policy; with ``None``, ``output_dtype`` requests a checked cast when set, otherwise the reduction result is retained.
+    axis : str
+        Reduction axis: ``z`` for the Z axis or ``channel`` for the channel axis.
+
+    Notes
+    -----
     Projection is an output view, not a preprocessing step. axis ``"z"`` is
     the visualization view: it reduces Z and keeps a singleton Z.
     axis ``"channel"`` is the inspection view: it merges the channels of a

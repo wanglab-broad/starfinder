@@ -31,14 +31,13 @@ code where possible using the directives in `docs/_ext/`: `method-table`,
 `config-options` and `synthetic-presets`. Link config classes to their API
 pages for further details rather than copying parameter descriptions.
 
-Every new or changed config field gets a numpydoc `Parameters` entry in its
-class docstring: what it sets, its unit and simple valid values, in one or two
-plain sentences. Keep precise rules in the specification and the first line
+Every config dataclass requires a complete numpydoc `Parameters` section in its
+class docstring, with an entry for every field: what it sets, its unit and simple
+valid values, in one or two plain sentences. Keep precise rules in the specification and the first line
 of the class docstring unchanged. `config-options` reads these descriptions;
 the strict build checks that every field has an entry and every entry names
-a field for each class that has the section. Classes without it render empty
-Description cells during the rollout; phase 2's last issue will require the
-section on every config.
+a field for every class shown by `config-options`. A quick-gate contract test
+checks all public config dataclasses and every class shown by `config-options`.
 
 Specifications, validation designs, baselines and proposals are design records
 in [design/](https://github.com/wanglab-broad/starfinder/blob/dev/design/README.md),

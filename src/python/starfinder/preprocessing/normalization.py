@@ -18,6 +18,21 @@ _FITS = ("fov", "supplied")
 class MinMaxNormalizationConfig:
     """Linear min-max scaling onto a declared output dtype and range, per channel or over the whole volume.
 
+    Parameters
+    ----------
+    output_dtype : str
+        Output real numeric dtype.
+    output_range : tuple of float
+        Lower and upper output intensities.
+    scope : str
+        Normalization grouping: ``global`` uses the whole image; ``per_channel`` uses individual channels in ZYXC and the whole image in ZYX.
+    snr_threshold : float or None
+        Nonnegative SNR threshold for the raw-intensity clipping gate; ``None`` disables the gate.
+    rounding : str
+        Floating-to-integer rounding: ``truncate`` or ``nearest_even``.
+
+    Notes
+    -----
     Integer rounding defaults to truncate, preserving historical uint8 behavior.
     Nonconstant low-SNR groups (max/mean < threshold; nonpositive mean gives
     SNR=0) retain raw values clipped to output_range. Constant groups always
@@ -79,6 +94,19 @@ def _normalize(volume, config):
 class HistogramMatchingConfig:
     """Matches each channel's intensity distribution to one channel of the reference round.
 
+    Parameters
+    ----------
+    output_dtype : str or None
+        Output real numeric dtype; ``None`` retains the input dtype.
+    rounding : str
+        Floating-to-integer rounding: ``truncate`` or ``nearest_even``.
+    reference_channel : int
+        Zero-based reference channel index for a recipe step.
+    fit : str
+        Reference statistics source for a recipe step: ``fov`` or ``supplied``.
+
+    Notes
+    -----
     Exact CDF matching; input dtype retained by default.
 
     Integer values truncate by default. Out-of-range reference values raise
@@ -153,6 +181,17 @@ def _match_counts(volume, values, counts, config):
 class PercentileNormalizationConfig:
     """Linear map of a per-channel percentile range onto the full output range.
 
+    Parameters
+    ----------
+    p_low : float
+        Lower intensity percentile in percent.
+    p_high : float
+        Upper intensity percentile in percent.
+    fit : str
+        Percentile statistics source: ``fov`` or ``supplied``.
+
+    Notes
+    -----
     p_low and p_high are intensity percents, 0 <= p_low < p_high <= 100
     (provisional defaults 1 and 99.9), estimated by the inverted-CDF
     definition. fit="fov" fits them on each round of each FOV; fit="supplied"

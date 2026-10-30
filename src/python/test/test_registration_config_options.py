@@ -58,7 +58,7 @@ class UnknownConfig:
 
 @dataclass
 class LegacyConfig:
-    """A class without a Parameters section still renders."""
+    """A class without a Parameters section is rejected."""
     count: int = 1
 
 
@@ -84,10 +84,11 @@ def test_parameter_descriptions(tables):
         "count": "Positive item count. Wrapped description with ``code``.",
         "label": "Display labels.", "method": "Display labels.",
     }
-    assert tables._parameter_descriptions(LegacyConfig) == {}
 
 
-@pytest.mark.parametrize("config, field_name", [(MissingConfig, "method"), (UnknownConfig, "typo")])
+@pytest.mark.parametrize("config, field_name", [
+    (LegacyConfig, "count"), (MissingConfig, "method"), (UnknownConfig, "typo"),
+])
 def test_parameter_completeness(tables, config, field_name):
     with pytest.raises(ValueError, match=rf"{config.__name__}: .*field '{field_name}'"):
         tables._parameter_descriptions(config)
@@ -103,7 +104,7 @@ def test_config_options_directive(tables, monkeypatch, config):
     monkeypatch.setattr(tables, "_resolve", lambda path: config)
     monkeypatch.setitem(directives._directives, "config-options", tables.ConfigOptions)
     source = ".. config-options:: fixture.Config\n   :exclude: method\n"
-    if config in (MissingConfig, UnknownConfig):
+    if config in (LegacyConfig, MissingConfig, UnknownConfig):
         # Excluding a field from the table does not disable completeness checks.
         with pytest.raises(SystemMessage, match=rf"{config.__name__}: .*field '"):
             publish_doctree(source, settings_overrides={"halt_level": 3})
@@ -111,13 +112,10 @@ def test_config_options_directive(tables, monkeypatch, config):
     tree = publish_doctree(source)
     rows = [[cell.astext() for cell in row.children] for row in tree.findall(nodes.row)]
     assert rows[0] == ["Option", "Default", "Description"]
-    if config is LegacyConfig:
-        assert rows[1:] == [["count", "1", ""]]
-    else:
-        assert rows[1:] == [
-            ["count", "1", "Positive item count. Wrapped description with code."],
-            ["label", "'items'", "Display labels."],
-        ]
-        assert [node.astext() for node in tree.findall(nodes.literal)][-4:] == [
-            "1", "code", "label", "'items'",
-        ]
+    assert rows[1:] == [
+        ["count", "1", "Positive item count. Wrapped description with code."],
+        ["label", "'items'", "Display labels."],
+    ]
+    assert [node.astext() for node in tree.findall(nodes.literal)][-4:] == [
+        "1", "code", "label", "'items'",
+    ]
