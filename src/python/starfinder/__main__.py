@@ -1,11 +1,12 @@
-"""Command line adapters for synthetic generation, benchmark lifecycle and pretrained weights."""
+"""Command line adapters for synthetic generation, benchmark lifecycle, pretrained weights and the workflow."""
 import argparse
 from pathlib import Path
 import sys
 
 
 def main(argv=None):
-    """Run a subcommand; usage/input errors exit 2, stage failures exit 1."""
+    """Run a subcommand; usage/input errors exit 2, stage failures exit 1 (the workflow commands also exit 3 for a
+    refused verified resume)."""
     parser = argparse.ArgumentParser(prog='starfinder')
     groups = parser.add_subparsers(dest='group', required=True)
     synthetic = groups.add_parser('synthetic', help='Processed-image synthetic generation')
@@ -44,7 +45,12 @@ def main(argv=None):
     for command in (fetch, listing, verify):
         command.add_argument('--dir', type=Path, help='Weights cache; default STARFINDER_WEIGHTS_DIR, '
                              'else $XDG_CACHE_HOME/starfinder/weights (~/.cache/starfinder/weights)')
+    from starfinder.workflow._cli import add_parser, run as run_workflow
+    add_parser(groups)
     args = parser.parse_args(argv)
+    if args.group == 'workflow':
+        # §2.13: the task commands map their own outcomes to exit 0, 1, 2 and 3.
+        return run_workflow(args, list(sys.argv[1:] if argv is None else argv)[1:])
     try:
         if args.group == 'weights':
             return _weights(args)

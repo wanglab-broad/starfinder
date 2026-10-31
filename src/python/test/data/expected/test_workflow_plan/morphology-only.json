@@ -1,0 +1,529 @@
+{
+ "format": "starfinder.workflow.manifest/1",
+ "backend": "python",
+ "configuration": {
+  "path": "workflow/resolved.json",
+  "sha256": "<sha256>",
+  "configuration_sha256": "<sha256>"
+ },
+ "package": {
+  "version": "0.0.0+test",
+  "git_commit": null,
+  "git_dirty": false
+ },
+ "roots": {
+  "input": "<work>/input/sample-tiny-v1/sample",
+  "output": "<work>/output/sample-tiny-v1/example-morphology-only"
+ },
+ "membership": {
+  "fovs": [
+   "FOV_001",
+   "FOV_002",
+   "FOV_003",
+   "FOV_004"
+  ],
+  "samples": {
+   "sample": [
+    "FOV_001",
+    "FOV_002",
+    "FOV_003",
+    "FOV_004"
+   ]
+  },
+  "selected_fovs": null
+ },
+ "inputs": {
+  "files": {
+   "fovs.csv": {
+    "path": "fovs.csv",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   }
+  },
+  "images": {
+   "FOV_001": {
+    "flamingo": {
+     "ch04": {
+      "path": "flamingo/FOV_001/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch05": {
+      "path": "flamingo/FOV_001/ch05.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "reference_stain": {
+     "ch04": {
+      "path": "round1/FOV_001/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   },
+   "FOV_002": {
+    "flamingo": {
+     "ch04": {
+      "path": "flamingo/FOV_002/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch05": {
+      "path": "flamingo/FOV_002/ch05.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "reference_stain": {
+     "ch04": {
+      "path": "round1/FOV_002/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   },
+   "FOV_003": {
+    "flamingo": {
+     "ch04": {
+      "path": "flamingo/FOV_003/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch05": {
+      "path": "flamingo/FOV_003/ch05.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "reference_stain": {
+     "ch04": {
+      "path": "round1/FOV_003/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   },
+   "FOV_004": {
+    "flamingo": {
+     "ch04": {
+      "path": "flamingo/FOV_004/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch05": {
+      "path": "flamingo/FOV_004/ch05.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "reference_stain": {
+     "ch04": {
+      "path": "round1/FOV_004/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   }
+  }
+ },
+ "export_route": null,
+ "groups": [
+  {
+   "name": "morphology",
+   "kind": "morphology",
+   "wildcards": [
+    "sample",
+    "fov"
+   ],
+   "outputs": [
+    "fovs/{fov}/nuclei_registration.json",
+    "fovs/{fov}/other_rounds/flamingo/image.ome.tif",
+    "fovs/{fov}/other_rounds/flamingo/registration.json",
+    "fovs/{fov}/other_rounds/reference_stain/image.ome.tif",
+    "fovs/{fov}/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.{sample}.{fov}.json",
+   "log": "workflow/logs/morphology.{sample}.{fov}.log",
+   "temporary": []
+  },
+  {
+   "name": "segment.nucleus",
+   "kind": "segment",
+   "wildcards": [
+    "sample",
+    "fov"
+   ],
+   "outputs": [
+    "fovs/{fov}/segmentation/nucleus/input.ome.tif",
+    "fovs/{fov}/segmentation/nucleus/labels.tif",
+    "fovs/{fov}/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.{sample}.{fov}.nucleus.json",
+   "log": "workflow/logs/segment.{sample}.{fov}.nucleus.log",
+   "temporary": []
+  }
+ ],
+ "tasks": [
+  {
+   "id": "morphology/sample/FOV_001",
+   "kind": "morphology",
+   "group": "morphology",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001"
+   },
+   "needs": [],
+   "inputs": [
+    "input:flamingo/FOV_001/ch04.tif",
+    "input:flamingo/FOV_001/ch05.tif",
+    "input:round1/FOV_001/ch04.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_001/nuclei_registration.json",
+    "fovs/FOV_001/other_rounds/flamingo/image.ome.tif",
+    "fovs/FOV_001/other_rounds/flamingo/registration.json",
+    "fovs/FOV_001/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_001/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.sample.FOV_001.json",
+   "log": "workflow/logs/morphology.sample.FOV_001.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "morphology",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-morphology-only/workflow/manifest.json",
+    "--task",
+    "morphology/sample/FOV_001"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "morphology"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "morphology/sample/FOV_002",
+   "kind": "morphology",
+   "group": "morphology",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002"
+   },
+   "needs": [],
+   "inputs": [
+    "input:flamingo/FOV_002/ch04.tif",
+    "input:flamingo/FOV_002/ch05.tif",
+    "input:round1/FOV_002/ch04.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_002/nuclei_registration.json",
+    "fovs/FOV_002/other_rounds/flamingo/image.ome.tif",
+    "fovs/FOV_002/other_rounds/flamingo/registration.json",
+    "fovs/FOV_002/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_002/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.sample.FOV_002.json",
+   "log": "workflow/logs/morphology.sample.FOV_002.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "morphology",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-morphology-only/workflow/manifest.json",
+    "--task",
+    "morphology/sample/FOV_002"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "morphology"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "morphology/sample/FOV_003",
+   "kind": "morphology",
+   "group": "morphology",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003"
+   },
+   "needs": [],
+   "inputs": [
+    "input:flamingo/FOV_003/ch04.tif",
+    "input:flamingo/FOV_003/ch05.tif",
+    "input:round1/FOV_003/ch04.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_003/nuclei_registration.json",
+    "fovs/FOV_003/other_rounds/flamingo/image.ome.tif",
+    "fovs/FOV_003/other_rounds/flamingo/registration.json",
+    "fovs/FOV_003/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_003/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.sample.FOV_003.json",
+   "log": "workflow/logs/morphology.sample.FOV_003.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "morphology",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-morphology-only/workflow/manifest.json",
+    "--task",
+    "morphology/sample/FOV_003"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "morphology"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "morphology/sample/FOV_004",
+   "kind": "morphology",
+   "group": "morphology",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004"
+   },
+   "needs": [],
+   "inputs": [
+    "input:flamingo/FOV_004/ch04.tif",
+    "input:flamingo/FOV_004/ch05.tif",
+    "input:round1/FOV_004/ch04.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_004/nuclei_registration.json",
+    "fovs/FOV_004/other_rounds/flamingo/image.ome.tif",
+    "fovs/FOV_004/other_rounds/flamingo/registration.json",
+    "fovs/FOV_004/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_004/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.sample.FOV_004.json",
+   "log": "workflow/logs/morphology.sample.FOV_004.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "morphology",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-morphology-only/workflow/manifest.json",
+    "--task",
+    "morphology/sample/FOV_004"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "morphology"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_001/nucleus",
+   "kind": "segment",
+   "group": "segment.nucleus",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001",
+    "run": "nucleus"
+   },
+   "needs": [
+    "morphology/sample/FOV_001"
+   ],
+   "inputs": [
+    "fovs/FOV_001/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_001/other_rounds/reference_stain/registration.json"
+   ],
+   "outputs": [
+    "fovs/FOV_001/segmentation/nucleus/input.ome.tif",
+    "fovs/FOV_001/segmentation/nucleus/labels.tif",
+    "fovs/FOV_001/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_001.nucleus.json",
+   "log": "workflow/logs/segment.sample.FOV_001.nucleus.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-morphology-only/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_001/nucleus"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": true,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_002/nucleus",
+   "kind": "segment",
+   "group": "segment.nucleus",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002",
+    "run": "nucleus"
+   },
+   "needs": [
+    "morphology/sample/FOV_002"
+   ],
+   "inputs": [
+    "fovs/FOV_002/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_002/other_rounds/reference_stain/registration.json"
+   ],
+   "outputs": [
+    "fovs/FOV_002/segmentation/nucleus/input.ome.tif",
+    "fovs/FOV_002/segmentation/nucleus/labels.tif",
+    "fovs/FOV_002/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_002.nucleus.json",
+   "log": "workflow/logs/segment.sample.FOV_002.nucleus.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-morphology-only/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_002/nucleus"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": true,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_003/nucleus",
+   "kind": "segment",
+   "group": "segment.nucleus",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003",
+    "run": "nucleus"
+   },
+   "needs": [
+    "morphology/sample/FOV_003"
+   ],
+   "inputs": [
+    "fovs/FOV_003/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_003/other_rounds/reference_stain/registration.json"
+   ],
+   "outputs": [
+    "fovs/FOV_003/segmentation/nucleus/input.ome.tif",
+    "fovs/FOV_003/segmentation/nucleus/labels.tif",
+    "fovs/FOV_003/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_003.nucleus.json",
+   "log": "workflow/logs/segment.sample.FOV_003.nucleus.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-morphology-only/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_003/nucleus"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": true,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_004/nucleus",
+   "kind": "segment",
+   "group": "segment.nucleus",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004",
+    "run": "nucleus"
+   },
+   "needs": [
+    "morphology/sample/FOV_004"
+   ],
+   "inputs": [
+    "fovs/FOV_004/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_004/other_rounds/reference_stain/registration.json"
+   ],
+   "outputs": [
+    "fovs/FOV_004/segmentation/nucleus/input.ome.tif",
+    "fovs/FOV_004/segmentation/nucleus/labels.tif",
+    "fovs/FOV_004/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_004.nucleus.json",
+   "log": "workflow/logs/segment.sample.FOV_004.nucleus.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-morphology-only/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_004/nucleus"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": true,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  }
+ ]
+}

@@ -57,10 +57,11 @@ The files:
 * `record_core_values.py`: the recording script; `README.md`: this file.
 
 The comparison is `workflow_golden.py`'s (`docs/contributing.md`, "Expected values and
-tolerances"): integers, strings, statuses, booleans, the reference images, floats that hold
-integers and the fixture's digests exactly; computed float64 values (a record's floats and the
-tables' non-integer float columns) with `rtol=1e-9`, `atol=1e-12`; the output file digests
-(`compare: same_environment`) and the run records' digests of the stage records only in the
-recording environment (`compare --other-environment` skips them). X4 compares the refactored `fov`
+tolerances"): integers, strings, statuses, booleans, the reference images and floats that hold
+integers exactly; computed float64 values (a record's floats and the tables' non-integer float
+columns) with `rtol=1e-9`, `atol=1e-12`; the fixture's digests, the output file digests
+(`compare: same_environment`), the run records' digests of the stage records and the digests of
+`pre_qc.csv` and `molecules.csv` that the stage and run records hold only in the recording
+environment (`compare --other-environment` skips them). X4 compares the refactored `fov`
 task's outputs with these values and leaves out the contract's exceptions (OC3: the frame ids carry
 `/rotate:0`; OC4: the frame ids and inputs name absolute paths, written `<work>` here).

@@ -49,7 +49,8 @@ booleans, integer images, the fixture's file hashes), ``float64`` (rtol 1e-9, at
 atol 1e-6) and ``same_environment`` (the SHA-256 of an output file's bytes: identity in one environment, which a run
 in another environment does not have to reproduce). Time, host, version and absolute-path fields are left out of the
 records (``NORMALIZED``). A comparison across environments (``--other-environment``) also skips the fixture's file
-hashes and the file digests of the stage records and the report's records (``compare``).
+hashes, the file digests of the stage records and the report's records, and the two output-file digests the per-FOV
+records hold (``compare``).
 """
 from __future__ import annotations
 
@@ -707,6 +708,12 @@ STAGE_RECORD_DIGEST = re.compile(r"^records/fovs/[^/]+/run\.json\.checkpoints\.[
 # (W-751: AVX-512 off and OPENBLAS_CORETYPE=Zen changed only them), so a comparison across environments skips them.
 FIXTURE_DIGEST = "fixture:"
 REPORT_FILE_DIGEST = re.compile(r"^records/(?:[^/]+/)*report/[^/]+/report\.json\.files\[\d+\]\.sha256: ")
+# The output-file digests held inside the per-FOV records: the pre_qc stage record's digest of its table and run.json's
+# digest of molecules.csv. The expected values limit output-file digests to the recording environment (the core
+# values' README.md), and the molecule table is compared with float tolerances, so its bytes need not match across
+# CPUs (W-751 found these values changed under a reduced SIMD dispatch; operator decision, 2026-10-30). Matched exactly.
+OUTPUT_FILE_DIGEST = re.compile(r"^records/fovs/[^/]+/(?:checkpoints/pre_qc\.json\.files\[0\]|"
+                                r"run\.json\.outputs\.molecules)\.sha256: ")
 
 
 def _close(actual, expected, kind):
@@ -761,7 +768,8 @@ def compare(expected_dir, actual_dir, *, same_environment=True):
         lines += [f"records/{name}{line}" for line in record_differences(json.loads(a.read_text()),
                                                                           json.loads(e.read_text()))
                   if same_environment or not (STAGE_RECORD_DIGEST.match(f"records/{name}{line}")
-                                              or REPORT_FILE_DIGEST.match(f"records/{name}{line}"))]
+                                              or REPORT_FILE_DIGEST.match(f"records/{name}{line}")
+                                              or OUTPUT_FILE_DIGEST.match(f"records/{name}{line}"))]
     dtypes_e = json.loads((expected_dir / "dtypes.json").read_text())
     dtypes_a = json.loads((actual_dir / "dtypes.json").read_text())
     for name in sorted(set(dtypes_e) | set(dtypes_a)):
@@ -819,7 +827,8 @@ def main(argv=None):
     comparing.add_argument("actual", type=Path)
     comparing.add_argument("--other-environment", action="store_true",
                            help="skip the file digests: the same_environment values, the fixture's, "
-                                "the stage records' and the report files'")
+                                "the stage records', the report files' and the per-FOV records' digests of "
+                                "pre_qc.csv and molecules.csv")
     args = parser.parse_args(argv)
     if args.command == "fixture":
         record = write_fixture(args.work)

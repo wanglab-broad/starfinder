@@ -138,6 +138,27 @@ def add_output(path, slot, entry):
     _records.write_json(data, path)
 
 
+def set_workflow(path, workflow, configuration):
+    """Add the workflow task's section to a written run.json and rewrite it atomically (D8, additive in version 2).
+
+    ``workflow`` is the task record's ``workflow`` section (design/specs/orchestration.md, "Logging and records") and
+    ``configuration`` the resolved configuration the task ran with, ``{path, sha256}`` with the path relative to the
+    output root, which replaces ``workflow_config``. The other keys are kept; a record without ``workflow`` still
+    loads.
+    """
+    import json
+    data = json.loads(Path(path).read_text())
+    data["workflow_config"] = configuration
+    data["workflow"] = workflow
+    _records.write_json(data, path)
+
+
+def _resumed_stages(stage):
+    """The stages a resume after ``stage`` keeps: that stage and the earlier ones."""
+    from starfinder._checkpoint import STAGES
+    return STAGES[:STAGES.index(stage) + 1]
+
+
 class _RunRecord:
     """Mutable run.json content; rewritten atomically at step boundaries.
 
@@ -149,7 +170,7 @@ class _RunRecord:
     SHA-256.
     """
 
-    def __init__(self, fov, directory, checkpoints, config, execution):
+    def __init__(self, fov, directory, checkpoints, config, execution, resume=None):
         self.fov = fov
         self.directory = Path(directory)
         self.checkpoint_directory = checkpoint_dir(self.directory)
@@ -192,6 +213,20 @@ class _RunRecord:
             # The files written after the processing, by slot (add_output).
             "outputs": {},
         }
+        if dataset._workflow is not None:
+            # The workflow task's section (set_workflow), from the start, so that a verified resume can check it.
+            self.data["workflow"] = dataset._workflow
+        # The sections a verified resume keeps from the earlier record (FOV._resume_run) where this run has none.
+        self.kept = {}
+        if resume is not None:
+            stage, earlier = resume
+            names = [step["name"] for step in earlier["steps"]]
+            last = max(i for i, name in enumerate(names) if name == f"write_checkpoint:{stage}")
+            self.data.update(config=earlier["config"], inputs=list(earlier["inputs"]),
+                             steps=list(earlier["steps"][:last + 1]))
+            self.data[CHECKPOINTS] = {name: entry for name, entry in earlier[CHECKPOINTS].items()
+                                      if name in _resumed_stages(stage)}
+            self.kept = {key: earlier[key] for key in ("preprocessing", "registration", "transforms")}
 
     @property
     def path(self):
@@ -270,6 +305,10 @@ class _RunRecord:
         self.data.update(preprocessing=preprocessing,
                          registration=fov.registration_attempts,
                          transforms=_transforms(fov, self.written.get("registered", [])), counts=counts)
+        for key, value in self.kept.items():
+            # A resumed run that restored no state of these sections keeps the earlier record's.
+            if not self.data[key]:
+                self.data[key] = value
         # Through the module, so that a test can make the write fail.
         _records.write_json(self.data, self.path)
 

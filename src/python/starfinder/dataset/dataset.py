@@ -215,6 +215,8 @@ class Dataset:
     # translated. run.json records them (design/specs/checkpoints.md, "run.json").
     _reference_files: dict = field(default_factory=dict, repr=False, compare=False, kw_only=True)
     _workflow_config: Path | None = field(default=None, repr=False, compare=False, kw_only=True)
+    # The workflow task's section of run.json (starfinder.workflow, the fov command), written from the run's start.
+    _workflow: dict | None = field(default=None, repr=False, compare=False, kw_only=True)
     # True on the workflow's legacy route (MATLAB's rsf_single_fov, or stitch_subtile in the subtile and deep
     # modes): export with assignment=None then reads the one-based signal/{fov_id}_goodSpots.csv.
     _legacy_molecules: bool = field(default=False, repr=False, compare=False, kw_only=True)

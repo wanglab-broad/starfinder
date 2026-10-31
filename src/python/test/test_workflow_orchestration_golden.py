@@ -20,6 +20,7 @@ pytestmark = [pytest.mark.workflow]
 ROOT = Path(__file__).resolve().parents[3]
 EXPECTED = Path(__file__).parent / "data" / "expected" / "test_workflow_orchestration_golden"
 EXPECTED_EXPORT = Path(__file__).parent / "data" / "expected" / "test_workflow_orchestration_golden_export"
+EXPECTED_CORE = Path(__file__).parent / "data" / "expected" / "test_workflow_core_golden"
 NO_SNAKEMAKE = "the golden baseline runs the workflow with Snakemake 9, which this environment does not have"
 
 
@@ -90,6 +91,13 @@ def _table_value(folder):
     table.write_text(text.replace(",0.1807337788883871\n", ",0.5\n"))
 
 
+def _core_table_value(folder):
+    table = folder / "FOV_001-molecules.csv"
+    text = table.read_text()
+    assert text.count(",0.22604338288727557\n") == 1
+    table.write_text(text.replace(",0.22604338288727557\n", ",0.5\n"))
+
+
 def _set(*path, value):
     def change(data):
         for key in path[:-1]:
@@ -100,7 +108,8 @@ def _set(*path, value):
 
 OTHER = lambda _: "0" * 64  # noqa: E731
 # The skips of a comparison across environments (W-751): the fixture's digests and the report files' digests, at any
-# depth of the records. Each case changes one value of a copy of a committed expected folder.
+# depth of the records, and the output-file digests the per-FOV records hold of pre_qc.csv and molecules.csv (W-647).
+# Each case changes one value of a copy of a committed expected folder.
 SKIPPED = {
     "fixture digest": (EXPECTED, _values(_fixture_digest), "fixture:"),
     "report file digest": (EXPECTED, _record("report/sample/report.json", _set("files", 2, "sha256", value=OTHER)),
@@ -108,6 +117,15 @@ SKIPPED = {
     "report file digest of a route": (EXPECTED_EXPORT, _record("per_fov/report/sample/report.json",
                                                                _set("files", 2, "sha256", value=OTHER)),
                                       "records/per_fov/report/sample/report.json.files[2].sha256: "),
+    "run output digest": (EXPECTED, _record("fovs/FOV_001/run.json", _set("outputs", "molecules", "sha256",
+                                                                            value=OTHER)),
+                          "records/fovs/FOV_001/run.json.outputs.molecules.sha256: "),
+    "core run output digest": (EXPECTED_CORE, _record("fovs/FOV_001/run.json", _set("outputs", "molecules", "sha256",
+                                                                                     value=OTHER)),
+                               "records/fovs/FOV_001/run.json.outputs.molecules.sha256: "),
+    "core pre_qc table digest": (EXPECTED_CORE, _record("fovs/FOV_002/checkpoints/pre_qc.json",
+                                                        _set("files", 0, "sha256", value=OTHER)),
+                                 "records/fovs/FOV_002/checkpoints/pre_qc.json.files[0].sha256: "),
 }
 # What the skips leave in: each change is reported in both comparisons.
 REPORTED = {
@@ -120,9 +138,14 @@ REPORTED = {
                        "records/fovs/FOV_001/run.json.outputs.molecules.rows: "),
     "report input digest": (EXPECTED, _record("report/sample/report.json", _set("inputs", 4, "sha256", value=OTHER)),
                             "records/report/sample/report.json.inputs[4].sha256: "),
-    "run output digest": (EXPECTED, _record("fovs/FOV_001/run.json", _set("outputs", "molecules", "sha256",
-                                                                            value=OTHER)),
-                          "records/fovs/FOV_001/run.json.outputs.molecules.sha256: "),
+    "core table value": (EXPECTED_CORE, _core_table_value, "FOV_001-molecules.csv: "),
+    "core stage count": (EXPECTED_CORE, _record("fovs/FOV_001/run.json", _set("counts", "spots", value=lambda v: v + 1)),
+                         "records/fovs/FOV_001/run.json.counts.spots: "),
+    "core candidates table digest": (EXPECTED_CORE, _record("fovs/FOV_001/checkpoints/candidates.json",
+                                                            _set("files", 0, "sha256", value=OTHER)),
+                                     "records/fovs/FOV_001/checkpoints/candidates.json.files[0].sha256: "),
+    "core input digest": (EXPECTED_CORE, _record("fovs/FOV_001/run.json", _set("inputs", 0, "sha256", value=OTHER)),
+                          "records/fovs/FOV_001/run.json.inputs[0].sha256: "),
 }
 
 
@@ -135,7 +158,7 @@ def _changed(tmp_path, expected, change):
 
 @pytest.mark.contract
 @pytest.mark.parametrize("case", sorted(SKIPPED))
-def test_a_comparison_across_environments_skips_only_the_fixture_and_report_file_digests(tmp_path, case):
+def test_a_comparison_across_environments_skips_only_the_fixture_report_and_output_file_digests(tmp_path, case):
     G = _golden()
     expected, change, prefix = SKIPPED[case]
     actual = _changed(tmp_path, expected, change)

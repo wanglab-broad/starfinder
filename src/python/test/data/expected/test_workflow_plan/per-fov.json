@@ -1,0 +1,2207 @@
+{
+ "format": "starfinder.workflow.manifest/1",
+ "backend": "python",
+ "configuration": {
+  "path": "workflow/resolved.json",
+  "sha256": "<sha256>",
+  "configuration_sha256": "<sha256>"
+ },
+ "package": {
+  "version": "0.0.0+test",
+  "git_commit": null,
+  "git_dirty": false
+ },
+ "roots": {
+  "input": "<work>/input/sample-tiny-v1/sample",
+  "output": "<work>/output/sample-tiny-v1/example-per-fov"
+ },
+ "membership": {
+  "fovs": [
+   "FOV_001",
+   "FOV_002",
+   "FOV_003",
+   "FOV_004"
+  ],
+  "samples": {
+   "sample": [
+    "FOV_001",
+    "FOV_002",
+    "FOV_003",
+    "FOV_004"
+   ]
+  },
+  "selected_fovs": null
+ },
+ "inputs": {
+  "files": {
+   "fovs.csv": {
+    "path": "fovs.csv",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "codebook": {
+    "path": "genes.csv",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "segmentation.nucleus.FOV_001": {
+    "path": "<work>/labels/FOV_001.tif",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "segmentation.cell.FOV_001": {
+    "path": "<work>/labels/FOV_001.tif",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "segmentation.nucleus.FOV_002": {
+    "path": "<work>/labels/FOV_002.tif",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "segmentation.cell.FOV_002": {
+    "path": "<work>/labels/FOV_002.tif",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "segmentation.nucleus.FOV_003": {
+    "path": "<work>/labels/FOV_003.tif",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "segmentation.cell.FOV_003": {
+    "path": "<work>/labels/FOV_003.tif",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "segmentation.nucleus.FOV_004": {
+    "path": "<work>/labels/FOV_004.tif",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "segmentation.cell.FOV_004": {
+    "path": "<work>/labels/FOV_004.tif",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "positions": {
+    "path": "positions.csv",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   }
+  },
+  "images": {
+   "FOV_001": {
+    "round1": {
+     "ch00": {
+      "path": "round1/FOV_001/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round1/FOV_001/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round1/FOV_001/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round1/FOV_001/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round2": {
+     "ch00": {
+      "path": "round2/FOV_001/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round2/FOV_001/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round2/FOV_001/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round2/FOV_001/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round3": {
+     "ch00": {
+      "path": "round3/FOV_001/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round3/FOV_001/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round3/FOV_001/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round3/FOV_001/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round4": {
+     "ch00": {
+      "path": "round4/FOV_001/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round4/FOV_001/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round4/FOV_001/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round4/FOV_001/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "flamingo": {
+     "ch04": {
+      "path": "flamingo/FOV_001/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch05": {
+      "path": "flamingo/FOV_001/ch05.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "reference_stain": {
+     "ch04": {
+      "path": "round1/FOV_001/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   },
+   "FOV_002": {
+    "round1": {
+     "ch00": {
+      "path": "round1/FOV_002/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round1/FOV_002/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round1/FOV_002/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round1/FOV_002/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round2": {
+     "ch00": {
+      "path": "round2/FOV_002/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round2/FOV_002/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round2/FOV_002/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round2/FOV_002/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round3": {
+     "ch00": {
+      "path": "round3/FOV_002/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round3/FOV_002/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round3/FOV_002/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round3/FOV_002/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round4": {
+     "ch00": {
+      "path": "round4/FOV_002/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round4/FOV_002/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round4/FOV_002/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round4/FOV_002/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "flamingo": {
+     "ch04": {
+      "path": "flamingo/FOV_002/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch05": {
+      "path": "flamingo/FOV_002/ch05.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "reference_stain": {
+     "ch04": {
+      "path": "round1/FOV_002/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   },
+   "FOV_003": {
+    "round1": {
+     "ch00": {
+      "path": "round1/FOV_003/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round1/FOV_003/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round1/FOV_003/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round1/FOV_003/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round2": {
+     "ch00": {
+      "path": "round2/FOV_003/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round2/FOV_003/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round2/FOV_003/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round2/FOV_003/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round3": {
+     "ch00": {
+      "path": "round3/FOV_003/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round3/FOV_003/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round3/FOV_003/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round3/FOV_003/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round4": {
+     "ch00": {
+      "path": "round4/FOV_003/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round4/FOV_003/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round4/FOV_003/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round4/FOV_003/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "flamingo": {
+     "ch04": {
+      "path": "flamingo/FOV_003/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch05": {
+      "path": "flamingo/FOV_003/ch05.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "reference_stain": {
+     "ch04": {
+      "path": "round1/FOV_003/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   },
+   "FOV_004": {
+    "round1": {
+     "ch00": {
+      "path": "round1/FOV_004/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round1/FOV_004/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round1/FOV_004/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round1/FOV_004/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round2": {
+     "ch00": {
+      "path": "round2/FOV_004/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round2/FOV_004/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round2/FOV_004/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round2/FOV_004/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round3": {
+     "ch00": {
+      "path": "round3/FOV_004/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round3/FOV_004/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round3/FOV_004/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round3/FOV_004/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round4": {
+     "ch00": {
+      "path": "round4/FOV_004/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round4/FOV_004/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round4/FOV_004/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round4/FOV_004/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "flamingo": {
+     "ch04": {
+      "path": "flamingo/FOV_004/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch05": {
+      "path": "flamingo/FOV_004/ch05.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "reference_stain": {
+     "ch04": {
+      "path": "round1/FOV_004/ch04.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   }
+  }
+ },
+ "export_route": "per_fov",
+ "groups": [
+  {
+   "name": "summarize.percentile_normalization",
+   "kind": "summarize",
+   "wildcards": [
+    "sample",
+    "step",
+    "fov"
+   ],
+   "outputs": [
+    "statistics/{sample}/{step}/histograms/{fov}.npz"
+   ],
+   "record": "workflow/tasks/summarize.{sample}.{step}.{fov}.json",
+   "log": "workflow/logs/summarize.{sample}.{step}.{fov}.log",
+   "temporary": []
+  },
+  {
+   "name": "merge.percentile_normalization",
+   "kind": "merge",
+   "wildcards": [
+    "sample",
+    "step"
+   ],
+   "outputs": [
+    "statistics/{sample}/{step}/supplied.json"
+   ],
+   "record": "workflow/tasks/merge.{sample}.{step}.json",
+   "log": "workflow/logs/merge.{sample}.{step}.log",
+   "temporary": []
+  },
+  {
+   "name": "fov",
+   "kind": "fov",
+   "wildcards": [
+    "sample",
+    "fov"
+   ],
+   "outputs": [
+    "fovs/{fov}/checkpoints/candidates.json",
+    "fovs/{fov}/checkpoints/pre_qc.json",
+    "fovs/{fov}/molecules.csv",
+    "fovs/{fov}/reference.tif",
+    "fovs/{fov}/run.json"
+   ],
+   "record": "workflow/tasks/fov.{sample}.{fov}.json",
+   "log": "workflow/logs/fov.{sample}.{fov}.log",
+   "temporary": []
+  },
+  {
+   "name": "morphology",
+   "kind": "morphology",
+   "wildcards": [
+    "sample",
+    "fov"
+   ],
+   "outputs": [
+    "fovs/{fov}/nuclei_registration.json",
+    "fovs/{fov}/other_rounds/flamingo/image.ome.tif",
+    "fovs/{fov}/other_rounds/flamingo/registration.json",
+    "fovs/{fov}/other_rounds/reference_stain/image.ome.tif",
+    "fovs/{fov}/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.{sample}.{fov}.json",
+   "log": "workflow/logs/morphology.{sample}.{fov}.log",
+   "temporary": []
+  },
+  {
+   "name": "segment.nucleus",
+   "kind": "segment",
+   "wildcards": [
+    "sample",
+    "fov"
+   ],
+   "outputs": [
+    "fovs/{fov}/segmentation/nucleus/labels.tif",
+    "fovs/{fov}/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.{sample}.{fov}.nucleus.json",
+   "log": "workflow/logs/segment.{sample}.{fov}.nucleus.log",
+   "temporary": []
+  },
+  {
+   "name": "segment.cell",
+   "kind": "segment",
+   "wildcards": [
+    "sample",
+    "fov"
+   ],
+   "outputs": [
+    "fovs/{fov}/segmentation/cell/labels.tif",
+    "fovs/{fov}/segmentation/cell/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.{sample}.{fov}.cell.json",
+   "log": "workflow/logs/segment.{sample}.{fov}.cell.log",
+   "temporary": []
+  },
+  {
+   "name": "assign.default",
+   "kind": "assign",
+   "wildcards": [
+    "sample",
+    "fov"
+   ],
+   "outputs": [
+    "fovs/{fov}/assignment/default/assignment.json",
+    "fovs/{fov}/assignment/default/cells.csv",
+    "fovs/{fov}/assignment/default/counts.csv",
+    "fovs/{fov}/assignment/default/molecules.csv",
+    "fovs/{fov}/assignment/default/nuclei.csv",
+    "fovs/{fov}/previews/"
+   ],
+   "record": "workflow/tasks/assign.{sample}.{fov}.default.json",
+   "log": "workflow/logs/assign.{sample}.{fov}.default.log",
+   "temporary": []
+  },
+  {
+   "name": "stitch",
+   "kind": "stitch",
+   "wildcards": [
+    "sample"
+   ],
+   "outputs": [
+    "stitching/{sample}/fovs.csv",
+    "stitching/{sample}/links.csv",
+    "stitching/{sample}/placement.json"
+   ],
+   "record": "workflow/tasks/stitch.{sample}.json",
+   "log": "workflow/logs/stitch.{sample}.log",
+   "temporary": []
+  },
+  {
+   "name": "export",
+   "kind": "export",
+   "wildcards": [
+    "sample"
+   ],
+   "outputs": [
+    "export/{sample}/export.json",
+    "export/{sample}/previews/"
+   ],
+   "record": "workflow/tasks/export.{sample}.json",
+   "log": "workflow/logs/export.{sample}.log",
+   "temporary": []
+  },
+  {
+   "name": "report",
+   "kind": "report",
+   "wildcards": [
+    "sample"
+   ],
+   "outputs": [
+    "report/{sample}/report.json"
+   ],
+   "record": "workflow/tasks/report.{sample}.json",
+   "log": "workflow/logs/report.{sample}.log",
+   "temporary": []
+  },
+  {
+   "name": "compare",
+   "kind": "compare",
+   "wildcards": [],
+   "outputs": [
+    "report/index.html",
+    "report/samples.csv"
+   ],
+   "record": "workflow/tasks/compare.json",
+   "log": "workflow/logs/compare.log",
+   "temporary": []
+  }
+ ],
+ "tasks": [
+  {
+   "id": "summarize/sample/percentile_normalization/FOV_001",
+   "kind": "summarize",
+   "group": "summarize.percentile_normalization",
+   "identity": {
+    "sample": "sample",
+    "step": "percentile_normalization",
+    "fov": "FOV_001"
+   },
+   "needs": [],
+   "inputs": [
+    "input:round1/FOV_001/ch00.ome.tif",
+    "input:round1/FOV_001/ch01.ome.tif",
+    "input:round1/FOV_001/ch02.ome.tif",
+    "input:round1/FOV_001/ch03.ome.tif",
+    "input:round2/FOV_001/ch00.ome.tif",
+    "input:round2/FOV_001/ch01.ome.tif",
+    "input:round2/FOV_001/ch02.ome.tif",
+    "input:round2/FOV_001/ch03.ome.tif",
+    "input:round3/FOV_001/ch00.ome.tif",
+    "input:round3/FOV_001/ch01.ome.tif",
+    "input:round3/FOV_001/ch02.ome.tif",
+    "input:round3/FOV_001/ch03.ome.tif",
+    "input:round4/FOV_001/ch00.ome.tif",
+    "input:round4/FOV_001/ch01.ome.tif",
+    "input:round4/FOV_001/ch02.ome.tif",
+    "input:round4/FOV_001/ch03.ome.tif"
+   ],
+   "outputs": [
+    "statistics/sample/percentile_normalization/histograms/FOV_001.npz"
+   ],
+   "record": "workflow/tasks/summarize.sample.percentile_normalization.FOV_001.json",
+   "log": "workflow/logs/summarize.sample.percentile_normalization.FOV_001.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "summarize",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "summarize/sample/percentile_normalization/FOV_001"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "summarize/sample/percentile_normalization/FOV_002",
+   "kind": "summarize",
+   "group": "summarize.percentile_normalization",
+   "identity": {
+    "sample": "sample",
+    "step": "percentile_normalization",
+    "fov": "FOV_002"
+   },
+   "needs": [],
+   "inputs": [
+    "input:round1/FOV_002/ch00.ome.tif",
+    "input:round1/FOV_002/ch01.ome.tif",
+    "input:round1/FOV_002/ch02.ome.tif",
+    "input:round1/FOV_002/ch03.ome.tif",
+    "input:round2/FOV_002/ch00.ome.tif",
+    "input:round2/FOV_002/ch01.ome.tif",
+    "input:round2/FOV_002/ch02.ome.tif",
+    "input:round2/FOV_002/ch03.ome.tif",
+    "input:round3/FOV_002/ch00.ome.tif",
+    "input:round3/FOV_002/ch01.ome.tif",
+    "input:round3/FOV_002/ch02.ome.tif",
+    "input:round3/FOV_002/ch03.ome.tif",
+    "input:round4/FOV_002/ch00.ome.tif",
+    "input:round4/FOV_002/ch01.ome.tif",
+    "input:round4/FOV_002/ch02.ome.tif",
+    "input:round4/FOV_002/ch03.ome.tif"
+   ],
+   "outputs": [
+    "statistics/sample/percentile_normalization/histograms/FOV_002.npz"
+   ],
+   "record": "workflow/tasks/summarize.sample.percentile_normalization.FOV_002.json",
+   "log": "workflow/logs/summarize.sample.percentile_normalization.FOV_002.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "summarize",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "summarize/sample/percentile_normalization/FOV_002"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "summarize/sample/percentile_normalization/FOV_003",
+   "kind": "summarize",
+   "group": "summarize.percentile_normalization",
+   "identity": {
+    "sample": "sample",
+    "step": "percentile_normalization",
+    "fov": "FOV_003"
+   },
+   "needs": [],
+   "inputs": [
+    "input:round1/FOV_003/ch00.ome.tif",
+    "input:round1/FOV_003/ch01.ome.tif",
+    "input:round1/FOV_003/ch02.ome.tif",
+    "input:round1/FOV_003/ch03.ome.tif",
+    "input:round2/FOV_003/ch00.ome.tif",
+    "input:round2/FOV_003/ch01.ome.tif",
+    "input:round2/FOV_003/ch02.ome.tif",
+    "input:round2/FOV_003/ch03.ome.tif",
+    "input:round3/FOV_003/ch00.ome.tif",
+    "input:round3/FOV_003/ch01.ome.tif",
+    "input:round3/FOV_003/ch02.ome.tif",
+    "input:round3/FOV_003/ch03.ome.tif",
+    "input:round4/FOV_003/ch00.ome.tif",
+    "input:round4/FOV_003/ch01.ome.tif",
+    "input:round4/FOV_003/ch02.ome.tif",
+    "input:round4/FOV_003/ch03.ome.tif"
+   ],
+   "outputs": [
+    "statistics/sample/percentile_normalization/histograms/FOV_003.npz"
+   ],
+   "record": "workflow/tasks/summarize.sample.percentile_normalization.FOV_003.json",
+   "log": "workflow/logs/summarize.sample.percentile_normalization.FOV_003.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "summarize",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "summarize/sample/percentile_normalization/FOV_003"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "summarize/sample/percentile_normalization/FOV_004",
+   "kind": "summarize",
+   "group": "summarize.percentile_normalization",
+   "identity": {
+    "sample": "sample",
+    "step": "percentile_normalization",
+    "fov": "FOV_004"
+   },
+   "needs": [],
+   "inputs": [
+    "input:round1/FOV_004/ch00.ome.tif",
+    "input:round1/FOV_004/ch01.ome.tif",
+    "input:round1/FOV_004/ch02.ome.tif",
+    "input:round1/FOV_004/ch03.ome.tif",
+    "input:round2/FOV_004/ch00.ome.tif",
+    "input:round2/FOV_004/ch01.ome.tif",
+    "input:round2/FOV_004/ch02.ome.tif",
+    "input:round2/FOV_004/ch03.ome.tif",
+    "input:round3/FOV_004/ch00.ome.tif",
+    "input:round3/FOV_004/ch01.ome.tif",
+    "input:round3/FOV_004/ch02.ome.tif",
+    "input:round3/FOV_004/ch03.ome.tif",
+    "input:round4/FOV_004/ch00.ome.tif",
+    "input:round4/FOV_004/ch01.ome.tif",
+    "input:round4/FOV_004/ch02.ome.tif",
+    "input:round4/FOV_004/ch03.ome.tif"
+   ],
+   "outputs": [
+    "statistics/sample/percentile_normalization/histograms/FOV_004.npz"
+   ],
+   "record": "workflow/tasks/summarize.sample.percentile_normalization.FOV_004.json",
+   "log": "workflow/logs/summarize.sample.percentile_normalization.FOV_004.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "summarize",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "summarize/sample/percentile_normalization/FOV_004"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "merge/sample/percentile_normalization",
+   "kind": "merge",
+   "group": "merge.percentile_normalization",
+   "identity": {
+    "sample": "sample",
+    "step": "percentile_normalization"
+   },
+   "needs": [
+    "summarize/sample/percentile_normalization/FOV_001",
+    "summarize/sample/percentile_normalization/FOV_002",
+    "summarize/sample/percentile_normalization/FOV_003",
+    "summarize/sample/percentile_normalization/FOV_004"
+   ],
+   "inputs": [
+    "statistics/sample/percentile_normalization/histograms/FOV_001.npz",
+    "statistics/sample/percentile_normalization/histograms/FOV_002.npz",
+    "statistics/sample/percentile_normalization/histograms/FOV_003.npz",
+    "statistics/sample/percentile_normalization/histograms/FOV_004.npz"
+   ],
+   "outputs": [
+    "statistics/sample/percentile_normalization/supplied.json"
+   ],
+   "record": "workflow/tasks/merge.sample.percentile_normalization.json",
+   "log": "workflow/logs/merge.sample.percentile_normalization.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "merge",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "merge/sample/percentile_normalization"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "fov/sample/FOV_001",
+   "kind": "fov",
+   "group": "fov",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001"
+   },
+   "needs": [
+    "merge/sample/percentile_normalization"
+   ],
+   "inputs": [
+    "input:genes.csv",
+    "input:round1/FOV_001/ch00.ome.tif",
+    "input:round1/FOV_001/ch01.ome.tif",
+    "input:round1/FOV_001/ch02.ome.tif",
+    "input:round1/FOV_001/ch03.ome.tif",
+    "input:round2/FOV_001/ch00.ome.tif",
+    "input:round2/FOV_001/ch01.ome.tif",
+    "input:round2/FOV_001/ch02.ome.tif",
+    "input:round2/FOV_001/ch03.ome.tif",
+    "input:round3/FOV_001/ch00.ome.tif",
+    "input:round3/FOV_001/ch01.ome.tif",
+    "input:round3/FOV_001/ch02.ome.tif",
+    "input:round3/FOV_001/ch03.ome.tif",
+    "input:round4/FOV_001/ch00.ome.tif",
+    "input:round4/FOV_001/ch01.ome.tif",
+    "input:round4/FOV_001/ch02.ome.tif",
+    "input:round4/FOV_001/ch03.ome.tif",
+    "statistics/sample/percentile_normalization/supplied.json"
+   ],
+   "outputs": [
+    "fovs/FOV_001/checkpoints/candidates.json",
+    "fovs/FOV_001/checkpoints/pre_qc.json",
+    "fovs/FOV_001/molecules.csv",
+    "fovs/FOV_001/reference.tif",
+    "fovs/FOV_001/run.json"
+   ],
+   "record": "workflow/tasks/fov.sample.FOV_001.json",
+   "log": "workflow/logs/fov.sample.FOV_001.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "fov",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "fov/sample/FOV_001"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 16000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "fov/sample/FOV_002",
+   "kind": "fov",
+   "group": "fov",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002"
+   },
+   "needs": [
+    "merge/sample/percentile_normalization"
+   ],
+   "inputs": [
+    "input:genes.csv",
+    "input:round1/FOV_002/ch00.ome.tif",
+    "input:round1/FOV_002/ch01.ome.tif",
+    "input:round1/FOV_002/ch02.ome.tif",
+    "input:round1/FOV_002/ch03.ome.tif",
+    "input:round2/FOV_002/ch00.ome.tif",
+    "input:round2/FOV_002/ch01.ome.tif",
+    "input:round2/FOV_002/ch02.ome.tif",
+    "input:round2/FOV_002/ch03.ome.tif",
+    "input:round3/FOV_002/ch00.ome.tif",
+    "input:round3/FOV_002/ch01.ome.tif",
+    "input:round3/FOV_002/ch02.ome.tif",
+    "input:round3/FOV_002/ch03.ome.tif",
+    "input:round4/FOV_002/ch00.ome.tif",
+    "input:round4/FOV_002/ch01.ome.tif",
+    "input:round4/FOV_002/ch02.ome.tif",
+    "input:round4/FOV_002/ch03.ome.tif",
+    "statistics/sample/percentile_normalization/supplied.json"
+   ],
+   "outputs": [
+    "fovs/FOV_002/checkpoints/candidates.json",
+    "fovs/FOV_002/checkpoints/pre_qc.json",
+    "fovs/FOV_002/molecules.csv",
+    "fovs/FOV_002/reference.tif",
+    "fovs/FOV_002/run.json"
+   ],
+   "record": "workflow/tasks/fov.sample.FOV_002.json",
+   "log": "workflow/logs/fov.sample.FOV_002.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "fov",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "fov/sample/FOV_002"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 16000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "fov/sample/FOV_003",
+   "kind": "fov",
+   "group": "fov",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003"
+   },
+   "needs": [
+    "merge/sample/percentile_normalization"
+   ],
+   "inputs": [
+    "input:genes.csv",
+    "input:round1/FOV_003/ch00.ome.tif",
+    "input:round1/FOV_003/ch01.ome.tif",
+    "input:round1/FOV_003/ch02.ome.tif",
+    "input:round1/FOV_003/ch03.ome.tif",
+    "input:round2/FOV_003/ch00.ome.tif",
+    "input:round2/FOV_003/ch01.ome.tif",
+    "input:round2/FOV_003/ch02.ome.tif",
+    "input:round2/FOV_003/ch03.ome.tif",
+    "input:round3/FOV_003/ch00.ome.tif",
+    "input:round3/FOV_003/ch01.ome.tif",
+    "input:round3/FOV_003/ch02.ome.tif",
+    "input:round3/FOV_003/ch03.ome.tif",
+    "input:round4/FOV_003/ch00.ome.tif",
+    "input:round4/FOV_003/ch01.ome.tif",
+    "input:round4/FOV_003/ch02.ome.tif",
+    "input:round4/FOV_003/ch03.ome.tif",
+    "statistics/sample/percentile_normalization/supplied.json"
+   ],
+   "outputs": [
+    "fovs/FOV_003/checkpoints/candidates.json",
+    "fovs/FOV_003/checkpoints/pre_qc.json",
+    "fovs/FOV_003/molecules.csv",
+    "fovs/FOV_003/reference.tif",
+    "fovs/FOV_003/run.json"
+   ],
+   "record": "workflow/tasks/fov.sample.FOV_003.json",
+   "log": "workflow/logs/fov.sample.FOV_003.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "fov",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "fov/sample/FOV_003"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 16000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "fov/sample/FOV_004",
+   "kind": "fov",
+   "group": "fov",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004"
+   },
+   "needs": [
+    "merge/sample/percentile_normalization"
+   ],
+   "inputs": [
+    "input:genes.csv",
+    "input:round1/FOV_004/ch00.ome.tif",
+    "input:round1/FOV_004/ch01.ome.tif",
+    "input:round1/FOV_004/ch02.ome.tif",
+    "input:round1/FOV_004/ch03.ome.tif",
+    "input:round2/FOV_004/ch00.ome.tif",
+    "input:round2/FOV_004/ch01.ome.tif",
+    "input:round2/FOV_004/ch02.ome.tif",
+    "input:round2/FOV_004/ch03.ome.tif",
+    "input:round3/FOV_004/ch00.ome.tif",
+    "input:round3/FOV_004/ch01.ome.tif",
+    "input:round3/FOV_004/ch02.ome.tif",
+    "input:round3/FOV_004/ch03.ome.tif",
+    "input:round4/FOV_004/ch00.ome.tif",
+    "input:round4/FOV_004/ch01.ome.tif",
+    "input:round4/FOV_004/ch02.ome.tif",
+    "input:round4/FOV_004/ch03.ome.tif",
+    "statistics/sample/percentile_normalization/supplied.json"
+   ],
+   "outputs": [
+    "fovs/FOV_004/checkpoints/candidates.json",
+    "fovs/FOV_004/checkpoints/pre_qc.json",
+    "fovs/FOV_004/molecules.csv",
+    "fovs/FOV_004/reference.tif",
+    "fovs/FOV_004/run.json"
+   ],
+   "record": "workflow/tasks/fov.sample.FOV_004.json",
+   "log": "workflow/logs/fov.sample.FOV_004.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "fov",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "fov/sample/FOV_004"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 16000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "morphology/sample/FOV_001",
+   "kind": "morphology",
+   "group": "morphology",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001"
+   },
+   "needs": [],
+   "inputs": [
+    "input:flamingo/FOV_001/ch04.tif",
+    "input:flamingo/FOV_001/ch05.tif",
+    "input:round1/FOV_001/ch04.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_001/nuclei_registration.json",
+    "fovs/FOV_001/other_rounds/flamingo/image.ome.tif",
+    "fovs/FOV_001/other_rounds/flamingo/registration.json",
+    "fovs/FOV_001/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_001/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.sample.FOV_001.json",
+   "log": "workflow/logs/morphology.sample.FOV_001.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "morphology",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "morphology/sample/FOV_001"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "morphology"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "morphology/sample/FOV_002",
+   "kind": "morphology",
+   "group": "morphology",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002"
+   },
+   "needs": [],
+   "inputs": [
+    "input:flamingo/FOV_002/ch04.tif",
+    "input:flamingo/FOV_002/ch05.tif",
+    "input:round1/FOV_002/ch04.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_002/nuclei_registration.json",
+    "fovs/FOV_002/other_rounds/flamingo/image.ome.tif",
+    "fovs/FOV_002/other_rounds/flamingo/registration.json",
+    "fovs/FOV_002/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_002/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.sample.FOV_002.json",
+   "log": "workflow/logs/morphology.sample.FOV_002.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "morphology",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "morphology/sample/FOV_002"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "morphology"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "morphology/sample/FOV_003",
+   "kind": "morphology",
+   "group": "morphology",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003"
+   },
+   "needs": [],
+   "inputs": [
+    "input:flamingo/FOV_003/ch04.tif",
+    "input:flamingo/FOV_003/ch05.tif",
+    "input:round1/FOV_003/ch04.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_003/nuclei_registration.json",
+    "fovs/FOV_003/other_rounds/flamingo/image.ome.tif",
+    "fovs/FOV_003/other_rounds/flamingo/registration.json",
+    "fovs/FOV_003/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_003/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.sample.FOV_003.json",
+   "log": "workflow/logs/morphology.sample.FOV_003.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "morphology",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "morphology/sample/FOV_003"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "morphology"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "morphology/sample/FOV_004",
+   "kind": "morphology",
+   "group": "morphology",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004"
+   },
+   "needs": [],
+   "inputs": [
+    "input:flamingo/FOV_004/ch04.tif",
+    "input:flamingo/FOV_004/ch05.tif",
+    "input:round1/FOV_004/ch04.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_004/nuclei_registration.json",
+    "fovs/FOV_004/other_rounds/flamingo/image.ome.tif",
+    "fovs/FOV_004/other_rounds/flamingo/registration.json",
+    "fovs/FOV_004/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_004/other_rounds/reference_stain/registration.json"
+   ],
+   "record": "workflow/tasks/morphology.sample.FOV_004.json",
+   "log": "workflow/logs/morphology.sample.FOV_004.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "morphology",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "morphology/sample/FOV_004"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "morphology"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_001/nucleus",
+   "kind": "segment",
+   "group": "segment.nucleus",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001",
+    "run": "nucleus"
+   },
+   "needs": [
+    "fov/sample/FOV_001"
+   ],
+   "inputs": [
+    "<work>/labels/FOV_001.tif",
+    "fovs/FOV_001/reference.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_001/segmentation/nucleus/labels.tif",
+    "fovs/FOV_001/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_001.nucleus.json",
+   "log": "workflow/logs/segment.sample.FOV_001.nucleus.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_001/nucleus"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_001/cell",
+   "kind": "segment",
+   "group": "segment.cell",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001",
+    "run": "cell"
+   },
+   "needs": [
+    "fov/sample/FOV_001"
+   ],
+   "inputs": [
+    "<work>/labels/FOV_001.tif",
+    "fovs/FOV_001/reference.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_001/segmentation/cell/labels.tif",
+    "fovs/FOV_001/segmentation/cell/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_001.cell.json",
+   "log": "workflow/logs/segment.sample.FOV_001.cell.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_001/cell"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_002/nucleus",
+   "kind": "segment",
+   "group": "segment.nucleus",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002",
+    "run": "nucleus"
+   },
+   "needs": [
+    "fov/sample/FOV_002"
+   ],
+   "inputs": [
+    "<work>/labels/FOV_002.tif",
+    "fovs/FOV_002/reference.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_002/segmentation/nucleus/labels.tif",
+    "fovs/FOV_002/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_002.nucleus.json",
+   "log": "workflow/logs/segment.sample.FOV_002.nucleus.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_002/nucleus"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_002/cell",
+   "kind": "segment",
+   "group": "segment.cell",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002",
+    "run": "cell"
+   },
+   "needs": [
+    "fov/sample/FOV_002"
+   ],
+   "inputs": [
+    "<work>/labels/FOV_002.tif",
+    "fovs/FOV_002/reference.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_002/segmentation/cell/labels.tif",
+    "fovs/FOV_002/segmentation/cell/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_002.cell.json",
+   "log": "workflow/logs/segment.sample.FOV_002.cell.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_002/cell"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_003/nucleus",
+   "kind": "segment",
+   "group": "segment.nucleus",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003",
+    "run": "nucleus"
+   },
+   "needs": [
+    "fov/sample/FOV_003"
+   ],
+   "inputs": [
+    "<work>/labels/FOV_003.tif",
+    "fovs/FOV_003/reference.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_003/segmentation/nucleus/labels.tif",
+    "fovs/FOV_003/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_003.nucleus.json",
+   "log": "workflow/logs/segment.sample.FOV_003.nucleus.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_003/nucleus"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_003/cell",
+   "kind": "segment",
+   "group": "segment.cell",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003",
+    "run": "cell"
+   },
+   "needs": [
+    "fov/sample/FOV_003"
+   ],
+   "inputs": [
+    "<work>/labels/FOV_003.tif",
+    "fovs/FOV_003/reference.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_003/segmentation/cell/labels.tif",
+    "fovs/FOV_003/segmentation/cell/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_003.cell.json",
+   "log": "workflow/logs/segment.sample.FOV_003.cell.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_003/cell"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_004/nucleus",
+   "kind": "segment",
+   "group": "segment.nucleus",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004",
+    "run": "nucleus"
+   },
+   "needs": [
+    "fov/sample/FOV_004"
+   ],
+   "inputs": [
+    "<work>/labels/FOV_004.tif",
+    "fovs/FOV_004/reference.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_004/segmentation/nucleus/labels.tif",
+    "fovs/FOV_004/segmentation/nucleus/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_004.nucleus.json",
+   "log": "workflow/logs/segment.sample.FOV_004.nucleus.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_004/nucleus"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "segment/sample/FOV_004/cell",
+   "kind": "segment",
+   "group": "segment.cell",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004",
+    "run": "cell"
+   },
+   "needs": [
+    "fov/sample/FOV_004"
+   ],
+   "inputs": [
+    "<work>/labels/FOV_004.tif",
+    "fovs/FOV_004/reference.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_004/segmentation/cell/labels.tif",
+    "fovs/FOV_004/segmentation/cell/segmentation.json"
+   ],
+   "record": "workflow/tasks/segment.sample.FOV_004.cell.json",
+   "log": "workflow/logs/segment.sample.FOV_004.cell.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "segment",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "segment/sample/FOV_004/cell"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "segmentation"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "assign/sample/FOV_001/default",
+   "kind": "assign",
+   "group": "assign.default",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001",
+    "name": "default"
+   },
+   "needs": [
+    "fov/sample/FOV_001",
+    "segment/sample/FOV_001/cell",
+    "segment/sample/FOV_001/nucleus"
+   ],
+   "inputs": [
+    "fovs/FOV_001/molecules.csv",
+    "fovs/FOV_001/reference.tif",
+    "fovs/FOV_001/segmentation/cell/labels.tif",
+    "fovs/FOV_001/segmentation/cell/segmentation.json",
+    "fovs/FOV_001/segmentation/nucleus/labels.tif",
+    "fovs/FOV_001/segmentation/nucleus/segmentation.json",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_001/assignment/default/assignment.json",
+    "fovs/FOV_001/assignment/default/cells.csv",
+    "fovs/FOV_001/assignment/default/counts.csv",
+    "fovs/FOV_001/assignment/default/molecules.csv",
+    "fovs/FOV_001/assignment/default/nuclei.csv",
+    "fovs/FOV_001/previews/"
+   ],
+   "record": "workflow/tasks/assign.sample.FOV_001.default.json",
+   "log": "workflow/logs/assign.sample.FOV_001.default.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "assign",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "assign/sample/FOV_001/default"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "assignment"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "assign/sample/FOV_002/default",
+   "kind": "assign",
+   "group": "assign.default",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002",
+    "name": "default"
+   },
+   "needs": [
+    "fov/sample/FOV_002",
+    "segment/sample/FOV_002/cell",
+    "segment/sample/FOV_002/nucleus"
+   ],
+   "inputs": [
+    "fovs/FOV_002/molecules.csv",
+    "fovs/FOV_002/reference.tif",
+    "fovs/FOV_002/segmentation/cell/labels.tif",
+    "fovs/FOV_002/segmentation/cell/segmentation.json",
+    "fovs/FOV_002/segmentation/nucleus/labels.tif",
+    "fovs/FOV_002/segmentation/nucleus/segmentation.json",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_002/assignment/default/assignment.json",
+    "fovs/FOV_002/assignment/default/cells.csv",
+    "fovs/FOV_002/assignment/default/counts.csv",
+    "fovs/FOV_002/assignment/default/molecules.csv",
+    "fovs/FOV_002/assignment/default/nuclei.csv",
+    "fovs/FOV_002/previews/"
+   ],
+   "record": "workflow/tasks/assign.sample.FOV_002.default.json",
+   "log": "workflow/logs/assign.sample.FOV_002.default.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "assign",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "assign/sample/FOV_002/default"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "assignment"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "assign/sample/FOV_003/default",
+   "kind": "assign",
+   "group": "assign.default",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003",
+    "name": "default"
+   },
+   "needs": [
+    "fov/sample/FOV_003",
+    "segment/sample/FOV_003/cell",
+    "segment/sample/FOV_003/nucleus"
+   ],
+   "inputs": [
+    "fovs/FOV_003/molecules.csv",
+    "fovs/FOV_003/reference.tif",
+    "fovs/FOV_003/segmentation/cell/labels.tif",
+    "fovs/FOV_003/segmentation/cell/segmentation.json",
+    "fovs/FOV_003/segmentation/nucleus/labels.tif",
+    "fovs/FOV_003/segmentation/nucleus/segmentation.json",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_003/assignment/default/assignment.json",
+    "fovs/FOV_003/assignment/default/cells.csv",
+    "fovs/FOV_003/assignment/default/counts.csv",
+    "fovs/FOV_003/assignment/default/molecules.csv",
+    "fovs/FOV_003/assignment/default/nuclei.csv",
+    "fovs/FOV_003/previews/"
+   ],
+   "record": "workflow/tasks/assign.sample.FOV_003.default.json",
+   "log": "workflow/logs/assign.sample.FOV_003.default.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "assign",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "assign/sample/FOV_003/default"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "assignment"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "assign/sample/FOV_004/default",
+   "kind": "assign",
+   "group": "assign.default",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004",
+    "name": "default"
+   },
+   "needs": [
+    "fov/sample/FOV_004",
+    "segment/sample/FOV_004/cell",
+    "segment/sample/FOV_004/nucleus"
+   ],
+   "inputs": [
+    "fovs/FOV_004/molecules.csv",
+    "fovs/FOV_004/reference.tif",
+    "fovs/FOV_004/segmentation/cell/labels.tif",
+    "fovs/FOV_004/segmentation/cell/segmentation.json",
+    "fovs/FOV_004/segmentation/nucleus/labels.tif",
+    "fovs/FOV_004/segmentation/nucleus/segmentation.json",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_004/assignment/default/assignment.json",
+    "fovs/FOV_004/assignment/default/cells.csv",
+    "fovs/FOV_004/assignment/default/counts.csv",
+    "fovs/FOV_004/assignment/default/molecules.csv",
+    "fovs/FOV_004/assignment/default/nuclei.csv",
+    "fovs/FOV_004/previews/"
+   ],
+   "record": "workflow/tasks/assign.sample.FOV_004.default.json",
+   "log": "workflow/logs/assign.sample.FOV_004.default.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "assign",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "assign/sample/FOV_004/default"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "assignment"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "stitch/sample",
+   "kind": "stitch",
+   "group": "stitch",
+   "identity": {
+    "sample": "sample"
+   },
+   "needs": [
+    "fov/sample/FOV_001",
+    "fov/sample/FOV_002",
+    "fov/sample/FOV_003",
+    "fov/sample/FOV_004"
+   ],
+   "inputs": [
+    "fovs/FOV_001/reference.tif",
+    "fovs/FOV_002/reference.tif",
+    "fovs/FOV_003/reference.tif",
+    "fovs/FOV_004/reference.tif",
+    "input:fovs.csv",
+    "input:positions.csv"
+   ],
+   "outputs": [
+    "stitching/sample/fovs.csv",
+    "stitching/sample/links.csv",
+    "stitching/sample/placement.json"
+   ],
+   "record": "workflow/tasks/stitch.sample.json",
+   "log": "workflow/logs/stitch.sample.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "stitch",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "stitch/sample"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "stitching"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "export/sample",
+   "kind": "export",
+   "group": "export",
+   "identity": {
+    "sample": "sample"
+   },
+   "needs": [
+    "assign/sample/FOV_001/default",
+    "assign/sample/FOV_002/default",
+    "assign/sample/FOV_003/default",
+    "assign/sample/FOV_004/default",
+    "morphology/sample/FOV_001",
+    "morphology/sample/FOV_002",
+    "morphology/sample/FOV_003",
+    "morphology/sample/FOV_004",
+    "stitch/sample"
+   ],
+   "inputs": [
+    "fovs/FOV_001/assignment/default/assignment.json",
+    "fovs/FOV_001/assignment/default/cells.csv",
+    "fovs/FOV_001/assignment/default/counts.csv",
+    "fovs/FOV_001/assignment/default/molecules.csv",
+    "fovs/FOV_001/assignment/default/nuclei.csv",
+    "fovs/FOV_001/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_001/reference.tif",
+    "fovs/FOV_002/assignment/default/assignment.json",
+    "fovs/FOV_002/assignment/default/cells.csv",
+    "fovs/FOV_002/assignment/default/counts.csv",
+    "fovs/FOV_002/assignment/default/molecules.csv",
+    "fovs/FOV_002/assignment/default/nuclei.csv",
+    "fovs/FOV_002/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_002/reference.tif",
+    "fovs/FOV_003/assignment/default/assignment.json",
+    "fovs/FOV_003/assignment/default/cells.csv",
+    "fovs/FOV_003/assignment/default/counts.csv",
+    "fovs/FOV_003/assignment/default/molecules.csv",
+    "fovs/FOV_003/assignment/default/nuclei.csv",
+    "fovs/FOV_003/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_003/reference.tif",
+    "fovs/FOV_004/assignment/default/assignment.json",
+    "fovs/FOV_004/assignment/default/cells.csv",
+    "fovs/FOV_004/assignment/default/counts.csv",
+    "fovs/FOV_004/assignment/default/molecules.csv",
+    "fovs/FOV_004/assignment/default/nuclei.csv",
+    "fovs/FOV_004/other_rounds/reference_stain/image.ome.tif",
+    "fovs/FOV_004/reference.tif",
+    "stitching/sample/fovs.csv",
+    "stitching/sample/links.csv",
+    "stitching/sample/placement.json"
+   ],
+   "outputs": [
+    "export/sample/export.json",
+    "export/sample/previews/"
+   ],
+   "record": "workflow/tasks/export.sample.json",
+   "log": "workflow/logs/export.sample.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "export",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "export/sample"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "assembly",
+    "export",
+    "assignment",
+    "stitching"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "report/sample",
+   "kind": "report",
+   "group": "report",
+   "identity": {
+    "sample": "sample"
+   },
+   "needs": [
+    "assign/sample/FOV_001/default",
+    "assign/sample/FOV_002/default",
+    "assign/sample/FOV_003/default",
+    "assign/sample/FOV_004/default",
+    "export/sample",
+    "fov/sample/FOV_001",
+    "fov/sample/FOV_002",
+    "fov/sample/FOV_003",
+    "fov/sample/FOV_004"
+   ],
+   "inputs": [
+    "export/sample/export.json",
+    "fovs/FOV_001/assignment/default/assignment.json",
+    "fovs/FOV_001/checkpoints/candidates.json",
+    "fovs/FOV_001/checkpoints/pre_qc.json",
+    "fovs/FOV_001/run.json",
+    "fovs/FOV_002/assignment/default/assignment.json",
+    "fovs/FOV_002/checkpoints/candidates.json",
+    "fovs/FOV_002/checkpoints/pre_qc.json",
+    "fovs/FOV_002/run.json",
+    "fovs/FOV_003/assignment/default/assignment.json",
+    "fovs/FOV_003/checkpoints/candidates.json",
+    "fovs/FOV_003/checkpoints/pre_qc.json",
+    "fovs/FOV_003/run.json",
+    "fovs/FOV_004/assignment/default/assignment.json",
+    "fovs/FOV_004/checkpoints/candidates.json",
+    "fovs/FOV_004/checkpoints/pre_qc.json",
+    "fovs/FOV_004/run.json"
+   ],
+   "outputs": [
+    "report/sample/report.json"
+   ],
+   "record": "workflow/tasks/report.sample.json",
+   "log": "workflow/logs/report.sample.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "report",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "report/sample"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "report"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "compare",
+   "kind": "compare",
+   "group": "compare",
+   "identity": {},
+   "needs": [
+    "report/sample"
+   ],
+   "inputs": [
+    "report/sample/report.json"
+   ],
+   "outputs": [
+    "report/index.html",
+    "report/samples.csv"
+   ],
+   "record": "workflow/tasks/compare.json",
+   "log": "workflow/logs/compare.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "compare",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
+    "--task",
+    "compare"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "report"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  }
+ ]
+}

@@ -35,3 +35,4 @@ Modules (alphabetical)
    spot_finding
    stitching
    synthetic
+   workflow

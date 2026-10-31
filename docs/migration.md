@@ -292,6 +292,24 @@ For `backend: python`, replace MATLAB-style blocks with native stage settings:
 The [workflow guide](workflows.md) and
 [reference](workflow-configuration.md) show complete native configurations.
 
+(workflow-python-shape)=
+
+### The Python configuration shape
+
+The `starfinder workflow` commands read a configuration in the Python shape of
+the [workflow contract](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/orchestration.md):
+the dataset keys at the top level, one block per step (`processing`,
+`morphology`, `segmentation`, `assignment`, `stitching`, `assembly`, `export`,
+`report`) and an `execution` section. A present block enables its step; the
+`rules` of the MATLAB dialect and their `run` flags go. `backend` defaults to
+`python`: `starfinder workflow plan` refuses a configuration without `backend`
+that holds a key of the MATLAB dialect, asking for `backend: matlab`, and it
+refuses each key that left the Python dialect, naming where it went. There is
+no shim. The table below is generated from the contract's migration table:
+
+```{workflow-migration}
+```
+
 ## Runtime error messages
 
 Some exception messages have changed while their types and trigger conditions stay

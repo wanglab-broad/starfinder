@@ -1,7 +1,9 @@
-"""Generate workflow key tables from the checkout's JSON Schema.
+"""Generate workflow key tables from the checkout's JSON Schema, and the workflow contract's migration table.
 
 An optional local JSON pointer selects an object. Referenced objects get their
 own tables; inline objects use dotted paths. Defaults are schema defaults only.
+``workflow-migration`` renders the migration table of design/specs/orchestration.md
+from the record's own labelled table, so the guide's table is generated from it.
 """
 from __future__ import annotations
 
@@ -104,6 +106,46 @@ class WorkflowConfig(Directive):
         return [_table(["Key", "Type / values", "Schema default", "Description"], rows, literal_columns={0, 1, 2})]
 
 
+def labelled_table(text, label):
+    """(header, rows) of the Markdown table right after the MyST label ``(label)=`` of a design record."""
+    lines = text.splitlines()
+    found = [i for i, line in enumerate(lines) if line.strip() == f"({label})="]
+    if len(found) != 1:
+        raise ValueError(f"({label})= occurs {len(found)} times")
+    start = found[0] + 1
+    while start < len(lines) and not lines[start].strip():
+        start += 1
+    end = start
+    while end < len(lines) and lines[end].startswith("|"):
+        end += 1
+    if end - start < 3:
+        raise ValueError(f"no table follows ({label})=")
+    cells = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in lines[start:end]]
+    # Single backticks of the record become the inline code of _table's cells.
+    convert = lambda text: text.replace("`", "``")  # noqa: E731
+    return [convert(c) for c in cells[0]], [[convert(c) for c in row] for row in cells[2:]]
+
+
+class WorkflowMigration(Directive):
+    """The migration table of the workflow contract, generated from the design record's own table
+    (design/specs/orchestration.md, ``(orchestration-migration)=``, or the label given)."""
+
+    optional_arguments = 1
+    has_content = False
+
+    def run(self):
+        env = self.state.document.settings.env
+        source = Path(env.srcdir).parent / "design/specs/orchestration.md"
+        env.note_dependency(str(source))
+        try:
+            header, rows = labelled_table(source.read_text(encoding="utf-8"),
+                                          self.arguments[0] if self.arguments else "orchestration-migration")
+        except (OSError, ValueError) as error:
+            raise self.error(f"workflow-migration: {error}")
+        return [_table(header, rows, literal_columns=set())]
+
+
 def setup(app):
     app.add_directive("workflow-config", WorkflowConfig)
+    app.add_directive("workflow-migration", WorkflowMigration)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

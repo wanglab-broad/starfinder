@@ -6,9 +6,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 import hashlib
 import json
+import os
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -213,6 +215,8 @@ class FOV:
     _record_path: Path | None = field(default=None, init=False, repr=False, compare=False)
     # The saved reference merged image restored by load_reference_image: (ZYX image, its grid, path).
     _reference_file: tuple | None = field(default=None, init=False, repr=False, compare=False)
+    # (stage, earlier run.json) while _resume_run continues an earlier run after that stage.
+    _resume: tuple | None = field(default=None, init=False, repr=False, compare=False)
 
     # --- Delegated properties ---
 
@@ -1934,13 +1938,36 @@ class FOV:
                                   'pass overwrite=True to replace the run record and the checkpoint files')
         if checkpoints.table_format == 'parquet':
             _require_parquet()
-        if directory.exists():
+        resume = self._resume
+        if resume is not None:
+            # A verified resume (_resume_run) keeps the stages up to the one it loaded; the later ones go.
+            later = _checkpoint.STAGES[_checkpoint.STAGES.index(resume[0]) + 1:]
+            for stage in later:
+                _checkpoint.header_path(directory, stage).unlink(missing_ok=True)
+                for fmt in ('csv', 'parquet'):
+                    (directory / f'{stage}.{fmt}').unlink(missing_ok=True)
+        elif directory.exists():
             # Stages this run does not rewrite must not survive from an earlier run.
             _checkpoint.clear_stages(directory)
         directory.mkdir(parents=True, exist_ok=True)
-        record = _RunRecord(self, folder, checkpoints, config, execution)
+        record = _RunRecord(self, folder, checkpoints, config, execution, resume=resume)
         record.write()
         return record
+
+    def _resume_run(self, config, *, execution, checkpoints, stage, record):
+        """Continue the run that ``record`` (an earlier run.json, checked by the caller) holds after ``stage``.
+
+        For the workflow's verified resume (design/specs/orchestration.md, "Checkpoints and resume"): the stage and
+        the earlier ones are loaded already (load_checkpoint), ``config`` is the part of the pipeline after it and
+        ``checkpoints`` the later stages. The new run.json keeps the earlier record's configuration, inputs,
+        preprocessing, registration and stages and its steps up to the write of ``stage``, then records this run's
+        steps; the stages up to ``stage`` stay on disk.
+        """
+        self._resume = (stage, record)
+        try:
+            return self.run(config, execution=execution, checkpoints=checkpoints)
+        finally:
+            self._resume = None
 
     def _checkpoint_snapshots(self) -> list[str]:
         """Snapshots used downstream besides the detection image: the recorded extraction source."""
@@ -2646,13 +2673,20 @@ class FOV:
             image = image[..., reference_channel]
         path = self._reference_image_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        if projection is None:
-            save_volume(image, path, metadata=metadata)
-        else:
-            image = project_image(image, config=projection)[0]
-            metadata = metadata.projected(method=projection.method)
-            tifffile.imwrite(path, image, photometric='minisblack',
-                             metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)})
+        # Written to a temporary sibling that keeps the file's name (and so its suffixes), then renamed into place,
+        # so that a reader never sees a partial file (design/specs/orchestration.md, OP6).
+        tmp = path.with_name(f'.{uuid.uuid4().hex}.tmp.{path.name}')
+        try:
+            if projection is None:
+                save_volume(image, tmp, metadata=metadata)
+            else:
+                image = project_image(image, config=projection)[0]
+                metadata = metadata.projected(method=projection.method)
+                tifffile.imwrite(tmp, image, photometric='minisblack',
+                                 metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)})
+            os.replace(tmp, path)
+        finally:
+            tmp.unlink(missing_ok=True)
         self._record_output('reference_image', path)
         return path
 

@@ -1433,6 +1433,8 @@ class _StitchingBlock:
     review: object
     fallback: str | None
     bigstitcher_save_dir: Path | None
+    dataset_xml: str | None = None
+    view_map: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1450,7 +1452,7 @@ def _stitching_methods():
     return (*dict.fromkeys(spec.name for spec in STITCHING_METHODS.values()), _BIGSTITCHER)
 
 
-def _stitching_block(config) -> _StitchingBlock:
+def _stitching_block(config, *, tasks=False) -> _StitchingBlock:
     """The Python-only stitching block (design/specs/stitching.md, "Workflow configuration").
 
     method is a STITCHING_METHODS name, run in process by Dataset.stitch, or
@@ -1462,6 +1464,12 @@ def _stitching_block(config) -> _StitchingBlock:
     rotate_angle); review holds the ReviewPolicy fields; fallback is null or
     nominal; bigstitcher_save_dir is a local folder, required with bigstitcher
     and refused with another method. Raises ValueError naming the key.
+
+    tasks is True for the workflow's task commands (design/specs/orchestration.md):
+    they write no legacy tile configuration, so no assembly block or image size is
+    needed, and with method bigstitcher the block may name a supplied BigStitcher
+    result, dataset_xml with its view_map (each a file pattern with ``{sample}``),
+    which replaces the macro and Fiji tasks and needs no bigstitcher_save_dir.
     """
     from starfinder.stitching import STITCHING_METHODS, BigStitcherConfig, ReviewPolicy
     from ._stitching import POSITION_KEYS, _check_input
@@ -1469,6 +1477,20 @@ def _stitching_block(config) -> _StitchingBlock:
     values = config['stitching']
     if not isinstance(values, dict):
         raise TypeError('stitching must be a mapping')
+    supplied = {}
+    if tasks:
+        values = dict(values)
+        supplied = {key: values.pop(key, None) for key in ('dataset_xml', 'view_map')}
+        given = [key for key, value in supplied.items() if value is not None]
+        if given and values.get('method', _BIGSTITCHER) != _BIGSTITCHER:
+            raise ValueError(f'stitching.{given[0]} is a supplied BigStitcher result: it needs method bigstitcher')
+        if len(given) == 1:
+            raise ValueError('stitching.dataset_xml needs stitching.view_map, the view map of the macro run that made '
+                             'it (the import pairs the XML\'s views with the FOVs through it), and the view map needs '
+                             'the dataset_xml')
+        for key in given:
+            if not isinstance(supplied[key], str) or '{sample}' not in supplied[key]:
+                raise ValueError(f'stitching.{key} must be a file pattern with {{sample}}; got {supplied[key]!r}')
     _known(values, _STITCHING_KEYS, 'stitching')
     method = values.get('method', _BIGSTITCHER)
     if method not in _stitching_methods():
@@ -1495,17 +1517,18 @@ def _stitching_block(config) -> _StitchingBlock:
     if fallback not in (None, 'nominal'):
         raise ValueError(f"stitching.fallback must be null or 'nominal'; got {fallback!r}")
     save_dir = values.get('bigstitcher_save_dir')
-    if method == _BIGSTITCHER and not save_dir:
+    if method == _BIGSTITCHER and not save_dir and supplied.get('dataset_xml') is None:
         raise ValueError('stitching.bigstitcher_save_dir (a local folder for the tiles, the macro and dataset.xml) is '
                          'required with method bigstitcher')
     if method != _BIGSTITCHER and save_dir is not None:
         raise ValueError(f'stitching.bigstitcher_save_dir is read with method bigstitcher only; method is {method!r}')
-    if method == _BIGSTITCHER and 'assembly' not in config:
+    if method == _BIGSTITCHER and not tasks and 'assembly' not in config:
         # Without an assembly block the import writes output/tile_config_{sample}.csv with the legacy writer.
         _image_shape(config, 'the legacy tile configuration writer of stitching method bigstitcher without an '
                              'assembly block')
     return _StitchingBlock(method, method_config, input_name, {k: _tuples(v) for k, v in positions.items()}, review,
-                           fallback, None if save_dir is None else Path(save_dir))
+                           fallback, None if save_dir is None else Path(save_dir), supplied.get('dataset_xml'),
+                           supplied.get('view_map'))
 
 
 @dataclass(frozen=True)

@@ -521,9 +521,9 @@ naming extraction, the stage to rerun.
 % W-294
 
 When no image operation is configured and no images are resident, `run` skips
-the round loop. Resuming is always an explicit call; there is no scheduler.
-Nothing verifies a resume against `run.json` today: verified resume, scheduling
-and job completion belong to workflow orchestration. `run.json` version 2 provides what verified
+the round loop. In the package, resuming is an explicit call. The workflow's `fov` task verifies a
+resume against `run.json` version 2 when `execution.resume_from_checkpoint` is on, and refuses on a
+mismatch (exit 3; [orchestration](orchestration.md), "Checkpoints and resume"). `run.json` version 2 provides what verified
 resume needs (each stage record with its SHA-256, each payload file hashed by
 its record, every input and source hashed, and paths that resolve in a copied
 tree); version 1, which named the stage files only and recorded paths as given,
@@ -558,7 +558,9 @@ depends on where the output tree or the input tree lies.
   files written after it (the molecule and read tables, the reference image, the
   subtile files), each added as its writer writes it. A `succeeded` record
   without an `outputs` entry says that the processing succeeded and that file
-  was not written.
+  was not written. A workflow task succeeded only when its record says
+  `succeeded` and lists every other declared output with its SHA-256 (the record
+  never lists itself; the log is closed before the record is written).
 
 | Field | Content |
 | --- | --- |
@@ -570,7 +572,7 @@ depends on where the output tree or the input tree lies.
 | `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded only when the package runs from a starfinder checkout, never from an enclosing repository. |
 | `environment` | Python, platform and package versions (`null` when not installed). |
 | `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, `readout_mode`, the dataset's readout mode (since 2026-10-02), and `encoding`, the codebook's encoding as in `pre_qc.json` (`null` without a codebook or in readout mode `direct`; since 2026-10-04). `checkpoints.directory`, the parent of the FOV folders when the configuration names one, is relative to the FOV folder (`..`; `../..` for a subtile), else `null`. The other configurations are recorded as given. |
-| `workflow_config` | `{path, sha256}` of the workflow configuration file a workflow rule ran with (the top-level `config_path`: absolute, or relative to the input root when it lies there; `sha256` of its bytes, `null` when no file is there), kept on the `Dataset` by `from_workflow_config`; `null` for a run outside the workflow (since 2026-10-12). |
+| `workflow_config` | `{path, sha256}` of the workflow configuration file a workflow rule ran with (the top-level `config_path`: absolute, or relative to the input root when it lies there; `sha256` of its bytes, `null` when no file is there), kept on the `Dataset` by `from_workflow_config`; for a task of the `starfinder workflow` commands, of the resolved configuration it ran with (`workflow/resolved.json`, relative to the output root, and the `sha256:` of its bytes; since 2026-10-31); `null` for a run outside the workflow (since 2026-10-12). |
 | `channels` | The channels of each configured round, and of `reference_stain` when `Dataset.reference_stains` is set: per round, in C order, one entry with `channel` (the file pattern), `name` (`null` when not given) and `wavelength` (nm, or `"unavailable"`), from `Dataset.channel_info` ([coordination](coordination.md), "Channels"; since 2026-10-05). An additive key: a `run.json` without it still loads. |
 | `rounds` | The round roles of the run, as `RoundState` holds them: `sequencing_rounds`, `other_rounds` and `reference_round` (since 2026-10-23). |
 | `inputs` | Each loaded TIFF: `path`, relative to the input root (POSIX), and its streamed `sha256` (`null` with `hash_inputs=False`). |
@@ -583,6 +585,7 @@ depends on where the output tree or the input tree lies.
 | `checkpoint_directory` | `checkpoints`, the FOV folder's checkpoint folder, relative to the FOV folder. |
 | `checkpoints` | Per stage written, the stage record the run relies on: `path` (`checkpoints/candidates.json`, `checkpoints/pre_qc.json` or `checkpoints/registered/transforms.json`, relative to the FOV folder) and `sha256` (of the record's bytes). The record names and hashes its payload files (`files`, see "registered" under "Layout"); a stage whose record was not written (a run that failed before it) has no entry. |
 | `outputs` | `{}` when the processing ends; then, per slot, each file written after the processing, added by its writer when the FOV's latest `run` had checkpoints and succeeded, the record rewritten atomically (a later `run` writes a new record without them). Every entry has `path` (relative to the FOV folder, POSIX) and `sha256` (of the file's bytes). `molecules` and `reads` ({py:meth}`~starfinder.dataset.FOV.export_spots`, since 2026-10-23) also have `molecules_sha256` (the keyed hash of the six molecule columns, `MoleculeTable.sha256`; `null` for `reads` or a file without those columns), `dtypes` (the column dtypes) and `rows`; `reference_image` ({py:meth}`~starfinder.dataset.FOV.save_reference_image`); `subtile_coords` (with `rows`) and `subtile_data` (per subtile ID, the NPZ's entry) ({py:meth}`~starfinder.dataset.FOV.save_subtiles`); and, in a resident subtile's record, `subtile_spots` (the workflow's `subtile_goodSpots_<n>.csv`). The declared outputs of the Python processing rules are all recorded here (since 2026-10-24). |
+| `workflow` | Written by the workflow's `fov` task ([orchestration](orchestration.md), "Logging and records"; since 2026-10-31): `task` (id and kind), `backend` (`python` and the device), `fallback`, `configuration_sha256`, `blocks_sha256`, `manifest_sha256`, `fingerprint`, `token`, `code`, `execution_context` (`engine`, `engine_version`, `job_id`, `attempt`, `image`, `host`), `resumed_from` (the stage a verified resume continued after, or `null`) and the task's `wall_s`, `cpu_s` and `peak_rss_kib`. Written when the run starts, so that a stopped attempt's record holds `blocks_sha256` for a verified resume, and again with the final measurements before the task record; the task record holds the same section. An additive key: a record without it still loads, and is not resumed. |
 
 % W-293, W-304, W-451, W-336, W-563, W-294, W-295, W-562, W-565
 

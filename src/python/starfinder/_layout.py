@@ -190,6 +190,59 @@ def fovs_file(input_root) -> Path:
     return Path(input_root) / "fovs.csv"
 
 
+#: The workflow's own folder under the output root (design/specs/orchestration.md, "Where the workflow files live"):
+#: the plan's resolved configuration and manifest, one record and one log per task, and verify's record.
+WORKFLOW = "workflow"
+RESOLVED_FILE = "resolved.json"
+MANIFEST_FILE = "manifest.json"
+VERIFY_FILE = "verify.json"
+TASKS = "tasks"
+LOGS = "logs"
+#: The two-pass statistics of a sample and a supplied step: one histogram file per FOV and the merged file.
+STATISTICS = "statistics"
+SUPPLIED_FILE = "supplied.json"
+
+
+def workflow_dir(output_root) -> Path:
+    """``workflow``, the folder of the plan's files, the task records and the task logs."""
+    return Path(output_root) / WORKFLOW
+
+
+def resolved_file(output_root) -> Path:
+    """``workflow/resolved.json``, the resolved configuration the plan writes."""
+    return workflow_dir(output_root) / RESOLVED_FILE
+
+
+def manifest_file(output_root) -> Path:
+    """``workflow/manifest.json``, the manifest of every task of a run."""
+    return workflow_dir(output_root) / MANIFEST_FILE
+
+
+def task_name(task_id) -> str:
+    """A task id as a file name: ``/`` written ``.`` (``fov/sample/FOV_001`` is ``fov.sample.FOV_001``)."""
+    return str(task_id).replace("/", ".")
+
+
+def task_record(output_root, task_id) -> Path:
+    """``workflow/tasks/<task>.json``, the task record, written last by a task that succeeded."""
+    return workflow_dir(output_root) / TASKS / f"{task_name(task_id)}.json"
+
+
+def failed_record(output_root, task_id) -> Path:
+    """``workflow/tasks/<task>.failed.json``, the record of a failed attempt, kept for diagnosis."""
+    return workflow_dir(output_root) / TASKS / f"{task_name(task_id)}.failed.json"
+
+
+def task_log(output_root, task_id) -> Path:
+    """``workflow/logs/<task>.log``, the log of a task, rewritten by each attempt."""
+    return workflow_dir(output_root) / LOGS / f"{task_name(task_id)}.log"
+
+
+def statistics_dir(output_root, sample, step) -> Path:
+    """``statistics/<sample>/<step>``, the histograms and the supplied file of a sample's supplied step."""
+    return Path(output_root) / STATISTICS / sample / step
+
+
 #: The layouts of the acquisition images under the input root (``image_dir_template``, the workflow key and the
 #: ``Dataset`` field): the folder of one round of one FOV, round-first (the default, the layout MATLAB reads) or
 #: FOV-first. The channel files in that folder are found as before (``io.load_round``).

@@ -1,0 +1,931 @@
+{
+ "format": "starfinder.workflow.manifest/1",
+ "backend": "python",
+ "configuration": {
+  "path": "workflow/resolved.json",
+  "sha256": "<sha256>",
+  "configuration_sha256": "<sha256>"
+ },
+ "package": {
+  "version": "0.0.0+test",
+  "git_commit": null,
+  "git_dirty": false
+ },
+ "roots": {
+  "input": "<work>/input/sample-tiny-v1/sample",
+  "output": "<work>/output/sample-tiny-v1/example-molecules-only"
+ },
+ "membership": {
+  "fovs": [
+   "FOV_001",
+   "FOV_002",
+   "FOV_003",
+   "FOV_004"
+  ],
+  "samples": {
+   "sample": [
+    "FOV_001",
+    "FOV_002",
+    "FOV_003",
+    "FOV_004"
+   ]
+  },
+  "selected_fovs": null
+ },
+ "inputs": {
+  "files": {
+   "fovs.csv": {
+    "path": "fovs.csv",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "codebook": {
+    "path": "genes.csv",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   },
+   "positions": {
+    "path": "positions.csv",
+    "bytes": "<bytes>",
+    "mtime_ns": "<mtime_ns>"
+   }
+  },
+  "images": {
+   "FOV_001": {
+    "round1": {
+     "ch00": {
+      "path": "round1/FOV_001/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round1/FOV_001/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round1/FOV_001/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round1/FOV_001/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round2": {
+     "ch00": {
+      "path": "round2/FOV_001/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round2/FOV_001/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round2/FOV_001/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round2/FOV_001/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round3": {
+     "ch00": {
+      "path": "round3/FOV_001/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round3/FOV_001/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round3/FOV_001/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round3/FOV_001/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round4": {
+     "ch00": {
+      "path": "round4/FOV_001/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round4/FOV_001/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round4/FOV_001/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round4/FOV_001/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   },
+   "FOV_002": {
+    "round1": {
+     "ch00": {
+      "path": "round1/FOV_002/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round1/FOV_002/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round1/FOV_002/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round1/FOV_002/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round2": {
+     "ch00": {
+      "path": "round2/FOV_002/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round2/FOV_002/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round2/FOV_002/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round2/FOV_002/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round3": {
+     "ch00": {
+      "path": "round3/FOV_002/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round3/FOV_002/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round3/FOV_002/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round3/FOV_002/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round4": {
+     "ch00": {
+      "path": "round4/FOV_002/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round4/FOV_002/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round4/FOV_002/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round4/FOV_002/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   },
+   "FOV_003": {
+    "round1": {
+     "ch00": {
+      "path": "round1/FOV_003/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round1/FOV_003/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round1/FOV_003/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round1/FOV_003/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round2": {
+     "ch00": {
+      "path": "round2/FOV_003/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round2/FOV_003/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round2/FOV_003/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round2/FOV_003/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round3": {
+     "ch00": {
+      "path": "round3/FOV_003/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round3/FOV_003/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round3/FOV_003/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round3/FOV_003/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round4": {
+     "ch00": {
+      "path": "round4/FOV_003/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round4/FOV_003/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round4/FOV_003/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round4/FOV_003/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   },
+   "FOV_004": {
+    "round1": {
+     "ch00": {
+      "path": "round1/FOV_004/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round1/FOV_004/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round1/FOV_004/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round1/FOV_004/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round2": {
+     "ch00": {
+      "path": "round2/FOV_004/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round2/FOV_004/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round2/FOV_004/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round2/FOV_004/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round3": {
+     "ch00": {
+      "path": "round3/FOV_004/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round3/FOV_004/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round3/FOV_004/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round3/FOV_004/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    },
+    "round4": {
+     "ch00": {
+      "path": "round4/FOV_004/ch00.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch01": {
+      "path": "round4/FOV_004/ch01.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch02": {
+      "path": "round4/FOV_004/ch02.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     },
+     "ch03": {
+      "path": "round4/FOV_004/ch03.ome.tif",
+      "bytes": "<bytes>",
+      "mtime_ns": "<mtime_ns>"
+     }
+    }
+   }
+  }
+ },
+ "export_route": "molecules_only",
+ "groups": [
+  {
+   "name": "fov",
+   "kind": "fov",
+   "wildcards": [
+    "sample",
+    "fov"
+   ],
+   "outputs": [
+    "fovs/{fov}/checkpoints/candidates.json",
+    "fovs/{fov}/checkpoints/pre_qc.json",
+    "fovs/{fov}/molecules.csv",
+    "fovs/{fov}/reference.tif",
+    "fovs/{fov}/run.json"
+   ],
+   "record": "workflow/tasks/fov.{sample}.{fov}.json",
+   "log": "workflow/logs/fov.{sample}.{fov}.log",
+   "temporary": []
+  },
+  {
+   "name": "stitch",
+   "kind": "stitch",
+   "wildcards": [
+    "sample"
+   ],
+   "outputs": [
+    "stitching/{sample}/fovs.csv",
+    "stitching/{sample}/links.csv",
+    "stitching/{sample}/placement.json"
+   ],
+   "record": "workflow/tasks/stitch.{sample}.json",
+   "log": "workflow/logs/stitch.{sample}.log",
+   "temporary": []
+  },
+  {
+   "name": "export",
+   "kind": "export",
+   "wildcards": [
+    "sample"
+   ],
+   "outputs": [
+    "export/{sample}/export.json"
+   ],
+   "record": "workflow/tasks/export.{sample}.json",
+   "log": "workflow/logs/export.{sample}.log",
+   "temporary": []
+  },
+  {
+   "name": "report",
+   "kind": "report",
+   "wildcards": [
+    "sample"
+   ],
+   "outputs": [
+    "report/{sample}/report.json"
+   ],
+   "record": "workflow/tasks/report.{sample}.json",
+   "log": "workflow/logs/report.{sample}.log",
+   "temporary": []
+  },
+  {
+   "name": "compare",
+   "kind": "compare",
+   "wildcards": [],
+   "outputs": [
+    "report/index.html",
+    "report/samples.csv"
+   ],
+   "record": "workflow/tasks/compare.json",
+   "log": "workflow/logs/compare.log",
+   "temporary": []
+  }
+ ],
+ "tasks": [
+  {
+   "id": "fov/sample/FOV_001",
+   "kind": "fov",
+   "group": "fov",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001"
+   },
+   "needs": [],
+   "inputs": [
+    "input:genes.csv",
+    "input:round1/FOV_001/ch00.ome.tif",
+    "input:round1/FOV_001/ch01.ome.tif",
+    "input:round1/FOV_001/ch02.ome.tif",
+    "input:round1/FOV_001/ch03.ome.tif",
+    "input:round2/FOV_001/ch00.ome.tif",
+    "input:round2/FOV_001/ch01.ome.tif",
+    "input:round2/FOV_001/ch02.ome.tif",
+    "input:round2/FOV_001/ch03.ome.tif",
+    "input:round3/FOV_001/ch00.ome.tif",
+    "input:round3/FOV_001/ch01.ome.tif",
+    "input:round3/FOV_001/ch02.ome.tif",
+    "input:round3/FOV_001/ch03.ome.tif",
+    "input:round4/FOV_001/ch00.ome.tif",
+    "input:round4/FOV_001/ch01.ome.tif",
+    "input:round4/FOV_001/ch02.ome.tif",
+    "input:round4/FOV_001/ch03.ome.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_001/checkpoints/candidates.json",
+    "fovs/FOV_001/checkpoints/pre_qc.json",
+    "fovs/FOV_001/molecules.csv",
+    "fovs/FOV_001/reference.tif",
+    "fovs/FOV_001/run.json"
+   ],
+   "record": "workflow/tasks/fov.sample.FOV_001.json",
+   "log": "workflow/logs/fov.sample.FOV_001.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "fov",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
+    "--task",
+    "fov/sample/FOV_001"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "fov/sample/FOV_002",
+   "kind": "fov",
+   "group": "fov",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002"
+   },
+   "needs": [],
+   "inputs": [
+    "input:genes.csv",
+    "input:round1/FOV_002/ch00.ome.tif",
+    "input:round1/FOV_002/ch01.ome.tif",
+    "input:round1/FOV_002/ch02.ome.tif",
+    "input:round1/FOV_002/ch03.ome.tif",
+    "input:round2/FOV_002/ch00.ome.tif",
+    "input:round2/FOV_002/ch01.ome.tif",
+    "input:round2/FOV_002/ch02.ome.tif",
+    "input:round2/FOV_002/ch03.ome.tif",
+    "input:round3/FOV_002/ch00.ome.tif",
+    "input:round3/FOV_002/ch01.ome.tif",
+    "input:round3/FOV_002/ch02.ome.tif",
+    "input:round3/FOV_002/ch03.ome.tif",
+    "input:round4/FOV_002/ch00.ome.tif",
+    "input:round4/FOV_002/ch01.ome.tif",
+    "input:round4/FOV_002/ch02.ome.tif",
+    "input:round4/FOV_002/ch03.ome.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_002/checkpoints/candidates.json",
+    "fovs/FOV_002/checkpoints/pre_qc.json",
+    "fovs/FOV_002/molecules.csv",
+    "fovs/FOV_002/reference.tif",
+    "fovs/FOV_002/run.json"
+   ],
+   "record": "workflow/tasks/fov.sample.FOV_002.json",
+   "log": "workflow/logs/fov.sample.FOV_002.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "fov",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
+    "--task",
+    "fov/sample/FOV_002"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "fov/sample/FOV_003",
+   "kind": "fov",
+   "group": "fov",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003"
+   },
+   "needs": [],
+   "inputs": [
+    "input:genes.csv",
+    "input:round1/FOV_003/ch00.ome.tif",
+    "input:round1/FOV_003/ch01.ome.tif",
+    "input:round1/FOV_003/ch02.ome.tif",
+    "input:round1/FOV_003/ch03.ome.tif",
+    "input:round2/FOV_003/ch00.ome.tif",
+    "input:round2/FOV_003/ch01.ome.tif",
+    "input:round2/FOV_003/ch02.ome.tif",
+    "input:round2/FOV_003/ch03.ome.tif",
+    "input:round3/FOV_003/ch00.ome.tif",
+    "input:round3/FOV_003/ch01.ome.tif",
+    "input:round3/FOV_003/ch02.ome.tif",
+    "input:round3/FOV_003/ch03.ome.tif",
+    "input:round4/FOV_003/ch00.ome.tif",
+    "input:round4/FOV_003/ch01.ome.tif",
+    "input:round4/FOV_003/ch02.ome.tif",
+    "input:round4/FOV_003/ch03.ome.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_003/checkpoints/candidates.json",
+    "fovs/FOV_003/checkpoints/pre_qc.json",
+    "fovs/FOV_003/molecules.csv",
+    "fovs/FOV_003/reference.tif",
+    "fovs/FOV_003/run.json"
+   ],
+   "record": "workflow/tasks/fov.sample.FOV_003.json",
+   "log": "workflow/logs/fov.sample.FOV_003.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "fov",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
+    "--task",
+    "fov/sample/FOV_003"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "fov/sample/FOV_004",
+   "kind": "fov",
+   "group": "fov",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004"
+   },
+   "needs": [],
+   "inputs": [
+    "input:genes.csv",
+    "input:round1/FOV_004/ch00.ome.tif",
+    "input:round1/FOV_004/ch01.ome.tif",
+    "input:round1/FOV_004/ch02.ome.tif",
+    "input:round1/FOV_004/ch03.ome.tif",
+    "input:round2/FOV_004/ch00.ome.tif",
+    "input:round2/FOV_004/ch01.ome.tif",
+    "input:round2/FOV_004/ch02.ome.tif",
+    "input:round2/FOV_004/ch03.ome.tif",
+    "input:round3/FOV_004/ch00.ome.tif",
+    "input:round3/FOV_004/ch01.ome.tif",
+    "input:round3/FOV_004/ch02.ome.tif",
+    "input:round3/FOV_004/ch03.ome.tif",
+    "input:round4/FOV_004/ch00.ome.tif",
+    "input:round4/FOV_004/ch01.ome.tif",
+    "input:round4/FOV_004/ch02.ome.tif",
+    "input:round4/FOV_004/ch03.ome.tif"
+   ],
+   "outputs": [
+    "fovs/FOV_004/checkpoints/candidates.json",
+    "fovs/FOV_004/checkpoints/pre_qc.json",
+    "fovs/FOV_004/molecules.csv",
+    "fovs/FOV_004/reference.tif",
+    "fovs/FOV_004/run.json"
+   ],
+   "record": "workflow/tasks/fov.sample.FOV_004.json",
+   "log": "workflow/logs/fov.sample.FOV_004.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "fov",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
+    "--task",
+    "fov/sample/FOV_004"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "stitch/sample",
+   "kind": "stitch",
+   "group": "stitch",
+   "identity": {
+    "sample": "sample"
+   },
+   "needs": [
+    "fov/sample/FOV_001",
+    "fov/sample/FOV_002",
+    "fov/sample/FOV_003",
+    "fov/sample/FOV_004"
+   ],
+   "inputs": [
+    "fovs/FOV_001/reference.tif",
+    "fovs/FOV_002/reference.tif",
+    "fovs/FOV_003/reference.tif",
+    "fovs/FOV_004/reference.tif",
+    "input:fovs.csv",
+    "input:positions.csv"
+   ],
+   "outputs": [
+    "stitching/sample/fovs.csv",
+    "stitching/sample/links.csv",
+    "stitching/sample/placement.json"
+   ],
+   "record": "workflow/tasks/stitch.sample.json",
+   "log": "workflow/logs/stitch.sample.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "stitch",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
+    "--task",
+    "stitch/sample"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "stitching"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "export/sample",
+   "kind": "export",
+   "group": "export",
+   "identity": {
+    "sample": "sample"
+   },
+   "needs": [
+    "fov/sample/FOV_001",
+    "fov/sample/FOV_002",
+    "fov/sample/FOV_003",
+    "fov/sample/FOV_004",
+    "stitch/sample"
+   ],
+   "inputs": [
+    "fovs/FOV_001/molecules.csv",
+    "fovs/FOV_001/reference.tif",
+    "fovs/FOV_002/molecules.csv",
+    "fovs/FOV_002/reference.tif",
+    "fovs/FOV_003/molecules.csv",
+    "fovs/FOV_003/reference.tif",
+    "fovs/FOV_004/molecules.csv",
+    "fovs/FOV_004/reference.tif",
+    "input:genes.csv",
+    "stitching/sample/fovs.csv",
+    "stitching/sample/links.csv",
+    "stitching/sample/placement.json"
+   ],
+   "outputs": [
+    "export/sample/export.json"
+   ],
+   "record": "workflow/tasks/export.sample.json",
+   "log": "workflow/logs/export.sample.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "export",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
+    "--task",
+    "export/sample"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "assembly",
+    "export",
+    "assignment",
+    "stitching"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "report/sample",
+   "kind": "report",
+   "group": "report",
+   "identity": {
+    "sample": "sample"
+   },
+   "needs": [
+    "export/sample",
+    "fov/sample/FOV_001",
+    "fov/sample/FOV_002",
+    "fov/sample/FOV_003",
+    "fov/sample/FOV_004"
+   ],
+   "inputs": [
+    "export/sample/export.json",
+    "fovs/FOV_001/checkpoints/candidates.json",
+    "fovs/FOV_001/checkpoints/pre_qc.json",
+    "fovs/FOV_001/run.json",
+    "fovs/FOV_002/checkpoints/candidates.json",
+    "fovs/FOV_002/checkpoints/pre_qc.json",
+    "fovs/FOV_002/run.json",
+    "fovs/FOV_003/checkpoints/candidates.json",
+    "fovs/FOV_003/checkpoints/pre_qc.json",
+    "fovs/FOV_003/run.json",
+    "fovs/FOV_004/checkpoints/candidates.json",
+    "fovs/FOV_004/checkpoints/pre_qc.json",
+    "fovs/FOV_004/run.json"
+   ],
+   "outputs": [
+    "report/sample/report.json"
+   ],
+   "record": "workflow/tasks/report.sample.json",
+   "log": "workflow/logs/report.sample.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "report",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
+    "--task",
+    "report/sample"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "report"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "compare",
+   "kind": "compare",
+   "group": "compare",
+   "identity": {},
+   "needs": [
+    "report/sample"
+   ],
+   "inputs": [
+    "report/sample/report.json"
+   ],
+   "outputs": [
+    "report/index.html",
+    "report/samples.csv"
+   ],
+   "record": "workflow/tasks/compare.json",
+   "log": "workflow/logs/compare.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "compare",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
+    "--task",
+    "compare"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "report"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  }
+ ]
+}

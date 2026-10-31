@@ -1,0 +1,502 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "starfinder.workflow.config.schema.json",
+ "title": "The Python configuration shape of the STARfinder workflow (design/specs/orchestration.md)",
+ "description": "A present block enables its step; the block translators check the keys inside the blocks. The plan validates against this schema without inserting defaults; the resolved configuration writes them.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "root_input_path",
+  "dataset_id",
+  "sample_id",
+  "root_output_path",
+  "output_id",
+  "n_rounds",
+  "ref_round",
+  "rotate_angle"
+ ],
+ "properties": {
+  "backend": {
+   "enum": [
+    "python"
+   ]
+  },
+  "root_input_path": {
+   "type": "string",
+   "minLength": 1
+  },
+  "dataset_id": {
+   "type": "string",
+   "minLength": 1
+  },
+  "sample_id": {
+   "type": "string",
+   "minLength": 1
+  },
+  "root_output_path": {
+   "type": "string",
+   "minLength": 1
+  },
+  "output_id": {
+   "type": "string",
+   "minLength": 1
+  },
+  "selected_fovs": {
+   "type": [
+    "array",
+    "null"
+   ],
+   "items": {
+    "type": "string",
+    "minLength": 1
+   }
+  },
+  "n_rounds": {
+   "type": "integer",
+   "minimum": 1
+  },
+  "ref_round": {
+   "type": "string",
+   "minLength": 1
+  },
+  "ref_channel": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "reference_stains": {
+   "type": [
+    "array",
+    "null"
+   ],
+   "items": {
+    "type": "object"
+   }
+  },
+  "seq_channel_order": {
+   "type": "array",
+   "items": {
+    "anyOf": [
+     {
+      "type": "string",
+      "minLength": 1
+     },
+     {
+      "type": "object"
+     }
+    ]
+   }
+  },
+  "additional_round": {
+   "type": [
+    "array",
+    "null"
+   ],
+   "items": {
+    "type": "object",
+    "required": [
+     "round_name"
+    ],
+    "properties": {
+     "round_name": {
+      "type": "string",
+      "minLength": 1
+     },
+     "channel_order": {
+      "type": [
+       "array",
+       "null"
+      ],
+      "items": {
+       "anyOf": [
+        {
+         "type": "string",
+         "minLength": 1
+        },
+        {
+         "type": "object"
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "rotate_angle": {
+   "type": "number"
+  },
+  "voxel_size_xy": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "exclusiveMinimum": 0
+  },
+  "voxel_size_z": {
+   "type": [
+    "number",
+    "null"
+   ],
+   "exclusiveMinimum": 0
+  },
+  "reference_image": {
+   "type": "string",
+   "minLength": 1
+  },
+  "reference_image_import": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "image_dir_template": {
+   "enum": [
+    "{round}/{fov}",
+    "{fov}/{round}"
+   ]
+  },
+  "readout_mode": {
+   "enum": [
+    "multiplexed",
+    "direct"
+   ]
+  },
+  "codebook": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "direct_panel": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "processing": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "mode": {
+     "enum": [
+      "direct",
+      "tiled"
+     ]
+    },
+    "tiled": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "checkpoints": {
+     "type": "array",
+     "uniqueItems": true,
+     "items": {
+      "enum": [
+       "registered",
+       "candidates",
+       "pre_qc"
+      ]
+     }
+    },
+    "streaming": {
+     "type": "boolean"
+    },
+    "device": {
+     "enum": [
+      "cpu"
+     ]
+    },
+    "load_codebook": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "load_raw_images": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "preprocessing": {
+     "type": "object"
+    },
+    "registration": {
+     "type": "object"
+    },
+    "reference_image_view": {
+     "type": "object",
+     "properties": {
+      "mode": {
+       "enum": [
+        "max",
+        "channel"
+       ]
+      },
+      "projection": {
+       "enum": [
+        null,
+        "max"
+       ]
+      }
+     }
+    },
+    "spot_finding": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "reads_extraction": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "reads_filtration": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "decoding": {
+     "type": "object"
+    },
+    "scoring": {
+     "anyOf": [
+      {
+       "const": false
+      },
+      {
+       "type": "object"
+      }
+     ]
+    },
+    "deduplication": {
+     "type": [
+      "object",
+      "null"
+     ]
+    }
+   }
+  },
+  "morphology": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "rounds": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1
+     }
+    },
+    "recipe": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "channel_images": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "projection": {
+         "enum": [
+          null,
+          "max"
+         ]
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  "segmentation": {
+   "type": "object",
+   "properties": {
+    "device": {
+     "enum": [
+      "cpu",
+      "cuda"
+     ]
+    },
+    "runs": {
+     "type": "array",
+     "minItems": 1
+    }
+   }
+  },
+  "assignment": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "properties": {
+    "previews": {
+     "type": "boolean"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1
+    }
+   }
+  },
+  "stitching": {
+   "type": "object",
+   "properties": {
+    "dataset_xml": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "view_map": {
+     "type": [
+      "string",
+      "null"
+     ]
+    }
+   }
+  },
+  "assembly": {
+   "type": [
+    "object",
+    "null"
+   ]
+  },
+  "export": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "properties": {
+    "previews": {
+     "type": "boolean"
+    }
+   }
+  },
+  "report": {
+   "type": [
+    "object",
+    "null"
+   ]
+  },
+  "execution": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "defaults": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "threads": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "memory_mb": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "runtime_min": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "gpu": {
+       "type": "boolean"
+      }
+     }
+    },
+    "tasks": {
+     "type": "object",
+     "propertyNames": {
+      "enum": [
+       "summarize",
+       "merge",
+       "fov",
+       "tile_global",
+       "tile",
+       "tile_merge",
+       "morphology",
+       "segment",
+       "assign",
+       "bigstitcher_macro",
+       "bigstitcher_engine",
+       "bigstitcher_import",
+       "stitch",
+       "export",
+       "report",
+       "compare"
+      ]
+     },
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "threads": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "memory_mb": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "runtime_min": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "gpu": {
+        "type": "boolean"
+       }
+      }
+     }
+    },
+    "container": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "fiji": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "resume_from_checkpoint": {
+     "type": "boolean"
+    },
+    "code_version": {
+     "enum": [
+      "keep",
+      "rerun"
+     ]
+    },
+    "log_level": {
+     "enum": [
+      "INFO",
+      "DEBUG"
+     ]
+    }
+   }
+  }
+ }
+}
