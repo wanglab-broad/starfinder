@@ -22,6 +22,7 @@ import inspect
 import json
 import math
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -552,6 +553,33 @@ def test_macro_text_view_map_and_tiles(tmp_path, pad_missing):
             assert np.array_equal(tile, images[row.fov_id])
         else:
             assert tile.dtype == np.uint8 and not tile.any()
+
+
+def test_tiles_are_published_atomically(tmp_path, monkeypatch):
+    """Each tile is written to a temporary sibling and renamed into place (OP6 of design/specs/orchestration.md): its
+    bytes equal a direct tifffile.imwrite of the same array, and a write that fails leaves no tile of that view."""
+    table = golden_table(tmp_path)
+    folder = tmp_path / "tiles"
+    _, view_map = export_bigstitcher(table, golden_inputs(table), config=BigStitcherConfig(), tile_dir=folder,
+                                     save_dir=folder)
+    images = {item.fov_id: item.image for item in golden_inputs(table)}
+    for row in view_map.itertuples(index=False):
+        image = images[row.fov_id] if row.kind == "fov" else np.zeros(GOLDEN_SHAPE, np.uint8)
+        direct = tmp_path / "direct.tif"
+        tifffile.imwrite(direct, image, photometric="minisblack")
+        assert (folder / f"tile_{row.view}.tif").read_bytes() == direct.read_bytes(), row.view
+    original = tifffile.imwrite
+
+    def failing(path, *args, **kwargs):
+        original(path, *args, **kwargs)
+        if Path(path).name.startswith(".tile_3."):
+            raise OSError("the disk is full")
+
+    monkeypatch.setattr(tifffile, "imwrite", failing)
+    broken = tmp_path / "broken"
+    with pytest.raises(OSError, match="the disk is full"):
+        export_bigstitcher(table, golden_inputs(table), config=BigStitcherConfig(), tile_dir=broken, save_dir=broken)
+    assert sorted(p.name for p in broken.iterdir()) == ["tile_0.tif", "tile_1.tif", "tile_2.tif"]
 
 
 def test_macro_voxel_size_is_the_grids_spacing_and_paths_are_arguments(tmp_path):

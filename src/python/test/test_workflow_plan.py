@@ -111,7 +111,10 @@ def test_the_resolved_configuration_writes_the_defaults_and_the_api(work):
     assert api["processing"]["pipeline"]["preprocessing"]["steps"][1]["config"]["type"] == \
         "PercentileNormalizationConfig"
     assert api["export"]["config"]["type"] == "ExportConfig" and api["export"]["route"] == "per_fov"
-    assert api["report"]["config"]["type"] == "ReportConfig" and api["report"]["assignment"] == "default"
+    # Every value of api comes from the block it is keyed by: the report's assignment name is the resolved
+    # assembly.assignment, and the export reads the codebook's encoding from api.processing.
+    assert api["report"] == {"config": api["report"]["config"]} and api["report"]["config"]["type"] == "ReportConfig"
+    assert "codebook" not in api["export"] and c["assembly"]["assignment"] == "default"
 
 
 def test_every_task_has_the_contracts_fields(work):

@@ -398,8 +398,11 @@ read.
 | `segment` | `segmentation` | |
 | `assign` | `assignment` | |
 | `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import`, `stitch` | `stitching` | |
-| `export` | `assembly`, `export`, `assignment`, `stitching` | `_export_config` reads `assembly`; `_assembly_block` needs `stitching` present; the route after fusion reads `assignment` (`_sample_segmentation_block`, `workflow.py:1715`) |
-| `report`, `compare` | `report` | They read the other steps through their records |
+| `export` | `assembly`, `export`, `assignment`, `stitching`, `processing` | `_export_config` reads `assembly`; `_assembly_block` needs `stitching` present; the route after fusion reads `assignment` (`_sample_segmentation_block`, `workflow.py:1715`); the molecule routes load the codebook with `processing`'s encoding and layout |
+| `report` | `report`, `assembly` | It reads the other steps through their records; `assembly.assignment` names the assignment it reports |
+| `compare` | `report` | It reads the other steps through their records |
+
+% Amended 2026-10-31 after W-647's review: the rows of export, report and compare (the operator's decision on W-152).
 
 **The map is also the command's access.** A command reads `configuration` and `api` only through a
 view limited to the common part and its kind's blocks; reading anything else raises, in every run,

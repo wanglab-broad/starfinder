@@ -83,14 +83,9 @@ def run(args, argv=None):
 
 def _prepare_fov(run):
     """The fov task's verified resume: the earlier run.json and its kept stages, or nothing (exit 3 on a mismatch)."""
-    from starfinder import _layout
     from starfinder.workflow import _resume
     resume = _resume.prepare(run)
     if resume is None:
         return ()
     run.resume = resume
-    stage, record = resume
-    folder = _layout.fov_dir(run.out, run.identity["fov"])
-    kept = {_layout.run_record(run.out, run.identity["fov"])}
-    kept |= {folder / entry["path"] for name, entry in record[_layout.CHECKPOINTS].items()}
-    return [declared for declared, path in run.outputs() if path in kept]
+    return _resume.kept_outputs(run, *resume)

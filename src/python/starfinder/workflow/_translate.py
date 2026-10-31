@@ -166,50 +166,34 @@ TRANSLATORS = {"processing": _processing_api, "morphology": _morphology_api, "se
 def api(configuration) -> dict:
     """The ``api`` of a resolved configuration: each present block's translation, keyed by block.
 
-    ``export`` holds the assembly and export blocks' translation (the assembly block has none of its own). The
-    values that a kind's commands need from another block are added by ``cross_block``.
+    ``export`` holds the assembly and export blocks' translation (the assembly block has none of its own). A kind
+    whose commands read another block's translation names that block in its map (the export reads ``processing``'s
+    encoding and layout), so every value of ``api`` comes from the block it is keyed by.
     """
     out = {}
     for block, translate in TRANSLATORS.items():
         if configuration.get(block) is not None or (block == "export" and configuration.get("assembly") is not None):
             out[block] = translate(configuration)
-    out.update(cross_block(configuration, out))
     return out
 
 
-#: The (block, key) of api that cross_block adds.
-_CROSS_BLOCK = {("export", "codebook"), ("report", "assignment")}
-
-
-def cross_block(configuration, out):
-    """The values a kind's commands read from another block, resolved by the plan into their own block's ``api``.
-
-    The export of the molecule tables (routes molecules_only and after_fusion) loads the codebook for its genes with
-    the processing block's encoding and layout (``export.codebook``); the report reads the assembly block's
-    assignment name (``report.assignment``). The task's fingerprint follows them through its ``needs``.
-    """
-    extra = {}
-    if "export" in out:
-        codebook = out["processing"]["codebook"] if "processing" in out else None
-        extra["export"] = dict(out["export"], codebook=codebook if out["export"]["route"] != "per_fov" else None)
-    if "report" in out:
-        assignment = out["export"]["assignment"] if "export" in out else None
-        extra["report"] = dict(out["report"], assignment=assignment)
-    return extra
-
-
 def check_api(view, api_view, blocks, kind):
-    """Translate ``blocks`` again from the configuration ``view`` and compare with ``api_view`` (exit 2 on a
-    difference): the values of other blocks (``cross_block``) are compared as the plan wrote them."""
+    """Translate each block of ``blocks`` again from the configuration ``view`` and compare it with ``api_view``,
+    every key of it (a TranslationMismatch, exit 2, on a difference). ``assembly`` is translated with ``export``,
+    whose translation holds it; a kind that names ``assembly`` without ``export`` (the report) reads its resolved
+    keys, which the configuration's hash covers. A block present on one side only differs."""
     configuration = view.plain()
     for block in blocks:
-        present = configuration.get("assembly" if block == "export" else block) is not None
-        if block == "assembly" or not present:
+        if block == "assembly":
             continue
-        again = TRANSLATORS[block](configuration)
-        recorded = {k: v for k, v in api_view[block].items() if (block, k) not in _CROSS_BLOCK}
+        present = configuration.get("assembly" if block == "export" else block) is not None
+        if not present and block not in api_view:
+            continue
+        again = TRANSLATORS[block](configuration) if present else None
+        recorded = api_view[block] if block in api_view else None
         if again != recorded:
-            difference = sorted(k for k in set(again) | set(recorded) if again.get(k) != recorded.get(k))
+            keys = set(again or {}) | set(recorded or {})
+            difference = sorted(k for k in keys if (again or {}).get(k) != (recorded or {}).get(k)) or [block]
             raise TranslationMismatch(
                 f"the {kind} task translates the {block} block differently from the plan: api.{block} differs in "
                 f"{', '.join(difference)}; plan the run again with this package")

@@ -5,8 +5,9 @@ records". A command checks, before any work, that the task exists, that the reso
 manifest's, that every task it needs has a succeeded record, that every declared input exists and that its blocks
 translate as the plan translated them (exit 2, nothing written; a refused verified resume exits 3). It then removes
 its earlier record, writes its log, runs one API entry, checks that every declared output exists, closes the log and
-writes its task record last (exit 0). A failure writes the traceback to the log, removes the declared outputs this
-attempt wrote and writes ``<task>.failed.json`` (exit 1).
+writes its task record last (exit 0). A failure writes the traceback to the log, removes every declared output (those
+a verified resume kept included), so that no declared output but the log remains, and writes ``<task>.failed.json``
+(exit 1).
 """
 from __future__ import annotations
 
@@ -172,8 +173,14 @@ class Run:
     # --- the checks before work ----------------------------------------------------------------------------------
 
     def check(self):
-        """The common checks of every command (exit 2): the needs' records, the declared inputs, the translation."""
+        """The common checks of every command (exit 2): the translation of every block the kind names, the needs'
+        records and the declared inputs (the task's existence and the resolved configuration's hash are checked when
+        the run is read)."""
         from starfinder.workflow._translate import TranslationMismatch, check_api
+        try:
+            check_api(self.configuration, self.api, self.task["blocks"], self.kind)
+        except TranslationMismatch as error:
+            raise TaskRefused(str(error)) from None
         waiting = []
         for need in self.task["needs"]:
             record = read_record(self.manifest, need)
@@ -186,25 +193,12 @@ class Run:
                    if not (self.path(i).is_dir() if i.endswith("/") else self.path(i).is_file())]
         if missing:
             raise TaskRefused(f"task {self.id}: the declared inputs {', '.join(missing)} do not exist")
-        try:
-            check_api(self.configuration, self.api, self.task["blocks"], self.kind)
-        except TranslationMismatch as error:
-            raise TaskRefused(str(error)) from None
 
     # --- the declared outputs ------------------------------------------------------------------------------------
 
     def outputs(self):
         """The declared outputs (without the record and the log) as (declared, path)."""
         return [(o, self.path(o)) for o in self.task["outputs"]]
-
-    def _state(self, path):
-        if path.is_dir():
-            return tuple(sorted((p.relative_to(path).as_posix(), p.stat().st_mtime_ns, p.stat().st_size)
-                                for p in path.rglob("*") if p.is_file()))
-        if path.is_file():
-            st = path.stat()
-            return (st.st_mtime_ns, st.st_size, st.st_ino)
-        return None
 
     def remove_outputs(self, keep=()):
         """Remove the declared outputs but those in ``keep``; return the declared paths removed."""
@@ -292,10 +286,6 @@ def execute(command, manifest_path, task_id, function, context=Context(), argv=N
     failed_path.unlink(missing_ok=True)
     if run.kind in PRE_REMOVE:
         run.remove_outputs(keep=run.kept)
-    before = {declared: run._state(path) for declared, path in run.outputs()}
-    if run.kind == "bigstitcher_engine":
-        # dataset.xml is the tool's, written in this job before the check.
-        before = {declared: None for declared in before}
     log_path.parent.mkdir(parents=True, exist_ok=True)
     handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
     handler.setFormatter(_UtcFormatter(task_id))
@@ -353,18 +343,11 @@ def execute(command, manifest_path, task_id, function, context=Context(), argv=N
         return 0
     except Exception as error:
         logger.error(f"failed: {type(error).__name__}: {error}\n{traceback.format_exc()}")
-        removed = []
-        for declared, path in run.outputs():
-            if declared in run.kept:
-                continue
-            if run._state(path) != before.get(declared) or before.get(declared) is None:
-                if path.is_dir() and declared.endswith("/"):
-                    shutil.rmtree(path)
-                    removed.append(declared)
-                elif path.is_file():
-                    path.unlink()
-                    removed.append(declared)
-        logger.error(f"removed the declared outputs this attempt wrote: {', '.join(removed) or 'none'}")
+        # A failed attempt leaves no declared output but its log, resumed or not: what a verified resume kept and what
+        # an earlier attempt of a kind that does not remove its outputs first left go too, so that the next attempt
+        # runs from scratch. An interruption (below) leaves the files as they are.
+        removed = run.remove_outputs()
+        logger.error(f"removed the declared outputs: {', '.join(removed) or 'none'}")
         section = run.workflow_section()
         close()
         _write(failed_path, {"format": FAILED_FORMAT, "id": task_id, "kind": run.kind, "identity": run.identity,

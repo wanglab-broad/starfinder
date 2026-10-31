@@ -1960,8 +1960,9 @@ class FOV:
         For the workflow's verified resume (design/specs/orchestration.md, "Checkpoints and resume"): the stage and
         the earlier ones are loaded already (load_checkpoint), ``config`` is the part of the pipeline after it and
         ``checkpoints`` the later stages. The new run.json keeps the earlier record's configuration, inputs,
-        preprocessing, registration and stages and its steps up to the write of ``stage``, then records this run's
-        steps; the stages up to ``stage`` stay on disk.
+        preprocessing, registration and stages and its steps up to the write of ``stage`` (without the detection
+        and extraction steps before a registered stage's write, which this run performs again), then records this
+        run's steps; the stages up to ``stage`` stay on disk.
         """
         self._resume = (stage, record)
         try:

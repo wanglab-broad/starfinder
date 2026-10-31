@@ -40,16 +40,26 @@ def _supplied_file(run, value):
 
 
 def _processing(run):
-    """(adapted WorkflowConfig with the task's dataset, pipeline with the task's supplied file, stages)."""
+    """(adapted WorkflowConfig with the task's dataset, pipeline with the task's supplied file, stages); a fov task
+    reads the supplied statistics file it declares (supplied_input)."""
     translated = _translate.processing(run.configuration.plain())
     adapted = translated.workflow
     run.dataset(adapted.dataset)
     pipeline = adapted.pipeline
     recipe = pipeline.preprocessing
     if recipe is not None and recipe.supplied_statistics is not None:
+        path = supplied_input(run) if run.kind == "fov" else None
         pipeline = replace(pipeline, preprocessing=replace(
-            recipe, supplied_statistics=_supplied_file(run, recipe.supplied_statistics)))
+            recipe, supplied_statistics=path or _supplied_file(run, recipe.supplied_statistics)))
     return adapted, pipeline, translated.stages
+
+
+def _declared(run, name):
+    """The declared-input form of a supplied file of the manifest's inputs (``input:<path>``, or absolute)."""
+    entry = run.manifest["inputs"]["files"].get(name)
+    if entry is None:
+        return None
+    return entry["path"] if Path(entry["path"]).is_absolute() else f"input:{entry['path']}"
 
 
 def _file(run, name):
@@ -58,8 +68,27 @@ def _file(run, name):
     return path if path.is_absolute() else run.root / path
 
 
+def codebook_input(run):
+    """The codebook (or direct panel) the task reads: its declared input that the manifest names the codebook, or
+    None when the task declares none (a fov task that does not decode)."""
+    declared = _declared(run, "codebook")
+    return run.path(declared) if declared is not None and declared in run.task["inputs"] else None
+
+
+def supplied_input(run):
+    """The supplied statistics file a fov task reads: its declared input that a merge task writes, or the configured
+    file the manifest lists; None when it declares none."""
+    merged = {o for t in run.manifest["tasks"] if t["kind"] == "merge" for o in t["outputs"]}
+    configured = _declared(run, "supplied_statistics")
+    found = [i for i in run.task["inputs"] if i in merged or i == configured]
+    return run.path(found[-1]) if found else None
+
+
 def _codebook(run):
-    return _file(run, "codebook")
+    path = codebook_input(run)
+    if path is None:
+        raise ValueError(f"task {run.id} declares no codebook, which its block reads")
+    return path
 
 
 def fov(run):
@@ -289,8 +318,8 @@ def bigstitcher_import(run):
 
 
 def _from_plain(value):
-    """A plain value of the resolved configuration back as the dataclass its ``type`` names (the encodings and
-    layouts that cross_block hands the export)."""
+    """A plain value of the resolved configuration back as the dataclass its ``type`` names (the encoding and layout
+    of ``api.processing.codebook``, which the export loads the codebook with)."""
     from starfinder.readout import BarcodeLayout, EncodingConfig, OneBaseEncodingConfig, Segment
     types = {cls.__name__: cls for cls in (BarcodeLayout, EncodingConfig, OneBaseEncodingConfig, Segment)}
     if isinstance(value, dict) and "type" in value:
@@ -311,26 +340,30 @@ def export(run):
     if export_api["previews"]:
         raise NotImplementedError("export.previews: the ownership previews of the export command land with the "
                                   "assign command (W-736)")
-    if export_api["codebook"] is not None:
+    if export_api["route"] != "per_fov":
+        # The molecule routes read each FOV's molecule table with the codebook's genes, loaded with the processing
+        # block's encoding and layout (a block the export's map names).
         if dataset.readout_mode == "direct":
             dataset.load_direct_panel(_codebook(run))
         else:
-            dataset.load_codebook(_codebook(run), encoding=_from_plain(export_api["codebook"]["encoding"]),
-                                  layout=_from_plain(export_api["codebook"]["layout"]))
+            codebook = run.api["processing"]["codebook"]
+            dataset.load_codebook(_codebook(run), encoding=_from_plain(codebook["encoding"]),
+                                  layout=_from_plain(codebook["layout"]))
     sample = run.identity["sample"]
     dataset.export(sample, placement=_layout.stitching_dir(run.out, sample), assignment=assembly.assignment,
                    config=config, output_dir=_layout.export_dir(run.out, sample))
 
 
 def report(run):
-    """Dataset.report of one sample into report/<sample>/, with the assignment name the plan resolved."""
+    """Dataset.report of one sample into report/<sample>/, with the assembly block's assignment name (None without
+    an assembly block), which the plan resolves."""
     from starfinder.dataset.workflow import _report_block
     from starfinder.workflow._translate import _base
     configuration = run.configuration.plain()
     config = _report_block(dict(_base(configuration), report=configuration["report"]))
     sample = run.identity["sample"]
     run.dataset().report(sample, list(run.manifest["membership"]["samples"][sample]),
-                         assignment=run.api["report"]["assignment"], config=config,
+                         assignment=(configuration.get("assembly") or {}).get("assignment"), config=config,
                          output_dir=_layout.report_dir(run.out, sample))
 
 

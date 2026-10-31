@@ -171,3 +171,28 @@ def test_a_command_that_reads_a_block_outside_its_map_fails(manifest, monkeypatc
     failed = json.loads(_layout.failed_record(out, FOV_TASK).read_text())
     assert failed["error"]["type"] == "BlockAccessError"
     assert "the fov command read the export block" in failed["error"]["message"]
+
+
+def test_a_failure_of_a_kind_that_keeps_its_folder_leaves_no_declared_output(fixture_work, tmp_path, monkeypatch):
+    """The compare command (like export and report) does not remove its earlier outputs before its call; when the call
+    fails, every declared output goes, an earlier one included, and the failed record lists them."""
+    work = tmp_path / "work"
+    shutil.copytree(fixture_work, work, symlinks=True)
+    X.fix_code(monkeypatch)
+    config = dict(X.single_fov(work, downstream=True))
+    plan(X.write_config(work, "single", config))
+    manifest = X.output_root(work, "single") / "workflow" / "manifest.json"
+    out = manifest.parents[1]
+    report = out / "report" / "sample" / "report.json"
+    report.parent.mkdir(parents=True)
+    report.write_text("{}\n")
+    _layout.task_record(out, "report/sample").parent.mkdir(parents=True, exist_ok=True)
+    _layout.task_record(out, "report/sample").write_text(json.dumps({"status": "succeeded"}))
+    earlier = [out / "report" / "samples.csv", out / "report" / "index.html"]
+    for path in earlier:
+        path.write_text("an earlier attempt's output\n")
+    assert X.run_task(manifest, "compare") == 1
+    assert [path for path in earlier if path.exists()] == []
+    failed = json.loads(_layout.failed_record(out, "compare").read_text())
+    assert sorted(failed["removed"]) == ["report/index.html", "report/samples.csv"]
+    assert _layout.task_log(out, "compare").is_file() and not _layout.task_record(out, "compare").exists()

@@ -833,7 +833,8 @@
     "assembly",
     "export",
     "assignment",
-    "stitching"
+    "stitching",
+    "processing"
    ],
    "blocks_sha256": "<sha256>",
    "fingerprint": "<sha256>"
@@ -889,7 +890,8 @@
     "container": null
    },
    "blocks": [
-    "report"
+    "report",
+    "assembly"
    ],
    "blocks_sha256": "<sha256>",
    "fingerprint": "<sha256>"

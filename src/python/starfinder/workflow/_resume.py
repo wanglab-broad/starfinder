@@ -74,20 +74,15 @@ def check(run, record, now_code):
         if entry["path"] in images and (path is None or not path.is_file() or entry.get("sha256") is None
                                         or file_sha256(path) != entry["sha256"]):
             differences.append(f"inputs {entry['path']} sha256 differs")
-    codebook = record.get("codebook")
-    current = run.manifest["inputs"]["files"].get("codebook")
-    if codebook is not None and current is not None:
-        path = resolve_source(record, codebook.get("path"), root)
-        now_path = root / current["path"] if not Path(current["path"]).is_absolute() else Path(current["path"])
-        if path is None or Path(path).resolve() != now_path.resolve():
-            differences.append(f"codebook.path is {codebook.get('path')} (recorded), {current['path']} (now)")
-        elif codebook.get("sha256") != file_sha256(now_path):
-            differences.append(f"codebook {codebook.get('path')} sha256 differs")
-    supplied = ((record.get("preprocessing") or {}).get("supplied_statistics") or {})
-    if supplied.get("path") is not None:
-        path = resolve_source(record, supplied["path"], root)
-        if path is None or not Path(path).is_file() or file_sha256(path) != supplied.get("sha256"):
-            differences.append(f"preprocessing.supplied_statistics {supplied['path']} sha256 differs")
+    # The codebook and the supplied statistics this task reads, from its declared inputs; each row requires equality,
+    # so a file present on one side only differs.
+    from starfinder.workflow._commands import codebook_input, supplied_input
+    codebook = record.get("codebook") or {}
+    differences += _file_differences("codebook", codebook.get("path"), codebook.get("sha256"), codebook_input(run),
+                                     record, root)
+    supplied = (record.get("preprocessing") or {}).get("supplied_statistics") or {}
+    differences += _file_differences("preprocessing.supplied_statistics", supplied.get("path"), supplied.get("sha256"),
+                                     supplied_input(run), record, root)
     folder = _layout.fov_dir(run.out, run.identity["fov"])
     for stage, entry in (record.get(_layout.CHECKPOINTS) or {}).items():
         path = folder / entry["path"]
@@ -102,17 +97,49 @@ def check(run, record, now_code):
     return differences
 
 
+def _file_differences(field, recorded, digest, now, record, root):
+    """How a file the record names (``recorded`` with its ``digest``) differs from the file the task reads now."""
+    if recorded is None and now is None:
+        return []
+    if recorded is None:
+        return [f"{field} is not recorded (recorded), {now} (now)"]
+    if now is None:
+        return [f"{field} is {recorded} (recorded), none (now)"]
+    path = resolve_source(record, recorded, root)
+    if path is None or Path(path).absolute() != Path(now).absolute():
+        return [f"{field}.path is {recorded} (recorded), {now} (now)"]
+    if not Path(now).is_file() or digest != file_sha256(now):
+        return [f"{field} {recorded} sha256 differs"]
+    return []
+
+
 def latest_stage(record):
     """The latest stage the earlier attempt wrote (registered, candidates, pre_qc), or None."""
     written = [stage for stage in _checkpoint.STAGES if stage in (record.get(_layout.CHECKPOINTS) or {})]
     return written[-1] if written else None
 
 
+def kept_outputs(run, stage, record):
+    """The declared outputs a resume after ``stage`` keeps: run.json, the stage records up to it and the payload files
+    each lists (the registered images of a segmentation input among them)."""
+    folder = _layout.fov_dir(run.out, run.identity["fov"])
+    kept = {_layout.run_record(run.out, run.identity["fov"])}
+    for name in _checkpoint.STAGES[:_checkpoint.STAGES.index(stage) + 1]:
+        entry = (record.get(_layout.CHECKPOINTS) or {}).get(name)
+        if entry is None:
+            continue
+        header = folder / entry["path"]
+        kept.add(header)
+        kept |= {header.parent / item["path"] for item in json.loads(header.read_text()).get("files") or []}
+    return [declared for declared, path in run.outputs() if path in kept]
+
+
 def prepare(run):
     """The fov command's verified resume: (stage, earlier record) to resume from, or None for a run from scratch.
 
     Raises ResumeRefused (exit 3) naming every field that differs. Without resume_from_checkpoint, or without an
-    earlier run.json or a stage in it, the task runs from scratch.
+    earlier run.json, or with a record that holds no stage (an attempt stopped before its first stage), the task runs
+    from scratch: the stage is found before the record is checked.
     """
     from starfinder.workflow._plan import package_identity
     if not run.configuration["execution"].get("resume_from_checkpoint"):
@@ -125,10 +152,12 @@ def prepare(run):
     except ValueError:
         raise ResumeRefused(f"{path.relative_to(run.out)} is not readable JSON; rerun without "
                             "resume_from_checkpoint") from None
+    stage = latest_stage(record) if isinstance(record, dict) else None
+    if stage is None:
+        return None
     differences = check(run, record, package_identity())
     if differences:
         raise ResumeRefused(f"{path.relative_to(run.out)} does not match this task: " + "; ".join(differences)
                             + "; rerun without resume_from_checkpoint, or restore the configuration and inputs it "
                             "was made with")
-    stage = latest_stage(record)
-    return None if stage is None else (stage, record)
+    return stage, record

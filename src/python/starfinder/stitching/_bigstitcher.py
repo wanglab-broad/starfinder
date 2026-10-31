@@ -21,7 +21,7 @@ from xml.etree import ElementTree
 import numpy as np
 import pandas as pd
 
-from starfinder._records import file_sha256
+from starfinder._records import atomic_file, file_sha256
 from starfinder._registry import provenance
 from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation._labels import ReferenceGrid
@@ -394,7 +394,9 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
         else:
             blank = np.zeros(shape, dtype) if blank is None else blank
             image = blank
-        tifffile.imwrite(folder / f"tile_{j}.tif", image, photometric="minisblack")
+        # A temporary sibling renamed into place: a failed write leaves no partial tile (OP6 of the workflow).
+        with atomic_file(folder / f"tile_{j}.tif") as tmp:
+            tifffile.imwrite(tmp, image, photometric="minisblack")
     return text, view_map
 
 

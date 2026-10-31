@@ -153,6 +153,10 @@ def set_workflow(path, workflow, configuration):
     _records.write_json(data, path)
 
 
+#: The steps before a stage's write that a resume after it performs again (FOV._resume_run).
+_REDONE = {"registered": ("find_spots", "find_round_spots", "extract_round")}
+
+
 def _resumed_stages(stage):
     """The stages a resume after ``stage`` keeps: that stage and the earlier ones."""
     from starfinder._checkpoint import STAGES
@@ -222,8 +226,11 @@ class _RunRecord:
             stage, earlier = resume
             names = [step["name"] for step in earlier["steps"]]
             last = max(i for i, name in enumerate(names) if name == f"write_checkpoint:{stage}")
+            # The steps up to the stage's write, but those this run performs again: after registered, the
+            # detection and the extraction, which a full run does inside the loop of rounds, before that write.
+            again = _REDONE.get(stage, ())
             self.data.update(config=earlier["config"], inputs=list(earlier["inputs"]),
-                             steps=list(earlier["steps"][:last + 1]))
+                             steps=[step for step in earlier["steps"][:last + 1] if step["name"] not in again])
             self.data[CHECKPOINTS] = {name: entry for name, entry in earlier[CHECKPOINTS].items()
                                       if name in _resumed_stages(stage)}
             self.kept = {key: earlier[key] for key in ("preprocessing", "registration", "transforms")}
