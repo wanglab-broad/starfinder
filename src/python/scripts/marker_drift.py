@@ -54,7 +54,10 @@ EXEMPTIONS = (
 )
 
 DURATION = re.compile(r"^\s*(\d+(?:\.\d+)?)s (setup|call|teardown)\s+(\S.*?)\s*$")
-OUTCOME = re.compile(r"^(\S+::\S.*?) (PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)\b")
+# A serial ``-v`` line, "test/x.py::y PASSED [  0%]", or a pytest-xdist one, "[gw1] [  0%] PASSED test/x.py::y".
+OUTCOME = re.compile(r"^(?:(?P<node>\S+::\S.*?) (?P<outcome>PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)\b"
+                     r"|\[gw\d+\] \[\s*\d+%\] (?P<xdist_outcome>PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS) "
+                     r"(?P<xdist_node>\S+::\S.*?)\s*$)")
 
 
 def parse_log(text: str) -> tuple[dict[str, dict[str, float]], dict[str, str]]:
@@ -68,7 +71,7 @@ def parse_log(text: str) -> tuple[dict[str, dict[str, float]], dict[str, str]]:
             continue
         match = OUTCOME.match(line)
         if match:
-            outcomes[match.group(1)] = match.group(2)
+            outcomes[match["node"] or match["xdist_node"]] = match["outcome"] or match["xdist_outcome"]
     return dict(durations), outcomes
 
 

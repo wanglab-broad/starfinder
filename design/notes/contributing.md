@@ -459,6 +459,10 @@ TMPDIR=$audit_tmp taskset -c 4 uv run python ../../docs/check_reference.py \
 wait
 ```
 
+Q may run under `pytest -n`, with one physical core per worker and at most four
+workers, and the fast tier may in local development. A selection's time and the
+`slow` threshold are still measured without `-n`.
+
 The `Tests` GitHub Actions workflow runs on pushes and pull requests to `dev`
 and `main` in two jobs:
 

@@ -117,6 +117,24 @@ def test_marker_drift_lists_unmarked_tests_at_5_s_and_slow_tests_under_2_s():
     assert [(r["nodeid"], r["exemption"]) for r in report["slow_under_exempt"]] == [(GA9, "app_routine")]
 
 
+def test_marker_drift_reads_the_outcomes_of_a_pytest_xdist_log():
+    drift = script("marker_drift")
+    # The same run under `pytest -n`: "[gw1] [  0%] PASSED test/x.py::y", in the order the workers finish, with the
+    # workers' start lines and no skip reason; a node ID may itself hold " - ".
+    outcomes, durations = DRIFT_LOG.split("=", 1)
+    lines = [line.split() for line in outcomes.splitlines()]
+    xdist = ["[gw0] linux Python 3.12.0 cwd: /src/python", "[gw1] linux Python 3.12.0 cwd: /src/python"]
+    xdist += [f"[gw{i % 2}] [{11 * i:3d}%] {words[1]} {words[0]} " for i, words in enumerate(reversed(lines))]
+    xdist += ["[gw1] [100%] PASSED test/test_c.py::test_bound[above 2 - 1] ", "=" + durations]
+    serial_durations, serial_outcomes = drift.parse_log(DRIFT_LOG)
+    xdist_durations, xdist_outcomes = drift.parse_log("\n".join(xdist))
+    assert xdist_outcomes.pop("test/test_c.py::test_bound[above 2 - 1]") == "PASSED"
+    assert xdist_outcomes == serial_outcomes and xdist_outcomes["test/test_b.py::test_skipped"] == "SKIPPED"
+    assert xdist_durations == serial_durations
+    assert (drift.drift(xdist_durations, xdist_outcomes, DRIFT_ITEMS)
+            == drift.drift(serial_durations, serial_outcomes, DRIFT_ITEMS))
+
+
 def test_marker_drift_exempts_only_the_tests_an_entry_lists():
     drift = script("marker_drift")
     durations, outcomes = drift.parse_log(DRIFT_LOG)

@@ -119,7 +119,9 @@ may run at the same time, each pinned to its own physical core with its own log
 and temporary directory, at most four at once on GP099-29C and never on the
 controller's core. Sibling hyper-threads are not separate cores. A selection's
 time and memory, and the `slow` threshold, are still measured on one CPU and one
-numerical thread.
+numerical thread. Q may run under `pytest -n`, with one physical core per worker
+and at most four workers, and the fast tier may in local development. A
+selection's time and the `slow` threshold are still measured without `-n`.
 New images ≤32×64×64, ≤4 channels/rounds. Existing exceptions: small synthetic
 test dataset 16×256×256 (generated once per pytest session), pointset 16×128×128,
 compression 10×128×128, tiny examples 8×128×128, benchmark allocation 256×1024
