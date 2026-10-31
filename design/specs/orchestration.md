@@ -310,6 +310,8 @@ Recommendation: A.
 replaces the parse-time validation of `common.smk`, its input enumeration and its target list
 (`get_overall_output`, `common.smk:283`).
 
+`--locate` prints the path of the manifest and plans nothing; a remote Snakemake parse uses it to find the manifest the main process wrote.
+
 ### Validation
 
 The plan validates every block before it writes anything, with the translators that today run
@@ -411,7 +413,9 @@ the command that reads it fails the first time it runs, in the tests and in the 
 (the validation design, C2 and X1). The map lives in the package, beside the commands, and the plan
 writes each task's `blocks` from it. A change in one block reaches other kinds only through their
 `needs`: changing `processing` reruns `fov` and everything downstream of it; changing `export` reruns
-`export` and `report`, and leaves every FOV as it is.
+`export`, `report` and `compare`, and leaves every FOV as it is.
+
+% Amended 2026-10-31 after W-737's review: `compare` needs `report` (the operator's decision on W-152).
 
 ### Choice: the serialization and the scope of the hash
 
@@ -1497,16 +1501,30 @@ migrated configurations, with the tolerances of `docs/contributing.md`. The comp
   step is skipped, so `run.json` records no `rotate_round` step and every frame id loses
   `/rotate:0` (today `["sample-tiny-v1","sample","FOV_001","formed"]/reference/rotate:0`); the
   stored image metadata that holds a frame id (the reference image, the morphology images and
-  saved forms, the label images, the fused images) and those files' hashes, and the records that
+  saved forms, the label images, the fused images) and those files' hashes and sizes, and the records that
   hash them (`grid_sha256`, `record_sha256`, `assembly_sha256`); and the `rotate_round` rows of
   `run.json` `steps` and of the report's step table.
 * **OC4.** The paths recorded relative to the input and output roots instead of absolute (O12, and
   `placement.json` above): the morphology images' frame ids and the placement's sources, and the
   digests of the files that hold them.
 * **D6.** The outputs of retired rules: `images/DAPI/`, `images/overlay/`,
-  `images/flamingo/enhanced_DAPI/` and, unless `morphology.channel_images` is on, the channel images.
+  `images/flamingo/enhanced_DAPI/`, `images/stardist_segmentation/` and, unless
+  `morphology.channel_images` is on, the channel images. The assign task reads the segment task's
+  saved run where `reads_assignment` read the legacy label file and copied it, which changes these
+  values: `assignment/<name>/cell_labels.tif` and its entry in the assignment record's `files`
+  leave; the assignment record's `workflow` section (the retired rule's parameters) leaves; its
+  `inputs.cells` records the saved run (`saved_under_run`, `file.path`, `record.import.path`,
+  `record.upstream`, `record.labels`); the export's path of each FOV's labels names the saved run;
+  and the report's inputs list the run's `labels.tif` and `segmentation.json` in place of
+  `cell_labels.tif`, with every other input compared as recorded. The labels themselves stay
+  compared (`labels_sha256`). The files of the morphology and segment tasks (`other_rounds/`,
+  `segmentation/`) have no earlier value. The migrated configurations name the imported run
+  `stardist_segmentation`, so that the label namespaces and the export tables compare equal.
 * **D8.** The checkpoint stages of the default (the golden configurations state theirs, so the
-  migrated ones state the same), and the new task records and logs.
+  migrated ones state the same); the new task records and logs, the plan's files under `workflow/`
+  and `run.json`'s `workflow` section.
+
+% Amended 2026-10-31 after W-737's review: what the comparison found on the migrated configurations (the operator's decision on W-152).
 
 Everything else is compared as W-642 and invocation D recorded it: the molecule tables, the counts
 and statuses, the registration results, the assignment tables, the placement, the export tables and

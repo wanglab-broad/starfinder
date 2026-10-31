@@ -822,8 +822,6 @@ _FOV = r"fovs/FOV_\d+/"
 EXCEPTIONS = (
     ("OC3", _RECORD + _FOV + r"run\.json\.outputs\.reference_image\.sha256: ",
      "the reference image's digest: its stored metadata holds the frame id"),
-    ("OC3", _RECORD + r"report/[^/]+/report\.json\.inputs\[\d+\]\.(?:sha256|bytes): ",
-     "the report's input digests and sizes of the reference images (checked against the expected record's path)"),
     ("OC3", _RECORD + r"stitching/[^/]+/placement\.json\.inputs\.FOV_\d+\.file_sha256: ",
      "the placement's digest of each FOV's reference image"),
     ("OC3", _RECORD + r"export/[^/]+/export\.json\.fusion\.fovs\[\d+\]\.images\.reference_merged\.sha256: ",
@@ -841,9 +839,12 @@ EXCEPTIONS = (
      + _RECORD + _FOV + r"assignment/[^/]+/assignment\.json\.files\.cell_labels: only in expected$",
      "the assignment folder's copy of the cell labels: the assign task reads the segment task's saved run and "
      "references its labels instead of copying them"),
-    ("D6", _RECORD + _FOV + r"assignment/[^/]+/assignment\.json\.(?:workflow: only in expected|"
-     r"inputs\.cells\.saved_under_run: True != False|inputs\.cells\.file\.path: |inputs\.cells\.record\.import\.path: |"
-     r"inputs\.cells\.record\.(?:upstream|labels\.path|labels\.file_sha256): only in actual)",
+    ("D6", _RECORD + _FOV + r"assignment/[^/]+/assignment\.json\.(?:workflow: only in expected$|"
+     r"inputs\.cells\.saved_under_run: True != False|"
+     r"inputs\.cells\.file\.path: '\.\./\.\./segmentation/[^/']+/labels\.tif' != 'cell_labels\.tif'|"
+     r"inputs\.cells\.record\.import\.path: '<work>/labels/(?P<fov>FOV_\d+)\.tif' != "
+     r"'<work>/output/[^']+/images/stardist_segmentation/(?P=fov)\.tif'|"
+     r"inputs\.cells\.record\.(?:upstream|labels\.path|labels\.file_sha256): only in actual$)",
      "the cell run's source: the segment task's saved run (saved under the run, with its record's upstream and label "
      "file) instead of reads_assignment's legacy label file, and the rule parameters' record of reads_assignment "
      "(rules.reads_assignment.parameters, retired)"),
@@ -851,8 +852,6 @@ EXCEPTIONS = (
      r"assembly\.fovs\[\d+\]\.territories)\.path: '<work>/output/[^']+/" + _FOV
      + r"segmentation/[^/']+/labels\.tif' != '<work>/output/[^']+/" + _FOV + r"assignment/[^/']+/cell_labels\.tif'",
      "the export's path of each FOV's cell labels: the segment task's saved run"),
-    ("D6", _RECORD + r"report/[^/]+/report\.json\.inputs: \d+ items != \d+$",
-     "the report's inputs list the segment task's saved runs instead of the copied cell labels (checked by path)"),
     ("D6", r"^file:" + _FOV + r"(?:other_rounds|segmentation)/.+: only in actual$",
      "the outputs of the morphology task's saved forms and of the segment task, which no rule of A to D wrote"),
     ("D8", r"^file:workflow/.+: only in actual$", "the plan's files, the task records and the task logs"),
@@ -913,35 +912,86 @@ def expected_with_exceptions(expected_dir, target):
     return target
 
 
-def _report_inputs(folder, name):
-    """The paths a report record lists as its inputs."""
-    return [entry.get("path") for entry in json.loads((Path(folder) / "records" / name).read_text())["inputs"]]
+# The report's inputs (report.json's ``inputs``), compared entry by entry by ``_report_input_differences``, never by
+# EXCEPTIONS: the label entries of D6 (the expected copy of each FOV's labels that reads_assignment wrote, against the
+# segment task's saved run) and, of every other entry compared field by field in order, OC3 only for the digest and
+# size of a reference image.
+REPORT_INPUTS = re.compile(r"^records/(.+?/report\.json)\.inputs(?=[\[.:])")
+EXPECTED_LABELS = re.compile(r"^fovs/(FOV_\d+)/assignment/[^/]+/cell_labels\.tif$")
+ACTUAL_LABELS = {re.compile(r"^fovs/(FOV_\d+)/segmentation/[^/]+/labels\.tif$"): "label_image",
+                 re.compile(r"^fovs/(FOV_\d+)/segmentation/[^/]+/segmentation\.json$"): "segmentation_record"}
+
+
+def _report_input_differences(name, expected, actual):
+    """[(decision or None, line)] of the ``inputs`` of one report record (``records/<name>``) in two folders.
+
+    The label entries leave both lists first: the expected ``fovs/<fov>/assignment/<name>/cell_labels.tif``, the actual
+    ``fovs/<fov>/segmentation/<run>/labels.tif`` (``label_image``, verified) and ``segmentation.json``
+    (``segmentation_record``, verified), one D6 line each; the FOVs of the two label files must be the same. The other
+    entries are compared in order with ``record_differences``; a ``sha256`` or ``bytes`` line is OC3 only when that
+    expected entry's path ends in ``/reference.tif``. Every other line is unexplained."""
+    where = f"records/{name}.inputs"
+    if not isinstance(expected, list) or not isinstance(actual, list):
+        return [(None, f"{where}: {'missing' if not isinstance(actual, list) else 'not'} in actual, "
+                       f"{'missing' if not isinstance(expected, list) else 'present'} in expected")]
+    out, kept_expected, kept_actual, removed = [], [], [], {"expected": set(), "actual": set()}
+    for index, entry in enumerate(expected):
+        match = EXPECTED_LABELS.match(entry.get("path") or "")
+        if match:
+            removed["expected"].add(match[1])
+            out.append(("D6", f"{where}[{index}]: {entry['path']} only in expected (the copied labels, D6)"))
+        else:
+            kept_expected.append((index, entry))
+    for index, entry in enumerate(actual):
+        path = entry.get("path") or ""
+        match, kind = next(((pattern.match(path), k) for pattern, k in ACTUAL_LABELS.items() if pattern.match(path)),
+                           (None, None))
+        if match is None:
+            kept_actual.append(entry)
+            continue
+        if kind == "label_image":
+            removed["actual"].add(match[1])
+        if entry.get("kind") == kind and entry.get("verified") is True:
+            out.append(("D6", f"{where}[{index}]: {path} only in actual (the segment task's saved run, D6)"))
+        else:
+            out.append((None, f"{where}[{index}]: {path} only in actual with kind {entry.get('kind')!r} and verified "
+                              f"{entry.get('verified')!r}, not {kind!r} and True"))
+    for fov in sorted(removed["expected"] ^ removed["actual"]):
+        side = "a copied cell_labels.tif and no labels.tif" if fov in removed["expected"] else \
+            "a labels.tif and no copied cell_labels.tif"
+        out.append((None, f"{where}: FOV {fov} has {side}"))
+    if len(kept_expected) != len(kept_actual):
+        return out + [(None, f"{where}: {len(kept_actual)} entries besides the label entries != {len(kept_expected)}")]
+    for (index, e), a in zip(kept_expected, kept_actual):
+        for line in record_differences(a, e, f"{where}[{index}]"):
+            oc3 = re.match(rf"^{re.escape(where)}\[\d+\]\.(?:sha256|bytes): ", line) and \
+                (e.get("path") or "").endswith("/reference.tif")
+            out.append(("OC3" if oc3 else None, line))
+    return out
 
 
 def compare_migrated(expected_dir, actual_dir, target):
     """G3: the differences between an expected folder and the refactored workflow's values (``extract`` with
     ``migrated``, or ``extract_export``), across environments, after the contract's exceptions.
 
-    The expected values are copied to ``target`` with OC3 applied (``expected_with_exceptions``); each difference
-    that remains is attributed to the first of EXCEPTIONS whose pattern it matches. A report's inputs are checked by
-    path as well: a differing digest or size only of a reference image, and a different list only by the label files
-    of D6 (the legacy copies against the segment task's saved runs). Returns (the unexplained differences, {decision:
-    the differences it explains})."""
+    The expected values are copied to ``target`` with OC3 applied (``expected_with_exceptions``). The report records'
+    ``inputs`` are taken out of ``compare``'s lines and compared entry by entry (``_report_input_differences``); each
+    other difference is attributed to the first of EXCEPTIONS whose pattern it matches. Returns (the unexplained
+    differences, {decision: the differences it explains})."""
     expected = expected_with_exceptions(expected_dir, target)
     explained, unexplained = {}, []
+    found = []
+    reports = set()
     for line in compare(expected, actual_dir, same_environment=False):
-        decision = next((d for d, pattern, _ in EXCEPTIONS if re.search(pattern, line)), None)
-        report = re.match(r"^records/((?:[^/]+/)?report/[^/]+/report\.json)\.inputs(?:\[(\d+)\])?", line)
-        if decision and report:
-            paths = _report_inputs(expected, report[1])
-            if report[2] is not None:
-                ok = (paths[int(report[2])] or "").endswith("/reference.tif")
-            else:
-                actual = _report_inputs(actual_dir, report[1])
-                labels = re.compile(r"(?:assignment/[^/]+/cell_labels\.tif|segmentation/[^/]+/(?:labels\.tif|"
-                                    r"segmentation\.json))$")
-                ok = [p for p in paths if not labels.search(p)] == [p for p in actual if not labels.search(p)]
-            decision = decision if ok else None
+        report = REPORT_INPUTS.match(line)
+        if report:
+            reports.add(report[1])
+            continue
+        found.append((next((d for d, pattern, _ in EXCEPTIONS if re.search(pattern, line)), None), line))
+    for name in sorted(reports):
+        records = [json.loads((Path(folder) / "records" / name).read_text()) for folder in (expected, actual_dir)]
+        found += _report_input_differences(name, records[0].get("inputs"), records[1].get("inputs"))
+    for decision, line in found:
         if decision is None:
             unexplained.append(line)
         else:

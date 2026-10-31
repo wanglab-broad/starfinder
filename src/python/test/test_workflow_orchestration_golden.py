@@ -13,6 +13,7 @@ only (the expected folders' README.md), so the comparison leaves them out.
 """
 import importlib.util
 import json
+import re
 import shutil
 import sys
 from importlib.metadata import PackageNotFoundError, version
@@ -212,6 +213,20 @@ MIGRATED_CASES = {
     "a step of the run": (EXPECTED, _record("fovs/FOV_001/run.json", lambda r: r["steps"].pop()), None),
     "an export image statistic": (EXPECTED_EXPORT, _values(_set("per_fov/export/sample/cell_labels.ome.tif:max",
                                                       "value", value=lambda v: v + 1)), None),
+    "the cell labels' path in the assignment record": (EXPECTED, _record(
+        "fovs/FOV_001/assignment/default/assignment.json",
+        _set("inputs", "cells", "file", "path", value=lambda _: "../../segmentation/stardist_segmentation/labels.tif")),
+        "D6"),
+    "another file as the cell labels' path": (EXPECTED, _record(
+        "fovs/FOV_001/assignment/default/assignment.json",
+        _set("inputs", "cells", "file", "path", value=lambda _: "../../segmentation/stardist_segmentation/other.tif")),
+        None),
+    "the imported label file's path": (EXPECTED, _record(
+        "fovs/FOV_001/assignment/default/assignment.json",
+        _set("inputs", "cells", "record", "import", "path", value=lambda _: "<work>/labels/FOV_001.tif")), "D6"),
+    "another FOV's imported label file": (EXPECTED, _record(
+        "fovs/FOV_001/assignment/default/assignment.json",
+        _set("inputs", "cells", "record", "import", "path", value=lambda _: "<work>/labels/FOV_002.tif")), None),
 }
 
 
@@ -227,6 +242,80 @@ def test_the_migrated_comparison_explains_only_the_contracts_exceptions(tmp_path
     lines = unexplained + [line for found in explained.values() for line in found]
     assert len(lines) == 1, lines
     assert (unexplained == [] and list(explained) == [decision]) if decision else unexplained == lines
+
+
+# The report's inputs (workflow_golden._report_input_differences): a copy of the per-FOV route's expected values with
+# the label entries swapped as the refactored workflow swaps them (each FOV's copied cell_labels.tif becomes the
+# segment task's labels.tif, and every FOV's segmentation.json joins), so that the lists differ in length as they do
+# on that route; then one change per case.
+REPORT = "per_fov/report/sample/report.json"
+SAVED_RUN = "fovs/{fov}/segmentation/stardist_segmentation/{name}"
+
+
+def _swap_labels(inputs):
+    out = []
+    for entry in inputs:
+        match = re.match(r"fovs/(FOV_\d+)/assignment/[^/]+/cell_labels\.tif$", entry["path"])
+        out.append(dict(entry, path=SAVED_RUN.format(fov=match[1], name="labels.tif")) if match else entry)
+    records = [{"path": SAVED_RUN.format(fov=f"FOV_00{n}", name="segmentation.json"), "kind": "segmentation_record",
+                "sha256": "1" * 64, "bytes": 2752, "verified": True} for n in range(1, 5)]
+    return out[:4] + records + out[4:]
+
+
+def _entry(inputs, end):
+    return next(entry for entry in inputs if entry["path"].endswith(end))
+
+
+def _exchange(inputs):
+    i, j = (inputs.index(_entry(inputs, end)) for end in ("tables/molecules.csv", "tables/cells.csv"))
+    inputs[i], inputs[j] = inputs[j], inputs[i]
+
+
+#: case: (change of the swapped inputs, the unexplained lines, the explained lines by decision).
+REPORT_INPUT_CASES = {
+    "the label swap alone": (lambda i: None, 0, {"D6": 10}),
+    "a raw image's digest": (lambda i: _entry(i, "round1/FOV_001/ch00.ome.tif").update(sha256="0" * 64), 1, {"D6": 10}),
+    "a retained input's size": (lambda i: _entry(i, "stitching/sample/fovs.csv").update(bytes=1), 1, {"D6": 10}),
+    "a retained input's kind": (lambda i: _entry(i, "export/sample/tables/fovs.csv").update(kind="placement_table"),
+                                1, {"D6": 10}),
+    "a retained input's verified flag": (lambda i: _entry(i, "tables/cells.csv").update(verified=False), 1, {"D6": 10}),
+    "a retained input removed": (lambda i: i.remove(_entry(i, "stitching/sample/links.csv")), 1, {"D6": 10}),
+    "a new input that is no label entry": (lambda i: i.append({"path": "fovs/FOV_001/other.tif", "kind": "label_image",
+                                                               "verified": True}), 1, {"D6": 10}),
+    "two retained inputs exchanged": (_exchange, 6, {"D6": 10}),
+    "a labels.tif of a FOV without copied labels": (lambda i: i.append(dict(
+        _entry(i, "FOV_001/segmentation/stardist_segmentation/labels.tif"),
+        path=SAVED_RUN.format(fov="FOV_003", name="labels.tif"))), 1, {"D6": 11}),
+    "copied labels without a labels.tif": (lambda i: i.remove(_entry(i, "FOV_002/segmentation/stardist_segmentation/"
+                                                                        "labels.tif")), 1, {"D6": 9}),
+    "a label entry not verified": (lambda i: _entry(i, "FOV_001/segmentation/stardist_segmentation/labels.tif").update(
+        verified=False), 1, {"D6": 9}),
+    "a reference image's digest": (lambda i: _entry(i, "FOV_001/reference.tif").update(sha256="0" * 64), 0,
+                                   {"D6": 10, "OC3": 1}),
+    "a reference image's size": (lambda i: _entry(i, "FOV_002/reference.tif").update(bytes=7672), 0,
+                                 {"D6": 10, "OC3": 1}),
+}
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("case", sorted(REPORT_INPUT_CASES))
+def test_the_migrated_comparison_compares_the_report_inputs_entry_by_entry(tmp_path, case):
+    G = _golden()
+    change, unexplained, explained = REPORT_INPUT_CASES[case]
+    actual = G.expected_with_exceptions(EXPECTED_EXPORT, tmp_path / "actual")
+    record = json.loads((actual / "records" / REPORT).read_text())
+    record["inputs"] = _swap_labels(record["inputs"])
+    change(record["inputs"])
+    (actual / "records" / REPORT).write_text(json.dumps(record, indent=1) + "\n")
+    lines, decided = G.compare_migrated(EXPECTED_EXPORT, actual, tmp_path / "expected")
+    assert len(lines) == unexplained, lines
+    assert {d: len(found) for d, found in decided.items()} == explained, decided
+    assert all(line.startswith(f"records/{REPORT}.inputs") for found in decided.values() for line in found)
+    if case == "the label swap alone":
+        named = sorted(re.search(r": (\S+) only in", line)[1] for line in decided["D6"])
+        assert named == sorted([f"fovs/FOV_00{n}/assignment/default/cell_labels.tif" for n in (1, 2, 4)]
+                               + [SAVED_RUN.format(fov=f"FOV_00{n}", name="labels.tif") for n in (1, 2, 4)]
+                               + [SAVED_RUN.format(fov=f"FOV_00{n}", name="segmentation.json") for n in range(1, 5)])
 
 
 @pytest.mark.contract

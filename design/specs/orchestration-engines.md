@@ -242,7 +242,7 @@ configuration key other than `backend`; the plan finds the output root from the 
 its node, which parses the Snakefile (Snakemake 9.15.0: `Workflow.is_main_process` is false in a
 remote job, `snakemake/workflow.py:298`). A plan in every job would rescan the inputs and could
 rewrite the manifest while other jobs read it. The remote parse reads the manifest that the main
-process wrote.
+process wrote, which `plan --locate` finds.
 
 **One rule per rule group.** Snakemake requires output patterns, not functions, so a rule cannot take
 its outputs from a task's manifest entry alone. The plan therefore adds a `groups` section to the
