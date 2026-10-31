@@ -9,6 +9,7 @@ PositionIDs and the route RD1 refuses; these plan configurations of the test's o
 images are empty files (``workflow_tasks``).
 """
 import copy
+import re
 import shutil
 from pathlib import Path
 
@@ -79,8 +80,10 @@ def test_a_missing_round_folder(work, capsys):
 def test_a_channel_label_that_matches_two_files(work, capsys):
     folder = X.input_root(work) / "round2" / "FOV_004"
     shutil.copyfile(folder / "ch01.ome.tif", folder / "copy-ch01.tif")
-    _refused(work, X.variants(work)["molecules-only"], capsys, "FOV FOV_004", "round round2", "'ch01'",
-             "found 2")
+    message = _refused(work, X.variants(work)["molecules-only"], capsys, "FOV FOV_004", "round round2", "'ch01'",
+                       "found 2")
+    # The refusal names both files (test_segmentation_workflow.py's "found 2.*a_ch04.tif.*b_ch04.tif", W-750).
+    assert re.search(r"found 2 \(ch01\.ome\.tif, copy-ch01\.tif\)", message), message
 
 
 def test_a_run_name_with_a_slash(work, capsys):

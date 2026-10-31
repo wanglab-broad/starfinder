@@ -281,6 +281,29 @@ def test_a_missing_or_disagreeing_reference_image_raises(raw, tmp_path):
         ds.fov("FOV").reference_grid()
 
 
+def test_a_reference_image_without_stored_metadata_lies_on_the_declared_grid(raw):
+    """W-755: a reference image without stored metadata (plain pages) is restored on the grid the dataset's
+    voxel_size_xy and voxel_size_z declare, the grid Dataset.export takes for it (_declared.reference_grid): its shape,
+    the declared frame in micrometres, source declared; the merged image is its pixels. Without the voxel sizes the
+    load raises naming them."""
+    from dataclasses import replace
+    from starfinder.dataset._declared import reference_grid, reference_settings
+    ds = dataset(raw["root"], "plain")
+    image = (np.arange(4 * 32 * 32) % 251).astype(np.uint16).reshape(4, 32, 32)
+    path = ds.output_root / "fovs" / "FOV" / "reference.tif"
+    path.parent.mkdir(parents=True)
+    tifffile.imwrite(path, image, metadata=None, photometric="minisblack")
+    with pytest.raises(ValueError, match="lacks voxel_size_xy and voxel_size_z: set voxel_size_xy and voxel_size_z"):
+        ds.fov("FOV").load_reference_image()
+    declared = replace(ds, voxel_size_xy=0.5, voxel_size_z=1.5)
+    restored = declared.fov("FOV").load_reference_image()
+    grid = restored.reference_grid()
+    assert grid == reference_grid(declared.output_root, "FOV", **reference_settings(declared))
+    assert (grid.source, grid.shape_zyx, grid.metadata.spacing_zyx) == ("declared", (4, 32, 32), (1.5, 0.5, 0.5))
+    assert grid.metadata.frame_id == f"declared:{ds.dataset_id}/{ds.output_id}/FOV"
+    assert np.array_equal(restored._merged_reference()[0], image)
+
+
 def test_a_channel_of_the_reference_round_still_needs_the_round(raw, threshold):
     ds = dataset(raw["root"], "channel")
     ds.fov("FOV").run(pipeline(rotation=ANGLE)).save_reference_image()

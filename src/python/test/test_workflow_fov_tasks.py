@@ -212,13 +212,15 @@ def test_r5_the_checkpoints_key_adds_stages_and_a_rerun_replaces_the_record(scen
     first, files, _, _ = run_scene(root, scene_config(root, codebook, "rerun", checkpoints=[]), "rerun")
     assert files == ["run.json"]
     staged = scene_config(root, codebook, "rerun", checkpoints=["candidates", "pre_qc"])
-    second, files, _, _ = run_scene(root, staged, "rerun")
+    second, files, _, out = run_scene(root, staged, "rerun")
     assert files == ["checkpoints/candidates.csv", "checkpoints/candidates.json", "checkpoints/pre_qc.csv",
                      "checkpoints/pre_qc.json", "run.json"]
     assert second["config"]["checkpoints"]["stages"] == ["candidates", "pre_qc"]
     assert second["started_at"] >= first["ended_at"]
-    # The resolved configuration changed with the key, and the record names its new bytes.
-    assert second["workflow_config"]["sha256"] != first["workflow_config"]["sha256"]
+    # The resolved configuration changed with the key, and the record names its new bytes: those of the current
+    # workflow/resolved.json (the base's sha256(root / "config.yaml"), W-750).
+    assert second["workflow_config"]["sha256"] == f"sha256:{sha256(out / 'workflow' / 'resolved.json')}" \
+        != first["workflow_config"]["sha256"]
     third, files, _, _ = run_scene(root, scene_config(root, codebook, "rerun"), "rerun")
     assert third["config"]["checkpoints"]["stages"] == ["candidates", "pre_qc"]
     assert files == ["checkpoints/candidates.csv", "checkpoints/candidates.json", "checkpoints/pre_qc.csv",

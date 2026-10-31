@@ -12,10 +12,12 @@ plain TIFF pages without metadata, the workflow configuration's ``voxel_size_xy`
 is on, of ``reference_merged``, in both dimensionalities. The legacy ``reads_assignment`` adapter
 (``starfinder._legacy_workflow``) runs through a stub ``snakemake`` object, as
 ``test_workflow_assembly_golden.py`` runs it, and the export is ``Dataset.export`` of the configuration's
-translation (``_export_dataset``), the entry the removed ``export_sample`` adapter called (W-750: the Python
-workflow's segment and assign commands read the reference image with ``FOV.load_reference_image``, which needs
-stored metadata, so this case keeps the adapter). The comparison runs both copies (about 8 s for 2D on one CPU), so
-it is ``slow``; the saved-folder case runs ``reads_assignment`` on the plain copy only.
+translation (``_export_dataset``), the entry the removed ``export_sample`` adapter called; this case stays for the
+MATLAB rule set, whose reads_assignment rule the adapter runs. The same plain sample also runs through the Python
+workflow's segment, assign and export commands (W-755: ``FOV.load_reference_image``, which those commands call, now
+takes the grid the voxel sizes declare for a file without stored metadata, as ``Dataset.export`` does). Each
+comparison runs both copies (about 4 to 8 s on one CPU), so it is ``slow``; the saved-folder case runs
+``reads_assignment`` on the plain copy only.
 """
 import hashlib
 import importlib.util
@@ -172,6 +174,97 @@ def test_reads_assignment_and_export_sample_on_declared_grids(tmp_path, dimensio
         assert (entry["grid"]["source"], entry["grid"]["calibration_source"]) == ("declared", "declared")
     assert all(e["grid"]["source"] == "declared" for e in records["plain"]["fusion"]["fovs"])
     assert all(e["grid"]["source"].startswith("file:") for e in records["stored"]["assembly"]["fovs"])
+
+
+def command_run(root, dimensions, *, stored):
+    """build() of the sample planned in the Python shape to its export (plan_sample of test_workflow_export_tasks.py:
+    the processing block, a segment run cell importing images/stardist_segmentation/{fov_id}.tif, a YX image as a
+    plane on the grid's Z projection, the assignment default, the stitching block and config_of's assembly and export
+    blocks, voxel_size_xy and voxel_size_z 1.0 µm); the fov tasks (whose reference images and molecule tables build
+    wrote) and the stitch task (whose placement it saved) succeeded, then the segment, assign and export tasks run by
+    their commands. Returns (output root, manifest, configuration)."""
+    from . import workflow_tasks as T
+    from .test_workflow_export_tasks import plan_sample
+    out, config = build(root, dimensions, stored=stored)
+    labels = str(out / "images" / "stardist_segmentation" / "{fov_id}.tif")
+    manifest, planned = plan_sample(root, "sample1", list(GOLDEN_IDS), export=dict(config["export"]),
+                                    assembly=dict(config["assembly"]), labels=labels, output_id="out", stain=False,
+                                    codebook_table=golden_codebook().table, voxel_size_xy=1.0, voxel_size_z=1.0)
+    assert T.output_root(planned) == out
+    if dimensions == "2d":
+        planned["segmentation"]["runs"][0]["projection"] = True
+        manifest, _ = T.plan(root, "out-plane", planned)
+    assert T.task(manifest, "export", sample="sample1")["outputs"] == ["export/sample1/export.json"]
+    T.succeed(manifest, "fov", "stitch")
+    T.run_kinds(manifest, "segment", "assign", "export")
+    return out, manifest, planned
+
+
+def saved_folder(out, fov):
+    """The saved assignment folder of a FOV: its file names, its tables' bytes, and its record without what the grid
+    decides or where the copy lies: the grid (stored metadata, or declared), the unit's spelling it gives size_unit
+    (µm^3 or micrometer^3), the saved cell run's record and file (its labels.tif stores the grid) and the molecule
+    table's path."""
+    folder = out / "fovs" / fov / "assignment" / "default"
+    names = sorted(p.name for p in folder.iterdir())
+    tables = {name: (folder / name).read_bytes() for name in names if name.endswith(".csv")}
+    record = json.loads((folder / "assignment.json").read_text())
+    record = {k: v for k, v in record.items() if k not in ("grid", "size_unit")}
+    record["inputs"] = dict(record["inputs"], cells={k: v for k, v in record["inputs"]["cells"].items()
+                                                     if k not in ("record", "record_sha256", "file")},
+                            molecules=dict(record["inputs"]["molecules"], source={
+                                k: v for k, v in record["inputs"]["molecules"]["source"].items() if k != "path"}))
+    return names, tables, record
+
+
+@needs_extras
+@pytest.mark.slow
+@pytest.mark.parametrize("dimensions", ["3d", "2d"])
+def test_the_segment_assign_and_export_commands_on_declared_grids(tmp_path, dimensions):
+    """W-755: the plain sample through the Python workflow's commands (W-750 kept it on the legacy adapter above,
+    because the segment and assign commands read the reference image with FOV.load_reference_image, which needed
+    stored metadata). On the plain pages with voxel_size_xy and voxel_size_z the segment task imports the labels on
+    the declared grid, the assign task saves the same tables as on the stored copy (its record's grid declared), and
+    the export task writes the same tables and fused images, its grids declared; without the voxel sizes the segment,
+    assign and export tasks each fail naming voxel_size_xy."""
+    from . import workflow_tasks as T
+    stored_out, _, _ = command_run(tmp_path / "stored", dimensions, stored=True)
+    plain_out, manifest, config = command_run(tmp_path / "plain", dimensions, stored=False)
+    with tifffile.TiffFile(plain_out / "fovs" / "Position001" / "reference.tif") as tif:
+        assert tif.series[0].axes == "IYX" and not tif.is_shaped
+    for fov in GOLDEN_IDS:
+        segmentation = json.loads((plain_out / "fovs" / fov / "segmentation" / "cell" / "segmentation.json")
+                                  .read_text())
+        assert segmentation["grid"]["source"] == "declared"
+        record = json.loads((plain_out / "fovs" / fov / "assignment" / "default" / "assignment.json").read_text())
+        assert record["grid"]["metadata"] == json.loads(json.dumps(asdict(declared(config, fov))))
+        assert record["grid"]["source"] == "declared"
+        assert saved_folder(plain_out, fov) == saved_folder(stored_out, fov), fov
+        names, tables, _ = saved_folder(plain_out, fov)
+        assert names == ["assignment.json", "cells.csv", "counts.csv", "molecules.csv"] and tables["molecules.csv"]
+    folders = {key: out / "export" / "sample1" for key, out in (("stored", stored_out), ("plain", plain_out))}
+    records = {key: json.loads((folder / "export.json").read_text()) for key, folder in folders.items()}
+    for key, folder in folders.items():
+        assert records[key]["complete"] is True, key
+        assert records[key]["parts"] == {"assemble": "written", "fuse": "written", "segment": "off",
+                                         "fuse_labels": "off", "export_spatialdata": "off"}
+        assert [o["path"] for o in records[key]["fusion"]["outputs"]] == FUSED
+        check_export(folder)
+    compare_tables(load_assembly(folders["stored"]), load_assembly(folders["plain"]))
+    for name in FUSED:
+        a, b = (tifffile.imread(folders[key] / name) for key in ("stored", "plain"))
+        assert a.dtype == b.dtype == np.uint8 and np.array_equal(a, b) and a.any()
+    for entry in records["plain"]["assembly"]["fovs"]:
+        assert (entry["grid"]["source"], entry["grid"]["calibration_source"]) == ("declared", "declared")
+    assert all(e["grid"]["source"].startswith("file:") for e in records["stored"]["assembly"]["fovs"])
+    # Without the voxel sizes: the same output root planned again, each command fails naming them (downstream first:
+    # a failed task removes its own declared outputs, which the tasks after it read).
+    unconfigured = {k: v for k, v in config.items() if k not in ("voxel_size_xy", "voxel_size_z")}
+    manifest, _ = T.plan(tmp_path / "plain", "unconfigured", unconfigured)
+    for task in ("export/sample1", "assign/sample1/Position001/default", "segment/sample1/Position001/cell"):
+        assert T.run(manifest, task) == 1, task
+        assert "lacks voxel_size_xy and voxel_size_z: set voxel_size_xy and voxel_size_z" in \
+            T.failure(manifest, task)["message"], task
 
 
 @needs_extras

@@ -31,7 +31,7 @@ from .stitching_fixtures import LN_SPACING, STAGE_SPACING, grid, maf_text
 from .test_stitching_bigstitcher import (LINK_IDS, LINK_SHAPE, golden_stitching_setups,  # noqa: F401
                                          links_table, links_view_map, links_xml)
 from .test_stitching_declared_grids import plain_pages
-from .test_stitching_reference_image import GOLDEN_SHAPE, GOLDEN_SPACING, assert_same_placement, fov_ids
+from .test_stitching_reference_image import MOVED, GOLDEN_SHAPE, GOLDEN_SPACING, assert_same_placement, fov_ids
 from .test_stitching_reference_image import scene_layouts  # noqa: F401  (the module fixture)
 from .test_workflow_stitching_golden import stage_file
 
@@ -317,6 +317,64 @@ def test_fiji_is_read_only_by_the_engine_task(tmp_path):
     assert "fiji" not in code
 
 
+@pytest.mark.slow
+def test_the_engine_task_fails_naming_execution_fiji_in_a_real_job(tmp_path):
+    """From test_wf3_fiji_path_is_read_only_when_the_engine_rule_runs (pytest.raises(ValueError, match="fiji_path")
+    when the engine rule ran without the path): a real Snakemake job of the engine task without execution.fiji fails
+    at once naming execution.fiji; no tool runs, the shell's || echo does not hide it and bigstitcher-check does not
+    run (the task has no record), while the plan and the macro task succeed. With a stand-in Fiji that fails, the job
+    removes a stale dataset.xml (one the check would pass) before the tool runs, and bigstitcher-check reports the
+    missing file; with one that writes a complete dataset.xml the task succeeds (the job runs the tool: before W-755
+    the rule's shell, evaluated again when the job ran, took the last group's and left the tool out)."""
+    import yaml
+    from starfinder import _layout
+    from starfinder.workflow._commands import _check_dataset_xml, _read_view_map
+    from .test_workflow_snakemake_dryrun import _snakemake, snakemake
+    _snakemake()
+    save = tmp_path / "bigstitcher"
+    for k, fov in enumerate(LINK_IDS):
+        reference(tmp_path, fov, np.full(LINK_SHAPE, k + 1, np.uint16), LN_SPACING)
+    config = imported(tmp_path, stitching={"positions": GRID, "bigstitcher_save_dir": str(save)})
+    T.write_inputs(config, rows(SAMPLE, LINK_IDS))
+    out, engine = T.output_root(config), f"bigstitcher_engine/{SAMPLE}"
+    path = tmp_path / "configs" / "engine.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
+    done = snakemake(tmp_path, path, "--", str(_layout.task_record(out, engine)))
+    message = done.stdout + done.stderr
+    assert done.returncode != 0
+    assert f"task {engine} runs fiji, but execution.fiji is not set: set execution.fiji" in message, message
+    assert "the tool exited with status" not in message
+    assert _layout.task_record(out, f"bigstitcher_macro/{SAMPLE}").is_file()
+    assert not _layout.task_record(out, engine).exists() and not _layout.failed_record(out, engine).exists()
+    assert T.task(_layout.manifest_file(out), "bigstitcher_engine")["execution"]["tool"] == {"name": "fiji",
+                                                                                            "path": None}
+    # A stand-in Fiji that records whether dataset.xml was there when it ran, and fails.
+    stale = save / SAMPLE / "dataset.xml"
+    stale.write_text(links_xml())
+    _check_dataset_xml(stale, _read_view_map(save / SAMPLE / "view_map.csv"))      # the stale file passes the check
+    fiji = tmp_path / "fiji.sh"
+    fiji.write_text(f"#!/bin/sh\nif [ -e {stale} ]; then echo present; else echo absent; fi > {tmp_path / 'seen'}\n"
+                    "exit 3\n")
+    fiji.chmod(0o755)
+    path.write_text(yaml.safe_dump(dict(config, execution={"fiji": str(fiji)}), sort_keys=False))
+    done = snakemake(tmp_path, path, "--", str(_layout.task_record(out, engine)))
+    assert done.returncode != 0
+    assert (tmp_path / "seen").read_text() == "absent\n"
+    assert "the tool exited with status 3" in done.stdout + done.stderr
+    message = T.failure(_layout.manifest_file(out), engine)["message"]
+    assert message.startswith("the BigStitcher engine task wrote no dataset.xml at ") and message.endswith(
+        f"/bigstitcher/{SAMPLE}/dataset.xml"), message
+    assert not stale.exists()
+    # A stand-in Fiji that writes a complete dataset.xml: the job runs it, and the check passes.
+    (tmp_path / "complete.xml").write_text(links_xml())
+    fiji.write_text(f"#!/bin/sh\ncp {tmp_path / 'complete.xml'} {stale}\n")
+    done = snakemake(tmp_path, path, "--", str(_layout.task_record(out, engine)))
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert json.loads(_layout.task_record(out, engine).read_text())["status"] == "succeeded"
+    assert stale.read_text() == links_xml()
+
+
 # --- the sample's FOVs under selected_fovs --------------------------------------------------------------------------
 
 # Two samples whose rows interleave (test_fov_membership.py's ROWS).
@@ -456,25 +514,30 @@ def test_a_selection_keeps_each_fov_s_regular_grid_cell(tmp_path, monkeypatch, m
 
 def layout_config(dataset, work, **blocks):
     """A configuration whose output root is the dataset's (<root>/data/output), whose input root holds fovs.csv, and
-    which reads the reference images where the layout holds them (reference_image_import of the dataset's
-    reference_image pattern: the plan declares a pattern with {fov_id} inside a file name, as the moved layout's, as
-    an input only)."""
+    whose reference_image is the dataset's pattern (the default layout's, or the moved layout's
+    images/flamingo/DAPI/{fov_id}_reference.tif), under a processing block, whose fov tasks write the files."""
+    from . import workflow_examples as X
     root = dataset.output_root.parent.parent
     config = T.dataset_keys(work, root_output_path=str(root), output_id="output",
-                            reference_image_import=str(dataset.output_root / dataset.reference_image), **blocks)
+                            reference_image=dataset.reference_image, processing=copy.deepcopy(X.PROCESSING), **blocks)
     if dataset.voxel_size_xy is not None:
         config.update(voxel_size_xy=dataset.voxel_size_xy, voxel_size_z=dataset.voxel_size_z)
     return config
 
 
 def stitch_layout(dataset, layouts, work):
-    """The stitch command with a multiview_stitcher block on the scene's positions table; the saved placement."""
+    """The stitch command with a multiview_stitcher block on the scene's positions table (the fov tasks, whose
+    reference images the layout holds, say succeeded); the saved placement."""
     positions = {"source": "table", "table": str(layouts["saved"] / "positions.csv")}
     block = {"method": "multiview_stitcher", "input": "reference_merged", "positions": positions,
              "config": {"binning_zyx": [1, 2, 2], "quality_threshold": -1.0}}
     config = layout_config(dataset, work, stitching=block)
     T.write_inputs(config, rows("scene", fov_ids(layouts)))
     manifest, _ = T.plan(work, "layout", config)
+    task = T.task(manifest, "stitch", sample="scene")
+    assert {i for i in task["inputs"] if i.endswith(".tif")} == {
+        dataset.reference_image.replace("{fov_id}", fov) for fov in fov_ids(layouts)}
+    T.succeed(manifest, "fov")
     status = T.run(manifest, "stitch/scene")
     if status:
         raise ValueError(T.failure(manifest, "stitch/scene")["message"])
@@ -489,8 +552,9 @@ def stitch_layout(dataset, layouts, work):
 @pytest.mark.parametrize("layout", ["default", "moved"])
 def test_the_stitch_command_on_files_without_metadata(scene_layouts, tmp_path, layout):  # noqa: F811
     """From test_the_workflow_stitching_adapter_on_files_without_metadata: the stitch command with a
-    multiview_stitcher block: plain pages with the configured voxel sizes give the stored copy's placement; without
-    them the task fails naming them."""
+    multiview_stitcher block, reading the reference images at reference_image (the default layout's, or the moved
+    layout's images/flamingo/DAPI/{fov_id}_reference.tif, the base's pattern): plain pages with the configured voxel
+    sizes give the stored copy's placement; without them the task fails naming them."""
     stored, plain = scene_layouts[("stored", layout)], scene_layouts[("plain", layout)]
     via = {form: stitch_layout(dataset, scene_layouts, tmp_path / form)
            for form, dataset in (("stored", stored), ("plain", plain))}
@@ -617,21 +681,16 @@ def test_the_import_command_on_the_2x2_links_fixture_without_metadata(tmp_path):
         import_route(*links_route(tmp_path / "unconfigured", "plain", voxel_size_xy=False))
 
 
-#: A moved reference image the plan can declare as the fov tasks' output: {fov_id} a whole path component (the plan
-#: refuses a pattern with {fov_id} inside a file name as an output, such as test_stitching_reference_image.py's MOVED).
-MOVED_FOLDERS = "images/flamingo/DAPI/{fov_id}/reference_merged.tif"
-
-
 def test_the_import_command_reads_the_configured_reference_image(tmp_path, golden_stitching_setups):  # noqa: F811
-    """From test_the_import_adapter_reads_the_configured_reference_image: with reference_image set, the import task
-    declares and reads the moved files and gives the default layout's placement."""
+    """From test_the_import_adapter_reads_the_configured_reference_image: with reference_image set
+    (images/flamingo/DAPI/{fov_id}_reference.tif, the base's pattern), the import task declares and reads the moved
+    files and gives the default layout's placement."""
     manifest, config, _ = golden_route(tmp_path / "default", "plain", golden_stitching_setups,
                                        reference_image="fovs/{fov_id}/reference.tif")
     expected = import_route(manifest, config)
-    manifest, config, _ = golden_route(tmp_path / "moved", "plain", golden_stitching_setups,
-                                       reference_image=MOVED_FOLDERS)
+    manifest, config, _ = golden_route(tmp_path / "moved", "plain", golden_stitching_setups, reference_image=MOVED)
     task = T.task(manifest, "bigstitcher_import", sample=SAMPLE)
-    assert "images/flamingo/DAPI/Position1/reference_merged.tif" in task["inputs"]
+    assert "images/flamingo/DAPI/Position1_reference.tif" in task["inputs"]
     assert not [i for i in task["inputs"] if i.endswith("/reference.tif")]
     assert_same_placement(expected, import_route(manifest, config))
     assert json.loads((T.output_root(config) / "stitching" / SAMPLE / "placement.json").read_text())

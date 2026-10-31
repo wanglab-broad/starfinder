@@ -71,8 +71,8 @@ def plan_sample(work, sample, fovs, *, export, assembly, cells=True, labels=None
     """Plan the route of a sample to its export: the processing block (molecules), with ``cells`` a segment run
     ``cell`` that imports ``labels`` (a ``{fov_id}`` pattern; empty files when None) and the assignment ``default``,
     the stitching block, the given assembly and export blocks, and with ``stain`` the morphology block; the codebook
-    ``codebook_table`` (entry_id, gene_id, color_sequence) is written first when given. Returns (manifest,
-    configuration)."""
+    ``codebook_table`` (entry_id, gene_id, color_sequence) is written first when given; ``previews`` None leaves
+    assignment.previews out. Returns (manifest, configuration)."""
     config = T.dataset_keys(work, output_id=output_id, processing=copy.deepcopy(X.PROCESSING), stitching=MERGED,
                             assembly=assembly, export=export, **(STAIN if stain else {}), **keys)
     if cells:
@@ -83,7 +83,7 @@ def plan_sample(work, sample, fovs, *, export, assembly, cells=True, labels=None
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"")
         config.update(segmentation={"runs": [{"name": "cell", "target": "cell", "method": "import", "path": labels}]},
-                      assignment={"cells": "cell", "previews": previews})
+                      assignment={"cells": "cell", **({} if previews is None else {"previews": previews})})
     if codebook_table is not None:
         write_codebook(config, codebook_table)
     T.write_inputs(config, "sample,fov_id\n" + "".join(f"{sample},{fov}\n" for fov in fovs), codebook=None)
@@ -200,6 +200,12 @@ def scene_export(work, export, *, export_previews=True):
     codebook and the truth labels of the route after fusion; (folder, manifest)."""
     folder = write_scene(work / "output" / "data", SCENES["fused_pair"]())
     per_fov_routes(folder)
+    return folder, plan_scene(work, folder, export, export_previews=export_previews)
+
+
+def plan_scene(work, folder, export, *, export_previews=True):
+    """The plan of the export block ``export`` on the written scene's output root, the tasks before the export
+    succeeded; the manifest."""
     if export.get("route") == "after_fusion":
         segmentation = truth_config(folder, export_grid(folder))
         runs = [{"name": run.name, "target": run.target, "method": "import", "path": run.method.path,
@@ -212,7 +218,7 @@ def scene_export(work, export, *, export_previews=True):
                                    sample_id=SCENE_SAMPLE)
     assert T.output_root(config) == folder.root
     T.succeed(manifest, "fov", "segment", "assign", "stitch")
-    return folder, manifest
+    return manifest
 
 
 AFTER_FUSION = {"route": "after_fusion", "images": list(IMAGES), "scale_yx": 1.0}
@@ -227,8 +233,9 @@ def figure_paths(folder):
 def test_the_export_previews_follow_the_route(tmp_path, monkeypatch):
     """From test_wf2_the_assignment_figures: with export.previews on, on the route after fusion the export draws no
     assignment figure and declares no preview folder (the sample's cells come from no per-FOV assignment); on the
-    route per FOV it draws them for every FOV with its ownership into export/<sample>/previews/<fov>/, and leaves the
-    assign task's figures in fovs/<fov>/previews/ as they are."""
+    route per FOV, planned on the same output root and exported into the same folder, it draws them for every FOV
+    with its ownership into export/<sample>/previews/<fov>/, rewrites the export, and leaves the assign task's figures
+    in fovs/<fov>/previews/ as they are (so that each of these checks can fail)."""
     import starfinder.workflow._previews as previews
     folder, manifest = scene_export(tmp_path, AFTER_FUSION)
     for fov in folder.scene.ids:  # the figures the assign task wrote first
@@ -249,13 +256,10 @@ def test_the_export_previews_follow_the_route(tmp_path, monkeypatch):
     assert record["assembly"]["route"] == "after_fusion" and record["complete"] is True
     assert set(record["assembly"]["fovs"][i]["kind"] for i in range(2)) == {"molecules"}
     assert calls == [] and figure_paths(folder) == before
-    # The route per FOV of the same sample, into the same folder: the figures are drawn again with ownership.
+    # The route per FOV of the same sample, planned on the same output root and exported into the same folder: the
+    # figures are drawn again with ownership, the assign task's left as they are, and the export rewritten.
     exported = listing(folder.export_dir)
-    folder, manifest = scene_export(tmp_path / "per_fov", {"route": "per_fov", "fuse": False})
-    for fov in folder.scene.ids:
-        (folder.root / "fovs" / fov / "previews").mkdir(parents=True)
-        (folder.root / "fovs" / fov / "previews" / "assignment.png").write_bytes(b"written by the assign task")
-    before = figure_paths(folder)
+    manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "fuse": False})        # checks the output root
     assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
     record = json.loads((folder.export_dir / "export.json").read_text())
     assert record["assembly"]["route"] == "per_fov" and record["parts"]["segment"] == "off"
@@ -341,9 +345,10 @@ FIGURES = {"3d": ["assignment.png", "assignment_single_layer.png"], "2d": ["assi
 
 def build_route(root, dimensions, *, assignment="default", previews=False, output_id="out"):
     """The sample of test_workflow_assembly_golden.py with the reference grids (unit spacing, zero pixels) and the
-    placement of assembly_golden, planned to its export with assignment.previews and export.previews ``previews``;
-    the segment tasks import its label images and the assign tasks run by their commands (assignment null: no
-    segment or assign task). Returns (output root, manifest, configuration)."""
+    placement of assembly_golden, planned to its export with assignment.previews and export.previews ``previews``
+    (None: both keys left out of the configuration); the segment tasks import its label images and the assign tasks
+    run by their commands (assignment null: no segment or assign task). Returns (output root, manifest,
+    configuration)."""
     _, _, out = build_sample(root, dimensions, legacy=False)
     for fov in GOLDEN_IDS:
         save_volume(np.zeros(TILE_ZYX, np.uint8), out / "fovs" / fov / "reference.tif",
@@ -356,7 +361,8 @@ def build_route(root, dimensions, *, assignment="default", previews=False, outpu
     else:
         labels_run = {}
     manifest, config = plan_sample(root, "sample1", list(GOLDEN_IDS),
-                                   export={"route": "per_fov", "fuse": False, "previews": previews},
+                                   export={"route": "per_fov", "fuse": False,
+                                           **({} if previews is None else {"previews": previews})},
                                    assembly={"assignment": assignment}, cells=cells, labels=labels, previews=previews,
                                    output_id=output_id, stain=False, codebook_table=golden_codebook().table,
                                    voxel_size_xy=1.0, voxel_size_z=1.0)
@@ -474,15 +480,18 @@ def test_the_export_draws_the_figures_with_ownership(tmp_path, monkeypatch, dime
 
 @needs_anndata
 def test_by_default_the_route_per_fov_writes_no_preview(tmp_path, monkeypatch):
-    """From test_by_default_the_saved_assignment_route_writes_no_preview: without assignment.previews and
-    export.previews (default false), neither the assign task nor the export task draws a figure; the route writes the
-    saved folders and the export, and no expr/ file."""
-    out, manifest, config = build_route(tmp_path, "3d")
-    assert config["assignment"]["previews"] is False and config["export"]["previews"] is False
-    assert not [o for t in T.tasks(manifest, "assign", "export") for o in t["outputs"] if "previews" in o]
+    """From test_by_default_the_saved_assignment_route_writes_no_preview: with assignment.previews and export.previews
+    left out of the configuration (default false), neither the assign task nor the export task draws a figure; the
+    route writes the saved folders and the export, and no expr/ file."""
     saved = saved_figures(monkeypatch)
+    out, manifest, config = build_route(tmp_path, "3d", previews=None)
+    assert "previews" not in config["assignment"] and "previews" not in config["export"]
+    resolved = json.loads((out / "workflow" / "resolved.json").read_text())["configuration"]
+    assert resolved["assignment"]["previews"] is False and resolved["export"]["previews"] is False
+    assert not [o for t in T.tasks(manifest, "assign", "export") for o in t["outputs"] if "previews" in o]
     assert T.run(manifest, "export/sample1") == 0
-    assert saved == []
+    assert saved == []                                                   # neither the assign tasks nor the export
+    assert all((out / "fovs" / fov / "assignment" / "default" / "assignment.json").is_file() for fov in GOLDEN_IDS)
     assert json.loads((out / "export" / "sample1" / "export.json").read_text())["parts"]["assemble"] == "written"
     assert list(out.rglob("*.png")) == [] and not (out / "expr").exists()
     assert not (out / "export" / "sample1" / "previews").exists()

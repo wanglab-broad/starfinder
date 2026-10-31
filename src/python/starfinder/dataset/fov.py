@@ -2278,14 +2278,19 @@ class FOV:
         Reads the file of the dataset's ``reference_image`` (default
         ``fovs/{fov_id}/reference.tif``), the file
         ``save_reference_image(reference_image="merged")`` writes, or the file
-        ``reference_image_import`` names: ZYX, or YX after a projection, with its
-        stored ``ImageMetadata``. The image becomes
-        resident as the reference merged image: without the reference round,
-        :meth:`reference_grid` returns the grid of that file (as
-        :func:`~starfinder.segmentation.reference_grid_from_file`: source
-        ``"file:<path>"`` and the SHA-256 of the array's C-order bytes; a YX
-        file gives a Z=1 grid), and ``InputChannel(reference_merged=True)``, also
-        as the amplicon of a ``CompositeConfig``, reads it. With
+        ``reference_image_import`` names: ZYX, or YX after a projection. The
+        image becomes resident as the reference merged image: without the
+        reference round, :meth:`reference_grid` returns the grid of that file,
+        the one ``Dataset.export`` and ``Dataset.stitch`` take for it. A file
+        with stored ``ImageMetadata`` gives the grid
+        :func:`~starfinder.segmentation.reference_grid_from_file` reads (source
+        ``"file:<path>"`` and the SHA-256 of the array's C-order bytes); a
+        file without stored metadata gives the grid the dataset's
+        ``voxel_size_xy`` and ``voxel_size_z`` declare (the file's shape, the
+        frame ``declared:<dataset_id>/<output_id>/<fov_id>`` in micrometres,
+        source ``"declared"`` and no hash). A YX file gives a Z=1 grid.
+        ``InputChannel(reference_merged=True)``, also as the amplicon of a
+        ``CompositeConfig``, reads the image. With
         :meth:`load_registered_round`, a process can then segment with no
         sequencing round resident (design/specs/segmentation.md, "Coordination
         per FOV"). A channel of the reference round other than the merged image
@@ -2303,14 +2308,15 @@ class FOV:
         FileNotFoundError
             The file does not exist.
         ValueError
-            The file has no stored metadata, or it disagrees with the resident
-            reference round (shape, metadata, dtype or values).
+            The file has no stored metadata and the dataset lacks
+            ``voxel_size_xy`` or ``voxel_size_z`` (naming them), or it
+            disagrees with the resident reference round (shape, metadata,
+            dtype or values).
         """
-        from starfinder.io import load_volume
-        from starfinder.segmentation import reference_grid_from_file
-        path = self._reference_image_path()
-        grid = reference_grid_from_file(path)
-        image = np.ascontiguousarray(load_volume(path).image)
+        from starfinder.dataset._declared import reference_settings, reference_volume
+        grid, loaded, path = reference_volume(self.dataset.output_root, self.fov_id,
+                                              **reference_settings(self.dataset))
+        image = np.ascontiguousarray(loaded.image)
         if self._reference_resident():
             self._check_reference_file(image, grid, path)
         self._reference_file = (image, grid, path)

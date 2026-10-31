@@ -56,7 +56,7 @@ def test_a_python_configuration_without_fiji_envs_and_dimensions_parses():
     assert 'include: "stitching.smk"' in (RULES / "legacy.smk").read_text()
     for name in ("common.smk", "registration.smk", "spot-finding.smk", "segmentation.smk", "reads-assignment.smk"):
         text = (RULES / name).read_text()
-        assert not re.search(r"config\[['\"](fiji_path|envs_path)['\"]\]", text), name
+        assert not re.search(r"config\[['\"](fiji_path|envs_path|img_row|img_col)['\"]\]", text), name
 
 
 def test_the_dimensions_are_required_by_their_consumers_only(tmp_path):

@@ -10,8 +10,9 @@
     log; per job, the task's declared inputs and the records of the tasks it needs, its command and fingerprint as
     params (Snakemake's params trigger reruns a task whose fingerprint changed), and its execution settings as threads
     and resources, memory and runtime times the attempt. The shell runs the command with the execution context; a task
-    with a tool_command (the BigStitcher engine task, D3) runs the tool first and the command, which checks the tool's
-    result, whatever the tool's exit status. merge and compare are local rules. Nothing here imports the package or
+    with a tool_command (the BigStitcher engine task, D3) removes its outputs, runs the tool and then the command, which
+    checks the tool's result, whatever the tool's exit status; without the tool's path (execution.fiji unset) the job
+    fails at once naming the key. merge and compare are local rules. Nothing here imports the package or
     reads the configuration; no default, translation or result-affecting computation lives here.
 
     Snakemake requires every output and log of a rule to hold the same wildcards. A group's record and log name every
@@ -95,9 +96,24 @@ def _inputs(job, by_id):
 
 
 def _tool(task):
-    """A task's tool command with its {<tool name>} placeholder written as the tool's path."""
+    """The shell commands that run before a task's command: none, or for a task with a tool_command (the BigStitcher
+    engine task, D3) its declared outputs removed, then the tool with its {<tool name>} placeholder written as the
+    tool's path, whose failure is reported and left to the command to judge. Without the path (execution.<tool name>
+    unset; planning without it is valid) the job stops there with exit status 2 and a message naming the key, before
+    the || echo and the command, so that no empty tool runs.
+
+    A job's own value (a param), not the rule's: Snakemake evaluates a rule's shell expression again when the job
+    runs, when a loop variable such as the group's would hold the last group's value."""
+    if "tool_command" not in task:
+        return ""
     tool = task["execution"]["tool"]
-    return shlex.join(tool["path"] if part == "{" + tool["name"] + "}" else part for part in task["tool_command"])
+    removed = "rm -f " + shlex.join(_path(o) for o in task["outputs"]) + "; "
+    if tool["path"] is None:
+        message = (f"task {task['id']} runs {tool['name']}, but execution.{tool['name']} is not set: set "
+                   f"execution.{tool['name']} to the {tool['name']} executable in the configuration and plan again")
+        return removed + f"{{ echo {shlex.quote(message)} >&2; exit 2; }}; "
+    line = shlex.join(tool["path"] if part == "{" + tool["name"] + "}" else part for part in task["tool_command"])
+    return removed + line + ' || echo "the tool exited with status $?" >&2; '
 
 
 def _rules():
@@ -139,7 +155,6 @@ for _name, _group, _tasks, _names, _fixed in RULES:
             _output = directory(_output)
         _outputs.append(_output)
     _constraints = {w: "|".join(re.escape(k[i]) for k in sorted(_tasks)) for i, w in enumerate(_names)}
-    _tooled = any("tool_command" in task for task in _tasks.values())
     _gpu = any(task["execution"]["gpu"] for task in _tasks.values())
 
     rule:
@@ -158,7 +173,9 @@ for _name, _group, _tasks, _names, _fixed in RULES:
         params:
             command=lambda wildcards, job=_job_of: shlex.join(job(wildcards)["command"]),
             fingerprint=lambda wildcards, job=_job_of: job(wildcards)["fingerprint"],
-            tool=lambda wildcards, job=_job_of: _tool(job(wildcards)) if "tool_command" in job(wildcards) else "",
+            tool=lambda wildcards, job=_job_of: _tool(job(wildcards)),
+            # Not in the shell (tool holds the removal): kept because Snakemake's params trigger compares the set of a
+            # job's param values, so that a run completed before this rule changed does not rerun every task.
             outputs=lambda wildcards, job=_job_of: shlex.join(_path(o) for o in job(wildcards)["outputs"]),
         threads: lambda wildcards, job=_job_of: job(wildcards)["execution"]["threads"]
         resources:
@@ -167,5 +184,4 @@ for _name, _group, _tasks, _names, _fixed in RULES:
             attempt=lambda wildcards, attempt: attempt,
             **({"gpu": lambda wildcards, job=_job_of: int(job(wildcards)["execution"]["gpu"])} if _gpu else {}),
         shell:
-            ('rm -f {params.outputs}; {params.tool} || echo "the tool exited with status $?" >&2; '
-             if _tooled else "") + "{params.command} " + CONTEXT
+            "{params.tool}{params.command} " + CONTEXT

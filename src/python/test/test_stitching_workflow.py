@@ -220,6 +220,28 @@ def test_wf1_invalid_blocks_fail_the_schema(tmp_path, change):
     assert T.validation_error(config)
 
 
+@pytest.mark.parametrize("block", ["stitching", "assembly", "export"])
+def test_wf1_each_block_is_python_only_in_the_matlab_schema(tmp_path, block):
+    """From test_wf1_invalid_blocks_fail_the_schema, its backend: matlab case: the MATLAB workflow validates its
+    configuration with the MATLAB schema before any rule (workflow/rules/legacy.smk), whose Python-only clause refuses
+    the stitching, assembly and export blocks: a valid MATLAB configuration passes with backend matlab and with the
+    backend omitted (the schema's default), and with the block it is refused by that clause, which names the block,
+    in both cases."""
+    from .test_fov_membership import matlab_config
+    config = matlab_config(tmp_path)
+    validator = jsonschema.Draft202012Validator(SCHEMA)
+    value = {"stitching": STITCHING, "assembly": ASSEMBLY, "export": EXPORT}[block]
+    assert SCHEMA["properties"]["backend"]["default"] == "matlab"
+    for backend in ({"backend": "matlab"}, {}):
+        plain = {**{k: v for k, v in config.items() if k != "backend"}, **backend}
+        assert validator.is_valid(plain), list(validator.iter_errors(plain))
+        errors = list(validator.iter_errors(dict(plain, **{block: copy.deepcopy(value)})))
+        clause = [e for e in errors if e.validator == "not"]
+        assert len(clause) == 1 and {"required": [block]} in clause[0].validator_value["anyOf"], (block, errors)
+        # The rest are the blocks' order (an assembly block needs stitching, export needs assembly).
+        assert all(e.validator == "dependentRequired" for e in errors if e not in clause), (block, errors)
+
+
 def test_wf1_the_blocks_of_the_contracts_translate():
     config = with_blocks(wf_config("workflow-full.yaml"))
     block = workflow._stitching_block(config)

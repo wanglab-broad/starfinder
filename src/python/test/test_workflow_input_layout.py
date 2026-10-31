@@ -171,6 +171,20 @@ def test_the_matlab_backend_refuses_the_python_input_keys(tmp_path, monkeypatch,
     if key != "image_dir_template":
         with pytest.raises(ValueError, match=f"{key} is Python-only"):
             _reference_file(dict(config, **{key: value}))
+    # The MATLAB rule set itself refuses them (the base's refusal in common.smk, W-750): legacy.smk validates the
+    # configuration against that schema before it includes common.smk or any rule file.
+    legacy = (RULES / "legacy.smk").read_text()
+    validation = legacy.index('\nvalidate(config, schema="../schemas/config.schema.yaml")\n')
+    assert validation < legacy.index('\ninclude: "common.smk"\n') == legacy.index("\ninclude: ")
+
+
+def test_the_matlab_rules_read_the_round_first_folders():
+    """From test_the_python_rule_inputs_follow_the_template, both cases: MATLAB's rules stay round-first, whatever
+    image_dir_template the Python workflow reads (registration.smk's two image folder inputs and the stain file of
+    rotate_nuclei)."""
+    matlab = (RULES / "registration.smk").read_text()
+    assert matlab.count('expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND)') == 2
+    assert 'pattern = f"{INPUT_DIR}/{config[\'dapi_round\']}/{wildcards.fovID}/*ch04.tif"' in matlab
 
 
 def test_the_rules_read_the_configured_codebook(tmp_path, monkeypatch):

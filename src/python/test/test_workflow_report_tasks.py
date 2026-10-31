@@ -103,6 +103,21 @@ def test_the_compare_command_calls_compare_samples_on_every_sample(tmp_path, mon
     assert args == (["sample0", SAMPLE, "sample2"],) and kwargs == {"report_root": out / "report"}
 
 
+def test_the_compare_command_keeps_the_order_of_fovs_csv(tmp_path, monkeypatch):
+    """From test_wf1_report_sample_declares_the_last_per_sample_output and test_wf1_report_smk_declares_exactly_these
+    (the comparison took the samples in fovs.csv's order, s2 before s1): compare passes ["s2", "s1"] to
+    compare_samples, although the task's declared inputs are sorted (s1 first), so that no manifest changes."""
+    calls = spy(monkeypatch, "compare_samples")
+    config = report_config(tmp_path, {}, {})
+    T.write_inputs(config, "sample,fov_id\ns2,F1\ns1,F2\ns2,F3\n")
+    manifest, planned = T.plan(tmp_path, "order", config)
+    assert T.task(manifest, "compare")["inputs"] == ["report/s1/report.json", "report/s2/report.json"]
+    assert list(planned["membership"]["samples"]) == ["s2", "s1"]
+    T.call(manifest, "compare")
+    (_, args, kwargs), = calls
+    assert args == (["s2", "s1"],) and kwargs == {"report_root": T.output_root(config) / "report"}
+
+
 def test_an_invalid_report_block_is_refused_before_any_task(tmp_path, monkeypatch):
     """From test_wf1_the_rules_raise_before_calling_the_entries: the plan refuses the block, naming the unknown key,
     and neither entry is called."""

@@ -327,7 +327,10 @@ class ReferenceGrid:
   `reference_image_import` (ZYX, or YX after a
   projection), with its stored metadata, and makes it resident as the reference merged
   image: `InputChannel(reference_merged=True)` and the amplicon of a `CompositeConfig`
-  read it when the reference round is not resident. A missing file raises
+  read it when the reference round is not resident. A file without stored metadata lies
+  on the grid the dataset's `voxel_size_xy` and `voxel_size_z` declare, the grid
+  `Dataset.export` takes for it (`starfinder.dataset._declared.reference_grid`, source
+  `declared`); without both voxel sizes it raises `ValueError` naming them. A missing file raises
   `FileNotFoundError`; with the reference round resident, the file must equal its channel
   maximum (shape, metadata, dtype and values; a YX file, its projection), else
   `ValueError`.

@@ -251,11 +251,6 @@ def test_rs5_route_configs_validate_and_translate(combination, tmp_path):
     {"segmentation": dict(SEGMENTATION, expansion=1.0)},              # an assignment setting: the assignment block's
     {"segmentation": dict(SEGMENTATION, runs=[])},
     {"segmentation": dict(SEGMENTATION, runs=[{"name": "cell", "target": "cell", "method": "watershed"}])},
-    {"segmentation": dict(SEGMENTATION, runs=[{"name": "cell", "target": "membrane", "method": "cellpose"}])},
-    {"segmentation": dict(SEGMENTATION, runs=[{"name": "cell", "target": "cell", "method": "cellpose",
-                                               "inputs": [{"role": "dapi", "image": "dapi"}]}])},
-    {"segmentation": dict(SEGMENTATION, runs=[{"name": "cell", "target": "cell", "method": "cellpose",
-                                               "inputs": [{"role": "nuclear"}]}])},
 ])
 def test_rs5_invalid_route_keys_fail_the_schema(change, tmp_path):
     """The package refuses each (the Python schema or the export block's translator, as the plan validates it;
@@ -264,6 +259,27 @@ def test_rs5_invalid_route_keys_fail_the_schema(change, tmp_path):
     config = python_route_config(tmp_path, None, "projection", True, True, True, "default")
     config["export"].update(copy.deepcopy(change))
     assert T.validation_error(config)
+
+
+#: A cellpose run that names its diameter and model, so that a run's own invalid key is what the package refuses.
+CELLPOSE = {"name": "cell", "method": "cellpose", "diameter": 30.0, "model": "cpsam_v2"}
+
+
+@pytest.mark.parametrize("run, message", [
+    (dict(CELLPOSE, target="membrane"), "target must be nucleus or cell; got 'membrane"),
+    (dict(CELLPOSE, target="cell", inputs=[{"role": "dapi", "image": "dapi"}]),
+     "run 'cell': unknown channel role 'dapi'; roles are nuclear, cytoplasm, membrane, amplicon, composite"),
+    (dict(CELLPOSE, target="cell", inputs=[{"role": "nuclear"}]),
+     "run 'cell': each input is a (role, image) pair of strings; got ('nuclear', None)"),
+])
+def test_rs5_an_invalid_run_key_hits_its_own_refusal(run, message, tmp_path):
+    """From test_rs5_invalid_route_keys_fail_the_schema's three runs (target membrane, role dapi, an input with no
+    image): with the diameter and model cellpose needs, which the package refuses first without them, each is refused
+    by its own key's message."""
+    from . import workflow_tasks as T
+    config = python_route_config(tmp_path, None, "projection", True, True, True, "default")
+    config["export"].update(segmentation=dict(SEGMENTATION, runs=[run]))
+    assert T.validation_error(config) == message
 
 
 def page_examples():

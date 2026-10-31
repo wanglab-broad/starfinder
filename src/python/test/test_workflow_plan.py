@@ -445,8 +445,9 @@ def test_with_the_blocks_no_legacy_file_is_planned(tmp_path):
     W.write_inputs(config, FOVS_CSV)
     _, manifest = W.plan(tmp_path, "blocks", config)
     declared = [path for t in manifest["tasks"] for path in t["outputs"]]
-    assert not [p for p in declared if "/images/fused/" in p or "tile_config" in p or "_raw.h5ad" in p
-                or "_reads_assignment" in p or p.startswith("expr/")]
+    assert declared and not [p for p in declared if p.startswith("images/fused/") or "/images/fused/" in p
+                             or "tile_config" in p or "_raw.h5ad" in p or "_reads_assignment" in p
+                             or p.startswith("expr/")]
 
 
 @pytest.mark.parametrize("blocks", [{}, {"stitching": MERGED},

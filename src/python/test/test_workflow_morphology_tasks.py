@@ -124,7 +124,7 @@ def test_the_morphology_command_writes_the_saved_form_and_the_channel_images(tmp
     record, the channel images and the saved form of each prepared image (always, D6, where the rule wrote it only
     with its checkpoints key); the record registers morph on the reference stain round1:ch04 by the displacement
     rotated with the images; the saved form reloads, and each channel image is the prepared image (its Z maximum
-    with projection max)."""
+    with projection max); a FOV folder without the saved form raises FileNotFoundError on the reload."""
     from .test_morphology_rounds import LABELS, MORPH
     from .test_segmentation_saved_images import write_inputs
     from starfinder.dataset.workflow import _nuclei_registration
@@ -158,6 +158,11 @@ def test_the_morphology_command_writes_the_saved_form_and_the_channel_images(tmp
         written = tifffile.imread(output / "images" / "morph" / channel.channel / "FOV.tif")
         image = fov.images["morph"][..., c]
         assert np.array_equal(written, image.max(axis=0) if projection else image)
+    # A FOV folder with no saved form has nothing to reload (the base's "without checkpoints there is nothing").
+    empty = _nuclei_registration(dict(old, output_id="empty"))[0]
+    assert not (empty.output_root / "fovs" / "FOV" / "other_rounds").exists()
+    with pytest.raises(FileNotFoundError):
+        empty.fov("FOV").load_registered_round("morph")
 
 
 # --- the channel images by label (from test_dataset_fov_layout.py) ------------------------------------------------

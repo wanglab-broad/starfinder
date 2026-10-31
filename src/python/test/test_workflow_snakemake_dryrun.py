@@ -232,12 +232,15 @@ def test_the_matlab_dry_run_schedules_w641s_three_jobs(tmp_path):
     assert "wildcards: fovID=tile_1" in done.stdout
 
 
-def test_the_fov_wildcard_matches_the_run_s_fovs_only(tmp_path):
+def test_the_fov_wildcard_matches_the_run_s_fovs_only(tmp_path, monkeypatch):
     """From test_fov_membership.py, test_the_python_fovid_wildcard_matches_the_run_s_fovs_only: with selected_fovs
     the rules of rules/tasks.smk constrain the fov wildcard to the plan's FOVs, so that a target of a selected FOV
-    resolves to its rule and no other FOV's (outside the selection or fovs.csv, or a regex look-alike) resolves to any
-    rule; the dispatcher includes no Python rule file of the old workflow."""
+    resolves to its rule and no other FOV's (outside the selection or fovs.csv, a regex look-alike, or the nested id
+    F10/x) resolves to any rule; the dispatcher includes no Python rule file of the old workflow, and the MATLAB rule
+    set defines no FOV_CONSTRAINT, neither in legacy.smk nor in the names common.smk evaluates for a MATLAB
+    configuration."""
     from . import workflow_tasks as W
+    from .test_fov_membership import common_names, matlab_config
     _snakemake()
     config = W.dataset_keys(tmp_path, selected_fovs=["F1.5", "F10"], processing=copy.deepcopy(X.PROCESSING))
     W.write_inputs(config, "sample,fov_id\ns1,F1\ns1,F1.5\ns2,F10\n")
@@ -250,9 +253,51 @@ def test_the_fov_wildcard_matches_the_run_s_fovs_only(tmp_path):
     assert set(tasks) == {"fov/s2/F10"}
     jobs, tasks = scheduled(snakemake(tmp_path, path, "--dry-run", "--", record("F1.5", "s1")))
     assert set(tasks) == {"fov/s1/F1.5"}
-    for fov, sample in (("F1", "s1"), ("F1x5", "s1"), ("F100", "s2"), ("F2", "s1")):
-        done = snakemake(tmp_path, path, "--dry-run", "--", record(fov, sample))
-        assert done.returncode != 0 and "MissingRuleException" in done.stdout + done.stderr, (fov, done.stdout)
+    for fov, sample in (("F1", "s1"), ("F1x5", "s1"), ("F100", "s2"), ("F10/x", "s2"), ("F2", "s1")):
+        for target in [record(fov, sample)] + ([str(out / "fovs" / fov / "run.json")] if "/" in fov else []):
+            done = snakemake(tmp_path, path, "--dry-run", "--", target)
+            assert done.returncode != 0 and "MissingRuleException" in done.stdout + done.stderr, (target, done.stdout)
     snakefile = SNAKEFILE.read_text()
     assert re.findall(r'include: "([^"]+)"', snakefile) == ["rules/legacy.smk", "rules/tasks.smk"]
     assert "FOV_CONSTRAINT" not in snakefile and "registration-py.smk" not in snakefile
+    assert "FOV_CONSTRAINT" not in (X.ROOT / "workflow" / "rules" / "legacy.smk").read_text()
+    matlab = common_names(matlab_config(tmp_path / "matlab"), monkeypatch)
+    assert "FOVS" in matlab and "FOV_CONSTRAINT" not in matlab
+
+
+#: The pattern of test_stitching_reference_image.py's moved layout: {fov_id} inside a file name (W-755).
+MOVED = "images/flamingo/DAPI/{fov_id}_reference.tif"
+
+
+def test_a_reference_image_with_the_fov_id_in_its_file_name_is_scheduled_and_written_there(tmp_path):
+    """W-755: reference_image images/flamingo/DAPI/{fov_id}_reference.tif on two FOVs of the fixture: one rule of the
+    fov group with the template images/flamingo/DAPI/{fov}_reference.tif; the dry run schedules each FOV's fov task and
+    its downstream (the segment task that reads that file), and the real run writes each FOV's reference image there,
+    which the segment tasks read, and none at the default path."""
+    _snakemake()
+    X.golden().write_fixture(tmp_path)
+    processing = {k: v for k, v in copy.deepcopy(X.PROCESSING).items()
+                  if k in ("load_codebook", "preprocessing", "registration")}
+    config = dict(X.dataset(tmp_path, "moved"), selected_fovs=["FOV_001", "FOV_002"], reference_image=MOVED,
+                  processing=dict(processing, checkpoints=[]), segmentation={"runs": [
+                      {"name": "nucleus", "target": "nucleus", "method": "import",
+                       "path": str(tmp_path / "labels" / "{fov_id}.tif")}]})
+    path = X.write_config(tmp_path, "moved", config)
+    done = snakemake(tmp_path, path, "--dry-run")
+    jobs, tasks = scheduled(done)
+    out = X.output_root(tmp_path, "moved")
+    plan = manifest(out)
+    (group,) = [g for g in plan["groups"] if g["kind"] == "fov"]
+    assert "images/flamingo/DAPI/{fov}_reference.tif" in group["outputs"]
+    fovs = {f"fov/sample/{fov}" for fov in ("FOV_001", "FOV_002")}
+    assert set(tasks) == downstream(plan, fovs) == fovs | {f"segment/sample/{fov}/nucleus" for fov in
+                                                           ("FOV_001", "FOV_002")}
+    assert set(tasks.values()) == {1} and jobs == {"fov_0": 2, "segment_1": 2}
+    done = snakemake(tmp_path, path)
+    assert done.returncode == 0, done.stdout[-5000:] + done.stderr[-5000:]
+    for fov in ("FOV_001", "FOV_002"):
+        moved = out / "images" / "flamingo" / "DAPI" / f"{fov}_reference.tif"
+        assert moved.is_file() and not (out / "fovs" / fov / "reference.tif").exists()
+        segmentation = json.loads((out / "fovs" / fov / "segmentation" / "nucleus" / "segmentation.json").read_text())
+        assert segmentation["grid"]["source"] == f"file:{moved.resolve()}"
+    assert scheduled(snakemake(tmp_path, path, "--dry-run")) == ({}, Counter())

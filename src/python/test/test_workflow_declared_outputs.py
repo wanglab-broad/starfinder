@@ -276,10 +276,11 @@ def _labels(work, fovs=("F1", "F2")):
 
 @pytest.mark.parametrize("setting", ["default", "relative", "absolute", "imported relative", "imported absolute"])
 def test_the_reference_image_is_declared_where_reference_image_names_it(tmp_path, setting):
-    """From test_dataset_fov_layout.py (the declarations of the reference image and of an imported one) and
-    test_stitching_reference_image.py, test_the_setting_defaults_to_the_present_location: the fov task declares the
-    file reference_image names (relative to the output root, or absolute), none with reference_image_import; the
-    tasks that read it (stitch, segment, assign) declare the same file as an input."""
+    """From test_dataset_fov_layout.py (the declarations of the reference image and of an imported one, and the
+    wildcard form of refs/{fov_id}_ref.tif) and test_stitching_reference_image.py,
+    test_the_setting_defaults_to_the_present_location: on two FOVs the fov task declares the file reference_image
+    names (relative to the output root, or absolute), none with reference_image_import, and the fov group's template
+    is the pattern with {fov}; the tasks that read it (stitch, segment, assign) declare the same file as an input."""
     keys = {"default": {}, "relative": {"reference_image": "refs/{fov_id}_ref.tif"},
             "absolute": {"reference_image": str(tmp_path / "elsewhere" / "{fov_id}.tif")},
             "imported relative": {"reference_image_import": "imports/{fov_id}.tif"},
@@ -289,13 +290,66 @@ def test_the_reference_image_is_declared_where_reference_image_names_it(tmp_path
                 "imported absolute": str(tmp_path / "tool" / "F1.tif")}[setting]
     config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), stitching=MERGED, **_cells(tmp_path),
                             **keys)
-    manifest = _planned(tmp_path, "reference", config, fovs="sample,fov_id\nsample,F1\n",
-                        **{k: str(v) for k, v in _labels(tmp_path, ("F1",)).items()})
-    (fov,) = _kinds(manifest, "fov")
+    manifest = _planned(tmp_path, "reference", config, **{k: str(v) for k, v in _labels(tmp_path).items()})
+    fov, second = _kinds(manifest, "fov")
     assert (declared in fov["outputs"]) is not setting.startswith("imported")
     assert not [o for o in fov["outputs"] if o.endswith(".tif") and o != declared]
+    assert (declared.replace("F1", "F2") in second["outputs"]) is not setting.startswith("imported")
+    (group,) = [g for g in manifest["groups"] if g["kind"] == "fov"]
+    template = {"default": "fovs/{fov}/reference.tif", "relative": "refs/{fov}_ref.tif",
+                "absolute": str(tmp_path / "elsewhere" / "{fov}.tif")}.get(setting)
+    assert [o for o in group["outputs"] if o.endswith(".tif")] == ([] if template is None else [template])
     readers = {t["kind"] for t in manifest["tasks"] if declared in t["inputs"]}
-    assert {"stitch", "assign"} <= readers
+    assert {"stitch", "segment", "assign"} <= readers
+
+
+@pytest.mark.parametrize("pattern, template", [
+    ("images/flamingo/DAPI/{fov_id}_reference.tif", "images/flamingo/DAPI/{fov}_reference.tif"),
+    ("refs/ref_{fov_id}.tif", "refs/ref_{fov}.tif"),
+    ("{fov_id}.reference.tif", "{fov}.reference.tif"),
+    ("images/flamingo/DAPI/{fov_id}/reference_merged.tif", "images/flamingo/DAPI/{fov}/reference_merged.tif"),
+    ("fovs/{fov_id}/reference.tif", "fovs/{fov}/reference.tif"),
+    ("refs/F1/{fov_id}_ref.tif", "refs/F1/{fov}_ref.tif"),             # a FOV id as a folder of the pattern
+    ("samples/sample/{fov_id}_ref.tif", "samples/sample/{fov}_ref.tif"),  # the sample as a folder of the pattern
+])
+def test_the_reference_image_template_is_the_pattern_s_own(tmp_path, pattern, template):
+    """W-755: on three FOVs (F1, F2, F10), reference_image with {fov_id} anywhere in its file name, or as a folder,
+    plans: the fov group's template is the pattern with {fov} where the pattern has {fov_id} and every other part
+    literal, so that a FOV id or the sample name in another part of the path is not replaced (the plan once rebuilt
+    the template by searching each FOV's id in its literal path, and refused such a pattern on two FOVs as "different
+    output templates"); each fov task declares its own FOV's file, and the tasks that read it declare the same file;
+    the other outputs' templates keep their rule (fovs/{fov}/...)."""
+    config = W.dataset_keys(tmp_path, reference_image=pattern, processing=copy.deepcopy(X.PROCESSING),
+                            stitching=MERGED, **_cells(tmp_path))
+    fovs = ("F1", "F2", "F10")
+    manifest = _planned(tmp_path, "pattern", config, fovs="sample,fov_id\n" + "".join(f"sample,{f}\n" for f in fovs),
+                        **{k: str(v) for k, v in _labels(tmp_path, fovs).items()})
+    (group,) = [g for g in manifest["groups"] if g["kind"] == "fov"]
+    assert group["wildcards"] == ["sample", "fov"]
+    assert [o for o in group["outputs"] if o.endswith(".tif")] == [template]
+    assert {o for o in group["outputs"] if not o.endswith(".tif")} == {
+        "fovs/{fov}/checkpoints/candidates.json", "fovs/{fov}/checkpoints/pre_qc.json", "fovs/{fov}/molecules.csv",
+        "fovs/{fov}/run.json"}
+    for task in _kinds(manifest, "fov"):
+        fov = task["identity"]["fov"]
+        expected = pattern.replace("{fov_id}", fov)
+        assert [o for o in task["outputs"] if o.endswith(".tif")] == [expected]
+        assert _layout.reference_image_path(tmp_path, fov, pattern) == tmp_path / expected
+        readers = {t["kind"] for t in manifest["tasks"] if expected in t["inputs"]}
+        assert {"stitch", "segment", "assign"} <= readers, fov
+
+
+def test_a_reference_image_without_fov_id_is_refused_as_before(tmp_path):
+    """W-755: a pattern with no {fov_id} is refused by the plan before any task, naming reference_image and the
+    default, as at the base (c932349)."""
+    from starfinder.workflow._plan import PlanRefused
+    config = W.dataset_keys(tmp_path, reference_image="images/reference.tif", processing=copy.deepcopy(X.PROCESSING))
+    W.write_inputs(config, TWO)
+    with pytest.raises(PlanRefused) as error:
+        W.plan(tmp_path, "nofov", config)
+    assert str(error.value) == ("reference_image must be a file pattern with {fov_id}, absolute or relative to the "
+                                "output root (default 'fovs/{fov_id}/reference.tif'); got 'images/reference.tif")
+    assert not W.output_root(config).exists()
 
 
 #: The position file of each source: the configuration's positions, and the file the placing tasks declare.
@@ -457,6 +511,10 @@ def test_the_export_task_declares_the_reference_images_and_the_named_images(tmp_
     assert {"fovs/F1/other_rounds/reference_stain/image.ome.tif",
             "fovs/F2/other_rounds/reference_stain/image.ome.tif"} <= set(export["inputs"])
     assert not [i for i in export["inputs"] if "/dapi/" in i or "/flamingo/F" in i]
+    # The base's list in this case (after_fusion_inputs(False) with the moved reference image): the placement, both
+    # FOVs' molecule tables and the files reference_image names.
+    assert {"stitching/sample/placement.json", "fovs/F1/molecules.csv", "fovs/F2/molecules.csv",
+            "images/flamingo/DAPI/F1.tif", "images/flamingo/DAPI/F2.tif"} <= set(export["inputs"])
 
 
 def test_a_configuration_without_the_new_keys_keeps_its_route(tmp_path):
@@ -544,30 +602,69 @@ def test_the_assign_task_declares_the_saved_folder_alone(tmp_path, name, preview
     assert _kinds(_planned(tmp_path, "molecules", molecules), "assign") == []
 
 
-@pytest.mark.parametrize("case", ["assembly", "stitching", "processing"])
+def test_the_matlab_reads_assignment_rule_keeps_its_legacy_outputs():
+    """From test_stitching_workflow.py, test_wf3_reads_assignment_declares_the_saved_folder_alone (its MATLAB rule
+    text): MATLAB's reads_assignment rule declares expr/{fovID}/raw.h5ad and reads_assignment.csv of every FOV, no
+    preview folder, and its output section is those two lists."""
+    text = (X.ROOT / "workflow" / "rules" / "reads-assignment.smk").read_text()
+    head = text[:text.index("rule reads_assignment:")]
+    assert 'expand("{output_dir}/expr/{{fovID}}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=FOVS)' in head
+    assert 'expand("{output_dir}/expr/{{fovID}}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=FOVS)' in head
+    assert "\nREADS_ASSIGNMENT_PREVIEWS = []\n" in head
+    rule = text[text.index("rule reads_assignment:"):]
+    output = rule[rule.index("output:"):rule.index("resources:")]
+    assert output.split() == ["output:", "READS_ASSIGNMENT_OUTPUTS,", "[directory(folder)", "for", "folder", "in",
+                              "READS_ASSIGNMENT_PREVIEWS],"]
+
+
+#: The morphology block and its round, which the export's default fusion image (reference_stain) needs.
+STAIN = {"reference_stains": [{"channel": "ch04", "name": "DAPI"}],
+         "additional_round": [{"round_name": "morph", "channel_order": ["ch00"]}], "morphology": {}}
+
+
+@pytest.mark.parametrize("case", ["assembly", "molecules", "stitching", "processing"])
 def test_the_report_task_declares_its_inputs(tmp_path, case):
     """From test_report_workflow.py, test_wf1_report_sample_declares_the_last_per_sample_output and
-    test_wf1_report_smk_declares_exactly_these: the report task of each sample declares its report.json, and reads
-    the sample's export.json with an assembly block, else its placement.json with a stitching block, and the FOVs'
-    run records (and stage records) in every case (the old rule declared the last per-sample output alone: the task
-    declares every file the report reads, D2); the compare task reads every sample's report.json, in fovs.csv's
-    order, and declares samples.csv and index.html."""
+    test_wf1_report_smk_declares_exactly_these: the report task of each sample (s2 with two FOVs, beside s1 with
+    one) declares its report.json, and reads the sample's export.json with an assembly block, else its placement.json
+    with a stitching block, and its own FOVs' run records (and stage records, and with an assignment their saved
+    assignments) in every case, no other FOV's (the old rule declared the last per-sample output alone: the task
+    declares every file the report reads, D2). The case molecules is the configuration of
+    test_wf1_existing_configurations_without_the_new_keys and test_wf3_export_sample_inputs_and_declared_output,
+    assembly: {assignment: null} with no export block (and the morphology block the default fusion image,
+    reference_stain, needs): the molecule route, whose export task declares the placement, the FOVs' molecule tables
+    and export.json, which the report reads. The compare task
+    reads every sample's report.json, sorted as every task's declared inputs are (the command takes fovs.csv's order,
+    test_workflow_report_tasks.py), and declares samples.csv and index.html."""
     blocks = {"assembly": dict(stitching=MERGED, assembly={"assignment": "default"},
                                export={"route": "per_fov", "fuse": False}, **_cells(tmp_path)),
+              "molecules": dict(stitching=MERGED, assembly={"assignment": None}, **STAIN),
               "stitching": dict(stitching=MERGED), "processing": {}}[case]
     config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), report={}, **blocks)
-    manifest = _planned(tmp_path, case, config, fovs="sample,fov_id\ns2,F1\ns1,F2\n",
-                        **{k: str(v) for k, v in _labels(tmp_path).items()})
+    if case == "molecules":
+        assert "export" not in config
+    members = {"s2": ["F1", "F3"], "s1": ["F2"]}
+    manifest = _planned(tmp_path, case, config, fovs="sample,fov_id\ns2,F1\ns1,F2\ns2,F3\n",
+                        **{k: str(v) for k, v in _labels(tmp_path, ("F1", "F2", "F3")).items()})
     reports = _kinds(manifest, "report")
     assert [t["outputs"] for t in reports] == [["report/s2/report.json"], ["report/s1/report.json"]]
     for task in reports:
-        sample, fov = task["identity"]["sample"], {"s2": "F1", "s1": "F2"}[task["identity"]["sample"]]
-        last = {"assembly": f"export/{sample}/export.json", "stitching": f"stitching/{sample}/placement.json",
-                "processing": None}[case]
-        assert f"fovs/{fov}/run.json" in task["inputs"]
+        sample = task["identity"]["sample"]
+        last = {"assembly": f"export/{sample}/export.json", "molecules": f"export/{sample}/export.json",
+                "stitching": f"stitching/{sample}/placement.json", "processing": None}[case]
+        assert {f"fovs/{fov}/run.json" for fov in members[sample]} <= set(task["inputs"])
+        assert {i.split("/")[1] for i in task["inputs"] if i.startswith("fovs/")} == set(members[sample])
         if last is not None:
             assert last in task["inputs"]
         assert not [i for i in task["inputs"] if ("export/" in i or "stitching/" in i) and i != last]
+    if case == "molecules":
+        assert manifest["export_route"] == "molecules_only" and _kinds(manifest, "assign") == []
+        for task in _kinds(manifest, "export"):
+            sample = task["identity"]["sample"]
+            assert task["outputs"] == [f"export/{sample}/export.json"]
+            assert {f"stitching/{sample}/placement.json"} | {f"fovs/{fov}/molecules.csv" for fov in members[sample]} \
+                <= set(task["inputs"])
+            assert not [i for i in task["inputs"] if i.endswith("assignment.json")]
     (compare,) = _kinds(manifest, "compare")
     assert compare["inputs"] == ["report/s1/report.json", "report/s2/report.json"]
     assert compare["needs"] == ["report/s1", "report/s2"]

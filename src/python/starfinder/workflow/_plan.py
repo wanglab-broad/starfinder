@@ -498,6 +498,16 @@ class Graph:
             parts.append(_escape(part) if replaced is None else replaced)
         return "/".join(parts)
 
+    def _template(self, path, identity, wildcards):
+        """The group template of a declared path: a FOV's reference image takes the pattern's own, ``{fov_id}``
+        written ``{fov}`` wherever the pattern has it and every other part literal, so that a FOV id inside a file
+        name, or in a folder or sample name, is neither missed nor replaced by accident; any other path ``_fill``."""
+        if "fov" in wildcards and path == self.reference_image(identity["fov"]):
+            pattern = Path(self.r["reference_image_import"] or self.r["reference_image"])
+            declared = self.rel(pattern if pattern.is_absolute() else self.out / pattern)
+            return "{fov}".join(_escape(part) for part in declared.split("{fov_id}"))
+        return self._fill(path, identity, wildcards)
+
     def execution(self, kind, gpu=False):
         e = self.r["execution"]
         values = {**e["defaults"], **({"threads": KIND_THREADS[kind]} if kind in KIND_THREADS else {}),
@@ -534,15 +544,16 @@ class Graph:
             task["tool_command"] = tool_command
         task["execution"] = self.execution(kind, gpu)
         task["blocks"] = list(TASK_BLOCKS[kind])
-        templates = sorted(self._fill(o, identity, wildcards) for o in declared)
+        templates = sorted(self._template(o, identity, wildcards) for o in declared)
         entry = {"name": group_name, "kind": kind, "wildcards": wildcards, "outputs": templates,
                  "record": f"{_layout.WORKFLOW}/{_layout.TASKS}/{name}.json",
                  "log": f"{_layout.WORKFLOW}/{_layout.LOGS}/{name}.log",
-                 "temporary": sorted(self._fill(self.rel(o) if isinstance(o, Path) else o, identity, wildcards)
+                 "temporary": sorted(self._template(self.rel(o) if isinstance(o, Path) else o, identity, wildcards)
                                      for o in temporary)}
         known = self.groups.setdefault(group_name, entry)
         if known != entry:
-            raise PlanRefused(f"the tasks of group {group_name} declare different output templates")
+            raise PlanRefused(f"the tasks of group {group_name} declare different output templates: task {task_id} "
+                              f"{entry['outputs']}, an earlier task {known['outputs']}")
         self.tasks.append(task)
         self.by_id[task_id] = task
         return task_id

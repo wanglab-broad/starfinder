@@ -672,8 +672,10 @@ def report(run):
 
 
 def compare(run):
-    """Dataset.compare_samples of every sample whose report is an input, in the inputs' order, into report/."""
-    samples = [path.parent.name for path in run.inputs("report.json")]
+    """Dataset.compare_samples of every sample whose report is an input, in the membership's order (fovs.csv's; the
+    task's declared inputs are sorted), into report/."""
+    reported = {path.parent.name for path in run.inputs("report.json")}
+    samples = [sample for sample in run.manifest["membership"]["samples"] if sample in reported]
     run.dataset().compare_samples(samples, report_root=_layout.report_root(run.out))
 
 
