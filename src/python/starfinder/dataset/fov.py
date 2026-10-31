@@ -2202,23 +2202,38 @@ class FOV:
         :meth:`load_reference_image`, it is the grid of the saved reference image
         as :func:`~starfinder.segmentation.reference_grid_from_file` reads it
         (source ``"file:<path>"``; a YX file gives a Z=1 grid). Either is the
-        same grid by the grid rule (equal shape and metadata). See
+        same grid by the grid rule (equal shape and metadata). Without either,
+        the reference stain prepared by :meth:`prepare_morphology` or restored
+        by :meth:`load_registered_round` gives the grid: it is the same
+        acquisition as the reference round (``images["reference_stain"]``'s
+        shape, its metadata, source ``"fov:reference_stain"`` and the SHA-256 of
+        its C-order bytes), so a nuclear-stain segmentation needs no processing
+        (design/specs/orchestration.md, open point OP4). See
         design/specs/segmentation.md.
 
         Raises
         ------
         ValueError
-            Neither the reference round nor the saved reference image is
-            resident, or both are and disagree.
+            Neither the reference round, the saved reference image nor the
+            prepared reference stain is resident, or the round and the saved
+            image both are and disagree.
         """
+        from starfinder.dataset._prepared import SAME_ACQUISITION
         from starfinder.segmentation import ReferenceGrid, SegmentationPlan, SegmentationResult
         from starfinder.segmentation._labels import grid_sha256
         ref = self.rounds.reference_round
         if not self._reference_resident():
             if self._reference_file is not None:
                 return self._reference_file[1]
+            entry = self.registration_record.get('rounds', {}).get(REFERENCE_STAIN) or {}
+            if (entry.get('relation') == SAME_ACQUISITION and REFERENCE_STAIN in self.images
+                    and REFERENCE_STAIN in self.metadata):
+                image = self.images[REFERENCE_STAIN]
+                return ReferenceGrid(np.shape(image)[:3], self.metadata[REFERENCE_STAIN], f'fov:{REFERENCE_STAIN}',
+                                     grid_sha256(image))
             raise ValueError(f'the reference round {ref!r} is not resident; call run(), '
-                             'load_checkpoint("registered") or load_reference_image() first')
+                             'load_checkpoint("registered"), load_reference_image() or, for the grid of the reference '
+                             'stain, load_registered_round("reference_stain") first')
         if self._reference_file is not None:
             self._check_reference_file(*self._reference_file)
         image = self.images[ref]
@@ -2302,7 +2317,7 @@ class FOV:
         return self
 
     def segment(self, plan: SegmentationPlan, *, device: str = 'cpu',
-                checkpoints: CheckpointConfig | None = None) -> FOV:
+                checkpoints: CheckpointConfig | None = None, run: str | None = None) -> FOV:
         """Run a segmentation plan on this FOV's resident reference-frame images.
 
         Each run, in order, takes the reference grid (:meth:`reference_grid`, or its
@@ -2342,6 +2357,12 @@ class FOV:
         The stored results carry that saved record. ``run.json`` and the ``FOV.run``
         stages are not touched; ``stages`` and ``hash_inputs`` are not used.
 
+        With ``run``, only that run of the plan is computed (and saved), as the
+        workflow's ``segment`` task does for one (FOV, run): the seeds it names
+        are then taken from ``segmentation_results``, where
+        :meth:`load_segmentation` restores the saved seed run. The result is the
+        one the whole plan gives that run.
+
         Parameters
         ----------
         plan : SegmentationPlan
@@ -2351,6 +2372,9 @@ class FOV:
         checkpoints : CheckpointConfig, optional
             None (default) keeps the results in memory only; otherwise its
             ``directory`` and ``overwrite`` place the run folders.
+        run : str, optional
+            The name of the one run to compute; None (default) computes every
+            run in order.
 
         Returns
         -------
@@ -2365,8 +2389,10 @@ class FOV:
             image needs that round, not the saved reference image), a morphology
             round without an entry in registration_record["rounds"] (or a
             sequencing round without a registration), a round with metadata other
-            than the reference round's, an unknown channel or an unknown device;
-            and every error of segment and import_labels.
+            than the reference round's, an unknown channel or an unknown device,
+            a ``run`` that the plan does not hold or whose seeds are not in
+            ``segmentation_results``; and every error of segment and
+            import_labels.
         TypeError
             checkpoints is neither None nor a CheckpointConfig.
         FileExistsError
@@ -2378,19 +2404,19 @@ class FOV:
         """
         from starfinder.segmentation import SegmentationPlan
         from starfinder.segmentation._persist import check_writable, run_directory, write_run
-        from starfinder.segmentation._plan import segment_fov
+        from starfinder.segmentation._plan import segment_fov, selected_runs
         if checkpoints is not None and not isinstance(checkpoints, CheckpointConfig):
             raise TypeError('checkpoints must be a CheckpointConfig or None')
         if checkpoints is None:
-            self.segmentation_results.update(segment_fov(self, plan, device=device))
+            self.segmentation_results.update(segment_fov(self, plan, device=device, only=run))
             return self
         checkpoints.__post_init__()
         root = self._fov_dir(checkpoints)
         if isinstance(plan, SegmentationPlan):
-            for run in plan.runs:
-                check_writable(run_directory(root, run.name), checkpoints.overwrite)
+            for item in selected_runs(plan, run):
+                check_writable(run_directory(root, item.name), checkpoints.overwrite)
         inputs = {}
-        results = segment_fov(self, plan, device=device, inputs=inputs)
+        results = segment_fov(self, plan, device=device, inputs=inputs, only=run)
         for name, result in results.items():
             directory = run_directory(root, name)
             results[name] = write_run(directory, result, inputs.get(name))

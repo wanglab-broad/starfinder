@@ -432,6 +432,16 @@ def check_producers(r):
         raise PlanRefused("; ".join(errors))
 
 
+def morphology_field(r):
+    """Whether the saved form of a round that morphology.recipe registers holds ``field.npz``: a step whose transform
+    is dense or a B-spline (REGISTRATION_METHODS' transform_kind). A step's recovery alternatives are of its step kind
+    (RegistrationStep), and every local method's transform is one of these, so no attempt changes it."""
+    from starfinder.registration import REGISTRATION_METHODS
+    recipe = _translate.morphology(r).recipe
+    return recipe is not None and any(REGISTRATION_METHODS[type(step.config)].transform_kind in ("dense", "bspline")
+                                      for step in recipe.steps)
+
+
 def check_names(r, membership=None):
     """FOV ids, sample names, run and assignment names become parts of file names and task ids: none may hold a
     ``/``. The block names are checked before the translators, the FOV and sample names after the membership."""
@@ -608,6 +618,7 @@ class Graph:
         if "morphology" in r:
             m = r["morphology"]
             stains = bool(r.get("reference_stains"))
+            field = morphology_field(r)
             for sample, members in samples.items():
                 for fov in members:
                     names = (["reference_stain"] if stains else []) + list(m["rounds"])
@@ -615,6 +626,9 @@ class Graph:
                     for name in names:
                         folder = _layout.other_round_dir(self.fov_dir(fov), name)
                         outputs += [folder / "image.ome.tif", folder / "registration.json"]
+                        if field and name != "reference_stain":
+                            # A dense recipe's displacement field (the reference stain is not registered).
+                            outputs.append(folder / "field.npz")
                     if m.get("channel_images"):
                         for e in r.get("additional_round") or []:
                             if e["round_name"] in m["rounds"]:

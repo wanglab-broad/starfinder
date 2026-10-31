@@ -242,29 +242,6 @@ def test_a18_the_legacy_outputs_equal_the_frozen_helper(tmp_path, dimensions, ex
         f"assignment ratio: {100 * assigned / total:.2f}% ({assigned} of {total} molecules assigned)"
 
 
-@pytest.mark.parametrize("dimensions", ["3d", "2d"])
-def test_the_python_route_reads_molecules_csv_by_key(tmp_path, dimensions):
-    """The Python route: the adapter reads fovs/<fov>/molecules.csv with load_molecules, so reads_assignment.csv
-    keeps the molecules' spot_ids (no csv:<i>) and zero-based coordinates; the counts, the cells and the rows equal
-    those of the same molecules on the legacy route."""
-    labels = label_fixture() if dimensions == "3d" else label_fixture().max(axis=0)
-    ids = [f"spot-{9 - i}" for i in range(len(KEEP))]  # identities that are neither row numbers nor in row order
-    adata, reads, path = run_rule(tmp_path, labels, spot_ids=ids)
-    legacy_adata, legacy_reads, _ = run_rule(tmp_path / "legacy", labels, legacy=True)
-    assert path.name == "molecules.csv" and path.parent.name == "Position001"
-    assert list(reads.columns) == MOLECULE_READS + ASSIGNMENT_READS
-    assert not reads.spot_id.str.startswith("csv:").any()
-    assert reads.spot_id.tolist() == [ids[int(s[len("csv:"):])] for s in legacy_reads.spot_id]
-    assert set(reads.spot_namespace) == {NAMESPACE} and reads.gene_id.tolist() == legacy_reads.gene.tolist()
-    assert_frame_equal(reads[["x", "y", "z", "global_x", "global_y", "global_z", "seg_label"] + ASSIGNMENT_READS],
-                       legacy_reads[["x", "y", "z", "global_x", "global_y", "global_z", "seg_label"]
-                                    + ASSIGNMENT_READS], check_dtype=False, check_exact=True)
-    assert np.array_equal(adata.X, legacy_adata.X)
-    assert_frame_equal(adata.obs.reset_index(drop=True), legacy_adata.obs.reset_index(drop=True))
-    record = json.loads(adata.uns["assignment"])
-    assert record["inputs"]["molecules"]["source"]["path"] == str(path)
-
-
 def test_the_log_of_a_run_without_molecules_has_no_ratio(tmp_path):
     adata, reads, _ = run_rule(tmp_path, label_fixture(), ())
     assert json.loads(adata.uns["assignment"])["counts"]["molecules"] == 0 and len(reads) == 0

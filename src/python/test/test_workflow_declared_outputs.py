@@ -1,11 +1,13 @@
-"""C3 of design/validation/orchestration.md for the kinds of W-647 and the tiled kinds of W-735: the declared outputs.
+"""C3 of design/validation/orchestration.md: the declared outputs of every task kind.
 
-For each worked-example variant and each task of the kinds summarize, merge, fov, tile_global, tile, tile_merge,
-bigstitcher_macro, bigstitcher_engine, bigstitcher_import, stitch, export, report and compare, the declared outputs
-equal the contract's table (design/specs/orchestration.md, "Declared outputs", with the tiled kinds' files of
-design/specs/orchestration-tiled.md, "Declared files of the tiled task kinds") resolved through ``_layout``; and every
-task's outputs, record and log equal its group's templates filled with its identity, the chunked checkpoint its
-group's one temporary output. The morphology, segment and assign kinds (W-736) add their rows with their issue.
+For each worked-example variant and each task, the declared outputs equal the contract's table
+(design/specs/orchestration.md, "Declared outputs", with the tiled kinds' files of design/specs/orchestration-tiled.md,
+"Declared files of the tiled task kinds") resolved through ``_layout``; and every task's outputs, record and log equal
+its group's templates filled with its identity, the chunked checkpoint its group's one temporary output. The rows of
+the morphology, segment and assign kinds (W-736) are checked on the variants and on configurations built here: the
+channel images with ``morphology.channel_images``, the displacement field of a dense ``morphology.recipe``, the nucleus
+table and the territories of an assignment with ``nuclei`` and ``expansion``, its previews with
+``assignment.previews``.
 """
 import os
 
@@ -18,8 +20,10 @@ from . import workflow_examples as X
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
-KINDS = ("summarize", "merge", "fov", "tile_global", "tile", "tile_merge", "bigstitcher_macro", "bigstitcher_engine",
-         "bigstitcher_import", "stitch", "export", "report", "compare")
+KINDS = ("summarize", "merge", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment", "assign",
+         "bigstitcher_macro", "bigstitcher_engine", "bigstitcher_import", "stitch", "export", "report", "compare")
+#: The registration methods whose transform is a displacement field or a B-spline (the saved form's field.npz).
+DENSE = ("bspline", "demons", "tps", "cpd")
 
 
 @pytest.fixture(scope="module")
@@ -36,7 +40,7 @@ def _rel(path, root):
 
 
 def expected_outputs(task, config, out):
-    """The contract's declared outputs of a task (its table's rows for the kinds of W-647), through _layout."""
+    """The contract's declared outputs of a task (its table's row for the task's kind), through _layout."""
     kind, identity = task["kind"], task["identity"]
     sample, fov = identity.get("sample"), identity.get("fov")
     processing = config.get("processing") or {}
@@ -71,6 +75,39 @@ def expected_outputs(task, config, out):
             paths.append(_layout.checkpoint_dir(folder) / "candidates.json")
         if "pre_qc" in stages:
             paths.append(_layout.checkpoint_dir(folder) / "pre_qc.json")
+    elif kind == "morphology":
+        block = config["morphology"]
+        folder = _layout.fov_dir(out, fov)
+        rounds = block.get("rounds", [e["round_name"] for e in config.get("additional_round") or []])
+        steps = ((block.get("recipe") or {}).get("steps")) or []
+        dense = any(step["method"] in DENSE for step in steps)
+        paths = [_layout.nuclei_registration_record(out, fov)]
+        for name in (["reference_stain"] if config.get("reference_stains") else []) + list(rounds):
+            paths += [_layout.other_round_dir(folder, name) / "image.ome.tif",
+                      _layout.other_round_dir(folder, name) / "registration.json"]
+            if dense and name != "reference_stain":
+                paths.append(_layout.other_round_dir(folder, name) / "field.npz")
+        if block.get("channel_images") is not None:
+            for entry in config.get("additional_round") or []:
+                if entry["round_name"] in rounds:
+                    paths += [_layout.image_file(out, fov, entry["round_name"], channel["channel"])
+                              for channel in entry["channel_order"]]
+    elif kind == "segment":
+        (run,) = [r for r in config["segmentation"]["runs"] if r["name"] == identity["run"]]
+        folder = _layout.segmentation_dir(_layout.fov_dir(out, fov), run["name"])
+        paths = [folder / "labels.tif", folder / "segmentation.json"]
+        if run["method"] != "import":
+            paths.append(folder / "input.ome.tif")
+    elif kind == "assign":
+        block = config["assignment"]
+        folder = _layout.assignment_dir(_layout.fov_dir(out, fov), block.get("name", "default"))
+        paths = [folder / "molecules.csv", folder / "cells.csv", folder / "counts.csv", folder / "assignment.json"]
+        if block.get("nuclei"):
+            paths.append(folder / "nuclei.csv")
+        if block.get("expansion"):
+            paths.append(folder / "territories.tif")
+        if block.get("previews"):
+            paths.append(str(_layout.fov_previews_dir(out, fov)) + "/")
     elif kind in ("bigstitcher_macro", "bigstitcher_engine"):
         save = os.path.join(config["stitching"]["bigstitcher_save_dir"], sample)
         paths = ([os.path.join(save, "BigStitcher_macro.ijm"), os.path.join(save, "view_map.csv"),
@@ -152,3 +189,45 @@ def test_the_tile_merge_declares_the_files_of_direct(manifests):
         tiles = [t for t in tasks if t["kind"] == "tile" and t["identity"]["fov"] == fov]
         assert sorted(t["identity"]["tile"] for t in tiles) == ["r0c0", "r0c1", "r1c0", "r1c1"]
         assert set(merge["needs"]) == {glob["id"], *(t["id"] for t in tiles)}
+
+
+def _built(work, name, config):
+    """The manifest of a configuration built here, on the variants' fixture."""
+    return plan(X.write_config(work, name, config))
+
+
+@pytest.mark.parametrize("case", ["channel images", "dense recipe", "nuclei and expansion", "no previews"])
+def test_the_options_of_the_cell_kinds_declare_their_files(manifests, case):
+    """The options of the contract's table, column "By option", of morphology and assign (W-736)."""
+    work, _ = manifests
+    config = X.variants(work)["per-fov"]
+    if case == "channel images":
+        config["morphology"] = {"channel_images": {"projection": "max"}}
+    elif case == "dense recipe":
+        config["morphology"] = {"recipe": {"steps": [{"method": "translation"}, {"method": "demons"}],
+                                           "signal": {"mode": "channel", "reference_channel": "ch04",
+                                                      "moving_channel": "ch04"}}}
+    elif case == "nuclei and expansion":
+        config["assignment"] = dict(config["assignment"], expansion={"distance": 1.0, "unit": "um", "mode": "planar"})
+    else:
+        config["assignment"] = dict(config["assignment"], previews=False)
+    manifest = _built(work, case.replace(" ", "-"), config)
+    out = manifest["roots"]["output"]
+    tasks = [t for t in manifest["tasks"] if t["kind"] in ("morphology", "segment", "assign")]
+    assert len(tasks) == 16
+    for task in tasks:
+        assert task["outputs"] == expected_outputs(task, config, out), task["id"]
+    morphology = next(t for t in tasks if t["kind"] == "morphology")
+    assign = next(t for t in tasks if t["kind"] == "assign")
+    if case == "channel images":
+        assert {o for o in morphology["outputs"] if o.startswith("images/")} == {
+            "images/flamingo/ch04/FOV_001.tif", "images/flamingo/ch05/FOV_001.tif"}
+    elif case == "dense recipe":
+        assert "fovs/FOV_001/other_rounds/flamingo/field.npz" in morphology["outputs"]
+        assert not any(o.endswith("reference_stain/field.npz") for o in morphology["outputs"])
+    elif case == "nuclei and expansion":
+        assert {"fovs/FOV_001/assignment/default/nuclei.csv", "fovs/FOV_001/assignment/default/territories.tif"} <= \
+            set(assign["outputs"])
+    else:
+        assert not any("previews" in o for o in assign["outputs"])
+

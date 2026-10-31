@@ -2,7 +2,7 @@
 
 Each function takes the running task (``_task.Run``), reads the resolved configuration through the kind's view,
 translates its block with the kept translators and calls the API entry; ``_task.execute`` does the checks, the log,
-completion and the records around it. The morphology, segment and assign commands land with W-736.
+completion and the records around it.
 """
 from __future__ import annotations
 
@@ -294,6 +294,197 @@ def merge(run):
     _publish(lambda tmp: save_supplied_statistics(document, tmp), target)
 
 
+# --- the morphology, segment and assign kinds (D6) ----------------------------------------------------------------
+
+def _stain_recipe(stain, moving):
+    """One translation step on the shared stain: the reference stain channel against the round's channel."""
+    from starfinder.registration import (RegistrationRecipe, RegistrationSignalConfig, RegistrationStep,
+        TranslationConfig)
+    return RegistrationRecipe((RegistrationStep(TranslationConfig()),),
+                              signal=RegistrationSignalConfig("channel", stain, moving))
+
+
+def _prepare_by_stain(fov_, configuration, config, checkpoints):
+    """The morphology command's grouping of rounds (OP5), moved unchanged from the nuclei_registration rule.
+
+    Each round is registered by one translation step on its shared stain (its one channel whose name contains
+    ref_channel, _nuclei_registration) against the reference stain (_nuclear_stain) as an ExternalReference labelled
+    ``<ref_round>:<stain channel>``. The leading rounds that share the first round's stain pattern go through
+    FOV.prepare_morphology in one call; a round whose shared stain has another pattern is registered after it by the
+    same public calls (load_images with the angle, register), in the configured order.
+    """
+    import numpy as np
+    from starfinder.dataset.config import MorphologyConfig
+    from starfinder.dataset.types import REFERENCE_STAIN
+    from starfinder.dataset.workflow import _nuclear_stain, _nuclei_registration
+    from starfinder.registration import ExternalReference
+    from starfinder.workflow._translate import _base
+    _, stains, _ = _nuclei_registration(_base(configuration))
+    stain = _nuclear_stain(_base(configuration)).channel
+    names = list(config.rounds)
+    angle, ref = config.rotation_degrees, fov_.rounds.reference_round
+    leading = next((i for i, name in enumerate(names) if stains[name] != stains[names[0]]), len(names))
+    fov_.prepare_morphology(MorphologyConfig(rotation_degrees=angle, recipe=_stain_recipe(stain, stains[names[0]]),
+                                             rounds=tuple(names[:leading])), checkpoints=checkpoints)
+    reference = ExternalReference(
+        np.ascontiguousarray(fov_.images[REFERENCE_STAIN][..., fov_.dataset.channel_index(REFERENCE_STAIN, stain)]),
+        fov_.metadata[REFERENCE_STAIN], f"{ref}:{stain}")
+    for name in names[leading:]:
+        fov_.load_images(rounds=[name], rotation_degrees=angle)
+        fov_.register(_stain_recipe(stain, stains[name]), rounds=[name], reference=reference, checkpoints=checkpoints)
+
+
+def _channel_images(run, fov_, rounds, projection):
+    """``images/<round>/<channel label>/<fov>.tif`` of each channel of the rounds (morphology.channel_images): ZYX,
+    or the Z maximum YX with ``projection: max``, keeping the dtype, as the nuclei_registration rule wrote them."""
+    from dataclasses import asdict
+    import tifffile
+    from starfinder.io import save_volume
+    from starfinder.preprocessing import ProjectionConfig, project_image
+    config = ProjectionConfig() if projection == "max" else None
+    for name in rounds:
+        for c, channel in enumerate(fov_.dataset.channel_info(name)):
+            path = _layout.image_file(run.out, fov_.fov_id, name, channel.channel)
+            volume, metadata = fov_.images[name][..., c], fov_.metadata[name]
+            if config is None:
+                _publish(lambda tmp: save_volume(volume, tmp, metadata=metadata), path)
+            else:
+                plane = project_image(volume, config=config)[0]
+                _publish(lambda tmp: tifffile.imwrite(tmp, plane, photometric="minisblack", metadata={
+                    "axes": "YX", "starfinder_metadata": asdict(metadata.projected(method=config.method))}), path)
+
+
+def morphology(run):
+    """FOV.prepare_morphology and FOV.save_registration_record of one FOV (as the nuclei_registration rule did), the
+    saved form of every prepared image always written (other_rounds/<name>/), and the channel images with
+    morphology.channel_images.
+
+    Without morphology.recipe the rounds are grouped by their shared stain (OP5, _prepare_by_stain); a given recipe
+    prepares every round with FOV.prepare_morphology.
+    """
+    from starfinder.dataset.config import CheckpointConfig
+    configuration = run.configuration.plain()
+    config = _translate.morphology(configuration)
+    fov_ = run.dataset().fov(run.identity["fov"])
+    checkpoints = CheckpointConfig(overwrite=True)
+    if config.recipe is None:
+        _prepare_by_stain(fov_, configuration, config, checkpoints)
+    else:
+        fov_.prepare_morphology(config, checkpoints=checkpoints)
+    _publish(lambda tmp: fov_.save_registration_record(tmp),
+             _layout.nuclei_registration_record(run.out, fov_.fov_id))
+    images = configuration["morphology"].get("channel_images")
+    if images is not None:
+        _channel_images(run, fov_, config.rounds, images.get("projection"))
+
+
+def segment(run):
+    """FOV.segment of the task's run with checkpoints into fovs/<fov>/segmentation/<run>/, on its FOV's reference
+    grid, after the inputs it declares are restored.
+
+    The grid is the saved reference image (FOV.load_reference_image), or without a processing block the reference
+    stain's saved form (OP4); a sequencing round is the fov task's registered stage (FOV.load_checkpoint), every other
+    round its saved form (FOV.load_registered_round); the seeds' run is the earlier segment task's
+    (FOV.load_segmentation). An import reads the FOV's file that the plan resolved from ``path`` with ``{fov_id}``
+    (OP3). The device is segmentation.device, which gives a cuda run's tasks their GPU (``execution.gpu``).
+    """
+    from starfinder.dataset.config import CheckpointConfig
+    from starfinder.dataset.types import REFERENCE_STAIN
+    from starfinder.segmentation import LabelImportConfig, SegmentationPlan
+    configuration = run.configuration.plain()
+    plan_, device = _translate.segmentation(configuration)
+    run.device = device
+    name = run.identity["run"]
+    (current,) = [r for r in plan_.runs if r.name == name]
+    if isinstance(current.method, LabelImportConfig):
+        # OP3: the run's file of this FOV, the task's declared input.
+        (declared,) = [i for i in run.task["inputs"]
+                       if i == _declared(run, f"segmentation.{name}.{run.identity['fov']}")]
+        current = replace(current, method=replace(current.method, path=run.path(declared)))
+        plan_ = SegmentationPlan(tuple(current if r.name == name else r for r in plan_.runs))
+    fov_ = run.dataset().fov(run.identity["fov"])
+    sequencing = set(fov_.rounds.sequencing_rounds)
+    rounds = list(dict.fromkeys(i.round for i in current.inputs if i.round is not None))
+    if any(r in sequencing for r in rounds):
+        fov_.load_checkpoint("registered")
+    reference = next((i for i in run.task["inputs"] if run.path(i) == fov_._reference_image_path()), None)
+    if reference is not None:
+        fov_.load_reference_image()
+    elif REFERENCE_STAIN not in rounds:
+        rounds.insert(0, REFERENCE_STAIN)
+    for other in rounds:
+        if other not in sequencing:
+            fov_.load_registered_round(other)
+    if current.seeds is not None:
+        fov_.load_segmentation(current.seeds)
+    fov_.segment(plan_, device=device, checkpoints=CheckpointConfig(overwrite=True), run=name)
+
+
+def _codebook_genes(run, dataset):
+    """The genes of the count matrix in their order, from the codebook the task declares: the direct panel's
+    (DirectPanel.genes) in readout_mode direct, else the codebook's gene column in first-appearance order
+    (Codebook.genes), which no encoding changes, so that the assign kind reads no processing block."""
+    import csv
+    path = _codebook(run)
+    if dataset.readout_mode == "direct":
+        dataset.load_direct_panel(path)
+        return tuple(dataset.direct_panel.genes)
+    genes, column = [], 0
+    with open(path, newline="", encoding="utf-8-sig") as handle:
+        for line, values in enumerate(csv.reader(handle), 1):
+            if line == 1 and values and values[0].strip() in ("gene", "gene_id", "entry_id"):
+                header = [v.strip() for v in values]
+                column = header.index("gene_id" if "gene_id" in header else "gene")
+                continue
+            if values:
+                genes.append(values[column].strip())
+    return tuple(dict.fromkeys(genes))
+
+
+def assign(run):
+    """assign_molecules of one FOV's molecule table on its saved segmentation runs, saved as
+    fovs/<fov>/assignment/<name>/ (as the reads_assignment rule did with an assembly block), and the FOV's previews
+    with assignment.previews.
+
+    The molecules are fovs/<fov>/molecules.csv (load_molecules, their identities kept); the grid is the FOV's
+    reference image (FOV.load_reference_image); the cell and nucleus runs are the segment tasks' saved runs
+    (FOV.load_segmentation), which the saved assignment links; the record holds summarize_assignment's counts.
+    """
+    from starfinder.assignment import assign_molecules, load_molecules, summarize_assignment
+    from starfinder.assignment._persist import assignment_directory, write_assignment
+    from starfinder.dataset.workflow import _label_namespace
+    from starfinder.segmentation._persist import saved_labels
+    from starfinder.workflow._previews import assignment_figures
+    from starfinder.workflow._translate import _base
+    configuration = run.configuration.plain()
+    config, call = _translate.assignment(configuration)
+    name = call.get("name", "default")
+    if call.get("population", "final") != "final":
+        raise ValueError(f"assignment.population {call['population']!r}: the assign task reads the FOV's "
+                         "molecules.csv, which holds the final population only")
+    dataset = run.dataset()
+    fov_id = run.identity["fov"]
+    genes = _codebook_genes(run, dataset)
+    fov_ = dataset.fov(fov_id)
+    fov_.load_reference_image()
+    grid = fov_.reference_grid()
+    cells = fov_.load_segmentation(call.get("cells", "cell"))
+    nuclei = (None if call.get("nuclei") is None else cells if call["nuclei"] == call.get("cells", "cell")
+              else fov_.load_segmentation(call["nuclei"]))
+    molecules = load_molecules(_layout.spot_table(run.out, fov_id), genes=genes,
+                               spot_namespace=_label_namespace(_base(configuration), fov_id))
+    result = assign_molecules(molecules, cells, grid=grid, nuclei=nuclei, config=config)
+    result = replace(result, record=dict(result.record, name=name))
+    result = replace(result, record=dict(result.record, counts=summarize_assignment(result)))
+    folder = _layout.fov_dir(run.out, fov_id)
+    result = write_assignment(assignment_directory(folder, name), result, metadata=cells.grid.metadata,
+                              cells_saved=saved_labels(cells, folder),
+                              nuclei_saved=None if nuclei is None else saved_labels(nuclei, folder),
+                              same_run=nuclei is cells)
+    if run.api["assignment"]["previews"]:
+        assignment_figures(result, fov_._reference_image_path(), _layout.fov_previews_dir(run.out, fov_id))
+
+
 def _stitching(run):
     """(block, dataset, membership, FOVs, PositionIDs, grid FOVs) of a stitching kind, the position file the
     manifest names in place of the configured path."""
@@ -431,13 +622,16 @@ def _from_plain(value):
 
 
 def export(run):
-    """Dataset.export of one sample into export/<sample>/; the molecule routes load the codebook for its genes."""
+    """Dataset.export of one sample into export/<sample>/; the molecule routes load the codebook for its genes.
+
+    With export.previews on the route per FOV with ``assemble`` (the plan then declares export/<sample>/previews/),
+    each assembled FOV's assignment figures with its ownership, into previews/<fov>/ (P5), over the FOV's reference
+    image when it is a declared input; the folder exists, empty, when the assemble part was neither written nor
+    reused.
+    """
     config, assembly = _translate.export(run.configuration.plain())
     dataset = run.dataset()
     export_api = run.api["export"]
-    if export_api["previews"]:
-        raise NotImplementedError("export.previews: the ownership previews of the export command land with the "
-                                  "assign command (W-736)")
     if export_api["route"] != "per_fov":
         # The molecule routes read each FOV's molecule table with the codebook's genes, loaded with the processing
         # block's encoding and layout (a block the export's map names).
@@ -448,8 +642,20 @@ def export(run):
             dataset.load_codebook(_codebook(run), encoding=_from_plain(codebook["encoding"]),
                                   layout=_from_plain(codebook["layout"]))
     sample = run.identity["sample"]
-    dataset.export(sample, placement=_layout.stitching_dir(run.out, sample), assignment=assembly.assignment,
-                   config=config, output_dir=_layout.export_dir(run.out, sample))
+    record = dataset.export(sample, placement=_layout.stitching_dir(run.out, sample), assignment=assembly.assignment,
+                            config=config, output_dir=_layout.export_dir(run.out, sample))
+    previews = _layout.export_previews_dir(run.out, sample)
+    if f"{Path(os.path.relpath(previews, run.out)).as_posix()}/" not in run.task["outputs"]:
+        return
+    from starfinder.workflow._previews import ownership_figures
+    previews.mkdir(parents=True, exist_ok=True)
+    if record.parts.get("assemble") in ("written", "reused"):
+        declared = set(run.inputs())
+        images = {fov: path for fov in run.manifest["membership"]["samples"][sample]
+                  if (path := _layout.reference_image_path(run.out, fov, dataset.reference_image,
+                                                           dataset.reference_image_import)) in declared}
+        ownership_figures(run.out, assembly.assignment, _layout.stitching_dir(run.out, sample), record.folder,
+                          run.inputs(), images)
 
 
 def report(run):
@@ -471,8 +677,9 @@ def compare(run):
     run.dataset().compare_samples(samples, report_root=_layout.report_root(run.out))
 
 
-#: The function of each kind; morphology, segment and assign land with W-736.
+#: The function of each kind.
 FUNCTIONS = {"summarize": summarize, "merge": merge, "fov": fov, "tile_global": tile_global, "tile": tile,
-             "tile_merge": tile_merge, "stitch": stitch,
+             "tile_merge": tile_merge, "morphology": morphology, "segment": segment, "assign": assign,
+             "stitch": stitch,
              "bigstitcher_macro": bigstitcher_macro, "bigstitcher_engine": bigstitcher_check,
              "bigstitcher_import": bigstitcher_import, "export": export, "report": report, "compare": compare}

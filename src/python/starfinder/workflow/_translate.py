@@ -122,22 +122,41 @@ def _processing_api(configuration):
     return out
 
 
-def _morphology_api(configuration):
+def morphology(configuration):
+    """The MorphologyConfig of the morphology block: ``rotate_angle`` (OC3), its rounds and its recipe, translated
+    as the processing block's registration (None: one translation step on the shared stain)."""
     from starfinder.dataset.config import MorphologyConfig
-    rounds = tuple(configuration["morphology"]["rounds"])
-    return plain(MorphologyConfig(rotation_degrees=rotation(configuration), rounds=rounds))
+    from starfinder.dataset.workflow import _explicit_registration
+    block = configuration["morphology"]
+    recipe = None if block.get("recipe") is None else _explicit_registration(block["recipe"])
+    return MorphologyConfig(rotation_degrees=rotation(configuration), recipe=recipe, rounds=tuple(block["rounds"]))
+
+
+def _morphology_api(configuration):
+    return plain(morphology(configuration))
+
+
+def segmentation(configuration):
+    """(SegmentationPlan, device) of the segmentation block (_segmentation_block)."""
+    from starfinder.dataset.workflow import _segmentation_block
+    return _segmentation_block(dict(_base(configuration), segmentation=configuration["segmentation"]))
 
 
 def _segmentation_api(configuration):
-    from starfinder.dataset.workflow import _segmentation_block
-    plan_, device = _segmentation_block(dict(_base(configuration), segmentation=configuration["segmentation"]))
+    plan_, device = segmentation(configuration)
     return {"plan": plain(plan_), "device": device}
 
 
-def _assignment_api(configuration):
+def assignment(configuration):
+    """(AssignmentConfig, FOV.assign_molecules keyword arguments) of the assignment block without its previews
+    (_assignment_block)."""
     from starfinder.dataset.workflow import _assignment_block
     values = {k: v for k, v in configuration["assignment"].items() if k != "previews"}
-    config, call = _assignment_block(dict(_base(configuration), assignment=values))
+    return _assignment_block(dict(_base(configuration), assignment=values))
+
+
+def _assignment_api(configuration):
+    config, call = assignment(configuration)
     return {"config": plain(config), "call": plain(call), "previews": configuration["assignment"]["previews"]}
 
 

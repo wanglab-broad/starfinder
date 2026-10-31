@@ -66,7 +66,9 @@ The run writes one folder per run, `results/fovs/FOV_001/segmentation/nucleus/` 
 `FOV.segment` takes the runs of the plan in order. For each run it:
 
 1. **Grid.** Takes the FOV's reference grid (`FOV.reference_grid()`), or its Z
-   projection when the run sets `projection`.
+   projection when the run sets `projection`. Without the reference round or the saved
+   reference image, the reference stain that `FOV.prepare_morphology` prepared (or
+   `FOV.load_registered_round("reference_stain")` restored) gives the grid.
 2. **Input.** For a method, builds the input image from the FOV's images: one channel
    per `InputChannel`, each with its role.
 3. **Labels.** Runs the method, with the labels of the run that `seeds` names as seeds;
@@ -74,6 +76,10 @@ The run writes one folder per run, `results/fovs/FOV_001/segmentation/nucleus/` 
 4. **Operations.** Applies the run's label operations, such as `expand_labels`, in order.
 5. **Results.** Keys each result by its run name in `fov.segmentation_results`, and,
    with `checkpoints`, writes each run's files.
+
+`FOV.segment(plan, run="cell")` takes that one run only, as the workflow's `segment` task
+does; the seeds it names are then read from `fov.segmentation_results`, where
+`fov.load_segmentation("nucleus")` restores a saved run.
 
 ## Methods
 

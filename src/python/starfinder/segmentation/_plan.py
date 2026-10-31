@@ -247,8 +247,9 @@ def _record_sha256(record):
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def _check_rounds(fov, plan, grid):
-    """Every round an input reads is resident, registered into the reference frame and on the reference grid.
+def _check_rounds(fov, runs, grid):
+    """Every round an input of ``runs`` reads is resident, registered into the reference frame and on the reference
+    grid.
 
     The reference merged image (an input's own, or the amplicon of a composite)
     is the resident reference round's, else the saved reference image of
@@ -257,7 +258,7 @@ def _check_rounds(fov, plan, grid):
     ref = fov.rounds.reference_round
     registered = fov.registration_record.get("rounds", {})
     restored = fov._reference_file is not None and not fov._reference_resident()
-    for run in plan.runs:
+    for run in runs:
         names = [ref if i.reference_merged else i.round for i in run.inputs]
         names += [ref for i in run.inputs if isinstance(i.prepare, CompositeConfig)]
         # Only the merged image of the reference round is read: the restored file serves it.
@@ -397,23 +398,41 @@ def _expand(result, config):
                               run_record, result.diagnostics)
 
 
-def segment_fov(fov, plan, *, device="cpu", inputs=None):
+def selected_runs(plan, run=None):
+    """The runs of ``plan`` that FOV.segment computes: every run, or the one named ``run``."""
+    if run is None:
+        return plan.runs
+    selected = tuple(r for r in plan.runs if r.name == run)
+    if not selected:
+        raise ValueError(f"run {run!r} is not a run of the plan (runs: {[r.name for r in plan.runs]})")
+    return selected
+
+
+def segment_fov(fov, plan, *, device="cpu", inputs=None, only=None):
     """Run a plan on one FOV; return the results by run name (FOV.segment stores them).
 
     ``inputs``, when a dict, receives each computed run's SegmentationInput by name
-    (the saved format writes it); an import has none.
+    (the saved format writes it); an import has none. ``only`` names the one run to
+    compute (None: every run); the seeds of a run that this call does not compute are
+    the FOV's ``segmentation_results`` (a saved run restored by FOV.load_segmentation).
     """
     if not isinstance(plan, SegmentationPlan):
         raise TypeError("plan must be a SegmentationPlan")
     plan.__post_init__()
     if not isinstance(device, str) or device not in DEVICES:
         raise ValueError(f"device must be 'cpu' or 'cuda'; got {device!r}")
+    runs = selected_runs(plan, only)
+    for item in runs:
+        if item.seeds is not None and item.seeds not in {r.name for r in runs} and \
+                item.seeds not in fov.segmentation_results:
+            raise ValueError(f"run {item.name!r}: its seeds {item.seeds!r} are not in segmentation_results; segment "
+                             "that run first, or restore it with FOV.load_segmentation")
     grid = fov.reference_grid()
-    _check_rounds(fov, plan, grid)
+    _check_rounds(fov, runs, grid)
     upstream = {"preprocessing_record_sha256": _record_sha256(fov.preprocessing_record),
                 "registration_record_sha256": _record_sha256(fov.registration_record)}
     results = {}
-    for run in plan.runs:
+    for run in runs:
         namespace = json.dumps([fov.dataset.dataset_id, fov.dataset.sample_id, fov.fov_id, fov.tile,
                                 run.name], separators=(",", ":"))
         if isinstance(run.method, LabelImportConfig):
@@ -426,7 +445,7 @@ def segment_fov(fov, plan, *, device="cpu", inputs=None):
             segmentation_input, stack = assemble_input(fov, run, grid)
             if inputs is not None:
                 inputs[run.name] = segmentation_input
-            seeds = None if run.seeds is None else results[run.seeds]
+            seeds = None if run.seeds is None else results.get(run.seeds, fov.segmentation_results.get(run.seeds))
             result = segment(segmentation_input, config=run.method, target=run.target, seeds=seeds, device=device,
                              label_namespace=namespace)
             for operation in run.operations:
