@@ -41,7 +41,9 @@ need adjustment in the stage entries below.
 | `io.read_checkpoint` | `dataset.load_checkpoint` |
 | `dataset.read_checkpoint` | `dataset.load_checkpoint` |
 | `FOV.save_spots` | `FOV.export_spots` (see the molecule-table entry below) |
-| `FOV.create_subtiles` | `FOV.save_subtiles` |
+| `FOV.create_subtiles`, `FOV.save_subtiles`, `FOV.from_subtile`, `dataset.SubtileConfig` (with `compute_windows`), `dataset.CropWindow`, `Dataset.subtile` | Removed with the Python subtile route (D5): a FOV in tiles is `dataset.tiled` (`tile_grid`, `run_tile_global`, `run_tile`, `merge_tiles`), and `io.read_window` reads a window of the chunked checkpoint; in the workflow, `processing.mode: tiled` |
+| `FOV.subtile_id` | `FOV.tile`: the tile id `r<row>c<col>` or None, the fourth element of a tile's spot namespace; the records keep their `subtile_id` field, null for a whole FOV |
+| `FOV.paths.subtile_dir` (`output/subtile/<fov_id>/`) and the `subtile_<n>/` folder of a FOV | Removed with the subtile files; a tiled run's files are `fovs/<fov_id>/tiled/` and `fovs/<fov_id>/tiles/<tile>/` |
 | `Dataset.channel_record` | Private; use `Dataset.channel_info` and `Dataset.channel_labels` to inspect channels |
 
 ### Image I/O and preprocessing

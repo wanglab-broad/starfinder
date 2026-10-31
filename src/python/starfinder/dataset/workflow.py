@@ -6,7 +6,7 @@ from pathlib import Path
 from .config import PipelineConfig, ExecutionConfig
 from ._declared import reference_settings
 from .dataset import Dataset
-from .types import ChannelInfo, RoundState, SubtileConfig
+from .types import ChannelInfo, RoundState
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type
 from starfinder import _layout
@@ -562,8 +562,10 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     split_index, n_barcode_segments and exclude_invalid_endpoints raise.
     The Python-only checkpoints key ({stages: [...]}) is checked here and read
     by the rule's runner (_rule_checkpoints); the top-level config_path is kept
-    on the Dataset, whose run.json records it as workflow_config. img_row and
-    img_col are read only for the subtile windows of create_subtiles.
+    on the Dataset, whose run.json records it as workflow_config. A
+    create_subtiles block is accepted and not translated: the package's subtile
+    API is retired (D5), and the subtile rules' runner refuses them
+    (_run_workflow).
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -628,17 +630,6 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         extraction=extraction,
         decoding=decoding if do_filter else None, scoring=scoring, deduplication=deduplication,
         filtering=ReadFilterConfig(end_bases=end_base, start_base=filt.get('start_base', 'C'), exclude_invalid_endpoints=filt.get('exclude_invalid_endpoints', False), score_bounds=filt.get('score_bounds', {})) if do_filter else None)
-    creation_rules = (('deep_create_subtile',) if rule.startswith('deep_') else
-                      ('gr_single_fov_subtile',) if rule == 'lrsf_single_fov_subtile' else
-                      (rule,) if rule == 'gr_single_fov_subtile' else
-                      ('gr_single_fov_subtile', 'deep_create_subtile'))
-    for subtile_rule in creation_rules:
-        subtile_params = config.get('rules', {}).get(subtile_rule, {}).get('parameters', {})
-        values, enabled = _operation(subtile_params, 'create_subtiles', ('sqrt_pieces', 'overlap_ratio'))
-        if enabled or values:
-            dataset.subtile = SubtileConfig(values.get('sqrt_pieces', 4), values.get('overlap_ratio', .1))
-            dataset.subtile.compute_windows(*_image_shape(config, f'rules.{subtile_rule}.parameters.create_subtiles'))
-            break
     streaming = params.get('streaming', False)
     if not isinstance(streaming, bool):
         raise ValueError('streaming must be Boolean')
@@ -797,8 +788,8 @@ def _reference_image_view(params, dataset, rule):
 
 
 def _image_shape(config, consumer):
-    """(img_row, img_col) of the configuration, which only their consumers require (the subtile windows, the legacy
-    tile configuration writer); missing, ValueError naming the keys and the consumer."""
+    """(img_row, img_col) of the configuration, which only their consumer requires (the legacy tile configuration
+    writer); missing, ValueError naming the keys and the consumer."""
     missing = [key for key in ('img_row', 'img_col') if config.get(key) is None]
     if missing:
         raise ValueError(f'{" and ".join(missing)} (the image height and width in pixels) '

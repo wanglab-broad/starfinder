@@ -19,7 +19,6 @@ from starfinder.dataset.types import (
     REFERENCE_STAIN,
     ChannelInfo,
     RoundState,
-    SubtileConfig,
     _channel_infos,
 )
 
@@ -64,9 +63,6 @@ class Dataset:
         default sequence is empty.
     codebook : Codebook or None
         Codebook for multiplexed readout; None means no codebook is loaded.
-    subtile : SubtileConfig or None
-        Subtile partition settings; None means no partition settings are
-        supplied.
     fov_pattern : str
         FOV name pattern using the ``{i}`` format field; the default is
         ``Position{i:03d}``.
@@ -180,7 +176,6 @@ class Dataset:
     rounds: RoundState = field(default_factory=RoundState)
     channel_order: tuple[str, ...] = ()
     codebook: Codebook | None = None
-    subtile: SubtileConfig | None = None
 
     # The {i} pattern of fov_ids (str.format with the field i)
     fov_pattern: str = "Position{i:03d}"

@@ -16,7 +16,7 @@ pytestmark = pytest.mark.contract
 FUNCTIONS = [pytest.param(assembly, "sample_anndata", "write_sample_h5ad", marks=pytest.mark.stitching),
              pytest.param(stitching, "bigstitcher_macro", "export_bigstitcher", marks=pytest.mark.stitching),
              pytest.param(export, "fuse", "fuse_images", marks=pytest.mark.stitching)]
-METHODS = {"assign": "assign_molecules", "save_spots": "export_spots", "create_subtiles": "save_subtiles"}
+METHODS = {"assign": "assign_molecules", "save_spots": "export_spots"}
 
 
 @pytest.mark.parametrize(("module", "old", "new"), FUNCTIONS, ids=lambda v: getattr(v, "__name__", v))

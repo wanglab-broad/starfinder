@@ -139,6 +139,8 @@ def _noise_record(image, channel, mode, value):
         threshold = median + value * mad * 1.4826
     elif mode == 'global':
         threshold = np.iinfo(image.dtype).max * value
+    elif mode == 'absolute':
+        threshold = float(value)
     elif mode == 'adaptive_round':
         threshold = float(image.max()) * value
     else:

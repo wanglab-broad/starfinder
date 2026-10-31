@@ -3,10 +3,11 @@
 ``tiny_sample`` is W-642's fixture (``scripts/workflow_golden.py``, ``write_fixture``: ``sample-tiny-v1``, seed 42,
 one sample of 2 × 2 FOVs of 5 × 36 × 36, four rounds of four channels, the reference stain ``ch04`` and the
 additional round ``flamingo``). ``variants`` gives the contract's eight worked-example configurations
-(design/specs/orchestration.md, "Worked example") in the Python shape, as W-643's prototype wrote them, with one
-change: ``after-fusion`` runs its processing direct until the tiled task kinds land (W-735), so it plans 14 tasks
-instead of the contract's 34. ``write_supplied`` writes the supplied files the variants name (the BigStitcher result
-of ``supplied-xml`` and the import file of ``after-fusion``); their content is never read by the plan.
+(design/specs/orchestration.md, "Worked example") in the Python shape, as W-643's prototype wrote them;
+``after-fusion`` runs its processing tiled (``processing.mode: tiled``) with a tile size of 18 voxels, so that each FOV
+of 36 × 36 voxels is the contract's four tiles (W-735 restored it; W-647 had planned it direct). ``write_supplied``
+writes the supplied files the variants name (the BigStitcher result of ``supplied-xml`` and the import file of
+``after-fusion``); their content is never read by the plan.
 """
 from __future__ import annotations
 
@@ -23,12 +24,12 @@ SAMPLE = "sample"
 FOVS = ("FOV_001", "FOV_002", "FOV_003", "FOV_004")
 VARIANTS = ("per-fov", "after-fusion", "molecules-only", "supplied-xml", "morphology-only", "reference-only")
 REFUSED = ("refused-assignment", "refused-matlab")
-#: The tasks per kind of each variant (the contract's table; after-fusion direct until W-735).
+#: The tasks per kind of each variant (the contract's table).
 KINDS = {
     "per-fov": {"summarize": 4, "merge": 1, "fov": 4, "morphology": 4, "segment": 8, "assign": 4, "stitch": 1,
                 "export": 1, "report": 1, "compare": 1},
-    "after-fusion": {"fov": 4, "morphology": 4, "bigstitcher_macro": 1, "bigstitcher_engine": 1,
-                     "bigstitcher_import": 1, "export": 1, "report": 1, "compare": 1},
+    "after-fusion": {"tile_global": 4, "tile": 16, "tile_merge": 4, "morphology": 4, "bigstitcher_macro": 1,
+                     "bigstitcher_engine": 1, "bigstitcher_import": 1, "export": 1, "report": 1, "compare": 1},
     "molecules-only": {"fov": 4, "stitch": 1, "export": 1, "report": 1, "compare": 1},
     "supplied-xml": {"fov": 4, "bigstitcher_import": 1, "export": 1, "report": 1, "compare": 1},
     "morphology-only": {"morphology": 4, "segment": 4},
@@ -107,8 +108,9 @@ def variants(work):
         stitching=multiview(work), assembly={"assignment": "default"},
         export={"route": "per_fov", "images": ["reference_merged", "reference_stain"], "previews": True},
         report={}, execution={"tasks": {"fov": {"memory_mb": 16000}}})
+    tiled = dict(copy.deepcopy(PROCESSING), mode="tiled", tiled={"tile_size_yx": 18})
     out["after-fusion"] = dict(
-        dataset(work, "example-after-fusion"), processing=copy.deepcopy(PROCESSING), morphology={},
+        dataset(work, "example-after-fusion"), processing=tiled, morphology={},
         stitching={"method": "bigstitcher", "bigstitcher_save_dir": str(work / "bigstitcher"), "positions": grid()},
         assembly={"assignment": "default"},
         export={"images": ["reference_merged", "reference_stain"], "segmentation": {"cells": "cell", "runs": [

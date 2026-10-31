@@ -13,7 +13,8 @@ Checkpoint options come from {py:class}`~starfinder.dataset.CheckpointConfig`.
 ## Layout
 
 Paths below are relative to a FOV folder, normally
-`<output_root>/fovs/<fov_id>/`. A subtile uses its `subtile_<n>/` folder.
+`<output_root>/fovs/<fov_id>/`. A FOV run in tiles keeps its global task's files in `tiled/` and each
+tile's in `tiles/<tile>/`; its merge writes the FOV folder's records as a direct run does.
 
 | Path | Written by / contents |
 | --- | --- |

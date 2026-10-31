@@ -74,7 +74,8 @@ def test_the_python_rules_take_no_json_copy_and_the_matlab_rules_keep_it(tmp_pat
     adapters = (ROOT / "src" / "python" / "starfinder" / "_snakemake.py").read_text()
     run_workflow = adapters[adapters.index("def _run_workflow("):adapters.index("def _run_nuclei_registration(")]
     assert "snakemake.input[" not in run_workflow
-    assert "snakemake.input.codebook" in run_workflow and "snakemake.input.subtile" in run_workflow
+    # W-735: the resident subtile branch, which read snakemake.input.subtile, is retired.
+    assert "snakemake.input.codebook" in run_workflow and "snakemake.input.subtile" not in run_workflow
 
 
 def minimal(tmp_path, **change):
@@ -93,7 +94,7 @@ def test_a_python_configuration_without_fiji_envs_and_dimensions_parses(tmp_path
     config = minimal(tmp_path)
     write_fovs(config, rows_text(positions=False))
     assert snakefile_errors(copy.deepcopy(config)) == []
-    assert from_workflow_config(config).dataset.subtile is None
+    assert not hasattr(from_workflow_config(config).dataset, "subtile")  # W-735: Dataset.subtile is retired
     names = common_names(config, monkeypatch, checks=True)
     assert names["BACKEND"] == "python" and names["FOVS"] == ["F10", "F2", "F3", "F1"]
     for name in ("common.smk", "registration-py.smk", "spot-finding-py.smk", "stitching-py.smk", "segmentation.smk",
@@ -110,19 +111,15 @@ REQUIRED = ["'img_col' is a required property", "'img_row' is a required propert
 
 
 def test_the_dimensions_are_required_by_their_consumers_only(tmp_path):
-    """img_row and img_col: required by an active create_subtiles block and by the legacy tile configuration writer
-    (stitching method bigstitcher without an assembly block), in the schema and in the adapters."""
+    """img_row and img_col: required by an active create_subtiles block (in the schema; the package's subtile windows
+    are retired, W-735) and by the legacy tile configuration writer (stitching method bigstitcher without an assembly
+    block), in the schema and in the adapters."""
     subtile = minimal(tmp_path, rules={"rsf_single_fov": {"run": True, "parameters": {}},
                                        "gr_single_fov_subtile": {"run": True, "parameters": {
                                            "create_subtiles": {"run": True, "sqrt_pieces": 2}}}})
     assert sorted(e.message for e in snakefile_errors(copy.deepcopy(subtile))) == REQUIRED
-    for rule in ("rsf_single_fov", "gr_single_fov_subtile"):
-        with pytest.raises(ValueError, match=r"img_row and img_col \(the image height and width in pixels\) are "
-                                             r"required by rules\.gr_single_fov_subtile\.parameters\.create_subtiles"):
-            from_workflow_config(subtile, rule)
     sized = dict(subtile, img_row=32, img_col=32)
     assert snakefile_errors(copy.deepcopy(sized)) == []
-    assert from_workflow_config(sized, "gr_single_fov_subtile").dataset.subtile.windows
     inactive = copy.deepcopy(subtile)
     inactive["rules"]["gr_single_fov_subtile"]["parameters"]["create_subtiles"] = {"run": False}
     assert snakefile_errors(copy.deepcopy(inactive)) == []

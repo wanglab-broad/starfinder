@@ -2,11 +2,11 @@
 
 Each function takes the running task (``_task.Run``), reads the resolved configuration through the kind's view,
 translates its block with the kept translators and calls the API entry; ``_task.execute`` does the checks, the log,
-completion and the records around it. The morphology, segment and assign commands land with W-736 and the tiled
-kinds with W-735.
+completion and the records around it. The morphology, segment and assign commands land with W-736.
 """
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import fields, replace
 from pathlib import Path
@@ -48,7 +48,7 @@ def _processing(run):
     pipeline = adapted.pipeline
     recipe = pipeline.preprocessing
     if recipe is not None and recipe.supplied_statistics is not None:
-        path = supplied_input(run) if run.kind == "fov" else None
+        path = supplied_input(run) if run.kind in ("fov", "tile_global") else None
         pipeline = replace(pipeline, preprocessing=replace(
             recipe, supplied_statistics=path or _supplied_file(run, recipe.supplied_statistics)))
     return adapted, pipeline, translated.stages
@@ -152,6 +152,104 @@ def _resume(run, fov_, adapted, pipeline, stages):
                                      preprocessing=pipeline.preprocessing),
                       execution=replace(adapted.execution, mode="batch"), checkpoints=None)
         fov_.images[ref], fov_.metadata[ref] = reference.images[ref], reference.metadata[ref]
+
+
+def _tiled(run):
+    """(adapted WorkflowConfig with the task's dataset and the codebook loaded when the block decodes, pipeline, stages,
+    processing.tiled translated, the FOV folder) of a tiled kind."""
+    from starfinder.dataset.workflow import _load_reference
+    adapted, pipeline, stages = _processing(run)
+    if pipeline.decoding:
+        _load_reference(adapted, _codebook(run))
+    adapted.dataset._workflow_config = run.out / run.manifest["configuration"]["path"]
+    adapted.dataset._workflow = run.workflow_section()
+    grid = _translate.tiled(run.configuration.plain())
+    return adapted, pipeline, stages, grid, _layout.fov_dir(run.out, run.identity["fov"])
+
+
+def _grid(run, grid, record):
+    """The FOV's tiles (tile_grid of the global task's shape), checked against the manifest's tiles of the FOV."""
+    from starfinder.dataset.tiled import tile_grid
+    tiles = tile_grid(record["shape_zyxc"][1:3], grid.tile_size_yx, grid.halo)
+    planned = sorted(t["identity"]["tile"] for t in run.manifest["tasks"] if t["kind"] == "tile"
+                     and t["identity"]["fov"] == run.identity["fov"] and t["identity"]["sample"] == run.identity["sample"])
+    if sorted(tile.id for tile in tiles) != planned:
+        raise ValueError(f"FOV {run.identity['fov']}: the registered rounds' shape {record['shape_zyxc'][:3]} gives the "
+                         f"tiles {sorted(tile.id for tile in tiles)}, not the plan's {planned}; plan the run again")
+    return tiles
+
+
+def tile_global(run):
+    """run_tile_global (dataset/tiled.py) and FOV.save_reference_image, as direct writes it; a verified resume
+    (execution.resume_from_checkpoint, the checkpoint's every round hashed again) has nothing to rerun."""
+    from starfinder.dataset.tiled import run_tile_global
+    adapted, pipeline, _, grid, folder = _tiled(run)
+    if run.resume is not None:
+        return
+    fov_ = adapted.dataset.fov(run.identity["fov"])
+    run_tile_global(fov_, pipeline, execution=adapted.execution, directory=_layout.tiled_dir(folder))
+    if adapted.dataset.reference_image_import is None:
+        fov_.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
+                                  reference_channel=adapted.reference_channel)
+
+
+def tile(run):
+    """run_tile (dataset/tiled.py) of the task's tile: its window of the chunked checkpoint detected with the FOV-level
+    thresholds, extracted, decoded and scored; its core's candidates and reads."""
+    from starfinder.dataset.tiled import run_tile
+    adapted, pipeline, _, grid, folder = _tiled(run)
+    tiled = _layout.tiled_dir(folder)
+    record = json.loads((tiled / _layout.GLOBAL_RECORD).read_text())
+    tiles = {t.id: t for t in _grid(run, grid, record)}
+    run_tile(adapted.dataset.fov(run.identity["fov"]), pipeline, tiles[run.identity["tile"]],
+             store=tiled / _layout.CHUNKED_CHECKPOINT, statistics=record["statistics"],
+             directory=_layout.tile_dir(folder, run.identity["tile"]), halo=grid.halo,
+             local_registration=grid.local_registration, post_local_registration=grid.post_local_registration,
+             execution=adapted.execution, attempt=run.context.attempt)
+
+
+def tile_merge(run):
+    """merge_tiles (dataset/tiled.py) and FOV.export_spots: the FOV's run.json, molecules.csv and checkpoint stages as
+    direct writes them, with run.json's ``tiled`` section; the chunked checkpoint is removed after success unless the
+    stage registered is kept."""
+    from starfinder._records import file_sha256
+    from starfinder.dataset.config import CheckpointConfig
+    from starfinder.dataset.tiled import merge_tiles
+    from starfinder.workflow._shape import plain
+    adapted, pipeline, stages, grid, folder = _tiled(run)
+    tiled = _layout.tiled_dir(folder)
+    record = json.loads((tiled / _layout.GLOBAL_RECORD).read_text())
+    run_record = json.loads((tiled / _layout.RUN_RECORD).read_text())
+    tiles = _grid(run, grid, record)
+    directories = {t.id: _layout.tile_dir(folder, t.id) for t in tiles}
+    kept = "registered" in stages
+    entries = []
+    for t in tiles:
+        tile_record = json.loads((directories[t.id] / "tile.json").read_text())
+        entries.append({"tile": t.id, "core_yx": list(t.core_yx), "window_yx": list(t.window_yx),
+                        "candidates": tile_record["counts"]["candidates_core"],
+                        "reads": tile_record["counts"]["reads_core"],
+                        "files": {name: "sha256:" + file_sha256(directories[t.id] / name) for name in _layout.TILE_FILES},
+                        "attempt": tile_record["attempt"]})
+    detection = record["statistics"]["detection"]
+    section = {"grid": {"tile_size_yx": grid.tile_size_yx,
+                        "n_yx": [max(t.row for t in tiles) + 1, max(t.col for t in tiles) + 1], "halo": grid.halo,
+                        "chunk_zyxc": record["chunk_zyxc"], "local_registration": plain(grid.local_registration)},
+               "checkpoint": {"path": f"{_layout.TILED}/{_layout.CHUNKED_CHECKPOINT}",
+                              "sha256": {name: entry["sha256"] for name, entry in record["checkpoint"]["rounds"].items()},
+                              "kept": kept},
+               "tiles": entries,
+               "statistics": {"thresholds": None if detection is None else
+                              {e["channel"]: e["threshold"] for e in detection["channels"]},
+                              "image_background": record["statistics"]["image_background"]}}
+    fov_ = adapted.dataset.fov(run.identity["fov"])
+    merge_tiles(fov_, pipeline, tiles, tile_directories=directories, global_record=record, global_run_record=run_record,
+                execution=adapted.execution, checkpoints=CheckpointConfig(stages=stages, overwrite=True), tiled=section)
+    if adapted.dataset.reference_image_import is None:
+        fov_._record_output("reference_image", fov_._reference_image_path())
+    fov_.export_spots()
+    if not kept:
+        (tiled / _layout.CHUNKED_CHECKPOINT).unlink(missing_ok=True)
 
 
 def summarize(run):
@@ -373,7 +471,8 @@ def compare(run):
     run.dataset().compare_samples(samples, report_root=_layout.report_root(run.out))
 
 
-#: The function of each kind; morphology, segment and assign land with W-736, the tiled kinds with W-735.
-FUNCTIONS = {"summarize": summarize, "merge": merge, "fov": fov, "stitch": stitch,
+#: The function of each kind; morphology, segment and assign land with W-736.
+FUNCTIONS = {"summarize": summarize, "merge": merge, "fov": fov, "tile_global": tile_global, "tile": tile,
+             "tile_merge": tile_merge, "stitch": stitch,
              "bigstitcher_macro": bigstitcher_macro, "bigstitcher_engine": bigstitcher_check,
              "bigstitcher_import": bigstitcher_import, "export": export, "report": report, "compare": compare}

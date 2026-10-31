@@ -76,7 +76,7 @@ def run(args, argv=None):
     function = FUNCTIONS[kind]
     context = Context(args.engine, args.engine_version, args.job_id, args.attempt,
                       None if args.image in (None, "none") else args.image, args.cache_token)
-    prepare = _prepare_fov if kind == "fov" else None
+    prepare = {"fov": _prepare_fov, "tile_global": _prepare_tile_global}.get(kind)
     return execute(args.command, args.manifest, args.task, function, context,
                    argv=["starfinder", "workflow", *(argv or [])], prepare=prepare)
 
@@ -89,3 +89,14 @@ def _prepare_fov(run):
         return ()
     run.resume = resume
     return _resume.kept_outputs(run, *resume)
+
+
+def _prepare_tile_global(run):
+    """The global task's verified resume: every declared output kept when its run.json matches and the chunked
+    checkpoint holds every round with its recorded SHA-256; otherwise a run from scratch (exit 3 on a mismatch)."""
+    from starfinder.workflow import _resume
+    resume = _resume.prepare_global(run)
+    if resume is None:
+        return ()
+    run.resume = resume
+    return [declared for declared, _ in run.outputs()]

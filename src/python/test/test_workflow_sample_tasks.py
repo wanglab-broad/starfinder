@@ -90,7 +90,8 @@ def test_the_molecules_only_variant_runs_to_its_comparison_page(work):
 
 def test_the_bigstitcher_check_fails_without_fijis_dataset_xml(work, capsys):
     manifest = _manifest(work, "after-fusion")
-    for task in _tasks(manifest, "fov") + _tasks(manifest, "bigstitcher_macro"):
+    # The after-fusion variant is tiled (W-735): its tile_global tasks write the reference images the macro reads.
+    for task in _tasks(manifest, "tile_global") + _tasks(manifest, "bigstitcher_macro"):
         assert X.run_task(manifest, task) == 0, task
     folder = work / "bigstitcher" / "sample"
     assert (folder / "BigStitcher_macro.ijm").is_file() and (folder / "view_map.csv").is_file()

@@ -115,9 +115,9 @@ def test_fov_summary_is_independent_of_image_size_and_marks_unloaded_images(tmp_
     # Read-only broadcast views stand in for very large volumes without allocating them.
     fov.images = {'round1': np.broadcast_to(np.uint16(4321), (64, 4096, 4096, 4)),
                   'dapi': np.broadcast_to(np.float32(0.5), (64, 4096, 4096))}
-    fov.subtile_id = 2
+    fov.tile = 'r0c1'  # W-735: FOV.tile replaces FOV.subtile_id
     assert repr(fov).splitlines()[:2] == [
-        "FOV 'FOV' subtile 2 of Dataset 'data' (sample 'sample')",
+        "FOV 'FOV' tile r0c1 of Dataset 'data' (sample 'sample')",
         "    images:   round1* (64, 4096, 4096, 4) uint16 ZYXC, dapi (64, 4096, 4096) float32 ZYX; "
         "not loaded: round2   (* reference)",
     ]

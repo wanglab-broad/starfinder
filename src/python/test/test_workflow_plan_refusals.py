@@ -132,7 +132,58 @@ def test_an_unknown_key_is_named(work, capsys):
     _refused(work, dict(X.variants(work)["molecules-only"], spot_size=3), capsys, "'spot_size'")
 
 
-def test_tiled_processing_waits_for_the_tiled_kinds(work, capsys):
+def _tiled(work, **tiled):
+    """The molecules-only variant with its processing tiled (a tile size of 18: 2 x 2 tiles of each 36 x 36 FOV)."""
     config = copy.deepcopy(X.variants(work)["molecules-only"])
-    config["processing"].update(mode="tiled", tiled={"tiles": 4})
-    _refused(work, config, capsys, "processing.mode tiled", "W-735")
+    config["processing"].update(mode="tiled", tiled=dict({"tile_size_yx": 18}, **tiled))
+    return config
+
+
+def test_a_tile_size_whose_predicted_peak_exceeds_the_task_memory_is_refused(work, capsys):
+    """The resource model (0.21 GB + 1.93 x the window's bytes; 4 rounds of 5 x 36 x 36 x 4 uint8 voxels): a tile
+    size of 4096 with a halo of 6 is predicted at 0.21 GB + 1.93 x 4 x 5 x 4108 ** 2 x 4 = 2816 MB, above 1000 MB, and
+    the largest multiple of 128 that fits is 2176 (2188 ** 2 x 154.4 + 0.21 GB = 0.949 GB; 2304 does not)."""
+    config = _tiled(work, tile_size_yx=4096)
+    config["execution"] = {"tasks": {"tile": {"memory_mb": 1000}}}
+    _refused(work, config, capsys, "processing.tiled.tile_size_yx 4096", "execution.tasks.tile.memory_mb 1000",
+             "predicted to peak at 2816 MB", "tile_size_yx 2176 fits")
+
+
+def test_a_task_memory_below_the_model_s_intercept_fits_no_tile_size(work, capsys):
+    config = _tiled(work)
+    config["execution"] = {"tasks": {"tile": {"memory_mb": 200}}}
+    _refused(work, config, capsys, "processing.tiled.tile_size_yx 18", "no tile size fits that memory")
+
+
+@pytest.mark.parametrize("change,named", [
+    ({"min_distance_voxels": 2}, "spot_finding.min_distance_voxels 2"),
+    ({"merge_radius_zyx": [1, 2, 2]}, "spot_finding.merge_radius_zyx")])
+def test_a_detector_without_a_finite_footprint_is_refused_with_exact(work, capsys, change, named):
+    config = _tiled(work)
+    config["processing"]["spot_finding"].update(change)
+    _refused(work, config, capsys, "processing.tiled.exact true", named, "processing.tiled.exact: false")
+
+
+def test_exact_false_accepts_a_detector_without_a_finite_footprint(work):
+    from starfinder.workflow import plan
+    config = _tiled(work, exact=False)
+    config["processing"]["spot_finding"].update(min_distance_voxels=2)
+    manifest = plan(X.write_config(work, "inexact", config))
+    assert sum(t["kind"] == "tile" for t in manifest["tasks"]) == 16
+
+
+def test_a_detector_other_than_local_maxima_is_refused_in_tiled_mode(work, capsys):
+    config = _tiled(work, exact=False)
+    config["processing"]["spot_finding"] = {"method": "starfish_log", "min_sigma": 1, "max_sigma": 2, "num_sigma": 2,
+                                            "threshold": 0.01}
+    _refused(work, config, capsys, "spot_finding method 'starfish_log'", "local_maxima only")
+
+
+def test_a_halo_below_the_footprints_names_the_operation(work, capsys):
+    _refused(work, _tiled(work, halo=2), capsys, "processing.tiled.halo 2", "minimum 6", "reads_extraction (6)")
+
+
+def test_the_tiled_settings_are_refused_in_direct_mode(work, capsys):
+    config = copy.deepcopy(X.variants(work)["molecules-only"])
+    config["processing"]["tiled"] = {"tile_size_yx": 18}
+    _refused(work, config, capsys, "processing.tiled", "processing.mode tiled only")

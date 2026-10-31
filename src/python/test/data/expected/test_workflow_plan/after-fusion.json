@@ -492,8 +492,44 @@
  "export_route": "after_fusion",
  "groups": [
   {
-   "name": "fov",
-   "kind": "fov",
+   "name": "tile_global",
+   "kind": "tile_global",
+   "wildcards": [
+    "sample",
+    "fov"
+   ],
+   "outputs": [
+    "fovs/{fov}/reference.tif",
+    "fovs/{fov}/tiled/global.json",
+    "fovs/{fov}/tiled/registered.h5",
+    "fovs/{fov}/tiled/run.json"
+   ],
+   "record": "workflow/tasks/tile_global.{sample}.{fov}.json",
+   "log": "workflow/logs/tile_global.{sample}.{fov}.log",
+   "temporary": [
+    "fovs/{fov}/tiled/registered.h5"
+   ]
+  },
+  {
+   "name": "tile",
+   "kind": "tile",
+   "wildcards": [
+    "sample",
+    "fov",
+    "tile"
+   ],
+   "outputs": [
+    "fovs/{fov}/tiles/{tile}/candidates.csv",
+    "fovs/{fov}/tiles/{tile}/reads.csv",
+    "fovs/{fov}/tiles/{tile}/tile.json"
+   ],
+   "record": "workflow/tasks/tile.{sample}.{fov}.{tile}.json",
+   "log": "workflow/logs/tile.{sample}.{fov}.{tile}.log",
+   "temporary": []
+  },
+  {
+   "name": "tile_merge",
+   "kind": "tile_merge",
    "wildcards": [
     "sample",
     "fov"
@@ -502,11 +538,10 @@
     "fovs/{fov}/checkpoints/candidates.json",
     "fovs/{fov}/checkpoints/pre_qc.json",
     "fovs/{fov}/molecules.csv",
-    "fovs/{fov}/reference.tif",
     "fovs/{fov}/run.json"
    ],
-   "record": "workflow/tasks/fov.{sample}.{fov}.json",
-   "log": "workflow/logs/fov.{sample}.{fov}.log",
+   "record": "workflow/tasks/tile_merge.{sample}.{fov}.json",
+   "log": "workflow/logs/tile_merge.{sample}.{fov}.log",
    "temporary": []
   },
   {
@@ -611,9 +646,9 @@
  ],
  "tasks": [
   {
-   "id": "fov/sample/FOV_001",
-   "kind": "fov",
-   "group": "fov",
+   "id": "tile_global/sample/FOV_001",
+   "kind": "tile_global",
+   "group": "tile_global",
    "identity": {
     "sample": "sample",
     "fov": "FOV_001"
@@ -639,22 +674,21 @@
     "input:round4/FOV_001/ch03.ome.tif"
    ],
    "outputs": [
-    "fovs/FOV_001/checkpoints/candidates.json",
-    "fovs/FOV_001/checkpoints/pre_qc.json",
-    "fovs/FOV_001/molecules.csv",
     "fovs/FOV_001/reference.tif",
-    "fovs/FOV_001/run.json"
+    "fovs/FOV_001/tiled/global.json",
+    "fovs/FOV_001/tiled/registered.h5",
+    "fovs/FOV_001/tiled/run.json"
    ],
-   "record": "workflow/tasks/fov.sample.FOV_001.json",
-   "log": "workflow/logs/fov.sample.FOV_001.log",
+   "record": "workflow/tasks/tile_global.sample.FOV_001.json",
+   "log": "workflow/logs/tile_global.sample.FOV_001.log",
    "command": [
     "starfinder",
     "workflow",
-    "fov",
+    "tile-global",
     "--manifest",
     "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
     "--task",
-    "fov/sample/FOV_001"
+    "tile_global/sample/FOV_001"
    ],
    "execution": {
     "threads": 4,
@@ -670,9 +704,255 @@
    "fingerprint": "<sha256>"
   },
   {
-   "id": "fov/sample/FOV_002",
-   "kind": "fov",
-   "group": "fov",
+   "id": "tile/sample/FOV_001/r0c0",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001",
+    "tile": "r0c0"
+   },
+   "needs": [
+    "tile_global/sample/FOV_001"
+   ],
+   "inputs": [
+    "fovs/FOV_001/tiled/global.json",
+    "fovs/FOV_001/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_001/tiles/r0c0/candidates.csv",
+    "fovs/FOV_001/tiles/r0c0/reads.csv",
+    "fovs/FOV_001/tiles/r0c0/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_001.r0c0.json",
+   "log": "workflow/logs/tile.sample.FOV_001.r0c0.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_001/r0c0"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_001/r0c1",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001",
+    "tile": "r0c1"
+   },
+   "needs": [
+    "tile_global/sample/FOV_001"
+   ],
+   "inputs": [
+    "fovs/FOV_001/tiled/global.json",
+    "fovs/FOV_001/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_001/tiles/r0c1/candidates.csv",
+    "fovs/FOV_001/tiles/r0c1/reads.csv",
+    "fovs/FOV_001/tiles/r0c1/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_001.r0c1.json",
+   "log": "workflow/logs/tile.sample.FOV_001.r0c1.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_001/r0c1"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_001/r1c0",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001",
+    "tile": "r1c0"
+   },
+   "needs": [
+    "tile_global/sample/FOV_001"
+   ],
+   "inputs": [
+    "fovs/FOV_001/tiled/global.json",
+    "fovs/FOV_001/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_001/tiles/r1c0/candidates.csv",
+    "fovs/FOV_001/tiles/r1c0/reads.csv",
+    "fovs/FOV_001/tiles/r1c0/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_001.r1c0.json",
+   "log": "workflow/logs/tile.sample.FOV_001.r1c0.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_001/r1c0"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_001/r1c1",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001",
+    "tile": "r1c1"
+   },
+   "needs": [
+    "tile_global/sample/FOV_001"
+   ],
+   "inputs": [
+    "fovs/FOV_001/tiled/global.json",
+    "fovs/FOV_001/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_001/tiles/r1c1/candidates.csv",
+    "fovs/FOV_001/tiles/r1c1/reads.csv",
+    "fovs/FOV_001/tiles/r1c1/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_001.r1c1.json",
+   "log": "workflow/logs/tile.sample.FOV_001.r1c1.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_001/r1c1"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile_merge/sample/FOV_001",
+   "kind": "tile_merge",
+   "group": "tile_merge",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_001"
+   },
+   "needs": [
+    "tile/sample/FOV_001/r0c0",
+    "tile/sample/FOV_001/r0c1",
+    "tile/sample/FOV_001/r1c0",
+    "tile/sample/FOV_001/r1c1",
+    "tile_global/sample/FOV_001"
+   ],
+   "inputs": [
+    "fovs/FOV_001/tiled/global.json",
+    "fovs/FOV_001/tiled/run.json",
+    "fovs/FOV_001/tiles/r0c0/candidates.csv",
+    "fovs/FOV_001/tiles/r0c0/reads.csv",
+    "fovs/FOV_001/tiles/r0c0/tile.json",
+    "fovs/FOV_001/tiles/r0c1/candidates.csv",
+    "fovs/FOV_001/tiles/r0c1/reads.csv",
+    "fovs/FOV_001/tiles/r0c1/tile.json",
+    "fovs/FOV_001/tiles/r1c0/candidates.csv",
+    "fovs/FOV_001/tiles/r1c0/reads.csv",
+    "fovs/FOV_001/tiles/r1c0/tile.json",
+    "fovs/FOV_001/tiles/r1c1/candidates.csv",
+    "fovs/FOV_001/tiles/r1c1/reads.csv",
+    "fovs/FOV_001/tiles/r1c1/tile.json",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_001/checkpoints/candidates.json",
+    "fovs/FOV_001/checkpoints/pre_qc.json",
+    "fovs/FOV_001/molecules.csv",
+    "fovs/FOV_001/run.json"
+   ],
+   "record": "workflow/tasks/tile_merge.sample.FOV_001.json",
+   "log": "workflow/logs/tile_merge.sample.FOV_001.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile-merge",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile_merge/sample/FOV_001"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile_global/sample/FOV_002",
+   "kind": "tile_global",
+   "group": "tile_global",
    "identity": {
     "sample": "sample",
     "fov": "FOV_002"
@@ -698,22 +978,21 @@
     "input:round4/FOV_002/ch03.ome.tif"
    ],
    "outputs": [
-    "fovs/FOV_002/checkpoints/candidates.json",
-    "fovs/FOV_002/checkpoints/pre_qc.json",
-    "fovs/FOV_002/molecules.csv",
     "fovs/FOV_002/reference.tif",
-    "fovs/FOV_002/run.json"
+    "fovs/FOV_002/tiled/global.json",
+    "fovs/FOV_002/tiled/registered.h5",
+    "fovs/FOV_002/tiled/run.json"
    ],
-   "record": "workflow/tasks/fov.sample.FOV_002.json",
-   "log": "workflow/logs/fov.sample.FOV_002.log",
+   "record": "workflow/tasks/tile_global.sample.FOV_002.json",
+   "log": "workflow/logs/tile_global.sample.FOV_002.log",
    "command": [
     "starfinder",
     "workflow",
-    "fov",
+    "tile-global",
     "--manifest",
     "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
     "--task",
-    "fov/sample/FOV_002"
+    "tile_global/sample/FOV_002"
    ],
    "execution": {
     "threads": 4,
@@ -729,9 +1008,255 @@
    "fingerprint": "<sha256>"
   },
   {
-   "id": "fov/sample/FOV_003",
-   "kind": "fov",
-   "group": "fov",
+   "id": "tile/sample/FOV_002/r0c0",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002",
+    "tile": "r0c0"
+   },
+   "needs": [
+    "tile_global/sample/FOV_002"
+   ],
+   "inputs": [
+    "fovs/FOV_002/tiled/global.json",
+    "fovs/FOV_002/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_002/tiles/r0c0/candidates.csv",
+    "fovs/FOV_002/tiles/r0c0/reads.csv",
+    "fovs/FOV_002/tiles/r0c0/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_002.r0c0.json",
+   "log": "workflow/logs/tile.sample.FOV_002.r0c0.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_002/r0c0"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_002/r0c1",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002",
+    "tile": "r0c1"
+   },
+   "needs": [
+    "tile_global/sample/FOV_002"
+   ],
+   "inputs": [
+    "fovs/FOV_002/tiled/global.json",
+    "fovs/FOV_002/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_002/tiles/r0c1/candidates.csv",
+    "fovs/FOV_002/tiles/r0c1/reads.csv",
+    "fovs/FOV_002/tiles/r0c1/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_002.r0c1.json",
+   "log": "workflow/logs/tile.sample.FOV_002.r0c1.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_002/r0c1"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_002/r1c0",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002",
+    "tile": "r1c0"
+   },
+   "needs": [
+    "tile_global/sample/FOV_002"
+   ],
+   "inputs": [
+    "fovs/FOV_002/tiled/global.json",
+    "fovs/FOV_002/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_002/tiles/r1c0/candidates.csv",
+    "fovs/FOV_002/tiles/r1c0/reads.csv",
+    "fovs/FOV_002/tiles/r1c0/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_002.r1c0.json",
+   "log": "workflow/logs/tile.sample.FOV_002.r1c0.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_002/r1c0"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_002/r1c1",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002",
+    "tile": "r1c1"
+   },
+   "needs": [
+    "tile_global/sample/FOV_002"
+   ],
+   "inputs": [
+    "fovs/FOV_002/tiled/global.json",
+    "fovs/FOV_002/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_002/tiles/r1c1/candidates.csv",
+    "fovs/FOV_002/tiles/r1c1/reads.csv",
+    "fovs/FOV_002/tiles/r1c1/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_002.r1c1.json",
+   "log": "workflow/logs/tile.sample.FOV_002.r1c1.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_002/r1c1"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile_merge/sample/FOV_002",
+   "kind": "tile_merge",
+   "group": "tile_merge",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_002"
+   },
+   "needs": [
+    "tile/sample/FOV_002/r0c0",
+    "tile/sample/FOV_002/r0c1",
+    "tile/sample/FOV_002/r1c0",
+    "tile/sample/FOV_002/r1c1",
+    "tile_global/sample/FOV_002"
+   ],
+   "inputs": [
+    "fovs/FOV_002/tiled/global.json",
+    "fovs/FOV_002/tiled/run.json",
+    "fovs/FOV_002/tiles/r0c0/candidates.csv",
+    "fovs/FOV_002/tiles/r0c0/reads.csv",
+    "fovs/FOV_002/tiles/r0c0/tile.json",
+    "fovs/FOV_002/tiles/r0c1/candidates.csv",
+    "fovs/FOV_002/tiles/r0c1/reads.csv",
+    "fovs/FOV_002/tiles/r0c1/tile.json",
+    "fovs/FOV_002/tiles/r1c0/candidates.csv",
+    "fovs/FOV_002/tiles/r1c0/reads.csv",
+    "fovs/FOV_002/tiles/r1c0/tile.json",
+    "fovs/FOV_002/tiles/r1c1/candidates.csv",
+    "fovs/FOV_002/tiles/r1c1/reads.csv",
+    "fovs/FOV_002/tiles/r1c1/tile.json",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_002/checkpoints/candidates.json",
+    "fovs/FOV_002/checkpoints/pre_qc.json",
+    "fovs/FOV_002/molecules.csv",
+    "fovs/FOV_002/run.json"
+   ],
+   "record": "workflow/tasks/tile_merge.sample.FOV_002.json",
+   "log": "workflow/logs/tile_merge.sample.FOV_002.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile-merge",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile_merge/sample/FOV_002"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile_global/sample/FOV_003",
+   "kind": "tile_global",
+   "group": "tile_global",
    "identity": {
     "sample": "sample",
     "fov": "FOV_003"
@@ -757,22 +1282,21 @@
     "input:round4/FOV_003/ch03.ome.tif"
    ],
    "outputs": [
-    "fovs/FOV_003/checkpoints/candidates.json",
-    "fovs/FOV_003/checkpoints/pre_qc.json",
-    "fovs/FOV_003/molecules.csv",
     "fovs/FOV_003/reference.tif",
-    "fovs/FOV_003/run.json"
+    "fovs/FOV_003/tiled/global.json",
+    "fovs/FOV_003/tiled/registered.h5",
+    "fovs/FOV_003/tiled/run.json"
    ],
-   "record": "workflow/tasks/fov.sample.FOV_003.json",
-   "log": "workflow/logs/fov.sample.FOV_003.log",
+   "record": "workflow/tasks/tile_global.sample.FOV_003.json",
+   "log": "workflow/logs/tile_global.sample.FOV_003.log",
    "command": [
     "starfinder",
     "workflow",
-    "fov",
+    "tile-global",
     "--manifest",
     "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
     "--task",
-    "fov/sample/FOV_003"
+    "tile_global/sample/FOV_003"
    ],
    "execution": {
     "threads": 4,
@@ -788,9 +1312,255 @@
    "fingerprint": "<sha256>"
   },
   {
-   "id": "fov/sample/FOV_004",
-   "kind": "fov",
-   "group": "fov",
+   "id": "tile/sample/FOV_003/r0c0",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003",
+    "tile": "r0c0"
+   },
+   "needs": [
+    "tile_global/sample/FOV_003"
+   ],
+   "inputs": [
+    "fovs/FOV_003/tiled/global.json",
+    "fovs/FOV_003/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_003/tiles/r0c0/candidates.csv",
+    "fovs/FOV_003/tiles/r0c0/reads.csv",
+    "fovs/FOV_003/tiles/r0c0/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_003.r0c0.json",
+   "log": "workflow/logs/tile.sample.FOV_003.r0c0.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_003/r0c0"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_003/r0c1",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003",
+    "tile": "r0c1"
+   },
+   "needs": [
+    "tile_global/sample/FOV_003"
+   ],
+   "inputs": [
+    "fovs/FOV_003/tiled/global.json",
+    "fovs/FOV_003/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_003/tiles/r0c1/candidates.csv",
+    "fovs/FOV_003/tiles/r0c1/reads.csv",
+    "fovs/FOV_003/tiles/r0c1/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_003.r0c1.json",
+   "log": "workflow/logs/tile.sample.FOV_003.r0c1.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_003/r0c1"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_003/r1c0",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003",
+    "tile": "r1c0"
+   },
+   "needs": [
+    "tile_global/sample/FOV_003"
+   ],
+   "inputs": [
+    "fovs/FOV_003/tiled/global.json",
+    "fovs/FOV_003/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_003/tiles/r1c0/candidates.csv",
+    "fovs/FOV_003/tiles/r1c0/reads.csv",
+    "fovs/FOV_003/tiles/r1c0/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_003.r1c0.json",
+   "log": "workflow/logs/tile.sample.FOV_003.r1c0.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_003/r1c0"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_003/r1c1",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003",
+    "tile": "r1c1"
+   },
+   "needs": [
+    "tile_global/sample/FOV_003"
+   ],
+   "inputs": [
+    "fovs/FOV_003/tiled/global.json",
+    "fovs/FOV_003/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_003/tiles/r1c1/candidates.csv",
+    "fovs/FOV_003/tiles/r1c1/reads.csv",
+    "fovs/FOV_003/tiles/r1c1/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_003.r1c1.json",
+   "log": "workflow/logs/tile.sample.FOV_003.r1c1.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_003/r1c1"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile_merge/sample/FOV_003",
+   "kind": "tile_merge",
+   "group": "tile_merge",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_003"
+   },
+   "needs": [
+    "tile/sample/FOV_003/r0c0",
+    "tile/sample/FOV_003/r0c1",
+    "tile/sample/FOV_003/r1c0",
+    "tile/sample/FOV_003/r1c1",
+    "tile_global/sample/FOV_003"
+   ],
+   "inputs": [
+    "fovs/FOV_003/tiled/global.json",
+    "fovs/FOV_003/tiled/run.json",
+    "fovs/FOV_003/tiles/r0c0/candidates.csv",
+    "fovs/FOV_003/tiles/r0c0/reads.csv",
+    "fovs/FOV_003/tiles/r0c0/tile.json",
+    "fovs/FOV_003/tiles/r0c1/candidates.csv",
+    "fovs/FOV_003/tiles/r0c1/reads.csv",
+    "fovs/FOV_003/tiles/r0c1/tile.json",
+    "fovs/FOV_003/tiles/r1c0/candidates.csv",
+    "fovs/FOV_003/tiles/r1c0/reads.csv",
+    "fovs/FOV_003/tiles/r1c0/tile.json",
+    "fovs/FOV_003/tiles/r1c1/candidates.csv",
+    "fovs/FOV_003/tiles/r1c1/reads.csv",
+    "fovs/FOV_003/tiles/r1c1/tile.json",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_003/checkpoints/candidates.json",
+    "fovs/FOV_003/checkpoints/pre_qc.json",
+    "fovs/FOV_003/molecules.csv",
+    "fovs/FOV_003/run.json"
+   ],
+   "record": "workflow/tasks/tile_merge.sample.FOV_003.json",
+   "log": "workflow/logs/tile_merge.sample.FOV_003.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile-merge",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile_merge/sample/FOV_003"
+   ],
+   "execution": {
+    "threads": 1,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile_global/sample/FOV_004",
+   "kind": "tile_global",
+   "group": "tile_global",
    "identity": {
     "sample": "sample",
     "fov": "FOV_004"
@@ -816,25 +1586,270 @@
     "input:round4/FOV_004/ch03.ome.tif"
    ],
    "outputs": [
-    "fovs/FOV_004/checkpoints/candidates.json",
-    "fovs/FOV_004/checkpoints/pre_qc.json",
-    "fovs/FOV_004/molecules.csv",
     "fovs/FOV_004/reference.tif",
-    "fovs/FOV_004/run.json"
+    "fovs/FOV_004/tiled/global.json",
+    "fovs/FOV_004/tiled/registered.h5",
+    "fovs/FOV_004/tiled/run.json"
    ],
-   "record": "workflow/tasks/fov.sample.FOV_004.json",
-   "log": "workflow/logs/fov.sample.FOV_004.log",
+   "record": "workflow/tasks/tile_global.sample.FOV_004.json",
+   "log": "workflow/logs/tile_global.sample.FOV_004.log",
    "command": [
     "starfinder",
     "workflow",
-    "fov",
+    "tile-global",
     "--manifest",
     "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
     "--task",
-    "fov/sample/FOV_004"
+    "tile_global/sample/FOV_004"
    ],
    "execution": {
     "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_004/r0c0",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004",
+    "tile": "r0c0"
+   },
+   "needs": [
+    "tile_global/sample/FOV_004"
+   ],
+   "inputs": [
+    "fovs/FOV_004/tiled/global.json",
+    "fovs/FOV_004/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_004/tiles/r0c0/candidates.csv",
+    "fovs/FOV_004/tiles/r0c0/reads.csv",
+    "fovs/FOV_004/tiles/r0c0/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_004.r0c0.json",
+   "log": "workflow/logs/tile.sample.FOV_004.r0c0.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_004/r0c0"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_004/r0c1",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004",
+    "tile": "r0c1"
+   },
+   "needs": [
+    "tile_global/sample/FOV_004"
+   ],
+   "inputs": [
+    "fovs/FOV_004/tiled/global.json",
+    "fovs/FOV_004/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_004/tiles/r0c1/candidates.csv",
+    "fovs/FOV_004/tiles/r0c1/reads.csv",
+    "fovs/FOV_004/tiles/r0c1/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_004.r0c1.json",
+   "log": "workflow/logs/tile.sample.FOV_004.r0c1.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_004/r0c1"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_004/r1c0",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004",
+    "tile": "r1c0"
+   },
+   "needs": [
+    "tile_global/sample/FOV_004"
+   ],
+   "inputs": [
+    "fovs/FOV_004/tiled/global.json",
+    "fovs/FOV_004/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_004/tiles/r1c0/candidates.csv",
+    "fovs/FOV_004/tiles/r1c0/reads.csv",
+    "fovs/FOV_004/tiles/r1c0/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_004.r1c0.json",
+   "log": "workflow/logs/tile.sample.FOV_004.r1c0.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_004/r1c0"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile/sample/FOV_004/r1c1",
+   "kind": "tile",
+   "group": "tile",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004",
+    "tile": "r1c1"
+   },
+   "needs": [
+    "tile_global/sample/FOV_004"
+   ],
+   "inputs": [
+    "fovs/FOV_004/tiled/global.json",
+    "fovs/FOV_004/tiled/registered.h5",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_004/tiles/r1c1/candidates.csv",
+    "fovs/FOV_004/tiles/r1c1/reads.csv",
+    "fovs/FOV_004/tiles/r1c1/tile.json"
+   ],
+   "record": "workflow/tasks/tile.sample.FOV_004.r1c1.json",
+   "log": "workflow/logs/tile.sample.FOV_004.r1c1.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile/sample/FOV_004/r1c1"
+   ],
+   "execution": {
+    "threads": 4,
+    "memory_mb": 8000,
+    "runtime_min": 30,
+    "gpu": false,
+    "container": null
+   },
+   "blocks": [
+    "processing"
+   ],
+   "blocks_sha256": "<sha256>",
+   "fingerprint": "<sha256>"
+  },
+  {
+   "id": "tile_merge/sample/FOV_004",
+   "kind": "tile_merge",
+   "group": "tile_merge",
+   "identity": {
+    "sample": "sample",
+    "fov": "FOV_004"
+   },
+   "needs": [
+    "tile/sample/FOV_004/r0c0",
+    "tile/sample/FOV_004/r0c1",
+    "tile/sample/FOV_004/r1c0",
+    "tile/sample/FOV_004/r1c1",
+    "tile_global/sample/FOV_004"
+   ],
+   "inputs": [
+    "fovs/FOV_004/tiled/global.json",
+    "fovs/FOV_004/tiled/run.json",
+    "fovs/FOV_004/tiles/r0c0/candidates.csv",
+    "fovs/FOV_004/tiles/r0c0/reads.csv",
+    "fovs/FOV_004/tiles/r0c0/tile.json",
+    "fovs/FOV_004/tiles/r0c1/candidates.csv",
+    "fovs/FOV_004/tiles/r0c1/reads.csv",
+    "fovs/FOV_004/tiles/r0c1/tile.json",
+    "fovs/FOV_004/tiles/r1c0/candidates.csv",
+    "fovs/FOV_004/tiles/r1c0/reads.csv",
+    "fovs/FOV_004/tiles/r1c0/tile.json",
+    "fovs/FOV_004/tiles/r1c1/candidates.csv",
+    "fovs/FOV_004/tiles/r1c1/reads.csv",
+    "fovs/FOV_004/tiles/r1c1/tile.json",
+    "input:genes.csv"
+   ],
+   "outputs": [
+    "fovs/FOV_004/checkpoints/candidates.json",
+    "fovs/FOV_004/checkpoints/pre_qc.json",
+    "fovs/FOV_004/molecules.csv",
+    "fovs/FOV_004/run.json"
+   ],
+   "record": "workflow/tasks/tile_merge.sample.FOV_004.json",
+   "log": "workflow/logs/tile_merge.sample.FOV_004.log",
+   "command": [
+    "starfinder",
+    "workflow",
+    "tile-merge",
+    "--manifest",
+    "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
+    "--task",
+    "tile_merge/sample/FOV_004"
+   ],
+   "execution": {
+    "threads": 1,
     "memory_mb": 8000,
     "runtime_min": 30,
     "gpu": false,
@@ -1034,10 +2049,10 @@
     "sample": "sample"
    },
    "needs": [
-    "fov/sample/FOV_001",
-    "fov/sample/FOV_002",
-    "fov/sample/FOV_003",
-    "fov/sample/FOV_004"
+    "tile_global/sample/FOV_001",
+    "tile_global/sample/FOV_002",
+    "tile_global/sample/FOV_003",
+    "tile_global/sample/FOV_004"
    ],
    "inputs": [
     "fovs/FOV_001/reference.tif",
@@ -1188,14 +2203,14 @@
    },
    "needs": [
     "bigstitcher_import/sample",
-    "fov/sample/FOV_001",
-    "fov/sample/FOV_002",
-    "fov/sample/FOV_003",
-    "fov/sample/FOV_004",
     "morphology/sample/FOV_001",
     "morphology/sample/FOV_002",
     "morphology/sample/FOV_003",
-    "morphology/sample/FOV_004"
+    "morphology/sample/FOV_004",
+    "tile_merge/sample/FOV_001",
+    "tile_merge/sample/FOV_002",
+    "tile_merge/sample/FOV_003",
+    "tile_merge/sample/FOV_004"
    ],
    "inputs": [
     "<work>/labels/fused-cells.ome.tif",
@@ -1256,10 +2271,10 @@
    },
    "needs": [
     "export/sample",
-    "fov/sample/FOV_001",
-    "fov/sample/FOV_002",
-    "fov/sample/FOV_003",
-    "fov/sample/FOV_004"
+    "tile_merge/sample/FOV_001",
+    "tile_merge/sample/FOV_002",
+    "tile_merge/sample/FOV_003",
+    "tile_merge/sample/FOV_004"
    ],
    "inputs": [
     "export/sample/export.json",

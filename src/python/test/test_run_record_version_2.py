@@ -31,7 +31,6 @@ from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizati
                                       save_supplied_statistics, summarize_histograms, summary_recipe,
                                       supplied_statistics)
 from starfinder.registration import DemonsConfig, RegistrationRecipe, RegistrationStep, TranslationConfig
-from starfinder.dataset import SubtileConfig
 
 from .report_fixtures import report_records
 from .test_report_records_golden import CHANNELS, ROUNDS, pipeline, write_scene
@@ -84,8 +83,6 @@ def scene(tmp_path):
 
 def test_a_checkpointed_run_writes_run_json_version_2(scene):
     dataset = new_dataset(scene)
-    dataset.subtile = SubtileConfig(sqrt_pieces=2, overlap_ratio=0)
-    dataset.subtile.compute_windows(24, 24)
     # The workflow configuration file, as from_workflow_config records it for a workflow rule.
     workflow = scene / "external" / "config.yaml"
     workflow.write_text("dataset_id: golden\n")
@@ -126,25 +123,19 @@ def test_a_checkpointed_run_writes_run_json_version_2(scene):
     fov.export_spots()
     fov.export_spots("reads")
     fov.save_reference_image()
-    fov.save_subtiles()
     record = json.loads((folder / "run.json").read_text())
     assert record["status"] == "succeeded"
     outputs = record["outputs"]
-    assert set(outputs) == {"molecules", "reads", "reference_image", "subtile_coords", "subtile_data"}
-    subtiles = os.path.relpath(fov.paths.subtile_dir, folder)
+    assert set(outputs) == {"molecules", "reads", "reference_image"}
     assert outputs["molecules"]["path"] == os.path.relpath(fov.paths.spot_table("molecules"), folder)
     assert outputs["reference_image"]["path"] == os.path.relpath(fov._reference_image_path(), folder)
-    assert outputs["subtile_coords"]["path"] == f"{subtiles}/subtile_coords.csv"
-    assert outputs["subtile_coords"]["rows"] == 4 and sorted(outputs["subtile_data"]) == ["1", "2", "3", "4"]
-    entries = [outputs[k] for k in ("molecules", "reads", "reference_image", "subtile_coords")]
-    entries += list(outputs["subtile_data"].values())
+    entries = [outputs[k] for k in ("molecules", "reads", "reference_image")]
     assert all(not Path(e["path"]).is_absolute() and e["sha256"] == sha256(folder / e["path"]) for e in entries)
 
 
 @pytest.mark.workflow
 def test_the_processing_rules_record_every_declared_output_after_the_processing(tmp_path):
-    """rsf_single_fov records molecules.csv and the reference image; gr_single_fov_subtile the reference image and
-    the subtile files; lrsf_single_fov_subtile its subtile_goodSpots_<n>.csv in the subtile's run.json."""
+    """rsf_single_fov records molecules.csv and the reference image; the subtile rules, retired (W-735), refuse."""
     write_scene(tmp_path / "data")
     codebook = write_codebook(tmp_path / "genes.csv")
     record, _, _ = run_rule(workflow_config(tmp_path, "out"), codebook)
@@ -158,7 +149,7 @@ def test_the_processing_rules_record_every_declared_output_after_the_processing(
     assert set(outputs) == {"molecules", "reference_image"}
     assert (outputs["molecules"]["path"], outputs["reference_image"]["path"]) == ("molecules.csv", "reference.tif")
     assert all(e["sha256"] == sha256(folder / e["path"]) for e in outputs.values())
-    # The subtile rules.
+    # The subtile rules: retired for Python (D5, W-735); their adapters refuse until W-750 removes them.
     rules = {"gr_single_fov_subtile": {"run": True, "parameters": {
                  "registration": {"steps": [{"method": "translation"}]},
                  "create_subtiles": {"run": True, "sqrt_pieces": 2}}},
@@ -167,27 +158,13 @@ def test_the_processing_rules_record_every_declared_output_after_the_processing(
                  "reads_extraction": {"run": True, "voxel_size": [1, 1, 1]}, "reads_filtration": {"run": True}}}}
     config = dict(workflow_config(tmp_path, "sub"), workflow_mode="subtile", rules=rules)
     Path(config["config_path"]).write_text(json.dumps(config))
-    paths = from_workflow_config(config, "gr_single_fov_subtile").dataset.fov("FOV_001").paths
-    subtiles = paths.subtile_dir
     for rule, inputs, wildcards in (
             ("gr_single_fov_subtile", SimpleNamespace(codebook=str(codebook)), {}),
-            ("lrsf_single_fov_subtile", SimpleNamespace(codebook=str(codebook),
-                                                        subtile=str(subtiles / "subtile_data_1.npz")),
+            ("lrsf_single_fov_subtile", SimpleNamespace(codebook=str(codebook), subtile="unused"),
              {"n_subtile": "1"})):
         snakemake = SimpleNamespace(config=config, input=inputs, wildcards=SimpleNamespace(fovID="FOV_001", **wildcards))
-        runpy.run_path(str(ROOT / "workflow" / "scripts" / f"{rule}.py"), init_globals={"snakemake": snakemake})
-    folder = paths.fov_dir
-    outputs = json.loads((folder / "run.json").read_text())["outputs"]
-    assert set(outputs) == {"reference_image", "subtile_coords", "subtile_data"}
-    assert outputs["subtile_coords"]["path"] == "../../output/subtile/FOV_001/subtile_coords.csv"
-    assert sorted(outputs["subtile_data"]) == ["1", "2", "3", "4"]
-    entries = [outputs["reference_image"], outputs["subtile_coords"], *outputs["subtile_data"].values()]
-    assert all(e["sha256"] == sha256(folder / e["path"]) for e in entries)
-    subtile = json.loads((folder / "subtile_1" / "run.json").read_text())
-    assert subtile["status"] == "succeeded" and set(subtile["outputs"]) == {"subtile_spots"}
-    entry = subtile["outputs"]["subtile_spots"]
-    assert entry["path"] == "../../../output/subtile/FOV_001/subtile_goodSpots_1.csv"
-    assert entry["sha256"] == sha256(subtiles / "subtile_goodSpots_1.csv")
+        with pytest.raises(ValueError, match="the Python subtile route is retired"):
+            runpy.run_path(str(ROOT / "workflow" / "scripts" / f"{rule}.py"), init_globals={"snakemake": snakemake})
 
 
 def test_an_input_outside_the_input_root_is_absolute_and_a_record_without_roots_never_reads_the_cwd(
@@ -299,11 +276,13 @@ def test_a_version_1_record_stays_report_readable_with_the_note(tmp_path):
         case.collect()
 
 
-def test_the_record_keeps_a_relative_checkpoint_directory_for_a_subtile(scene):
+def test_the_record_keeps_a_relative_checkpoint_directory_for_a_tile(scene):
+    # W-735: a tile (FOV.tile) records its identity as subtile_id; its folder is its FOV's (no subtile_<n> folder).
     dataset = new_dataset(scene)
     fov = dataset.fov("FOV_001")
-    fov.subtile_id = 2
+    fov.tile = "r0c1"
     fov.run(PipelineConfig(load=pipeline().load), checkpoints=CheckpointConfig(stages=(), directory=scene / "ck"))
-    record = json.loads((scene / "ck" / "FOV_001" / "subtile_2" / "run.json").read_text())
+    record = json.loads((scene / "ck" / "FOV_001" / "run.json").read_text())
+    assert record["subtile_id"] == "r0c1"
     assert record["config"]["checkpoints"] == dict(json.loads(json.dumps(asdict(CheckpointConfig(stages=())))),
-                                                   directory="../..")
+                                                   directory="..")

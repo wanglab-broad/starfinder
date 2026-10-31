@@ -8,7 +8,7 @@ as provenance. ``checkpoints.<stage>`` names the stage record with its SHA-256,
 and the stage record names and hashes its payload files. Two meanings are kept
 apart: ``status`` is the outcome of ``FOV.run``'s processing, written when the
 run ends, and ``outputs`` lists the files written after it (molecules, reads,
-the reference image, the subtile files), each added as it is written. Version
+the reference image), each added as it is written. Version
 1 recorded the paths as given and linked the stages by file names; its readers
 read it as recorded.
 """
@@ -128,7 +128,7 @@ def add_output(path, slot, entry):
     """Set ``outputs.<slot>`` of a written run.json to ``entry`` and rewrite the record atomically.
 
     The writers of the outputs (``FOV.export_spots``, ``save_reference_image``,
-    ``save_subtiles``, the subtile rules' tables) call it after the FOV's latest
+    the tiled merge) call it after the FOV's latest
     checkpointed run succeeded; the other keys, ``status`` among them, and
     ``format_version`` are kept.
     """
@@ -195,7 +195,7 @@ class _RunRecord:
                     if dataset.codebook is not None and dataset.readout_mode == "multiplexed" else None)
         self.data = {
             "format_version": FORMAT_VERSION, "dataset_id": dataset.dataset_id,
-            "sample_id": dataset.sample_id, "fov_id": fov.fov_id, "subtile_id": fov.subtile_id,
+            "sample_id": dataset.sample_id, "fov_id": fov.fov_id, "subtile_id": fov.tile,
             # The roots of the run, absolute, as provenance; the record's paths do not depend on them.
             "input_root": None if dataset.input_root is None else os.path.abspath(dataset.input_root),
             "output_root": os.path.abspath(dataset.output_root),

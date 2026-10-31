@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.dataset import FOV, Dataset, SubtileConfig
+from starfinder.dataset import FOV, Dataset
 
 pytestmark = pytest.mark.dataset
 
@@ -167,42 +167,6 @@ class TestFOVPipeline:
             assert fov.images[r].shape == original_shape
 
 
-class TestFOVSubtile:
-    """Tests for subtile operations."""
-
-    def test_create_and_load_subtiles(self, small_pipeline_dataset):
-        fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_images()
-
-        # Configure subtiles (2x2 grid)
-        small_pipeline_dataset.subtile = SubtileConfig(
-            sqrt_pieces=2, overlap_ratio=0.1
-        )
-        h, w = fov.images["round1"].shape[1:3]
-        small_pipeline_dataset.subtile.compute_windows(h, w)
-
-        coords_df = fov.save_subtiles()
-        assert len(coords_df) == 4
-        assert set(coords_df.columns) == {
-            "t", "scoords_x", "scoords_y", "ecoords_x", "ecoords_y",
-        }
-
-        # Coordinates should be 1-based
-        assert coords_df["scoords_x"].min() >= 1
-        assert coords_df["scoords_y"].min() >= 1
-
-        # Load back from NPZ
-        npz_path = fov.paths.subtile_dir / "subtile_data_1.npz"
-        assert npz_path.exists()
-
-        loaded = FOV.from_subtile(
-            npz_path, small_pipeline_dataset, "FOV_001"
-        )
-        assert len(loaded.images) == 4
-        for r in ["round1", "round2", "round3", "round4"]:
-            assert r in loaded.images
-
-
 class TestFOVPaths:
     """Tests for FOV path helpers."""
 
@@ -212,18 +176,17 @@ class TestFOVPaths:
 
         assert p.fov_dir == small_pipeline_dataset.output_root / "fovs" / "FOV_001"
         assert p.checkpoint_dir == p.fov_dir / "checkpoints" and p.run_record == p.fov_dir / "run.json"
-        assert "subtile" in str(p.subtile_dir)
         assert p.signal_csv("goodSpots").name == "FOV_001_goodSpots.csv"
 
     def test_paths_keep_the_attributes_of_the_base_revision(self, tmp_path):
         """FOV.paths keeps its class name and every public attribute it had before the path object moved to
         starfinder._layout (W-548; the list recorded at 81fead1), except the unused signal PNG path helper, which
         W-562 deleted (docs/migration.md), with spot_table, which W-562 added, without the log paths gr_log,
-        nr_log, rsf_log, score_log and shift_log, whose files W-563 removed (docs/migration.md), and with fov_dir
+        nr_log, rsf_log, score_log and shift_log, whose files W-563 removed (docs/migration.md), with fov_dir
         and run_record in place of ref_merged_tif, which W-564 replaced by the one reference-image resolver
+        (docs/migration.md), and without subtile_dir, which W-735 removed with the subtile API
         (docs/migration.md)."""
         fov = Dataset(tmp_path / "in", tmp_path / "out", "d", "s", "o").fov("FOV_001")
         assert type(fov.paths).__name__ == "_FovPaths"
         assert sorted(name for name in dir(fov.paths) if not name.startswith("_")) == [
-            "checkpoint_dir", "fov_dir", "fov_id", "output_root", "run_record", "signal_csv", "spot_table",
-            "subtile_dir"]
+            "checkpoint_dir", "fov_dir", "fov_id", "output_root", "run_record", "signal_csv", "spot_table"]

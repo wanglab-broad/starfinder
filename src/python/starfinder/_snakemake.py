@@ -25,49 +25,45 @@ from starfinder.registration import (ExternalReference, RegistrationRecipe, Regi
     RegistrationStep, TranslationConfig)
 
 
-def _run_workflow(snakemake, rule):
-    """Thin common runner used by the five Snakemake script adapters; each run writes the FOV's run.json.
+#: The Python subtile rules, whose package route is retired (D5, design/specs/orchestration-tiled.md, "What is
+#: retired"): the package's subtile API and the resident branch went with W-735; W-750 removes their rule files.
+_RETIRED_SUBTILE_RULES = ('gr_single_fov_subtile', 'lrsf_single_fov_subtile', 'deep_create_subtile', 'deep_rsf_subtile')
 
-    The run record is fovs/<fov>/run.json, or fovs/<fov>/subtile_<n>/run.json
-    for the resident subtile rules; it holds the counts, fractions, read
-    summary, round roles, registration attempts and transforms that the
-    MATLAB-shaped logs held before. The rules that are not resident also write
-    the reference image (FOV.save_reference_image, the file reference_image
-    names), except with reference_image_import, whose file they never write.
-    run.json says ``succeeded`` when FOV.run's processing succeeded; each
-    declared output written after it (molecules, the reference image, the
-    subtile files, a resident subtile's ``subtile_goodSpots_<n>.csv`` as
-    ``outputs.subtile_spots``) is then added to its ``outputs`` with its path
-    and SHA-256. The rule's inputs are read by name: ``codebook`` (the
-    reference file, _reference_file) and, for the resident subtile rules,
-    ``subtile`` (the saved subtile .npz); the rules take no JSON copy of the
-    configuration, which the adapter reads from ``snakemake.config``.
+
+def _run_workflow(snakemake, rule):
+    """Thin runner of the rsf_single_fov script adapter; each run writes the FOV's run.json.
+
+    The run record is fovs/<fov>/run.json; it holds the counts, fractions,
+    read summary, round roles, registration attempts and transforms that the
+    MATLAB-shaped logs held before. The rule also writes the reference image
+    (FOV.save_reference_image, the file reference_image names), except with
+    reference_image_import, whose file it never writes. run.json says
+    ``succeeded`` when FOV.run's processing succeeded; each declared output
+    written after it (molecules, the reference image) is then added to its
+    ``outputs`` with its path and SHA-256. The rule's inputs are read by name:
+    ``codebook`` (the reference file, _reference_file); the rule takes no JSON
+    copy of the configuration, which the adapter reads from
+    ``snakemake.config``. The subtile rules of the Python backend are retired
+    (D5): a FOV that does not fit one job runs as the tiled task kinds of
+    ``starfinder workflow`` (processing.mode tiled), and this runner refuses
+    them.
     """
-    from .dataset.fov import FOV
+    if rule in _RETIRED_SUBTILE_RULES:
+        raise ValueError(f"{rule}: the Python subtile route is retired (D5); a FOV that does not fit one job runs "
+                         "as tiled execution, processing.mode: tiled of the Python configuration (starfinder "
+                         "workflow plan)")
     adapted = from_workflow_config(snakemake.config, rule)
     dataset = adapted.dataset
     fov_id = snakemake.wildcards.fovID
-    resident = rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile')
     if adapted.pipeline.decoding:
         # The rule's codebook input is the reference file (_reference_file): the panel CSV in direct mode.
         _load_reference(adapted, Path(snakemake.input.codebook))
-    fov = FOV.from_subtile(Path(snakemake.input.subtile), dataset, fov_id) if resident else dataset.fov(fov_id)
+    fov = dataset.fov(fov_id)
     fov.run(adapted.pipeline, execution=adapted.execution, checkpoints=_rule_checkpoints(snakemake.config, rule))
-    if resident:
-        from starfinder.readout.spots import _export_legacy_spots
-        number = snakemake.wildcards.n_subtile
-        # The legacy route: stitch_subtile reads the one-based subtile tables.
-        path = _export_legacy_spots(fov.spot_result, fov.filtering_result,
-                                    Path(snakemake.input.subtile).parent / f'subtile_goodSpots_{number}.csv')
-        fov._record_output('subtile_spots', path)
-    else:
-        if dataset.reference_image_import is None:
-            fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
-                                     reference_channel=adapted.reference_channel)
-        if rule == 'rsf_single_fov':
-            fov.export_spots()
-        else:
-            fov.save_subtiles()
+    if dataset.reference_image_import is None:
+        fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
+                                 reference_channel=adapted.reference_channel)
+    fov.export_spots()
 
 
 def _run_nuclei_registration(snakemake):
@@ -642,7 +638,10 @@ def _run_record_outputs(output_root, fov_ids, subtiles=None):
     """
     if subtiles is None:
         return [str(_layout.run_record(output_root, fov)) for fov in fov_ids]
-    return [str(_layout.run_record(output_root, fov, n)) for fov in fov_ids for n in subtiles]
+    # The Python subtile rules' records (SUBTILE_RUN_RECORD of common.smk), which W-750 removes with the rule files; the
+    # package keeps no subtile folder of its own.
+    return [str(_layout.fov_dir(output_root, fov) / f"subtile_{n}" / _layout.RUN_RECORD)
+            for fov in fov_ids for n in subtiles]
 
 
 def _assignment_record_outputs(output_root, fov_ids, name):

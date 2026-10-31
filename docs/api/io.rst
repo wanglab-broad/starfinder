@@ -28,3 +28,18 @@ Conversion and saving
    convert_image
    ImageConversionConfig
    save_volume
+
+The chunked checkpoint of tiled execution
+-----------------------------------------
+
+The registered rounds of one FOV in one HDF5 file, written once by the global task of tiled execution and read by
+window by its tile tasks (``CHUNK_EDGE`` is 128 voxels in Y and X).
+
+.. autosummary::
+   :toctree: generated
+
+   CHUNK_EDGE
+   chunked_round_sha256
+   ChunkedCheckpointWriter
+   read_chunked_record
+   read_window

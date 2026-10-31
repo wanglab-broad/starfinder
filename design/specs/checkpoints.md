@@ -80,8 +80,9 @@ folder holds the restart material of `FOV.run`, the three stages.
         assignment.json
 ```
 
-An FOV loaded from a subtile writes its `run.json` and `checkpoints/` to `subtile_<n>/`
-inside its FOV folder, so subtiles of one FOV never share files. Round labels must be
+Tiled execution (`orchestration-tiled.md`) writes its global task's files to `tiled/` and each
+tile's to `tiles/<tile>/` inside the FOV folder; its merge writes the FOV's `run.json` and
+`checkpoints/` as a direct run does. Round labels must be
 plain file names. `molecules.csv`, `reads.csv`, `nuclei_registration.json` and
 `reference.tif` are written by the calls named beside them into
 `<output_root>/fovs/<fov_id>/`; the reference image goes wherever the dataset's
@@ -474,8 +475,8 @@ identical typed results. Empty tables keep their columns and dtypes.
 ## Reload and continue
 
 {py:meth}`~starfinder.dataset.FOV.load_checkpoint` restores one stage into an FOV
-that has no results at or after that stage. It checks the FOV id (and subtile
-id), the round labels and the channel order against the dataset, and, for
+that has no results at or after that stage. It checks the FOV id (and the tile,
+`subtile_id`), the round labels and the channel order against the dataset, and, for
 `candidates` and `pre_qc`, the readout mode (`multiplexed` when the header has
 none) against `Dataset.readout_mode`, and, for `pre_qc`, the recorded `encoding`
 against the loaded codebook's (since 2026-10-04; not checked when the header has none
@@ -555,8 +556,8 @@ depends on where the output tree or the input tree lies.
   `input_root` and `output_root` record the roots of the run as provenance.
 * **Two meanings, kept apart.** `status` is the outcome of `FOV.run`'s processing:
   `succeeded` is written when that processing succeeded. `outputs` records the
-  files written after it (the molecule and read tables, the reference image, the
-  subtile files), each added as its writer writes it. A `succeeded` record
+  files written after it (the molecule and read tables, the reference image),
+  each added as its writer writes it. A `succeeded` record
   without an `outputs` entry says that the processing succeeded and that file
   was not written. A workflow task succeeded only when its record says
   `succeeded` and lists every other declared output with its SHA-256 (the record
@@ -565,7 +566,7 @@ depends on where the output tree or the input tree lies.
 | Field | Content |
 | --- | --- |
 | `format_version` | `2`. |
-| `dataset_id`, `sample_id`, `fov_id`, `subtile_id` | Identity. |
+| `dataset_id`, `sample_id`, `fov_id`, `subtile_id` | Identity; `subtile_id` is the tile of a FOV in tiles (`FOV.tile`, null for a whole FOV; the subtile API went with W-735). |
 | `input_root`, `output_root` | The `Dataset`'s input root and output root, absolute (`null` input root for a dataset without one): provenance. The other paths do not depend on them; a reader of a version-2 record resolves the input paths against the input root it is given ([replay specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/report.md#the-replay)), and against `input_root` only when it is given none. |
 | `status`, `started_at`, `ended_at` | `running`, `succeeded`, `failed` or `interrupted`, with UTC times: the outcome of `FOV.run`'s processing. |
 | `error` | `null`, or the failing `step` and `round`, the exception `type`, `message` and `traceback`. |
@@ -584,7 +585,8 @@ depends on where the output tree or the input tree lies.
 | `counts` | Spots, intensities, decoding call statuses, scoring counts (`scoring`: total, scored, `no_assignment` and `background_unavailable`, since 2026-10-02, when the reads were scored), deduplication counts (`deduplication`: total, groups, `merged_reads` and `conflicting_groups`, since 2026-10-02, when the reads were deduplicated) and filtering counts (`filtering`: total, accepted and rejected; when the filter checked endpoints, with `end_bases` or a codebook layout's segment ends, also `endpoint_valid`, the reads of the correct form, and with segment ends `endpoint_valid_segments`, that count per segment; since 2026-10-12; and `fractions`, the filter result's `accepted` and, when it checked endpoints, `endpoint_valid` over all reads, `null` without reads; since 2026-10-23). Whenever reads were decoded, `summary` holds the population summary of {py:func}`~starfinder.readout.summarize_reads` of the latest reads (since 2026-10-02 for scored or deduplicated reads; since 2026-10-23 also without scoring or deduplication). |
 | `checkpoint_directory` | `checkpoints`, the FOV folder's checkpoint folder, relative to the FOV folder. |
 | `checkpoints` | Per stage written, the stage record the run relies on: `path` (`checkpoints/candidates.json`, `checkpoints/pre_qc.json` or `checkpoints/registered/transforms.json`, relative to the FOV folder) and `sha256` (of the record's bytes). The record names and hashes its payload files (`files`, see "registered" under "Layout"); a stage whose record was not written (a run that failed before it) has no entry. |
-| `outputs` | `{}` when the processing ends; then, per slot, each file written after the processing, added by its writer when the FOV's latest `run` had checkpoints and succeeded, the record rewritten atomically (a later `run` writes a new record without them). Every entry has `path` (relative to the FOV folder, POSIX) and `sha256` (of the file's bytes). `molecules` and `reads` ({py:meth}`~starfinder.dataset.FOV.export_spots`, since 2026-10-23) also have `molecules_sha256` (the keyed hash of the six molecule columns, `MoleculeTable.sha256`; `null` for `reads` or a file without those columns), `dtypes` (the column dtypes) and `rows`; `reference_image` ({py:meth}`~starfinder.dataset.FOV.save_reference_image`); `subtile_coords` (with `rows`) and `subtile_data` (per subtile ID, the NPZ's entry) ({py:meth}`~starfinder.dataset.FOV.save_subtiles`); and, in a resident subtile's record, `subtile_spots` (the workflow's `subtile_goodSpots_<n>.csv`). The declared outputs of the Python processing rules are all recorded here (since 2026-10-24). |
+| `outputs` | `{}` when the processing ends; then, per slot, each file written after the processing, added by its writer when the FOV's latest `run` had checkpoints and succeeded, the record rewritten atomically (a later `run` writes a new record without them). Every entry has `path` (relative to the FOV folder, POSIX) and `sha256` (of the file's bytes). `molecules` and `reads` ({py:meth}`~starfinder.dataset.FOV.export_spots`, since 2026-10-23) also have `molecules_sha256` (the keyed hash of the six molecule columns, `MoleculeTable.sha256`; `null` for `reads` or a file without those columns), `dtypes` (the column dtypes) and `rows`; `reference_image` ({py:meth}`~starfinder.dataset.FOV.save_reference_image`). The declared outputs of the Python processing rules are all recorded here (since 2026-10-24); the subtile slots `subtile_coords`, `subtile_data` and `subtile_spots` went with the subtile API (W-735, 2026-10-31). |
+| `tiled` | Written by the merge of tiled execution ([orchestration-tiled](orchestration-tiled.md), "The merge"; since 2026-10-31): `grid` (`tile_size_yx`, `n_yx`, `halo`, `chunk_zyxc`, `local_registration`), `checkpoint` (the chunked checkpoint's path relative to the FOV folder, the SHA-256 of each round's array, and whether it was kept), `tiles` (per tile its `core_yx`, `window_yx`, `candidates`, `reads`, the SHA-256 of its three files and its attempt) and `statistics` (the FOV-level thresholds and image background the tiles used). An additive key: a record without it loads as direct's. |
 | `workflow` | Written by the workflow's `fov` task ([orchestration](orchestration.md), "Logging and records"; since 2026-10-31): `task` (id and kind), `backend` (`python` and the device), `fallback`, `configuration_sha256`, `blocks_sha256`, `manifest_sha256`, `fingerprint`, `token`, `code`, `execution_context` (`engine`, `engine_version`, `job_id`, `attempt`, `image`, `host`), `resumed_from` (the stage a verified resume continued after, or `null`) and the task's `wall_s`, `cpu_s` and `peak_rss_kib`. Written when the run starts, so that a stopped attempt's record holds `blocks_sha256` for a verified resume, and again with the final measurements before the task record; the task record holds the same section. An additive key: a record without it still loads, and is not resumed. |
 
 % W-293, W-304, W-451, W-336, W-563, W-294, W-295, W-562, W-565

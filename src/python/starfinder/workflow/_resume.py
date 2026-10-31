@@ -162,3 +162,47 @@ def prepare(run):
                             + "; rerun without resume_from_checkpoint, or restore the configuration and inputs it "
                             "was made with")
     return stage, record
+
+
+def prepare_global(run):
+    """The tile_global command's verified resume (design/specs/orchestration-tiled.md, "Resume of the global task"):
+    ("registered", earlier record) when ``tiled/run.json`` says succeeded and matches the task (as the fov task's,
+    ``check``) and the chunked checkpoint holds every pipeline round with the SHA-256 global.json records, hashed
+    again; None for a run from scratch (no resume asked, no earlier run, or a checkpoint that is incomplete or differs:
+    the rounds are produced in order, so a partly written checkpoint is discarded).
+
+    Raises ResumeRefused (exit 3) naming every field of run.json that differs.
+    """
+    from starfinder.io.chunked import chunked_round_sha256
+    from starfinder.workflow._plan import package_identity
+    if not run.configuration["execution"].get("resume_from_checkpoint"):
+        return None
+    folder = _layout.tiled_dir(_layout.fov_dir(run.out, run.identity["fov"]))
+    path, record_path = folder / _layout.RUN_RECORD, folder / _layout.GLOBAL_RECORD
+    store = folder / _layout.CHUNKED_CHECKPOINT
+    if not (path.is_file() and record_path.is_file() and store.is_file()):
+        return None
+    try:
+        record, global_record = json.loads(path.read_text()), json.loads(record_path.read_text())
+    except ValueError:
+        return None
+    if not isinstance(record, dict) or record.get("status") != "succeeded":
+        return None
+    differences = check(run, record, package_identity())
+    if differences:
+        raise ResumeRefused(f"{path.relative_to(run.out)} does not match this task: " + "; ".join(differences)
+                            + "; rerun without resume_from_checkpoint, or restore the configuration and inputs it "
+                            "was made with")
+    rounds = global_record.get("checkpoint", {}).get("rounds") or {}
+    try:
+        for name, entry in rounds.items():
+            if chunked_round_sha256(store, name) != entry["sha256"]:
+                return None
+            for snapshot, digest in (entry.get("snapshots") or {}).items():
+                if chunked_round_sha256(store, name, snapshot) != digest:
+                    return None
+    except (OSError, KeyError, ValueError):
+        return None
+    if not rounds:
+        return None
+    return "registered", record

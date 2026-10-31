@@ -69,7 +69,8 @@ print(result.spots[["spot_id", "z", "y", "x", "channel"]])
    option.
 3. **Candidates.** The candidates of all channels form one table. `spot_id` numbers
    its rows `"0"`, `"1"`, … within the result's namespace. In a FOV, the namespace
-   names the dataset, sample, FOV and subtile.
+   names the dataset, sample, FOV and, for a tile of tiled execution, the tile (`FOV.tile`;
+   null for a whole FOV); the merge gives a tiled FOV's candidates the FOV's IDs.
 4. **Records.** The diagnostics record each channel's threshold, count and effective
    settings, and the software and execution in effect.
 
@@ -128,6 +129,8 @@ threshold:
 * `adaptive_round`: `threshold_value` times the maximum of the whole image, all
   channels together;
 * `global`: `threshold_value` times the maximum of the image's integer dtype.
+* `absolute`: `threshold_value` itself, in the image's grey levels; the tile task of
+  tiled execution detects with the FOV-level threshold of each channel this way.
 
 Local maxima records each channel's median, MAD and zero fraction in
 `diagnostics["noise"]`, in every mode, and a `SpotFindingWarning` names a channel

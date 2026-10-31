@@ -597,15 +597,18 @@ def test_load_checkpoint_rejects_mismatches_and_existing_results(tmp_path):
         ds.fov('FOV').load_checkpoint('final')
 
 
-def test_subtile_checkpoints_use_their_own_directory(tmp_path):
+def test_tile_checkpoints_record_the_tile(tmp_path):
+    # W-735: FOV.tile replaces subtile_id; a tile's records name it (subtile_id) in its FOV's folder.
     ds = dataset(tmp_path)
     fov = resident(ds)
-    fov.subtile_id = 3
+    fov.tile = 'r0c1'
     fov.run(full(), checkpoints=CheckpointConfig())
-    directory = tmp_path / 'out' / 'fovs' / 'FOV' / 'subtile_3'
+    directory = tmp_path / 'out' / 'fovs' / 'FOV'
     assert (directory / 'run.json').is_file() and (directory / 'checkpoints' / 'candidates.json').is_file()
+    with pytest.raises(ValueError, match='tile'):
+        ds.fov('FOV').load_checkpoint('candidates')
     loaded = ds.fov('FOV')
-    loaded.subtile_id = 3
+    loaded.tile = 'r0c1'
     loaded.load_checkpoint('candidates')
     assert_spots_equal(loaded.spot_result, fov.spot_result)
 

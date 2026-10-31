@@ -83,7 +83,7 @@ def test_the_tasks_respect_their_needs_and_the_contracts_counts(work, variant):
     for task in manifest["tasks"]:
         counts[task["kind"]] = counts.get(task["kind"], 0) + 1
     assert counts == X.KINDS[variant]
-    assert len(manifest["tasks"]) == {"per-fov": 29, "after-fusion": 14, "molecules-only": 8, "supplied-xml": 8,
+    assert len(manifest["tasks"]) == {"per-fov": 29, "after-fusion": 34, "molecules-only": 8, "supplied-xml": 8,
                                       "morphology-only": 8, "reference-only": 16}[variant]
 
 
@@ -318,3 +318,50 @@ def test_a_command_reads_its_configuration_through_the_restricted_view():
         with pytest.raises(BlockAccessError, match="the fov command read the export block"):
             read()
     assert "report" not in ConfigurationView(configuration, "compare")
+
+
+# --- the deep recipe and the tiled settings (W-735) -----------------------------------------------------------------
+
+def _resolved(work, name, config):
+    plan(X.write_config(work, name, config))
+    return json.loads((X.output_root(work, config["output_id"]) / "workflow" / "resolved.json").read_text())
+
+
+def test_the_deep_recipe_is_expanded_into_the_resolved_configuration(work):
+    """processing.recipe deep (design/specs/orchestration-tiled.md, "The deep-tissue recipe"): the plan writes the
+    recipe's steps (its name null), a key the block also sets wins, and the hash covers the steps, not the name."""
+    config = X.variants(work)["molecules-only"]
+    deep = dict(config, output_id="deep", processing={k: v for k, v in config["processing"].items()
+                                                       if k not in ("preprocessing", "registration")})
+    deep["processing"]["recipe"] = "deep"
+    p = _resolved(work, "deep", deep)["configuration"]["processing"]
+    assert p["recipe"] is None and "tiled" not in p
+    assert [s["method"] for s in p["preprocessing"]["steps"]] == ["min_max_normalization", "histogram_matching"]
+    assert p["preprocessing"]["post_registration"] == [{"method": "reconstruction", "radius_yx": 3}]
+    assert p["registration"] == {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}
+    # The same run (output_id is part of the hash) with the recipe's steps spelled out and no recipe.
+    spelled = dict(deep, processing=dict(deep["processing"], recipe=None,
+                                                                preprocessing=p["preprocessing"],
+                                                                registration=p["registration"]))
+    hashes = [plan(X.write_config(work, name, c))["configuration"]["configuration_sha256"]
+              for name, c in (("deep", deep), ("spelled", spelled))]
+    assert hashes[0] == hashes[1]
+    # A key the block sets wins over the recipe's.
+    own = dict(deep, output_id="own", processing=dict(deep["processing"], registration={
+        "steps": [{"method": "translation"}], "signal": {"mode": "channel", "reference_channel": 0}}))
+    assert _resolved(work, "own", own)["configuration"]["processing"]["registration"]["signal"] == {
+        "mode": "channel", "reference_channel": 0}
+
+
+def test_tiled_mode_writes_its_defaults_and_the_deep_recipe_s_local_registration(work):
+    config = X.variants(work)["molecules-only"]
+    tiled = dict(config, output_id="tiled-deep", processing=dict(
+        {k: v for k, v in config["processing"].items() if k not in ("preprocessing", "registration")},
+        recipe="deep", mode="tiled", tiled={"tile_size_yx": 18}))
+    resolved = _resolved(work, "tiled-deep", tiled)["configuration"]
+    t = resolved["processing"]["tiled"]
+    # The halo is the plan's minimum: the local registration's margin (30 voxels for a translation step) exceeds
+    # the extraction ring (6) and the detection's distance (1).
+    assert t == {"tile_size_yx": 18, "halo": 30, "exact": True, "post_local_registration": None,
+                 "local_registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}}
+    assert resolved["api"]["processing"]["tiled"]["local_registration"]["type"] == "RegistrationRecipe"

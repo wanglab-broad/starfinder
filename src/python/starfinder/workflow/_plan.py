@@ -14,11 +14,13 @@ import os
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 
+import numpy as np
+
 from starfinder import _layout
 from starfinder.workflow import _translate
 from starfinder.workflow._shape import (CHECKPOINT_STAGES, COMMANDS, EXECUTION_DEFAULTS, ID_FIELDS, KIND_THREADS,
-    LEFT_KEYS, MANIFEST_FORMAT, MATLAB_KEYS, PROCESSING_LEFT, RESOLVED_FORMAT, TASK_BLOCKS, blocks_sha256, canonical,
-    configuration_sha256, sha256)
+    LEFT_KEYS, MANIFEST_FORMAT, MATLAB_KEYS, PROCESSING_LEFT, RECIPES, RESOLVED_FORMAT, TASK_BLOCKS, TILED_DEFAULTS,
+    blocks_sha256, canonical, configuration_sha256, sha256)
 
 #: The message of D7: a configuration without backend that holds MATLAB-dialect keys.
 MATLAB_DIALECT = ("this configuration has no backend and holds keys of the MATLAB dialect ({keys}); the default "
@@ -121,6 +123,26 @@ def sequencing_inputs(r):
             for item in run.get("inputs") or [] if item.get("round") in sequencing]
 
 
+def _merged(base, given):
+    """``given`` over ``base``: mappings merged key by key, any other value of ``given`` replacing ``base``'s."""
+    if isinstance(base, dict) and isinstance(given, dict):
+        return {**base, **{k: _merged(base[k], v) if k in base else v for k, v in given.items()}}
+    return given
+
+
+def expand_recipe(processing):
+    """processing.recipe expanded (design/specs/orchestration-tiled.md, "The deep-tissue recipe"): the recipe's keys
+    with the block's own keys over them (a key the user also sets wins), ``tiled`` only in mode tiled; the name is
+    written null, so that the hash covers the steps, not the name."""
+    name = processing.get("recipe")
+    if name is None:
+        return dict(processing, recipe=None)
+    expansion = copy.deepcopy(RECIPES[name])
+    if processing.get("mode", "direct") != "tiled":
+        expansion.pop("tiled", None)
+    return dict(_merged(expansion, {k: v for k, v in processing.items() if k != "recipe"}), recipe=None)
+
+
 def resolve(config, source, output_root=None):
     """The resolved configuration: the given keys with the contract's defaults written out, and ``api``."""
     r = copy.deepcopy(config)
@@ -132,8 +154,13 @@ def resolve(config, source, output_root=None):
     r.setdefault("reference_image", _layout.REFERENCE_IMAGE)
     r.setdefault("reference_image_import", None)
     if "processing" in r:
-        p = r["processing"] = dict(r["processing"] or {})
+        p = r["processing"] = expand_recipe(dict(r["processing"] or {}))
         p.setdefault("mode", "direct")
+        if p["mode"] == "tiled":
+            p["tiled"] = {**TILED_DEFAULTS, **(p.get("tiled") or {})}
+        elif p.get("tiled") is not None:
+            raise PlanRefused("processing.tiled: the tiled settings are read in processing.mode tiled only; remove "
+                              "them or set processing.mode: tiled")
         p.setdefault("checkpoints", list(CHECKPOINT_STAGES))
         # D8: the stage registered is on when a data dependency needs it (a segmentation input of a sequencing round).
         if sequencing_inputs(r) and "registered" not in p["checkpoints"]:
@@ -177,15 +204,58 @@ def resolve(config, source, output_root=None):
     e.setdefault("resume_from_checkpoint", False)
     e.setdefault("code_version", "keep")
     e.setdefault("log_level", "INFO")
-    if (r.get("processing") or {}).get("mode") == "tiled":
-        raise PlanRefused("processing.mode tiled: the tiled task kinds (tile_global, tile, tile_merge) are not "
-                          "implemented in this package yet (W-735); use processing.mode direct")
     check_names(r)
+    if (r.get("processing") or {}).get("mode") == "tiled":
+        check_tiled(r)
     try:
         r["api"] = _translate.api(r)
     except (ValueError, TypeError, KeyError) as error:
         raise PlanRefused(str(error).strip("'\"")) from None
     return {"format": RESOLVED_FORMAT, "source": source, "configuration": r}
+
+
+def check_tiled(r):
+    """Tiled execution's checks (design/specs/orchestration-tiled.md, "The halo rule"): the detector, the operations
+    without a finite footprint under ``exact``, and the halo, which the plan computes from the footprints and writes
+    into the resolved configuration (a configured halo below the minimum is refused, naming the operation)."""
+    from starfinder.dataset.tiled import tile_footprints, unbounded_operations
+    from starfinder.spot_finding import LocalMaximaConfig
+    p, t = r["processing"], r["processing"]["tiled"]
+    if not produces_molecules(r):
+        raise PlanRefused("processing.mode tiled detects, extracts and decodes in tiles and merges their molecules: "
+                          "it needs spot_finding, reads_extraction and reads_filtration; use processing.mode direct")
+    if sequencing_inputs(r):
+        raise PlanRefused(f"the segmentation inputs {sequencing_inputs(r)} read registered sequencing rounds, which "
+                          "processing.mode tiled keeps in its chunked checkpoint only (OT3); use processing.mode direct")
+    try:
+        pipeline = _translate.processing(r).workflow.pipeline
+        grid = _translate.tiled(dict(r, processing=dict(p, tiled=dict(t, halo=t["halo"] or 0))))
+    except (ValueError, TypeError, KeyError) as error:
+        raise PlanRefused(str(error).strip("'\"")) from None
+    from starfinder.dataset.tiled import _detection_configs
+    learned = [c.method for c in _detection_configs(pipeline.spot_finding) if not isinstance(c, LocalMaximaConfig)]
+    if learned:
+        raise PlanRefused(f"spot_finding method {learned[0]!r} in processing.mode tiled: tiled execution detects with "
+                          "local_maxima only (OT2); use processing.mode direct")
+    if grid.post_local_registration and pipeline.preprocessing is not None and \
+            pipeline.preprocessing.extraction_source is not None:
+        raise PlanRefused("processing.tiled.post_local_registration with preprocessing.extraction_source is not "
+                          "supported: the tile reads the extraction source from the chunked checkpoint")
+    if t["exact"]:
+        problems = unbounded_operations(pipeline)
+        if problems:
+            raise PlanRefused("processing.mode tiled with processing.tiled.exact true: " + "; ".join(problems)
+                              + "; these have no finite footprint, so a tile cannot equal direct: change them, or "
+                              "set processing.tiled.exact: false to accept a result that may differ from direct")
+    footprints = tile_footprints(pipeline, grid.local_registration)
+    minimum = max(footprints.values(), default=0)
+    if t["halo"] is None:
+        t["halo"] = minimum
+    elif t["halo"] < minimum:
+        names = ", ".join(f"{k} ({v})" for k, v in footprints.items() if v == minimum)
+        raise PlanRefused(f"processing.tiled.halo {t['halo']} is below the minimum {minimum} that {names} sets "
+                          "(the largest footprint of the tile's operations); leave it null or set at least "
+                          f"{minimum}")
 
 
 # --- input discovery ---------------------------------------------------------------------------------------------
@@ -428,8 +498,9 @@ class Graph:
             values["tool"] = {"name": "fiji", "path": e["fiji"]}
         return values
 
-    def add(self, kind, identity, needs, inputs, outputs, *, group=None, gpu=False, tool_command=None):
-        """Add one task; ``outputs`` are Paths (or output-root-relative strings ending in ``/`` for a folder)."""
+    def add(self, kind, identity, needs, inputs, outputs, *, group=None, gpu=False, tool_command=None, temporary=()):
+        """Add one task; ``outputs`` are Paths (or output-root-relative strings ending in ``/`` for a folder), and
+        ``temporary`` those of them that the group marks temporary (Snakemake's ``temp()``)."""
         parts = [kind] + [str(identity[k]) for k in ID_FIELDS if k in identity]
         task_id = "/".join(parts)
         if task_id in self.by_id:
@@ -455,7 +526,8 @@ class Graph:
         entry = {"name": group_name, "kind": kind, "wildcards": wildcards, "outputs": templates,
                  "record": f"{_layout.WORKFLOW}/{_layout.TASKS}/{name}.json",
                  "log": f"{_layout.WORKFLOW}/{_layout.LOGS}/{name}.log",
-                 "temporary": []}
+                 "temporary": sorted(self._fill(self.rel(o) if isinstance(o, Path) else o, identity, wildcards)
+                                     for o in temporary)}
         known = self.groups.setdefault(group_name, entry)
         if known != entry:
             raise PlanRefused(f"the tasks of group {group_name} declare different output templates")
@@ -473,10 +545,12 @@ class Graph:
                                                      self.r["reference_image_import"]))
 
     def stage_records(self, fov):
-        """The stage records the fov task declares: the stages of processing.checkpoints its operations reach."""
+        """The stage records the fov (or tile_merge) task declares: the stages of processing.checkpoints its operations
+        reach; in mode tiled the stage registered is the chunked checkpoint, which the global task writes."""
         p = self.r.get("processing") or {}
         folder = _layout.checkpoint_dir(self.fov_dir(fov))
-        reached = {"candidates": "spot_finding" in p, "pre_qc": "reads_filtration" in p, "registered": True}
+        reached = {"candidates": "spot_finding" in p, "pre_qc": "reads_filtration" in p,
+                   "registered": p.get("mode") != "tiled"}
         names = {"candidates": "candidates.json", "pre_qc": "pre_qc.json",
                  "registered": f"{_layout.REGISTERED}/{_layout.TRANSFORMS_FILE}"}
         return [self.rel(folder / names[stage]) for stage in p.get("checkpoints", []) if reached[stage]]
@@ -486,7 +560,9 @@ class Graph:
         samples = self.membership.samples
         sequencing = sequencing_rounds(r)
         codebook, fovs_csv = self.inputs.codebook, self.inputs.membership
-        fov_task, stats_file = {}, {}
+        # fov_task: the producer of a FOV's run record and molecules (fov, or tile_merge); reference_task: of its
+        # reference image (fov, or tile_global).
+        fov_task, reference_task, stats_file = {}, {}, {}
         # The two-pass statistics: per sample and supplied step in recipe order, one summarize per FOV and one merge;
         # a later step is summarized on the earlier step's file.
         for sample, members in samples.items():
@@ -514,6 +590,10 @@ class Graph:
                     stats = [stats_file[sample]] if sample in stats_file else (
                         [supplied_input] if supplied_input else [])
                     inputs = self.inputs.image_inputs(fov, sequencing) + [codebook] + stats
+                    if r["processing"]["mode"] == "tiled":
+                        fov_task[fov], reference_task[fov] = self.tiled(sample, fov, merges[-1:],
+                                                                         [i for i in inputs if i])
+                        continue
                     outputs = [_layout.run_record(out, fov)]
                     if not r["reference_image_import"]:
                         outputs.append(self.reference_image(fov))
@@ -522,8 +602,8 @@ class Graph:
                     outputs += [_layout.checkpoint_dir(self.fov_dir(fov)) / _layout.REGISTERED / f"{name}.ome.tif"
                                 for name in sorted({n for _, n in sequencing_inputs(r)})]
                     outputs += self.stage_records(fov)
-                    fov_task[fov] = self.add("fov", {"sample": sample, "fov": fov}, merges[-1:],
-                                             [i for i in inputs if i], outputs)
+                    fov_task[fov] = reference_task[fov] = self.add("fov", {"sample": sample, "fov": fov},
+                                                                   merges[-1:], [i for i in inputs if i], outputs)
         morph = {}
         if "morphology" in r:
             m = r["morphology"]
@@ -555,7 +635,7 @@ class Graph:
                         if r["reference_image_import"]:
                             inputs.append(self.reference_image(fov))
                         elif "processing" in r:
-                            needs.append(fov_task.get(fov))
+                            needs.append(reference_task.get(fov))
                             inputs.append(self.reference_image(fov))
                         else:
                             needs.append(morph[fov])
@@ -625,10 +705,10 @@ class Graph:
                     source_needs = [morph[f] for f in members]
                 else:
                     sources = [self.reference_image(f) for f in members]
-                    source_needs = [fov_task.get(f) for f in members]
+                    source_needs = [reference_task.get(f) for f in members]
                 common = [fovs_csv] + ([position_file] if position_file else [])
                 grids = [self.reference_image(f) for f in members]
-                needs = source_needs + [fov_task.get(f) for f in members]
+                needs = source_needs + [reference_task.get(f) for f in members]
                 if st["method"] == "bigstitcher" and not st.get("dataset_xml"):
                     save = Path(st["bigstitcher_save_dir"]) / sample
                     macro_outputs = [save / "BigStitcher_macro.ijm", save / "view_map.csv",
@@ -719,6 +799,83 @@ class Graph:
             self.add("compare", {}, reports, [self.by_id[t]["outputs"][0] for t in reports],
                      [root / "samples.csv", root / "index.html"])
         return self.tasks
+
+    # -- tiled execution --------------------------------------------------------------------------------------
+
+    def image_geometry(self, fov):
+        """(Z, Y, X) of a FOV's pipeline rounds after rotation, and the bytes per voxel of its chunked checkpoint,
+        from the reference round's first channel file (its header alone, as _volume_header reads it)."""
+        import tifffile
+        from starfinder.io.tiff import _volume_header
+        r = self.r
+        rounds = self.inputs.images[fov]
+        name = r["ref_round"] if r["ref_round"] in rounds else sequencing_rounds(r)[0]
+        entry = next(iter(rounds[name].values()))
+        path = self.inputs.root / entry["path"]
+        header = _volume_header(path, floating=True)
+        if header is None or header[0] is None:
+            raise PlanRefused(f"FOV {fov}: the image shape of {path} cannot be read from its header, which tiled "
+                              "execution's grid needs")
+        z, y, x = header[0]
+        angle = r.get("rotate_angle") or 0
+        if float(angle) % 180 == 90:
+            y, x = x, y
+        with tifffile.TiffFile(path) as tif:
+            dtype = np.dtype(tif.series[0].dtype)
+        pipeline = _translate.processing(r).workflow.pipeline
+        for step in (pipeline.preprocessing.steps if pipeline.preprocessing is not None else ()):
+            if getattr(step.config, "output_dtype", None) is not None:
+                dtype = np.dtype(step.config.output_dtype)
+        return (int(z), int(y), int(x)), dtype.itemsize
+
+    def tiled(self, sample, fov, needs, inputs):
+        """The tiled tasks of one FOV (design/specs/orchestration-tiled.md, "Declared files of the tiled task kinds"):
+        tile_global, one tile per tile of the grid, tile_merge; returns (tile_merge's id, tile_global's id).
+
+        The tile size's predicted peak (the resource model) must fit the tile task's memory: a size that does not is
+        refused, naming the largest multiple of 128 that fits."""
+        from starfinder.dataset.tiled import largest_tile_size, predicted_tile_memory, tile_grid
+        r, out = self.r, self.out
+        p, t = r["processing"], r["processing"]["tiled"]
+        shape, size = self.image_geometry(fov)
+        recipe = (p.get("preprocessing") or {})
+        rounds = len(set([r["ref_round"], *sequencing_rounds(r)])) * (2 if recipe.get("extraction_source") else 1)
+        geometry = dict(z=shape[0], rounds=rounds, channels=len(r.get("seq_channel_order") or []),
+                        bytes_per_voxel=size)
+        limit = self.execution("tile")["memory_mb"] * 1e6
+        predicted = predicted_tile_memory(t["tile_size_yx"], t["halo"], **geometry)
+        if predicted > limit:
+            fits = largest_tile_size(limit, t["halo"], **geometry)
+            raise PlanRefused(
+                f"processing.tiled.tile_size_yx {t['tile_size_yx']}: a tile of FOV {fov} ({shape[0]} planes, "
+                f"{geometry['rounds']} rounds, {geometry['channels']} channels, {size} bytes per voxel, halo "
+                f"{t['halo']}) is predicted to peak at {predicted / 1e6:.0f} MB, above execution.tasks.tile.memory_mb "
+                f"{limit / 1e6:.0f}; " + (f"tile_size_yx {fits} fits" if fits else "no tile size fits that memory")
+                + " (the tiled record's resource model, 0.21 GB + 1.93 x the window's bytes)")
+        folder = self.fov_dir(fov)
+        tiled = _layout.tiled_dir(folder)
+        store = tiled / _layout.CHUNKED_CHECKPOINT
+        outputs = [store, tiled / _layout.GLOBAL_RECORD, tiled / _layout.RUN_RECORD]
+        if not r["reference_image_import"]:
+            outputs.append(self.reference_image(fov))
+        kept = "registered" in p["checkpoints"]
+        identity = {"sample": sample, "fov": fov}
+        global_task = self.add("tile_global", identity, needs, inputs, outputs, temporary=[] if kept else [store])
+        codebook = self.inputs.codebook
+        tiles = []
+        for tile in tile_grid(shape[1:], t["tile_size_yx"], t["halo"]):
+            directory = _layout.tile_dir(folder, tile.id)
+            tiles.append(self.add("tile", {"sample": sample, "fov": fov, "tile": tile.id}, [global_task],
+                                  [self.rel(store), self.rel(tiled / _layout.GLOBAL_RECORD)]
+                                  + ([codebook] if codebook else []),
+                                  [directory / name for name in _layout.TILE_FILES]))
+        inputs = [o for task in tiles for o in self.by_id[task]["outputs"]]
+        inputs += [self.rel(tiled / _layout.GLOBAL_RECORD), self.rel(tiled / _layout.RUN_RECORD)]
+        if codebook:
+            inputs.append(codebook)
+        outputs = [_layout.run_record(out, fov), _layout.spot_table(out, fov)] + self.stage_records(fov)
+        merge = self.add("tile_merge", identity, [global_task, *tiles], inputs, outputs)
+        return merge, global_task
 
 
 def supplied_path(r, supplied):

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from starfinder.dataset import CropWindow, Dataset
+from starfinder.dataset import Dataset
 
 pytestmark = pytest.mark.dataset
 
@@ -76,32 +76,3 @@ class TestSTARMapDataset:
         sample_config["seq_channel_order"] = ["ch00", "ch01", "ch02", "ch03"]
         ds = from_workflow_config(sample_config).dataset
         assert ds.channel_order == ("ch00", "ch01", "ch02", "ch03")
-
-    @pytest.mark.parametrize(
-        "rule_name", ["gr_single_fov_subtile", "deep_create_subtile"]
-    )
-    def test_from_config_builds_subtile_windows(self, sample_config, rule_name):
-        sample_config.update(
-            {
-                "img_row": 100,
-                "img_col": 100,
-                "rules": {
-                    rule_name: {
-                        "parameters": {
-                            "create_subtiles": {"run": True, "sqrt_pieces": 2}
-                        }
-                    }
-                },
-            }
-        )
-
-        ds = from_workflow_config(sample_config).dataset
-
-        assert ds.subtile is not None
-        assert ds.subtile.sqrt_pieces == 2
-        assert ds.subtile.windows == [
-            CropWindow(0, 52, 0, 52),
-            CropWindow(0, 52, 48, 100),
-            CropWindow(48, 100, 0, 52),
-            CropWindow(48, 100, 48, 100),
-        ]

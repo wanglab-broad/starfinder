@@ -414,7 +414,7 @@ def segment_fov(fov, plan, *, device="cpu", inputs=None):
                 "registration_record_sha256": _record_sha256(fov.registration_record)}
     results = {}
     for run in plan.runs:
-        namespace = json.dumps([fov.dataset.dataset_id, fov.dataset.sample_id, fov.fov_id, fov.subtile_id,
+        namespace = json.dumps([fov.dataset.dataset_id, fov.dataset.sample_id, fov.fov_id, fov.tile,
                                 run.name], separators=(",", ":"))
         if isinstance(run.method, LabelImportConfig):
             config = run.method

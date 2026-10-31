@@ -73,12 +73,14 @@ def tables():
 
 
 def test_parameter_descriptions(tables):
-    from starfinder.dataset.types import SubtileConfig
+    # W-735: the tiled entries' Tile replaces the retired SubtileConfig as the dataset type of this check.
+    from starfinder.dataset.tiled import Tile
 
-    assert tables._parameter_descriptions(SubtileConfig) == {
-        "sqrt_pieces": "Positive number of tiles per axis.",
-        "overlap_ratio": "Fractional overlap; default 0.1.",
-        "windows": "Computed CropWindow list; default new empty list. Call compute_windows before extraction.",
+    assert tables._parameter_descriptions(Tile) == {
+        "row": "Zero-based row of the grid.",
+        "col": "Zero-based column of the grid.",
+        "core_yx": "``(y0, y1, x0, x1)`` of the core; the cores partition the FOV's plane.",
+        "window_yx": "``(y0, y1, x0, x1)`` of the window: the core grown by the halo on every side, clipped to the FOV.",
     }
     assert tables._parameter_descriptions(CompleteConfig) == {
         "count": "Positive item count. Wrapped description with ``code``.",

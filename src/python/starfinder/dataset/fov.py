@@ -142,8 +142,10 @@ class FOV:
         preparation records; the default is empty.
     spot_result : SpotFindingResult or None
         Detected spots with their identities; None represents absent detections.
-    subtile_id : int or None
-        One-based subtile identifier; None denotes the whole FOV.
+    tile : str or None
+        The tile of tiled execution this FOV holds (``r<row>c<col>``, zero-based); None denotes the whole FOV. A
+        tile's detections use it as the fourth element of their namespace, and its records as their
+        ``subtile_id`` (null for a whole FOV).
     intensity_result : IntensityExtractionResult or None
         Extracted spot intensities; None represents an absent extraction result.
     decoding_result : ReadDecodingResult or None
@@ -196,7 +198,7 @@ class FOV:
     registration_chains: dict[str, TransformChain] = field(default_factory=dict)
     registration_record: dict = field(default_factory=dict)
     spot_result: SpotFindingResult | None = None
-    subtile_id: int | None = None
+    tile: str | None = None
 
     intensity_result: IntensityExtractionResult | None = None
     decoding_result: ReadDecodingResult | None = None
@@ -217,6 +219,10 @@ class FOV:
     _reference_file: tuple | None = field(default=None, init=False, repr=False, compare=False)
     # (stage, earlier run.json) while _resume_run continues an earlier run after that stage.
     _resume: tuple | None = field(default=None, init=False, repr=False, compare=False)
+    # Tiled execution's global task (dataset/tiled.py): called with each pipeline round's name once FOV.run has
+    # processed it (after the post-registration steps), while its image is resident; and the folder of its run.json.
+    _round_sink: object | None = field(default=None, init=False, repr=False, compare=False)
+    _record_folder: Path | None = field(default=None, init=False, repr=False, compare=False)
 
     # --- Delegated properties ---
 
@@ -301,7 +307,7 @@ class FOV:
 
     def __repr__(self):
         ds = self.dataset
-        subtile = "" if self.subtile_id is None else f" subtile {self.subtile_id}"
+        subtile = "" if self.tile is None else f" tile {self.tile}"
         results = self.results
         lines = [
             f"FOV {self.fov_id!r}{subtile} of Dataset {ds.dataset_id!r} (sample {ds.sample_id!r})",
@@ -1052,7 +1058,7 @@ class FOV:
                 raise IncompatibleGeometryError(f"detection round {round_name!r} has ZYX shape {shape}, unlike the "
                                                 f"reference round {reference!r} ({reference_shape})")
         namespace = json.dumps([self.dataset.dataset_id, self.dataset.sample_id,
-                                self.fov_id, self.subtile_id], separators=(",", ":"))
+                                self.fov_id, self.tile], separators=(",", ":"))
         return _detect(self.images[round_name], config, metadata, namespace, device, round_name)
 
     @staticmethod
@@ -1110,7 +1116,7 @@ class FOV:
         column, the rounds in FOV.run order (reference first), spot_id
         running over the combined table and the per-round diagnostics under
         diagnostics['rounds']. The namespace encodes dataset/sample/FOV and,
-        for saved subtiles, the one-based subtile ID. IDs are retained in
+        for a tile of tiled execution, its tile id. IDs are retained in
         extraction/filtering tables. While FOV.run records run.json, the
         step record gets the detection's provenance entry under methods (one
         per detected round, with its ``round``, for a plan with rounds).
@@ -1427,7 +1433,7 @@ class FOV:
         preprocessing_record and written to run.json and the registered
         checkpoint, which also stores the extraction source snapshot of each
         round. The pipeline never projects. Loading may be disabled for
-        resident/subtile data. Images without registration must already
+        resident data (a tile's window). Images without registration must already
         declare the same frame/grid for extraction. Without image
         operations or resident images (after load_checkpoint), the round loop
         is skipped.
@@ -1455,7 +1461,7 @@ class FOV:
         failed (or interrupted for other BaseExceptions) with the failing step
         and round, and the original exception is re-raised. Its ``succeeded``
         means that this processing succeeded; the files written afterwards
-        (export_spots, save_reference_image, save_subtiles) are added to its
+        (export_spots, save_reference_image) are added to its
         ``outputs`` as each is written.
         """
         if not isinstance(config, PipelineConfig) or not isinstance(execution, ExecutionConfig):
@@ -1595,6 +1601,8 @@ class FOV:
                 if 'registered' in stages:
                     self._write_checkpoint(stage='registered', directory=record.checkpoint_directory,
                                            table_format=checkpoints.table_format, round_name=name)
+                if self._round_sink is not None:
+                    self._round_sink(name)
                 if name == ref and config.spot_finding and detection_plan is None:
                     self.find_spots(config=config.spot_finding, device=execution.device)
                 if name in detection_rounds:
@@ -1719,7 +1727,7 @@ class FOV:
         registered = name in self.registration_chains
         write_image(image_directory(root, name),
                     identity=dict(dataset_id=self.dataset.dataset_id, sample_id=self.dataset.sample_id,
-                                  fov_id=self.fov_id, subtile_id=self.subtile_id),
+                                  fov_id=self.fov_id, subtile_id=self.tile),
                     name=name, image=self.images[name], metadata=self.metadata[name],
                     channels=[c.record() for c in self.dataset._resident_channels(name)],
                     rotation=jsonable(self.load_diagnostics.get(name, {}).get('rotation')),
@@ -1868,7 +1876,7 @@ class FOV:
         ValueError
             A file that is missing or whose SHA-256 differs from the record
             (naming the path and both hashes), a record of another version or
-            image, a dataset, sample, FOV or subtile other than this FOV's,
+            image, a dataset, sample, FOV or tile other than this FOV's,
             channels other than the dataset's, an image that is already
             prepared, or, when the reference round is resident, metadata other
             than the reference grid's.
@@ -1883,7 +1891,7 @@ class FOV:
         root = self._fov_dir(checkpoints)
         directory = image_directory(root, name)
         identity = dict(dataset_id=self.dataset.dataset_id, sample_id=self.dataset.sample_id, fov_id=self.fov_id,
-                        subtile_id=self.subtile_id)
+                        subtile_id=self.tile)
         saved = read_image(directory, name, identity, self.dataset.channel_labels(name))
         ref = self.rounds.reference_round
         if ref in self.metadata and saved['metadata'] != self.metadata[ref]:
@@ -1913,8 +1921,11 @@ class FOV:
                                             self.dataset.reference_image_import)
 
     def _fov_dir(self, checkpoints: CheckpointConfig) -> Path:
-        """The FOV folder of the durable results: fovs/<fov_id>[/subtile_<n>], or under CheckpointConfig.directory."""
-        return _layout.fov_dir(self.dataset.output_root, self.fov_id, self.subtile_id, parent=checkpoints.directory)
+        """The FOV folder of the durable results: fovs/<fov_id>, or under CheckpointConfig.directory (the global task of
+        tiled execution sets its own, fovs/<fov_id>/tiled)."""
+        if self._record_folder is not None:
+            return Path(self._record_folder)
+        return _layout.fov_dir(self.dataset.output_root, self.fov_id, parent=checkpoints.directory)
 
     def _checkpoint_dir(self, checkpoints: CheckpointConfig) -> Path:
         """The restart folder of the checkpoint stages: <FOV folder>/checkpoints."""
@@ -1922,7 +1933,7 @@ class FOV:
 
     def _checkpoint_header(self) -> dict:
         return dict(dataset_id=self.dataset.dataset_id, sample_id=self.dataset.sample_id,
-                    fov_id=self.fov_id, subtile_id=self.subtile_id, rounds=asdict(self.rounds),
+                    fov_id=self.fov_id, subtile_id=self.tile, rounds=asdict(self.rounds),
                     channel_labels=list(self.dataset.channel_order))
 
     def _start_run_record(self, checkpoints, config, execution):
@@ -2149,7 +2160,7 @@ class FOV:
         directory = self._checkpoint_dir(checkpoints)
         header = _checkpoint.read_header(directory, stage)
         expected = jsonable(self._checkpoint_header())
-        for key, label in (('fov_id', 'FOV id'), ('subtile_id', 'subtile id'),
+        for key, label in (('fov_id', 'FOV id'), ('subtile_id', 'tile'),
                            ('rounds', 'round labels'), ('channel_labels', 'channel order')):
             if header.get(key) != expected[key]:
                 raise ValueError(f'{stage} checkpoint {label} {header.get(key)!r} differs from this FOV ({expected[key]!r})')
@@ -2785,149 +2796,3 @@ class FOV:
                         registered_rounds={name: self.registration_record['rounds'][name] for name in names},
                         registration={name: self.registration_attempts[name] for name in names}), path)
         return path
-
-    # --- Subtile operations ---
-
-    def save_subtiles(
-        self,
-        *,
-        out_dir: Path | None = None,
-    ) -> pd.DataFrame:
-        """Partition FOV into overlapping subtiles and save as NPZ.
-
-        Returns subtile coordinates DataFrame with 1-based coords
-        for ``stitch_subtile.py`` compatibility. After a checkpointed run that
-        succeeded, the FOV's run.json gains ``outputs.subtile_coords`` (path
-        relative to the FOV folder, SHA-256, rows) and ``outputs.subtile_data``
-        (per subtile ID, path and SHA-256 of its NPZ).
-
-        Parameters
-        ----------
-        out_dir : Path | None
-            Output directory for compressed subtile NPZs and coordinates CSV; None uses paths.subtile_dir.
-
-        Returns
-        -------
-        pd.DataFrame
-            Subtile table with t (one-based ID), scoords_x/y (one-based starts), ecoords_x/y (one-based inclusive ends). Also writes NPZs and subtile_coords.csv.
-
-        Raises
-        ------
-        ValueError
-            Dataset subtile configuration is absent. Compute its windows first.
-        """
-        if self.dataset.subtile is None:
-            raise ValueError("SubtileConfig not set on dataset.")
-
-        subtile_cfg = self.dataset.subtile
-        if out_dir is None:
-            out_dir = self.paths.subtile_dir
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        coord_rows = []
-        for t, window in enumerate(subtile_cfg.windows):
-            sy, sx = window.to_slice()
-
-            # Singleton Z is retained for both volume and projected images.
-            arrays = {}
-            for round_name, img in self.images.items():
-                _validate_image(img)
-                if not (0 <= window.y_start < window.y_end <= img.shape[1]
-                        and 0 <= window.x_start < window.x_end <= img.shape[2]):
-                    raise ValueError("subtile crop must lie within the image")
-                arrays[f"images_{round_name}"] = img[:, sy, sx, ...]
-                source = self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}"))
-                geometry = source.cropped((0, window.y_start, window.x_start),
-                    frame_id=f"{source.frame_id}/subtile:{t + 1}")
-                arrays[f"metadata_{round_name}"] = json.dumps(asdict(geometry))
-                arrays[f"source_mapping_{round_name}"] = json.dumps({
-                    "source_metadata": asdict(source),
-                    "source_start_zyx": [0, window.y_start, window.x_start],
-                })
-
-            # Save NPZ — 1-based naming to match Snakemake wildcard {n_subtile}
-            subtile_id = t + 1
-            npz_path = out_dir / f"subtile_data_{subtile_id}.npz"
-            np.savez_compressed(
-                npz_path,
-                **arrays,
-                fov_id=self.fov_id,
-                subtile_id=subtile_id,
-                layers_seq=self.rounds.sequencing_rounds,
-                layers_ref=self.rounds.reference_round,
-                other_rounds=self.rounds.other_rounds,
-                dataset_id=self.dataset.dataset_id, sample_id=self.dataset.sample_id,
-                channel_labels=self.dataset.channel_order,
-            )
-
-            # 1-based coordinates for stitch_subtile.py
-            coord_rows.append(
-                {
-                    "t": subtile_id,
-                    "scoords_x": window.x_start + 1,
-                    "scoords_y": window.y_start + 1,
-                    "ecoords_x": window.x_end,  # exclusive→inclusive + 0→1
-                    "ecoords_y": window.y_end,
-                }
-            )
-
-        coords_df = pd.DataFrame(coord_rows)
-        coords_df.to_csv(out_dir / "subtile_coords.csv", index=False)
-        if self._recording():
-            from starfinder.dataset._run_record import add_output, output_entry
-            add_output(self._record_path, 'subtile_data', {
-                str(row["t"]): output_entry(self._record_path, out_dir / f"subtile_data_{row['t']}.npz")
-                for row in coord_rows})
-            self._record_output('subtile_coords', out_dir / "subtile_coords.csv", rows=len(coords_df))
-        return coords_df
-
-    @classmethod
-    def from_subtile(
-        cls,
-        subtile_path: Path,
-        dataset: Dataset,
-        fov_id: str,
-    ) -> FOV:
-        """Load FOV state from a saved NPZ subtile.
-
-        Parameters
-        ----------
-        subtile_path : Path
-            Path to a trusted NPZ written by save_subtiles (loaded with allow_pickle=True).
-        dataset : Dataset
-            Dataset providing shared configuration, rounds and codebook.
-        fov_id : str
-            Field-of-view identifier used in output paths.
-
-        Returns
-        -------
-        FOV
-            New FOV with image arrays loaded; dataset state is supplied by caller. Geometry is restored; spots and shifts are not restored.
-        """
-        data = np.load(subtile_path, allow_pickle=True)
-
-        if str(data["fov_id"]) != fov_id or str(data["dataset_id"]) != dataset.dataset_id or str(data["sample_id"]) != dataset.sample_id:
-            data.close()
-            raise ValueError("subtile identity differs from dataset/FOV")
-        if (list(data["layers_seq"]) != dataset.rounds.sequencing_rounds or
-            str(data["layers_ref"]) != dataset.rounds.reference_round or
-            list(data["other_rounds"]) != dataset.rounds.other_rounds or
-            tuple(data["channel_labels"]) != dataset.channel_order):
-            data.close()
-            raise ValueError("subtile round/channel labels differ from dataset")
-        fov = cls(dataset=dataset, fov_id=fov_id)
-        if "subtile_id" not in data:
-            raise ValueError("saved subtile requires subtile_id for spot namespace")
-        fov.subtile_id = int(data["subtile_id"])
-        for key in data.files:
-            if key.startswith("images_"):
-                round_name = key[len("images_") :]
-                fov.images[round_name] = data[key]
-                metadata_key = f"metadata_{round_name}"
-                fov.metadata[round_name] = (ImageMetadata(**json.loads(str(data[metadata_key])))
-                    if metadata_key in data else ImageMetadata(f"{fov_id}/{round_name}/unknown-subtile"))
-                mapping_key = f"source_mapping_{round_name}"
-                if mapping_key in data:
-                    fov.load_diagnostics[round_name] = json.loads(str(data[mapping_key]))
-        data.close()
-        return fov

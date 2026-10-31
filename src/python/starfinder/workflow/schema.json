@@ -187,11 +187,52 @@
       "tiled"
      ]
     },
+    "recipe": {
+     "enum": [
+      null,
+      "deep"
+     ],
+     "description": "A named recipe the plan expands into the resolved configuration (deep: the deep-tissue recipe); a key the block also sets wins."
+    },
     "tiled": {
      "type": [
       "object",
       "null"
-     ]
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "tile_size_yx": {
+       "type": "integer",
+       "minimum": 1,
+       "description": "The largest tile edge in Y and X, in voxels (default 512)."
+      },
+      "halo": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0,
+       "description": "The halo in voxels; null is the plan's minimum, the largest footprint of the tile's operations."
+      },
+      "local_registration": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "description": "A registration recipe run on each tile's window, or null."
+      },
+      "post_local_registration": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "description": "Preprocessing steps run in the tile after its local registration, or null."
+      },
+      "exact": {
+       "type": "boolean",
+       "description": "true (default): refuse operations without a finite footprint, so that tiled equals direct."
+      }
+     }
     },
     "checkpoints": {
      "type": "array",

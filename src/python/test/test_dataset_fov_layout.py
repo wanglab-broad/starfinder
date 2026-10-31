@@ -141,19 +141,14 @@ def test_the_overwrite_guard_covers_run_json_and_checkpoints_only(tmp_path):
 
 
 def test_checkpoint_directory_names_the_parent_of_the_fov_folders(tmp_path):
-    """CheckpointConfig.directory replaces <output_root>/fovs; a subtile's folder is subtile_<n> of its FOV's."""
+    """CheckpointConfig.directory replaces <output_root>/fovs (the subtile folders subtile_<n> are retired, W-735)."""
     ds = dataset(tmp_path)
     checkpoints = CheckpointConfig(directory=tmp_path / "elsewhere", stages=("candidates",))
     resident(ds).run(full(), checkpoints=checkpoints)
-    subtile = resident(ds)
-    subtile.subtile_id = 2
-    subtile.run(full(), checkpoints=checkpoints)
     assert tree(tmp_path / "elsewhere") == [
-        "FOV/checkpoints/candidates.csv", "FOV/checkpoints/candidates.json", "FOV/run.json",
-        "FOV/subtile_2/checkpoints/candidates.csv", "FOV/subtile_2/checkpoints/candidates.json",
-        "FOV/subtile_2/run.json"]
+        "FOV/checkpoints/candidates.csv", "FOV/checkpoints/candidates.json", "FOV/run.json"]
     assert not (tmp_path / "out").exists()
-    assert _layout.run_record("/o", "F", 3) == Path("/o/fovs/F/subtile_3/run.json")
+    assert _layout.run_record("/o", "F") == Path("/o/fovs/F/run.json")
 
 
 # --- The reference image ----------------------------------------------------------------------------------

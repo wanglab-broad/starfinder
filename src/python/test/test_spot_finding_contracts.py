@@ -139,7 +139,7 @@ def test_fov_namespace_and_downstream_identity(tmp_path):
     accepted = fov.filtering_result.accepted
     pd.testing.assert_series_equal(ids, accepted.spot_id)
     assert accepted.spot_namespace.tolist() == [namespace]
-    fov.subtile_id = 1
+    fov.tile = 'r0c1'  # W-735: FOV.tile replaces FOV.subtile_id in the namespace
     fov.find_spots()
     assert fov.spot_result.spot_namespace != namespace
 

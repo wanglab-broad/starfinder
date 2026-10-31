@@ -42,11 +42,12 @@ def rule_configuration(configuration):
 
     The present sub-blocks spot_finding, reads_extraction and reads_filtration are enabled; the codebook is loaded
     whenever the block decodes (load_codebook always runs); deduplication is on when present; ``scoring: false``
-    is ``{run: false}``; reference_image_view.projection is the rule's maximum_projection; mode, tiled and
-    checkpoints are the plan's (the checkpoints are passed to FOV.run by the fov command).
+    is ``{run: false}``; reference_image_view.projection is the rule's maximum_projection; mode, recipe (expanded by
+    the plan), tiled and checkpoints are the plan's (the checkpoints are passed to FOV.run by the fov command, the
+    tiled settings to the tiled commands, ``tiled``).
     """
     block = configuration["processing"]
-    params = copy.deepcopy({k: v for k, v in block.items() if k not in ("mode", "tiled", "checkpoints")})
+    params = copy.deepcopy({k: v for k, v in block.items() if k not in ("mode", "recipe", "tiled", "checkpoints")})
     for name in _ENABLED:
         if name in params:
             params[name] = {"run": True, **(params[name] or {})}
@@ -80,14 +81,45 @@ def processing(configuration) -> Processing:
     return Processing(adapted, tuple(configuration["processing"].get("checkpoints") or ()))
 
 
+@dataclass(frozen=True)
+class Tiled:
+    """processing.tiled translated: the grid's settings, the tiles' local registration and post-registration steps."""
+    tile_size_yx: int
+    halo: int
+    local_registration: object
+    post_local_registration: tuple | None
+    exact: bool
+
+
+def tiled(configuration) -> Tiled | None:
+    """processing.tiled of a resolved configuration in mode tiled (its halo resolved by the plan); None in mode direct.
+
+    local_registration is translated as the processing block's registration (a RegistrationRecipe) and
+    post_local_registration as preprocessing steps (PreprocessingStep).
+    """
+    from starfinder.dataset.workflow import _explicit_registration, _preprocessing_steps
+    block = configuration["processing"]
+    if block.get("mode") != "tiled":
+        return None
+    t = block["tiled"]
+    local = None if t.get("local_registration") is None else _explicit_registration(t["local_registration"])
+    post = None if not t.get("post_local_registration") else _preprocessing_steps(
+        t["post_local_registration"], "processing.tiled.post_local_registration")
+    return Tiled(t["tile_size_yx"], t["halo"], local, post, t["exact"])
+
+
 def _processing_api(configuration):
     translated = processing(configuration)
     adapted = translated.workflow
-    return {"pipeline": plain(adapted.pipeline), "execution": plain(adapted.execution),
-            "checkpoints": {"stages": list(translated.stages)},
-            "reference_image_view": {"projection": plain(adapted.reference_projection),
-                                     "image": adapted.reference_image, "channel": adapted.reference_channel},
-            "codebook": {"encoding": plain(adapted.encoding), "layout": plain(adapted.layout)}}
+    out = {"pipeline": plain(adapted.pipeline), "execution": plain(adapted.execution),
+           "checkpoints": {"stages": list(translated.stages)},
+           "reference_image_view": {"projection": plain(adapted.reference_projection),
+                                    "image": adapted.reference_image, "channel": adapted.reference_channel},
+           "codebook": {"encoding": plain(adapted.encoding), "layout": plain(adapted.layout)}}
+    grid = tiled(configuration)
+    if grid is not None:
+        out["tiled"] = plain(grid)
+    return out
 
 
 def _morphology_api(configuration):

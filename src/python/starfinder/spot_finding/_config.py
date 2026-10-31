@@ -62,9 +62,9 @@ class LocalMaximaConfig:
     Parameters
     ----------
     threshold_mode : str
-        Threshold mode: ``noise``, ``adaptive``, ``adaptive_round`` or ``global``.
+        Threshold mode: ``noise``, ``adaptive``, ``adaptive_round``, ``global`` or ``absolute``.
     threshold_value : float
-        Nonnegative noise multiplier in sigma units for ``noise``, or maximum-intensity fraction for ``adaptive``, ``adaptive_round`` and ``global``.
+        Nonnegative noise multiplier in sigma units for ``noise``, maximum-intensity fraction for ``adaptive``, ``adaptive_round`` and ``global``, or the threshold in grey levels of the image for ``absolute``.
     min_distance_voxels : int
         Minimum peak separation in voxels, as a positive integer.
     exclude_border : bool
@@ -84,7 +84,9 @@ class LocalMaximaConfig:
 
     noise uses median + value * MAD * 1.4826 (sigma units); adaptive uses
     channel maximum, adaptive_round the image maximum, global the uint8/uint16
-    maximum (fraction units [0,1]). Border exclusion uses min_distance_voxels.
+    maximum (fraction units [0,1]); absolute is threshold_value itself, in the
+    image's grey levels (the tiled tile task's FOV-level thresholds, one per
+    channel). Border exclusion uses min_distance_voxels.
     Singleton Z is treated as a 2D plane, excluding only the YX border.
     Optional peak_intensity is the original pixel value, without normalization.
 
@@ -107,10 +109,10 @@ class LocalMaximaConfig:
     method: str = field(default="local_maxima", init=False)
 
     def __post_init__(self):
-        if self.threshold_mode not in ("noise", "adaptive", "adaptive_round", "global"):
+        if self.threshold_mode not in ("noise", "adaptive", "adaptive_round", "global", "absolute"):
             raise ValueError("unknown threshold_mode")
         _number(self.threshold_value, "threshold_value", 0,
-                None if self.threshold_mode == "noise" else 1)
+                None if self.threshold_mode in ("noise", "absolute") else 1)
         _distance(self.min_distance_voxels)
         _labels(self.channel_labels)
         if type(self.exclude_border) is not bool or type(self.measure_peak_intensity) is not bool:

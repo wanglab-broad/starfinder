@@ -65,11 +65,26 @@ LEFT_KEYS = {
     "n_random_tests": "selected_fovs",
 }
 #: The processing block's keys (today's processing rule parameters without the run flags, D4) and the new keys.
-PROCESSING_KEYS = ("mode", "tiled", "checkpoints", "streaming", "device", "load_codebook", "load_raw_images",
+PROCESSING_KEYS = ("mode", "recipe", "tiled", "checkpoints", "streaming", "device", "load_codebook", "load_raw_images",
                    "preprocessing", "registration", "reference_image_view", "spot_finding", "reads_extraction",
                    "reads_filtration", "decoding", "scoring", "deduplication")
 #: The keys of the processing block's sub-blocks that left with the run flags or the subtile route.
-PROCESSING_LEFT = {"create_subtiles": "processing.tiled (W-644): the legacy subtile route is retired for Python"}
+PROCESSING_LEFT = {"create_subtiles": "processing.mode: tiled and processing.tiled: the legacy subtile route is "
+                                      "retired for Python (D5)"}
+#: The defaults of processing.tiled (design/specs/orchestration-tiled.md, "Declared files of the tiled task kinds");
+#: the plan writes the halo it computes in place of null.
+TILED_DEFAULTS = {"tile_size_yx": 512, "halo": None, "local_registration": None, "post_local_registration": None,
+                  "exact": True}
+#: The named recipes of processing.recipe, which the plan expands into the resolved configuration (a key the user
+#: also sets wins); ``tiled`` applies in mode tiled only (design/specs/orchestration-tiled.md, "The deep-tissue
+#: recipe").
+RECIPES = {"deep": {
+    "preprocessing": {"steps": [
+        {"method": "min_max_normalization", "output_dtype": "uint8", "output_range": [0, 255], "rounding": "truncate"},
+        {"method": "histogram_matching", "reference_channel": 0}],
+        "post_registration": [{"method": "reconstruction", "radius_yx": 3}]},
+    "registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}},
+    "tiled": {"local_registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}}}}
 #: The default checkpoint stages of the fov task (D8) and every stage in order.
 CHECKPOINT_STAGES = ("candidates", "pre_qc")
 STAGES = ("registered", "candidates", "pre_qc")

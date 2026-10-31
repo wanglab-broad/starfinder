@@ -71,7 +71,7 @@ rather than treating a generated JSON copy as the durable configuration.
 | Location | Use |
 | --- | --- |
 | Console and `.snakemake/log/` | Find the failed job and first traceback. |
-| `OUTPUT/fovs/<FOV>/run.json` | Inspect Python status, steps, counts and registration attempts; a subtile record is below `subtile_<n>/`. |
+| `OUTPUT/fovs/<FOV>/run.json` | Inspect Python status, steps, counts and registration attempts; a FOV run in tiles also has `tiled/run.json` (its global task) and `tiles/<tile>/tile.json`. |
 | `OUTPUT/fovs/<FOV>/nuclei_registration.json` | Inspect the saved morphology registration record. |
 | `OUTPUT/log/` | Inspect MATLAB processing logs and Snakemake benchmark records. |
 

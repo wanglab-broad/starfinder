@@ -192,11 +192,12 @@ def test_processing_invalid_images(image):
             op(image)
 
 
-def test_fov_subtile_rotation_and_projection_metadata(tmp_path):
-    from starfinder.dataset import Dataset, RoundState, SubtileConfig, FOV
+def test_fov_tile_rotation_and_projection_metadata(tmp_path):
+    # W-735: a tile's window of the chunked checkpoint replaces the retired subtile NPZ.
+    from starfinder.dataset import Dataset, RoundState, FOV
+    from starfinder.dataset.tiled import tile_grid
+    from starfinder.io import ChunkedCheckpointWriter, read_window
     dataset = Dataset(input_root=tmp_path, output_root=tmp_path, dataset_id="test", sample_id="small", output_id="output", rounds=RoundState(sequencing_rounds=["round1"], reference_round="round1"), channel_order=("ch00",))
-    dataset.subtile = SubtileConfig(2, overlap_ratio=0)
-    dataset.subtile.compute_windows(8, 8)
     save_volume(np.ones((2, 8, 8), np.uint16), tmp_path / "round1/fov/ch00.tif", metadata=geometry())
     loaded_fov = FOV(dataset, "fov").load_images(channel_order=["ch00"])
     assert loaded_fov.metadata["round1"] == geometry()
@@ -204,8 +205,10 @@ def test_fov_subtile_rotation_and_projection_metadata(tmp_path):
     fov = FOV(dataset, "fov", images={"round1": np.arange(128, dtype=np.uint16).reshape(2, 8, 8, 1)}, metadata={"round1": geometry()})
     fov.rotate(angle=90)
     rotated_meta = fov.metadata["round1"]
-    fov.save_subtiles(out_dir=tmp_path / "tiles")
-    child = FOV.from_subtile(tmp_path / "tiles/subtile_data_4.npz", dataset, "fov")
+    with ChunkedCheckpointWriter(tmp_path / "registered.h5", identity={"fov_id": "fov"}, channel_labels=("ch00",)) as writer:
+        writer.write_round("round1", fov.images["round1"], rotated_meta)
+    window = read_window(tmp_path / "registered.h5", "round1", tile_grid((8, 8), 4, 0)[3].window_yx)
+    child = FOV(dataset, "fov", images={"round1": window.image}, metadata={"round1": window.metadata})
     assert child.images["round1"].shape == (2, 4, 4, 1)
     np.testing.assert_allclose(child.metadata["round1"].index_to_world((0, 0, 0)), rotated_meta.index_to_world((0, 4, 4)))
     child.project_image()

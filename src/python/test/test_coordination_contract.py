@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from starfinder.dataset import (Dataset, FOV, RoundState, PipelineConfig, ExecutionConfig,
-    SubtileConfig, from_workflow_config)
+    from_workflow_config)
 from starfinder.registration import RecoveryConfig, RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.readout import export_spots
@@ -194,28 +194,33 @@ def test_export_reordered_subset_empty_and_bad_keys(tmp_path):
 
 
 @pytest.mark.parametrize('shape', [(9, 14), (13, 7)])
-def test_rectangular_subtiles_cover_remainder_and_restore_geometry(tmp_path, shape):
+def test_rectangular_tiles_cover_remainder_and_restore_geometry(tmp_path, shape):
+    # W-735: the tiled entries replace the retired subtile API (SubtileConfig, save_subtiles, from_subtile).
+    from starfinder.dataset.tiled import tile_grid
+    from starfinder.io import ChunkedCheckpointWriter, read_window
     ds = dataset(tmp_path)
-    ds.subtile = SubtileConfig(3, .2)
-    ds.subtile.compute_windows(*shape)
-    coverage = np.zeros(shape, bool)
-    for window in ds.subtile.windows:
-        coverage[window.to_slice()] = True
-    assert coverage.all()
-    fov = resident(ds)
-    fov.images = {r: np.zeros((2, *shape, 4), dtype=np.uint8) for r in ds.rounds.all_rounds}
+    tiles = tile_grid(shape, 5, 2)
+    coverage = np.zeros(shape, int)
+    for tile in tiles:
+        y0, y1, x0, x1 = tile.core_yx
+        coverage[y0:y1, x0:x1] += 1
+    assert (coverage == 1).all()
     geometry = ImageMetadata('grid', spacing_zyx=(2, 3, 4), origin_zyx=(10, 20, 30),
         direction_zyx=((1, 0, 0), (0, 1, 0), (0, 0, 1)), spatial_unit='um')
-    fov.metadata = dict.fromkeys(ds.rounds.all_rounds, geometry)
-    fov.save_subtiles()
-    loaded = FOV.from_subtile(fov.paths.subtile_dir/'subtile_data_9.npz', ds, 'FOV')
-    w = ds.subtile.windows[-1]
-    assert loaded.metadata['round1'].origin_zyx == (10, 20 + 3*w.y_start, 30 + 4*w.x_start)
+    store = tmp_path/'registered.h5'
+    with ChunkedCheckpointWriter(store, identity={'fov_id': 'FOV'}, channel_labels=ds.channel_order) as writer:
+        for r in ds.rounds.all_rounds:
+            writer.write_round(r, np.zeros((2, *shape, 4), dtype=np.uint8), geometry)
+    w = tiles[-1].window_yx
+    loaded = resident(ds)
+    loaded.tile = tiles[-1].id
+    for r in ds.rounds.all_rounds:
+        window = read_window(store, r, w, frame_id='grid/tile')
+        loaded.images[r], loaded.metadata[r] = window.image, window.metadata
+    assert loaded.metadata['round1'].origin_zyx == (10, 20 + 3*w[0], 30 + 4*w[2])
     loaded.find_spots()
-    assert loaded.spot_result.spot_namespace == '["data","sample","FOV",9]'
+    assert loaded.spot_result.spot_namespace == f'["data","sample","FOV","{tiles[-1].id}"]'
     assert loaded.metadata['round1'] == loaded.metadata['round2']
-    with pytest.raises(ValueError, match='identity'):
-        FOV.from_subtile(fov.paths.subtile_dir/'subtile_data_9.npz', ds, 'OTHER')
 
 
 def workflow_config(tmp_path):
@@ -286,21 +291,19 @@ def test_five_workflow_adapters_and_shared_filenames(tmp_path, streaming):
     for rule in ['rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile', 'deep_create_subtile', 'deep_rsf_subtile']:
         adapted = from_workflow_config(config, rule)
         fov = adapted.dataset.fov('FOV')
-        subtile = fov.paths.subtile_dir/'subtile_data_1.npz'
         # The rules' named inputs (the adapters read snakemake.input.<name>; no JSON copy).
-        snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook), subtile=str(subtile)),
+        snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook), subtile='unused'),
                                    wildcards=SimpleNamespace(fovID='FOV', n_subtile='1'))
+        if rule != 'rsf_single_fov':
+            # W-735: the Python subtile route is retired (D5); its adapters refuse until W-750 removes them.
+            with pytest.raises(ValueError, match='the Python subtile route is retired'):
+                runpy.run_path(str(root/f'workflow/scripts/{rule}.py'), init_globals={'snakemake': snakemake})
+            continue
         runpy.run_path(str(root/f'workflow/scripts/{rule}.py'), init_globals={'snakemake': snakemake})
-        if rule == 'rsf_single_fov':
-            assert fov.paths.spot_table('molecules') == tmp_path/'out'/'data'/'run'/'fovs'/'FOV'/'molecules.csv'
-            assert list(pd.read_csv(fov.paths.spot_table('molecules'))) == ['spot_namespace', 'spot_id', 'z', 'y', 'x',
-                                                                            'gene_id', 'entry_id', 'qc_score']
-            assert (fov.paths.fov_dir/'reference.tif').is_file() and fov.paths.run_record.is_file()
-        elif 'rsf_subtile' in rule or rule == 'lrsf_single_fov_subtile':
-            assert list(pd.read_csv(subtile.parent/'subtile_goodSpots_1.csv')) == ['x', 'y', 'z', 'gene']
-        else:
-            assert subtile.is_file()
-            assert (subtile.parent/'subtile_coords.csv').is_file()
+        assert fov.paths.spot_table('molecules') == tmp_path/'out'/'data'/'run'/'fovs'/'FOV'/'molecules.csv'
+        assert list(pd.read_csv(fov.paths.spot_table('molecules'))) == ['spot_namespace', 'spot_id', 'z', 'y', 'x',
+                                                                        'gene_id', 'entry_id', 'qc_score']
+        assert (fov.paths.fov_dir/'reference.tif').is_file() and fov.paths.run_record.is_file()
 
 
 def test_removed_python_surface():

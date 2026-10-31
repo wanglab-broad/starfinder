@@ -4,8 +4,7 @@ Private and unexported; it imports nothing from ``starfinder``. Every helper
 returns a path without touching the filesystem. The MATLAB-era folders
 (``images``, ``signal``, ``log``, ``output``, ``expr``, ``documents``) keep
 their names, and the ``.smk`` rules of the MATLAB backend spell the same paths
-on their own. A FOV's own folder ``fovs/<fov_id>/`` (a subtile's
-``fovs/<fov_id>/subtile_<n>/``) holds its durable results: the run record, the
+on their own. A FOV's own folder ``fovs/<fov_id>/`` holds its durable results: the run record, the
 tables ``FOV.export_spots`` writes, the registration record of its other
 rounds, its reference image and the folders ``other_rounds/``,
 ``segmentation/`` and ``assignment/``; the restart material of ``FOV.run``
@@ -31,6 +30,13 @@ CHECKPOINTS = "checkpoints"
 OTHER_ROUNDS = "other_rounds"
 SEGMENTATION = "segmentation"
 ASSIGNMENT = "assignment"
+# Tiled execution (design/specs/orchestration-tiled.md, "Declared files of the tiled task kinds"): the global task's
+# folder and files, and the tiles' folder of each FOV.
+TILED = "tiled"
+TILES = "tiles"
+CHUNKED_CHECKPOINT = "registered.h5"
+GLOBAL_RECORD = "global.json"
+TILE_FILES = ("candidates.csv", "reads.csv", "tile.json")
 #: The record files: a FOV's run record in its folder, a sample's export record in its export folder.
 RUN_RECORD = "run.json"
 EXPORT_FILE = "export.json"
@@ -92,14 +98,13 @@ def reference_image_path(output_root, fov_id, pattern=REFERENCE_IMAGE, imported=
     return path if path.is_absolute() else Path(output_root) / path
 
 
-def fov_dir(output_root, fov_id, subtile_id=None, *, parent=None) -> Path:
-    """``fovs/<fov_id>`` (a subtile: ``fovs/<fov_id>/subtile_<n>``), the folder of a FOV's durable results.
+def fov_dir(output_root, fov_id, *, parent=None) -> Path:
+    """``fovs/<fov_id>``, the folder of a FOV's durable results.
 
     ``parent`` (``CheckpointConfig.directory``) replaces ``<output_root>/fovs``
     as the parent of the FOV folders when given.
     """
-    folder = (Path(output_root) / FOVS if parent is None else Path(parent)) / fov_id
-    return folder if subtile_id is None else folder / f"subtile_{subtile_id}"
+    return (Path(output_root) / FOVS if parent is None else Path(parent)) / fov_id
 
 
 def checkpoint_dir(fov_directory) -> Path:
@@ -107,9 +112,19 @@ def checkpoint_dir(fov_directory) -> Path:
     return Path(fov_directory) / CHECKPOINTS
 
 
-def run_record(output_root, fov_id, subtile_id=None) -> Path:
-    """``fovs/<fov_id>/run.json`` (a subtile: ``fovs/<fov_id>/subtile_<n>/run.json``), the run record of a FOV."""
-    return fov_dir(output_root, fov_id, subtile_id) / RUN_RECORD
+def run_record(output_root, fov_id) -> Path:
+    """``fovs/<fov_id>/run.json``, the run record of a FOV."""
+    return fov_dir(output_root, fov_id) / RUN_RECORD
+
+
+def tiled_dir(fov_directory) -> Path:
+    """``<fov folder>/tiled``: the global task's files of tiled execution (the chunked checkpoint, its records)."""
+    return Path(fov_directory) / TILED
+
+
+def tile_dir(fov_directory, tile) -> Path:
+    """``<fov folder>/tiles/<tile>``: one tile task's files of tiled execution (``tile`` is ``r<row>c<col>``)."""
+    return Path(fov_directory) / TILES / tile
 
 
 def other_round_dir(fov_directory, name) -> Path:
@@ -280,17 +295,6 @@ class _FovPaths:
 
     output_root: Path
     fov_id: str
-
-    @property
-    def subtile_dir(self) -> Path:
-        """Path to the subtile directory under output/subtile.
-
-        Returns
-        -------
-        pathlib.Path
-            Path under output_root; no filesystem mutation.
-        """
-        return self.output_root / "output" / "subtile" / self.fov_id
 
     @property
     def fov_dir(self) -> Path:

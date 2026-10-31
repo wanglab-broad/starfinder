@@ -296,39 +296,34 @@ class TestE2EStreamingMode:
         assert len(batch_fov.images) == 4
 
 
-class TestE2ESubtileRoundTrip:
-    """Validate subtile coordinate mapping after spot finding."""
+class TestE2ETileRoundTrip:
+    """Validate tile coordinate mapping after spot finding (W-735: the chunked checkpoint replaces the subtiles)."""
 
-    def test_subtile_spot_coordinate_mapping(self, e2e_result):
-        """Spots found in a subtile remap to valid global coordinates."""
-        from starfinder.dataset import FOV, SubtileConfig
+    def test_tile_spot_coordinate_mapping(self, e2e_result, tmp_path):
+        """Spots found in a tile's window remap to valid global coordinates."""
+        from starfinder.dataset.tiled import tile_grid
+        from starfinder.io import ChunkedCheckpointWriter, read_window
         from starfinder.spot_finding import find_spots, LocalMaximaConfig
         from starfinder.image import ImageMetadata
 
         fov, ds, gt = e2e_result
         Z, Y, X = gt["image_shape"]
 
-        # Configure 2x2 subtiles
-        ds.subtile = SubtileConfig(sqrt_pieces=2, overlap_ratio=0.1)
+        # A 2x2 grid with a halo, the reference round written once and read by window
         h, w = fov.images["round1"].shape[1:3]
-        ds.subtile.compute_windows(h, w)
-
-        coords_df = fov.save_subtiles()
-
-        # Load first subtile and run spot finding
-        npz_path = fov.paths.subtile_dir / "subtile_data_1.npz"
-        sub_fov = FOV.from_subtile(npz_path, ds, "FOV_001")
-
-        ref_image = sub_fov.images[ds.rounds.reference_round]
+        tile = tile_grid((h, w), (max(h, w) + 1) // 2, 6)[0]
+        ref = ds.rounds.reference_round
+        with ChunkedCheckpointWriter(tmp_path / "registered.h5", identity={"fov_id": "FOV_001"},
+                                     channel_labels=ds.channel_order) as writer:
+            writer.write_round(ref, fov.images[ref], fov.metadata[ref])
+        ref_image = read_window(tmp_path / "registered.h5", ref, tile.window_yx).image
         sub_spots = find_spots(ref_image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_e2e"), spot_namespace="direct/test_e2e").spots
 
         if len(sub_spots) == 0:
-            pytest.skip("No spots detected in subtile")
+            pytest.skip("No spots detected in the tile")
 
-        # Get subtile offsets (1-based CSV → 0-based)
-        row0 = coords_df.iloc[0]
-        x_offset = int(row0["scoords_x"]) - 1
-        y_offset = int(row0["scoords_y"]) - 1
+        # The window's zero-based start
+        y_offset, _, x_offset, _ = tile.window_yx
 
         # Remap to global coordinates
         global_x = sub_spots["x"].values + x_offset

@@ -326,11 +326,12 @@ def execute(command, manifest_path, task_id, function, context=Context(), argv=N
                    if not (path.is_dir() if declared.endswith("/") else path.is_file())]
         if missing:
             raise TaskFailed(f"the task's call returned without the declared outputs {', '.join(missing)}")
-        if run.kind in ("fov", "tile_merge"):
+        if run.kind in ("fov", "tile_merge", "tile_global"):
             from starfinder.dataset._run_record import set_workflow
-            set_workflow(_layout.run_record(out, run.identity["fov"]), run.workflow_section(),
-                         {"path": run.manifest["configuration"]["path"],
-                          "sha256": run.manifest["configuration"]["sha256"]})
+            folder = _layout.fov_dir(out, run.identity["fov"])
+            set_workflow((_layout.tiled_dir(folder) if run.kind == "tile_global" else folder) / _layout.RUN_RECORD,
+                         run.workflow_section(), {"path": run.manifest["configuration"]["path"],
+                                                  "sha256": run.manifest["configuration"]["sha256"]})
         outputs = run.output_entries()
         section = run.workflow_section()
         logger.info(f"succeeded in {section['wall_s']:.2f}s; {len(outputs)} declared outputs")
