@@ -440,6 +440,25 @@ uv run pytest test/ -v --durations=0 -m "<selection>" > <run-dir>/durations.log
 uv run python scripts/marker_drift.py <run-dir>/durations.log
 ```
 
+Independent test selections may run at the same time, each pinned to its own
+physical core with its own log and temporary directory, at most four at once on
+GP099-29C and never on the controller's core. Sibling hyper-threads are not
+separate cores. A selection's time and memory, and the `slow` threshold, are
+still measured on one CPU and one numerical thread. For example, to run Q on
+core 2 and the reference audit on core 4 from `src/python`, each with its own
+log and its own `TMPDIR` on local disk:
+
+```bash
+q_tmp=$(mktemp -d /tmp/q.XXXXXX)
+audit_tmp=$(mktemp -d /tmp/audit.XXXXXX)
+TMPDIR=$q_tmp taskset -c 2 uv run pytest test/ -v \
+    -m "not (slow or learned or extended) and (contract or not validation)" \
+    > <run-dir>/q.log 2>&1 &
+TMPDIR=$audit_tmp taskset -c 4 uv run python ../../docs/check_reference.py \
+    > <run-dir>/reference-audit.log 2>&1 &
+wait
+```
+
 The `Tests` GitHub Actions workflow runs on pushes and pull requests to `dev`
 and `main` in two jobs:
 

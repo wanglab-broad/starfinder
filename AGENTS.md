@@ -113,8 +113,13 @@ widen a tolerance or change an expected value to make a result pass, hide
 warnings/skips, or claim an unexecuted backend passed. SimpleITK
 must be installed for its execution coverage; MATLAB execution is excluded.
 
-Default resource limits: one CPU, one numerical thread, no GPU; 1800 s per check;
-target process RSS ≤4 GiB, new artifacts ≤1 GiB.
+Default resource limits per check: one CPU, one numerical thread, no GPU; 1800 s;
+target process RSS ≤4 GiB, new artifacts ≤1 GiB. Independent test selections
+may run at the same time, each pinned to its own physical core with its own log
+and temporary directory, at most four at once on GP099-29C and never on the
+controller's core. Sibling hyper-threads are not separate cores. A selection's
+time and memory, and the `slow` threshold, are still measured on one CPU and one
+numerical thread.
 New images ≤32×64×64, ≤4 channels/rounds. Existing exceptions: small synthetic
 test dataset 16×256×256 (generated once per pytest session), pointset 16×128×128,
 compression 10×128×128, tiny examples 8×128×128, benchmark allocation 256×1024

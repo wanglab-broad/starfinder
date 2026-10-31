@@ -129,6 +129,9 @@ registration; spot_finding; and other excluding those four.
 cover collected tests once. `scripts/marker_drift.py` reads a durations log to
 review cost markers. Review new and changed test markers before merging.
 
+The selections are independent: they may run at the same time when each has its
+own core and temporary directory.
+
 ## Limits
 
 A local HTML build does not execute MATLAB or optional algorithms. Record
