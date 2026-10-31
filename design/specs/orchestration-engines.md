@@ -830,7 +830,7 @@ RUN uv sync --no-install-project --no-default-groups --group workflow \
 COPY src/python/ ./
 # The build context has no .git: the version is `git describe`'s on the build host (the contract's code identity).
 ARG STARFINDER_VERSION
-ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_STARFINDER=$STARFINDER_VERSION
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=$STARFINDER_VERSION
 RUN uv sync --no-default-groups --group workflow --no-editable \
       --extra ome --extra local-registration --extra checkpoint --extra anndata \
       --extra multiview-stitcher --extra spatialdata

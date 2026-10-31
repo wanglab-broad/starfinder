@@ -1,0 +1,9 @@
+# The image copies only src/python/ (Containerfile); keep local environments and caches out of the context.
+.git
+.worktrees
+**/.venv
+**/.conda
+**/__pycache__
+**/.pytest_cache
+**/.snakemake
+docs/_build
