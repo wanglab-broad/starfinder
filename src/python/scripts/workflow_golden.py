@@ -48,7 +48,8 @@ The comparison classes of ``values.json`` (docs/contributing.md): ``exact`` (int
 booleans, integer images, the fixture's file hashes), ``float64`` (rtol 1e-9, atol 1e-12), ``float32`` (rtol 1e-6,
 atol 1e-6) and ``same_environment`` (the SHA-256 of an output file's bytes: identity in one environment, which a run
 in another environment does not have to reproduce). Time, host, version and absolute-path fields are left out of the
-records (``NORMALIZED``).
+records (``NORMALIZED``). A comparison across environments (``--other-environment``) also skips the fixture's file
+hashes and the file digests of the stage records and the report's records (``compare``).
 """
 from __future__ import annotations
 
@@ -69,6 +70,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 sys.path.insert(0, str(HERE.parent / "test"))
 import expected_values as EV  # noqa: E402
+from starfinder._execution import THREAD_VARIABLES  # noqa: E402
 
 PRESET = "sample-tiny-v1"
 DATASET_ID = PRESET
@@ -223,6 +225,16 @@ def configurations(work, starfinder_path):
     return a, b, c
 
 
+def _environment(work):
+    """The environment of the Snakemake runs: the caller's, with one numerical thread whatever the caller sets.
+
+    Each run record holds the thread variables in effect (``_execution.THREAD_VARIABLES``), compared exactly, and the
+    expected records hold "1"; ITK's thread count is pinned with them, so the result does not depend on the caller.
+    """
+    threads = dict.fromkeys(THREAD_VARIABLES + ("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS",), "1")
+    return dict(os.environ, XDG_CACHE_HOME=str(Path(work) / "cache"), PYTHONDONTWRITEBYTECODE="1", **threads)
+
+
 def run_workflow(work, snakemake, starfinder_path, cores=1):
     """Invocations A and B (see the module docstring); returns the command records."""
     import yaml
@@ -234,7 +246,7 @@ def run_workflow(work, snakemake, starfinder_path, cores=1):
     snakefile = Path(starfinder_path) / "workflow" / "Snakefile"
     common = [str(snakemake), "-s", str(snakefile), "--directory", str(work / "snakemake"), "--cores", str(cores),
               "--nocolor", "--printshellcmds"]
-    environment = dict(os.environ, XDG_CACHE_HOME=str(work / "cache"), PYTHONDONTWRITEBYTECODE="1")
+    environment = _environment(work)
     out = output_root(work)
     allowed = ["rsf_single_fov", "rotate_nuclei", "create_nuclei_amplicon_overlay", "nuclei_registration",
                "enhance_dapi_with_flamingo", "reads_assignment"]
@@ -343,7 +355,7 @@ def run_export(work, snakemake, starfinder_path, cores=1):
     snakefile = Path(starfinder_path) / "workflow" / "Snakefile"
     common = [str(snakemake), "-s", str(snakefile), "--directory", str(work / "snakemake"), "--cores", str(cores),
               "--nocolor", "--printshellcmds", "--allowed-rules", *EXPORT_RULES]
-    environment = dict(os.environ, XDG_CACHE_HOME=str(work / "cache"), PYTHONDONTWRITEBYTECODE="1")
+    environment = _environment(work)
     records = []
 
     def invoke(name, config):
@@ -689,6 +701,12 @@ TOLERANCES = {"float64": EV.FLOAT64, "float32": {"rtol": 1e-6, "atol": 1e-6}}
 # (detection_diagnostics.software), so the digest is an identity of the recording environment, like the file digests,
 # and a comparison across environments skips it (W-643: NumPy 2.3.5 against 2.2.6 changed only that leaf).
 STAGE_RECORD_DIGEST = re.compile(r"^records/fovs/[^/]+/run\.json\.checkpoints\.[A-Za-z_]+\.sha256: ")
+# The fixture's file digests (values.json's fixture: keys) and the digests the report records of the files it wrote
+# (report.json's files[<n>].sha256, under report/<sample>/ at any depth of the records): file digests hold only in the
+# recording environment (design/validation/orchestration.md, G1's row), and these change with NumPy's SIMD dispatch
+# (W-751: AVX-512 off and OPENBLAS_CORETYPE=Zen changed only them), so a comparison across environments skips them.
+FIXTURE_DIGEST = "fixture:"
+REPORT_FILE_DIGEST = re.compile(r"^records/(?:[^/]+/)*report/[^/]+/report\.json\.files\[\d+\]\.sha256: ")
 
 
 def _close(actual, expected, kind):
@@ -730,8 +748,9 @@ def compare(expected_dir, actual_dir, *, same_environment=True):
         e, a = expected[key], actual[key]
         if e["compare"] != a["compare"]:
             lines.append(f"{key}: comparison {a['compare']} != {e['compare']}")
-        elif (e["compare"] != "same_environment" or same_environment) and not _close(a["value"], e["value"],
-                                                                                       e["compare"]):
+        elif not same_environment and (e["compare"] == "same_environment" or key.startswith(FIXTURE_DIGEST)):
+            continue
+        elif not _close(a["value"], e["value"], e["compare"]):
             lines.append(f"{key}: {a['value']!r} != {e['value']!r} ({e['compare']})")
     names = lambda folder: {p.relative_to(folder / "records").as_posix() for p in (folder / "records").rglob("*.json")}
     for name in sorted(names(expected_dir) | names(actual_dir)):
@@ -741,7 +760,8 @@ def compare(expected_dir, actual_dir, *, same_environment=True):
             continue
         lines += [f"records/{name}{line}" for line in record_differences(json.loads(a.read_text()),
                                                                           json.loads(e.read_text()))
-                  if same_environment or not STAGE_RECORD_DIGEST.match(f"records/{name}{line}")]
+                  if same_environment or not (STAGE_RECORD_DIGEST.match(f"records/{name}{line}")
+                                              or REPORT_FILE_DIGEST.match(f"records/{name}{line}"))]
     dtypes_e = json.loads((expected_dir / "dtypes.json").read_text())
     dtypes_a = json.loads((actual_dir / "dtypes.json").read_text())
     for name in sorted(set(dtypes_e) | set(dtypes_a)):
@@ -798,7 +818,8 @@ def main(argv=None):
     comparing.add_argument("expected", type=Path)
     comparing.add_argument("actual", type=Path)
     comparing.add_argument("--other-environment", action="store_true",
-                           help="skip the same_environment values (the file digests)")
+                           help="skip the file digests: the same_environment values, the fixture's, "
+                                "the stage records' and the report files'")
     args = parser.parse_args(argv)
     if args.command == "fixture":
         record = write_fixture(args.work)
