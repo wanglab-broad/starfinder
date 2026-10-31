@@ -3,9 +3,10 @@
 The sequencing workflow turns round/FOV TIFF directories and a codebook into
 per-FOV molecule CSVs, and its later rules segment cells and assign molecules to
 them, stitch each sample's FOVs, assemble and export the sample and write its
-processing report. Snakemake schedules whole FOVs or subtiles; load, rotate,
-enhance, register, detect, extract and filter are operations **inside** those
-jobs, not seven independent Snakemake rules. Segmentation and assignment are
+processing report. An engine (Snakemake; Nextflow with task group 5) runs the tasks of the plan's
+manifest: whole FOVs, or tiles of a FOV; load, rotate, enhance, register, detect, extract and filter are
+operations inside those tasks, not seven independent tasks ([orchestration](orchestration.md); the
+MATLAB backend's rules schedule whole FOVs or subtiles as before). Segmentation and assignment are
 separate jobs after the molecule tables ([workflow-downstream](workflow-downstream.md)); the
 stitching, assembly, export and report blocks are in [workflow-configuration](workflow-configuration.md).
 How the workflow relates to the Python API is in [workflow/index](../notes/workflow-api.md); installing
@@ -36,9 +37,9 @@ INPUT/round2/tile_1/...               # through round<n_rounds>
 OUTPUT/documents/sample-annotation.csv  # MATLAB backend: the FOV membership
 ```
 
-The membership file must exist **before parsing the workflow**, even for a dry
-run or sequencing-only job; the workflow reads it during startup and cannot
-produce it as an upstream job. The Python backend reads `INPUT/fovs.csv`, with
+The membership file must exist before the plan command runs, even for a dry run; the plan
+reads it and no task produces it (Python). On the MATLAB backend it must exist before parsing the
+workflow, which reads it during startup and cannot produce it as an upstream job. The Python backend reads `INPUT/fovs.csv`, with
 the columns `sample,fov_id` and an optional `position_id` (the stage file's
 `PositionID`, required when the stitching block reads a stage file), in row
 order; the optional `selected_fovs` list restricts every rule to those FOVs
@@ -86,7 +87,7 @@ It calls `workflow/scripts/rsf_single_fov.py` or `.m` respectively.
 | Stage | Python script operation | MATLAB script operation | Data transition |
 | --- | --- | --- | --- |
 | load | `from_workflow_config`, `load_codebook`, `FOV.load_images` | `STARMapDataset`, `LoadRawImages` | Round/FOV channel stacks → in-memory images; Python loads the codebook before processing |
-| rotate | `FOV.rotate` if angle is nonzero | `LoadRawImages(..., 'rotate_angle', ...)` | Rotated image arrays; no standalone stage file |
+| rotate | `FOV.run` rotates by `rotate_angle`; `0` is no rotation and the step is skipped | `LoadRawImages(..., 'rotate_angle', ...)` | Rotated image arrays; no standalone stage file |
 | enhance | Optional `normalize_min_max`, `match_histogram`, `correct_background` | `EnhanceContrast`, `HistEqualize`, `MorphRecon` | Preprocessed arrays |
 | registration | `register(RegistrationRecipe(...))`: global then local step, composed and resampled once | `GlobalRegistration`, `LocalRegistration` | Aligned arrays and reference image |
 | spot_finding | `find_spots` | `SpotFinding` | Candidate coordinates |
@@ -106,7 +107,7 @@ The direct rule declares these outputs, relative to OUTPUT:
   (`spot_namespace, spot_id, z, y, x, gene_id, entry_id, qc_score`); on the MATLAB
   backend `signal/{fovID}_goodSpots.csv`, containing 1-based `x,y,z` and `gene`.
 
-The Python script writes them using `FOV.run` with checkpoints, `save_reference_image` and
+The `fov` command writes them using `FOV.run` with checkpoints, `save_reference_image` and
 `export_spots`; `export_spots` also records the table as `outputs.molecules` of the
 FOV's `fovs/{fovID}/run.json`. MATLAB also writes preview images. Benchmarked rules write
 `log/benchmark/{rule}/{fovID}[_{n_subtile}].txt`. A reference projection is not a
@@ -114,20 +115,22 @@ segmentation label image, and a molecule table is not a cell-by-gene matrix.
 
 ### Molecule tables
 
-Each FOV has one molecule table that the downstream rules read (`reads_assignment`, and
-`export_sample` with `assembly.assignment: null` or on the route after fusion). Its file
-follows from the configuration, the backend and the producer the `ruleorder` of the
-`Snakefile` selects, never from whichever file exists (`MOLECULE_TABLE` in `common.smk`,
-`_molecule_table` in the package):
+Each FOV has one molecule table that the downstream tasks and rules read (the `assign` task, and
+the `export` task with `assembly.assignment: null` or on the route after fusion; `reads_assignment` on
+the MATLAB backend), never whichever file exists. Python: the plan names the producer, the `fov` or
+`tile_merge` task, and its file is `fovs/{fovID}/molecules.csv`; MATLAB: the `ruleorder` of
+`workflow/rules/legacy.smk` selects it as before (`MOLECULE_TABLE` in `common.smk`, `_molecule_table`
+in the package):
 
 | Producer | Backend | File | Reader |
 | --- | --- | --- | --- |
-| `rsf_single_fov` | Python | `fovs/{fovID}/molecules.csv` (zero-based, identities kept) | `assignment.load_molecules` |
+| the `fov` or `tile_merge` task | Python | `fovs/{fovID}/molecules.csv` (zero-based, identities kept) | `assignment.load_molecules` |
 | `rsf_single_fov` | MATLAB | `signal/{fovID}_goodSpots.csv` (one-based `x,y,z,gene`) | `assignment.import_legacy_molecules_csv` |
-| `stitch_subtile` (the `subtile` and `deep` modes, or free mode with `gr_single_fov_subtile` or `deep_create_subtile` on) | either | `signal/{fovID}_goodSpots.csv` (one-based) | `assignment.import_legacy_molecules_csv` |
+| `stitch_subtile` (the `subtile` and `deep` modes, or free mode with `gr_single_fov_subtile` or `deep_create_subtile` on) | MATLAB | `signal/{fovID}_goodSpots.csv` (one-based) | `assignment.import_legacy_molecules_csv` |
 
-The subtile and deep route stays legacy: subtile spot IDs repeat across subtiles and their
-namespaces hold the subtile, so the resident rules write the one-based
+For the Python backend the subtile route is retired; tiled execution writes the same files as direct
+([orchestration-tiled](orchestration-tiled.md)). On the MATLAB backend subtile spot IDs repeat across
+subtiles and their namespaces hold the subtile, so the resident rules write the one-based
 `subtile_goodSpots_{n}.csv` without identities, and `stitch_subtile` merges them.
 
 ### Projection views and the reference merged image
@@ -168,17 +171,17 @@ per-channel Z-maximum preview montages; Python does not.
 `rsf_preparation`, defined for the MATLAB backend only, is a local rule that
 reads `config_path` and writes the same name with `.yaml` replaced by `.json`;
 the MATLAB core rules depend on that JSON. It reads the YAML file from disk,
-**not** Snakemake's merged config dictionary. The Python rules take no JSON copy:
-their inputs are named (`codebook`, `images`, `subtile`), the adapters read them
-by name and read the configuration from `snakemake.config`; MATLAB scripts read
-the JSON. See the
+**not** Snakemake's merged config dictionary. The Python tasks read the resolved configuration and
+their inputs from the manifest; MATLAB scripts read the JSON. See the
 [override caveat](workflow-configuration.md#overrides-and-validation-boundaries).
 
 ## Modes and backend selection
 
-`backend: matlab` is the default. `backend: python` selects the Python core
-registration and spot-finding rules and the Python `nuclei_registration` rule
-(below). It does not replace all downstream code. `matlab_launcher: path` (the
+`backend: python` is the default; a configuration without `backend` that holds MATLAB-dialect keys is
+refused, asking for `backend: matlab`. `workflow/Snakefile` dispatches on it: `backend: matlab` includes
+the frozen MATLAB rule set (`workflow/rules/legacy.smk`), and any other configuration runs the plan and
+the tasks of its manifest (`workflow/rules/tasks.smk`; [orchestration-engines](orchestration-engines.md),
+"Snakemake"). `matlab_launcher: path` (the
 default) runs a local MATLAB executable; `matlab_launcher: broad` sources
 `/broad/software/scripts/useuse` and runs `use Matlab` first. See the
 [MATLAB launcher](workflow-configuration.md#matlab-launcher) settings.
@@ -187,10 +190,12 @@ default) runs a local MATLAB executable; `matlab_launcher: broad` sources
 
 `nuclei_registration` registers the `additional_round` rounds (for example
 morphology rounds) to the reference round's DAPI stain, one job per FOV. The
-MATLAB backend runs `workflow/scripts/nuclei_registration.m`. The Python backend
-runs `workflow/scripts/nuclei_registration.py`, which calls
-`FOV.prepare_morphology` ([coordination](../../docs/coordination.md)) and keeps the MATLAB inputs and
-image file names:
+MATLAB backend runs `workflow/scripts/nuclei_registration.m`. On the Python backend the `morphology`
+task writes `nuclei_registration.json` and the saved form of each prepared image (always), and the
+channel images with `morphology.channel_images`; nothing reads the channel images. Its command calls
+`FOV.prepare_morphology` ([coordination](../../docs/coordination.md)) and keeps the MATLAB inputs; the
+list below describes what the retired Python rule `workflow/scripts/nuclei_registration.py` did, which
+the command keeps unless the morphology block says otherwise:
 
 - it reads the reference round's stain file that `reference_stains` declares
   (for example `{channel: ch04, name: DAPI}`; with several entries the one whose
@@ -222,6 +227,8 @@ of each prepared image under `fovs/<fov>/other_rounds/<name>/`, which
 `FOV.load_registered_round` reads ([checkpoints](../../docs/checkpoints.md)); the declared files do not
 change.
 
+MATLAB only (Python: `processing.mode` is `direct` or `tiled`; `deep` is a recipe of either, W-644):
+
 | Mode | Selected core rules | Intermediate files and execution |
 | --- | --- | --- |
 | `free` (default) | Each configured rule's `run` flag | Use for a deliberate combination or rerun; output requests can still pull in prerequisites whose flags are false |
@@ -229,8 +236,8 @@ change.
 | `subtile` | `gr_single_fov_subtile` → `lrsf_single_fov_subtile` → `stitch_subtile` | Load/preprocess/global registration, then local registration/detection/extraction/filtering per subtile, then recombine molecules |
 | `deep` | `deep_create_subtile` → `deep_rsf_subtile` → `stitch_subtile` | Load/histogram equalization/global registration and split, then reconstruction/detection/extraction/filtering; no local registration step in the deep subtile script |
 
-Preset modes require all named rule sections to exist and ignore their core
-`run` flags. Schema validation still requires a boolean `run` in each section.
+MATLAB only (Python: a present block enables its step; the plan derives the tasks). Preset modes
+require all named rule sections to exist and ignore their core `run` flags. Schema validation still requires a boolean `run` in each section.
 Preparation, nuclei/rotation, overlay, StarDist, stitching/BigStitcher,
 assignment and sample aggregation use their individual flags in all modes.
 `enhance_dapi_with_flamingo` and the MATLAB-only `rsf_single_fov_seq` are outside
@@ -309,9 +316,10 @@ Snakemake is separate from the `docs` dependency group.
 For real inputs, copy/edit the YAML, point `config_path` at that exact `.yaml`
 file, supply real images and the membership file (`fovs.csv` for the Python backend, the annotation CSV for
 MATLAB), then dry-run `all` before
-removing `-n`. Inspect the job list: a direct one-FOV example schedules config
-preparation, `rsf_single_fov`, and `all`; a 2×2 subtile grid schedules one
-creation job, four processing jobs, a stitch job, preparation and `all`.
+removing `-n`. Inspect the job list: on the MATLAB backend a direct one-FOV example schedules config
+preparation, `rsf_single_fov` and `all` (3 jobs); a 2×2 subtile grid schedules one
+creation job, four processing jobs, a stitch job, preparation and `all`; on the Python backend the
+plan's manifest lists the tasks, one job each, and `all`.
 DAG construction only checks that round/FOV directories exist, not whether
 their TIFFs have the right channels, dimensions or barcode semantics.
 
@@ -324,10 +332,10 @@ their TIFFs have the right channels, dimensions or barcode semantics.
 [Download the minimal YAML](../../docs/examples/workflow-minimal.yaml) or
 [the preparation helper](../../docs/examples/prepare_workflow.py).
 
-The older `tests/minimal_config.yaml` and `tests/tissue_2D_test.yaml` remain
-historical starting templates, not ready-to-run portable examples. The former
-holds placeholder paths and needs a sample annotation at startup; the latter contains site paths and
-commented variants (including a trailing space in `intensity_threshold `).
+`tests/minimal_config.yaml` is the schema fixture of the frozen MATLAB dialect, not a template: it does
+not parse (it has no `additional_round` and no sample annotation). `tests/tissue_2D_test.yaml` remains a
+historical MATLAB template; it contains site paths and commented variants (including a trailing space in
+`intensity_threshold `).
 Use the explicit examples here and check the selected backend's parameters.
 
 ## Broad UGER execution

@@ -26,7 +26,9 @@ def add_parser(groups):
     plan.add_argument("--config", type=Path, required=True, help="The configuration file (YAML, the Python shape)")
     plan.add_argument("--output-root", type=Path, help="The output root; default "
                       "<root_output_path>/<dataset_id>/<output_id>")
-    verify = commands.add_parser("verify", help="Apply the completion and staleness rule from the output root")
+    plan.add_argument("--locate", action="store_true", help="Print the path of the manifest the plan writes, without "
+                      "planning (an engine's parse in a cluster job)")
+    verify =commands.add_parser("verify", help="Apply the completion and staleness rule from the output root")
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--task", help="One task id; default every task")
     verify.add_argument("--hash", action="store_true", help="Compare each output's SHA-256, not only its size")
@@ -47,8 +49,11 @@ def add_parser(groups):
 def run(args, argv=None):
     """Run the parsed ``starfinder workflow`` command; return its exit status."""
     if args.command == "plan":
-        from starfinder.workflow._plan import PlanRefused, plan
+        from starfinder.workflow._plan import PlanRefused, locate, plan
         try:
+            if args.locate:
+                print(json.dumps({"manifest": str(locate(args.config, args.output_root))}))
+                return 0
             manifest = plan(args.config, args.output_root)
         except PlanRefused as error:
             print(f"plan refused: {error}", file=sys.stderr)

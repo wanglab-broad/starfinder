@@ -232,10 +232,12 @@ def test_with_assignment_null_no_figure_is_written_or_changed(tmp_path, monkeypa
 
 @needs_anndata
 def test_without_an_assembly_block_reads_assignment_draws_no_ownership(tmp_path, monkeypatch):
-    """The legacy configuration: no export_sample rule (the Snakefile includes export.smk with the block only),
-    and reads_assignment's figures carry no region line, no grey point and no stated count."""
-    snakefile = (workflow.Path(__file__).resolve().parents[3] / "workflow" / "Snakefile").read_text()
-    assert 'if ASSEMBLY_BLOCK:\n    include: "rules/export.smk"' in snakefile
+    """The legacy configuration: no export_sample rule (no workflow file includes export.smk: the dispatcher's
+    MATLAB rule set has no export rule, and the Python route's export task comes from the plan), and reads_assignment's
+    figures carry no region line, no grey point and no stated count."""
+    folder = workflow.Path(__file__).resolve().parents[3] / "workflow"
+    for name in ("Snakefile", "rules/legacy.smk", "rules/tasks.smk"):
+        assert "export.smk" not in (folder / name).read_text(), name
     _, _, out = build_sample(tmp_path, "3d")
     saved = []
     real = matplotlib.figure.Figure.savefig

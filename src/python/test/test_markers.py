@@ -63,6 +63,24 @@ def test_selection_coverage_reports_an_overlap_a_missing_and_a_repeated_node_id(
     assert report["partition_outside_collection"] == ["x"]
 
 
+def test_collection_ledger_reports_a_test_that_left_without_a_row(tmp_path):
+    ledger = script("collection_ledger")
+    base = ["t.py::a", "t.py::b[1]", "t.py::b[2]", "t.py::c"]
+    tip = ["t.py::a", "u.py::b[1]", "u.py::d"]
+    rows = [{"test_id": "t.py::b[1]", "class": "M", "reference": "u.py::b"},
+            {"test_id": "t.py::b[2]", "class": "D", "reference": "the second case is the first's (a decision)"},
+            {"test_id": "t.py::c", "class": "R", "reference": "u.py::d"}]
+    report = ledger.check(base, tip, rows)
+    assert report["ok"] and report["left"] == ["t.py::b[1]", "t.py::b[2]", "t.py::c"]
+    report = ledger.check(base, tip, rows[:2] + [{"test_id": "t.py::a", "class": "X", "reference": "u.py::e"}])
+    assert not report["ok"] and report["left_without_row"] == ["t.py::c"]
+    assert report["rows_still_collected"] == ["t.py::a"] and len(report["invalid_rows"]) == 1
+    assert [row["reference"] for row in report["references_not_collected"]] == ["u.py::e"]
+    listing = tmp_path / "base.txt"
+    listing.write_text("t.py::a\nt.py::b[1]\n\n2 tests collected in 0.01s\n")
+    assert ledger.collected(listing) == ["t.py::a", "t.py::b[1]"]
+
+
 GA9 = "test/test_synthetic_appearance_presets.py::test_ga9_routine_ownership_overlap_and_anchors[appearance-dense3d-v1]"
 DRIFT_LOG = f"""\
 test/test_a.py::test_at_the_bound PASSED                                    [ 11%]

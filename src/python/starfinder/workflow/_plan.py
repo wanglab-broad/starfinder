@@ -1025,6 +1025,44 @@ def plan(config_path, output_root=None) -> dict:
     return manifest
 
 
+def locate(config_path, output_root=None) -> Path:
+    """The path of the manifest that the plan of ``config_path`` writes, without planning.
+
+    An engine's parse in a cluster job (Snakemake's ``workflow.is_main_process`` false) reads the manifest that the
+    plan of its main process wrote; planning again there would rescan the inputs and could rewrite the manifest while
+    other jobs read it (design/specs/orchestration-engines.md, "The Snakefile over the manifest").
+
+    Parameters
+    ----------
+    config_path : str or pathlib.Path
+        The configuration file (YAML) in the Python shape.
+    output_root : str, pathlib.Path or None
+        The run's output root; None is ``<root_output_path>/<dataset_id>/<output_id>``, as for ``plan``.
+
+    Returns
+    -------
+    pathlib.Path
+        ``<output root>/workflow/manifest.json``.
+
+    Raises
+    ------
+    PlanRefused
+        The file cannot be read, is not YAML, or lacks a key of the default output root.
+    """
+    import yaml
+    try:
+        config = yaml.safe_load(Path(config_path).read_bytes())
+    except (OSError, yaml.YAMLError) as error:
+        raise PlanRefused(f"the configuration file {config_path}: {error}") from None
+    if output_root is not None:
+        return _layout.manifest_file(Path(output_root).resolve())
+    missing = [k for k in ("root_output_path", "dataset_id", "output_id") if not isinstance(config, dict)
+               or k not in config]
+    if missing:
+        raise PlanRefused(f"the configuration file {config_path} has no {', '.join(missing)}")
+    return _layout.manifest_file(default_output_root(config).absolute())
+
+
 def _write_if_changed(path, data):
     """Write ``data`` atomically unless the file holds it already (its modification time then stays)."""
     from starfinder._records import atomic_file

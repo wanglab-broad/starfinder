@@ -12,11 +12,11 @@ An em dash in the default column means the schema defines no default.
 
 | Field(s) | Type / constraint | Required by schema | Default / runtime meaning |
 | --- | --- | --- | --- |
-| `config_path` | string | Yes | —; absolute path to the same `.yaml` passed to `--configfile`; for the MATLAB backend `rsf_preparation` writes a sibling JSON, which the MATLAB scripts read (the Python rules read `snakemake.config` and take no JSON) |
-| `starfinder_path` | string | Yes | —; repository root used to locate Python/MATLAB code |
+| `config_path` | string | Yes | —; MATLAB backend only: absolute path to the same `.yaml` passed to `--configfile`; `rsf_preparation` writes a sibling JSON, which the MATLAB scripts read; the Python plan records the file it read |
+| `starfinder_path` | string | Yes | —; MATLAB backend only: repository root used to locate MATLAB code; the Python tasks run the installed `starfinder` command |
 | `root_input_path`, `root_output_path` | strings | Yes | —; roots before dataset/sample or dataset/output components |
-| `fiji_path` | string | No | —; read at parse time only by the legacy BigStitcher rule `run_BigStitcher_macro` (`stitching.smk`, included for the MATLAB backend without a `stitching` block); the Python BigStitcher engine rule reads it when it runs |
-| `envs_path` | string | No | —; no rule reads it: `stardist_segmentation` runs in the environment that runs Snakemake (see [segmentation and assignment](#segmentation-and-assignment)); kept in the schema until workflow orchestration |
+| `fiji_path` | string | No | —; read at parse time only by the legacy BigStitcher rule `run_BigStitcher_macro` (`stitching.smk`, included for the MATLAB backend without a `stitching` block); Python: `execution.fiji`, the tool of the BigStitcher engine task |
+| `envs_path` | string | No | —; no rule reads it: `stardist_segmentation` runs in the environment that runs Snakemake (see [segmentation and assignment](#segmentation-and-assignment)); removed from the Python dialect |
 | `dataset_id`, `sample_id`, `output_id` | strings | Yes | —; directory identifiers |
 | `fov_id_pattern` | string | MATLAB backend | —; MATLAB backend only (the Python backend refuses it, see [FOV membership](#fov-membership)): Python format string with `{i}`, e.g. `tile_{i}`, `Position{i:03}` |
 | `n_fovs` | integer >=1 | MATLAB backend | —; MATLAB backend only (refused by the Python backend): FOV indices start at 1 |
@@ -36,20 +36,20 @@ An em dash in the default column means the schema defines no default.
 | `image_dir_template` | `"{round}/{fov}"` or `"{fov}/{round}"`, or null | No | None (`"{round}/{fov}"`); Python only: the layout of the acquisition images under the input root (`Dataset.image_dir_template`); any other value raises. See [reference file and image layout](#reference-file-and-image-layout) |
 | `maximum_projection` | boolean | No | `false`; reference-image/DAPI output projection; does not turn sequencing into a 2-D algorithm |
 | `seq_channel_order` | array of strings, or of objects with `wavelength`, `channel`, `name` | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]`, or MATLAB's `channel_order_dict` entries; see [channels](#channels) |
-| `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; supply `[]` when unused; accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
-| `backend` | `python` or `matlab` | No | `matlab` |
+| `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; optional for Python, read by the plan; MATLAB: supply `[]` when unused, accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
+| `backend` | `python` or `matlab` | No | `python`; `workflow/Snakefile` includes the frozen MATLAB rule set for `matlab` only (the MATLAB schema's own default stays `matlab`) |
 | `segmentation`, `assignment` | objects | No | —; Python only (`backend: python`): a segmentation plan and an assign call for the workflow orchestration's segmentation rule, see [segmentation and assignment](#segmentation-and-assignment) |
 | `report` | object | No | —; Python only (`backend: python`): the `ReportConfig` of the processing report, and with it the rules `report_sample` and `report_dataset`, see [processing report](#processing-report) |
 | `readout_mode` | `multiplexed` or `direct` | No | `multiplexed`; Python only (`Dataset.readout_mode`), and `direct` only with `backend: python`; see [readout mode](#readout-mode) |
 | `matlab_launcher` | `path` or `broad` | No | `path`; how MATLAB rules start MATLAB, see [MATLAB launcher](#matlab-launcher) |
 | `matlab_single_thread` | boolean | No | `false`; `true` adds `-singleCompThread` to every MATLAB call |
-| `workflow_mode` | `free`, `direct`, `subtile`, `deep` | No | `free`; preset selection described in [workflows](workflows.md#modes-and-backend-selection) |
+| `workflow_mode` | `free`, `direct`, `subtile`, `deep` | No | `free`; MATLAB backend only; preset selection described in [workflows](workflows.md#modes-and-backend-selection) |
 | `subset_list` | array of integers >=1 | No | —; MATLAB backend only; supply `[]` when unused; code indexes it directly |
 | `subset_range` | boolean | No | `false`, applied by `common.smk`'s MATLAB branch (the schema holds no default); MATLAB backend only |
 | `subset_start`, `subset_end` | integers >=1 | Conditional | —; MATLAB backend only; see caveat below |
 | `subset_random` | boolean | No | `false`, applied by `common.smk`'s MATLAB branch (the schema holds no default); MATLAB backend only |
 | `n_random_tests` | integer >=1 | Conditional | —; MATLAB backend only; see caveat below |
-| `rules` | object of recognized rule names | Yes | —; each provided section requires boolean `run` |
+| `rules` | object of recognized rule names | Yes | —; MATLAB backend only: each provided section requires boolean `run`; the Python dialect has blocks and `execution` |
 
 % §2.13
 
@@ -91,8 +91,8 @@ The Python backend reads its FOVs from `fovs.csv` in the input root
 read in row order. `FOVS` is the FOVs in row order; `SAMPLE` the samples in the
 order of their first row; each sample's FOVs keep their row order. A repeated
 row, a FOV in two rows (another sample or another `position_id`), a
-`position_id` of two FOVs, an empty value or another column raises
-`ValueError` when the rule files are parsed. The `sample` column groups FOVs for
+`position_id` of two FOVs, an empty value or another column: the plan refuses it (Python), or
+`ValueError` is raised when the rule files are parsed (MATLAB). The `sample` column groups FOVs for
 the per-sample rules; it is not the acquisition `sample_id`, which stays part of
 every path and namespace. The optional `selected_fovs` list restricts a run to
 those FOV IDs of the file, for every rule (the per-FOV rules and the per-sample
@@ -212,7 +212,9 @@ must stay on one computational thread, for example on a shared host.
 
 ## Rule resources and parameters
 
-Each `rules.<name>` requires `run: true|false`. `resources` is optional; if
+Python: `execution.defaults` and `execution.tasks.<kind>` give `threads`, `memory_mb`, `runtime_min` and
+`gpu` ([orchestration](orchestration.md), "The Python configuration shape"). MATLAB, unchanged: each
+`rules.<name>` requires `run: true|false`. `resources` is optional; if
 present, it accepts only `mem_mb` (integer >=1000, default 8000) and `runtime`
 (integer >=1 minute, default 30). `get_rule_config` also supplies these fallbacks
 when the resource object is absent. There is no YAML `threads` resource: core
@@ -267,7 +269,7 @@ which read MATLAB-backend configurations (`dataset/_legacy_config.py`).
 | `decoding` | Python-only `method` (`wta`, `codebook_aware` or `direct`) and that config's fields | Python rules only: the decoder used with `reads_filtration.run`; default `WtaDecoderConfig(diagnostics=True)`, or `DirectDecoderConfig()` with `readout_mode: direct`; the adapter sets `diagnostics` true and `allow_rescue` false unless given; a method that does not support the readout mode raises `TypeError` |
 | `scoring` | Python-only boolean `run` (default true) and `method` (`bgcorr_probability`) | Python rules only (the schema rejects it unless `backend: python`): the adapter adds the shared read-QC score (`ReadScoreConfig`, [readout-contract](../../docs/readout-contract.md), "Shared read-QC score") whenever it decodes; `run: false` turns it off. It ranks calls, sets no cutoff and never changes a call. Giving the block without `reads_filtration.run`, or scoring with `reads_extraction.background: false`, raises `ValueError` |
 | `deduplication` | Python-only boolean `run` (default false), `distance_voxels` (default 1.0, voxel index space) and `compatibility` (`same_sequence`) | Python rules only (the schema rejects it unless `backend: python`): with `run: true` the adapter sets `PipelineConfig.deduplication` ([readout-contract](../../docs/readout-contract.md), "Optional deduplication"), which marks cross-channel reads of one amplicon within the distance with the same WTA sequence as duplicates of one representative; the read filter then rejects them (`ReadFilterConfig.exclude_duplicates`, default true). Off without the block. It needs `reads_filtration.run` and raises `ValueError` with `readout_mode: direct` |
-| `checkpoints` | Python-only mapping with the one key `stages` (a list of `registered`, `candidates`, `pre_qc`), or null | Python rules only: the checkpoint stages the five processing rules (`rsf_single_fov`, `gr_single_fov_subtile`, `lrsf_single_fov_subtile`, `deep_create_subtile`, `deep_rsf_subtile`) write besides `run.json`; absent or null is `{stages: []}`, `run.json` alone. See [run records of the processing rules](#run-records-of-the-processing-rules) |
+| `checkpoints` | Python-only mapping with the one key `stages` (a list of `registered`, `candidates`, `pre_qc`), or null | In the Python shape `processing.checkpoints`: a list of stages, default `[candidates, pre_qc]`; the plan adds `registered` when a segmentation input reads a sequencing round. See [run records of the processing rules](#run-records-of-the-processing-rules) |
 
 In a MATLAB configuration, always pair `intensity_estimation` with
 `intensity_threshold`; in a Python one, `threshold_mode` with `threshold_value`.
@@ -293,12 +295,10 @@ are partitioned independently with complete edge coverage.
 
 ### Run records of the processing rules
 
-Each Python processing rule runs its FOV (or subtile) with
-`CheckpointConfig(stages=<stages>, overwrite=True)`, so every run writes
-`<output_root>/fovs/<fov>/run.json` (`subtile_<n>/run.json` below it for a
-subtile rule; [checkpoints](../../docs/checkpoints.md), "run.json"). The stages come from
-`rules.<rule>.parameters.checkpoints`, a mapping with the one key `stages`; absent
-or null it is `{stages: []}`, which writes `run.json` alone. For example, the
+Each `fov` task runs its FOV with `CheckpointConfig(stages=<processing.checkpoints>, overwrite=True)`,
+so every run writes `<output_root>/fovs/<fov>/run.json` ([checkpoints](../../docs/checkpoints.md),
+"run.json"); the default stages are `candidates` and `pre_qc` (tiled execution's merge writes the same
+files, [orchestration-tiled](orchestration-tiled.md)). For example, the
 stages that let the processing report read the candidates and the reads:
 
 ```yaml
@@ -322,7 +322,7 @@ wrote before ([migration](../../docs/migration.md), "Sequencing logs and the mor
 stage files are not declared. Its `status` `succeeded` says that the rule's
 `FOV.run` processing succeeded; each other declared output the rule writes after it
 (`molecules.csv`, the reference image, the subtile files, a resident subtile's
-`subtile_goodSpots_<n>.csv`) is then added to its `outputs` with its path and SHA-256. The key is allowed with `backend: python` only: the schema refuses it with `backend: matlab` or without `backend` (whose default is `matlab`), and the adapter raises `ValueError`.
+`subtile_goodSpots_<n>.csv`) is then added to its `outputs` with its path and SHA-256. The key is allowed with `backend: python` only: the schema refuses it with `backend: matlab`, and the adapter raises `ValueError`.
 
 ## Codebook segment layout
 
@@ -613,8 +613,9 @@ sample-level rules for a configuration that has them. The specification is the
   `dataset.xml`, saves the placement and, without an `assembly` block, writes
   `output/tile_config_{sample}.csv` with the legacy writer from the record's raw
   translations and view map (with the block nothing reads that file, so it is neither
-  written nor declared). `fiji_path` is read by
-  `bigstitcher_engine` when it runs, not when the rules are parsed, and the rule fails
+  written nor declared). `execution.fiji` is the tool of the `bigstitcher_engine` task, which only
+  Snakemake runs, followed in the same job by `bigstitcher-check`; Nextflow refuses `method:
+  bigstitcher` without `stitching.dataset_xml` (task group 5). The check fails
   unless `dataset.xml` holds a `Stitching Transform` for every view, whatever Fiji's exit
   status. `positions` is the positions mapping of `Dataset.stitch`; `stage_axes` is
   required with `source: stage_file` and is never inferred from `rotate_angle`, and so is
@@ -623,9 +624,7 @@ sample-level rules for a configuration that has them. The specification is the
   column of `fovs.csv`, required then, and the sample's positions are selected before the
   conversion. The four legacy stitching rules, `create_sample_maf`, `create_sample_h5ad`
   and `create_sample_reads_assignment` run with `backend: matlab` only: a Python
-  configuration that enables one without the block that replaces it (`stitching`, or
-  `assembly` for the two sample rules), or `reads_assignment` without either block, raises
-  when the rule files are parsed, naming the blocks to add. `config`
+  configuration has no rule names, and the plan refuses `rules`, naming the blocks. `config`
   holds the fields of `MultiviewStitcherConfig` or `BigStitcherConfig`, `review` the
   `ReviewPolicy` fields, and `fallback` is null or `nominal`. With `multiview_stitcher`
   no `tile_config_{sample}.csv` is written, so the legacy `reads_assignment` rule needs an
@@ -708,8 +707,8 @@ sample-level rules for a configuration that has them. The specification is the
 
 Default-tier tests keep the method list equal to `STITCHING_METHODS` plus `bigstitcher`
 and the `assembly` and `export` keys equal to those fields, and the methods of a
-`segmentation` run equal to `SEGMENTATION_METHODS`. The blocks raise naming the key when
-the rule files are parsed; so does a route the configuration alone refuses (check 7 of
+`segmentation` run equal to `SEGMENTATION_METHODS`. The plan refuses them, naming the key; so does a
+route the configuration alone refuses (check 7 of
 `Dataset.export` without the conditions of a reused segmentation and without the models,
 which `export_sample` checks before anything is written).
 
@@ -795,7 +794,7 @@ configuration without the block runs as before: no report rule and no report out
   and `jpeg_quality`. Lists become tuples. An omitted key keeps its default, so `report: {}`
   gives `ReportConfig()`; an omitted rule of `limits` keeps its default limit, and an omitted
   key of a given rule is null. An unknown key, at any level, raises `ValueError` naming it
-  when the rule files are parsed.
+  when the plan runs.
 * **`report_sample`**, one rule per sample, calls `Dataset.report(sample, <the sample's
   FOVs from the sample annotation>, assignment=<assembly.assignment>, config=…)` and writes
   `<OUTPUT>/report/<sample>/`. Its declared output is `report/<sample>/report.json`, which
@@ -861,9 +860,9 @@ otherwise permissive parameter object can silently leave a script default in
 use. The schema does not check path existence, reference membership, barcode
 length, channel count, stage prerequisites or backend feature compatibility.
 
-Snakemake combines `--configfile` and CLI `--config` values for Python scripts
-and DAG selection; the Python rules read that combined `snakemake.config` and
-take no JSON copy. However, for the MATLAB backend `rsf_preparation` serializes
+The plan reads one configuration file; overrides are edits of that file (the resolved configuration
+records it and its hash): with the Python backend `workflow/rules/tasks.smk` refuses several
+`--configfile` values and any `--config` override. For the MATLAB backend `rsf_preparation` serializes
 the original file on disk for MATLAB; CLI mode/parameter/path overrides are not
 written back to that file. A `.yml` extension is also unsafe because conversion literally
 replaces `.yaml`. Use one fully resolved `.yaml` file and matching

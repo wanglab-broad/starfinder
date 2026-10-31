@@ -327,10 +327,12 @@ def test_with_the_blocks_the_legacy_sample_rules_are_left_out(tmp_path, monkeypa
 
 
 def test_the_snakefile_includes_the_legacy_sample_rules_for_matlab_only():
+    # The dispatcher includes rules/legacy.smk, which holds the MATLAB includes and local rules, for backend matlab only.
     snakefile = (ROOT / "workflow/Snakefile").read_text()
-    assert 'elif BACKEND == "matlab":\n    include: "rules/stitching.smk"' in snakefile
-    assert 'if BACKEND == "matlab":\n    include: "rules/utils.smk"' in snakefile
-    assert 'if BACKEND == "matlab":\n    localrules: create_sample_maf' in snakefile
+    assert 'if config.get("backend") == "matlab":\n\n    include: "rules/legacy.smk"\n' in snakefile
+    legacy = (ROOT / "workflow/rules/legacy.smk").read_text()
+    assert 'include: "stitching.smk"' in legacy and 'include: "utils.smk"' in legacy
+    assert "\nlocalrules: create_sample_maf, rsf_preparation\n" in legacy
     reads = (ROOT / "workflow/rules/reads-assignment.smk").read_text()
     legacy = reads[reads.index('if BACKEND == "matlab":'):]
     assert "    rule create_sample_h5ad:" in legacy and "    rule create_sample_reads_assignment:" in legacy
@@ -442,9 +444,12 @@ def test_the_python_fovid_wildcard_matches_the_run_s_fovs_only(tmp_path, monkeyp
     for fov in ("F1", "F1x5", "F100", "F10/x", "F2"):
         assert rule.match(f"{output}/fovs/{fov}/run.json") is None, fov
     assert output_regex(patterns[0], {}).match(f"{output}/fovs/F1/run.json")       # unconstrained, it would resolve
+    # The dispatcher includes no Python rule file: the Python route's rules (rules/tasks.smk) constrain each wildcard
+    # to the values of their group's tasks, which the plan takes from fovs.csv and selected_fovs.
     snakefile = (ROOT / "workflow/Snakefile").read_text()
-    assert ('if BACKEND == "python":\n    wildcard_constraints:\n        fovID=FOV_CONSTRAINT\n' in snakefile and
-            snakefile.index("wildcard_constraints") < snakefile.index('include: "rules/registration-py.smk"'))
+    assert re.findall(r'include: "([^"]+)"', snakefile) == ["rules/legacy.smk", "rules/tasks.smk"]
+    assert "FOV_CONSTRAINT" not in snakefile and "registration-py.smk" not in snakefile
+    assert "FOV_CONSTRAINT" not in (ROOT / "workflow/rules/legacy.smk").read_text()
     matlab = common_names(matlab_config(tmp_path / "matlab"), monkeypatch)
     assert "FOV_CONSTRAINT" not in matlab
 

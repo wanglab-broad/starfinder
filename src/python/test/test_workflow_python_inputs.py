@@ -67,7 +67,9 @@ def test_the_python_rules_take_no_json_copy_and_the_matlab_rules_keep_it(tmp_pat
     common = (RULES / "common.smk").read_text()
     assert re.search(r'^if BACKEND == "matlab":\n    rule rsf_preparation:\n', common, re.M)
     assert not re.search(r"^rule rsf_preparation:", common, re.M)
-    assert 'if BACKEND == "matlab":\n    localrules: create_sample_maf, rsf_preparation' in \
+    # The local rules of the MATLAB rule set stand in rules/legacy.smk, which the dispatcher includes for matlab only.
+    assert "\nlocalrules: create_sample_maf, rsf_preparation\n" in (RULES / "legacy.smk").read_text()
+    assert 'if config.get("backend") == "matlab":\n\n    include: "rules/legacy.smk"\n' in \
         (ROOT / "workflow" / "Snakefile").read_text()
     for name in ("registration-py.smk", "spot-finding-py.smk"):
         assert ".replace('.yaml', '.json')" not in (RULES / name).read_text(), name
@@ -103,8 +105,7 @@ def test_a_python_configuration_without_fiji_envs_and_dimensions_parses(tmp_path
         assert not re.search(r"config\[['\"](fiji_path|envs_path|img_row|img_col)['\"]\]", text), name
     # Fiji is read when the rule file is parsed only by the legacy BigStitcher rule, which only MATLAB includes.
     assert "config['fiji_path']" in (RULES / "stitching.smk").read_text()
-    assert re.search(r'elif BACKEND == "matlab":\n\s+include: "rules/stitching.smk"',
-                     (ROOT / "workflow" / "Snakefile").read_text())
+    assert 'include: "stitching.smk"' in (RULES / "legacy.smk").read_text()
 
 
 REQUIRED = ["'img_col' is a required property", "'img_row' is a required property"]

@@ -272,12 +272,16 @@ def rule_names(text):
 
 
 def test_wf2_legacy_configurations_include_the_legacy_rules_only():
-    """Without the blocks the Snakefile includes stitching.smk (the four legacy rules, backend matlab only) and no
-    export rule; the legacy outputs of reads_assignment and the sample rules stay in reads-assignment.smk."""
+    """The dispatcher includes rules/legacy.smk for backend matlab only, which includes stitching.smk (the four legacy
+    rules) and no export rule; the legacy outputs of reads_assignment and the sample rules stay in
+    reads-assignment.smk. The Python route (rules/tasks.smk) includes no rule file."""
     snakefile = (ROOT / "workflow/Snakefile").read_text()
-    assert re.search(r'if STITCHING_BLOCK:\n\s+include: "rules/stitching-py.smk"\nelif BACKEND == "matlab":\n\s+'
-                     r'include: "rules/stitching.smk"', snakefile)
-    assert re.search(r'if ASSEMBLY_BLOCK:\n\s+include: "rules/export.smk"', snakefile)
+    legacy = (ROOT / "workflow/rules/legacy.smk").read_text()
+    assert re.search(r'if config.get\("backend"\) == "matlab":\n\s+include: "rules/legacy.smk"\n', snakefile)
+    assert re.findall(r'include: "([^"]+)"', snakefile) == ["rules/legacy.smk", "rules/tasks.smk"]
+    assert 'include: "stitching.smk"' in legacy
+    for text in (snakefile, legacy, (ROOT / "workflow/rules/tasks.smk").read_text()):
+        assert "stitching-py.smk" not in text and "export.smk" not in text
     assert rule_names((ROOT / "workflow/rules/stitching.smk").read_text()) == [
         "stitching_preparation", "create_BigStitcher_macro", "run_BigStitcher_macro", "create_tile_config"]
     assert rule_names((ROOT / "workflow/rules/reads-assignment.smk").read_text()) == [

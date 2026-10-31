@@ -5,11 +5,12 @@ Python `rsf_single_fov`, or on the legacy route (MATLAB's `rsf_single_fov`, and
 `stitch_subtile` in the subtile and deep modes) `signal/{fovID}_goodSpots.csv`
 ([workflows](workflows.md), "Molecule tables"). Producing a cell
 expression matrix additionally requires aligned morphology images, segmentation
-labels, codebook metadata and tile geometry. The rules below are included for
-both backends. The segmentation and assignment scripts call the Starfinder package
-under both backends, so the environment that runs Snakemake needs the package and the
-extras named below, also for `backend: matlab`; the other downstream scripts keep
-their own dependencies.
+labels, codebook metadata and tile geometry. For the Python backend the morphology, segment and assign
+tasks replace these rules and run in the locked environment or image
+([orchestration](orchestration.md)); the rules below stay for the MATLAB backend. Their segmentation and
+assignment scripts call the Starfinder package, so the environment that runs Snakemake needs the package
+and the extras named below for `backend: matlab`; the other downstream scripts keep their own
+dependencies.
 
 The contracts below were checked against `workflow/rules/segmentation.smk`,
 `stitching.smk`, `reads-assignment.smk`, `utils.smk` and their scripts. They are
@@ -27,11 +28,11 @@ in the backend registration rule file).
 
 | Rule | Inputs | Outputs / behavior |
 | --- | --- | --- |
-| `nuclei_registration` | INPUT additional-round/FOV directories, and for MATLAB the config JSON; the MATLAB script also reads the reference-round `*ch04.tif`, the Python one the reference stain `reference_stains` declares | MATLAB: `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`; Python: `fovs/{fovID}/nuclei_registration.json` (the registered rounds and their attempts); both: registered `images/<round>/<channel name>/{fovID}.tif`; MATLAB script, or with `backend: python` the Python script, which calls `FOV.prepare_morphology` and, with the Python-only `parameters.checkpoints`, also writes the saved form under `fovs/{fovID}/other_rounds/` (not declared) ([workflows](workflows.md#nuclei-registration)) |
-| `rotate_nuclei` | MATLAB: INPUT/`{dapi_round}/{fovID}/*ch04.tif`; Python: the reference round's file of the declared reference stain, `INPUT/{ref_round}/{fovID}/*<channel>.tif` (laid out by `image_dir_template`) | `images/DAPI/{fovID}.tif`, rotated and optionally projected by top-level `maximum_projection` |
-| `create_nuclei_amplicon_overlay` | DAPI and the reference image: MATLAB's `images/ref_merged/{fovID}.tif`, on the Python backend the file `reference_image` names (`fovs/{fovID}/reference.tif` by default) or `reference_image_import` (the reference round's channel-merged detection image, ZYX, or YX with top-level `maximum_projection`; see [projection views](workflows.md#projection-views-and-the-reference-merged-image)) | `images/overlay/{fovID}.tif`; `composite_nuclei_amplicon` (contrast stretch, maximum of the DAPI and amplicon images) and the optional Z projection |
-| `enhance_dapi_with_flamingo` | `images/flamingo/DAPI/{fovID}.tif`, `images/flamingo/Flamingo/{fovID}.tif` | `images/flamingo/enhanced_DAPI/{fovID}.tif` (`enhance_with_flamingo`); those input folders must be supplied separately |
-| `stardist_segmentation` | `images/{segmentation_input_folder}/{fovID}.tif` (default folder `overlay`) | `images/stardist_segmentation/{fovID}.tif`, `uint32` labels of the package's `stardist` method, and the run record beside it as `{fovID}.json` |
+| `nuclei_registration` | INPUT additional-round/FOV directories, and for MATLAB the config JSON; the MATLAB script also reads the reference-round `*ch04.tif`, the Python one the reference stain `reference_stains` declares | MATLAB: `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`; MATLAB: registered `images/<round>/<channel name>/`; Python (the `morphology` task, which calls `FOV.prepare_morphology`): `fovs/{fovID}/nuclei_registration.json` (the registered rounds and their attempts), the saved forms under `fovs/{fovID}/other_rounds/`, and `images/<round>/<channel label>/` with `morphology.channel_images` ([workflows](workflows.md#nuclei-registration)) |
+| `rotate_nuclei` (MATLAB backend only; Python: the `segment` task with the inputs and `prepare` functions of its run) | MATLAB: INPUT/`{dapi_round}/{fovID}/*ch04.tif`; Python: the reference round's file of the declared reference stain, `INPUT/{ref_round}/{fovID}/*<channel>.tif` (laid out by `image_dir_template`) | `images/DAPI/{fovID}.tif`, rotated and optionally projected by top-level `maximum_projection` |
+| `create_nuclei_amplicon_overlay` (MATLAB backend only) | DAPI and the reference image: MATLAB's `images/ref_merged/{fovID}.tif`, on the Python backend the file `reference_image` names (`fovs/{fovID}/reference.tif` by default) or `reference_image_import` (the reference round's channel-merged detection image, ZYX, or YX with top-level `maximum_projection`; see [projection views](workflows.md#projection-views-and-the-reference-merged-image)) | `images/overlay/{fovID}.tif`; `composite_nuclei_amplicon` (contrast stretch, maximum of the DAPI and amplicon images) and the optional Z projection |
+| `enhance_dapi_with_flamingo` (MATLAB backend only) | `images/flamingo/DAPI/{fovID}.tif`, `images/flamingo/Flamingo/{fovID}.tif` | `images/flamingo/enhanced_DAPI/{fovID}.tif` (`enhance_with_flamingo`); those input folders must be supplied separately |
+| `stardist_segmentation` (MATLAB backend only) | `images/{segmentation_input_folder}/{fovID}.tif` (default folder `overlay`) | `images/stardist_segmentation/{fovID}.tif`, `uint32` labels of the package's `stardist` method, and the run record beside it as `{fovID}.json` |
 
 Nuclei registration's additional-round objects need `channel_order` structs
 with MATLAB channel/name metadata beyond the schema-described `round_name`;
@@ -47,8 +48,8 @@ and `FOV.segment` then runs with no sequencing round resident
 ([segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md#coordination-per-fov), "Coordination per FOV"). For the Python rule to write
 that saved form, set
 `rules.nuclei_registration.parameters.checkpoints` (for example `{}`; `null` or absent
-writes none). The Python-only `segmentation` block is not wired to a rule yet (that is
-left to the workflow integration), and `rotate_nuclei` and the legacy segmentation rules are unchanged.
+writes none). The `segmentation` block runs as one `segment` task per (FOV, run); for the Python
+backend `rotate_nuclei` and the legacy segmentation rules are retired.
 
 % left to the workflow integration: §2.13
 
@@ -89,7 +90,7 @@ blocks instead, and its `reads_assignment` reads the FOV membership `INPUT/fovs.
 | `create_BigStitcher_macro` | Fused sample `grid.csv` | `images/fused/{sample}/BigStitcher_macro.ijm`; actual script is `create_BigStitcher_macro_1.py` |
 | `run_BigStitcher_macro` | Macro and grid | `images/fused/{sample}/DAPI/dataset.xml`, through configured Fiji executable |
 | `create_tile_config` | Sample's dataset XML and grid | `output/tile_config_{sample}.csv` and `.html` |
-| `reads_assignment` | The FOV membership (`INPUT/fovs.csv` for the Python backend, the annotation for MATLAB), DAPI, segmentation labels, the molecule table, the codebook of the sequencing rules (`INPUT/genes.csv`, or the file `codebook` or `direct_panel` names), sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written. With an `assembly` block that names an assignment: `fovs/{fovID}/assignment/<name>/` alone, and `fovs/{fovID}/previews/` with `previews: true` ([workflow-configuration](workflow-configuration.md), "`assembly`") |
+| `reads_assignment` (MATLAB backend only; Python: the `assign` task, which reads no tile configuration) | The FOV membership (`INPUT/fovs.csv` for the Python backend, the annotation for MATLAB), DAPI, segmentation labels, the molecule table, the codebook of the sequencing rules (`INPUT/genes.csv`, or the file `codebook` or `direct_panel` names), sample tile config | `expr/{fovID}/raw.h5ad`, `expr/{fovID}/reads_assignment.csv`; additional diagnostic images/logs may be written. With an `assembly` block that names an assignment: `fovs/{fovID}/assignment/<name>/` alone, and `fovs/{fovID}/previews/` with `previews: true` ([workflow-configuration](workflow-configuration.md), "`assembly`") |
 | `create_sample_h5ad` | Annotation and all per-FOV H5ADs in its sample range | `expr/{sample}_raw.h5ad` |
 | `create_sample_reads_assignment` | Annotation and all per-FOV assignment CSVs in its sample range | `expr/{sample}_reads_assignment.csv` |
 
@@ -142,7 +143,8 @@ assigned molecules over all molecules of the table with both counts
 `assignment ratio: none (no molecule)` when the FOV has none. With an `assembly` block
 that names an assignment (the route of a saved assignment, since 2026-10-24), the rule writes the
 saved folder alone, and the figures only with `previews: true`, into
-`fovs/{fovID}/previews/`; then, on the route per FOV (below), the sample's `export_sample`
+`fovs/{fovID}/previews/` (the `assign` task: with `assignment.previews: true`, into
+`fovs/{fovID}/previews/`; the export's with `export.previews: true`); then, on the route per FOV (below), the sample's `export_sample`
 rule draws the two figures once the sample is assembled into
 `export/<sample>/previews/{fovID}/`, with the FOV's ownership region as a yellow line, the
 cells and molecules the assembly excluded in grey and, as each panel's x-axis label, how
@@ -181,7 +183,7 @@ fusion refuses `dimensionality: stack` (with `both` and `route: after_fusion` it
 the projection), and refuses `projection: sum` as well, because it segments the Z
 maximum. A configuration with an assignment name that exports a projection must
 therefore set `export.segmentation` (the runs of the route after fusion) or
-`route: per_fov`; until it does, the workflow refuses it when the rules are parsed, naming
+`route: per_fov`; until it does, the plan refuses it, naming
 both, so that no run changes route without a key that says so.
 
 **Which to choose.** The route per FOV for a 3D stack, for a sample that cannot be fused,

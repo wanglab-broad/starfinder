@@ -174,6 +174,21 @@ def test_a_second_plan_on_unchanged_inputs_rewrites_neither_file(work):
     assert {name: (folder / name).stat().st_mtime_ns for name in times} == times
 
 
+def test_plan_locate_prints_the_manifest_the_plan_writes_and_writes_nothing(work, capsys):
+    # An engine's parse in a cluster job reads the main process's manifest (workflow/rules/tasks.smk).
+    from starfinder.__main__ import main
+    path = X.write_config(work, "per-fov", X.variants(work)["per-fov"])
+    assert main(["workflow", "plan", "--config", str(path), "--locate"]) == 0
+    located = json.loads(capsys.readouterr().out)["manifest"]
+    assert not (X.output_root(work, "example-per-fov") / "workflow").exists()
+    assert main(["workflow", "plan", "--config", str(path)]) == 0
+    assert json.loads(capsys.readouterr().out)["manifest"] == located
+    assert located == str(X.output_root(work, "example-per-fov").absolute() / "workflow" / "manifest.json")
+    (work / "configs" / "empty.yaml").write_text("{}\n")
+    assert main(["workflow", "plan", "--config", str(work / "configs" / "empty.yaml"), "--locate"]) == 2
+    assert "has no root_output_path, dataset_id, output_id" in capsys.readouterr().err
+
+
 # --- C2: the fingerprints ----------------------------------------------------------------------------------------
 
 def _stats(manifest):

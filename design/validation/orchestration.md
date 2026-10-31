@@ -88,9 +88,9 @@ P2: the comparison runs in the `slow` tier.
 
 | # | Check | Fixture | Marker | Selection | Threshold | Resource bound | Identity |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 | Today's workflow reproduces W-642's values (invocations A, A2, B, C), landed with the lock change before any refactor | `tiny_sample`; `golden_values` | `workflow`, `golden`, `slow` | Slow `other`; skipped without Snakemake | Integers, strings, booleans, integer images exactly; float64 values `rtol=1e-9`, `atol=1e-12`; the file digests only in the recording environment | 1800 s per Snakemake run; 4 GiB | I-discrete; I-hash for the same-environment digests |
-| G2 | Today's workflow reproduces W-643's invocation D (stitching, export on three routes, report) | `tiny_sample`; `golden_values` | `workflow`, `golden`, `slow` | Slow `other`; skipped without Snakemake or the `multiview-stitcher` and `anndata` extras | As G1 | 1800 s per run; 4 GiB | I-discrete; I-hash for the same-environment digests |
-| G3 | The refactored workflow (the migrated A to D configurations, the `fov`, `morphology`, `segment` import, `assign`, `stitch`, `export`, `report`, `compare` tasks) reproduces the values of G1 and G2 except the contract's exceptions | `tiny_sample`; `golden_values` | `workflow`, `golden`, `slow` | Slow `other` | As G1, on every value outside the exceptions; each exception names its decision | 1800 s; 4 GiB | I-discrete; I-hash for the same-environment digests |
+| G1 | Today's workflow reproduces W-642's values (invocations A, A2, B, C), landed with the lock change before any refactor; it last passed in PREP's validation (`runs/W-734/20261030T195901Z-63dfd1c0/validation-20261030T202523Z-d2365ca7/`, `pytest-slow-other`) and its test left with the workflow it ran (TG2-4): G3's `test_the_refactored_workflow_reproduces_the_golden_values` compares with the same expected values | `tiny_sample`; `golden_values` | `workflow`, `golden`, `slow` | Slow `other`; skipped without Snakemake | Integers, strings, booleans, integer images exactly; float64 values `rtol=1e-9`, `atol=1e-12`; the file digests only in the recording environment | 1800 s per Snakemake run; 4 GiB | I-discrete; I-hash for the same-environment digests |
+| G2 | Today's workflow reproduces W-643's invocation D (stitching, export on three routes, report); it last passed in PREP's validation (`runs/W-734/20261030T195901Z-63dfd1c0/validation-20261030T202523Z-d2365ca7/`, `pytest-slow-other`) and its test left with the workflow it ran (TG2-4): G3's `test_the_refactored_workflow_reproduces_the_golden_values_of_the_export` compares with the same expected values | `tiny_sample`; `golden_values` | `workflow`, `golden`, `slow` | Slow `other`; skipped without Snakemake or the `multiview-stitcher` and `anndata` extras | As G1 | 1800 s per run; 4 GiB | I-discrete; I-hash for the same-environment digests |
+| G3 | The refactored workflow (the migrated A to D configurations, the `fov`, `morphology`, `segment` import, `assign`, `stitch`, `export`, `report`, `compare` tasks) reproduces the values of G1 and G2 except the contract's exceptions | `tiny_sample`; `golden_values` | `workflow`, `golden`, `slow` | Slow `other`; skipped without Snakemake, and its part on G2's values without the `multiview-stitcher` and `anndata` extras | As G1, on every value outside the exceptions; each exception names its decision | 1800 s; 4 GiB | I-discrete; I-hash for the same-environment digests |
 
 ### Engineering validation, `extended` (X)
 
@@ -145,18 +145,18 @@ table holds exactly the rows of the check tables.
 | C1 | `test_workflow_plan.py` (planned) | Q | TG2-1 |
 | C2 | `test_workflow_plan.py` (planned) | Q | TG2-1 |
 | C3 | `test_workflow_declared_outputs.py` (planned) | Q | TG2-1, TG2-2, TG2-3 |
-| C4 | `test_workflow_snakemake_dryrun.py` (planned) | Slow `other` | TG2-4 |
+| C4 | `test_workflow_snakemake_dryrun.py`: `test_the_dry_run_of_each_variant_schedules_the_manifests_tasks_per_rule_group`, `test_a_dry_run_after_a_completed_tiled_run_schedules_nothing`, `test_a_dry_run_after_a_completed_per_fov_run_schedules_nothing`, `test_a_changed_key_reruns_the_tasks_of_its_block_and_their_downstream`, `test_a_raw_image_replaced_with_an_older_time_reruns_the_tasks_that_declare_it_and_their_downstream` | Slow `other` | TG2-4 |
 | C5 | `test_workflow_plan_refusals.py` (planned) | Q | TG2-1 |
 | C6 | `test_workflow_commands.py` (planned) | Q | TG2-1 |
 | C7 | `test_workflow_completion.py` (planned) | Q | TG2-1 |
 | C8 | `test_workflow_boundary.py` (planned) | Q | TG2-4, TG5 |
-| C9 | `test_assignment_workflow.py`, `test_workflow_assembly_golden.py` (existing, import line changed); `test_workflow_snakemake_dryrun.py` (planned) | Q; Slow `other` | TG2-4 |
+| C9 | `test_assignment_workflow.py`, `test_workflow_assembly_golden.py` (existing; their import line changes with TG2-5); `test_workflow_snakemake_dryrun.py`: `test_the_matlab_dry_run_schedules_w641s_three_jobs` | Q; Slow `other` | TG2-4 (the dry run), TG2-5 |
 | N1 | `test_workflow_nextflow_stub.py` (planned) | `nextflow` | TG5 |
 | N2 | `test_workflow_nextflow_stub.py` (planned) | `nextflow` | TG5 |
 | N3 | `test_workflow_nextflow_stub.py` (planned) | `nextflow` | TG5 |
-| G1 | `test_workflow_orchestration_golden.py` (W-642's draft) | Slow `other` | PREP |
-| G2 | `test_workflow_orchestration_golden.py` (W-643's draft) | Slow `other` | PREP |
-| G3 | `test_workflow_orchestration_golden.py` (planned: the refactored workflow) | Slow `other` | TG2-4 |
+| G1 | `test_workflow_orchestration_golden.py`: `test_the_refactored_workflow_reproduces_the_golden_values` (G3's test, on G1's expected values); G1's own test last passed in PREP's validation, `runs/W-734/20261030T195901Z-63dfd1c0/validation-20261030T202523Z-d2365ca7/` | Slow `other` | PREP; TG2-4 |
+| G2 | `test_workflow_orchestration_golden.py`: `test_the_refactored_workflow_reproduces_the_golden_values_of_the_export` (G3's test, on G2's expected values); G2's own test last passed in PREP's validation, `runs/W-734/20261030T195901Z-63dfd1c0/validation-20261030T202523Z-d2365ca7/` | Slow `other` | PREP; TG2-4 |
+| G3 | `test_workflow_orchestration_golden.py`: `test_the_refactored_workflow_reproduces_the_golden_values`, `test_the_refactored_workflow_reproduces_the_golden_values_of_the_export` | Slow `other` | TG2-4 |
 | X1 | `test_workflow_engines_e2e.py` (planned) | Extended | V |
 | X2 | `test_workflow_engines_e2e.py` (planned) | Extended, Nextflow job | V |
 | X3 | `test_workflow_engines_e2e.py` (planned) | Extended, Nextflow job | V |

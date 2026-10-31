@@ -1,86 +1,27 @@
 """
-    STARfinder Snakemake Pipeline
+    STARfinder Snakemake workflow: the dispatcher (design/specs/orchestration-engines.md, "Snakemake").
 
-    This is the main entry point for the STARfinder spatial transcriptomics pipeline.
-    All rules are modularized into separate .smk files in the rules/ directory.
-
-    Workflow modes:
-    - 'free': Mix and match rules using individual run: True/False flags
-    - 'direct': Use rsf_single_fov for direct spot finding
-    - 'subtile': Use subtile-based workflow (gr_single_fov_subtile → lrsf_single_fov_subtile → stitch_subtile)
-    - 'deep': Use workflow optimized for deep-tissue (deep_create_subtile → deep_rsf_subtile → stitch_subtile)
+    backend: matlab runs the frozen MATLAB workflow (rules/legacy.smk: its schema validation, rule files, rule order
+    and local rules, unchanged; D7). Every other configuration is the Python workflow: rules/tasks.smk runs the plan
+    (starfinder workflow plan) once and defines one rule per rule group of its manifest, each running the task's
+    starfinder workflow command (D1, D2). This file reads no configuration key other than backend.
 """
 
-from snakemake.utils import validate
+if config.get("backend") == "matlab":
 
-### ==================== [ Config Validation ] =========================
+    include: "rules/legacy.smk"
 
-# Validate configuration against schema (catches errors early at pipeline startup)
-validate(config, schema="schemas/config.schema.yaml")
+    TARGETS = get_overall_output
 
-### ==================== [ Include Rule Files ] =========================
-
-include: "rules/common.smk"
-
-# The Python backend runs the FOVs of fovs.csv, restricted by selected_fovs, in every rule: its fovID wildcard
-# matches those FOV IDs only (FOV_CONSTRAINT, common.smk). The MATLAB backend keeps its unconstrained wildcard.
-if BACKEND == "python":
-    wildcard_constraints:
-        fovID=FOV_CONSTRAINT
-
-# Backend-specific rule files: only one set of core rules is active per run
-if BACKEND == "python":
-    include: "rules/registration-py.smk"
-    include: "rules/spot-finding-py.smk"
-elif BACKEND == "matlab":
-    include: "rules/registration.smk"
-    include: "rules/spot-finding.smk"
-
-include: "rules/segmentation.smk"
-# The Python-only stitching block replaces the four legacy stitching rules (stitching-py.smk);
-# the assembly block adds the one per-sample rule export_sample (export.smk). The legacy sample
-# rules, which read MATLAB's sample annotation, run with backend matlab only (common.smk refuses
-# them for the Python backend, naming the blocks to add).
-if STITCHING_BLOCK:
-    include: "rules/stitching-py.smk"
-elif BACKEND == "matlab":
-    include: "rules/stitching.smk"
-include: "rules/reads-assignment.smk"
-if ASSEMBLY_BLOCK:
-    include: "rules/export.smk"
-# The Python-only report block adds report_sample and report_dataset (report.smk).
-if REPORT_BLOCK:
-    include: "rules/report.smk"
-if BACKEND == "matlab":
-    include: "rules/utils.smk"
-
-### ==================== [ Dynamic Rule Order ] =========================
-
-# Build ruleorder based on workflow_mode to avoid ambiguous rule selection
-# Rules that produce the same output (e.g., _goodSpots.csv) need ordering. The same choice names the
-# producer of each FOV's molecule table that the consumers read (MOLECULE_TABLE, common.smk; _legacy_molecules).
-
-if WORKFLOW_MODE == 'subtile' or (WORKFLOW_MODE == 'free' and is_rule_enabled('gr_single_fov_subtile')):
-    # Subtile workflow: subtile rules (gr/lrsf) take priority over deep rules
-    ruleorder: stitch_subtile > gr_single_fov_subtile > lrsf_single_fov_subtile > deep_create_subtile > deep_rsf_subtile > rsf_single_fov
-elif WORKFLOW_MODE == 'deep' or (WORKFLOW_MODE == 'free' and is_rule_enabled('deep_create_subtile')):
-    # Deep workflow: deep rules take priority over subtile rules
-    ruleorder: stitch_subtile > deep_create_subtile > deep_rsf_subtile > gr_single_fov_subtile > lrsf_single_fov_subtile > rsf_single_fov
-elif WORKFLOW_MODE == 'direct' or (WORKFLOW_MODE == 'free' and is_rule_enabled('rsf_single_fov')):
-    # Direct workflow: rsf_single_fov takes priority
-    ruleorder: rsf_single_fov > stitch_subtile > gr_single_fov_subtile > lrsf_single_fov_subtile > deep_create_subtile > deep_rsf_subtile
 else:
-    # Default: rsf_single_fov first (simpler workflow)
-    ruleorder: rsf_single_fov > stitch_subtile > gr_single_fov_subtile > lrsf_single_fov_subtile > deep_create_subtile > deep_rsf_subtile
 
-### ==================== [ Local Rules ] =========================
+    include: "rules/tasks.smk"
 
-# rsf_preparation writes the JSON copy of the configuration that only the MATLAB scripts read.
-if BACKEND == "matlab":
-    localrules: create_sample_maf, rsf_preparation
+    TARGETS = TASK_RECORDS
 
 ### ==================== [ Main Target Rule ] =========================
 
+# The default target: the MATLAB workflow's outputs, or every task record of the plan's manifest.
 rule all:
     input:
-        get_overall_output
+        TARGETS

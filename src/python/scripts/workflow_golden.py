@@ -1,8 +1,13 @@
-"""Record and compare the golden baseline of the current Snakemake workflow (W-642, design/baselines/orchestration.md).
+"""Record and compare the golden baseline of the Snakemake workflow (W-642, design/baselines/orchestration.md).
 
-The baseline that workflow orchestration (§2.13) reproduces (D10): the current workflow with ``backend: python`` run
-by an installed Snakemake 9 on a synthetic fixture, and the explicit expected values of its outputs, written in the
-convention of ``test/expected_values.py`` (docs/contributing.md, "Expected values and tolerances").
+The baseline that workflow orchestration (§2.13) reproduces (D10): the workflow with ``backend: python`` as it was before
+the dispatcher (W-737), run by an installed Snakemake 9 on a synthetic fixture, and the explicit expected values of its
+outputs, written in the convention of ``test/expected_values.py`` (docs/contributing.md, "Expected values and
+tolerances"). W-642 recorded invocations A, A2, B and C, W-643 invocation D, each with a subcommand of this script that
+drove that workflow (``run``, ``run-export``). W-737 replaced that workflow with the dispatcher over the plan's manifest
+and removed both subcommands: ``4583228`` is the last revision on which the expected values can be re-recorded (its
+``run``, ``extract``, ``run-export`` and ``extract-export``). The refactored workflow never re-records them; G3 compares
+its values with them (``run-migrated``, ``compare-migrated``).
 
 Subcommands, each run in its own process:
 
@@ -14,28 +19,17 @@ Subcommands, each run in its own process:
     ``fovs.csv`` and ``positions.csv``; the truth cell labels under ``WORK/labels/`` as plain ZYX TIFFs without
     stored metadata; ``WORK/fixture.json`` lists
     every file with its SHA-256. Run with the package's environment.
-``run WORK --snakemake EXE``
-    Write the two configurations and run the workflow in ``WORK/output/``: invocation A (``config-a.yaml``, target
-    ``all``: ``rsf_single_fov``, ``rotate_nuclei``, ``nuclei_registration``, ``create_nuclei_amplicon_overlay``,
-    ``report_sample`` and ``report_dataset``), invocation A2 (the same configuration, target the files of
-    ``enhance_dapi_with_flamingo``, whose inputs ``nuclei_registration`` writes without declaring them, so that they
-    must exist before the DAG is built), then the truth labels copied as the
-    legacy label files ``images/stardist_segmentation/<fov>.tif``, then invocation B (``config-b.yaml``, which adds
-    the stitching, assembly and export blocks; target the saved assignment of each FOV, ``reads_assignment``, with
-    ``stardist_segmentation`` not allowed), then invocation C (``config-c.yaml``, a stitching block of method
-    ``bigstitcher``; target the macro and view map of ``bigstitcher_macro_sample``, the one rule allowed: its engine
-    rule runs Fiji). ``WORK/commands.json`` records the commands and their exit status.
-``extract WORK OUT``
-    Write the expected values of the outputs to ``OUT`` (``values.json``, tables with ``dtypes.json``, ``arrays.npz``).
+``run-migrated WORK --snakemake EXE`` (G3, W-737)
+    The refactored workflow (``workflow/Snakefile``) on A to D migrated to the Python shape
+    (``migrated_configurations``), in ``WORK/output/``, with one numerical thread: A (target ``all``: the ``fov``,
+    ``morphology``, ``report`` and ``compare`` tasks), B (target the ``assign`` tasks' records, after the ``segment``
+    tasks that import the truth labels), C (target the BigStitcher macro task's record), then D's three routes in
+    their own output roots with target ``all``, the per-FOV route's fused cell labels written as the after-fusion
+    route's import file in between. ``WORK/commands-g3.json`` records the commands and their exit status.
+``extract WORK OUT [--migrated]``
+    Write the expected values of the outputs of A to C to ``OUT`` (``values.json``, tables with ``dtypes.json``,
+    ``arrays.npz``); with ``--migrated``, of ``run-migrated``'s, whose workflow writes none of the RETIRED_IMAGES.
     Reads the outputs with NumPy, pandas, tifffile and json only.
-``run-export WORK --snakemake EXE`` (W-643)
-    Invocation D, on a fixture of its own: stitching with ``multiview_stitcher`` (B's positions table, the binning
-    ``(1, 2, 2)`` and the link filter of the package's stitching tests), the export on each route the fixture allows
-    and the report after the export, each route in its own output root (``golden-per-fov``, ``golden-molecules-only``,
-    ``golden-after-fusion``) with target ``all``. The per-FOV route exports the saved assignments of
-    ``reads_assignment`` (the truth labels copied first, as in B) with the fused cell labels; their Z maximum, written
-    on the fused projection grid, is the import file of the route after fusion's one cell run. Records the commands in
-    ``WORK/commands-d.json``.
 ``extract-export WORK OUT`` (W-643)
     The expected values of invocation D in the layout of ``extract``: the records, tables and images of each route's
     ``stitching/``, ``export/`` and ``report/`` folders, the content of each ``sample.h5ad`` (X, layers, obsm, obs,
@@ -43,6 +37,10 @@ Subcommands, each run in its own process:
     which pin them. Run with an environment that has anndata.
 ``compare EXPECTED ACTUAL``
     Compare two ``extract`` (or two ``extract-export``) folders; print the differences and exit 1 when there is one.
+``compare-migrated EXPECTED ACTUAL SCRATCH`` (G3, W-737)
+    Compare the refactored workflow's values with an expected folder across environments, after the contract's
+    exceptions (``compare_migrated``; the expected values with OC3 applied are written to ``SCRATCH``): print each
+    difference with the decision that explains it, and exit 1 when one is unexplained.
 
 The comparison classes of ``values.json`` (docs/contributing.md): ``exact`` (integers, counts, strings, statuses,
 booleans, integer images, the fixture's file hashes), ``float64`` (rtol 1e-9, atol 1e-12), ``float32`` (rtol 1e-6,
@@ -167,11 +165,12 @@ def write_fixture(work):
     return record
 
 
-# --- configurations and the run -----------------------------------------------------------------------------------
+# --- the recorded configurations (W-642), from which G3's are migrated -----------------------------------------------
 
 def configurations(work, starfinder_path):
-    """(config A, config B, config C) of the run: B is A with the stitching, assembly and export blocks, without the
-    report block; C is A with a stitching block of method bigstitcher, without the report block."""
+    """(config A, config B, config C) of the recorded run: B is A with the stitching, assembly and export blocks,
+    without the report block; C is A with a stitching block of method bigstitcher, without the report block. Their
+    Python shape is ``migrated_configurations``'s."""
     work = Path(work)
     rules = {
         "rsf_single_fov": {"run": True, "parameters": {
@@ -236,49 +235,6 @@ def _environment(work):
     return dict(os.environ, XDG_CACHE_HOME=str(Path(work) / "cache"), PYTHONDONTWRITEBYTECODE="1", **threads)
 
 
-def run_workflow(work, snakemake, starfinder_path, cores=1):
-    """Invocations A and B (see the module docstring); returns the command records."""
-    import yaml
-    work = Path(work)
-    fov_ids = json.loads((work / "fixture.json").read_text())["fov_ids"]
-    a, b, c = configurations(work, starfinder_path)
-    for config in (a, b, c):
-        Path(config["config_path"]).write_text(yaml.safe_dump(config, sort_keys=False))
-    snakefile = Path(starfinder_path) / "workflow" / "Snakefile"
-    common = [str(snakemake), "-s", str(snakefile), "--directory", str(work / "snakemake"), "--cores", str(cores),
-              "--nocolor", "--printshellcmds"]
-    environment = _environment(work)
-    out = output_root(work)
-    allowed = ["rsf_single_fov", "rotate_nuclei", "create_nuclei_amplicon_overlay", "nuclei_registration",
-               "enhance_dapi_with_flamingo", "reads_assignment"]
-    targets = [str(out / "fovs" / fov / "assignment" / ASSIGNMENT / "assignment.json") for fov in fov_ids]
-    records = []
-
-    def invoke(name, command):
-        log = work / f"snakemake-{name}.log"
-        with open(log, "w") as handle:
-            status = subprocess.run(command, stdout=handle, stderr=subprocess.STDOUT, env=environment).returncode
-        records.append({"name": name, "command": command, "exit_status": status, "log": log.name})
-        (work / "commands.json").write_text(json.dumps(records, indent=1) + "\n")
-        if status:
-            raise SystemExit(f"invocation {name} exited with status {status}; see {log}")
-
-    # --configfile and --allowed-rules take several values, so "--" ends them before the targets.
-    invoke("A", common + ["--configfile", a["config_path"], "--", "all"])
-    invoke("A2", common + ["--configfile", a["config_path"], "--",
-                           *[str(out / "images" / "flamingo" / "enhanced_DAPI" / f"{fov}.tif") for fov in fov_ids]])
-    for fov in fov_ids:
-        labels = out / "images" / "stardist_segmentation" / f"{fov}.tif"
-        labels.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(work / "labels" / f"{fov}.tif", labels)
-    invoke("B", common + ["--configfile", b["config_path"], "--allowed-rules", *allowed, "--", *targets])
-    # The BigStitcher macro rule alone (the tiles, the macro and the view map); its engine rule runs Fiji.
-    folder = Path(c["stitching"]["bigstitcher_save_dir"]) / SAMPLE_ID
-    invoke("C", common + ["--configfile", c["config_path"], "--allowed-rules", "bigstitcher_macro_sample", "--",
-                          str(folder / "BigStitcher_macro.ijm"), str(folder / "view_map.csv")])
-    return records
-
-
 # --- invocation D: stitching, the export on each route and the report after the export (W-643) ----------------------
 
 # The routes of export_sample the fixture runs without a learned method: per FOV (the saved assignments of
@@ -288,17 +244,12 @@ EXPORT_ROUTES = ("per_fov", "molecules_only", "after_fusion")
 # The per-FOV route's fused cell labels (export/<sample>/cell_labels.ome.tif, fuse_labels at the fusion's scale), copied
 # as the label file that the route after fusion imports on the fused projection grid.
 FUSED_CELLS = "fused-cells.ome.tif"
-# The rules invocation D may run: those of A and B, the stitching, export and report rules.
-EXPORT_RULES = ("rsf_single_fov", "rotate_nuclei", "create_nuclei_amplicon_overlay", "nuclei_registration",
-                "reads_assignment", "stitch_sample", "export_sample", "report_sample", "report_dataset")
-
-
 def export_output_root(work, route):
     return Path(work) / "output" / DATASET_ID / f"{OUTPUT_ID}-{route.replace('_', '-')}"
 
 
 def export_configurations(work, starfinder_path):
-    """{route: configuration} of invocation D: each is configuration A (its processing and morphology rules) with B's
+    """{route: configuration} of the recorded invocation D: each is configuration A (its processing and morphology rules) with B's
     stitching block of method multiview_stitcher, an assembly block, an export block and the report block, in its
     own output root. The export fuses the reference image (``images: [reference_merged]``, a declared output of
     rsf_single_fov; the default ``reference_stain`` reads the undeclared saved form of the morphology rounds)."""
@@ -344,40 +295,95 @@ def _fused_cells(export_dir, target):
                         annotation={"golden": "the Z maximum of the per-FOV route's fused cell labels"})
 
 
-def run_export(work, snakemake, starfinder_path, cores=1):
-    """Invocation D (the module docstring): D-per-fov, then the fused cell labels copied, D-molecules-only and
-    D-after-fusion, each with target all; returns the command records (``WORK/commands-d.json``)."""
+# --- G3: the refactored workflow on the migrated configurations (W-737) ---------------------------------------------
+
+# The invocations of the refactored workflow, in order: A to D migrated to the Python shape (design/specs/orchestration.md,
+# "Migration from the current Python keys"). A2 has none: enhance_dapi_with_flamingo is retired (D6).
+MIGRATED = ("A", "B", "C", "D-per-fov", "D-molecules-only", "D-after-fusion")
+# The segmentation run of the migrated B and D-per-fov: the import of the truth cell labels, named as the legacy rule
+# whose label file B copied them as.
+LEGACY_RUN = "stardist_segmentation"
+
+
+def migrated_configurations(work):
+    """{invocation: configuration} of the refactored workflow (G3), each in the Python shape.
+
+    A: configuration A's processing rule as the processing block (its parameters without the run flags, the checkpoint
+    stages it states, candidates and pre_qc), its morphology rules as the morphology block with the channel images
+    (``morphology.channel_images``, no projection: ``maximum_projection: false``), and the report block.
+    B: A without the report block, with one segmentation run that imports each FOV's truth cell labels
+    (``labels/{fov_id}.tif``, OP3; B copied them as the legacy label files of stardist_segmentation) and B's
+    assignment, named ``default``, without expansion; the run is named ``stardist_segmentation`` (LEGACY_RUN). C: A without the report block, with C's stitching block
+    (``img_row`` and ``img_col`` are removed, D6). D: invocation D's three routes, each A with D's stitching, assembly,
+    export and report blocks, the per-FOV route with B's segmentation and assignment. ``rotate_nuclei``,
+    ``create_nuclei_amplicon_overlay``, ``enhance_dapi_with_flamingo`` and ``stardist_segmentation`` are retired (D6).
+    """
+    work = Path(work)
+    a, b, c = configurations(work, REPO)
+    d = export_configurations(work, REPO)
+    parameters = a["rules"]["rsf_single_fov"]["parameters"]
+    processing = {k: v for k, v in json.loads(json.dumps(parameters)).items() if k != "checkpoints"}
+    for block in processing.values():
+        if isinstance(block, dict):
+            block.pop("run", None)
+    processing["checkpoints"] = list(parameters["checkpoints"]["stages"])
+    removed = {"config_path", "starfinder_path", "workflow_mode", "rules", "maximum_projection", "img_row", "img_col"}
+    base = {k: v for k, v in a.items() if k not in removed | {"report"}}
+    base.update(processing=processing, morphology={"channel_images": {"projection": None}})
+    # The run keeps the name of the legacy label file's rule, so that the label namespaces stay those of A to D.
+    segmentation = {"runs": [{"name": LEGACY_RUN, "target": "cell", "method": "import",
+                              "path": str(work / "labels" / "{fov_id}.tif")}]}
+    assignment = {"cells": LEGACY_RUN, "name": ASSIGNMENT}
+    out = {"A": dict(base, report={}),
+           "B": dict(base, segmentation=segmentation, assignment=assignment),
+           "C": dict(base, stitching=c["stitching"])}
+    for route in EXPORT_ROUTES:
+        config = dict(base, output_id=d[route]["output_id"], stitching=d[route]["stitching"],
+                      assembly=d[route]["assembly"], export=d[route]["export"], report={})
+        if route == "per_fov":
+            config.update(segmentation=segmentation, assignment=assignment)
+        out["D-" + route.replace("_", "-")] = config
+    if b["assembly"]["assignment"] != ASSIGNMENT or tuple(out) != MIGRATED:
+        raise ValueError("the migrated configurations do not follow A to D")
+    return out
+
+
+def run_migrated(work, snakemake, starfinder_path=REPO, cores=1, names=MIGRATED):
+    """G3's runs: the refactored workflow (``workflow/Snakefile``, ``backend: python``) on the migrated configurations
+    ``names`` (a subset of MIGRATED) in order, with one numerical thread (``_environment``) and the ``starfinder``
+    command beside ``snakemake`` first on PATH. A, the D routes: target ``all``; B: the assign tasks' records; C: the
+    BigStitcher macro task's record (its engine task runs Fiji). The per-FOV route's fused cell labels are written as
+    the after-fusion route's import file before the next route, as the recorded invocation D did. Records the commands
+    in ``WORK/commands-g3.json``; returns them."""
     import yaml
+    from starfinder import _layout
     work = Path(work)
     fov_ids = json.loads((work / "fixture.json").read_text())["fov_ids"]
-    configs = export_configurations(work, starfinder_path)
-    for config in configs.values():
-        Path(config["config_path"]).write_text(yaml.safe_dump(config, sort_keys=False))
+    configs = migrated_configurations(work)
+    paths = {}
+    for name, config in configs.items():
+        paths[name] = work / f"config-g3-{name.lower()}.yaml"
+        paths[name].write_text(yaml.safe_dump(config, sort_keys=False))
     snakefile = Path(starfinder_path) / "workflow" / "Snakefile"
-    common = [str(snakemake), "-s", str(snakefile), "--directory", str(work / "snakemake"), "--cores", str(cores),
-              "--nocolor", "--printshellcmds", "--allowed-rules", *EXPORT_RULES]
     environment = _environment(work)
+    environment["PATH"] = os.pathsep.join([str(Path(snakemake).parent), environment.get("PATH", "")])
+    common = [str(snakemake), "-s", str(snakefile), "--directory", str(work / "snakemake"), "--cores", str(cores),
+              "--nocolor", "--printshellcmds"]
+    out = output_root(work)
+    targets = {"B": [_layout.task_record(out, f"assign/{SAMPLE_ID}/{fov}/{ASSIGNMENT}") for fov in fov_ids],
+               "C": [_layout.task_record(out, f"bigstitcher_macro/{SAMPLE_ID}")]}
     records = []
-
-    def invoke(name, config):
-        log = work / f"snakemake-{name}.log"
-        command = common + ["--configfile", config["config_path"], "--", "all"]
+    for name in (n for n in MIGRATED if n in names):
+        if name == "D-molecules-only" or (name == "D-after-fusion" and "D-molecules-only" not in names):
+            _fused_cells(export_output_root(work, "per_fov") / "export" / SAMPLE_ID, work / "labels" / FUSED_CELLS)
+        log = work / f"snakemake-g3-{name}.log"
+        command = common + ["--configfile", str(paths[name]), "--", *map(str, targets.get(name, ["all"]))]
         with open(log, "w") as handle:
             status = subprocess.run(command, stdout=handle, stderr=subprocess.STDOUT, env=environment).returncode
         records.append({"name": name, "command": command, "exit_status": status, "log": log.name})
-        (work / "commands-d.json").write_text(json.dumps(records, indent=1) + "\n")
+        (work / "commands-g3.json").write_text(json.dumps(records, indent=1) + "\n")
         if status:
             raise SystemExit(f"invocation {name} exited with status {status}; see {log}")
-
-    root = export_output_root(work, "per_fov")
-    for fov in fov_ids:
-        labels = root / "images" / "stardist_segmentation" / f"{fov}.tif"
-        labels.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(work / "labels" / f"{fov}.tif", labels)
-    invoke("D-per-fov", configs["per_fov"])
-    _fused_cells(root / "export" / SAMPLE_ID, work / "labels" / FUSED_CELLS)
-    invoke("D-molecules-only", configs["molecules_only"])
-    invoke("D-after-fusion", configs["after_fusion"])
     return records
 
 
@@ -441,11 +447,16 @@ def _image(path):
         return tif.series[0].asarray()
 
 
-def extract(work, out):
+# The image folders of rules that the refactored workflow retires (D6): G3's extraction does not read them.
+RETIRED_IMAGES = ("DAPI", "overlay", "flamingo/enhanced_DAPI")
+
+
+def extract(work, out, *, migrated=False):
     """The expected values of one run in ``out``: ``records/`` (each JSON record normalized), the tables with their
     ``dtypes.json`` (the report's intensity histograms summarized, one row per histogram), ``arrays.npz`` (each FOV's
     reference image) and ``values.json`` (the fixture's file digests; the shape, dtype, minimum, maximum and sum of
-    the other images and of the BigStitcher tiles; the macro's text; and the output files' digests)."""
+    the other images and of the BigStitcher tiles; the macro's text; and the output files' digests). ``migrated``: the
+    output of ``run-migrated`` (G3), whose workflow writes none of the RETIRED_IMAGES."""
     work, out = Path(work).resolve(), Path(out)
     out.mkdir(parents=True, exist_ok=True)
     fixture = json.loads((work / "fixture.json").read_text())
@@ -473,6 +484,8 @@ def extract(work, out):
             raise ValueError(f"{folder / 'reference.tif'} is not an integer image")
         arrays[f"{fov}/reference"] = reference
         for folder_name in ("DAPI", "overlay", f"flamingo/{STAIN}", f"flamingo/{FLAMINGO}", "flamingo/enhanced_DAPI"):
+            if migrated and folder_name in RETIRED_IMAGES:
+                continue
             image = root / "images" / folder_name / f"{fov}.tif"
             name = image.relative_to(root).as_posix()
             pixels = _image(image)
@@ -795,6 +808,147 @@ def compare(expected_dir, actual_dir, *, same_environment=True):
     return lines
 
 
+# --- G3's comparison: the contract's exceptions (design/specs/orchestration.md, "The exception of the golden
+# comparison") ---------------------------------------------------------------------------------------------------
+
+# OC3 on the expected values: rotate_angle 0 is no rotation, so run.json and the report's step tables have no
+# rotate_round step (the later steps' indices shift, in the step tables and in the row keys that name them), every
+# frame id loses /rotate:0 and the pipeline's rotation_degrees is null.
+ROTATION_STEP = "rotate_round"
+ROW_KEY = re.compile(r"scope=fov;fov_id=([^;]+);index=(\d+)")
+_RECORD = r"^records/(?:(?:per_fov|molecules_only|after_fusion)/)?"
+_FOV = r"fovs/FOV_\d+/"
+# Each difference that the exceptions leave, by decision: (decision, pattern of the comparison's line, why).
+EXCEPTIONS = (
+    ("OC3", _RECORD + _FOV + r"run\.json\.outputs\.reference_image\.sha256: ",
+     "the reference image's digest: its stored metadata holds the frame id"),
+    ("OC3", _RECORD + r"report/[^/]+/report\.json\.inputs\[\d+\]\.(?:sha256|bytes): ",
+     "the report's input digests and sizes of the reference images (checked against the expected record's path)"),
+    ("OC3", _RECORD + r"stitching/[^/]+/placement\.json\.inputs\.FOV_\d+\.file_sha256: ",
+     "the placement's digest of each FOV's reference image"),
+    ("OC3", _RECORD + r"export/[^/]+/export\.json\.fusion\.fovs\[\d+\]\.images\.reference_merged\.sha256: ",
+     "the export's digest of each fused reference image"),
+    ("OC3", _RECORD + r"(?:" + _FOV + r"assignment/[^/]+/assignment\.json\.inputs\.cells\.file|"
+     r"export/[^/]+/(?:export\.json|sample\.h5ad\.uns\.json)\.(?:labels\.fovs\[\d+\]|assembly\.fovs\[\d+\]\.territories))"
+     r"\.sha256: ",
+     "the digest of each FOV's cell label image (the run's labels themselves, labels_sha256, are compared)"),
+    ("D6", r"^images/(?:DAPI|overlay|flamingo/enhanced_DAPI)/FOV_\d+\.tif:(?:shape|dtype|min|max|sum): only in expected$",
+     "the images of the retired rules rotate_nuclei, create_nuclei_amplicon_overlay and enhance_dapi_with_flamingo"),
+    ("D6", r"^file:images/(?:DAPI|overlay|flamingo/enhanced_DAPI|stardist_segmentation)/FOV_\d+\.tif: only in expected$",
+     "the files of the retired rules, and the legacy label file of stardist_segmentation that B copied the truth "
+     "labels as (the segment task imports them, OP3)"),
+    ("D6", r"^file:" + _FOV + r"assignment/[^/]+/cell_labels\.tif: only in expected$|"
+     + _RECORD + _FOV + r"assignment/[^/]+/assignment\.json\.files\.cell_labels: only in expected$",
+     "the assignment folder's copy of the cell labels: the assign task reads the segment task's saved run and "
+     "references its labels instead of copying them"),
+    ("D6", _RECORD + _FOV + r"assignment/[^/]+/assignment\.json\.(?:workflow: only in expected|"
+     r"inputs\.cells\.saved_under_run: True != False|inputs\.cells\.file\.path: |inputs\.cells\.record\.import\.path: |"
+     r"inputs\.cells\.record\.(?:upstream|labels\.path|labels\.file_sha256): only in actual)",
+     "the cell run's source: the segment task's saved run (saved under the run, with its record's upstream and label "
+     "file) instead of reads_assignment's legacy label file, and the rule parameters' record of reads_assignment "
+     "(rules.reads_assignment.parameters, retired)"),
+    ("D6", _RECORD + r"export/[^/]+/(?:export\.json|sample\.h5ad\.uns\.json)\.(?:labels\.fovs\[\d+\]|"
+     r"assembly\.fovs\[\d+\]\.territories)\.path: '<work>/output/[^']+/" + _FOV
+     + r"segmentation/[^/']+/labels\.tif' != '<work>/output/[^']+/" + _FOV + r"assignment/[^/']+/cell_labels\.tif'",
+     "the export's path of each FOV's cell labels: the segment task's saved run"),
+    ("D6", _RECORD + r"report/[^/]+/report\.json\.inputs: \d+ items != \d+$",
+     "the report's inputs list the segment task's saved runs instead of the copied cell labels (checked by path)"),
+    ("D6", r"^file:" + _FOV + r"(?:other_rounds|segmentation)/.+: only in actual$",
+     "the outputs of the morphology task's saved forms and of the segment task, which no rule of A to D wrote"),
+    ("D8", r"^file:workflow/.+: only in actual$", "the plan's files, the task records and the task logs"),
+    ("D8", _RECORD + _FOV + r"run\.json\.workflow: only in actual$", "run.json's workflow section"),
+)
+
+
+def _oc3(value, indices=None):
+    """OC3 on a record: no rotate_round step, no /rotate:0 in a frame id, a null rotation_degrees for 0, and the row
+    keys of FOV steps renumbered by ``indices`` ({fov: {old index: new index}})."""
+    if isinstance(value, dict):
+        out = {k: _oc3(v, indices) for k, v in value.items()}
+        if out.get("rotation_degrees") == 0:
+            out["rotation_degrees"] = None
+        return out
+    if isinstance(value, list):
+        return [_oc3(v, indices) for v in value if not (isinstance(v, dict) and v.get("name") == ROTATION_STEP)]
+    if isinstance(value, str):
+        value = value.replace("/rotate:0", "")
+        if indices:
+            value = ROW_KEY.sub(lambda m: f"scope=fov;fov_id={m[1]};index={indices[m[1]][int(m[2])]}"
+                                if m[1] in indices and int(m[2]) in indices[m[1]] else m[0], value)
+        return value
+    return value
+
+
+def expected_with_exceptions(expected_dir, target):
+    """A copy of an expected folder (W-642's or invocation D's) with OC3 applied: the rotate_round rows leave the
+    report's step tables, whose indices are renumbered within each FOV, and the row keys that name a step index follow
+    them in the tables and records; the records lose their rotate_round steps and /rotate:0."""
+    target = Path(target)
+    shutil.copytree(expected_dir, target)
+    dtypes = json.loads((target / "dtypes.json").read_text())
+    indices = {}
+    for name in sorted(dtypes):
+        if not name.endswith("-tables-steps.csv"):
+            continue
+        frame = EV.read_table(target / name)
+        kept = frame[frame["name"] != ROTATION_STEP].copy()
+        route = name[:-len("report-sample-tables-steps.csv")]
+        for fov, rows in kept[kept["scope"] == "fov"].groupby("fov_id", sort=False):
+            indices.setdefault(route, {})[fov] = dict(zip(rows["index"].tolist(), range(len(rows))))
+        renumbered = kept["scope"] == "fov"
+        kept.loc[renumbered, "index"] = kept[renumbered].groupby("fov_id", sort=False).cumcount().astype("int64")
+        dtypes[name] = EV.write_csv(kept.reset_index(drop=True), target / name)
+    for name in sorted(dtypes):
+        if name.endswith("-tables-unavailable.csv"):
+            frame = EV.read_table(target / name)
+            route = indices.get(name[:-len("report-sample-tables-unavailable.csv")], {})
+            frame["row_key"] = pd.array([_oc3(v, route) if isinstance(v, str) else v for v in frame["row_key"]],
+                                        dtype="string")
+            dtypes[name] = EV.write_csv(frame, target / name)
+    (target / "dtypes.json").write_text(json.dumps(dtypes, indent=1) + "\n")
+    for path in sorted((target / "records").rglob("*.json")):
+        parts = path.relative_to(target / "records").parts
+        route = indices.get(f"{parts[0]}-" if parts[0] in EXPORT_ROUTES else "", {})
+        path.write_text(json.dumps(_oc3(json.loads(path.read_text()), route), indent=1) + "\n")
+    return target
+
+
+def _report_inputs(folder, name):
+    """The paths a report record lists as its inputs."""
+    return [entry.get("path") for entry in json.loads((Path(folder) / "records" / name).read_text())["inputs"]]
+
+
+def compare_migrated(expected_dir, actual_dir, target):
+    """G3: the differences between an expected folder and the refactored workflow's values (``extract`` with
+    ``migrated``, or ``extract_export``), across environments, after the contract's exceptions.
+
+    The expected values are copied to ``target`` with OC3 applied (``expected_with_exceptions``); each difference
+    that remains is attributed to the first of EXCEPTIONS whose pattern it matches. A report's inputs are checked by
+    path as well: a differing digest or size only of a reference image, and a different list only by the label files
+    of D6 (the legacy copies against the segment task's saved runs). Returns (the unexplained differences, {decision:
+    the differences it explains})."""
+    expected = expected_with_exceptions(expected_dir, target)
+    explained, unexplained = {}, []
+    for line in compare(expected, actual_dir, same_environment=False):
+        decision = next((d for d, pattern, _ in EXCEPTIONS if re.search(pattern, line)), None)
+        report = re.match(r"^records/((?:[^/]+/)?report/[^/]+/report\.json)\.inputs(?:\[(\d+)\])?", line)
+        if decision and report:
+            paths = _report_inputs(expected, report[1])
+            if report[2] is not None:
+                ok = (paths[int(report[2])] or "").endswith("/reference.tif")
+            else:
+                actual = _report_inputs(actual_dir, report[1])
+                labels = re.compile(r"(?:assignment/[^/]+/cell_labels\.tif|segmentation/[^/]+/(?:labels\.tif|"
+                                    r"segmentation\.json))$")
+                ok = [p for p in paths if not labels.search(p)] == [p for p in actual if not labels.search(p)]
+            decision = decision if ok else None
+        if decision is None:
+            unexplained.append(line)
+        else:
+            explained.setdefault(decision, []).append(line)
+    return unexplained, explained
+
+
 def _integral(series):
     """Whether a float column holds integer values only (compared exactly, docs/contributing.md)."""
     values = series.to_numpy(np.float64)
@@ -806,7 +960,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("fixture").add_argument("work", type=Path)
-    run = commands.add_parser("run")
+    run = commands.add_parser("run-migrated")
     run.add_argument("work", type=Path)
     run.add_argument("--snakemake", required=True)
     run.add_argument("--starfinder-path", type=Path, default=REPO)
@@ -814,11 +968,7 @@ def main(argv=None):
     extracting = commands.add_parser("extract")
     extracting.add_argument("work", type=Path)
     extracting.add_argument("out", type=Path)
-    run_d = commands.add_parser("run-export")
-    run_d.add_argument("work", type=Path)
-    run_d.add_argument("--snakemake", required=True)
-    run_d.add_argument("--starfinder-path", type=Path, default=REPO)
-    run_d.add_argument("--cores", type=int, default=1)
+    extracting.add_argument("--migrated", action="store_true", help="the output of run-migrated (G3)")
     extracting_d = commands.add_parser("extract-export")
     extracting_d.add_argument("work", type=Path)
     extracting_d.add_argument("out", type=Path)
@@ -829,20 +979,27 @@ def main(argv=None):
                            help="skip the file digests: the same_environment values, the fixture's, "
                                 "the stage records', the report files' and the per-FOV records' digests of "
                                 "pre_qc.csv and molecules.csv")
+    migrated = commands.add_parser("compare-migrated")
+    migrated.add_argument("expected", type=Path)
+    migrated.add_argument("actual", type=Path)
+    migrated.add_argument("scratch", type=Path, help="a new folder for the expected values with OC3 applied")
     args = parser.parse_args(argv)
     if args.command == "fixture":
         record = write_fixture(args.work)
         print(f"{len(record['files'])} fixture files in {args.work}")
-    elif args.command == "run":
-        for record in run_workflow(args.work, args.snakemake, args.starfinder_path, args.cores):
+    elif args.command == "run-migrated":
+        for record in run_migrated(args.work, args.snakemake, args.starfinder_path, args.cores):
             print(record["name"], record["exit_status"])
     elif args.command == "extract":
-        print(f"{len(extract(args.work, args.out))} values in {args.out}")
-    elif args.command == "run-export":
-        for record in run_export(args.work, args.snakemake, args.starfinder_path, args.cores):
-            print(record["name"], record["exit_status"])
+        print(f"{len(extract(args.work, args.out, migrated=args.migrated))} values in {args.out}")
     elif args.command == "extract-export":
         print(f"{len(extract_export(args.work, args.out))} values in {args.out}")
+    elif args.command == "compare-migrated":
+        unexplained, explained = compare_migrated(args.expected, args.actual, args.scratch)
+        for decision, lines in explained.items():
+            print("\n".join(f"{decision}: {line}" for line in lines))
+        print("\n".join(f"unexplained: {line}" for line in unexplained) if unexplained else "no unexplained difference")
+        return 1 if unexplained else 0
     else:
         lines = compare(args.expected, args.actual, same_environment=not args.other_environment)
         print("\n".join(lines) if lines else "no difference")

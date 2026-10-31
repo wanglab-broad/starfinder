@@ -407,10 +407,10 @@ def test_wf1_without_the_block_no_rule_and_no_output_is_added(tmp_path, monkeypa
     reports = [f"{output_root}/report/{sample}/report.json" for sample in names["SAMPLE"]]
     assert [p for p in with_block if p not in requested] == reports + [f"{output_root}/report/samples.csv"]
     assert [p for p in with_block if "/report/" not in p] == requested
-    # The Snakefile includes report.smk with the block only, and no other rule file names a report rule.
-    snakefile = (ROOT / "workflow/Snakefile").read_text()
-    assert re.search(r'\nif REPORT_BLOCK:\n    include: "rules/report.smk"\n', snakefile)
-    assert snakefile.count('include: "rules/report.smk"') == 1
+    # No workflow file includes report.smk (the Python route's report tasks come from the plan, which adds none
+    # without the block: test_workflow_plan's expected manifests), and no other rule file names a report rule.
+    for name in ("Snakefile", "rules/legacy.smk", "rules/tasks.smk"):
+        assert "report.smk" not in (ROOT / "workflow" / name).read_text(), name
     for path in (ROOT / "workflow/rules").glob("*.smk"):
         if path.name != "report.smk":
             assert not {"report_sample", "report_dataset"} & set(rule_names(path.read_text())), path.name
