@@ -10,6 +10,20 @@ import pytest
 
 pytestmark = [pytest.mark.contract, pytest.mark.preprocessing]
 ROOT = Path(__file__).resolve().parents[3]
+GENERATED_DOCS = (("api", "generated"), ("_build",))
+
+
+def _config_option_targets(docs):
+    """Return config-options targets named by hand-written pages, skipping build outputs."""
+    pattern = re.compile(r"(?:\{config-options\}|\.\. config-options::)\s+([\w.]+)")
+    targets = []
+    for path in sorted(docs.rglob("*")):
+        parts = path.relative_to(docs).parts
+        if path.suffix not in (".md", ".rst") or any(
+                parts[:len(prefix)] == prefix for prefix in GENERATED_DOCS):
+            continue
+        targets.extend(pattern.findall(path.read_text()))
+    return targets
 
 
 def _config_classes():
@@ -26,14 +40,31 @@ def _config_classes():
         module = import_module(".".join(parts[:-1] if parts[-1] == "__init__" else parts))
         classes.update(getattr(module, name) for name in names
                        if is_dataclass(getattr(module, name)))
-    pattern = re.compile(r"(?:\{config-options\}|\.\. config-options::)\s+([\w.]+)")
-    for path in sorted((ROOT / "docs").rglob("*")):
-        if path.suffix not in (".md", ".rst"):
-            continue
-        for target in pattern.findall(path.read_text()):
-            module, _, name = target.rpartition(".")
-            classes.add(getattr(import_module(module), name))
+    for target in _config_option_targets(ROOT / "docs"):
+        module, _, name = target.rpartition(".")
+        classes.add(getattr(import_module(module), name))
     return sorted(classes, key=lambda cls: (cls.__module__, cls.__qualname__))
+
+
+def test_config_option_scan_skips_generated_pages(tmp_path, monkeypatch):
+    docs = tmp_path / "docs"
+    (docs / "api/generated").mkdir(parents=True)
+    (docs / "_build/html").mkdir(parents=True)
+    (docs / "guide").mkdir()
+    (docs / "page.md").write_text("```{config-options} pkg.PageConfig\n```\n")
+    (docs / "guide/page.rst").write_text(".. config-options:: pkg.GuideConfig\n")
+    (docs / "api/page.md").write_text("```{config-options} pkg.ApiConfig\n```\n")
+    (docs / "api/generated/pkg.md").write_text("```{config-options} pkg.GeneratedConfig\n```\n")
+    (docs / "_build/html/page.rst").write_text(".. config-options:: pkg.BuiltConfig\n")
+    (docs / "_build/page.md").write_text("```{config-options} pkg.BuiltConfig\n```\n")
+    read = []
+    read_text = Path.read_text
+    monkeypatch.setattr(Path, "read_text",
+                        lambda self, *args, **kwargs: read.append(self) or read_text(self, *args, **kwargs))
+    targets = _config_option_targets(docs)
+    assert sorted(targets) == ["pkg.ApiConfig", "pkg.GuideConfig", "pkg.PageConfig"]
+    assert sorted(path.relative_to(docs).as_posix() for path in read) == [
+        "api/page.md", "guide/page.rst", "page.md"]
 
 
 def test_config_dataclasses_have_complete_parameters():
