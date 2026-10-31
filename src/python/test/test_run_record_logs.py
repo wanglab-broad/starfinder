@@ -4,25 +4,28 @@ design/notes/migration.md, "Sequencing logs and the morphology record". A checkp
 the filter's ``counts.filtering.fractions``, the read summary ``counts.summary`` whenever reads were decoded (with or
 without scoring and deduplication) and the round roles ``rounds``; ``FOV.save_registration_record`` writes
 ``fovs/<fov_id>/nuclei_registration.json`` with the registered other rounds and their attempts, unchanged. The final
-targets of ``common.smk`` branch on ``backend``: each target is an output of a rule of that backend's rule files, the
-Python processing rules request their run.json and no log, and the MATLAB rules keep theirs. Scenes: the 4 x 24 x 24
-FOV of test_report_records_golden.py and the 8 x 32 x 32 other-round FOV of test_registration_other_rounds.py.
+targets of ``common.smk`` (the MATLAB rule set's) are outputs of the MATLAB rule files, which keep their logs; the
+Python workflow's tasks declare run.json and no log (test_workflow_declared_outputs.py,
+test_the_fov_kinds_declare_their_run_records_and_no_log, W-750). Scenes: the 4 x 24 x 24 FOV of
+test_report_records_golden.py and the 8 x 32 x 32 other-round FOV of test_registration_other_rounds.py.
 """
 from dataclasses import asdict, replace
 import itertools
 import json
 import re
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+import yaml
 
-from starfinder._snakemake import _reference_image_outputs, _run_record_outputs
 from starfinder.readout import summarize_reads
 
 from .test_registration_other_rounds import TRANSLATION, external, other_round_fov
 from .test_report_records_golden import ALL_STAGES, pipeline
 from .test_report_run_record_additions import golden_dataset, jsonable, run
-from .test_report_workflow import SAMPLE, annotation, common_preamble, repository_config
+from .test_report_workflow import SAMPLE, annotation
 
 pytestmark = [pytest.mark.dataset, pytest.mark.contract]
 
@@ -102,27 +105,38 @@ def test_the_removed_writers_are_gone():
         assert not hasattr(FOV, name), name
 
 
-# --- The final targets of common.smk, per backend ---------------------------------------------------------
+# --- The final targets of common.smk (the MATLAB rule set) ---------------------------------------------------------
 
-RULE_FILES = {"python": ("registration-py.smk", "spot-finding-py.smk"),
-              "matlab": ("registration.smk", "spot-finding.smk")}
+RULE_FILES = ("registration.smk", "spot-finding.smk")
 RULES = ("rsf_single_fov", "gr_single_fov_subtile", "lrsf_single_fov_subtile", "deep_create_subtile",
          "deep_rsf_subtile", "nuclei_registration")
 
 
-def declared_outputs(backend, rule, names, fovs, subtiles):
-    """The output files of ``rule`` in the backend's rule files, expanded over the FOVs and subtiles.
+def common_preamble(config, output_root, monkeypatch):
+    """The names common.smk defines before its first rule, executed with ``config`` (its sample annotation is
+    written first)."""
+    text = (ROOT / "workflow/rules/common.smk").read_text()
+    source = text[:text.index("### ==================== [ Preparation Rule ]")]
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    namespace = {"config": config, "workflow": SimpleNamespace(basedir=str(ROOT / "workflow"))}
+    exec(compile(source, "common.smk", "exec"), namespace)
+    assert namespace["OUTPUT_DIR"] == Path(output_root)
+    return namespace
 
-    The output section is evaluated with the names of common.smk (``names``; the Python rules name the FOV folder's
-    run record and reference image by variables, W-564) and stand-ins for Snakemake's ``expand`` and ``temp``.
+
+def declared_outputs(rule, names, fovs, subtiles):
+    """The output files of ``rule`` in the MATLAB rule files, expanded over the FOVs and subtiles.
+
+    The output section is evaluated with the names of common.smk (``names``) and stand-ins for Snakemake's ``expand``
+    and ``temp``.
     """
-    for name in RULE_FILES[backend]:
+    for name in RULE_FILES:
         text = (ROOT / "workflow" / "rules" / name).read_text()
         match = re.search(rf"^rule {rule}:\n(.*?)(?=^rule |\Z)", text, flags=re.MULTILINE | re.DOTALL)
         if match:
             break
     else:
-        raise AssertionError(f"{rule} is in no {backend} rule file")
+        raise AssertionError(f"{rule} is in no MATLAB rule file")
     section = re.search(r"^    output:\n(.*?)^    \w+:", match.group(1), flags=re.MULTILINE | re.DOTALL).group(1)
 
     def expand(pattern, **values):
@@ -134,16 +148,19 @@ def declared_outputs(backend, rule, names, fovs, subtiles):
 
 
 @pytest.mark.workflow
-@pytest.mark.parametrize("backend", ["python", "matlab"])
+@pytest.mark.parametrize("backend", ["matlab"])
 @pytest.mark.parametrize("rule", RULES)
 def test_the_final_targets_branch_on_the_backend(tmp_path, monkeypatch, backend, rule):
-    config, output_root = repository_config("docs/examples/workflow-minimal.yaml", tmp_path)
+    """The MATLAB rule set's final targets: each an output of the rule in the MATLAB rule files; the rules keep their
+    logs (deep_create_subtile requests none) and write no run.json."""
+    config = yaml.safe_load((ROOT / "docs/examples/workflow-minimal.yaml").read_text())
+    config["root_output_path"] = str(tmp_path)
+    output_root = tmp_path / config["dataset_id"] / config["output_id"]
     config.update(backend=backend, workflow_mode="free", rules={rule: {"run": True}})
-    if backend == "matlab":
-        # The MATLAB backend's membership: the sample annotation, fov_id_pattern, n_fovs and the subset keys, for the
-        # FOVs of the example's fovs.csv (tile_1 of sample1, tile_2 of sample2).
-        config.update(fov_id_pattern="tile_{i}", n_fovs=2, subset_list=[], subset_range=False, subset_random=False)
-        annotation(output_root, [(SAMPLE, 1, 1), ("sample2", 2, 2)])
+    # The MATLAB backend's membership: the sample annotation, fov_id_pattern, n_fovs and the subset keys (tile_1 of
+    # sample1, tile_2 of sample2).
+    config.update(fov_id_pattern="tile_{i}", n_fovs=2, subset_list=[], subset_range=False, subset_random=False)
+    annotation(output_root, [(SAMPLE, 1, 1), ("sample2", 2, 2)])
     config.pop("assembly", None)
     config.pop("stitching", None)
     names = common_preamble(config, output_root, monkeypatch)
@@ -151,23 +168,7 @@ def test_the_final_targets_branch_on_the_backend(tmp_path, monkeypatch, backend,
     fovs, subtiles = names["FOVS"], names["N_SUBTILE"]
     targets = names["get_overall_output"](None)
     assert targets and len(set(targets)) == len(targets)
-    # Every target is an output of the rule in the backend's own rule files.
-    # The names the Python block of common.smk adds after its preamble, for the Python rule files.
-    names.update(RUN_RECORD=_run_record_outputs(output_root, ["{fovID}"])[0],
-                 SUBTILE_RUN_RECORD=_run_record_outputs(output_root, ["{fovID}"], ["{n_subtile}"])[0],
-                 REFERENCE_IMAGE_OUTPUT=_reference_image_outputs(config, output_root, ["{fovID}"]))
-    assert set(targets) <= declared_outputs(backend, rule, names, fovs, subtiles)
+    assert set(targets) <= declared_outputs(rule, names, fovs, subtiles)
     logs = [t for t in targets if t.startswith(f"{output_root}/log/")]
-    if backend == "python":
-        assert logs == []
-        if rule == "nuclei_registration":
-            assert targets == [f"{output_root}/fovs/{fov}/nuclei_registration.json" for fov in fovs]
-        elif rule in ("lrsf_single_fov_subtile", "deep_rsf_subtile"):
-            assert {f"{output_root}/fovs/{fov}/subtile_{i}/run.json" for fov in fovs for i in subtiles} <= set(
-                targets)
-        else:
-            assert {f"{output_root}/fovs/{fov}/run.json" for fov in fovs} <= set(targets)
-    else:
-        # MATLAB's rules keep their logs (deep_create_subtile requests none) and write no run.json.
-        assert bool(logs) is (rule != "deep_create_subtile")
-        assert not any(t.endswith("run.json") or t.endswith("nuclei_registration.json") for t in targets)
+    assert bool(logs) is (rule != "deep_create_subtile")
+    assert not any(t.endswith("run.json") or t.endswith("nuclei_registration.json") for t in targets)

@@ -23,6 +23,8 @@ from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig,
 from .coordination_helpers import digest
 from .test_preprocessing_golden import PINNED_SEQUENCE, fixture_rounds
 
+from . import workflow_tasks as T
+
 pytestmark = [pytest.mark.preprocessing, pytest.mark.contract]
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -340,16 +342,16 @@ def test_legacy_defaults_and_top_level_snr_threshold(tmp_path):
 
 
 def test_the_schema_refuses_tophat_for_python_rules_and_validates_it_for_matlab(tmp_path):
-    """The schema's backend guard covers tophat: the Python rules refuse it (preprocessing white_tophat), while a
-    MATLAB-backend configuration keeps the key's definition and its translation."""
+    """tophat in a Python rule's parameters is refused (preprocessing white_tophat) by the translator and by the
+    package (W-750: the Python workflow validates with the package), while the MATLAB schema keeps the key's
+    definition for a MATLAB-backend configuration, and its translation."""
     schema = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
     config = yaml.safe_load((ROOT / "docs/examples/workflow-full.yaml").read_text())
     matlab = yaml.safe_load((ROOT / "tests/tissue_2D_test.yaml").read_text())
     for rule in ("rsf_single_fov", "gr_single_fov_subtile", "lrsf_single_fov_subtile", "deep_create_subtile", "deep_rsf_subtile"):
         candidate = copy.deepcopy(config)
         candidate["rules"][rule].setdefault("parameters", {})["tophat"] = {"run": True, "radius": 2}
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(candidate, schema)
+        assert T.validation_error(T.python_shape(candidate, rule))
         with pytest.raises(ValueError, match="tophat is a MATLAB key.*white_tophat"):
             from_workflow_config(candidate, rule)
         candidate = copy.deepcopy(matlab)

@@ -1,37 +1,33 @@
-"""RS5, WF1 and WF2 of design/validation/sample-segmentation.md: the route in the workflow (W-430).
+"""RS5 of design/validation/sample-segmentation.md: the route in the workflow (W-430).
 
 RS5: the static schema's ``export`` keys equal the fields of ``ExportConfig`` with ``route``,
 ``segment`` and ``segmentation``, and a run's keys besides ``name``, ``target``, ``inputs``,
 ``seeds`` and ``method`` equal the init fields of its method's config, kept equal to
-``SEGMENTATION_METHODS`` as the §2.9 schema test does; the example configurations of each route on
-the workflow configuration page validate. WF1: the inputs of ``export_sample`` by route
-(``_export_sample_files``, which ``export.smk`` calls), and the parse-time check of the route.
-WF2: the assignment figures of W-330 are not drawn again on the route after fusion, and are on
-the route per FOV. The rule-level evidence of WF1, a read-only Snakemake dry run with the
-starfinder-v9 Snakemake, is in the W-430 worker notes; the locked environment has no Snakemake.
+``SEGMENTATION_METHODS`` as the §2.9 schema test does; the configurations of each route, and the
+example configurations of each route on the workflow configuration page, pass the package's
+validation (the Python schema, the translators and the data dependencies, as the plan validates
+them; W-750) and translate. WF1 (the inputs of the export task by route, the refusal of the route)
+moved to the plan's declarations and refusals, WF2 (the assignment figures) to the export command's
+previews: test_workflow_declared_outputs.py, test_workflow_plan_refusals.py and
+test_workflow_export_tasks.py (W-750).
 
 Fixtures: ``route_configs`` (workflow ``export`` blocks for every combination of ``route``,
 ``dimensionality``, ``segment``, ``fuse``, with and without ``segmentation``, and ``assignment``
-set or null; the repository's example configurations and copies with the blocks), and
-``fused_pair`` written as a dataset with ``truth_import`` and ``per_fov_routes``
-(``sample_segmentation_fixtures.py``). The adapters run through stub ``snakemake`` objects, as in
-``test_stitching_workflow.py``. No model is loaded or run; dask runs with the synchronous scheduler.
+set or null), as the translator reads them (the repository's full example configuration with the
+blocks) and in the Python shape. No model is loaded or run.
 """
 import copy
 import importlib.util
 import itertools
-import json
 import re
 from dataclasses import asdict, fields
 from pathlib import Path
-from types import SimpleNamespace
 
 import jsonschema
 import pytest
 import yaml
 
 import starfinder.dataset.workflow as workflow
-from starfinder import _snakemake
 from starfinder._registry import names
 from starfinder.export import (
     ROUTES,
@@ -41,24 +37,14 @@ from starfinder.export import (
     SampleSegmentationConfig,
     SampleSegmentationRun,
     SpatialDataExportConfig,
-    check_export,
 )
 from starfinder.segmentation import SEGMENTATION_METHODS, LabelImportConfig
 from starfinder.segmentation._methods import ROLES
 
 from . import docs_pages
-from .fusion_fixtures import listing
 from .sample_segmentation_fixtures import (
-    DS,
-    IMAGES,
-    SAMPLE,
-    SCENES,
-    codebook,
     length_configs,
-    per_fov_routes,
-    write_scene,
 )
-from .test_sample_segmentation_route import export_grid, truth_config
 
 pytestmark = [pytest.mark.workflow, pytest.mark.validation]
 
@@ -75,8 +61,6 @@ MULTIVIEW = {"method": "multiview_stitcher", "input": "reference_stain",
              "positions": {"source": "regular_grid",
                            "regular_grid": {"columns": 2, "rows": 1, "order": "column_major_down_right",
                                             "overlap": 0.25}}}
-FOVS = ["Position001", "Position002"]
-OUT = Path("/out")
 # The images of the route_configs blocks: the four kinds of source entry, one of them an absolute pattern.
 ROUTE_IMAGES = ["reference_stain", "reference_merged", "dapi=file:images/dapi/{fov_id}.tif",
                 "flamingo=file:/abs/flamingo/{fov_id}.tif"]
@@ -122,6 +106,20 @@ def route_workflow_config(route, dimensionality, segment, fuse, segmentation, as
                                                                               segmentation))
 
 
+def python_route_config(tmp_path, route, dimensionality, segment, fuse, segmentation, assignment):
+    """The route_configs block in the Python shape (the worked example's dataset keys, processing and morphology
+    blocks, the stitching block); an assignment name gets the assignment block and the segment run it reads."""
+    from . import workflow_examples as X
+    block = route_block(route, dimensionality, segment, fuse, segmentation)
+    config = dict(X.dataset(tmp_path, "route"), processing=copy.deepcopy(X.PROCESSING), morphology={},
+                  stitching=copy.deepcopy(MULTIVIEW), assembly={"assignment": assignment}, export=block)
+    if assignment is not None:
+        config["segmentation"] = {"runs": [{"name": "cell", "target": "cell", "method": "import",
+                                            "path": str(tmp_path / "{fov_id}.tif")}]}
+        config["assignment"] = {"cells": "cell", "name": assignment}
+    return config
+
+
 def resolved(route, dimensionality):
     """The route of the contract's rule, by hand: the set value, else after_fusion for projection only."""
     return route or ("after_fusion" if dimensionality == "projection" else "per_fov")
@@ -140,26 +138,6 @@ def refused(route, dimensionality, segment, fuse, segmentation, assignment):
     if segment and not fuse:
         return "fuse: false"
     return None
-
-
-def per_fov_inputs(fovs=FOVS, root=OUT, name="default"):
-    """The inputs of export_sample on the route per FOV: the placement and the one output of reads_assignment, the
-    saved folder's record (W-568: no raw.h5ad or reads_assignment.csv)."""
-    return ([f"{root}/stitching/{SAMPLE}/placement.json"]
-            + [f"{root}/fovs/{f}/assignment/{name}/assignment.json" for f in fovs])
-
-
-def molecule_inputs(fovs=FOVS, root=OUT):
-    return [f"{root}/stitching/{SAMPLE}/placement.json"] + [f"{root}/fovs/{f}/molecules.csv" for f in fovs]
-
-
-def after_fusion_inputs(fuse, fovs=FOVS, root=OUT, reference="fovs/{fov_id}/reference.tif"):
-    """The molecule tables, the reference images and, with fuse on, the source images that are workflow files:
-    reference_merged (the reference image) and each file pattern; not the saved form of reference_stain."""
-    inputs = molecule_inputs(fovs, root) + [f"{root}/{reference.format(fov_id=f)}" for f in fovs]
-    if fuse:
-        inputs += [f"{root}/images/dapi/{f}.tif" for f in fovs] + [f"/abs/flamingo/{f}.tif" for f in fovs]
-    return inputs
 
 
 # --- RS5: configuration schema -------------------------------------------------------------------------------
@@ -230,19 +208,25 @@ def test_rs5_every_init_field_of_a_method_config_translates(tmp_path):
     block = {"images": ["dapi=file:images/dapi/{fov_id}.tif"], "route": "after_fusion",
              "segmentation": {"cells": "seeded_watershed", "nuclei": "nucleus", "runs": runs}}
     config = base_config(assembly={"assignment": "default"}, export=block)
-    VALIDATOR.validate(config)
+    from . import workflow_tasks as T
+    python = python_route_config(tmp_path, "after_fusion", "projection", True, True, False, "default")
+    assert T.validation_error(dict(python, export=block)) is None
     export, _ = workflow._export_config(config)
     expected = {"nucleus": configs.pop("imported"), **configs}
     assert {run.name: run.method for run in export.segmentation.runs} == expected
 
 
 @pytest.mark.parametrize("combination", COMBINATIONS, ids=lambda c: "-".join(map(str, c)))
-def test_rs5_route_configs_validate_and_translate(combination):
-    """Every route_configs block validates against the schema and translates to the ExportConfig of the same
-    values; the segmentation's assignment settings are the assignment block's."""
+def test_rs5_route_configs_validate_and_translate(combination, tmp_path):
+    """Every route_configs block passes the package's validation, or is refused there naming the key the route's
+    check names (check 7 of the contract, which the old schema did not hold; W-750), and translates to the
+    ExportConfig of the same values; the segmentation's assignment settings are the assignment block's."""
+    from . import workflow_tasks as T
     route, dimensionality, segment, fuse, segmentation, assignment = combination
+    error = T.validation_error(python_route_config(tmp_path, *combination))
+    expected = refused(*combination)
+    assert (error is None) if expected is None else re.search(expected, error), (expected, error)
     config = route_workflow_config(*combination)
-    VALIDATOR.validate(config)
     export, block = workflow._export_config(config)
     assert block.assignment == assignment
     assert (export.route, export.segment, export.fuse, export.fusion.dimensionality) == (route, segment, fuse,
@@ -273,11 +257,13 @@ def test_rs5_route_configs_validate_and_translate(combination):
     {"segmentation": dict(SEGMENTATION, runs=[{"name": "cell", "target": "cell", "method": "cellpose",
                                                "inputs": [{"role": "nuclear"}]}])},
 ])
-def test_rs5_invalid_route_keys_fail_the_schema(change):
-    config = base_config(assembly={"assignment": "default"}, export=dict(route_block(None, "projection", True, True,
-                                                                                     True), **change))
-    with pytest.raises(jsonschema.ValidationError):
-        VALIDATOR.validate(config)
+def test_rs5_invalid_route_keys_fail_the_schema(change, tmp_path):
+    """The package refuses each (the Python schema or the export block's translator, as the plan validates it;
+    W-750)."""
+    from . import workflow_tasks as T
+    config = python_route_config(tmp_path, None, "projection", True, True, True, "default")
+    config["export"].update(copy.deepcopy(change))
+    assert T.validation_error(config)
 
 
 def page_examples():
@@ -295,9 +281,12 @@ def test_rs5_the_example_configuration_of_each_route():
     ``slow``, ``learned`` or ``extended`` test (docs/contributing.md, "Test markers"; W-602)."""
     examples = page_examples()
     assert sorted(e["export"]["route"] for e in examples) == ["after_fusion", "per_fov"]
+    from . import workflow_tasks as T
     for example in examples:
         config = base_config(**example)
-        VALIDATOR.validate(config)
+        python = python_route_config(Path("/work"), None, "projection", True, True, False, "default")
+        python.update(copy.deepcopy(example))
+        assert T.validation_error(python) is None, example
         workflow._check_export_route(config)
         export, block = workflow._export_config(config)
         assert workflow._after_fusion(export, block) is (example["export"]["route"] == "after_fusion")
@@ -305,244 +294,4 @@ def test_rs5_the_example_configuration_of_each_route():
 
 # --- WF1: the rule's inputs by route ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("combination", COMBINATIONS, ids=lambda c: "-".join(map(str, c)))
-def test_wf1_the_rule_s_inputs_by_route(combination):
-    """route_configs: on the route per FOV the outputs of reads_assignment of every FOV, as before; on the route
-    after fusion the molecule tables and the source images and no reads_assignment output; molecules only on
-    either route the molecule tables (fovs/<fov>/molecules.csv). A configuration that check 7 refuses by itself is refused when
-    the rule files are parsed, naming the key."""
-    route, dimensionality, segment, fuse, segmentation, assignment = combination
-    config = route_workflow_config(*combination)
-    error = refused(*combination)
-    if error is not None:
-        with pytest.raises(ValueError, match=error):
-            workflow._check_export_route(config)
-        return
-    workflow._check_export_route(config)
-    inputs, output = _snakemake._export_sample_files(config, OUT, FOVS, SAMPLE)
-    assert output == f"{OUT}/export/{SAMPLE}/export.json"
-    if assignment is None:
-        assert inputs == molecule_inputs()
-    elif resolved(route, dimensionality) == "per_fov":
-        assert inputs == per_fov_inputs()
-    else:
-        assert inputs == after_fusion_inputs(fuse)
-        assert not [p for p in inputs if "/expr/" in p or "/assignment/" in p]
-
-
-def test_wf1_the_inputs_follow_reference_image_and_the_named_images():
-    """The reference images are the files reference_image names; reference_merged is that file, listed once; with
-    reference_stain alone no source image is declared (its saved form is no declared output of any rule)."""
-    config = route_workflow_config("after_fusion", "projection", True, True, True, "default")
-    config["reference_image"] = "images/flamingo/DAPI/{fov_id}.tif"
-    reference = "images/flamingo/DAPI/{fov_id}.tif"
-    assert _snakemake._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == after_fusion_inputs(True,
-                                                                                              reference=reference)
-    config["export"]["images"] = ["reference_stain"]
-    config["export"]["segmentation"]["runs"][1]["inputs"] = [{"role": "cytoplasm", "image": "reference_stain"}]
-    workflow._check_export_route(config)
-    assert _snakemake._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == after_fusion_inputs(False,
-                                                                                              reference=reference)
-
-
-def wf_config(name):
-    return yaml.safe_load((ROOT / "docs/examples" / name).read_text())
-
-
-@pytest.mark.parametrize("name", ["workflow-full.yaml", "workflow-minimal.yaml", "workflow-recipe-2.yaml"])
-def test_wf1_existing_configurations_without_the_new_keys(name):
-    """The amended row WF1. The examples have no assembly block, so export_sample is not included. Their copies with
-    the blocks and without the new keys that RD1 accepts (a stack, both, a projection without an assignment) keep
-    the inputs they had at the base revision; the copy that RD1 refuses (a projection with an assignment and no
-    export.segmentation) is refused when the rules are parsed, naming export.segmentation and route: per_fov, and
-    with route: per_fov added it has the inputs it had at the base revision, as has any copy with route: per_fov."""
-    config = wf_config(name)
-    assert "assembly" not in config and "export" not in config
-    common = (ROOT / "workflow/rules/common.smk").read_text()
-    assert re.search(r"if ASSEMBLY_BLOCK:\n        _export_config\(config\)\n        _check_export_route\(config\)",
-                     common)
-    blocks = dict(config, backend="python", stitching=copy.deepcopy(MULTIVIEW))
-    for export, assignment, expected in ((None, "default", None), ({"dimensionality": "stack"}, "default", "per_fov"),
-                                         ({"dimensionality": "both"}, "default", "per_fov"),
-                                         (None, None, "molecules")):
-        copied = dict(copy.deepcopy(blocks), assembly={"assignment": assignment})
-        if export is not None:
-            copied["export"] = export
-        VALIDATOR.validate(copied)
-        if expected is None:
-            with pytest.raises(ValueError, match=r"export\.segmentation.*route: per_fov"):
-                workflow._check_export_route(copied)
-            copied["export"] = {"route": "per_fov"}  # the one line that restores the earlier behaviour
-            expected = "per_fov"
-            VALIDATOR.validate(copied)
-        workflow._check_export_route(copied)
-        inputs = _snakemake._export_sample_files(copied, OUT, FOVS, SAMPLE)[0]
-        assert inputs == (per_fov_inputs() if expected == "per_fov" else molecule_inputs())
-
-
-# The route_configs without the new key route that RD1 refuses by its default.
-RD1_REFUSED = [c for c in COMBINATIONS if c[0] is None and refused(*c) == r"export\.segmentation"]
-
-
-@pytest.mark.parametrize("combination", RD1_REFUSED, ids=lambda c: "-".join(map(str, c)))
-def test_wf1_a_configuration_rd1_refuses_plans_its_earlier_jobs_with_route_per_fov(combination):
-    """The amended row WF1, second part, on route_configs: every configuration RD1 refuses (no route, a projection,
-    an assignment, no export.segmentation) is refused when the rules are parsed, naming export.segmentation and
-    route: per_fov; with route: per_fov added it passes and export_sample has the inputs of the base revision (the
-    planned jobs are compared in the dry run, case default_projection_per_fov, in the W-430 worker notes)."""
-    route, dimensionality, segment, fuse, segmentation, assignment = combination
-    assert (route, dimensionality, segmentation, assignment) == (None, "projection", False, "default")
-    config = route_workflow_config(*combination)
-    with pytest.raises(ValueError) as refusal:
-        workflow._check_export_route(config)
-    assert "export.segmentation" in str(refusal.value) and "route: per_fov" in str(refusal.value)
-    config["export"]["route"] = "per_fov"
-    VALIDATOR.validate(config)
-    workflow._check_export_route(config)
-    assert _snakemake._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == per_fov_inputs()
-
-
 # --- WF2: the assignment figures --------------------------------------------------------------------------------
-
-def scene_workflow(tmp_path):
-    """fused_pair as a workflow dataset (output root tmp/data/output), its codebook, the per-FOV assignment folders
-    of per_fov_routes and the truth labels on the segmentation grid; returns (folder, the export block of the
-    route after fusion)."""
-    folder = write_scene(tmp_path / "data", SCENES["fused_pair"]())
-    per_fov_routes(folder)
-    genes = tmp_path / "in" / DS / SAMPLE / "genes.csv"
-    genes.parent.mkdir(parents=True)
-    codebook().table[["entry_id", "gene_id", "color_sequence"]].to_csv(genes, index=False)
-    segmentation = truth_config(folder, export_grid(folder))
-    runs = [{"name": run.name, "target": run.target, "method": "import", "path": run.method.path,
-             "relabel": False} for run in segmentation.runs]
-    block = {"route": "after_fusion", "images": list(IMAGES), "scale_yx": 1.0,
-             "segmentation": {"cells": "cell", "nuclei": "nucleus", "runs": runs}}
-    return folder, block
-
-
-def scene_config(tmp_path, export, previews=None):
-    """The scene's configuration; ``previews`` None leaves assembly.previews out (its default, false)."""
-    assembly = {"assignment": "default", "table_format": "csv", **({} if previews is None else {"previews": previews})}
-    return {"backend": "python", "dataset_id": DS, "sample_id": SAMPLE, "output_id": "output",
-            "root_input_path": str(tmp_path / "in"), "root_output_path": str(tmp_path),
-            "fov_id_pattern": "FOV{i}", "n_rounds": 3, "ref_round": "round1", "rotate_angle": 0, "img_col": 24,
-            "img_row": 24, "voxel_size_xy": 0.5, "voxel_size_z": 1.0, "rules": {},
-            "seq_channel_order": ["ch00", "ch01", "ch02", "ch03"], "stitching": copy.deepcopy(MULTIVIEW),
-            "assembly": assembly, "export": export}
-
-
-def run_rule(folder, config, monkeypatch, extra_inputs=()):
-    """export_sample through a stub with the inputs export.smk gives it; returns (record, figure calls)."""
-    calls = []
-    real = _snakemake._write_assignment_figures
-    monkeypatch.setattr(_snakemake, "_write_assignment_figures",
-                        lambda result, image, out, **kwargs: calls.append((Path(out).name, kwargs)) or
-                        real(result, image, out, **kwargs))
-    inputs, output = _snakemake._export_sample_files(config, folder.root, list(folder.scene.ids), SAMPLE)
-    _snakemake._run_export(SimpleNamespace(config=config, input=[*inputs, *map(str, extra_inputs)], output=[output],
-                                         wildcards=SimpleNamespace(sample=SAMPLE)))
-    monkeypatch.undo()
-    return json.loads(Path(output).read_text()), calls, inputs
-
-
-def figure_paths(folder):
-    return {p.relative_to(folder.root).as_posix(): p.read_bytes() for p in sorted(folder.root.rglob("*.png"))}
-
-
-@needs_anndata
-@needs_library
-def test_wf2_the_assignment_figures(tmp_path, monkeypatch):
-    """With assembly.previews on (W-568): on the route after fusion export_sample draws no assignment figure, also
-    with the FOVs' saved assignments present and passed as inputs; on the route per FOV it draws them for every FOV
-    with its ownership, as W-330 specifies, into export/<sample>/previews/<fov>/, and leaves the local figures of
-    reads_assignment in fovs/<fov>/previews/ as they are."""
-    folder, block = scene_workflow(tmp_path)
-    for fov in folder.scene.ids:  # the figures reads_assignment wrote first
-        (folder.root / "fovs" / fov / "previews").mkdir(parents=True)
-        (folder.root / "fovs" / fov / "previews" / "assignment.png").write_bytes(b"written by reads_assignment")
-    before = figure_paths(folder)
-    config = scene_config(tmp_path, block, previews=True)
-    workflow._check_export_route(config)
-    saved = [folder.root / "fovs" / f / "assignment" / "default" / "assignment.json" for f in folder.scene.ids]
-    assert all(p.is_file() for p in saved)
-    record, calls, inputs = run_rule(folder, config, monkeypatch, extra_inputs=saved)
-    assert record["parts"] == {"assemble": "written", "fuse": "written", "segment": "written", "fuse_labels": "off",
-                               "export_spatialdata": "off"}
-    assert record["assembly"]["route"] == "after_fusion" and record["complete"] is True
-    assert set(record["assembly"]["fovs"][i]["kind"] for i in range(2)) == {"molecules"}
-    assert calls == [] and figure_paths(folder) == before
-    assert not [p for p in inputs if "/expr/" in p or "/assignment/" in p]
-    # The route per FOV of the same sample, into the same folder: the figures are drawn again with ownership.
-    config = scene_config(tmp_path, {"route": "per_fov", "fuse": False}, previews=True)
-    exported = listing(folder.export_dir)
-    record, calls, _ = run_rule(folder, config, monkeypatch)
-    assert record["assembly"]["route"] == "per_fov" and record["parts"]["segment"] == "off"
-    assert sorted(fov for fov, _ in calls) == sorted(folder.scene.ids)
-    assert all(kwargs["ownership"] is not None for _, kwargs in calls)
-    after = figure_paths(folder)
-    assert {k: v for k, v in after.items() if k.startswith("fovs/")} == before
-    previews = f"export/{SAMPLE}/previews"
-    assert {k.rsplit("/", 1)[0] for k in after if not k.startswith("fovs/")} == {f"{previews}/{fov}"
-                                                                                 for fov in folder.scene.ids}
-    assert all(after[f"{previews}/{fov}/assignment.png"] != before[f"fovs/{fov}/previews/assignment.png"]
-               for fov in folder.scene.ids)
-    assert listing(folder.export_dir) != exported
-    check_export(folder.export_dir)
-
-
-@needs_anndata
-@needs_library
-@pytest.mark.parametrize("assemble", [True, False], ids=["assemble", "no_assemble"])
-@pytest.mark.parametrize("route", ["per_fov", "after_fusion"])
-def test_wf2_every_declared_output_of_export_sample_exists(tmp_path, route, assemble):
-    """W-568 repair: with assembly.previews on, export_sample declares export/<sample>/previews/ only on the route per
-    FOV with assemble on (_export_preview_outputs), and after the adapter runs every declared output exists, on each
-    route with the assemble part on and off; the folder holds each FOV's figures exactly when declared."""
-    folder, block = scene_workflow(tmp_path)
-    # After fusion, assemble false is accepted with segment false only (check 7), which reuses a saved segmentation.
-    export = dict(block, assemble=assemble, **({} if assemble else {"segment": False})) if route == "after_fusion" \
-        else {"route": "per_fov", "fuse": False, "assemble": assemble}
-    config = scene_config(tmp_path, export, previews=True)
-    workflow._check_export_route(config)
-    inputs, output = _snakemake._export_sample_files(config, folder.root, list(folder.scene.ids), SAMPLE)
-    if route == "after_fusion" and not assemble:   # the saved sample segmentation it reuses, from a first export
-        first = scene_config(tmp_path, block, previews=True)
-        _snakemake._run_export(SimpleNamespace(config=first, input=inputs, output=[output],
-                                             wildcards=SimpleNamespace(sample=SAMPLE)))
-    previews = _snakemake._export_preview_outputs(config, folder.root, SAMPLE)
-    assert previews == ([str(folder.export_dir / "previews")] if (route, assemble) == ("per_fov", True) else [])
-    declared = [output, *previews]       # export.smk: export.json, then the preview folder when declared
-    _snakemake._run_export(SimpleNamespace(config=config, input=inputs, output=declared,
-                                         wildcards=SimpleNamespace(sample=SAMPLE)))
-    assert [p for p in declared if not Path(p).exists()] == []
-    drawn = {p.relative_to(folder.export_dir).as_posix() for p in folder.export_dir.rglob("*.png")}
-    expected = {f"previews/{fov}/{name}" for fov in folder.scene.ids
-                for name in ("assignment.png", "assignment_single_layer.png")}
-    assert drawn == (expected if previews else set())
-    check_export(folder.export_dir)
-
-
-@needs_anndata
-@needs_library
-def test_wf2_the_declared_preview_folder_exists_when_the_assemble_part_cannot_run(tmp_path, monkeypatch):
-    """W-568 repair: when the folder is declared but the assemble part is neither written nor reused (here not_run,
-    as with an extra missing), export_sample still creates it, empty, and draws no figure."""
-    folder, _ = scene_workflow(tmp_path)
-    config = scene_config(tmp_path, {"route": "per_fov", "fuse": False}, previews=True)
-    inputs, output = _snakemake._export_sample_files(config, folder.root, list(folder.scene.ids), SAMPLE)
-    declared = [output, *_snakemake._export_preview_outputs(config, folder.root, SAMPLE)]
-    assert declared[1:] == [str(folder.export_dir / "previews")]
-
-    class NotRun:
-        def export(self, sample, *, output_dir, **kwargs):
-            Path(output_dir).mkdir(parents=True, exist_ok=True)
-            (Path(output_dir) / "export.json").write_text("{}")
-            return SimpleNamespace(parts={"assemble": "not_run"}, folder=Path(output_dir))
-
-    monkeypatch.setattr(_snakemake, "_export_dataset", lambda *args: NotRun())
-    monkeypatch.setattr(_snakemake, "_write_ownership_figures", lambda *args: pytest.fail("no assembly to draw"))
-    _snakemake._run_export(SimpleNamespace(config=config, input=inputs, output=declared,
-                                         wildcards=SimpleNamespace(sample=SAMPLE)))
-    assert all(Path(p).exists() for p in declared)
-    assert list(Path(declared[1]).iterdir()) == []

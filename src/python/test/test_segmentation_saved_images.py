@@ -18,25 +18,20 @@ import hashlib
 import json
 import os
 import re
-import runpy
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
-import jsonschema
 import numpy as np
 import pandas as pd
 import pytest
 import tifffile
-import yaml
-from skimage.measure import label
 
 from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table
 from starfinder.assignment import _assign
 from starfinder.readout import ReadFilterConfig
 from starfinder.dataset import CheckpointConfig, MorphologyConfig, PipelineConfig
-from starfinder.dataset.workflow import _nuclei_checkpoints, _nuclei_registration
+from starfinder.dataset.workflow import _nuclei_checkpoints
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import save_volume
 from starfinder.preprocessing import ProjectionConfig
@@ -47,7 +42,7 @@ from starfinder.segmentation._labels import same_grid
 from starfinder.segmentation._plan import assemble_input
 
 from . import hash_oracles
-from .test_morphology_rounds import (LABELS, MORPH, SEQUENCING_SHIFT, STAIN, THRESHOLD, ThresholdConfig, files,
+from .test_morphology_rounds import (LABELS, MORPH, SEQUENCING_SHIFT, THRESHOLD, ThresholdConfig, files,
                                      make_dataset, pipeline)
 from .test_registration_other_rounds import SHIFT, grid, texture
 
@@ -57,7 +52,6 @@ SRC = Path(__file__).resolve().parents[1]           # src/python of this tree
 ROOT = SRC.parents[1]
 ANGLE = 90
 SPACING = dict(spacing_zyx=(1.0, 0.5, 0.5), spatial_unit="micrometer")
-SCHEMA = yaml.safe_load((ROOT / "workflow" / "schemas" / "config.schema.yaml").read_text())
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -442,60 +436,18 @@ def rule_config(tmp_path, angle, projection, checkpoints=None):
     return config
 
 
-def run_rule(config, raw):
-    source = Path(config["root_input_path"]) / "dataset" / "sample"
-    if not source.exists():
-        source.parent.mkdir(parents=True)
-        os.symlink(raw["root"] / "in", source)
-    snakemake = SimpleNamespace(config=config, wildcards=SimpleNamespace(fovID="FOV"), input=[], output=[])
-    runpy.run_path(str(ROOT / "workflow" / "scripts" / "nuclei_registration.py"), init_globals={"snakemake": snakemake})
-    return Path(config["root_output_path"]) / "dataset" / "output"
-
-
-# The channel images are named by the channel labels ch00 (Flamingo), ch01 (RBD) and ch02 (DAPI).
-DECLARED = ["fovs/FOV/nuclei_registration.json", "images/morph/ch00/FOV.tif", "images/morph/ch01/FOV.tif",
-            "images/morph/ch02/FOV.tif"]
-
-
-@pytest.mark.parametrize("projection", [False, True])
-@pytest.mark.parametrize("angle", [None, 90])
-def test_the_rule_writes_the_saved_form_only_with_checkpoints(raw, tmp_path, angle, projection):
-    plain = run_rule(rule_config(tmp_path / "plain", angle, projection), raw)
-    saved = run_rule(rule_config(tmp_path / "saved", angle, projection, checkpoints={}), raw)
-    assert files(plain) == DECLARED
-    assert files(saved) == sorted(DECLARED + [f"fovs/FOV/other_rounds/{name}/{file}"
-                                              for name in ("morph", "reference_stain")
-                                              for file in ("image.ome.tif", "registration.json")])
-    for name in DECLARED:
-        assert (plain / name).read_bytes() == (saved / name).read_bytes(), name
-    record = json.loads((plain / "fovs" / "FOV" / "nuclei_registration.json").read_text())
-    assert list(record["registration"]) == list(record["registered_rounds"]) == ["morph"]
-    assert record["registration"]["morph"][0]["reference"] == "round1:ch04"
-    rotated = {None: (3, -2), 90: (2, 3)}[angle]       # the displacement (0, 3, -2) rotated by 90 degrees CCW
-    assert record["registration"]["morph"][0]["qc"]["details"]["transform"]["displacement_zyx"] == [0, *rotated]
-
-    # The saved form reloads, and its image is the one the rule wrote; without checkpoints there is nothing.
-    rule_dataset = _nuclei_registration(rule_config(tmp_path / "saved", angle, projection))[0]
-    fov = rule_dataset.fov("FOV")
-    for name in ("reference_stain", "morph"):
-        fov.load_registered_round(name)
-    assert fov.registration_chains["morph"].transforms[0].displacement_zyx == (0.0, *map(float, rotated))
-    for c, channel in enumerate(MORPH):
-        written = tifffile.imread(saved / "images" / "morph" / channel.channel / "FOV.tif")
-        image = fov.images["morph"][..., c]
-        assert np.array_equal(written, image.max(axis=0) if projection else image)
-    with pytest.raises(FileNotFoundError):
-        _nuclei_registration(rule_config(tmp_path / "plain", angle, projection))[0].fov("FOV").load_registered_round("morph")
-
-
 def test_the_rule_checkpoints_key(tmp_path):
-    for value in ({}, {"directory": "/somewhere", "overwrite": True}, None):
-        config = yaml.safe_load((ROOT / "docs/examples/workflow-full.yaml").read_text())
-        config["rules"]["nuclei_registration"]["parameters"] = dict(checkpoints=value)
-        jsonschema.validate(config, SCHEMA)
-    config["rules"]["nuclei_registration"]["parameters"] = dict(checkpoints=[1])
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(config, SCHEMA)
+    """The translator of the nuclei_registration rule's checkpoints key. The Python configuration has no such key:
+    the morphology task always writes the saved form (D6), and the package refuses a checkpoints key of the
+    morphology block (the Python schema, W-750)."""
+    from . import workflow_tasks as T
+    python = T.dataset_keys(tmp_path, seq_channel_order=list(LABELS), reference_stains=[{"channel": "ch04",
+                                                                                       "name": "DAPI"}],
+                            additional_round=[dict(round_name="morph", channel_order=[c.record() for c in MORPH])],
+                            morphology={})
+    assert T.validation_error(python) is None
+    for value in ({}, {"directory": "/somewhere", "overwrite": True}, None, [1]):
+        assert "morphology" in T.validation_error(dict(python, morphology={"checkpoints": value}))
     assert _nuclei_checkpoints(rule_config(tmp_path, None, False)) is None
     assert _nuclei_checkpoints(rule_config(tmp_path, None, False, checkpoints=None)) is None
     assert _nuclei_checkpoints(rule_config(tmp_path, None, False, checkpoints={})) == CheckpointConfig()

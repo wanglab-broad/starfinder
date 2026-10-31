@@ -1,4 +1,10 @@
-"""The Python-only registration workflow key: adapter, static schema and its consistency with REGISTRATION_METHODS (W-256)."""
+"""The Python-only registration workflow key: adapter, static schema and its consistency with REGISTRATION_METHODS (W-256).
+
+A Python configuration's key is validated by the package (the Python schema and the processing block's translator, as
+the plan validates it; W-750), on the rule's parameters as the processing block (``workflow_tasks.python_shape``); the
+MATLAB schema keeps its registration definitions, consistent with the registry, and refuses the key without
+``backend: python``.
+"""
 import copy
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -12,6 +18,8 @@ from starfinder.registration import RecoveryConfig, RegistrationRecipe, Registra
 from starfinder.registration import (REGISTRATION_METHODS, AffineConfig, BSplineConfig, DemonsConfig,
     InsufficientLandmarksError, RegistrationEstimationError, RegistrationQcConfig, RegistrationSignalConfig,
     RegistrationSpec, RigidConfig, TranslationConfig, WarpConfig)
+
+from . import workflow_tasks as T
 
 pytestmark = [pytest.mark.registration, pytest.mark.contract]
 
@@ -150,14 +158,14 @@ def test_matlab_registration_keys_keep_their_names():
 def test_every_python_rule_accepts_the_key(rule):
     config = with_registration(yaml.safe_load(EXPLICIT), rule)
     original = copy.deepcopy(config)
-    jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.python_shape(config, rule)) is None
     assert from_workflow_config(config, rule).pipeline.registration == EXPLICIT_RECIPE
     assert config == original
 
 
 def test_minimal_key_and_defaults():
     config = with_registration(yaml.safe_load("steps: [{method: translation}, {method: demons, iterations: [5]}]"))
-    jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.python_shape(config)) is None
     recipe = from_workflow_config(config).pipeline.registration
     assert recipe == RegistrationRecipe((RegistrationStep(TranslationConfig()),
                                          RegistrationStep(DemonsConfig(iterations=(5,)))))
@@ -166,15 +174,14 @@ def test_minimal_key_and_defaults():
 
 @pytest.mark.parametrize("block", ["global_registration", "local_registration"])
 def test_a_legacy_block_raises_on_the_python_backend_naming_registration_steps(block):
-    """Under backend python a legacy block raises naming registration.steps, enabled or not, and the schema's backend
-    guard refuses it; a MATLAB-backend configuration keeps the mutual exclusion with an enabled block."""
+    """Under backend python a legacy block raises naming registration.steps, enabled or not, and the package refuses
+    it; a MATLAB-backend configuration keeps the mutual exclusion with an enabled block."""
     for run in (True, False):
         config = with_registration({"steps": [{"method": "translation"}]}, **{block: {"run": run}})
         with pytest.raises(ValueError, match=f"{block} is a MATLAB key, which the Python backend replaces by a "
                                              "registration.steps entry"):
             from_workflow_config(config)
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(config, SCHEMA)
+        assert T.validation_error(T.python_shape(config))
     matlab = with_registration({"steps": [{"method": "translation"}]}, **{block: {"run": True}})
     del matlab["backend"]
     with pytest.raises(ValueError, match="mutually exclusive with the enabled legacy blocks"):
@@ -185,13 +192,14 @@ def test_a_legacy_block_raises_on_the_python_backend_naming_registration_steps(b
 
 @pytest.mark.parametrize("block", ["global_registration", "local_registration"])
 def test_a_legacy_block_of_a_disabled_rule_raises_on_the_python_backend(block):
-    """A legacy block of a rule that does not run raises when any rule is read; the schema refuses it."""
+    """A legacy block of a rule that does not run raises when any rule is read; a Python configuration names no rule
+    (D4), and the package refuses the rules."""
     config = with_registration({"steps": [{"method": "translation"}]})
     config["rules"]["lrsf_single_fov_subtile"] = {"run": False, "parameters": {block: {"run": False}}}
     with pytest.raises(ValueError, match=f"rules.lrsf_single_fov_subtile.parameters: {block} is a MATLAB key"):
         from_workflow_config(config)
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(config, SCHEMA)
+    assert "rules left the Python configuration" in T.validation_error(dict(T.python_shape(config),
+                                                                           rules=config["rules"]))
 
 
 # The MATLAB names of the legacy blocks and the native form each error names.
@@ -206,7 +214,7 @@ MATLAB_NAMES = {"detection_threshold": "detection_noise_sigma", "match_distance"
 @pytest.mark.parametrize("key", sorted(MATLAB_NAMES))
 def test_a_matlab_block_name_inside_a_native_step_or_alternative_raises(key):
     """A MATLAB parameter or block name inside a registration step or one of its recovery alternatives raises naming
-    the native form; the schema refuses both (the step definitions and the guard of the alternatives)."""
+    the native form; the package refuses both (the processing block's translator)."""
     value = ("merged-image" if key in ("ref_img", "mov_img") else "nearest" if key == "boundary_mode" else
              "round1" if key == "ref_round" else 1)
     recovery = {"allowed_errors": ["InsufficientLandmarksError"]}
@@ -218,8 +226,7 @@ def test_a_matlab_block_name_inside_a_native_step_or_alternative_raises(key):
         with pytest.raises(ValueError, match=f"registration.{where}: {key} is a MATLAB name, which the Python backend "
                                              f"writes as {MATLAB_NAMES[key]}"):
             from_workflow_config(config)
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(config, SCHEMA)
+        assert MATLAB_NAMES[key] in T.validation_error(T.python_shape(config))
 
 
 @pytest.mark.parametrize("variant", LEGACY_ALIASES)
@@ -231,11 +238,10 @@ def test_a_demons_variant_method_name_raises_naming_the_variant_field(variant):
         with pytest.raises(ValueError, match=f"unknown registration method '{variant}': a MATLAB demons variant name, "
                                              f"which the Python backend writes as {{method: demons, variant: {variant}}}"):
             from_workflow_config(config)
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(config, SCHEMA)
+        assert T.validation_error(T.python_shape(config))
     native = {"steps": [{"method": "tps", "recovery": {**recovery, "alternatives": [
         {"method": "demons", "variant": variant}]}}]}
-    jsonschema.validate(with_registration(native), SCHEMA)
+    assert T.validation_error(T.python_shape(with_registration(native))) is None
     assert from_workflow_config(with_registration(native)).pipeline.registration.steps[0].recovery.alternatives == (
         DemonsConfig(variant=variant),)
 
@@ -248,8 +254,7 @@ def test_a_matlab_image_representation_as_a_signal_mode_raises(mode, native):
         with pytest.raises(ValueError, match=f"registration.{where}: mode '{mode}' is a MATLAB image representation, "
                                              f"which the Python backend writes as mode '{native}'"):
             from_workflow_config(config)
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(config, SCHEMA)
+        assert f"mode '{native}'" in T.validation_error(T.python_shape(config))
 
 
 @pytest.mark.parametrize("registration, error, message", [
@@ -284,8 +289,8 @@ def test_unknown_methods_fields_and_sequences_raise(registration, error, message
     {"steps": [{"method": "tps", "recovery": {"allowed_errors": ["ValueError"], "alternatives": [{"method": "cpd"}]}}]},
 ])
 def test_schema_rejects_unknown_methods_fields_and_values(registration):
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(with_registration(registration), SCHEMA)
+    """The package refuses each (W-750: the Python workflow validates with the package)."""
+    assert T.validation_error(T.python_shape(with_registration(registration)))
 
 
 @pytest.mark.parametrize("backend", [None, "matlab"])
@@ -297,7 +302,7 @@ def test_schema_accepts_the_key_only_on_the_python_backend(backend):
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(config, SCHEMA)
     config["backend"] = "python"
-    jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.python_shape(config)) is None   # the package validates the Python one (W-750)
 
 
 def test_the_widened_local_method_enum_is_accepted():

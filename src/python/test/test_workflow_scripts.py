@@ -69,10 +69,6 @@ def test_stitch_subtile_plots_4d_reference_image(tmp_path):
     assert preview_output.exists()
 
 
-class NamedInputs(list):
-    """A list whose entries may also be named, as Snakemake's rule input."""
-
-
 def ref_merged_fov(tmp_path, reference_image):
     """An FOV whose saved reference merged image has the W-235 content."""
     from starfinder.dataset import Dataset, RoundState
@@ -88,7 +84,9 @@ def ref_merged_fov(tmp_path, reference_image):
 
 @pytest.mark.parametrize("maximum_projection", [False, True])
 def test_stitch_subtile_plots_the_reference_merged_image(tmp_path, maximum_projection):
-    """The stitch preview reads the ZYX, or projected YX, reference merged image."""
+    """The stitch preview reads the ZYX, or projected YX, reference merged image at MATLAB's images/ref_merged/ (the
+    Python backend's input reference, the FOV folder's reference image, is retired with its subtile route, D5)."""
+    import shutil
     from starfinder.preprocessing import ProjectionConfig
 
     base_path = tmp_path / "dataset" / "output"
@@ -105,18 +103,16 @@ def test_stitch_subtile_plots_the_reference_merged_image(tmp_path, maximum_proje
     reference_image[1, 4, 3, 2] = 4000
     fov = ref_merged_fov(tmp_path, reference_image)
     reference = fov.save_reference_image(projection=ProjectionConfig() if maximum_projection else None)
-    assert reference == base_path / "fovs" / "FOV_001" / "reference.tif"
+    matlab = base_path / "images" / "ref_merged" / "FOV_001.tif"
+    matlab.parent.mkdir(parents=True)
+    shutil.copyfile(reference, matlab)
 
     reads_output = signal_path / "FOV_001_goodSpots.csv"
     preview_output = signal_path / "FOV_001_goodSpots.png"
-    # The Python backend's rule declares the reference image as its input named reference (Snakemake's named list).
-    inputs = NamedInputs([str(coords_path)])
-    inputs.reference = str(reference)
     snakemake = SimpleNamespace(
         wildcards=SimpleNamespace(fovID="FOV_001"),
-        config={"root_output_path": str(tmp_path), "dataset_id": "dataset", "output_id": "output",
-                "backend": "python"},
-        input=inputs,
+        config={"root_output_path": str(tmp_path), "dataset_id": "dataset", "output_id": "output"},
+        input=[str(coords_path)],
         output=[str(reads_output), str(preview_output)],
     )
     namespace = runpy.run_path(

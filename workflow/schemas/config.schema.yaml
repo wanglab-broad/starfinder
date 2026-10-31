@@ -520,7 +520,8 @@ allOf:
   # deduplication, reads_extraction.background, load_codebook.encoding.pair_to_color, the
   # segmentation, assignment, stitching, assembly, export and report blocks, the
   # stardist_segmentation target and the rules' checkpoints are Python-only (backend
-  # defaults to matlab)
+  # defaults to matlab); so are the codebook, direct_panel and image_dir_template that name another
+  # codebook or image layout than MATLAB's genes.csv and round-first folders, when not null (OC5)
   - if:
       not:
         required: [backend]
@@ -531,6 +532,12 @@ allOf:
       not:
         anyOf:
           - required: [selected_fovs]
+          - required: [codebook]
+            properties: {codebook: {type: string}}
+          - required: [direct_panel]
+            properties: {direct_panel: {type: string}}
+          - required: [image_dir_template]
+            properties: {image_dir_template: {type: string}}
           - required: [reference_stains]
           - required: [segmentation]
           - required: [assignment]

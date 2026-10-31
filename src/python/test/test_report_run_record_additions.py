@@ -5,8 +5,9 @@ design/specs/report.md, "Records added to run.json": R1 ``transforms`` (the entr
 file named only when the stage ``registered`` wrote it), R2 ``codebook`` (the file
 ``Dataset.load_codebook`` or ``load_direct_panel`` read), R3
 ``counts.filtering.endpoint_valid`` (the filter's correct-form count), R4
-``workflow_config`` (the configuration file of a workflow rule) and R5 (the processing
-rules write ``run.json``, alone by default). Every run is made here on the synthetic FOV of
+``workflow_config`` (the configuration file a run names) and R5 (the checkpoints key of the
+processing rules, as the translator reads it; the fov task's run.json, which names the resolved
+configuration, is test_workflow_fov_tasks.py's, W-750). Every run is made here on the synthetic FOV of
 ``test_report_records_golden.py`` (two rounds of four channels, 4 × 24 × 24, round2 shifted
 by one voxel in X); nothing outside the test is read. ``format_version`` stayed 1 (V1) until
 run.json version 2 (W-565, design/notes/migration.md), which these records are.
@@ -18,8 +19,6 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
-import runpy
-from types import SimpleNamespace
 
 import jsonschema
 import pandas as pd
@@ -279,73 +278,17 @@ def workflow_config(root: Path, out: str, **parameters) -> dict:
                 rules={"rsf_single_fov": {"run": True, "parameters": rule}})
 
 
-def run_rule(config: dict, codebook: Path):
-    """Write the configuration file and run workflow/scripts/rsf_single_fov.py with a stub snakemake object."""
-    jsonschema.validate(config, SCHEMA)
-    Path(config["config_path"]).write_text(yaml.safe_dump(config))
-    snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook)),
-                                wildcards=SimpleNamespace(fovID="FOV_001"))
-    runpy.run_path(str(ROOT / "workflow" / "scripts" / "rsf_single_fov.py"), init_globals={"snakemake": snakemake})
-    paths = from_workflow_config(config).dataset.fov("FOV_001").paths
-    folder = paths.fov_dir
-    # The run's own files: run.json and its checkpoint folder (the rule also writes the reference image and molecules).
-    files = sorted(name for name in (p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
-                   if name == "run.json" or name.startswith("checkpoints/")) if folder.exists() else []
-    logs = sorted(p.relative_to(paths.output_root).as_posix() for p in (paths.output_root / "log").rglob("*"))
-    record = json.loads((folder / "run.json").read_text()) if "run.json" in files else None
-    return record, files, logs
-
-
-@pytest.fixture(scope="module")
-def scene(tmp_path_factory):
-    root = tmp_path_factory.mktemp("workflow")
-    write_scene(root / "data")
-    return root, write_codebook(root / "genes.csv")
-
-
-def test_r4_r5_the_rule_writes_run_json_alone_and_no_log(scene):
-    root, codebook = scene
-    record, files, logs = run_rule(workflow_config(root, "out"), codebook)
-    assert files == ["run.json"]
-    assert record["status"] == "succeeded"
-    assert record["config"]["checkpoints"] == {"stages": [], "directory": None, "table_format": "csv",
-                                               "hash_inputs": True, "overwrite": True}
-    config_file = root / "config.yaml"
-    assert record["workflow_config"] == {"path": str(config_file), "sha256": sha256(config_file)}
-    assert record["codebook"] == {"kind": "codebook", "path": str(codebook), "sha256": sha256(codebook),
-                                  "entries": 4, "genes": 4}
-    assert list(record["transforms"]) == ["round2"]
-    assert all(entry["sha256"] is not None for entry in record["inputs"])
-    # The rule writes no log file (W-563): run.json holds what its logs held.
-    assert logs == []
-    assert set(record["counts"]["filtering"]["fractions"]) == {"accepted"}
-    assert record["counts"]["summary"]["filtering"]["accepted"] == record["counts"]["filtering"]["accepted"]
-    assert record["rounds"]["reference_round"] == "round1" and record["rounds"]["sequencing_rounds"] == list(ROUNDS)
-
-
-def test_r5_the_checkpoints_key_adds_stages_and_a_rerun_replaces_the_record(scene):
-    root, codebook = scene
-    first, files, _ = run_rule(workflow_config(root, "rerun"), codebook)
-    assert files == ["run.json"]
-    staged = workflow_config(root, "rerun", checkpoints={"stages": ["candidates", "pre_qc"]})
-    second, files, _ = run_rule(staged, codebook)
-    assert files == ["checkpoints/candidates.csv", "checkpoints/candidates.json", "checkpoints/pre_qc.csv",
-                     "checkpoints/pre_qc.json", "run.json"]
-    assert second["config"]["checkpoints"]["stages"] == ["candidates", "pre_qc"]
-    assert second["started_at"] >= first["ended_at"]
-    # The configuration file changed with the key, and the record names the new bytes.
-    assert second["workflow_config"]["sha256"] == sha256(root / "config.yaml") != first["workflow_config"]["sha256"]
-    third, files, _ = run_rule(workflow_config(root, "rerun", checkpoints=None), codebook)
-    assert files == ["run.json"] and third["config"]["checkpoints"]["stages"] == []
-
-
 def test_r5_the_checkpoints_key_is_checked(tmp_path):
+    from . import workflow_tasks as T
     config = workflow_config(tmp_path, "out", checkpoints={"stages": ["registered"]})
-    jsonschema.validate(config, SCHEMA)
+    # The package validates the Python configuration's processing.checkpoints, a list of stages (W-750).
+    python = T.dataset_keys(tmp_path, n_rounds=2, seq_channel_order=list(CHANNELS), processing={
+        "registration": {"steps": [{"method": "translation"}]}, "reads_filtration": {}, "checkpoints": ["registered"]})
+    assert T.validation_error(python) is None
+    for value in (["registred"], {"directory": "elsewhere"}, "pre_qc"):
+        assert T.validation_error(dict(python, processing=dict(python["processing"], checkpoints=value)))
     for value in ({"stages": ["registred"]}, {"directory": "elsewhere"}, ["pre_qc"]):
         invalid = workflow_config(tmp_path, "out", checkpoints=value)
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(invalid, SCHEMA)
         with pytest.raises((ValueError, TypeError)):
             from_workflow_config(invalid)
     with pytest.raises(ValueError, match="Python-only"):
@@ -362,14 +305,14 @@ PROCESSING_RULES = ("rsf_single_fov", "gr_single_fov_subtile", "lrsf_single_fov_
 
 @pytest.mark.parametrize("rule", PROCESSING_RULES)
 def test_r5_the_schema_allows_the_checkpoints_key_with_the_python_backend_only(tmp_path, rule):
-    # The workflow validates its configuration with this schema (workflow/Snakefile) before any rule runs; a
-    # MATLAB run never reaches the adapter's own check, so the schema must refuse the key there.
+    # The MATLAB workflow validates its configuration with this schema (workflow/rules/legacy.smk) before any rule
+    # runs; a MATLAB run never reaches the adapter's own check, so the schema must refuse the key there. (The Python
+    # workflow's processing.checkpoints is validated by the package: the test above, W-750.)
     base = workflow_config(tmp_path, "out")
     matlab = dict(base, **MATLAB_FOVS)
     without = {k: v for k, v in matlab.items() if k != "backend"}
     keyed = {"rules": {rule: {"run": True, "parameters": {"checkpoints": {"stages": ["pre_qc"]}}}}}
     plain = {"rules": {rule: {"run": True, "parameters": {}}}}
-    jsonschema.validate(dict(base, **keyed), SCHEMA)
     # backend: matlab refuses it; without the key the same configuration is valid.
     jsonschema.validate(dict(matlab, backend="matlab", **plain), SCHEMA)
     with pytest.raises(jsonschema.ValidationError):

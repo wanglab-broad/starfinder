@@ -2,16 +2,24 @@
 
 The two refused variants of the worked example, a missing round folder, a channel label that matches two files, a
 run name with ``/``, each key that left the Python dialect and ``backend: matlab``: ``starfinder workflow plan``
-exits 2 with a message that names the key, FOV, round or label, and writes nothing.
+exits 2 with a message that names the key, FOV, round or label, and writes nothing. And the refusals that moved here
+from the tests of the old rules' parse-time checks (W-750): a channel label that matches no file, a reference image
+pattern without ``{fov_id}``, the legacy sample rules of a Python configuration, a stage file of a fovs.csv without
+PositionIDs and the route RD1 refuses; these plan configurations of the test's own on an input root whose raw
+images are empty files (``workflow_tasks``).
 """
 import copy
 import shutil
+from pathlib import Path
 
 import pytest
 
 from starfinder.__main__ import main
 
+from starfinder.workflow._plan import PlanRefused
+
 from . import workflow_examples as X
+from . import workflow_tasks as W
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -187,3 +195,111 @@ def test_the_tiled_settings_are_refused_in_direct_mode(work, capsys):
     config = copy.deepcopy(X.variants(work)["molecules-only"])
     config["processing"]["tiled"] = {"tile_size_yx": 18}
     _refused(work, config, capsys, "processing.tiled", "processing.mode tiled only")
+
+
+# --- the refusals of the old rules' parse-time checks (W-750) -------------------------------------------------------
+
+def _one_fov(tmp_path, fovs="sample,fov_id\ns1,P1\n", **keys):
+    """The processing block on fovs.csv's FOVs, raw images as empty files."""
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), **keys)
+    W.write_inputs(config, fovs)
+    return config
+
+
+def _refused_plan(tmp_path, config, *parts):
+    with pytest.raises(PlanRefused) as refusal:
+        W.plan(tmp_path, "refused", config)
+    for part in parts:
+        assert part in str(refusal.value), (part, str(refusal.value))
+    assert not (W.output_root(config) / "workflow").exists()     # the plan writes nothing
+    return str(refusal.value)
+
+
+def test_a_channel_label_that_matches_no_file(tmp_path):
+    """From test_segmentation_workflow.py, test_get_dapi_input_needs_exactly_one_file[registration-py.smk] (the
+    reference round's stain file of the Python rotate_nuclei rule): a label of a FOV's round that matches no file is
+    refused, naming the FOV, the round, the label and the count (two files: test_a_channel_label_that_matches_two_files
+    above)."""
+    config = _one_fov(tmp_path, reference_stains=[{"channel": "ch04", "name": "DAPI"}], morphology={},
+                      additional_round=[{"round_name": "morph", "channel_order": [{"channel": "ch00",
+                                                                                     "name": "DAPI"}]}])
+    (W.input_root(config) / "round1" / "P1" / "P1_ch04.tif").unlink()
+    _refused_plan(tmp_path, config, "FOV P1", "round round1", "'ch04'", "found 0")
+
+
+@pytest.mark.parametrize("value", ["fovs/{fovID}/reference.tif", "images/x.tif", "", 3])
+def test_a_reference_image_without_fov_id_is_refused(tmp_path, value):
+    """From test_stitching_reference_image.py, test_a_pattern_without_fov_id_raises_naming_the_setting (the rule
+    inputs of the reference image): a reference_image pattern without {fov_id} is refused, naming the setting."""
+    _refused_plan(tmp_path, _one_fov(tmp_path, reference_image=value), "reference_image")
+
+
+LEGACY_SAMPLE_RULES = [
+    (["stitching_preparation", "create_tile_config"], {}),
+    (["create_sample_h5ad"], {"stitching": {"method": "multiview_stitcher", "positions": X.grid()}}),
+    (["create_sample_reads_assignment"], {}),
+    (["reads_assignment"], {}),
+]
+
+
+@pytest.mark.parametrize("rules, blocks", LEGACY_SAMPLE_RULES)
+def test_the_legacy_sample_rules_are_refused_naming_the_blocks(tmp_path, rules, blocks):
+    """From test_fov_membership.py, test_the_legacy_sample_rules_are_refused_for_python_naming_the_blocks: a Python
+    configuration names no rule (D4, D7): the plan refuses the rules and names the step blocks that replace them,
+    where the parse-time check named the blocks each legacy rule needs."""
+    config = _one_fov(tmp_path, rules={rule: {"run": True} for rule in rules}, **blocks)
+    _refused_plan(tmp_path, config, "rules left the Python configuration",
+                  "the step blocks (processing, morphology, segmentation, assignment, stitching, assembly, export, "
+                  "report)")
+
+
+def test_a_stage_file_without_the_position_ids_of_fovs_csv_is_refused(tmp_path):
+    """From test_fov_membership.py, test_the_python_stitching_parse_needs_only_fovs_csv_and_a_stage_file (its
+    refusal): a stage file names the FOVs by fovs.csv's position_id; without that column the plan refuses it (V6),
+    as the rules' parse did."""
+    from .stitching_fixtures import maf_text
+    stage = tmp_path / "positions.maf"
+    stage.write_text(maf_text(((1, "0.076", "0.048"), (2, "0.076", "0.048261"))))
+    config = _one_fov(tmp_path, fovs="sample,fov_id\ns1,F1\ns1,F2\n", reference_image_import=str(
+        tmp_path / "refs" / "{fov_id}.tif"), stitching={"method": "multiview_stitcher", "positions": {
+            "source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}, "stage_file": str(stage)}})
+    config.pop("processing")
+    _refused_plan(tmp_path, config, "position_id column of fovs.csv")
+
+
+def _route(tmp_path, combination):
+    """The route_configs block of the combination (test_sample_segmentation_workflow.py) on the plan's dataset: its
+    source images under the test's folder (the relative pattern under the output root, where the export reads it)."""
+    from .test_sample_segmentation_workflow import python_route_config
+    config = python_route_config(tmp_path, *combination)
+    flamingo = tmp_path / "flamingo" / "{fov_id}.tif"
+    config["export"]["images"] = [i.replace("/abs/flamingo/{fov_id}.tif", str(flamingo))
+                                  for i in config["export"]["images"]]
+    fovs = "sample,fov_id\nsample,F1\nsample,F2\n"
+    W.write_inputs(config, fovs, codebook="gene,barcode\n")
+    out = W.output_root(config)
+    for fov in ("F1", "F2"):
+        for path in (out / "images" / "dapi" / f"{fov}.tif", Path(str(flamingo).replace("{fov_id}", fov)),
+                     tmp_path / f"{fov}.tif"):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"")
+    return config
+
+
+@pytest.mark.parametrize("segment", [True, False])
+@pytest.mark.parametrize("fuse", [True, False])
+def test_a_configuration_rd1_refuses_names_export_segmentation_and_route_per_fov(tmp_path, segment, fuse):
+    """From test_wf1_a_configuration_rd1_refuses_plans_its_earlier_jobs_with_route_per_fov (the route_configs that
+    RD1 refuses by its default: no route, dimensionality projection, an assignment, no export.segmentation): the plan
+    refuses each, naming export.segmentation and route: per_fov; with route: per_fov added it plans the route per FOV,
+    whose export task reads each FOV's saved assignment and no molecule table (it also declares the folder's tables
+    and the fusion's source images, D2)."""
+    config = _route(tmp_path, (None, "projection", segment, fuse, False, "default"))
+    _refused_plan(tmp_path, config, "export.segmentation", "route: per_fov")
+    config["export"]["route"] = "per_fov"
+    _, manifest = W.plan(tmp_path, "per_fov", config)
+    (export,) = [t for t in manifest["tasks"] if t["kind"] == "export"]
+    assert "stitching/sample/placement.json" in export["inputs"]
+    for fov in ("F1", "F2"):
+        assert f"fovs/{fov}/assignment/default/assignment.json" in export["inputs"]
+        assert f"fovs/{fov}/molecules.csv" not in export["inputs"]

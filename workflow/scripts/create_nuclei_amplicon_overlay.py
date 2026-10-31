@@ -2,5 +2,5 @@
 import sys
 if 'starfinder_path' in snakemake.config:
     sys.path.insert(0, snakemake.config['starfinder_path'] + '/src/python')
-from starfinder._snakemake import _run_nuclei_amplicon_overlay
+from starfinder._legacy_workflow import _run_nuclei_amplicon_overlay
 _run_nuclei_amplicon_overlay(snakemake)

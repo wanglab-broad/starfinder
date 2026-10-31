@@ -425,15 +425,24 @@ def test_each_export_caller_reads_the_grid_without_pixels(tmp_path, monkeypatch)
 @pytest.mark.stitching
 @pytest.mark.workflow
 def test_the_export_reads_no_reference_image_whole_for_its_grid(tmp_path, monkeypatch):
-    """The workflow's reads_assignment with an assembly block, and its export_sample (Dataset.export with the
-    assembly and the fusion on), read no reference image whole for its grid; the fusion reads every page. The
-    figures are drawn (previews on, W-568), and the export record holds the declared grid of every FOV (grid_record)
-    in the assembly and the fusion. That the plain sample's saved folders, tables and fused images equal those of
-    the same sample with stored metadata is test_workflow_declared_grids.py's
-    test_reads_assignment_and_export_sample_on_declared_grids."""
+    """The legacy reads_assignment adapter with an assembly block, and the export (Dataset.export of the
+    configuration's translation, with the assembly and the fusion on, the call of the removed export_sample adapter),
+    read no reference image whole for its grid; the fusion reads every page. The figures are drawn (previews on,
+    W-568), and the export record holds the declared grid of every FOV (grid_record) in the assembly and the fusion.
+    That the plain sample's saved folders, tables and fused images equal those of the same sample with stored
+    metadata is test_workflow_declared_grids.py's test_reads_assignment_and_export_sample_on_declared_grids, whose
+    two helpers this test runs (W-750: the helpers of test_workflow_assembly_figures.py left with the old Python
+    workflow)."""
     import dask
 
-    from .test_workflow_assembly_figures import export_sample, reads_assignment
+    from . import test_workflow_declared_grids as grids
+    from starfinder import _layout
+
+    def reads_assignment(root, out, fov, config):
+        grids.reads_assignment(root, out, fov, config)
+        return {p.name: p.read_bytes() for p in sorted(_layout.fov_previews_dir(out, fov).glob("*.png"))}
+
+    export_sample = grids.export_sample
     root = tmp_path
     out, config, images = golden_sample(root)
     # The figures reads_assignment draws on request (W-568, assembly.previews).

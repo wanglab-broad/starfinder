@@ -1,9 +1,11 @@
-"""The Snakefile's configuration validation (W-570).
+"""The MATLAB rule set's configuration validation (W-570).
 
-``workflow/Snakefile`` calls ``snakemake.utils.validate(config, schema=...)``, which inserts every schema default
-into the configuration before it checks it (``set_default=True``). A default on a key that the Python backend
-refuses would therefore make every Python configuration invalid; the schema gives those keys none, and
-``common.smk``'s MATLAB branch applies MATLAB's defaults instead.
+``workflow/rules/legacy.smk`` (the MATLAB rule set, which the dispatcher includes for ``backend: matlab``) calls
+``snakemake.utils.validate(config, schema=...)``, which inserts every schema default into the configuration before it
+checks it (``set_default=True``). The MATLAB schema gives the keys that the Python dialect refuses no default, and
+``common.smk`` applies MATLAB's defaults instead. The Python workflow validates its configuration with the package
+(the plan's Python schema, without inserting defaults; W-750): a Python configuration with a key of the MATLAB
+dialect is refused there, naming the key.
 """
 
 import copy
@@ -13,19 +15,14 @@ import jsonschema
 import pytest
 import yaml
 
-from .test_fov_membership import common_names, config_for
-from .test_readout_direct import yaml_config
-from .test_readout_encoding_table import workflow as encoding_workflow
-from .test_report_run_record_additions import workflow_config as golden_workflow_config
-from .test_report_workflow import REPORT
-from .test_sample_segmentation_workflow import COMBINATIONS, route_workflow_config
+from . import workflow_tasks as T
+from .test_fov_membership import common_names
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_PATH = ROOT / "workflow" / "schemas" / "config.schema.yaml"
 SCHEMA = yaml.safe_load(SCHEMA_PATH.read_text())
-EXAMPLES = ("workflow-minimal", "workflow-full", "workflow-recipe-2")
 # The keys the Python backend refuses (the schema's first allOf clause), by group.
 REFUSED = {"naming": {"fov_id_pattern": "tile_{i}", "n_fovs": 1}, "list": {"subset_list": []},
            "range": {"subset_range": False, "subset_start": 1, "subset_end": 1},
@@ -57,51 +54,13 @@ def snakefile_errors(config, validator=VALIDATOR):
     return list(validator.iter_errors(config))
 
 
-def example(name):
-    return yaml.safe_load((ROOT / "docs" / "examples" / f"{name}.yaml").read_text())
-
-
-def python_test_configs(tmp_path):
-    """The Python configurations that the repository's tests validate against the schema."""
-    full = example("workflow-full")
-    configs = {f"{name}+report": dict(example(name), report=copy.deepcopy(REPORT)) for name in EXAMPLES}
-    configs.update({
-        "minimal+selected_fovs": dict(example("workflow-minimal"), selected_fovs=["tile_1"]),
-        "fov_membership": dict(config_for(tmp_path), config_path="config.yaml", starfinder_path=str(ROOT)),
-        "readout_direct": yaml_config(tmp_path),
-        "readout_encoding": encoding_workflow({"encoding": {"reverse_bases": True}}),
-        "report_run_record": golden_workflow_config(tmp_path, "out"),
-        "full+python": dict(full, backend="python"),
-    })
-    for i, combination in enumerate(COMBINATIONS):
-        configs[f"route_configs[{i}]"] = route_workflow_config(*combination)
-    return configs
-
-
-@pytest.mark.parametrize("name", EXAMPLES)
-def test_the_python_examples_pass_the_snakefiles_validation(name):
-    config = example(name)
-    assert config["backend"] == "python"
-    assert snakefile_errors(config) == []
-    assert not set(config) & set().union(*REFUSED.values())
-
-
-def test_the_python_test_configurations_pass_the_snakefiles_validation(tmp_path):
-    configs = python_test_configs(tmp_path)
-    assert all(config["backend"] == "python" for config in configs.values())
-    failures = {name: [e.message for e in snakefile_errors(config)] for name, config in configs.items()}
-    assert {name: messages for name, messages in failures.items() if messages} == {}
-
-
 @pytest.mark.parametrize("key, value", [(k, v) for group in REFUSED.values() for k, v in group.items()])
 def test_a_python_configuration_with_a_refused_key_fails_naming_the_key(key, value):
-    errors = snakefile_errors(dict(example("workflow-minimal"), **{key: value}))
-    guards = [e for e in errors if e.validator == "not" and {"required": [key]} in e.validator_value["anyOf"]]
-    assert len(guards) == 1
-    # The guard's branch that matches is the key's own: the error names that key.
-    matched = [branch for branch in guards[0].validator_value["anyOf"]
-               if jsonschema.Draft202012Validator(branch).is_valid(guards[0].instance)]
-    assert matched == [{"required": [key]}]
+    """The package refuses the key in a Python configuration, naming it and where it went (W-750: the Snakefile's
+    validation, whose guard named the key, no longer reads a Python configuration)."""
+    config = T.dataset_keys("/work", processing={"reads_filtration": {}})
+    assert T.validation_error(config) is None
+    assert T.validation_error(dict(config, **{key: value})).startswith(f"{key} left the Python configuration")
 
 
 def test_no_refused_key_has_a_schema_default():
@@ -192,15 +151,24 @@ def test_common_smk_selects_the_matlab_fovs(tmp_path, monkeypatch, name, fovs):
         assert fovs == [config["fov_id_pattern"].format(i=i) for i in range(1, config["n_fovs"] + 1)]
 
 
+#: Python-only keys that the MATLAB schema refuses with backend matlab (its Python-only clause; OC5 for the inputs).
+PYTHON_ONLY = {"selected_fovs": ["tile_1"], "reference_stains": [{"channel": "ch04", "name": "DAPI"}],
+               "codebook": "panel.csv", "direct_panel": "panel.csv", "image_dir_template": "{fov}/{round}"}
+
+
 def test_the_validator_is_snakemakes(tmp_path):
     """With Snakemake installed (it is not a test dependency; the run's saved comparison uses the real one), its own
-    validate agrees with the validator above on the examples, the Python test configurations and the refused keys."""
+    validate agrees with the validator above on the repository's MATLAB configurations (it inserts the same defaults)
+    and refuses, naming each, the Python-only keys in a MATLAB configuration (W-750: the MATLAB rule set is the
+    Snakefile's validation's only reader)."""
     utils = pytest.importorskip("snakemake.utils", reason="snakemake is not installed in the test environment")
-    configs = dict(python_test_configs(tmp_path), **{name: example(name) for name in EXAMPLES})
+    configs = matlab_configs(tmp_path)
     for name, config in configs.items():
         ours = copy.deepcopy(config)
         utils.validate(config, schema=str(SCHEMA_PATH))
         assert snakefile_errors(ours) == [] and config == ours, name
-    for key, value in ((k, v) for group in REFUSED.values() for k, v in group.items()):
-        with pytest.raises(Exception, match=key):
-            utils.validate(dict(example("workflow-minimal"), **{key: value}), schema=str(SCHEMA_PATH))
+    for key, value in PYTHON_ONLY.items():
+        config = dict(configs["minimal_config"], backend="matlab", **{key: value})
+        assert snakefile_errors(copy.deepcopy(config)), key
+        with pytest.raises(Exception, match="not"):
+            utils.validate(config, schema=str(SCHEMA_PATH))

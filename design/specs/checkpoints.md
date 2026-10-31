@@ -358,12 +358,12 @@ grid's. It restores the image, its metadata, the rotation diagnostics and
 `registration_record["rounds"][name]`, with `saved` (the image file's path relative to
 the FOV folder and its SHA-256); a registered round also gets its results, chain,
 attempts and `WarpConfig` back. `FOV.segment` links that saved file in the record of a
-run that reads the image. The Python `nuclei_registration` rule writes these folders when
-`rules.nuclei_registration.parameters.checkpoints` is set ([workflows](../../docs/workflows.md)).
+run that reads the image. The workflow's `morphology` task always writes these folders (D6,
+[orchestration](orchestration.md)).
 
 **The registration record.** Without saving images, `fov.save_registration_record(path=None)`
-writes `<output_root>/fovs/<fov_id>/nuclei_registration.json`, which the Python
-`nuclei_registration` rule declares: `fov_id`; `rounds`, the round roles; `registered_rounds`,
+writes `<output_root>/fovs/<fov_id>/nuclei_registration.json`, which the workflow's
+`morphology` task declares: `fov_id`; `rounds`, the round roles; `registered_rounds`,
 the `registration_record["rounds"]` entries of the other rounds that have registration
 attempts (the reference stain, which has none, is left out); and `registration`, those
 rounds' attempts, unchanged. Each estimation attempt holds its translation as
@@ -386,13 +386,13 @@ and re-applies the filter with `FOV.run` ("Reload and continue").
 `FOV.save_reference_image` writes the reference round's merged (or single-channel) image to
 the file of the dataset's `reference_image` setting (the workflow key and `Dataset` field of
 that name): a pattern with `{fov_id}`, absolute or relative to the output root, by default
-`fovs/{fov_id}/reference.tif`. `FOV.load_reference_image`, the workflow's rule declarations
+`fovs/{fov_id}/reference.tif`. `FOV.load_reference_image`, the plan's declarations
 and every reader of the sample stages (`Dataset.stitch`, `Dataset.export`, the report and
-the workflow adapters) resolve the same file through one function. A reference image that
+the workflow commands) resolve the same file through one function. A reference image that
 another tool or rule produced is declared with `reference_image_import`, a pattern of the
 same form that excludes `reference_image`: every reader reads that file,
-`FOV.save_reference_image` raises instead of writing it, and the Python processing rules
-write no reference image. The TIFF content, calibration and projection metadata are as
+`FOV.save_reference_image` raises instead of writing it, and the workflow's `fov` and
+`tile_global` tasks write no reference image. The TIFF content, calibration and projection metadata are as
 before. A segmentation run that reads the saved image records it by its path relative to
 the output root, or by its absolute path when it lies outside, with its SHA-256 (since
 2026-10-24; [migration](../../docs/migration.md)).

@@ -1,139 +1,76 @@
-"""What the Python workflow rules take and require (W-569: OM-02, OM-15, OM-11).
+"""What the workflow rules take and require (W-569: OM-02, OM-15, OM-11), now the MATLAB rule set's (W-750).
 
-The Python rules take no JSON copy of the configuration and name their inputs, which the adapters read by name; the
-MATLAB rules keep the copy, which their scripts read. A Python configuration needs fiji_path, envs_path, img_row and
-img_col only where a rule reads them: Fiji in the legacy BigStitcher rule (stitching.smk, included for the MATLAB
-backend only), the dimensions in the subtile windows and the legacy tile configuration writer.
+The MATLAB rules keep the JSON copy of the configuration, which their scripts read, and the MATLAB schema requires
+fiji_path's reader (the legacy BigStitcher rule, stitching.smk, included for the MATLAB backend only) and img_row and
+img_col. The Python workflow's tasks name their inputs and read no copy, and need none of these keys (they left the
+Python configuration): test_workflow_plan.py, test_the_tasks_read_their_named_inputs_and_no_json_copy and
+test_the_plan_needs_no_fiji_envs_or_dimensions, and test_workflow_boundary.py (C8), W-750.
 """
 
-import copy
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-import jsonschema
 import pytest
 import yaml
 
-from starfinder.dataset import from_workflow_config
 from starfinder.dataset.workflow import _stitching_block
 
 from .test_dataset_fov_layout import backend_namespace, rule_section
-from .test_fov_membership import common_names, rows_text, write_fovs
 from .test_stitching_workflow import ASSEMBLY, STITCHING
-from .test_workflow_config_validation import snakefile_errors
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
 ROOT = Path(__file__).resolve().parents[3]
 RULES = ROOT / "workflow" / "rules"
 SCHEMA = yaml.safe_load((ROOT / "workflow" / "schemas" / "config.schema.yaml").read_text())
-# The processing rules of each backend: (rule file, rule) of the Python and the MATLAB backend.
-PROCESSING = {"rsf_single_fov": ("registration-py.smk", "registration.smk"),
-              "gr_single_fov_subtile": ("registration-py.smk", "registration.smk"),
-              "deep_create_subtile": ("registration-py.smk", "spot-finding.smk"),
-              "nuclei_registration": ("registration-py.smk", "registration.smk"),
-              "lrsf_single_fov_subtile": ("spot-finding-py.smk", "spot-finding.smk"),
-              "deep_rsf_subtile": ("spot-finding-py.smk", "spot-finding.smk")}
-# The named inputs of each Python rule, which _run_workflow reads by name (codebook, subtile).
-NAMED = {"rsf_single_fov": {"codebook", "images"}, "gr_single_fov_subtile": {"codebook", "images"},
-         "deep_create_subtile": {"images"}, "nuclei_registration": {"images"},
-         "lrsf_single_fov_subtile": {"codebook", "subtile"}, "deep_rsf_subtile": {"codebook", "subtile"}}
-
-
-def namespace(tmp_path, backend):
-    names, _ = backend_namespace(tmp_path, backend, config_path=str(tmp_path / "config.yaml"))
-    from starfinder._snakemake import _image_dir_inputs
-    return dict(names, CODEBOOK=str(tmp_path / "in" / "genes.csv"), _image_dir_inputs=_image_dir_inputs,
-                additional_round_names=["flamingo"])
+# The processing rules of the MATLAB backend and their rule files.
+PROCESSING = {"rsf_single_fov": "registration.smk", "gr_single_fov_subtile": "registration.smk",
+              "deep_create_subtile": "spot-finding.smk", "nuclei_registration": "registration.smk",
+              "lrsf_single_fov_subtile": "spot-finding.smk", "deep_rsf_subtile": "spot-finding.smk"}
 
 
 def test_the_python_rules_take_no_json_copy_and_the_matlab_rules_keep_it(tmp_path):
-    """Each processing rule parsed for its backend: the MATLAB rule's first input is the JSON copy, which its script
-    reads; the Python rule's inputs are named and none of them is the copy."""
+    """Each MATLAB processing rule's first input is the JSON copy, which its script reads; the copy's rule
+    (rsf_preparation, a local rule) is the MATLAB rule set's, which the dispatcher includes for backend matlab only.
+    (The Python workflow's tasks: test_workflow_plan.py, test_the_tasks_read_their_named_inputs_and_no_json_copy.)"""
     json_copy = str(tmp_path / "config.json")
-    python, matlab = namespace(tmp_path, "python"), namespace(tmp_path, "matlab")
-    for rule, (python_file, matlab_file) in PROCESSING.items():
-        args, kwargs = rule_section(RULES / python_file, rule, "input", python)
-        assert args == () and set(kwargs) == NAMED[rule], rule
-        # The inputs the adapter reads are one path each, so that snakemake.input.<name> is a string.
-        assert all(isinstance(kwargs[name], str) for name in ("codebook", "subtile") if name in kwargs), rule
-        files = [f for value in kwargs.values() for f in (value if isinstance(value, list) else [value])]
-        assert json_copy not in files and not [f for f in files if f.endswith(".json")], rule
+    matlab, _ = backend_namespace(tmp_path, "matlab", config_path=str(tmp_path / "config.yaml"))
+    matlab.update(CODEBOOK=str(tmp_path / "in" / "genes.csv"), additional_round_names=["flamingo"])
+    for rule, matlab_file in PROCESSING.items():
         matlab_args, _ = rule_section(RULES / matlab_file, rule, "input", matlab)
         assert matlab_args[0] == json_copy, rule
-    # The copy's rule exists for the MATLAB backend only; the Python block of common.smk never names it.
     common = (RULES / "common.smk").read_text()
-    assert re.search(r'^if BACKEND == "matlab":\n    rule rsf_preparation:\n', common, re.M)
-    assert not re.search(r"^rule rsf_preparation:", common, re.M)
-    # The local rules of the MATLAB rule set stand in rules/legacy.smk, which the dispatcher includes for matlab only.
+    assert re.search(r"^rule rsf_preparation:\n", common, re.M)
     assert "\nlocalrules: create_sample_maf, rsf_preparation\n" in (RULES / "legacy.smk").read_text()
     assert 'if config.get("backend") == "matlab":\n\n    include: "rules/legacy.smk"\n' in \
         (ROOT / "workflow" / "Snakefile").read_text()
-    for name in ("registration-py.smk", "spot-finding-py.smk"):
-        assert ".replace('.yaml', '.json')" not in (RULES / name).read_text(), name
-    adapters = (ROOT / "src" / "python" / "starfinder" / "_snakemake.py").read_text()
-    run_workflow = adapters[adapters.index("def _run_workflow("):adapters.index("def _run_nuclei_registration(")]
-    assert "snakemake.input[" not in run_workflow
-    # W-735: the resident subtile branch, which read snakemake.input.subtile, is retired.
-    assert "snakemake.input.codebook" in run_workflow and "snakemake.input.subtile" not in run_workflow
 
 
-def minimal(tmp_path, **change):
-    """The minimal Python example without envs_path, fiji_path, img_row and img_col, under tmp_path."""
-    config = yaml.safe_load((ROOT / "docs" / "examples" / "workflow-minimal.yaml").read_text())
-    for key in ("envs_path", "fiji_path", "img_row", "img_col"):
-        config.pop(key, None)
-    config.update(root_input_path=str(tmp_path / "input"), root_output_path=str(tmp_path / "output"),
-                  starfinder_path=str(ROOT), **change)
-    return config
-
-
-def test_a_python_configuration_without_fiji_envs_and_dimensions_parses(tmp_path, monkeypatch):
-    """Without a legacy BigStitcher rule and without subtile windows, the configuration passes the Snakefile's
-    validation, the adapters and the parse-time code of common.smk; no Python rule file reads the four keys."""
-    config = minimal(tmp_path)
-    write_fovs(config, rows_text(positions=False))
-    assert snakefile_errors(copy.deepcopy(config)) == []
-    assert not hasattr(from_workflow_config(config).dataset, "subtile")  # W-735: Dataset.subtile is retired
-    names = common_names(config, monkeypatch, checks=True)
-    assert names["BACKEND"] == "python" and names["FOVS"] == ["F10", "F2", "F3", "F1"]
-    for name in ("common.smk", "registration-py.smk", "spot-finding-py.smk", "stitching-py.smk", "segmentation.smk",
-                 "reads-assignment.smk", "export.smk", "report.smk"):
-        text = (RULES / name).read_text()
-        assert not re.search(r"config\[['\"](fiji_path|envs_path|img_row|img_col)['\"]\]", text), name
-    # Fiji is read when the rule file is parsed only by the legacy BigStitcher rule, which only MATLAB includes.
+def test_a_python_configuration_without_fiji_envs_and_dimensions_parses():
+    """Fiji is read when the rule file is parsed only by the legacy BigStitcher rule, which only the MATLAB rule set
+    includes; no other rule file of it reads fiji_path, envs_path, img_row or img_col at parse time. (A Python
+    configuration has none of them: test_workflow_plan.py, test_the_plan_needs_no_fiji_envs_or_dimensions.)"""
     assert "config['fiji_path']" in (RULES / "stitching.smk").read_text()
     assert 'include: "stitching.smk"' in (RULES / "legacy.smk").read_text()
-
-
-REQUIRED = ["'img_col' is a required property", "'img_row' is a required property"]
+    for name in ("common.smk", "registration.smk", "spot-finding.smk", "segmentation.smk", "reads-assignment.smk"):
+        text = (RULES / name).read_text()
+        assert not re.search(r"config\[['\"](fiji_path|envs_path)['\"]\]", text), name
 
 
 def test_the_dimensions_are_required_by_their_consumers_only(tmp_path):
-    """img_row and img_col: required by an active create_subtiles block (in the schema; the package's subtile windows
-    are retired, W-735) and by the legacy tile configuration writer (stitching method bigstitcher without an assembly
-    block), in the schema and in the adapters."""
-    subtile = minimal(tmp_path, rules={"rsf_single_fov": {"run": True, "parameters": {}},
-                                       "gr_single_fov_subtile": {"run": True, "parameters": {
-                                           "create_subtiles": {"run": True, "sqrt_pieces": 2}}}})
-    assert sorted(e.message for e in snakefile_errors(copy.deepcopy(subtile))) == REQUIRED
-    sized = dict(subtile, img_row=32, img_col=32)
-    assert snakefile_errors(copy.deepcopy(sized)) == []
-    inactive = copy.deepcopy(subtile)
-    inactive["rules"]["gr_single_fov_subtile"]["parameters"]["create_subtiles"] = {"run": False}
-    assert snakefile_errors(copy.deepcopy(inactive)) == []
-
-    stitched = minimal(tmp_path, stitching=copy.deepcopy(STITCHING))
-    assert sorted(e.message for e in snakefile_errors(copy.deepcopy(stitched))) == REQUIRED
+    """The MATLAB backend keeps img_row and img_col required (its legacy stitching scripts read them). The translator
+    of the stitching block requires them for the legacy tile configuration writer (stitching method bigstitcher
+    without an assembly block). (The Python subtile windows that required them are retired, W-735; the legacy tile
+    configuration writer of the Python backend too, D6.)"""
+    stitched = {"backend": "python", "dataset_id": "data", "sample_id": "sample", "output_id": "out",
+                "root_input_path": str(tmp_path), "root_output_path": str(tmp_path), "n_rounds": 4,
+                "ref_round": "round1", "rules": {}, "stitching": dict(STITCHING)}
     with pytest.raises(ValueError, match="required by the legacy tile configuration writer"):
         _stitching_block(stitched)
     assert _stitching_block(dict(stitched, img_row=32, img_col=32)).method == "bigstitcher"
-    assembled = dict(stitched, assembly=copy.deepcopy(ASSEMBLY))
-    assert snakefile_errors(copy.deepcopy(assembled)) == []
-    assert _stitching_block(assembled).method == "bigstitcher"
-    # The MATLAB backend keeps them required (its legacy stitching scripts read them).
+    assert _stitching_block(dict(stitched, assembly=dict(ASSEMBLY))).method == "bigstitcher"
     assert "img_col" in SCHEMA["allOf"][0]["else"]["required"] and "img_row" in SCHEMA["allOf"][0]["else"]["required"]
 
 

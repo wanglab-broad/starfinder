@@ -8,7 +8,8 @@ absolute path and SHA-256, each stage by its record and that record's SHA-256, a
 written after the processing under ``outputs``. The stage records (header version 3) hash their
 payload files and ``FOV.load_checkpoint`` checks them. A copy of the output and input trees
 reports at its new place with the new input root, and the replay verifies the inputs there.
-Version-1 run records (the report fixtures) and headers of versions 1 and 2 stay readable.
+Version-1 run records (the report fixtures) and headers of versions 1 and 2 stay readable. The fov task's
+record of its declared outputs moved to test_workflow_fov_tasks.py (W-750).
 """
 from __future__ import annotations
 
@@ -18,13 +19,11 @@ import importlib.util
 import json
 import os
 from pathlib import Path
-import runpy
 import shutil
-from types import SimpleNamespace
 
 import pytest
 
-from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState, from_workflow_config
+from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState
 from starfinder.dataset._run_record import READ_VERSIONS, resolve_source
 from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizationConfig, PreprocessingRecipe,
                                       PreprocessingStep, TophatConfig, fit_supplied_section, merge_histograms,
@@ -34,7 +33,7 @@ from starfinder.registration import DemonsConfig, RegistrationRecipe, Registrati
 
 from .report_fixtures import report_records
 from .test_report_records_golden import CHANNELS, ROUNDS, pipeline, write_scene
-from .test_report_run_record_additions import ROOT, run_rule, workflow_config, write_codebook
+from .test_report_run_record_additions import write_codebook
 
 pytestmark = [pytest.mark.dataset, pytest.mark.contract]
 
@@ -131,40 +130,6 @@ def test_a_checkpointed_run_writes_run_json_version_2(scene):
     assert outputs["reference_image"]["path"] == os.path.relpath(fov._reference_image_path(), folder)
     entries = [outputs[k] for k in ("molecules", "reads", "reference_image")]
     assert all(not Path(e["path"]).is_absolute() and e["sha256"] == sha256(folder / e["path"]) for e in entries)
-
-
-@pytest.mark.workflow
-def test_the_processing_rules_record_every_declared_output_after_the_processing(tmp_path):
-    """rsf_single_fov records molecules.csv and the reference image; the subtile rules, retired (W-735), refuse."""
-    write_scene(tmp_path / "data")
-    codebook = write_codebook(tmp_path / "genes.csv")
-    record, _, _ = run_rule(workflow_config(tmp_path, "out"), codebook)
-    folder = from_workflow_config(workflow_config(tmp_path, "out")).dataset.fov("FOV_001").paths.fov_dir
-    assert record["status"] == "succeeded" and record["format_version"] == 2
-    assert record["inputs"][0]["path"] == "round1/FOV_001/ch00.tif"
-    assert record["input_root"] == str(tmp_path / "data" / "in")
-    assert record["codebook"]["path"] == str(codebook)
-    assert record["workflow_config"]["path"] == str(tmp_path / "config.yaml")
-    outputs = record["outputs"]
-    assert set(outputs) == {"molecules", "reference_image"}
-    assert (outputs["molecules"]["path"], outputs["reference_image"]["path"]) == ("molecules.csv", "reference.tif")
-    assert all(e["sha256"] == sha256(folder / e["path"]) for e in outputs.values())
-    # The subtile rules: retired for Python (D5, W-735); their adapters refuse until W-750 removes them.
-    rules = {"gr_single_fov_subtile": {"run": True, "parameters": {
-                 "registration": {"steps": [{"method": "translation"}]},
-                 "create_subtiles": {"run": True, "sqrt_pieces": 2}}},
-             "lrsf_single_fov_subtile": {"run": True, "parameters": {
-                 "spot_finding": {"run": True, "threshold_mode": "adaptive", "threshold_value": 0.2},
-                 "reads_extraction": {"run": True, "voxel_size": [1, 1, 1]}, "reads_filtration": {"run": True}}}}
-    config = dict(workflow_config(tmp_path, "sub"), workflow_mode="subtile", rules=rules)
-    Path(config["config_path"]).write_text(json.dumps(config))
-    for rule, inputs, wildcards in (
-            ("gr_single_fov_subtile", SimpleNamespace(codebook=str(codebook)), {}),
-            ("lrsf_single_fov_subtile", SimpleNamespace(codebook=str(codebook), subtile="unused"),
-             {"n_subtile": "1"})):
-        snakemake = SimpleNamespace(config=config, input=inputs, wildcards=SimpleNamespace(fovID="FOV_001", **wildcards))
-        with pytest.raises(ValueError, match="the Python subtile route is retired"):
-            runpy.run_path(str(ROOT / "workflow" / "scripts" / f"{rule}.py"), init_globals={"snakemake": snakemake})
 
 
 def test_an_input_outside_the_input_root_is_absolute_and_a_record_without_roots_never_reads_the_cwd(

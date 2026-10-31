@@ -151,8 +151,10 @@ def resolve(config, source, output_root=None):
     r.setdefault("additional_round", [])
     r.setdefault("image_dir_template", _layout.IMAGE_DIR_TEMPLATE)
     r.setdefault("readout_mode", "multiplexed")
-    r.setdefault("reference_image", _layout.REFERENCE_IMAGE)
     r.setdefault("reference_image_import", None)
+    # The two settings exclude each other (reference_settings): with an imported reference image the default pattern
+    # is not written, so that every task's dataset reads the imported file.
+    r.setdefault("reference_image", None if r["reference_image_import"] is not None else _layout.REFERENCE_IMAGE)
     if "processing" in r:
         p = r["processing"] = expand_recipe(dict(r["processing"] or {}))
         p.setdefault("mode", "direct")
@@ -775,8 +777,11 @@ class Graph:
                                                        / "image.ome.tif"))
                                 needs.append(morph[fov])
                             elif "=file:" in name:
+                                # A relative pattern lies under the output root, where Dataset.export reads it
+                                # (dataset/_export.py, source_path).
+                                path = Path(name.split("=file:", 1)[1].replace("{fov_id}", fov))
                                 inputs.append(self.inputs.add_file(
-                                    f"export.{name}.{fov}", name.split("=file:", 1)[1].replace("{fov_id}", fov),
+                                    f"export.{name}.{fov}", str(path if path.is_absolute() else out / path),
                                     f"export.images {name} of FOV {fov}"))
                 if way == "after_fusion":
                     for run in ((r.get("export") or {}).get("segmentation") or {}).get("runs") or []:
@@ -995,6 +1000,14 @@ def plan(config_path, output_root=None) -> dict:
     except (ValueError, FileNotFoundError) as error:
         raise PlanRefused(str(error)) from None
     check_names(r, membership)
+    if "stitching" in r:
+        # V6: a stage file names the sample's FOVs by the PositionIDs of fovs.csv (_stage_position_ids), checked
+        # before any task, as common.smk checked it when the rules were parsed.
+        from starfinder.dataset.workflow import _stage_position_ids
+        try:
+            _stage_position_ids({"stitching": r["stitching"]}, membership)
+        except ValueError as error:
+            raise PlanRefused(str(error)) from None
     check_producers(r)
     inputs = Inputs(r, membership, _needs_rounds(r), _needs_codebook(r))
     manifest_path = _layout.manifest_file(out)

@@ -17,7 +17,7 @@ import yaml
 
 from starfinder._registry import names
 from starfinder.dataset.workflow import _segmentation, _segmentation_block
-from starfinder._snakemake import _run_stardist_segmentation
+from starfinder._legacy_workflow import _run_stardist_segmentation
 from starfinder.preprocessing import ProjectionConfig
 from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, CompositeConfig, ExpandLabelsConfig,
                                      InputChannel, LabelImportConfig, SeededWatershedConfig, SegmentationPlan,
@@ -163,9 +163,11 @@ def run_segmentation(tmp_path, config, image):
     return tifffile.imread(output), json.loads(output.with_suffix(".json").read_text())
 
 
-@pytest.mark.parametrize("backend", ["python", "matlab"])
+@pytest.mark.parametrize("backend", ["matlab"])
 def test_the_rule_writes_uint32_labels_equal_to_the_legacy_pins(tmp_path, stand_in_stardist, backend):
-    """The translated legacy run (rescale false, expand_labels true, distance 4) gives LABELS_3D[(False, True)]."""
+    """The translated legacy run (rescale false, expand_labels true, distance 4) gives LABELS_3D[(False, True)]. (The
+    Python backend's segment task: test_workflow_morphology_tasks.py,
+    test_the_segment_command_writes_uint32_labels_equal_to_the_legacy_pins, W-750.)"""
     model_folder(tmp_path / "models" / "stand_in")
     labels, record = run_segmentation(tmp_path, workflow(tmp_path, backend=backend), fixture()["dapi"])
     assert labels.dtype == np.uint32 and labels.shape == (16, 64, 64)
@@ -178,7 +180,8 @@ def test_the_rule_writes_uint32_labels_equal_to_the_legacy_pins(tmp_path, stand_
 
 
 def test_an_image_without_foreground_gives_an_empty_label_image(tmp_path, monkeypatch):
-    """No foreground gate: an all-zero image is outcome empty, where the script raised (W-307 golden test)."""
+    """No foreground gate: an all-zero image is outcome empty, where the script raised (W-307 golden test), on a
+    MATLAB configuration (the segment task's: test_workflow_morphology_tasks.py, W-750)."""
     model_folder(tmp_path / "models" / "stand_in")
 
     def empty_run(image, config, context):
@@ -186,7 +189,7 @@ def test_an_image_without_foreground_gives_an_empty_label_image(tmp_path, monkey
 
     spec = SEGMENTATION_METHODS[StarDistConfig]
     monkeypatch.setitem(SEGMENTATION_METHODS, StarDistConfig, replace(spec, run=empty_run, requires=()))
-    labels, record = run_segmentation(tmp_path, workflow(tmp_path, expand_labels=False),
+    labels, record = run_segmentation(tmp_path, workflow(tmp_path, backend="matlab", expand_labels=False),
                                       np.zeros((16, 64, 64), np.uint8))
     assert labels.dtype == np.uint32 and not labels.any() and record["outcome"] == "empty"
 
@@ -274,31 +277,40 @@ def base_config():
     return config
 
 
+def python_shape(tmp_path, **blocks):
+    """The worked example's dataset keys and processing block in the Python shape with blocks."""
+    from . import workflow_examples as X
+    return dict(X.dataset(tmp_path, "segmentation"), processing=copy.deepcopy(X.PROCESSING), **copy.deepcopy(blocks))
+
+
 @pytest.mark.parametrize("addition", [
     {"segmentation": BLOCK["segmentation"]},
     {"rules": {"stardist_segmentation": {"parameters": {"target": "cell"}}}},
     {"rules": {"stardist_segmentation": {"parameters": {"device": "cuda"}}}},
 ])
-def test_python_only_keys_validate_on_the_python_backend_only(addition):
+def test_python_only_keys_validate_on_the_python_backend_only(addition, tmp_path):
+    """The MATLAB schema refuses each with backend matlab. The package validates the segmentation block of a Python
+    configuration (W-750); the stardist_segmentation rule's target and device left with that rule's Python branch
+    (D6): a Python configuration has no rules."""
+    from . import workflow_tasks as T
     config = base_config()
     for key, value in addition.items():
         if key == "rules":
             config["rules"]["stardist_segmentation"]["parameters"].update(value["stardist_segmentation"]["parameters"])
         else:
             config[key] = value
-    jsonschema.validate(config, SCHEMA)
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(dict(config, backend="matlab"), SCHEMA)
+    if "segmentation" in addition:
+        assert T.validation_error(python_shape(tmp_path, segmentation=addition["segmentation"])) is None
 
 
-def test_the_schema_rejects_an_unknown_method_and_target():
-    config = dict(base_config(), segmentation={"runs": [{"name": "x", "target": "cell", "method": "watershed"}]})
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(config, SCHEMA)
-    config = base_config()
-    config["rules"]["stardist_segmentation"]["parameters"]["target"] = "membrane"
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(config, SCHEMA)
+def test_the_schema_rejects_an_unknown_method_and_target(tmp_path):
+    """The package refuses a segmentation run with an unknown method or target (W-750)."""
+    from . import workflow_tasks as T
+    for run in ({"name": "x", "target": "cell", "method": "watershed"},
+                {"name": "x", "target": "membrane", "method": "import", "path": "/labels/{fov_id}.tif"}):
+        assert T.validation_error(python_shape(tmp_path, morphology={}, segmentation={"runs": [run]}))
 
 
 # --- The shared rules under both backends ---------------------------------------------------------------
@@ -314,18 +326,17 @@ def test_the_shared_rules_do_not_branch_on_the_backend_and_read_no_envs_path():
 
 
 def get_dapi_input(path, input_dir, dapi_round="round1"):
-    """get_dapi_input of a rule file, executed with the names common.smk provides: MATLAB's reads dapi_round's
-    *ch04.tif, the Python one the reference round's file of the declared reference stain (here ch04)."""
+    """get_dapi_input of the MATLAB rule file, executed with the names common.smk provides: it reads dapi_round's
+    *ch04.tif. (The plan's refusal of a channel label that matches no file or two files is C5,
+    test_workflow_plan_refusals.py, W-750.)"""
     text = path.read_text()
     source = re.search(r"^def get_dapi_input\(wildcards\):\n(?:    .*\n)+", text, re.MULTILINE).group(0)
-    config = ({"backend": "python", "ref_round": dapi_round, "reference_stains": [{"channel": "ch04", "name": "DAPI"}]}
-              if path.name == "registration-py.smk" else {"dapi_round": dapi_round})
-    namespace = {"glob": glob, "INPUT_DIR": input_dir, "config": config}
+    namespace = {"glob": glob, "INPUT_DIR": input_dir, "config": {"dapi_round": dapi_round}}
     exec(source, namespace)
     return namespace["get_dapi_input"]
 
 
-@pytest.mark.parametrize("rules", ["registration.smk", "registration-py.smk"])
+@pytest.mark.parametrize("rules", ["registration.smk"])
 def test_get_dapi_input_needs_exactly_one_file(tmp_path, rules):
     function = get_dapi_input(ROOT / "workflow/rules" / rules, tmp_path)
     folder = tmp_path / "round1" / "Position001"

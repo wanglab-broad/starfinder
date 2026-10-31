@@ -15,6 +15,8 @@ from starfinder.dataset.workflow import from_workflow_config
 from starfinder.spot_finding import (SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig, SpotFindingPlan,
     SpotFindingSpec)
 
+from . import workflow_tasks as T
+
 pytestmark = [pytest.mark.spot_finding, pytest.mark.contract]
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -106,8 +108,9 @@ def python_example(spot_finding, rule="rsf_single_fov", run=True):
 @pytest.mark.parametrize("alias, name", list(ALIASES.items()))
 def test_a_legacy_key_of_a_disabled_block_or_override_raises_on_the_python_backend(alias, name):
     """The refusal does not depend on run: a MATLAB key of local_maxima in a block with run false, in a channel
-    override of such a block, or in a block of a rule that does not run raises naming its field; the schema's guard
-    refuses the block and the override entry too."""
+    override of such a block, or in a block of a rule that does not run raises naming its field; the package refuses
+    the block and the override entry too, and a rule that does not run has no place in a Python configuration (D4:
+    the package refuses the rules; W-750)."""
     values = {"threshold_mode": "noise", "threshold_value": 4.0, "min_distance_voxels": 2}
     for spot, rule, run in (({"run": False, alias: values[name]}, "rsf_single_fov", True),
                             ({"run": False, "channel_overrides": {"ch02": {alias: values[name]}}}, "rsf_single_fov",
@@ -118,17 +121,20 @@ def test_a_legacy_key_of_a_disabled_block_or_override_raises_on_the_python_backe
         config = python_example(spot, rule, run)
         with pytest.raises(ValueError, match=f"{alias} is a MATLAB key of local_maxima.*{name}"):
             from_workflow_config(config)
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(config, SCHEMA)
+        if rule == "rsf_single_fov":
+            assert T.validation_error(T.python_shape(config))
+        else:
+            assert "rules left the Python configuration" in T.validation_error(dict(T.python_shape(config),
+                                                                                   rules=config["rules"]))
     native = python_example({"run": False, "channel_overrides": {"ch02": {name: values[name]}}})
-    jsonschema.validate(native, SCHEMA)
+    assert T.validation_error(T.python_shape(native)) is None
     assert from_workflow_config(native).pipeline.spot_finding is None
 
 
 @pytest.mark.parametrize("alias", ["intensity_estimation", "intensity_threshold"])
 def test_a_local_maxima_key_of_another_method_raises_whatever_run(alias):
     """intensity_estimation and intensity_threshold are no field of another method: a disabled block or override of
-    starfish_log with one raises naming local_maxima's fields, and the schema refuses it."""
+    starfish_log with one raises naming local_maxima's fields, and the package refuses it (W-750)."""
     value = "noise" if alias == "intensity_estimation" else 5.0
     for spot in ({"run": False, "method": "starfish_log", alias: value},
                  {"run": False, "method": "starfish_log", "channel_overrides": {"ch02": {alias: value}}}):
@@ -136,8 +142,7 @@ def test_a_local_maxima_key_of_another_method_raises_whatever_run(alias):
         with pytest.raises(ValueError, match=f"{alias} is a MATLAB key of local_maxima .*method 'starfish_log' has no "
                                              "such field"):
             from_workflow_config(config)
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(config, SCHEMA)
+        assert T.validation_error(T.python_shape(config))
 
 
 def test_min_distance_stays_native_for_another_method_on_the_python_backend(native_distance):
@@ -249,24 +254,26 @@ MATLAB_FOVS = {"fov_id_pattern": "tile_{i}", "n_fovs": 1, "subset_list": [], "su
     {"spot_finding": {"run": True, "channel_overrides": {"ch02": {"threshold_value": 4.0}}}},
     {"device": "cpu"}])
 def test_python_only_keys_validate_on_the_python_backend_only(parameters):
+    """The MATLAB schema: the shared keys validate with backend matlab, and local_maxima's MATLAB keys too; the
+    Python-only keys are refused there. The package (W-750): the shared keys and the Python-only keys validate in a
+    Python configuration, and local_maxima's MATLAB keys are refused."""
     config = copy.deepcopy(EXAMPLE)
     for key in ("preprocessing", "registration"):
         del config["rules"]["rsf_single_fov"]["parameters"][key]
     config["rules"]["rsf_single_fov"]["parameters"]["spot_finding"] = {"run": True, "ref_round": "round1"}
-    for backend in ("python", "matlab"):
-        # the shared keys validate on both
-        jsonschema.validate(dict(config, backend=backend, **(MATLAB_FOVS if backend == "matlab" else {})), SCHEMA)
+    # the shared keys validate on both
+    jsonschema.validate(dict(config, backend="matlab", **MATLAB_FOVS), SCHEMA)
+    assert T.validation_error(T.python_shape(config)) is None
     # The MATLAB keys of local_maxima validate on the MATLAB backend only; the Python backend names the fields.
     matlab_keys = copy.deepcopy(config)
     matlab_keys["rules"]["rsf_single_fov"]["parameters"]["spot_finding"].update(intensity_estimation="adaptive",
                                                                                  intensity_threshold=0.2)
     jsonschema.validate(dict(matlab_keys, backend="matlab", **MATLAB_FOVS), SCHEMA)
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(matlab_keys, SCHEMA)
+    assert T.validation_error(T.python_shape(matlab_keys))
     config["rules"]["rsf_single_fov"]["parameters"]["spot_finding"].update(threshold_mode="adaptive",
                                                                            threshold_value=0.2)
     config["rules"]["rsf_single_fov"]["parameters"].update(parameters)
-    jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.python_shape(config)) is None
     from_workflow_config(config)
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(dict(config, backend="matlab", **MATLAB_FOVS), SCHEMA)

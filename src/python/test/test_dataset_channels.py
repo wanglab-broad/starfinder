@@ -7,7 +7,6 @@ import math
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-import jsonschema
 import numpy as np
 import pandas as pd
 import pytest
@@ -25,10 +24,11 @@ from starfinder.segmentation import (SEGMENTATION_METHODS, FlamingoEnhancementCo
                                      SegmentationRun, SegmentationSpec)
 from starfinder.synthetic import development_scene_preset, generate_amplicon_scene
 
+from . import workflow_tasks as T
+
 pytestmark = [pytest.mark.dataset, pytest.mark.contract]
 
 ROOT = Path(__file__).resolve().parents[3]
-SCHEMA = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
 SEQUENCING = ("ch00", "ch01", "ch02", "ch03")
 MORPH = (ChannelInfo("ch00", "Flamingo", 488), ChannelInfo("ch01", "RBD", 561), ChannelInfo("ch02", "DAPI"))
 STAIN = ChannelInfo("ch04", "DAPI", 405)
@@ -394,9 +394,10 @@ def test_both_forms_of_seq_channel_order_give_the_same_patterns():
     assert objects.channel_info("round1") == tuple(ChannelInfo.from_value(o) for o in OBJECTS)
     adapted = (from_workflow_config(full_config()), from_workflow_config(full_config(seq_channel_order=OBJECTS)))
     assert adapted[0].pipeline.load == adapted[1].pipeline.load
+    # The package validates both forms (W-750: the Python workflow validates with the package).
     for config in (full_config(), full_config(seq_channel_order=OBJECTS), full_config(additional_round=ADDITIONAL),
                    full_config(seq_channel_order=OBJECTS, additional_round=ADDITIONAL)):
-        jsonschema.validate(config, SCHEMA)
+        assert T.validation_error(T.python_shape(config)) is None
 
 
 @pytest.mark.workflow
@@ -449,7 +450,8 @@ def test_dapi_round_is_the_matlab_backends_key():
         with pytest.raises(ValueError, match="the Python backend declares the reference round's stain files with "
                                              "reference_stains"):
             translate(config)
-    assert not jsonschema.Draft202012Validator(SCHEMA).is_valid(config)
+    assert "dapi_round left the Python configuration: use reference_stains" in T.validation_error(
+        dict(T.python_shape(config), dapi_round="round1"))       # the package refuses it (W-750)
     matlab = {"ref_round": "round1", "dapi_round": "round1", "ref_channel": "DAPI"}
     assert _reference_stains(matlab) == (ChannelInfo("ch04", "DAPI"),)
     assert _reference_stains({"ref_round": "round1"}) == ()

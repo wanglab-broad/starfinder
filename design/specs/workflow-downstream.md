@@ -140,16 +140,16 @@ FOV, `assignment_single_layer.png` (the middle plane `Z // 2`) when the label im
 ZYX, not for a YX one, and `log.txt`: one line of totals, then the assignment ratio,
 assigned molecules over all molecules of the table with both counts
 (`assignment ratio: 61.11% (11 of 18 molecules assigned)`), or
-`assignment ratio: none (no molecule)` when the FOV has none. With an `assembly` block
-that names an assignment (the route of a saved assignment, since 2026-10-24), the rule writes the
-saved folder alone, and the figures only with `previews: true`, into
-`fovs/{fovID}/previews/` (the `assign` task: with `assignment.previews: true`, into
-`fovs/{fovID}/previews/`; the export's with `export.previews: true`); then, on the route per FOV (below), the sample's `export_sample`
-rule draws the two figures once the sample is assembled into
+`assignment ratio: none (no molecule)` when the FOV has none. For the Python
+backend the `assign` task takes this rule's place (the route of a saved assignment, since
+2026-10-24): it writes the saved folder alone, and the figures only with
+`assignment.previews: true`, into `fovs/{fovID}/previews/`; then, on the route per FOV
+(below), the sample's `export` task draws the two figures with `export.previews: true` once
+the sample is assembled into
 `export/<sample>/previews/{fovID}/`, with the FOV's ownership region as a yellow line, the
 cells and molecules the assembly excluded in grey and, as each panel's x-axis label, how
-many of those drawn it retained ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#diagnostics), "Diagnostics"). Without the
-block the figures stay as `reads_assignment` draws them.
+many of those drawn it retained ([assignment specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment.md#diagnostics), "Diagnostics"). The MATLAB
+`reads_assignment` draws them as above.
 
 % the route of a saved assignment: W-568
 
@@ -161,7 +161,7 @@ downstream scripts, models, acquisition metadata or coordinate checks.
 
 ## Two routes to a sample's cells
 
-With `stitching` and `assembly` blocks, `export_sample` reaches the sample's cells by one
+With `stitching` and `assembly` blocks, the `export` task reaches the sample's cells by one
 of two routes, set by `export.route` ([sample-segmentation-contract](../../docs/sample-segmentation-contract.md)):
 
 * **Per FOV** (`per_fov`). Each FOV is segmented and assigned on its own

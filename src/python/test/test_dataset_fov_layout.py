@@ -5,40 +5,36 @@ design/specs/checkpoints.md ("Layout") and docs/migration.md. A FOV's durable re
 folders), its restart material to the folder's ``checkpoints/``; the reference image is
 written and read through ``_layout.reference_image_path`` (default
 ``fovs/<fov_id>/reference.tif``, or the file ``reference_image_import`` names, which nothing
-writes); the Python ``nuclei_registration`` rule names each channel's folder by its unique
-channel label. The cases are the hand-built 4-channel, 2-round FOV of test_checkpoints, the
+writes). The cases are the hand-built 4-channel, 2-round FOV of test_checkpoints, the
 other-round textures of test_registration_other_rounds and the small views of
-test_projection_views; the rule files are parsed for both backends with a stand-in for
-Snakemake's ``expand`` (Snakemake is not installed in the test environment).
+test_projection_views; the MATLAB rule files are parsed with a stand-in for Snakemake's
+``expand``. The Python rules' declarations of these files moved to the plan's
+(test_workflow_declared_outputs.py), the processing rule with an imported reference image to the fov
+command and the channel folders by label to the morphology command (test_workflow_fov_tasks.py,
+test_workflow_cell_tasks.py), W-750; the Python readers of the retired stitch_subtile (D5) and
+create_nuclei_amplicon_overlay (D6) rules are retired.
 """
 import hashlib
 import itertools
 import json
 import re
-import runpy
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
-import tifffile
 
 from starfinder import _layout
-from starfinder._snakemake import (_reference_image_inputs, _reference_image_outputs, _run_record_outputs,
-                                   _shared_image_inputs)
 from starfinder.dataset import CheckpointConfig, Dataset, RoundState, from_workflow_config
 from starfinder.dataset._declared import reference_grid, reference_settings
 from starfinder.dataset._export import source_path
-from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
 from starfinder.segmentation import InputChannel, LabelImportConfig, SegmentationPlan, SegmentationRun
 
 from . import hash_oracles
 from .test_checkpoints import dataset, full, resident
 from .test_morphology_rounds import ThresholdConfig, threshold  # noqa: F401 (the fixture registers the method)
-from .test_projection_views import CHANNELS as VIEW_CHANNELS, METADATA as VIEW_METADATA, NATIVE_DETECTION, \
-    reference_round, workflow_config
-from .test_registration_other_rounds import OTHER, SEQUENCING, rounds
+from .test_projection_views import CHANNELS as VIEW_CHANNELS, METADATA as VIEW_METADATA, reference_round, workflow_config
+from .test_registration_other_rounds import SEQUENCING
 
 pytestmark = [pytest.mark.dataset, pytest.mark.workflow]
 
@@ -194,10 +190,8 @@ def test_the_reference_image_is_written_and_read_where_reference_image_names(tmp
     assert source_path(ds, "FOV", "reference_merged") == path
     recorded = str(path) if setting == "absolute" else path.relative_to(ds.output_root).as_posix()
     assert linked == {"path": recorded, "sha256": hash_oracles.file_sha256(path)}
-    config = {"dataset_id": "data", "output_id": "run", **({} if pattern is None else {"reference_image": pattern})}
-    declared = str(_layout.reference_image_path(ds.output_root, "{fovID}", ds.reference_image))
-    assert _reference_image_outputs(config, ds.output_root, ["{fovID}"]) == [declared]
-    assert _reference_image_inputs(config, ds.output_root, ["{fovID}"]) == [declared]
+    # The plan declares the same file (the fov task's output, its readers' input): test_workflow_declared_outputs.py,
+    # test_the_reference_image_is_declared_where_reference_image_names_it (W-750).
 
 
 @pytest.mark.contract
@@ -223,10 +217,8 @@ def test_an_imported_reference_image_is_read_by_every_reader_and_never_written(t
     assert source_path(ds, "FOV", "reference_merged") == imported
     recorded = str(imported) if where == "absolute" else "imports/FOV.tif"
     assert linked == {"path": recorded, "sha256": hash_oracles.file_sha256(imported)}
-    config = {"dataset_id": "data", "output_id": "run", "reference_image_import": pattern}
-    assert _reference_image_outputs(config, ds.output_root, ["{fovID}"]) == []
-    assert _reference_image_inputs(config, ds.output_root, ["{fovID}"]) == [
-        str(_layout.reference_image_path(ds.output_root, "{fovID}", imported=pattern))]
+    # The plan declares it as an input of its readers and as no output: test_workflow_declared_outputs.py,
+    # test_the_reference_image_is_declared_where_reference_image_names_it (W-750).
 
 
 @pytest.mark.contract
@@ -246,32 +238,10 @@ def test_the_two_reference_settings_exclude_each_other(tmp_path):
         from_workflow_config(dict(config, reference_image="a/{fov_id}.tif", reference_image_import="b/{fov_id}.tif"))
 
 
-def test_with_reference_image_import_the_processing_rule_writes_no_reference_image(tmp_path):
-    """The Python rsf_single_fov writes run.json and molecules.csv in the FOV folder and no reference image; the
-    imported file is left as it is."""
-    raw = reference_round(np.uint16, seed=1)
-    for name in ("round1", "round2"):
-        for c, channel in enumerate(VIEW_CHANNELS):
-            save_volume(raw[..., c], tmp_path / "data" / "sample" / name / "FOV" / f"{channel}.tif",
-                        metadata=VIEW_METADATA)
-    codebook = tmp_path / "genes.csv"
-    codebook.write_text("gene,barcode\ngene,AAA\n")
-    imported = tmp_path / "tool" / "FOV.tif"
-    save_volume(raw.max(axis=-1), imported, metadata=VIEW_METADATA)
-    before = imported.read_bytes()
-    parameters = {key: value for key, value in NATIVE_DETECTION.items() if key != "reference_image_view"}
-    config = workflow_config(tmp_path, backend="python", **parameters)
-    config.update(starfinder_path=str(ROOT), reference_image_import=str(tmp_path / "tool" / "{fov_id}.tif"))
-    snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook)),
-                                wildcards=SimpleNamespace(fovID="FOV"))
-    runpy.run_path(str(ROOT / "workflow" / "scripts" / "rsf_single_fov.py"), init_globals={"snakemake": snakemake})
-    assert tree(tmp_path / "out" / "data" / "run") == ["fovs/FOV/molecules.csv", "fovs/FOV/run.json"]
-    assert imported.read_bytes() == before
-
-
 # --- Channel output paths by label ------------------------------------------------------------------------
 
 def nuclei_rule_config(tmp_path, morph):
+    """The translator's view of a Python configuration with the other round ``morph`` (its channel_order)."""
     return dict(starfinder_path=str(ROOT), root_input_path=str(tmp_path / "input"), dataset_id="dataset",
                 sample_id="sample", root_output_path=str(tmp_path / "output"), output_id="output",
                 n_rounds=2, ref_round="round1", seq_channel_order=list(SEQUENCING[:3]),
@@ -279,28 +249,6 @@ def nuclei_rule_config(tmp_path, morph):
                 ref_channel="DAPI", rotate_angle=0, maximum_projection=False, backend="python",
                 additional_round=[dict(round_name="morph", channel_order=morph)],
                 rules=dict(nuclei_registration=dict(run=True)))
-
-
-@pytest.mark.contract
-def test_channels_that_share_a_descriptive_name_write_one_file_each_under_their_labels(tmp_path):
-    """Two channels named Nissl in one round write images/morph/ch01/ and images/morph/ch02/, each its own
-    channel; MATLAB's name folders would have written one file for both."""
-    reference, sequencing, morph, _, _ = rounds()
-    morph_channels = [dict(wavelength=405, channel="ch00", name="DAPI"), dict(wavelength=488, channel="ch01",
-                      name="Nissl"), dict(wavelength=647, channel="ch02", name="Nissl")]
-    config = nuclei_rule_config(tmp_path, morph_channels)
-    source = tmp_path / "input" / "dataset" / "sample"
-    for name, image, labels in (("round1", reference, SEQUENCING), ("round2", sequencing, SEQUENCING),
-                                ("morph", morph, OTHER)):
-        for c, label in enumerate(labels):
-            save_volume(image[..., c], source / name / "FOV" / f"FOV_{label}.tif")
-    snakemake = SimpleNamespace(config=config, wildcards=SimpleNamespace(fovID="FOV"), input=[], output=[])
-    runpy.run_path(str(ROOT / "workflow" / "scripts" / "nuclei_registration.py"), init_globals={"snakemake": snakemake})
-    output = tmp_path / "output" / "dataset" / "output"
-    assert tree(output) == ["fovs/FOV/nuclei_registration.json", "images/morph/ch00/FOV.tif",
-                            "images/morph/ch01/FOV.tif", "images/morph/ch02/FOV.tif"]
-    first, second = (tifffile.imread(output / "images" / "morph" / label / "FOV.tif") for label in ("ch01", "ch02"))
-    assert not np.array_equal(first, second)
 
 
 @pytest.mark.contract
@@ -347,74 +295,32 @@ def rule_files(path, rule, section, namespace):
     return flat, kwargs
 
 
-class Namedlist(list):
-    """The shape of ``snakemake.io.Namedlist``, the ``snakemake.input`` of a job (Snakemake is not installed in the
-    test environment): every file in order, and each named entry also an attribute and an item by name, a string for
-    an entry declared as one path and a ``Namedlist`` of its files for an entry declared as a list."""
-
-    def __getitem__(self, key):
-        return getattr(self, key) if isinstance(key, str) else super().__getitem__(key)
-
-
-def job_input(path, rule, namespace, **wildcards):
-    """The ``snakemake.input`` of one job of a rule: its parsed input section with the wildcards filled in, input
-    functions called with them, in the shape Snakemake gives each entry."""
-    def fill(value):
-        if callable(value):
-            value = value(SimpleNamespace(**wildcards))
-        if isinstance(value, list):
-            return Namedlist(fill(v) for v in value)
-        return str(value).format(**wildcards)
-    args, kwargs = rule_section(path, rule, "input", namespace)
-    job = Namedlist()
-    for value in [*args, *kwargs.values()]:
-        filled = fill(value)
-        job.extend(filled if isinstance(filled, list) else [filled])
-    for name, value in kwargs.items():
-        setattr(job, name, fill(value))
-    return job
-
-
 def common_value(name):
     """The MATLAB value common.smk gives a variable before the Python block: its literal assignment, evaluated."""
     text = (RULES / "common.smk").read_text()
-    match = re.search(rf"^{name} = (.*?)\n(?=\S)", text, re.M | re.S)
+    match = re.search(rf"^{name} = (.*?)\n(?=\S|\Z)", text, re.M | re.S)
     return match.group(1)
 
 
-def common_python_names(config, output):
-    """The names the Python block of common.smk gives the Python rule files, by executing its own assignments."""
-    text = (RULES / "common.smk").read_text()
-    names = ("RUN_RECORD", "SUBTILE_RUN_RECORD", "REFERENCE_IMAGE_OUTPUT", "REFERENCE_IMAGE_INPUT",
-             "SHARED_IMAGE_INPUTS")
-    lines = re.findall(rf"^    ((?:{'|'.join(names)}) = .*)$", text, re.M)
-    assert [line.split(" = ")[0] for line in lines] == list(names)
-    namespace = dict(config=config, OUTPUT_DIR=output, _reference_image_inputs=_reference_image_inputs,
-                     _reference_image_outputs=_reference_image_outputs, _run_record_outputs=_run_record_outputs,
-                     _shared_image_inputs=_shared_image_inputs)
-    exec("\n".join(lines), namespace)
-    return {name: namespace[name] for name in names}
-
-
-def backend_namespace(tmp_path, backend, **keys):
+def backend_namespace(tmp_path, backend="matlab", **keys):
+    """The names the MATLAB rule files read from common.smk, for a configuration under tmp_path."""
     output = tmp_path / "data" / "run"
     config = dict(dataset_id="data", output_id="run", backend=backend, n_rounds=1, ref_round="round1",
                   root_input_path=str(tmp_path), root_output_path=str(tmp_path), sample_id="sample",
                   seq_channel_order=["ch01"], additional_round=[dict(round_name="flamingo", channel_order=[
                       dict(channel="ch00", name="DAPI"), dict(channel="ch03", name="Flamingo")])], **keys)
     namespace = dict(OUTPUT_DIR=output, INPUT_DIR=tmp_path / "in", ROUND=["round1"], N_SUBTILE=[1], config=config)
-    if backend == "python":
-        namespace.update(common_python_names(config, output))
-    else:
-        namespace["SHARED_IMAGE_INPUTS"] = eval(common_value("SHARED_IMAGE_INPUTS"), dict(OUTPUT_DIR=output))
+    namespace["SHARED_IMAGE_INPUTS"] = eval(common_value("SHARED_IMAGE_INPUTS"), dict(OUTPUT_DIR=output))
     return namespace, output
 
 
 @pytest.mark.contract
 def test_the_matlab_backend_keeps_its_rules_and_the_python_backend_follows_the_layout(tmp_path):
     """registration.smk and the shared segmentation.smk parsed for MATLAB give MATLAB's files (images/ref_merged/,
-    the name folders of the flamingo round, the logs); registration-py.smk and segmentation.smk for Python give the
-    FOV folder's run.json and reference image (none with reference_image_import) and the label folders."""
+    the name folders of the flamingo round, the logs). (The Python workflow's tasks declare the FOV folder's run.json
+    and reference image, none with reference_image_import: test_workflow_declared_outputs.py,
+    test_the_reference_image_is_declared_where_reference_image_names_it, W-750; the label folders of the flamingo
+    round that enhance_dapi_with_flamingo read are retired with the Python branch of that rule, D6.)"""
     matlab, out = backend_namespace(tmp_path, "matlab")
     assert rule_files(RULES / "registration.smk", "rsf_single_fov", "output", matlab)[0] == [
         f"{out}/log/{{fovID}}_rsf.txt", f"{out}/log/sf_scores/{{fovID}}.txt", f"{out}/images/ref_merged/{{fovID}}.tif",
@@ -427,70 +333,3 @@ def test_the_matlab_backend_keeps_its_rules_and_the_python_backend_follows_the_l
         "flamingo_img": f"{out}/images/flamingo/Flamingo/{{fovID}}.tif"}
     assert rule_files(segmentation, "create_nuclei_amplicon_overlay", "input", matlab)[1] == {
         "dapi_img": [f"{out}/images/DAPI/{{fovID}}.tif"], "amplicon_img": f"{out}/images/ref_merged/{{fovID}}.tif"}
-
-    python, out = backend_namespace(tmp_path, "python")
-    registration = RULES / "registration-py.smk"
-    assert rule_files(registration, "rsf_single_fov", "output", python)[0] == [
-        f"{out}/fovs/{{fovID}}/run.json", f"{out}/fovs/{{fovID}}/reference.tif", f"{out}/fovs/{{fovID}}/molecules.csv"]
-    for rule in ("gr_single_fov_subtile", "deep_create_subtile"):
-        assert rule_files(registration, rule, "output", python)[0][:2] == [
-            f"{out}/fovs/{{fovID}}/run.json", f"{out}/fovs/{{fovID}}/reference.tif"], rule
-    assert rule_files(RULES / "spot-finding-py.smk", "lrsf_single_fov_subtile", "output", python)[0][0] == \
-        f"{out}/fovs/{{fovID}}/subtile_{{n_subtile}}/run.json"
-    assert rule_files(RULES / "spot-finding-py.smk", "stitch_subtile", "input", python)[1] == {
-        "reference": f"{out}/fovs/{{fovID}}/reference.tif"}
-    named = rule_files(segmentation, "enhance_dapi_with_flamingo", "input", python)[1]
-    wildcards = SimpleNamespace(fovID="FOV")
-    assert {key: function(wildcards) for key, function in named.items()} == {
-        "dapi_img": f"{out}/images/flamingo/ch00/FOV.tif", "flamingo_img": f"{out}/images/flamingo/ch03/FOV.tif"}
-    assert rule_files(segmentation, "create_nuclei_amplicon_overlay", "input", python)[1]["amplicon_img"] == \
-        f"{out}/fovs/{{fovID}}/reference.tif"
-
-    imported, out = backend_namespace(tmp_path, "python", reference_image_import="tool/{fov_id}.tif")
-    assert rule_files(registration, "rsf_single_fov", "output", imported)[0] == [
-        f"{out}/fovs/{{fovID}}/run.json", f"{out}/fovs/{{fovID}}/molecules.csv"]
-    assert rule_files(segmentation, "create_nuclei_amplicon_overlay", "input", imported)[1]["amplicon_img"] == \
-        f"{out}/tool/{{fovID}}.tif"
-
-
-@pytest.mark.contract
-@pytest.mark.parametrize("setting", ["default", "configured", "imported"])
-def test_the_readers_of_the_reference_image_get_one_path_in_the_shape_snakemake_gives(tmp_path, setting):
-    """The Python stitch_subtile and create_nuclei_amplicon_overlay jobs, their inputs built from the parsed rules in
-    the shape of snakemake.input (one path for an entry declared as one path), read the reference image the setting
-    names: the default, a configured pattern or an imported file. stitch_subtile passes its input reference to
-    TiffFile, which refuses a list."""
-    keys = {"default": {}, "configured": {"reference_image": "refs/{fov_id}_ref.tif"},
-            "imported": {"reference_image_import": str(tmp_path / "tool" / "{fov_id}.tif")}}[setting]
-    namespace, out = backend_namespace(tmp_path, "python", **keys)
-    reference = {"default": out / "fovs" / "FOV" / "reference.tif", "configured": out / "refs" / "FOV_ref.tif",
-                 "imported": tmp_path / "tool" / "FOV.tif"}[setting]
-    image = reference_round(np.uint16, seed=4).max(axis=-1)
-    save_volume(image, reference, metadata=VIEW_METADATA)
-    subtiles = out / "output" / "subtile" / "FOV"
-    subtiles.mkdir(parents=True)
-    (subtiles / "subtile_coords.csv").write_text("t,scoords_x,scoords_y,ecoords_x,ecoords_y\n1,1,1,7,6\n")
-    (subtiles / "subtile_goodSpots_1.csv").write_text("x,y,z,gene\n4,5,1,Gene1\n")
-
-    job = job_input(RULES / "spot-finding-py.smk", "stitch_subtile", namespace, fovID="FOV")
-    assert job.reference == str(reference) and job[-1] == str(reference)
-    signal = out / "signal"
-    signal.mkdir()
-    snakemake = SimpleNamespace(wildcards=SimpleNamespace(fovID="FOV"), config=namespace["config"], input=job,
-                                output=[str(signal / "FOV_goodSpots.csv"), str(signal / "FOV_goodSpots.png")])
-    stitched = runpy.run_path(str(ROOT / "workflow" / "scripts" / "stitch_subtile.py"),
-                              init_globals={"snakemake": snakemake})
-    np.testing.assert_array_equal(stitched["reference_img"], image.max(axis=0))
-    assert (signal / "FOV_goodSpots.png").stat().st_size > 0
-
-    dapi = out / "images" / "DAPI" / "FOV.tif"
-    dapi.parent.mkdir(parents=True)
-    tifffile.imwrite(dapi, np.full(image.shape, 7, np.uint16), photometric="minisblack")
-    job = job_input(RULES / "segmentation.smk", "create_nuclei_amplicon_overlay", namespace, fovID="FOV")
-    assert job["amplicon_img"] == str(reference) and list(job["dapi_img"]) == [str(dapi)]
-    overlay = out / "images" / "overlay" / "FOV.tif"
-    overlay.parent.mkdir(parents=True)
-    runpy.run_path(str(ROOT / "workflow" / "scripts" / "create_nuclei_amplicon_overlay.py"),
-                   init_globals={"snakemake": SimpleNamespace(input=job, output=[str(overlay)],
-                                                              config=namespace["config"])})
-    assert tifffile.imread(overlay).shape == image.shape

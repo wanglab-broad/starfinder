@@ -1,31 +1,24 @@
 """The Python workflow's FOV membership (W-566): ``<input_root>/fovs.csv`` and ``selected_fovs``.
 
 ``starfinder.dataset.workflow._membership`` reads ``fovs.csv`` (``sample,fov_id`` and an optional
-``position_id``) in row order and restricts it by ``selected_fovs``; ``common.smk`` builds ``FOVS``,
-``SAMPLE`` and ``SAMPLE_TO_FOV`` from it for the Python backend and keeps the sample annotation, the FOV
-pattern and the subset keys for the MATLAB backend; the per-sample adapters read the same restricted
-membership. Fixtures, all written in the test: the repository's example configurations with a
-``fovs.csv`` (or, for the MATLAB backend, a sample annotation) under ``tmp_path``. The rule files are
-executed in part, as in ``test_report_workflow.py`` (the names ``common.smk`` defines before its first
-rule, its Python checks after the rules, and the helpers of ``stitching-py.smk`` before its rules);
-Snakemake itself never runs.
+``position_id``) in row order and restricts it by ``selected_fovs``; the plan reads it (the tests of the plan's
+membership, its tasks and the stitch and report commands that read the restricted membership moved to
+test_workflow_plan.py, test_workflow_plan_refusals.py, test_workflow_stitch_tasks.py and
+test_workflow_snakemake_dryrun.py, W-750). ``common.smk`` keeps the sample annotation, the FOV pattern and the subset
+keys of the MATLAB backend, and the legacy reads_assignment adapter reads a FOV's sample from either
+(``_fov_sample`` of ``starfinder._legacy_workflow``). Fixtures, all written in the test: the repository's example
+configurations with a ``fovs.csv`` (or, for the MATLAB backend, a sample annotation) under ``tmp_path``. The rule file
+is executed in part (the names ``common.smk`` defines before its first rule); Snakemake itself never runs.
 """
-import copy
-import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
-import pandas as pd
 import pytest
 import yaml
 
 import starfinder.dataset.workflow as workflow
-from starfinder import _snakemake
-from starfinder.dataset import Dataset
-
-from .stitching_fixtures import maf_text
+from starfinder._legacy_workflow import _fov_sample
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -138,22 +131,35 @@ MATLAB_RSF = {"run": True, "parameters": {
     "reads_filtration": {"run": True, "end_base": "CC", "start_base": "C"}}}
 
 
-def test_the_schema_refuses_the_matlab_fov_keys_for_python_and_requires_them_for_matlab():
+MATLAB_FOV_KEYS = (("fov_id_pattern", "tile_{i}"), ("n_fovs", 1), ("subset_list", []), ("subset_range", False),
+                   ("subset_start", 1), ("subset_end", 1), ("subset_random", False), ("n_random_tests", 1))
+
+
+def test_the_schema_refuses_the_matlab_fov_keys_for_python_and_requires_them_for_matlab(tmp_path):
+    """The MATLAB schema requires the FOV keys of backend matlab and refuses the Python-only selected_fovs there;
+    the package (the plan's shape check, its Python schema and the membership it reads, W-750) refuses each MATLAB
+    FOV key in a Python configuration, accepts selected_fovs and refuses an empty or repeated selection."""
     import jsonschema
+    from starfinder.workflow._plan import PlanRefused
+    from . import workflow_examples as X
+    from . import workflow_tasks as T
     schema = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
     validator = jsonschema.validators.validator_for(schema)(schema)
     config = yaml.safe_load((ROOT / "docs/examples/workflow-minimal.yaml").read_text())
-    validator.validate(dict(config, selected_fovs=["tile_1"]))
     matlab = dict(config, backend="matlab", fov_id_pattern="tile_{i}", n_fovs=1, subset_list=[], subset_range=False,
                   subset_start=1, subset_end=1, subset_random=False, n_random_tests=1,
                   rules={"rsf_single_fov": MATLAB_RSF})
     validator.validate(matlab)
-    for key, value in (("fov_id_pattern", "tile_{i}"), ("n_fovs", 1), ("subset_list", []), ("subset_range", False),
-                       ("subset_start", 1), ("subset_end", 1), ("subset_random", False), ("n_random_tests", 1)):
-        assert not validator.is_valid(dict(config, **{key: value})), key
-    for invalid in ({k: v for k, v in matlab.items() if k != "n_fovs"}, dict(matlab, selected_fovs=["tile_1"]),
-                    dict(config, selected_fovs=[]), dict(config, selected_fovs=["tile_1", "tile_1"])):
+    for invalid in ({k: v for k, v in matlab.items() if k != "n_fovs"}, dict(matlab, selected_fovs=["tile_1"])):
         assert not validator.is_valid(invalid)
+    python = T.dataset_keys(tmp_path, processing=X.PROCESSING)
+    assert T.validation_error(dict(python, selected_fovs=["tile_1"])) is None
+    for key, value in MATLAB_FOV_KEYS:
+        assert f"{key} left the Python configuration" in T.validation_error(dict(python, **{key: value})), key
+    T.write_inputs(python, "sample,fov_id\ns1,tile_1\n")
+    for selected, match in (([], "nonempty list"), (["tile_1", "tile_1"], r"repeated \['tile_1'\]")):
+        with pytest.raises(PlanRefused, match=match):
+            T.plan(tmp_path, "selected", dict(python, selected_fovs=selected))
 
 
 # --- common.smk: FOVS, SAMPLE and SAMPLE_TO_FOV by backend -------------------------------------------------------
@@ -174,23 +180,6 @@ def python_example(tmp_path, **extra):
     config = yaml.safe_load((ROOT / "docs/examples/workflow-minimal.yaml").read_text())
     config.update(root_input_path=str(tmp_path / "input"), root_output_path=str(tmp_path), **extra)
     return config
-
-
-def test_common_smk_builds_the_python_membership_from_fovs_csv(tmp_path, monkeypatch):
-    config = python_example(tmp_path)
-    write_fovs(config, rows_text(positions=False))
-    assert not (tmp_path / "example" / "direct" / "documents").exists()
-    names = common_names(config, monkeypatch)
-    assert names["FOVS"] == ["F10", "F2", "F3", "F1"]
-    assert names["SAMPLE"] == ["s2", "s1"]
-    assert names["SAMPLE_TO_FOV"] == {"s2": ["F10", "F3"], "s1": ["F2", "F1"]}
-    assert names["FOV_TO_SAMPLE"] == {"F10": "s2", "F3": "s2", "F2": "s1", "F1": "s1"}
-    assert names["MEMBERSHIP"] == str(tmp_path / "input" / "example" / "sample" / "fovs.csv")
-    assert "SAMPLE_ANNOT" not in names
-    # The same file gives the same values, in the same order, on every parse.
-    again = common_names(copy.deepcopy(config), monkeypatch)
-    assert [again[k] for k in ("FOVS", "SAMPLE", "SAMPLE_TO_FOV")] == [names[k] for k in ("FOVS", "SAMPLE",
-                                                                                         "SAMPLE_TO_FOV")]
 
 
 def matlab_config(tmp_path, **extra):
@@ -238,93 +227,24 @@ def test_common_smk_keeps_the_matlab_random_subset(tmp_path, monkeypatch):
     assert len(names["FOVS"]) == 2 and set(names["FOVS"]) <= set(base_rule(config)[0])
 
 
-def test_selected_fovs_restricts_every_requested_output(tmp_path, monkeypatch):
-    """With selected_fovs, the per-FOV outputs and the per-sample ones (stitching, export, report) are requested
-    for the selected FOVs and their samples only."""
-    config = python_example(tmp_path, selected_fovs=["F3", "F10"], stitching=MULTIVIEW,
-                            assembly={"assignment": None}, report={})
-    write_fovs(config, rows_text(positions=False))
-    names = common_names(config, monkeypatch, checks=True)
-    assert names["FOVS"] == ["F10", "F3"] and names["SAMPLE"] == ["s2"]
-    assert names["SAMPLE_TO_FOV"] == {"s2": ["F10", "F3"]}
-    output = Path(tmp_path / "example" / "direct")
-    requested = names["get_overall_output"](None)
-    assert [p for p in requested if p.endswith("run.json")] == [f"{output}/fovs/F10/run.json",
-                                                                 f"{output}/fovs/F3/run.json"]
-    assert [p for p in requested if "/stitching/" in p or "/export/" in p or "/report/" in p] == [
-        f"{output}/stitching/s2/placement.json", f"{output}/export/s2/export.json",
-        f"{output}/report/s2/report.json", f"{output}/report/samples.csv"]
-    # The export rule's input function (export.smk) gives the selected FOVs of the sample.
-    inputs = _snakemake._export_sample_files(config, output, names["SAMPLE_TO_FOV"]["s2"], "s2")[0]
-    assert inputs[1:] == [f"{output}/fovs/F10/molecules.csv", f"{output}/fovs/F3/molecules.csv"]
-
-
-def write_reference(tmp_path, fovs):
-    """A 2 × 16 × 24 reference image per FOV under tmp_path/data/output (config_for's output root)."""
-    from starfinder.io import save_volume
-    from .stitching_fixtures import STAGE_SPACING, grid
-    for fov in fovs:
-        save_volume(np.zeros((2, 16, 24), np.uint16), tmp_path / "data/output/fovs" / fov / "reference.tif",
-                    metadata=grid((2, 16, 24), STAGE_SPACING).metadata)
-
-
-def test_a_per_sample_rule_reads_the_selected_fovs_only(tmp_path, monkeypatch):
-    """stitch_sample and report_sample, the per-sample adapters, read the sample's selected FOVs; reads_assignment
-    takes its sample and tile-configuration id from the same membership."""
-    calls = []
-    monkeypatch.setattr(Dataset, "stitch", lambda self, *args, **kwargs: calls.append(("stitch", args, kwargs)))
-    monkeypatch.setattr(Dataset, "report", lambda self, *args, **kwargs: calls.append(("report", args, kwargs)))
-    config = config_for(tmp_path, selected_fovs=["F1", "F10"], stitching=MULTIVIEW, report={})
+def test_a_per_sample_rule_reads_the_selected_fovs_only(tmp_path):
+    """The legacy reads_assignment adapter takes a FOV's sample and tile-configuration id from the membership:
+    fovs.csv restricted by selected_fovs for the Python backend (its PositionID, or without that column its 1-based
+    place among its sample's FOVs of the run). The stitch and report commands that read the sample's selected FOVs:
+    test_workflow_stitch_tasks.py, test_the_per_sample_commands_read_the_selected_fovs_only (W-750)."""
+    config = config_for(tmp_path, selected_fovs=["F1", "F10"])
     path = write_fovs(config, rows_text())
-    write_reference(tmp_path, ["F1"])          # the selected grid's geometry (see the regular-grid test below)
-    placement = tmp_path / "data/output/stitching/s1/placement.json"
-    _snakemake._run_stitching(SimpleNamespace(config=config, input=[str(path)], output=[str(placement)],
-                                              wildcards=Wildcards(sample="s1")))
-    report = tmp_path / "data/output/report/s1/report.json"
-    _snakemake._run_report_sample(SimpleNamespace(config=config, input=[], output=[str(report)],
-                                                  wildcards=Wildcards(sample="s1")))
-    (_, stitch_args, stitch_kwargs), (_, report_args, _) = calls
-    assert stitch_args == ("s1", ["F1"]) and report_args == ("s1", ["F1"])
-    assert stitch_kwargs["position_ids"] is None       # a regular grid reads no PositionID
-    assert stitch_kwargs["table"].fov_ids == ["F1"]
-    assert _snakemake._fov_sample(path, config, "F10") == ("s2", 7)
-    assert _snakemake._fov_sample(path, config, "F1") == ("s1", 1)
+    assert _fov_sample(path, config, "F10") == ("s2", 7)
+    assert _fov_sample(path, config, "F1") == ("s1", 1)
     with pytest.raises(ValueError, match="F2 is in no sample"):
-        _snakemake._fov_sample(path, config, "F2")
+        _fov_sample(path, config, "F2")
     write_fovs(config, rows_text(positions=False))
     # Without position_id the id is the FOV's 1-based place among its sample's FOVs of the run.
-    assert _snakemake._fov_sample(path, dict(config, selected_fovs=None), "F3") == ("s2", 2)
-    assert _snakemake._fov_sample(path, config, "F10") == ("s2", 1)
+    assert _fov_sample(path, dict(config, selected_fovs=None), "F3") == ("s2", 2)
+    assert _fov_sample(path, config, "F10") == ("s2", 1)
 
 
-# --- The legacy sample rules and the stitching parse for the Python backend ------------------------------------
-
-@pytest.mark.parametrize("rules, blocks, match", [
-    (["stitching_preparation", "create_tile_config"], {}, r"\['stitching_preparation', 'create_tile_config'\] need a "
-                                                         r"stitching block"),
-    (["create_sample_h5ad"], {"stitching": MULTIVIEW}, r"\['create_sample_h5ad'\] need a stitching block and an "
-                                                        r"assembly block"),
-    (["create_sample_reads_assignment"], {}, "need a stitching block and an assembly block"),
-    (["reads_assignment"], {}, r"\['reads_assignment'\] needs an assembly block, or a stitching block with method "
-                               r"bigstitcher"),
-])
-def test_the_legacy_sample_rules_are_refused_for_python_naming_the_blocks(tmp_path, monkeypatch, rules, blocks, match):
-    config = python_example(tmp_path, **blocks)
-    config["rules"].update({rule: {"run": True} for rule in rules})
-    write_fovs(config, rows_text(positions=False))
-    with pytest.raises(ValueError, match=r"the legacy sample rules run with backend matlab only; .*" + match):
-        common_names(config, monkeypatch, checks=True)
-
-
-def test_with_the_blocks_the_legacy_sample_rules_are_left_out(tmp_path, monkeypatch):
-    config = python_example(tmp_path, stitching=MULTIVIEW, assembly={"assignment": None})
-    config["rules"].update({rule: {"run": True} for rule in workflow._LEGACY_STITCHING_RULES
-                            + workflow._LEGACY_SAMPLE_RULES})
-    write_fovs(config, rows_text(positions=False))
-    requested = common_names(config, monkeypatch, checks=True)["get_overall_output"](None)
-    assert not any("/images/fused/" in p or "tile_config" in p or "_raw.h5ad" in p or "_reads_assignment" in p
-                   for p in requested)
-
+# --- The legacy sample rules of the MATLAB backend -------------------------------------------------------------
 
 def test_the_snakefile_includes_the_legacy_sample_rules_for_matlab_only():
     # The dispatcher includes rules/legacy.smk, which holds the MATLAB includes and local rules, for backend matlab only.
@@ -338,159 +258,3 @@ def test_the_snakefile_includes_the_legacy_sample_rules_for_matlab_only():
     assert "    rule create_sample_h5ad:" in legacy and "    rule create_sample_reads_assignment:" in legacy
     assert "rule reads_assignment:" not in legacy
     assert "rule create_sample_maf:" in (ROOT / "workflow/rules/utils.smk").read_text()
-
-
-def test_the_python_stitching_parse_needs_only_fovs_csv_and_a_stage_file(tmp_path, monkeypatch):
-    """A Python configuration with a stitching block on a whole-acquisition stage file: common.smk and the helpers of
-    stitching-py.smk parse with fovs.csv and the stage file alone (no sample annotation, no documents/ folder), the
-    placement rule declares the stage file and stitch_sample places the sample's positions, selected from it; no
-    documents/maf/ copy is written."""
-    import starfinder.stitching as stitching
-    from starfinder.io import save_volume
-    from .stitching_fixtures import STAGE_SPACING, grid
-    stage = tmp_path / "acquisition" / "positions.maf"
-    stage.parent.mkdir()
-    # Sample s1 (PositionIDs 1, 2) and sample s2 (7, 3), in one acquisition file, in the order 7, 1, 3, 2.
-    stage.write_text(maf_text(((7, "0.07", "0.04"), (1, "0.076", "0.048"), (3, "0.07", "0.040261"),
-                               (2, "0.076", "0.048261"))))
-    positions = {"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}, "stage_file": str(stage)}
-    config = python_example(tmp_path, stitching=dict(MULTIVIEW, positions=positions), voxel_size_xy=12.0,
-                            voxel_size_z=1.0)
-    path = write_fovs(config, rows_text())
-    output = tmp_path / "example" / "direct"
-    names = common_names(config, monkeypatch, checks=True)
-    text = (ROOT / "workflow/rules/stitching-py.smk").read_text()
-    exec(compile(text[:text.index("if STITCHING_METHOD == 'bigstitcher':")], "stitching-py.smk", "exec"), names)
-    assert names["get_stitching_positions"](Wildcards(sample="s1")) == [str(stage)]
-    assert names["get_stitching_images"](Wildcards(sample="s1")) == [f"{output}/fovs/F2/reference.tif",
-                                                                     f"{output}/fovs/F1/reference.tif"]
-    assert names["MEMBERSHIP"] == str(path)
-    for fov in ("F2", "F1"):
-        save_volume(np.zeros((2, 16, 24), np.uint16), output / "fovs" / fov / "reference.tif",
-                    metadata=grid((2, 16, 24), STAGE_SPACING).metadata)
-    tables = []
-    monkeypatch.setattr(stitching, "stitch", lambda inputs, table, **kw: tables.append(table) or "result")
-    monkeypatch.setattr(stitching, "save_placement", lambda result, folder: None)
-    _snakemake._run_stitching(SimpleNamespace(config=config, input=[names["MEMBERSHIP"]],
-                                              output=[str(output / "stitching/s1/placement.json")],
-                                              wildcards=Wildcards(sample="s1")))
-    table, = tables
-    assert table.fov_ids == ["F1", "F2"] and table.positions["position_id"].tolist() == [1, 2]   # file order
-    assert table.positions["nominal_y"].tolist() == [0.0, 261.0] and table.positions["nominal_x"].tolist() == [0, 0]
-    assert not (output / "documents").exists()
-    # Without the position_id column the stage file names no FOV of the workflow: the parse raises.
-    write_fovs(config, rows_text(positions=False))
-    with pytest.raises(ValueError, match="position_id column of fovs.csv"):
-        common_names(config, monkeypatch, checks=True)
-
-
-def test_selected_fovs_select_from_a_supplied_position_table(tmp_path, monkeypatch):
-    """stitch_sample under selected_fovs [F2] with a supplied table that holds F1 and F2 places F2 as a table that
-    holds only F2 does."""
-    import starfinder.stitching as stitching
-    from starfinder.io import save_volume
-    from starfinder.stitching import placement_from_table
-    from .stitching_fixtures import STAGE_SPACING, grid
-    monkeypatch.setattr(stitching, "stitch", lambda inputs, table, *, sample, **kw: placement_from_table(
-        table, {item.fov_id: item.grid for item in inputs}, sample=sample))
-    saved = []
-    monkeypatch.setattr(stitching, "save_placement", lambda result, folder: saved.append(result))
-    for fov in ("F1", "F2"):
-        save_volume(np.zeros((2, 16, 24), np.uint16), tmp_path / "data/output/fovs" / fov / "reference.tif",
-                    metadata=grid((2, 16, 24), STAGE_SPACING).metadata)
-    rows = [{"fov_id": "F1", "nominal_z": 0.0, "nominal_y": 0.0, "nominal_x": 0.0},
-            {"fov_id": "F2", "nominal_z": 0.0, "nominal_y": 259.2, "nominal_x": 0.0}]
-    for name, table in (("both.csv", rows), ("f2.csv", rows[1:])):
-        pd.DataFrame(table).to_csv(tmp_path / name, index=False)
-        positions = {"source": "table", "table": str(tmp_path / name)}
-        config = config_for(tmp_path, selected_fovs=["F2"], stitching=dict(MULTIVIEW, positions=positions))
-        path = write_fovs(config, "sample,fov_id\ns1,F1\ns1,F2\n")
-        _snakemake._run_stitching(SimpleNamespace(config=config, input=[str(path)],
-                                                  output=[str(tmp_path / "data/output/stitching/s1/placement.json")],
-                                                  wildcards=Wildcards(sample="s1")))
-    both, alone = saved
-    assert both.fovs.fov_id.tolist() == ["F2"]
-    pd.testing.assert_frame_equal(both.fovs, alone.fovs, check_exact=True)
-
-
-def output_regex(pattern, constraints):
-    """The regex Snakemake matches a target against for an output pattern: the literal parts escaped, each wildcard
-    ``{name}`` the group of its constraint (default ``.+``), the whole target matched."""
-    parts, last = [], 0
-    for match in re.finditer(r"\{(\w+)\}", pattern):
-        parts += [re.escape(pattern[last:match.start()]), f"(?P<{match.group(1)}>{constraints.get(match.group(1), '.+')})"]
-        last = match.end()
-    return re.compile("".join(parts + [re.escape(pattern[last:])]) + "$")
-
-
-def test_the_python_fovid_wildcard_matches_the_run_s_fovs_only(tmp_path, monkeypatch):
-    """With selected_fovs the Python backend's fovID constraint (FOV_CONSTRAINT, the Snakefile's
-    wildcard_constraints) lets a target of a selected FOV resolve to its rule and no other FOV's (outside the
-    selection or fovs.csv, or a regex look-alike); the MATLAB backend defines no constraint."""
-    config = python_example(tmp_path, selected_fovs=["F1.5", "F10"])
-    write_fovs(config, "sample,fov_id\ns1,F1\ns1,F1.5\ns2,F10\n")
-    names = common_names(config, monkeypatch)
-    assert names["FOVS"] == ["F1.5", "F10"]
-    constraints = {"fovID": names["FOV_CONSTRAINT"]}
-    output = Path(tmp_path / "example" / "direct")
-    requested = names["get_overall_output"](None)
-    patterns = [f"{output}/fovs/{{fovID}}/run.json", f"{output}/fovs/{{fovID}}/molecules.csv",
-                f"{output}/fovs/{{fovID}}/reference.tif"]
-    for target in requested:
-        assert any(output_regex(p, constraints).match(target) for p in patterns), target
-    rule = output_regex(patterns[0], constraints)
-    assert rule.match(f"{output}/fovs/F10/run.json")["fovID"] == "F10"
-    assert rule.match(f"{output}/fovs/F1.5/run.json")["fovID"] == "F1.5"
-    for fov in ("F1", "F1x5", "F100", "F10/x", "F2"):
-        assert rule.match(f"{output}/fovs/{fov}/run.json") is None, fov
-    assert output_regex(patterns[0], {}).match(f"{output}/fovs/F1/run.json")       # unconstrained, it would resolve
-    # The dispatcher includes no Python rule file: the Python route's rules (rules/tasks.smk) constrain each wildcard
-    # to the values of their group's tasks, which the plan takes from fovs.csv and selected_fovs.
-    snakefile = (ROOT / "workflow/Snakefile").read_text()
-    assert re.findall(r'include: "([^"]+)"', snakefile) == ["rules/legacy.smk", "rules/tasks.smk"]
-    assert "FOV_CONSTRAINT" not in snakefile and "registration-py.smk" not in snakefile
-    assert "FOV_CONSTRAINT" not in (ROOT / "workflow/rules/legacy.smk").read_text()
-    matlab = common_names(matlab_config(tmp_path / "matlab"), monkeypatch)
-    assert "FOV_CONSTRAINT" not in matlab
-
-
-@pytest.mark.parametrize("method", ["multiview_stitcher", "bigstitcher"])
-def test_a_selection_keeps_each_fov_s_regular_grid_cell(tmp_path, monkeypatch, method):
-    """A regular grid is laid out over the sample's FOVs of fovs.csv: under selected_fovs [F2, F4] the placement
-    table holds F2 and F4 with the cells and nominal positions they have without the selection (in process and for
-    the BigStitcher import)."""
-    import starfinder.stitching as stitching
-    from starfinder.stitching import placement_from_table
-    write_reference(tmp_path, ["F1", "F2", "F3", "F4"])
-    tables = []
-
-    def stand_in(inputs, table, *, sample, **kw):
-        tables.append(table)
-        return placement_from_table(table, {item.fov_id: item.grid for item in inputs}, sample=sample)
-
-    def spy(xml, *, table, **kwargs):
-        tables.append(table)
-        raise StopIteration
-
-    monkeypatch.setattr(stitching, "stitch", stand_in)
-    monkeypatch.setattr(stitching, "save_placement", lambda result, folder: None)
-    monkeypatch.setattr(stitching, "import_bigstitcher", spy)
-    block = (dict(MULTIVIEW) if method == "multiview_stitcher" else
-             {"positions": MULTIVIEW["positions"], "bigstitcher_save_dir": str(tmp_path / "bigstitcher")})
-    for selected in (None, ["F2", "F4"]):
-        config = config_for(tmp_path, selected_fovs=selected, stitching=block)
-        path = write_fovs(config, "sample,fov_id\ns1,F1\ns1,F2\ns1,F3\ns1,F4\n")
-        stub = SimpleNamespace(config=config, input=[str(path)] + [str(tmp_path / "x")] * 3,
-                               output=[str(tmp_path / "data/output/stitching/s1/placement.json"), str(tmp_path / "t")],
-                               wildcards=Wildcards(sample="s1"))
-        if method == "bigstitcher":
-            (tmp_path / "x").write_text("// macro\n")
-            monkeypatch.setattr(_snakemake, "_read_view_map", lambda path: None)
-            with pytest.raises(StopIteration):
-                _snakemake._run_stitching(stub)
-        else:
-            _snakemake._run_stitching(stub)
-    every, chosen = (table.positions.set_index("fov_id") for table in tables)
-    assert list(every.index) == ["F1", "F2", "F3", "F4"] and list(chosen.index) == ["F2", "F4"]
-    pd.testing.assert_frame_equal(chosen, every.loc[["F2", "F4"]], check_exact=True)
-    assert chosen.loc["F4", "grid_column"] == 1 and chosen.loc["F4", "grid_row"] == 1     # column-major 2 × 2

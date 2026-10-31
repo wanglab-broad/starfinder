@@ -43,12 +43,8 @@ for i in range(subtile_coords_df.shape[0]):
 # save reads_df
 reads_df.to_csv(snakemake.output[0], index=False)
 
-# visualize reads on the FOV's reference image: the Python backend's rule input reference, the one path of the file
-# reference_image or reference_image_import names; MATLAB's images/ref_merged/<fov>.tif
-if snakemake.config.get('backend', 'matlab') == 'python':
-    reference_img_path = snakemake.input.reference
-else:
-    reference_img_path = os.path.join(image_path, 'ref_merged', f'{current_fov_id}.tif')
+# visualize reads on the FOV's reference image: MATLAB's images/ref_merged/<fov>.tif
+reference_img_path = os.path.join(image_path, 'ref_merged', f'{current_fov_id}.tif')
 # project every axis except Y and X; OME-TIFF (ZCYX), tifffile ZYXC and plain stacks differ in order
 with TiffFile(reference_img_path) as tif:
     series = tif.series[0]

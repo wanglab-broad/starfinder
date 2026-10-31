@@ -39,7 +39,7 @@ An em dash in the default column means the schema defines no default.
 | `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; optional for Python, read by the plan; MATLAB: supply `[]` when unused, accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
 | `backend` | `python` or `matlab` | No | `python`; `workflow/Snakefile` includes the frozen MATLAB rule set for `matlab` only (the MATLAB schema's own default stays `matlab`) |
 | `segmentation`, `assignment` | objects | No | —; Python only (`backend: python`): a segmentation plan and an assign call for the workflow orchestration's segmentation rule, see [segmentation and assignment](#segmentation-and-assignment) |
-| `report` | object | No | —; Python only (`backend: python`): the `ReportConfig` of the processing report, and with it the rules `report_sample` and `report_dataset`, see [processing report](#processing-report) |
+| `report` | object | No | —; Python only (`backend: python`): the `ReportConfig` of the processing report, and with it the `report` task of each sample and the `compare` task, see [processing report](#processing-report) |
 | `readout_mode` | `multiplexed` or `direct` | No | `multiplexed`; Python only (`Dataset.readout_mode`), and `direct` only with `backend: python`; see [readout mode](#readout-mode) |
 | `matlab_launcher` | `path` or `broad` | No | `path`; how MATLAB rules start MATLAB, see [MATLAB launcher](#matlab-launcher) |
 | `matlab_single_thread` | boolean | No | `false`; `true` adds `-singleCompThread` to every MATLAB call |
@@ -57,16 +57,15 @@ An em dash in the default column means the schema defines no default.
 
 Three Python-only keys name the inputs that the Python rules read from the input root
 `INPUT = root_input_path/dataset_id/sample_id`; the MATLAB backend reads
-`INPUT/genes.csv` and the round-first layout only, and `common.smk` refuses the three
-keys for it.
+`INPUT/genes.csv` and the round-first layout only, and the schema refuses the three keys
+without `backend: python` (OC5).
 
 * `codebook` (readout_mode `multiplexed`) or `direct_panel` (readout_mode `direct`)
   names the reference file, absolute or relative to INPUT; absent or null, it is
   `INPUT/genes.csv`. The other mode's key raises `ValueError` naming both. The
-  sequencing rules (`rsf_single_fov`, `gr_single_fov_subtile`,
-  `lrsf_single_fov_subtile`, `deep_rsf_subtile`) declare it as their codebook input,
-  `export_sample` loads it for the genes of the molecule tables, and `reads_assignment`
-  loads it as they do: its genes, in its order (`Codebook.genes`, first appearance, or
+  `fov` task declares it as its codebook input, the `export` task loads it for the genes
+  of the molecule tables (on the routes that read them), and the `assign` task loads it as
+  they do: its genes, in its order (`Codebook.genes`, first appearance, or
   `DirectPanel.genes`, table order), are the gene universe and the columns of the count
   matrix. No input file is renamed.
 * `image_dir_template` lays out the images of one round of one FOV: `"{round}/{fov}"`
@@ -400,7 +399,7 @@ channel. The schema accepts `direct` only with `backend: python`. In `direct` mo
   `reads_filtration.end_base`, `split_index`, `n_barcode_segments` and
   `exclude_invalid_endpoints` have no meaning and raise.
 
-The Python `rsf_single_fov` writes the same molecule table as in multiplexed mode,
+The `fov` task writes the same molecule table as in multiplexed mode,
 `fovs/{fovID}/molecules.csv`; its `entry_id` is `<round>/<channel>`.
 
 ```yaml
@@ -539,8 +538,10 @@ rsf_single_fov:
 ## Segmentation and assignment
 
 The rules `enhance_dapi_with_flamingo`, `create_nuclei_amplicon_overlay`,
-`stardist_segmentation` and `reads_assignment` call the Starfinder package under both
-backends (`_snakemake.py`), keeping their names, inputs and outputs. The
+`stardist_segmentation` and `reads_assignment` of the MATLAB backend call the Starfinder
+package (`starfinder/_legacy_workflow.py`, D7), keeping their names, inputs and outputs; for
+the Python backend the morphology, segment and assign tasks replace them
+([orchestration](orchestration.md)). The
 environment that runs Snakemake therefore needs the package, with the `stardist` extra
 for `stardist_segmentation` and the `anndata` extra for `reads_assignment`; no rule reads
 `envs_path` any more. The legacy keys are translated as the
@@ -602,18 +603,16 @@ sample-level rules for a configuration that has them. The specification is the
 [assembly contract](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md#workflow-configuration) and the
 [sample-output contract](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md#workflow-configuration).
 
-* **`stitching`.** With the block, `rules/stitching-py.smk` is included instead of the
-  four legacy stitching rules, which then do not run whatever their `run` flags. One rule
-  per sample, `stitch_sample`, writes `<OUTPUT>/stitching/<sample>/` (`placement.json`,
-  `fovs.csv`, `links.csv`). `method` is a `STITCHING_METHODS` name, run in process by
-  `Dataset.stitch` (`multiview_stitcher`), or `bigstitcher`, the default: then
-  `bigstitcher_macro_sample` writes the tiles, the macro and the view map into
-  `<bigstitcher_save_dir>/<sample>/` (a local folder, required with `bigstitcher`),
-  `bigstitcher_engine` runs Fiji on the macro, and `stitch_sample` imports BigStitcher's
-  `dataset.xml`, saves the placement and, without an `assembly` block, writes
-  `output/tile_config_{sample}.csv` with the legacy writer from the record's raw
-  translations and view map (with the block nothing reads that file, so it is neither
-  written nor declared). `execution.fiji` is the tool of the `bigstitcher_engine` task, which only
+* **`stitching`.** With the block, the plan adds per sample the `stitch` task, or the
+  BigStitcher tasks below, which write `<OUTPUT>/stitching/<sample>/` (`placement.json`,
+  `fovs.csv`, `links.csv`); the four legacy stitching rules are the MATLAB backend's.
+  `method` is a `STITCHING_METHODS` name, run in process by `Dataset.stitch`
+  (`multiview_stitcher`), or `bigstitcher`, the default: then the `bigstitcher_macro` task
+  writes the tiles, the macro and the view map into `<bigstitcher_save_dir>/<sample>/` (a
+  local folder, required with `bigstitcher`), the `bigstitcher_engine` task runs Fiji on the
+  macro, and the `bigstitcher_import` task imports BigStitcher's `dataset.xml` and saves the
+  placement (the legacy tile configuration writer of the Python backend is retired, D6).
+  `execution.fiji` is the tool of the `bigstitcher_engine` task, which only
   Snakemake runs, followed in the same job by `bigstitcher-check`; Nextflow refuses `method:
   bigstitcher` without `stitching.dataset_xml` (task group 5). The check fails
   unless `dataset.xml` holds a `Stitching Transform` for every view, whatever Fiji's exit
@@ -626,9 +625,7 @@ sample-level rules for a configuration that has them. The specification is the
   and `create_sample_reads_assignment` run with `backend: matlab` only: a Python
   configuration has no rule names, and the plan refuses `rules`, naming the blocks. `config`
   holds the fields of `MultiviewStitcherConfig` or `BigStitcherConfig`, `review` the
-  `ReviewPolicy` fields, and `fallback` is null or `nominal`. With `multiview_stitcher`
-  no `tile_config_{sample}.csv` is written, so the legacy `reads_assignment` rule needs an
-  `assembly` block there.
+  `ReviewPolicy` fields, and `fallback` is null or `nominal`.
 * **`assembly`** (needs `stitching`). The keys are the `AssemblyConfig` fields,
   `assignment` (the assignment name read per FOV, default `default`; null for molecules
   only), `table_format` (`csv` or `parquet`) and `previews` (default `false`; below).
@@ -637,39 +634,35 @@ sample-level rules for a configuration that has them. The specification is the
   FOVs whose territories share at least that share of the smaller one are one cell, the
   larger observation stays and the other is excluded `duplicate_observation` with its
   molecules; it removes a second observation and does not complete a cell cut by a FOV
-  edge ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Retention", rule 8). With the block, `reads_assignment`
-  assigns on the grid of the FOV's reference image (`reference_image`, default
-  `fovs/{fov_id}/reference.tif`; its stored metadata, or for a file that stores none the
-  grid `voxel_size_xy` and `voxel_size_z` declare, as `export_sample` reads it) and reads no
-  `tile_config_{sample}.csv`. With an `assignment` name it writes and declares the FOV's
-  assignment folder `fovs/{fovID}/assignment/<assignment>/` alone, whose record holds the
-  counts: no `expr/{fovID}/raw.h5ad`, `reads_assignment.csv` or `log.txt` (since 2026-10-24). With
-  `assignment: null` (molecules only) it writes the per-FOV `raw.h5ad` and
-  `reads_assignment.csv` without the tile filter and without `global_*` columns, and
-  `log.txt` and the figures beside them, as before. `create_sample_h5ad` and
-  `create_sample_reads_assignment` do not run. One rule per sample, `export_sample`, runs
-  every part of `Dataset.export` after the placement and, on the route per FOV, every
-  FOV's `reads_assignment`; on the route after fusion it needs no output of
-  `reads_assignment`, but the FOVs' molecule tables (`fovs/{fovID}/molecules.csv`, or on the
-  legacy route of [workflows](workflows.md), "Molecule tables", `signal/{fovID}_goodSpots.csv`), their
-  reference images (the files `reference_image` names) and, with `fuse` on, the source
-  images of `images` that are files of the workflow (`reference_merged` and each
-  `<name>=file:<pattern>`; the saved form of `reference_stain` is read but is no declared
-  output of any rule, so it is not declared, as for `stitch_sample`); `reads_assignment`
-  still runs while its `run` flag is on, and can be turned off on that route. Its declared output
-  is `export/<sample>/export.json`, which lists every other file of the folder, so a part
-  that cannot run (an extra not installed) is recorded `not_run` and does not fail the
-  rule. **Previews** (opt-in, since 2026-10-24). With an `assignment` name, `previews: true` turns on
-  the two assignment figures, `assignment.png` (and `assignment_single_layer.png` for a
-  ZYX label image), each kind with one writer and its own folder, declared as a directory
-  output: `reads_assignment` draws each FOV's figures into `fovs/{fovID}/previews/`, and
-  on the route per FOV `export_sample` draws them with the FOV's ownership region into
+  edge ([assembly specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assembly.md), "Retention", rule 8). With the block, the `assign` task of each FOV (the
+  `assignment` block's `name`) assigns on the grid of the FOV's reference image
+  (`reference_image`, default `fovs/{fov_id}/reference.tif`; its stored metadata, or for a
+  file that stores none the grid `voxel_size_xy` and `voxel_size_z` declare, as the `export`
+  task reads it) and reads no `tile_config_{sample}.csv`. It writes and declares the FOV's
+  assignment folder `fovs/{fovID}/assignment/<name>/` alone, whose record holds the counts:
+  no `expr/{fovID}/raw.h5ad`, `reads_assignment.csv` or `log.txt` (since 2026-10-24). With
+  `assembly.assignment: null` (molecules only) no `assign` task is needed: the export reads
+  the molecule tables. `create_sample_h5ad` and `create_sample_reads_assignment` are rules
+  of the MATLAB backend. One task per sample, `export`, runs every part of `Dataset.export`
+  after the placement and, on the route per FOV, every FOV's `assign` task; on the route
+  after fusion it needs no `assign` task, but the FOVs' molecule tables
+  (`fovs/{fovID}/molecules.csv`), their reference images (the files `reference_image`
+  names), the codebook and, with `fuse` on, the source images of `images`
+  (`reference_merged`, the saved form of `reference_stain`, which the `morphology` task
+  writes, and each `<name>=file:<pattern>`, a relative pattern under the output root). Its
+  declared output is `export/<sample>/export.json`, which lists every other file of the
+  folder, so a part that cannot run (an extra not installed) is recorded `not_run` and does
+  not fail the task. **Previews** (opt-in, since 2026-10-24; P5). With an assignment,
+  `assignment.previews: true` turns on the two assignment figures, `assignment.png` (and
+  `assignment_single_layer.png` for a ZYX label image), each kind with one writer and its
+  own folder, declared as a directory output: the `assign` task draws each FOV's figures
+  into `fovs/{fovID}/previews/`, and with `export.previews: true` the `export` task draws
+  them on the route per FOV with the FOV's ownership region into
   `export/<sample>/previews/{fovID}/`, which `export.json` does not list; that folder is
   declared only on the route per FOV with the export block's `assemble` on, and created
-  (empty) when the assemble part could not run. Neither rule overwrites the other's files. With `previews: false`, the default, no figure is drawn on
-  the route of a saved assignment. On the route after fusion `export_sample` draws no
-  figure: the sample's cells come from no per-FOV assignment. `previews` does not change
-  molecules only (`assignment: null`), whose figures stay in `expr/{fovID}/`.
+  (empty) when the assemble part could not run. Neither task overwrites the other's files.
+  Without them no figure is drawn. On the route after fusion the `export` task draws no
+  figure: the sample's cells come from no per-FOV assignment.
 * **`export`** (needs `assembly`). The parts of `Dataset.export` and their settings: the
   flags `assemble`, `fuse`, `fuse_labels` and `export_spatialdata`, the `FusionConfig`
   fields (`images`, `dimensionality`, `projection`, `scale_yx`, `ome_zarr`,
@@ -696,11 +689,11 @@ sample-level rules for a configuration that has them. The specification is the
   `export.segmentation` or `route: per_fov`; the route after fusion also refuses
   `dimensionality: stack` and `projection: sum`.
 * **The device of the route after fusion.** On that route the part `segment` runs inside
-  `export_sample`, so that rule needs the device and memory of the segmentation methods:
-  with a learned model on `cuda` (`segmentation.device: cuda`) the rule must run on a GPU
+  the `export` task, so that task needs the device and memory of the segmentation methods:
+  with a learned model on `cuda` (`segmentation.device: cuda`) the task runs on a GPU
   node (choice E1 of
-  [sample-segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-segmentation.md), whose stated cost this is; the GPU resource of the
-  rule belongs to workflow orchestration and is not set by this block). The whole fused projection is
+  [sample-segmentation specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-segmentation.md), whose stated cost this is; the plan
+  sets the task's `gpu` from `export.segmentation.device`). The whole fused projection is
   segmented in one call, so its size, set by `scale_yx`, must fit that device.
 
 % W-568, §2.13
@@ -710,7 +703,7 @@ and the `assembly` and `export` keys equal to those fields, and the methods of a
 `segmentation` run equal to `SEGMENTATION_METHODS`. The plan refuses them, naming the key; so does a
 route the configuration alone refuses (check 7 of
 `Dataset.export` without the conditions of a reused segmentation and without the models,
-which `export_sample` checks before anything is written).
+which the `export` task checks before anything is written).
 
 ```yaml
 stitching:
@@ -735,7 +728,7 @@ export:
 
 One example configuration for each route ([workflow-downstream](workflow-downstream.md), "Two routes to a
 sample's cells", says which to choose). The route per FOV, for a projection sample that
-keeps the per-FOV segmentation and assignment of `reads_assignment`:
+keeps the per-FOV segmentation and the `assign` task's assignment:
 
 ```yaml
 assembly:
@@ -795,18 +788,18 @@ configuration without the block runs as before: no report rule and no report out
   gives `ReportConfig()`; an omitted rule of `limits` keeps its default limit, and an omitted
   key of a given rule is null. An unknown key, at any level, raises `ValueError` naming it
   when the plan runs.
-* **`report_sample`**, one rule per sample, calls `Dataset.report(sample, <the sample's
-  FOVs from the sample annotation>, assignment=<assembly.assignment>, config=…)` and writes
+* **`report`**, one task per sample, calls `Dataset.report(sample, <the sample's
+  FOVs from fovs.csv>, assignment=<assembly.assignment>, config=…)` and writes
   `<OUTPUT>/report/<sample>/`. Its declared output is `report/<sample>/report.json`, which
-  lists every other file of the folder. Its declared input is the sample's last per-sample
-  output: `export/<sample>/export.json` with an `assembly` block (the `export_sample` rule,
-  which an `export` block configures); else `stitching/<sample>/placement.json` with a
-  `stitching` block; else every FOV's `fovs/{fovID}/run.json`. Without an `assembly`
-  block no rule saves a per-FOV assignment, so the report is made without cells
-  (`assignment=None`).
-* **`report_dataset`** calls `Dataset.compare_samples` on every sample of the run, in the
-  order of the sample annotation, and writes `<OUTPUT>/report/index.html` and
-  `report/samples.csv`, its declared output, after every sample's `report_sample`.
+  lists every other file of the folder. Its declared inputs are every FOV's
+  `fovs/{fovID}/run.json` and stage records, the sample's last per-sample output
+  (`export/<sample>/export.json` with an `assembly` block, the `export` task; else
+  `stitching/<sample>/placement.json` with a `stitching` block) and, with an `assign` task,
+  each FOV's assignment record. Without an `assembly` block no task saves a per-FOV
+  assignment for the report, so it is made without cells (`assignment=None`).
+* **`compare`** calls `Dataset.compare_samples` on every sample of the run, in the
+  order of fovs.csv, and writes `<OUTPUT>/report/index.html` and
+  `report/samples.csv`, its declared outputs, after every sample's `report` task.
 
 A default-tier test keeps the block's keys equal to the fields of `ReportConfig`,
 `MarkerGroup`, `ReportLimits` and `RuleLimit`. The example is the report inputs survey's markers of the lymph

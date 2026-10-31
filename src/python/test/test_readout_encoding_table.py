@@ -45,6 +45,8 @@ from .test_readout_direct import pipeline as direct_pipeline
 from .test_readout_golden import (CHANNELS, METADATA, ROUNDS, candidates, golden_dataset, readout_config,
                                   write_codebook)
 
+from . import workflow_tasks as T
+
 pytestmark = pytest.mark.readout
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -456,8 +458,9 @@ def test_yaml_pair_to_color_gives_the_python_codebook(tmp_path):
     assert from_workflow_config(workflow({"encoding": {"pair_to_color": quoted}})).encoding == python.encoding
     assert from_workflow_config(workflow({})).encoding == EncodingConfig()
     assert from_workflow_config(workflow({"encoding": {"method": "two_base"}})).encoding == EncodingConfig()
-    jsonschema.validate(workflow(block), SCHEMA)
-    jsonschema.validate(workflow({"encoding": {"pair_to_color": quoted}}), SCHEMA)
+    # The package validates both tables (W-750: the Python workflow validates with the package).
+    assert T.validation_error(T.python_shape(workflow(block))) is None
+    assert T.validation_error(T.python_shape(workflow({"encoding": {"pair_to_color": quoted}}))) is None
 
 
 @pytest.mark.contract
@@ -472,18 +475,21 @@ def test_invalid_yaml_tables_raise_the_python_error():
 
 @pytest.mark.contract
 def test_schema_accepts_pair_to_color_for_the_python_backend_only():
+    """The MATLAB schema refuses pair_to_color without backend: python and keeps reverse_bases for MATLAB; the package
+    validates the Python table and refuses an incomplete or invalid one (W-750)."""
     block = {"encoding": {"pair_to_color": RELABELLED}}
-    jsonschema.validate(workflow(block), SCHEMA)
+    assert T.validation_error(T.python_shape(workflow(block))) is None
     jsonschema.validate(workflow({"encoding": {"reverse_bases": True}}, backend="matlab"), SCHEMA)
     description = SCHEMA["$defs"]["load_codebook_params"]["properties"]["encoding"]["properties"][
         "pair_to_color"]["description"]
     assert description.startswith("Python only")
-    for invalid in (workflow(block, backend="matlab"), workflow(block, backend=None),
-                    workflow({"encoding": {"pair_to_color": _without("TT")}}),
-                    workflow({"encoding": {"pair_to_color": {**RELABELLED, "AA": "5"}}}),
-                    workflow({"encoding": {"pair_to_color": {**RELABELLED, "AN": "1"}}})):
+    for invalid in (workflow(block, backend="matlab"), workflow(block, backend=None)):
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(invalid, SCHEMA)
+    for invalid in (workflow({"encoding": {"pair_to_color": _without("TT")}}),
+                    workflow({"encoding": {"pair_to_color": {**RELABELLED, "AA": "5"}}}),
+                    workflow({"encoding": {"pair_to_color": {**RELABELLED, "AN": "1"}}})):
+        assert T.validation_error(T.python_shape(invalid))
 
 
 # --- provenance -----------------------------------------------------------------------------------

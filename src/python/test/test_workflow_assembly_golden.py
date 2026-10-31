@@ -46,7 +46,7 @@ import pandas as pd
 import pytest
 import tifffile
 
-from starfinder._snakemake import _run_reads_assignment
+from starfinder._legacy_workflow import _run_reads_assignment
 
 from .coordination_helpers import write_molecules_csv
 from .test_assignment_golden import GENES, legacy_assignment

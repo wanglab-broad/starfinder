@@ -6,10 +6,7 @@ MATLAB writes ``images/ref_merged`` with SaveSingleStack, one YX page per Z of
 one page of its Z maximum when ``maximum_projection`` is true. MATLAB is not
 run here; the page layout is mirrored with tifffile.
 """
-from dataclasses import replace
 from pathlib import Path
-import runpy
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -17,7 +14,7 @@ import tifffile
 
 from starfinder.dataset import Dataset, PipelineConfig, RoundState, from_workflow_config
 from starfinder.image import ImageMetadata, InvalidImageError
-from starfinder.io import load_volume, save_volume
+from starfinder.io import load_volume
 from starfinder.preprocessing import (MinMaxNormalizationConfig, PreprocessingRecipe, ProjectionConfig,
     PreprocessingStep, project_image)
 
@@ -207,26 +204,3 @@ NATIVE_DETECTION = dict(
     registration={'signal': SINGLE_SIGNAL, 'steps': [{'method': 'translation'}]}, reference_image_view=CHANNEL_VIEW,
     spot_finding={'run': True, 'threshold_mode': 'adaptive', 'threshold_value': .1},
     reads_extraction={'run': True, 'voxel_size': [0, 0, 0]}, reads_filtration={'run': True})
-
-
-@pytest.mark.parametrize('maximum_projection', [False, True])
-def test_rsf_single_fov_script_writes_the_detection_view(tmp_path, maximum_projection):
-    raw = reference_round(np.uint16, seed=1)
-    for name in ('round1', 'round2'):
-        for c, channel in enumerate(CHANNELS):
-            save_volume(raw[..., c], tmp_path / 'data' / 'sample' / name / 'FOV' / f'{channel}.tif', metadata=METADATA)
-    codebook = tmp_path / 'genes.csv'
-    codebook.write_text('gene,barcode\ngene,AAA\n')
-    config = workflow_config(tmp_path, maximum_projection=maximum_projection, backend='python', **NATIVE_DETECTION)
-    config.update(starfinder_path=str(ROOT))
-    snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook)),
-                                wildcards=SimpleNamespace(fovID='FOV'))
-    runpy.run_path(str(ROOT / 'workflow' / 'scripts' / 'rsf_single_fov.py'), init_globals={'snakemake': snakemake})
-    adapted = from_workflow_config(config)
-    fov = adapted.dataset.fov('FOV')
-    fov.run(replace(adapted.pipeline, registration=None, spot_finding=None, extraction=None, decoding=None, filtering=None))
-    expected = fov.images['round1'][..., 2]
-    expected = expected.max(axis=0) if maximum_projection else expected
-    saved, axes = read_back(fov.paths.fov_dir / 'reference.tif')
-    np.testing.assert_array_equal(saved, expected, strict=True)
-    assert saved.dtype == np.uint8 and axes == ('YX' if maximum_projection else 'ZYX')

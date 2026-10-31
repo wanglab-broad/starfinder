@@ -2,7 +2,7 @@
     The frozen MATLAB workflow (backend: matlab; D7, design/specs/orchestration-engines.md, "The MATLAB legacy
     separation"), included by the dispatcher (workflow/Snakefile). Its schema validation, MATLAB rule files, rule order
     and local rules are those of workflow/Snakefile before the dispatcher, moved here unchanged; the schema refuses the
-    Python-only blocks for this backend, so none of the Python rule files is included. The target rule all stays in
+    Python-only blocks and keys for this backend. The target rule all stays in
     workflow/Snakefile, with this file's get_overall_output as its input (Snakemake takes the default target from the
     main file only).
 

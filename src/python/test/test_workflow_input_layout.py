@@ -2,18 +2,18 @@
 
 OM-13: the reference file of the sequencing rules is the file the Python-only key ``codebook``
 (``direct_panel`` in readout_mode direct) names, absolute or relative to the input root, else
-``<input_root>/genes.csv``; the Python rules, ``_export_dataset`` and ``reads_assignment`` read it, and
-the count matrix's genes are the loaded codebook's (or panel's) in its order. NM-11: the acquisition
+``<input_root>/genes.csv``; the translators ``_reference_file``, ``_reference_genes`` and ``_export_dataset`` read
+it, and the count matrix's genes are the loaded codebook's (or panel's) in its order. NM-11: the acquisition
 images are laid out round-first (``"{round}/{fov}"``, the default) or FOV-first (``"{fov}/{round}"``);
-``FOV.input_dir`` and the Python rule inputs follow ``image_dir_template``, and the MATLAB rules stay
-round-first. Fixtures, all written in the test: a two-FOV scene of two rounds stored in both layouts,
-and the repository's minimal example configuration with a three-gene codebook. The rule files are
-evaluated in part, as in ``test_fov_membership.py`` and ``test_dataset_fov_layout.py``; Snakemake
-itself never runs.
+``FOV.input_dir`` follows ``image_dir_template``, and the MATLAB rules stay round-first. The package validates the
+keys of a Python configuration (the Python schema, as the plan does; W-750), and the plan's inputs follow the template
+and the codebook (test_workflow_plan.py, W-750); the MATLAB schema refuses the three keys without ``backend: python``
+(OC5). Fixtures, all written in the test: a two-FOV scene of two rounds stored in both layouts, and the repository's
+minimal example configuration with a three-gene codebook. The MATLAB rule files are evaluated in part, as in
+``test_fov_membership.py`` and ``test_dataset_fov_layout.py``; Snakemake itself never runs.
 """
 import copy
 from pathlib import Path
-from types import SimpleNamespace
 
 import jsonschema
 import numpy as np
@@ -26,8 +26,9 @@ from starfinder.dataset import Dataset, RoundState, from_workflow_config
 from starfinder.dataset.types import REFERENCE_STAIN
 from starfinder.dataset.workflow import _assembly_block, _export_dataset, _reference_file, _reference_genes
 
+from . import workflow_tasks as T
 from .test_dataset_fov_layout import rule_files
-from .test_fov_membership import MULTIVIEW, common_names, matlab_config, python_example, rows_text, write_fovs
+from .test_fov_membership import MULTIVIEW, common_names, matlab_config, python_example
 
 pytestmark = [pytest.mark.workflow, pytest.mark.dataset, pytest.mark.contract]
 
@@ -112,45 +113,16 @@ def test_an_unknown_image_dir_template_raises(tmp_path, template):
     else:
         with pytest.raises(ValueError, match="image_dir_template must be one of"):
             from_workflow_config(config)
-        assert not jsonschema.Draft202012Validator(SCHEMA).is_valid(config)
+        assert T.validation_error(T.dataset_keys(tmp_path, image_dir_template=template))
 
 
 def test_the_workflow_key_sets_the_dataset_field_and_needs_the_python_backend(tmp_path):
     config = python_example(tmp_path, image_dir_template="{fov}/{round}")
-    jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.dataset_keys(tmp_path, image_dir_template="{fov}/{round}")) is None
     assert from_workflow_config(config).dataset.image_dir_template == "{fov}/{round}"
     matlab = dict(config, backend="matlab")
     with pytest.raises(ValueError, match="image_dir_template is Python-only and need backend: python"):
         from_workflow_config(matlab)
-
-
-@pytest.mark.parametrize("template", list(_layout.IMAGE_DIR_TEMPLATES))
-def test_the_python_rule_inputs_follow_the_template(tmp_path, monkeypatch, template):
-    """The image folders of rsf_single_fov, gr_single_fov_subtile, deep_create_subtile and nuclei_registration (their
-    named input images), and the stain file of rotate_nuclei (get_dapi_input: the reference round's file of the
-    declared reference stain), follow image_dir_template; MATLAB's rules stay round-first."""
-    config = python_example(tmp_path, image_dir_template=template, reference_stains=[{"channel": "ch04", "name": "DAPI"}],
-                            additional_round=[{"round_name": "morph"}])
-    write_fovs(config, rows_text(positions=False))
-    names = common_names(config, monkeypatch, checks=True)
-    names["get_additional_round_names"] = lambda: ["morph"]
-    root = Path(names["INPUT_DIR"])
-    folders = [str(root / template.format(round=r, fov="{fovID}")) for r in ("round1", "round2", "round3", "round4")]
-    for rule in ("rsf_single_fov", "gr_single_fov_subtile", "deep_create_subtile"):
-        assert rule_files(RULES / "registration-py.smk", rule, "input", names)[1]["images"] == folders, rule
-    assert rule_files(RULES / "registration-py.smk", "nuclei_registration", "input",
-                      dict(names, additional_round_names=["morph"]))[1]["images"] == [
-        str(root / template.format(round="morph", fov="{fovID}"))]
-    text = (RULES / "registration-py.smk").read_text()
-    source = text[text.index("def get_dapi_input(wildcards):"):text.index("rule rotate_nuclei:")]
-    exec(source, names)
-    stain = root / template.format(round="round1", fov="F1") / "F1_ch04.tif"
-    stain.parent.mkdir(parents=True)
-    stain.write_bytes(b"")
-    assert names["get_dapi_input"](SimpleNamespace(fovID="F1")) == [str(stain)]
-    matlab = (RULES / "registration.smk").read_text()
-    assert matlab.count('expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND)') == 2
-    assert 'pattern = f"{INPUT_DIR}/{config[\'dapi_round\']}/{wildcards.fovID}/*ch04.tif"' in matlab
 
 
 # --- The reference file: codebook, direct_panel and <input_root>/genes.csv ---------------------------------------
@@ -168,7 +140,7 @@ def test_the_codebook_key_names_the_reference_file_else_genes_csv(tmp_path, give
     assert _reference_file(config) == expected
     if value is not None:
         assert expected.resolve() == supplied.resolve()
-        jsonschema.validate(config, SCHEMA)
+        assert T.validation_error(T.dataset_keys(tmp_path, codebook=value)) is None
 
 
 def test_the_direct_panel_key_names_the_panel_of_readout_mode_direct(tmp_path):
@@ -185,36 +157,34 @@ def test_the_direct_panel_key_names_the_panel_of_readout_mode_direct(tmp_path):
 
 @pytest.mark.parametrize("key", ["codebook", "direct_panel", "image_dir_template"])
 def test_the_matlab_backend_refuses_the_python_input_keys(tmp_path, monkeypatch, key):
-    """MATLAB reads <INPUT>/genes.csv round-first: common.smk refuses the keys for backend matlab, and so does the
-    package; without them CODEBOOK is <INPUT>/genes.csv."""
+    """MATLAB reads <INPUT>/genes.csv round-first: the MATLAB schema refuses the keys for backend matlab and without
+    backend (OC5: the refusal moved from common.smk to the schema's Python-only clause, which the MATLAB rule set
+    validates first; null stays accepted), and so does the package; without them CODEBOOK is <INPUT>/genes.csv."""
     config = matlab_config(tmp_path)
     assert common_names(config, monkeypatch)["CODEBOOK"] == f"{input_root(config)}/genes.csv"
     value = "{fov}/{round}" if key == "image_dir_template" else "other.csv"
-    with pytest.raises(ValueError, match=f"{key} is Python-only and need backend: python"):
-        common_names(dict(config, **{key: value}), monkeypatch)
+    assert jsonschema.Draft202012Validator(SCHEMA).is_valid(config)
+    assert jsonschema.Draft202012Validator(SCHEMA).is_valid(dict(config, **{key: None}))
+    for backend in ({"backend": "matlab"}, {}):
+        errors = list(jsonschema.Draft202012Validator(SCHEMA).iter_errors(dict(config, **{key: value}, **backend)))
+        assert errors and all(e.validator == "not" for e in errors), key
     if key != "image_dir_template":
         with pytest.raises(ValueError, match=f"{key} is Python-only"):
             _reference_file(dict(config, **{key: value}))
 
 
 def test_the_rules_read_the_configured_codebook(tmp_path, monkeypatch):
-    """CODEBOOK is the resolved file: the codebook input of the Python sequencing rules and of reads_assignment."""
-    config = python_example(tmp_path, codebook="panels/codebook.csv")
-    write_fovs(config, rows_text(positions=False))
+    """CODEBOOK is <INPUT>/genes.csv for the MATLAB rule set: the codebook input of the shared reads_assignment rule,
+    right after its molecule table. (The Python workflow's tasks declare the configured codebook:
+    test_workflow_plan.py, test_the_plan_declares_the_configured_codebook, W-750.)"""
+    config = matlab_config(tmp_path)
     names = common_names(config, monkeypatch, checks=True)
-    expected = str(input_root(config) / "panels" / "codebook.csv")
+    expected = f"{input_root(config)}/genes.csv"
     assert names["CODEBOOK"] == expected
-    for path, rules in ((RULES / "registration-py.smk", ("rsf_single_fov", "gr_single_fov_subtile")),
-                        (RULES / "spot-finding-py.smk", ("lrsf_single_fov_subtile", "deep_rsf_subtile"))):
-        for rule in rules:
-            assert rule_files(path, rule, "input", names)[1]["codebook"] == expected, rule
     names.update(READS_ASSIGNMENT_GEOMETRY=[])
     inputs = rule_files(RULES / "reads-assignment.smk", "reads_assignment", "input", names)[0]
     assert inputs[inputs.index(names["MOLECULE_TABLE"]) + 1] == expected
     assert not [f for f in inputs if "documents/genes" in f]
-    assert names["CODEBOOK"] == str(_reference_file(config))
-    default = python_example(tmp_path)
-    assert common_names(default, monkeypatch)["CODEBOOK"] == str(input_root(default) / "genes.csv")
 
 
 def write_codebook(config, relative):

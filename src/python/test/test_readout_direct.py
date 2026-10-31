@@ -8,14 +8,14 @@ Gfap, Gad1, Sst and Aqp4; the other round of each candidate is valid=False with 
 unmapped (round, channel) is unmatched with unmapped_channel; a zero own round is no_signal; a
 repeated gene or (round, channel) raises naming it. Check R16 (direct part): the candidates and
 pre_qc checkpoints of the direct2 run round-trip exactly in CSV and Parquet with readout_mode in
-the headers, and a checkpoint without the key loads as multiplexed. The mode checks, the YAML
-route through workflow/scripts/rsf_single_fov.py and the schema key are checked too.
+the headers, and a checkpoint without the key loads as multiplexed. The mode checks and the
+configuration key are checked too: the MATLAB schema keeps readout_mode multiplexed, the package
+validates the Python configuration (W-750), and the direct route of the fov command is
+test_workflow_fov_tasks.py's (it ran workflow/scripts/rsf_single_fov.py before W-750).
 """
 from dataclasses import replace
 import json
 from pathlib import Path
-import runpy
-from types import SimpleNamespace
 
 import jsonschema
 import numpy as np
@@ -30,7 +30,7 @@ from starfinder.readout.decoding import ReadDecodingResult
 from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState, load_checkpoint
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
-from starfinder.io import ImageLoadResult, save_volume
+from starfinder.io import ImageLoadResult
 from starfinder._checkpoint import candidates_frame, read_header, readout_mode
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
@@ -359,39 +359,23 @@ def yaml_config(tmp_path, **top):
 
 
 @pytest.mark.contract
-def test_yaml_direct_route_writes_the_four_genes(tmp_path):
-    for name, image in direct_images().items():
-        for c, channel in enumerate(CHANNELS):
-            save_volume(image[..., c], tmp_path / "data" / "sample" / name / "FOV" / f"{channel}.tif",
-                        metadata=METADATA)
-    panel = tmp_path / "panel.csv"
-    DIRECT_MAPPING.to_csv(panel, index=False)
-    config = yaml_config(tmp_path)
-    jsonschema.validate(config, SCHEMA)
-    snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(panel)),
-                                wildcards=SimpleNamespace(fovID="FOV"))
-    runpy.run_path(str(ROOT / "workflow" / "scripts" / "rsf_single_fov.py"), init_globals={"snakemake": snakemake})
-    adapted = from_workflow_config(config)
-    assert adapted.dataset.readout_mode == "direct" and adapted.pipeline.decoding == DirectDecoderConfig()
-    good = pd.read_csv(adapted.dataset.fov("FOV").paths.spot_table("molecules"))
-    assert list(good.columns) == ["spot_namespace", "spot_id", "z", "y", "x", "gene_id", "entry_id", "qc_score"]
-    assert good.gene_id.tolist() == GENES
-    assert list(zip(good.x, good.y, good.z)) == [(x + 0, y + 0, z + 0) for _, _, z, y, x in DIRECT_SPOTS]
-
-
-@pytest.mark.contract
 def test_yaml_readout_mode_keys(tmp_path):
+    from . import workflow_tasks as T
     config = yaml_config(tmp_path)
     shared = dict(config, rules={"rsf_single_fov": {"run": True, "parameters": {"reads_filtration": {"run": True}}}})
-    for backend in ("matlab", "python"):
-        jsonschema.validate(dict(shared, readout_mode="multiplexed", backend=backend,
-                                 **(MATLAB_FOVS if backend == "matlab" else {})), SCHEMA)
-    jsonschema.validate(config, SCHEMA)
+    # The MATLAB schema: multiplexed only, for backend matlab and without backend (its default).
+    jsonschema.validate(dict(shared, readout_mode="multiplexed", backend="matlab", **MATLAB_FOVS), SCHEMA)
     for invalid in (dict(config, backend="matlab", **MATLAB_FOVS),
-                    {**{k: v for k, v in config.items() if k != "backend"}, **MATLAB_FOVS},
-                    dict(config, readout_mode="sequential")):
+                    {**{k: v for k, v in config.items() if k != "backend"}, **MATLAB_FOVS}):
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(invalid, SCHEMA)
+    # The package validates the Python configuration (W-750): both modes, and no other.
+    python = T.dataset_keys(tmp_path, n_rounds=2, seq_channel_order=list(CHANNELS), processing={
+        "spot_finding": {"threshold_mode": "noise", "threshold_value": 10.0, "rounds": list(ROUNDS)},
+        "reads_extraction": {}, "reads_filtration": {}})
+    assert T.validation_error(dict(python, readout_mode="direct")) is None
+    assert T.validation_error(dict(python, readout_mode="multiplexed", processing={"reads_filtration": {}})) is None
+    assert T.validation_error(dict(python, readout_mode="sequential"))
     with pytest.raises(ValueError, match="readout_mode must be one of"):
         from_workflow_config(dict(config, readout_mode="sequential"))
     parameters = config["rules"]["rsf_single_fov"]["parameters"]

@@ -2,8 +2,6 @@
 from dataclasses import replace
 from pathlib import Path
 import copy
-import runpy
-from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -18,8 +16,7 @@ from starfinder.readout import export_spots
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
     ReconstructionConfig, TophatConfig, PreprocessingRecipe, PreprocessingStep)
-from starfinder.registration import (TranslationConfig, TpsConfig, DemonsConfig, CpdConfig,
-    InsufficientLandmarksError, RegistrationBackendUnavailableError, InvalidRegistrationConfigError,
+from starfinder.registration import (TranslationConfig, TpsConfig, DemonsConfig, InsufficientLandmarksError, RegistrationBackendUnavailableError, InvalidRegistrationConfigError,
     RegistrationSignalConfig)
 from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.readout import (Codebook, NeighborhoodSumConfig, WtaDecoderConfig,
@@ -266,44 +263,6 @@ def test_maintained_workflow_examples_translate():
         for rule in config['rules']:
             if rule in ('rsf_single_fov','gr_single_fov_subtile','lrsf_single_fov_subtile','deep_create_subtile','deep_rsf_subtile'):
                 from_workflow_config(config, rule)
-
-
-@pytest.mark.parametrize('streaming', [False, True])
-def test_five_workflow_adapters_and_shared_filenames(tmp_path, streaming):
-    config = workflow_config(tmp_path)
-    root = Path(__file__).resolve().parents[3]
-    config['starfinder_path'] = str(root)
-    config['backend'] = 'python'
-    for name, image in images().items():
-        for c, channel in enumerate(config['seq_channel_order']):
-            path = tmp_path/'data'/'sample'/name/'FOV'/f'{channel}.tif'
-            path.parent.mkdir(parents=True, exist_ok=True)
-            save_volume(image[..., c], path, metadata=ImageMetadata('common'))
-    codebook = tmp_path/'genes.csv'
-    codebook.write_text('gene,barcode\ngene,AAA\n')
-    rsf = dict(streaming=streaming, spot_finding={'run': True, 'threshold_mode': 'adaptive', 'threshold_value': .1},
-               reads_extraction={'run': True, 'voxel_size': [0, 0, 0]}, reads_filtration={'run': True})
-    creation = dict(streaming=streaming, create_subtiles={'run': True, 'sqrt_pieces': 2})
-    for rule, parameters in [('rsf_single_fov', rsf), ('gr_single_fov_subtile', creation),
-                             ('lrsf_single_fov_subtile', rsf), ('deep_create_subtile', creation),
-                             ('deep_rsf_subtile', rsf)]:
-        config['rules'][rule] = {'parameters': parameters}
-    for rule in ['rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile', 'deep_create_subtile', 'deep_rsf_subtile']:
-        adapted = from_workflow_config(config, rule)
-        fov = adapted.dataset.fov('FOV')
-        # The rules' named inputs (the adapters read snakemake.input.<name>; no JSON copy).
-        snakemake = SimpleNamespace(config=config, input=SimpleNamespace(codebook=str(codebook), subtile='unused'),
-                                   wildcards=SimpleNamespace(fovID='FOV', n_subtile='1'))
-        if rule != 'rsf_single_fov':
-            # W-735: the Python subtile route is retired (D5); its adapters refuse until W-750 removes them.
-            with pytest.raises(ValueError, match='the Python subtile route is retired'):
-                runpy.run_path(str(root/f'workflow/scripts/{rule}.py'), init_globals={'snakemake': snakemake})
-            continue
-        runpy.run_path(str(root/f'workflow/scripts/{rule}.py'), init_globals={'snakemake': snakemake})
-        assert fov.paths.spot_table('molecules') == tmp_path/'out'/'data'/'run'/'fovs'/'FOV'/'molecules.csv'
-        assert list(pd.read_csv(fov.paths.spot_table('molecules'))) == ['spot_namespace', 'spot_id', 'z', 'y', 'x',
-                                                                        'gene_id', 'entry_id', 'qc_score']
-        assert (fov.paths.fov_dir/'reference.tif').is_file() and fov.paths.run_record.is_file()
 
 
 def test_removed_python_surface():

@@ -1,4 +1,10 @@
-"""The Python-only preprocessing workflow key: adapter, static schema and its consistency with PREPROCESSING_METHODS (W-232)."""
+"""The Python-only preprocessing workflow key: adapter, static schema and its consistency with PREPROCESSING_METHODS (W-232).
+
+The MATLAB schema's preprocessing definitions stay consistent with the registry and refuse the key without
+``backend: python``; a Python configuration's key is validated by the package (the Python schema and the processing
+block's translator, as the plan validates it; W-750), on the rule's parameters as the processing block
+(``workflow_tasks.python_shape``).
+"""
 import copy
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -8,6 +14,8 @@ import pytest
 import yaml
 
 from starfinder.dataset import from_workflow_config
+
+from . import workflow_tasks as T
 from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig, MinMaxNormalizationConfig, PercentileNormalizationConfig,
     PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig, StepResult, PreprocessingSpec,
     TophatConfig)
@@ -84,7 +92,7 @@ def test_consistency_check_fails_for_a_missing_step_or_different_parameters(monk
 # --- Adapter -------------------------------------------------------------------------
 
 def test_recipe_2_example_validates_and_builds_the_declared_recipe():
-    jsonschema.validate(EXAMPLE, SCHEMA)
+    assert T.validation_error(T.python_shape(EXAMPLE)) is None
     adapted = from_workflow_config(EXAMPLE, "rsf_single_fov")
     assert adapted.pipeline.preprocessing == RECIPE_2
     assert adapted.pipeline.registration and adapted.pipeline.extraction is not None
@@ -98,7 +106,7 @@ def test_every_python_rule_accepts_the_key(rule):
         {"method": "white_tophat", "radius_yx": 2}],
         "extraction_source": "flat", "registration_source": "scaled", "supplied_statistics": None}
     config = with_preprocessing(preprocessing, rule)
-    jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.python_shape(config, rule)) is None
     recipe = from_workflow_config(config, rule).pipeline.preprocessing
     assert recipe == PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig("uint8", (0, 255)), "scaled"),
                                           PreprocessingStep(Background3DConfig(radius_voxels_zyx=(1, 3, 3)), "flat"),
@@ -111,7 +119,7 @@ def test_supplied_statistics_path_is_passed_to_the_recipe(tmp_path):
     preprocessing = {"steps": [{"method": "percentile_normalization", "fit": "supplied"}],
                      "supplied_statistics": str(tmp_path / "supplied.json")}
     config = with_preprocessing(preprocessing)
-    jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.python_shape(config)) is None
     assert from_workflow_config(config).pipeline.preprocessing.supplied_statistics == tmp_path / "supplied.json"
 
 
@@ -123,7 +131,7 @@ NATIVE = {"enhance_contrast": "min_max_normalization", "hist_equalize": "histogr
 @pytest.mark.parametrize("key", sorted(LEGACY))
 def test_each_legacy_key_raises_on_the_python_backend_naming_its_native_form(key):
     """Under backend python a legacy key raises naming its preprocessing step, with or without the preprocessing key,
-    and the schema's backend guard refuses it; a MATLAB-backend configuration keeps the mutual exclusion."""
+    and the package refuses it; a MATLAB-backend configuration keeps the mutual exclusion."""
     for config in (with_preprocessing({"steps": [{"method": "white_tophat"}]}, **{key: LEGACY[key]}),
                    with_preprocessing(None, **{key: LEGACY[key]})):
         if config["rules"]["rsf_single_fov"]["parameters"]["preprocessing"] is None:
@@ -131,8 +139,7 @@ def test_each_legacy_key_raises_on_the_python_backend_naming_its_native_form(key
         with pytest.raises(ValueError, match=f"{key} is a MATLAB key, which the Python backend replaces by .*"
                                              f"{NATIVE[key]}"):
             from_workflow_config(config)
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(config, SCHEMA)
+        assert T.validation_error(T.python_shape(config))
     matlab = with_preprocessing({"steps": [{"method": "white_tophat"}]}, **{key: LEGACY[key]})
     del matlab["backend"]
     with pytest.raises(ValueError, match="mutually exclusive with the legacy keys"):
@@ -142,14 +149,15 @@ def test_each_legacy_key_raises_on_the_python_backend_naming_its_native_form(key
 @pytest.mark.parametrize("key", sorted(LEGACY))
 def test_a_legacy_key_of_a_disabled_rule_raises_on_the_python_backend(key):
     """The refusal does not depend on run: a legacy key (here disabled, run false) in a rule that does not run raises
-    when any rule is read, naming its native form, and the schema refuses it."""
+    when any rule is read, naming its native form; a Python configuration names no rule (D4), and the package refuses
+    the rules."""
     config = with_preprocessing({"steps": [{"method": "white_tophat"}]})
     config["rules"]["gr_single_fov_subtile"] = {"run": False, "parameters": {key: LEGACY[key]}}
     with pytest.raises(ValueError, match=f"rules.gr_single_fov_subtile.parameters: {key} is a MATLAB key, which the "
                                          f"Python backend replaces by .*{NATIVE[key]}"):
         from_workflow_config(config)
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(config, SCHEMA)
+    assert "rules left the Python configuration" in T.validation_error(dict(T.python_shape(config),
+                                                                           rules=config["rules"]))
 
 
 @pytest.mark.parametrize("method", ["reconstruction", "white_tophat"])
@@ -161,8 +169,7 @@ def test_the_matlab_radius_inside_a_native_step_raises_naming_radius_yx(method, 
     with pytest.raises(ValueError, match=rf"preprocessing.{where}\[0\]: .*radius is the MATLAB key of morph_recon and "
                                          "tophat, which the Python backend writes as radius_yx"):
         from_workflow_config(config)
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(config, SCHEMA)
+    assert "radius_yx" in T.validation_error(T.python_shape(config))
 
 
 @pytest.mark.parametrize("steps, extra, message", [
@@ -189,8 +196,8 @@ def test_unknown_methods_fields_and_snapshots_raise(steps, extra, message):
                                   {"method": "white_tophat", "save_as": "detection"},
                                   {"method": "percentile_normalization", "fit": "sample"}])
 def test_schema_rejects_unknown_methods_fields_and_values(step):
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(with_preprocessing({"steps": [step]}), SCHEMA)
+    """The package refuses each (W-750: the Python workflow validates with the package)."""
+    assert T.validation_error(T.python_shape(with_preprocessing({"steps": [step]})))
 
 
 @pytest.mark.parametrize("backend", [None, "matlab"])
@@ -202,7 +209,7 @@ def test_schema_accepts_the_key_only_on_the_python_backend(backend):
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(config, SCHEMA)
     config["backend"] = "python"
-    jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.python_shape(config)) is None   # the package validates the Python one (W-750)
 
 
 @pytest.mark.parametrize("rule", PYTHON_RULES)
@@ -211,15 +218,15 @@ def test_the_post_registration_list_carries_to_the_recipe(rule):
     preprocessing = {"steps": [{"method": "white_tophat", "radius_yx": 2}],
                      "post_registration": [{"method": "reconstruction", "radius_yx": 5}]}
     config = with_preprocessing(preprocessing, rule)
-    jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.python_shape(config, rule)) is None
     recipe = from_workflow_config(config, rule).pipeline.preprocessing
     assert recipe == PreprocessingRecipe((PreprocessingStep(TophatConfig(radius_yx=2)),),
                                          (PreprocessingStep(ReconstructionConfig(radius_yx=5)),))
     assert from_workflow_config(with_preprocessing({"steps": []}, rule), rule).pipeline.preprocessing \
         .post_registration == ()
     for bad in ([{"method": "white_tophat"}], [{"method": "reconstruction", "save_as": "late"}], {}):
-        with pytest.raises(jsonschema.ValidationError):
-            jsonschema.validate(with_preprocessing(dict(preprocessing, post_registration=bad), rule), SCHEMA)
+        assert T.validation_error(T.python_shape(with_preprocessing(dict(preprocessing, post_registration=bad), rule),
+                                                 rule)), bad
 
 
 def test_legacy_keys_still_map_to_recipe_1_on_the_matlab_backend():
@@ -229,8 +236,7 @@ def test_legacy_keys_still_map_to_recipe_1_on_the_matlab_backend():
     parameters = config["rules"]["rsf_single_fov"]["parameters"]
     del parameters["preprocessing"]
     parameters["tophat"] = {"run": True, "radius": 2}
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(config, SCHEMA)
+    assert T.validation_error(T.python_shape(config))
     with pytest.raises(ValueError, match="tophat is a MATLAB key.*white_tophat"):
         from_workflow_config(config)
     del config["backend"]

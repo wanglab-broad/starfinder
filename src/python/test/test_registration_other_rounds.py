@@ -10,19 +10,15 @@ a Gaussian displacement of magnitude 2 voxels to that pull map.
 """
 import hashlib
 import json
-import runpy
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
-import tifffile
 
 from starfinder.dataset import Dataset, RoundState
 from starfinder.registration import ExternalReference, RegistrationRecipe, RegistrationStep
 from starfinder.evaluation.registration import _valid_overlap, evaluate_displacement_field
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
-from starfinder.io import save_volume
 from starfinder.registration import (DemonsConfig, RegistrationSignalConfig, TranslationConfig, WarpConfig,
                                      apply_transform)
 from starfinder import registration
@@ -221,103 +217,3 @@ def test_records_name_the_reference(tmp_path, use_external):
     # The estimation attempt holds the translation, (dz, dy, dx) = (z, row, col) of the former shift table.
     assert record["registration"]["morph"][0]["qc"]["details"]["transform"] == dict(
         kind="translation", displacement_zyx=[0, 3, -2])
-
-
-def rule_block(path):
-    """Input and output lines of the nuclei_registration rule of a Snakemake file."""
-    text = path.read_text()
-    block = text[text.index("rule nuclei_registration:"):]
-    block = block[:block.index("    resources:")]
-    return block
-
-
-@pytest.mark.parametrize("maximum_projection", [False, True])
-def test_the_python_workflow_rule_mirrors_the_matlab_outputs(tmp_path, maximum_projection):
-    reference, sequencing, morph, truth, _ = rounds()
-    config = dict(starfinder_path=str(ROOT), root_input_path=str(tmp_path / "input"), dataset_id="dataset",
-                  sample_id="sample", root_output_path=str(tmp_path / "output"), output_id="output",
-                  n_rounds=2, ref_round="round1", seq_channel_order=list(SEQUENCING[:3]),
-                  # The reference round's stain is its file ch04, declared explicitly (no hard-coded ch04).
-                  reference_stains=[dict(channel=SEQUENCING[3], name="DAPI")],
-                  ref_channel="DAPI", rotate_angle=90, maximum_projection=maximum_projection, backend="python",
-                  additional_round=[dict(round_name="morph", channel_order=[
-                      dict(wavelength=405, channel="ch00", name="DAPI"), dict(wavelength=488, channel="ch01", name="Nissl"),
-                      dict(wavelength=647, channel="ch02", name="GFAP")])],
-                  rules=dict(nuclei_registration=dict(run=True)))
-    # Inputs are written unrotated; the rule rotates every image by rotate_angle = 90 degrees.
-    source = tmp_path / "input" / "dataset" / "sample"
-    for name, image, labels in (("round1", reference, SEQUENCING), ("round2", sequencing, SEQUENCING),
-                                ("morph", morph, OTHER)):
-        for c, label in enumerate(labels):
-            save_volume(np.rot90(image[..., c], k=-1, axes=(1, 2)), source / name / "FOV" / f"FOV_{label}.tif")
-    snakemake = SimpleNamespace(config=config, wildcards=SimpleNamespace(fovID="FOV"),
-                                input=SimpleNamespace(images=[str(source / "morph" / "FOV")]),
-                                output=[str(tmp_path / "output" / "dataset" / "output" / "fovs" / "FOV" /
-                                            "nuclei_registration.json")])
-    runpy.run_path(str(ROOT / "workflow" / "scripts" / "nuclei_registration.py"), init_globals={"snakemake": snakemake})
-
-    output = tmp_path / "output" / "dataset" / "output"
-    names = sorted(p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file())
-    # Each channel's folder is its unique channel label (MATLAB names it by the descriptive name).
-    assert names == ["fovs/FOV/nuclei_registration.json", "images/morph/ch00/FOV.tif", "images/morph/ch01/FOV.tif",
-                     "images/morph/ch02/FOV.tif"]
-    assert all(Path(path).is_file() for path in snakemake.output)
-    record = json.loads((output / "fovs" / "FOV" / "nuclei_registration.json").read_text())
-    assert list(record["registration"]) == ["morph"]
-    assert record["registration"]["morph"][0]["qc"]["details"]["transform"]["displacement_zyx"] == [0, 3, -2]
-    for c, folder in enumerate(("ch00", "ch01", "ch02")):
-        saved = tifffile.imread(output / "images" / "morph" / folder / "FOV.tif")
-        assert saved.dtype == np.uint16
-        if maximum_projection:
-            assert saved.shape == SHAPE[1:]
-        else:
-            assert np.array_equal(saved[OVERLAP], truth[OVERLAP + (c,)])
-    # The Python rule declares the MATLAB rule's image folders, laid out by image_dir_template (_image_dir_inputs; the
-    # default is MATLAB's round-first layout) and named, but not the JSON copy of the configuration, which only the
-    # MATLAB script reads; instead of MATLAB's log and shift table, the registration record; it runs the Python script.
-    python_rule, matlab_rule = (ROOT / "workflow" / "rules" / "registration-py.smk",
-                                ROOT / "workflow" / "rules" / "registration.smk")
-    python_block, matlab_block = rule_block(python_rule), rule_block(matlab_rule)
-    inputs, outputs = python_block.split("    output:\n")
-    assert inputs.endswith("    input:\n        images=_image_dir_inputs(config, additional_round_names),\n")
-    assert matlab_block.split("    output:\n")[0].endswith(
-        "    input:\n        config['config_path'].replace('.yaml', '.json'),\n"
-        '        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=additional_round_names),\n')
-    assert outputs == '        expand("{output_dir}/fovs/{{fovID}}/nuclei_registration.json", output_dir=OUTPUT_DIR),\n'
-    assert "/log/" not in outputs and "/log/" in matlab_block.split("    output:\n")[1]
-    assert '"../scripts/nuclei_registration.py"' in python_rule.read_text()
-    assert "matlab_script_name = 'nuclei_registration'" in matlab_rule.read_text()
-
-
-def test_the_declared_reference_stain_drives_the_python_nuclei_rule(tmp_path):
-    """The reference round's stain is the file reference_stains declares, here ch09: nuclei_registration registers
-    the other round against it (reference round1:ch09) and rotate_nuclei's input is that file; no ch04 is assumed."""
-    reference, sequencing, morph, _, _ = rounds()
-    labels = (*SEQUENCING[:3], "ch09")
-    config = dict(starfinder_path=str(ROOT), root_input_path=str(tmp_path / "input"), dataset_id="dataset",
-                  sample_id="sample", root_output_path=str(tmp_path / "output"), output_id="output",
-                  n_rounds=2, ref_round="round1", seq_channel_order=list(labels[:3]),
-                  reference_stains=[dict(channel="ch09", name="DAPI")], ref_channel="DAPI", rotate_angle=0,
-                  maximum_projection=False, backend="python",
-                  additional_round=[dict(round_name="morph", channel_order=[
-                      dict(channel="ch00", name="DAPI"), dict(channel="ch01", name="Nissl"),
-                      dict(channel="ch02", name="GFAP")])],
-                  rules=dict(nuclei_registration=dict(run=True)))
-    source = tmp_path / "input" / "dataset" / "sample"
-    for name, image, names in (("round1", reference, labels), ("round2", sequencing, SEQUENCING),
-                               ("morph", morph, OTHER)):
-        for c, label in enumerate(names):
-            save_volume(image[..., c], source / name / "FOV" / f"FOV_{label}.tif")
-    snakemake = SimpleNamespace(config=config, wildcards=SimpleNamespace(fovID="FOV"),
-                                input=SimpleNamespace(images=[str(source / "morph" / "FOV")]), output=[])
-    runpy.run_path(str(ROOT / "workflow" / "scripts" / "nuclei_registration.py"), init_globals={"snakemake": snakemake})
-    record = json.loads((tmp_path / "output" / "dataset" / "output" / "fovs" / "FOV" /
-                         "nuclei_registration.json").read_text())
-    attempt = record["registration"]["morph"][0]
-    assert attempt["reference"] == "round1:ch09"
-    assert attempt["qc"]["details"]["transform"]["displacement_zyx"] == [0, 3, -2]
-    text = (ROOT / "workflow" / "rules" / "registration-py.smk").read_text()
-    namespace = {"glob": __import__("glob"), "INPUT_DIR": source, "config": config}
-    exec(text[text.index("def get_dapi_input(wildcards):"):text.index("rule rotate_nuclei:")], namespace)
-    assert namespace["get_dapi_input"](SimpleNamespace(fovID="FOV")) == [str(source / "round1" / "FOV" /
-                                                                             "FOV_ch09.tif")]

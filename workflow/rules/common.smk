@@ -1,6 +1,7 @@
 """
-    Common imports, helper functions, and parameters shared across all rule files.
-    This file should be included first in the main Snakefile.
+    Common imports, helper functions, and parameters shared across the MATLAB rule files (backend: matlab; D7).
+    rules/legacy.smk includes it first. The Python workflow (rules/tasks.smk) reads none of it; its Python branches
+    left with the Python rule files (design/specs/orchestration-engines.md, "The MATLAB legacy separation").
 """
 
 ### ==================== [ Imports ] =========================
@@ -21,16 +22,6 @@ import matlab_launcher
 BACKEND = config.get("backend", "matlab")
 if BACKEND not in ("python", "matlab"):
     raise ValueError(f"Unknown backend '{BACKEND}'. Valid options: 'python', 'matlab'")
-
-# The Python-only §2.10 blocks: with a stitching block, stitching-py.smk replaces the four legacy
-# stitching rules; with an assembly block, export_sample replaces the legacy sample rules (option W1).
-STITCHING_BLOCK = "stitching" in config
-ASSEMBLY_BLOCK = "assembly" in config
-LEGACY_STITCHING_RULES = ('stitching_preparation', 'create_BigStitcher_macro', 'run_BigStitcher_macro',
-                          'create_tile_config')
-LEGACY_SAMPLE_RULES = ('create_sample_h5ad', 'create_sample_reads_assignment')
-# The Python-only §2.11 report block: with it, report.smk adds report_sample and report_dataset (option WR1).
-REPORT_BLOCK = "report" in config
 
 ### ==================== [ Workflow Mode Configuration ] =========================
 
@@ -205,54 +196,30 @@ DOC_DIR = Path(OUTPUT_DIR, 'documents')
 
 ROUND = [f"round{i}" for i in range(1, config['n_rounds']+1)]
 
-# FOV membership. The Python backend reads <INPUT>/fovs.csv (sample,fov_id and an optional position_id) in row
-# order, restricted by selected_fovs, for every rule (_membership); the MATLAB backend keeps its sample annotation,
-# fov_id_pattern, n_fovs and subset keys. MEMBERSHIP is the file the rules that read it declare.
-if BACKEND == "python":
-    sys.path.insert(0, str(Path(config["starfinder_path"]) / "src" / "python"))
-    from starfinder import _layout
-    from starfinder.dataset.workflow import _membership, _reference_file
-    MEMBERSHIP = str(_layout.fovs_file(INPUT_DIR))
-    _MEMBERS = _membership(config, MEMBERSHIP)
-    SAMPLE_TO_FOV = {sample: list(fovs) for sample, fovs in _MEMBERS.samples.items()}
-    FOV_TO_SAMPLE = {fov: sample for sample, fovs in SAMPLE_TO_FOV.items() for fov in fovs}
-    SAMPLE = list(SAMPLE_TO_FOV)
-    FOVS = list(_MEMBERS.fovs)
-    # The fovID wildcard of every rule matches the run's FOVs only (the Snakefile's wildcard_constraints), so that an
-    # explicit target of a FOV outside fovs.csv or selected_fovs resolves to no rule.
-    import re as _re
-    FOV_CONSTRAINT = "|".join(_re.escape(fov) for fov in FOVS)
-    # The codebook of the sequencing rules and reads_assignment: the file the Python-only key codebook (direct_panel
-    # in readout_mode direct) names, absolute or relative to INPUT_DIR, else <INPUT>/genes.csv (_reference_file).
-    CODEBOOK = str(_reference_file(config))
-else:
-    # MATLAB reads <INPUT>/genes.csv and the round-first image layout <INPUT>/<round>/<fov>; the keys that name
-    # another codebook or layout are Python-only.
-    _PYTHON_INPUT_KEYS = [key for key in ('codebook', 'direct_panel', 'image_dir_template')
-                          if config.get(key) is not None]
-    if _PYTHON_INPUT_KEYS:
-        raise ValueError(f"{', '.join(_PYTHON_INPUT_KEYS)} {'is' if len(_PYTHON_INPUT_KEYS) == 1 else 'are'} "
-                         "Python-only and need backend: python")
-    CODEBOOK = f"{INPUT_DIR}/genes.csv"
-    MEMBERSHIP = f"{OUTPUT_DIR}/documents/sample-annotation.csv"
-    SAMPLE_ANNOT = pd.read_csv(MEMBERSHIP)
-    SAMPLE_TO_FOV = {}
-    FOV_TO_SAMPLE = {}
-    for current_sample in SAMPLE_ANNOT['sample_id'].unique():
-        fov_list = []
+# FOV membership: the sample annotation, fov_id_pattern, n_fovs and the subset keys. MEMBERSHIP is the file the
+# rules that read it declare. MATLAB reads <INPUT>/genes.csv and the round-first image layout <INPUT>/<round>/<fov>;
+# the schema refuses the Python-only keys that name another codebook or layout (codebook, direct_panel,
+# image_dir_template; OC5).
+CODEBOOK = f"{INPUT_DIR}/genes.csv"
+MEMBERSHIP = f"{OUTPUT_DIR}/documents/sample-annotation.csv"
+SAMPLE_ANNOT = pd.read_csv(MEMBERSHIP)
+SAMPLE_TO_FOV = {}
+FOV_TO_SAMPLE = {}
+for current_sample in SAMPLE_ANNOT['sample_id'].unique():
+    fov_list = []
 
-        current_start = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_start'].values[0]
-        current_end = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_end'].values[0]
+    current_start = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_start'].values[0]
+    current_end = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_end'].values[0]
 
-        for i in range(current_start, current_end+1):
-            current_fov = config['fov_id_pattern'].format(i=i)
-            fov_list.append(current_fov)
-            FOV_TO_SAMPLE[current_fov] = current_sample
+    for i in range(current_start, current_end+1):
+        current_fov = config['fov_id_pattern'].format(i=i)
+        fov_list.append(current_fov)
+        FOV_TO_SAMPLE[current_fov] = current_sample
 
-        SAMPLE_TO_FOV[current_sample] = fov_list
+    SAMPLE_TO_FOV[current_sample] = fov_list
 
-    SAMPLE = list(SAMPLE_TO_FOV.keys())
-    FOVS = sorted([config['fov_id_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)])
+SAMPLE = list(SAMPLE_TO_FOV.keys())
+FOVS = sorted([config['fov_id_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)])
 
 # Determine N_SUBTILE based on enabled rules
 # Only gr_single_fov_subtile and deep_create_subtile have sqrt_pieces parameter
@@ -263,90 +230,49 @@ elif is_rule_enabled('deep_create_subtile'):
 else:
     N_SUBTILE = [1]
 
-## Define specific list of positions to run the pipeline for testing/re-runs (MATLAB backend; the Python backend's
-## selected_fovs is applied by _membership above)
-if BACKEND == "matlab":
-    # The schema gives the subset switches no default (the Snakefile's validate would insert it into Python
-    # configurations, which refuse them), so MATLAB's defaults are applied here.
-    config.setdefault('subset_range', False)
-    config.setdefault('subset_random', False)
-    if config.get('subset_list'):
-        FOVS = [config['fov_id_pattern'].format(i=j) for j in config['subset_list']]
-        SAMPLE = list(set([FOV_TO_SAMPLE[fov] for fov in FOVS]))
-    elif config.get('subset_range'):
-        FOVS = [config['fov_id_pattern'].format(i=j) for j in range(config.get('subset_start'), config.get('subset_end')+1)]
-    elif config.get('subset_random'):
-        FOVS = random.sample(FOVS, config.get('n_random_tests'))
+## Define specific list of positions to run the pipeline for testing/re-runs
+# The schema gives the subset switches no default (its validate would insert it into Python-dialect
+# configurations, which refuse them), so MATLAB's defaults are applied here.
+config.setdefault('subset_range', False)
+config.setdefault('subset_random', False)
+if config.get('subset_list'):
+    FOVS = [config['fov_id_pattern'].format(i=j) for j in config['subset_list']]
+    SAMPLE = list(set([FOV_TO_SAMPLE[fov] for fov in FOVS]))
+elif config.get('subset_range'):
+    FOVS = [config['fov_id_pattern'].format(i=j) for j in range(config.get('subset_start'), config.get('subset_end')+1)]
+elif config.get('subset_random'):
+    FOVS = random.sample(FOVS, config.get('n_random_tests'))
 
 ### ==================== [ Dynamic Output Function ] =========================
 
 def get_overall_output(wildcards):
     """Create dynamic output list for all rules based on workflow_mode and config."""
     output_list = []
-    if BACKEND == "python":
-        # The FOV folder's run record and the reference image of the Python processing rules (none with
-        # reference_image_import), as the package lays them out.
-        from starfinder._snakemake import _reference_image_outputs, _run_record_outputs
-    if STITCHING_BLOCK:
-        output_list += [f"{OUTPUT_DIR}/stitching/{sample}/placement.json" for sample in SAMPLE]
-    if ASSEMBLY_BLOCK:
-        output_list += [f"{OUTPUT_DIR}/export/{sample}/export.json" for sample in SAMPLE]
-    if REPORT_BLOCK:
-        output_list += [f"{OUTPUT_DIR}/report/{sample}/report.json" for sample in SAMPLE]
-        output_list += [f"{OUTPUT_DIR}/report/samples.csv"]
     for current_rule in config['rules']:
-        if STITCHING_BLOCK and current_rule in LEGACY_STITCHING_RULES:
-            continue
-        if ASSEMBLY_BLOCK and current_rule in LEGACY_SAMPLE_RULES:
-            continue
         if is_rule_enabled(current_rule):
             if current_rule == 'rsf_single_fov':
-                # The Python rsf_single_fov writes the FOV folder's run.json, reference image (none with
-                # reference_image_import) and zero-based molecules.csv, MATLAB's its logs, images/ref_merged/
-                # and the legacy goodSpots.
-                if BACKEND == "python":
-                    output_list += _run_record_outputs(OUTPUT_DIR, FOVS)
-                    output_list += _reference_image_outputs(config, OUTPUT_DIR, FOVS)
-                    output_list += [f"{OUTPUT_DIR}/fovs/{fovID}/molecules.csv" for fovID in FOVS]
-                else:
-                    output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
-                    output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]
-                    output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
-                    output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
             elif current_rule == 'rsf_single_fov_seq':
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_allSpots.csv" for fovID in FOVS]
             elif current_rule == 'gr_single_fov_subtile':
-                subtile_ext = "npz" if BACKEND == "python" else "mat"
-                if BACKEND == "python":
-                    output_list += _run_record_outputs(OUTPUT_DIR, FOVS)
-                    output_list += _reference_image_outputs(config, OUTPUT_DIR, FOVS)
-                else:
-                    output_list += [f"{OUTPUT_DIR}/log/{fovID}_gr.txt" for fovID in FOVS]
-                    output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/log/{fovID}_gr.txt" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.{subtile_ext}" for fovID in FOVS for i in N_SUBTILE]
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.mat" for fovID in FOVS for i in N_SUBTILE]
             elif current_rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile'):
-                # The Python subtile rules write each subtile's run.json, MATLAB's the score logs.
-                if BACKEND == "python":
-                    output_list += _run_record_outputs(OUTPUT_DIR, FOVS, N_SUBTILE)
-                else:
-                    output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
+                output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_goodSpots_{i}.csv" for fovID in FOVS for i in N_SUBTILE]
             elif current_rule == 'deep_create_subtile':
-                subtile_ext = "npz" if BACKEND == "python" else "mat"
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.{subtile_ext}" for fovID in FOVS for i in N_SUBTILE]
-                if BACKEND == "python":
-                    output_list += _run_record_outputs(OUTPUT_DIR, FOVS)
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.mat" for fovID in FOVS for i in N_SUBTILE]
             elif current_rule == 'stitch_subtile':
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
             elif current_rule == 'nuclei_registration':
-                # The Python rule writes one registration record per FOV, MATLAB's its log and shift table.
-                if BACKEND == "python":
-                    output_list += [f"{OUTPUT_DIR}/fovs/{fovID}/nuclei_registration.json" for fovID in FOVS]
-                else:
-                    output_list += [f"{OUTPUT_DIR}/log/{fovID}_nr.txt" for fovID in FOVS]
-                    output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}_nr.txt" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/log/{fovID}_nr.txt" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}_nr.txt" for fovID in FOVS]
             elif current_rule == 'rotate_nuclei':
                 output_list += [f"{DAPI_DIR}/{fovID}.tif" for fovID in FOVS]
             elif current_rule == 'create_nuclei_amplicon_overlay':
@@ -367,16 +293,8 @@ def get_overall_output(wildcards):
                 output_list += [f"{OUTPUT_DIR}/output/tile_config_{sample}.csv" for sample in SAMPLE]
                 output_list += [f"{OUTPUT_DIR}/output/tile_config_{sample}.html" for sample in SAMPLE]
             elif current_rule == 'reads_assignment':
-                # With an assembly block the rule's outputs follow the route (_reads_assignment_outputs): the
-                # saved assignment folder alone (and its previews, on request), or the molecules-only files.
-                if ASSEMBLY_BLOCK:
-                    from starfinder._snakemake import _reads_assignment_outputs
-                    for fovID in FOVS:
-                        files, previews = _reads_assignment_outputs(config, OUTPUT_DIR, fovID)
-                        output_list += files + previews
-                else:
-                    output_list += [f"{OUTPUT_DIR}/expr/{fovID}/raw.h5ad" for fovID in FOVS]
-                    output_list += [f"{OUTPUT_DIR}/expr/{fovID}/reads_assignment.csv" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/expr/{fovID}/raw.h5ad" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/expr/{fovID}/reads_assignment.csv" for fovID in FOVS]
             elif current_rule == 'create_sample_h5ad':
                 output_list += [f"{OUTPUT_DIR}/expr/{sample}_raw.h5ad" for sample in SAMPLE]
             elif current_rule == 'create_sample_reads_assignment':
@@ -386,62 +304,21 @@ def get_overall_output(wildcards):
 
 ### ==================== [ Preparation Rule ] =========================
 
-# The JSON copy of the configuration that the MATLAB scripts read (jsondecode); the Python rules read
-# snakemake.config and take no copy, so the rule exists for the MATLAB backend only.
-if BACKEND == "matlab":
-    rule rsf_preparation:
-        input:
-            yaml_config = config['config_path']
-        output:
-            json_config = config['config_path'].replace('.yaml', '.json')
-        run:
-            json_path = yaml_to_json(config['config_path'])
+# The JSON copy of the configuration that the MATLAB scripts read (jsondecode).
+rule rsf_preparation:
+    input:
+        yaml_config = config['config_path']
+    output:
+        json_config = config['config_path'].replace('.yaml', '.json')
+    run:
+        json_path = yaml_to_json(config['config_path'])
 
-# The FOV molecule table that reads_assignment and export_sample read, chosen by its producer
-# (design/specs/workflows.md, "Molecule tables"): fovs/{fovID}/molecules.csv of the Python rsf_single_fov, or the
-# legacy one-based signal/{fovID}_goodSpots.csv of MATLAB's rsf_single_fov and of stitch_subtile (the
-# subtile and deep modes, the ruleorder of the Snakefile). The Python backend asks the package (_molecule_table).
+# The FOV molecule table that reads_assignment reads, chosen by its producer (design/specs/workflows.md, "Molecule
+# tables"): the legacy one-based signal/{fovID}_goodSpots.csv of MATLAB's rsf_single_fov and of stitch_subtile (the
+# subtile and deep modes, the ruleorder of rules/legacy.smk).
 MOLECULE_TABLE = f"{OUTPUT_DIR}/signal/{{fovID}}_goodSpots.csv"
 # The images the shared segmentation rules read (segmentation.smk): MATLAB's reference image
-# images/ref_merged/ and its channel-name folders of the additional round flamingo. The Python backend
-# reads its reference image and the channel-label folders nuclei_registration writes (_shared_image_inputs).
+# images/ref_merged/ and its channel-name folders of the additional round flamingo.
 SHARED_IMAGE_INPUTS = {"amplicon_img": f"{OUTPUT_DIR}/images/ref_merged/{{fovID}}.tif",
                        "dapi_img": f"{OUTPUT_DIR}/images/flamingo/DAPI/{{fovID}}.tif",
                        "flamingo_img": f"{OUTPUT_DIR}/images/flamingo/Flamingo/{{fovID}}.tif"}
-
-# Validate only active Python adapters; shared MATLAB configuration stays intact.
-if BACKEND == "python":
-    from starfinder.dataset import from_workflow_config
-    from starfinder.dataset.workflow import _check_python_dialect
-    # One dialect: a MATLAB key of any Python rule raises here, naming its native form, whatever the rule's run flag.
-    _check_python_dialect(config)
-    for python_rule in ("rsf_single_fov", "gr_single_fov_subtile",
-                        "lrsf_single_fov_subtile", "deep_create_subtile", "deep_rsf_subtile"):
-        if is_rule_enabled(python_rule):
-            from_workflow_config(config, python_rule)
-    # The §2.10 blocks raise here, naming the key, rather than when their rules run; so does the route
-    # (check 7 of design/specs/sample-segmentation.md, without the reuse conditions and the models).
-    from starfinder.dataset.workflow import (_check_export_route, _check_sample_rules, _export_config, _membership,
-                                             _molecule_table, _report_block, _stage_position_ids, _stitching_block)
-    # The annotation-driven legacy sample rules run with backend matlab only; the blocks replace them.
-    _check_sample_rules(config)
-    MOLECULE_TABLE = str(_molecule_table(config, OUTPUT_DIR, "{fovID}"))
-    # The FOV folder's run record of the processing rules (fovs/{fovID}/run.json, a subtile's
-    # fovs/{fovID}/subtile_{n_subtile}/run.json), the reference image they write (the file reference_image
-    # names; none with reference_image_import, which they never write) and the one its readers read, a single
-    # path pattern, so that a rule input named by it is one path (snakemake.input.<name> a string).
-    from starfinder._snakemake import (_image_dir_inputs, _reference_image_inputs, _reference_image_outputs,
-                                       _run_record_outputs, _shared_image_inputs)
-    RUN_RECORD = _run_record_outputs(OUTPUT_DIR, ["{fovID}"])[0]
-    SUBTILE_RUN_RECORD = _run_record_outputs(OUTPUT_DIR, ["{fovID}"], ["{n_subtile}"])[0]
-    REFERENCE_IMAGE_OUTPUT = _reference_image_outputs(config, OUTPUT_DIR, ["{fovID}"])
-    REFERENCE_IMAGE_INPUT = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])[0]
-    SHARED_IMAGE_INPUTS = _shared_image_inputs(config, OUTPUT_DIR)
-    if STITCHING_BLOCK:
-        _stitching_block(config)
-        _stage_position_ids(config, _membership(config, MEMBERSHIP))
-    if ASSEMBLY_BLOCK:
-        _export_config(config)
-        _check_export_route(config)
-    if REPORT_BLOCK:
-        _report_block(config)

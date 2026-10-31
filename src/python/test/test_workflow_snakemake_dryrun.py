@@ -12,7 +12,8 @@ time, the tasks that declare it and their downstream (Snakemake's params trigger
 trigger alone misses an older time). The rerun triggers are the engine record's profile setting, ``mtime``, ``params``
 and ``input``. C9: the MATLAB dry run of ``tests/tissue_2D_test.yaml``, adapted as W-641 adapted it (one FOV, paths
 under the test's folder, its input folders and sample annotation written) with ``backend: matlab``, which a
-configuration needs for the dispatcher to include ``rules/legacy.smk``, schedules W-641's three jobs.
+configuration needs for the dispatcher to include ``rules/legacy.smk``, schedules W-641's three jobs. And the FOV
+wildcard of the tasks' rules matches the run's FOVs only (moved from test_fov_membership.py, W-750).
 
 Snakemake 9 comes from the ``workflow`` dependency group, beside the interpreter; the tests skip with the reason
 "Snakemake not installed" where it is absent. The BigStitcher engine task's job is checked by its printed
@@ -229,3 +230,29 @@ def test_the_matlab_dry_run_schedules_w641s_three_jobs(tmp_path):
     assert dict(re.findall(r"^(\w+)\s+(\d+)$", table, re.M)) == {"all": "1", "rsf_preparation": "1",
                                                                   "rsf_single_fov": "1", "total": "3"}
     assert "wildcards: fovID=tile_1" in done.stdout
+
+
+def test_the_fov_wildcard_matches_the_run_s_fovs_only(tmp_path):
+    """From test_fov_membership.py, test_the_python_fovid_wildcard_matches_the_run_s_fovs_only: with selected_fovs
+    the rules of rules/tasks.smk constrain the fov wildcard to the plan's FOVs, so that a target of a selected FOV
+    resolves to its rule and no other FOV's (outside the selection or fovs.csv, or a regex look-alike) resolves to any
+    rule; the dispatcher includes no Python rule file of the old workflow."""
+    from . import workflow_tasks as W
+    _snakemake()
+    config = W.dataset_keys(tmp_path, selected_fovs=["F1.5", "F10"], processing=copy.deepcopy(X.PROCESSING))
+    W.write_inputs(config, "sample,fov_id\ns1,F1\ns1,F1.5\ns2,F10\n")
+    path = tmp_path / "configs" / "fovs.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
+    out = W.output_root(config)
+    record = lambda fov, sample: str(out / "workflow" / "tasks" / f"fov.{sample}.{fov}.json")  # noqa: E731
+    jobs, tasks = scheduled(snakemake(tmp_path, path, "--dry-run", "--", record("F10", "s2")))
+    assert set(tasks) == {"fov/s2/F10"}
+    jobs, tasks = scheduled(snakemake(tmp_path, path, "--dry-run", "--", record("F1.5", "s1")))
+    assert set(tasks) == {"fov/s1/F1.5"}
+    for fov, sample in (("F1", "s1"), ("F1x5", "s1"), ("F100", "s2"), ("F2", "s1")):
+        done = snakemake(tmp_path, path, "--dry-run", "--", record(fov, sample))
+        assert done.returncode != 0 and "MissingRuleException" in done.stdout + done.stderr, (fov, done.stdout)
+    snakefile = SNAKEFILE.read_text()
+    assert re.findall(r'include: "([^"]+)"', snakefile) == ["rules/legacy.smk", "rules/tasks.smk"]
+    assert "FOV_CONSTRAINT" not in snakefile and "registration-py.smk" not in snakefile

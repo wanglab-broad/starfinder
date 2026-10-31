@@ -74,15 +74,15 @@ INPUT; the sequencing rules and `reads_assignment` read that file, and its genes
 its order, are the columns of the count matrix. The images are laid out round-first,
 `INPUT/<round>/<fov>/`, unless `image_dir_template: "{fov}/{round}"` reads them
 FOV-first, `INPUT/<fov>/<round>/`; the channel files inside are found as above. The
-MATLAB backend reads `INPUT/genes.csv` and the round-first layout only, and refuses
-the three keys.
+MATLAB backend reads `INPUT/genes.csv` and the round-first layout only; the schema refuses
+the three keys without `backend: python`.
 
 ## Stages and files
 
-For direct mode, the rule is `rsf_single_fov` in
-[registration-py.smk](https://github.com/wanglab-broad/starfinder/blob/dev/workflow/rules/registration-py.smk)
-or [registration.smk](https://github.com/wanglab-broad/starfinder/blob/dev/workflow/rules/registration.smk).
-It calls `workflow/scripts/rsf_single_fov.py` or `.m` respectively.
+For direct mode, the Python workflow runs each FOV's `fov` task (`starfinder workflow fov`,
+[orchestration](orchestration.md)); the MATLAB workflow runs the rule `rsf_single_fov` in
+[registration.smk](https://github.com/wanglab-broad/starfinder/blob/dev/workflow/rules/registration.smk),
+which calls `workflow/scripts/rsf_single_fov.m`.
 
 | Stage | Python script operation | MATLAB script operation | Data transition |
 | --- | --- | --- | --- |

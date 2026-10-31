@@ -9,15 +9,19 @@ plain TIFF pages without metadata, the workflow configuration's ``voxel_size_xy`
 ``voxel_size_z`` set to the same spacing (1.0 µm), and the placement of
 ``assembly_golden`` on the grids the §2.9 workflow declares
 (``declared:<dataset_id>/<output_id>/<fov_id>``, ``micrometer``, no direction). The fusion
-is on, of ``reference_merged``, in both dimensionalities. ``reads_assignment`` and
-``export_sample`` run through stub ``snakemake`` objects, as those tests run them. The
-comparison runs the workflow on both copies (about 8 s for 2D on one CPU), so it is
-``slow``; the saved-folder case runs ``reads_assignment`` on the plain copy only.
+is on, of ``reference_merged``, in both dimensionalities. The legacy ``reads_assignment`` adapter
+(``starfinder._legacy_workflow``) runs through a stub ``snakemake`` object, as
+``test_workflow_assembly_golden.py`` runs it, and the export is ``Dataset.export`` of the configuration's
+translation (``_export_dataset``), the entry the removed ``export_sample`` adapter called (W-750: the Python
+workflow's segment and assign commands read the reference image with ``FOV.load_reference_image``, which needs
+stored metadata, so this case keeps the adapter). The comparison runs both copies (about 8 s for 2D on one CPU), so
+it is ``slow``; the saved-folder case runs ``reads_assignment`` on the plain copy only.
 """
 import hashlib
 import importlib.util
 import json
 from dataclasses import asdict, replace
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -31,11 +35,12 @@ from starfinder.dataset._export import assembly_inputs
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import save_placement
 
+from starfinder._legacy_workflow import _run_reads_assignment
+
 from .assembly_fixtures import GOLDEN_IDS, golden_placement, unit_grid
 from .fusion_fixtures import golden_codebook, merged_image
 from .test_stitching_declared_grids import compare_tables, plain_pages
-from .test_workflow_assembly_figures import assembly_config, export_sample, reads_assignment
-from .test_workflow_assembly_golden import TILE_ZYX, build_sample
+from .test_workflow_assembly_golden import TILE_ZYX, _config, build_sample
 
 pytestmark = [pytest.mark.workflow, pytest.mark.stitching]
 needs_extras = pytest.mark.skipif(
@@ -50,6 +55,40 @@ def synchronous():
     import dask
     with dask.config.set(scheduler="synchronous"):
         yield
+
+
+MULTIVIEW = {"method": "multiview_stitcher", "input": "reference_stain",
+             "positions": {"source": "regular_grid",
+                           "regular_grid": {"columns": 2, "rows": 2, "order": "column_major_down_right",
+                                            "overlap": 0.25}}}
+
+
+def assembly_config(root):
+    """The sample's configuration on the route of the saved assignment ``default`` (test_workflow_assembly_figures.py's
+    before W-750)."""
+    return {**_config(root, legacy=False), "n_rounds": 3, "ref_round": "round1",
+            "seq_channel_order": ["ch00", "ch01", "ch02", "ch03"], "stitching": MULTIVIEW,
+            "assembly": {"assignment": "default"}, "export": {"route": "per_fov", "fuse": False}}
+
+
+def reads_assignment(root, out, fov, config):
+    """The legacy reads_assignment adapter with the assembly block for one FOV: it saves the FOV's assignment folder."""
+    inputs = [root / "input" / "data" / "sample" / "fovs.csv", out / "images" / "DAPI" / f"{fov}.tif",
+              out / "images" / "stardist_segmentation" / f"{fov}.tif", out / "fovs" / fov / "molecules.csv",
+              root / "input" / "data" / "sample" / "genes.csv", out / "fovs" / fov / "reference.tif"]
+    _run_reads_assignment(SimpleNamespace(input=[str(p) for p in inputs],
+                                          output=[str(out / "fovs" / fov / "assignment" / "default" / "assignment.json")],
+                                          config=config, wildcards=SimpleNamespace(fovID=fov)))
+
+
+def export_sample(out, config):
+    """Dataset.export of the sample with the configuration's export and assembly blocks (the removed export_sample
+    adapter's call)."""
+    from starfinder.dataset.workflow import _export_config, _export_dataset
+    export, block = _export_config(config)
+    _export_dataset(config, block, export).export("sample1", placement=out / "stitching" / "sample1",
+                                                  assignment=block.assignment, config=export,
+                                                  output_dir=out / "export" / "sample1")
 
 
 def config_of(root):

@@ -149,8 +149,8 @@ table holds exactly the rows of the check tables.
 | C5 | `test_workflow_plan_refusals.py` (planned) | Q | TG2-1 |
 | C6 | `test_workflow_commands.py` (planned) | Q | TG2-1 |
 | C7 | `test_workflow_completion.py` (planned) | Q | TG2-1 |
-| C8 | `test_workflow_boundary.py` (planned) | Q | TG2-4, TG5 |
-| C9 | `test_assignment_workflow.py`, `test_workflow_assembly_golden.py` (existing; their import line changes with TG2-5); `test_workflow_snakemake_dryrun.py`: `test_the_matlab_dry_run_schedules_w641s_three_jobs` | Q; Slow `other` | TG2-4 (the dry run), TG2-5 |
+| C8 | `test_workflow_boundary.py`: `test_no_engine_file_of_the_python_workflow_imports_the_package`, `test_the_python_branch_reads_no_configuration_key_but_backend`, `test_no_module_of_the_python_workflow_imports_the_legacy_module`, `test_the_python_workflow_includes_no_file_of_the_old_python_workflow` (the Nextflow part with TG5) | Q | TG2-5, TG5 |
+| C9 | `test_assignment_workflow.py`, `test_workflow_assembly_golden.py` (their import line from `starfinder._legacy_workflow`, TG2-5); `test_workflow_config_validation.py`: `test_a_matlab_configuration_passes_and_holds_the_base_subset_values` (`tests/minimal_config.yaml` on the MATLAB schema); `test_workflow_snakemake_dryrun.py`: `test_the_matlab_dry_run_schedules_w641s_three_jobs` | Q; Slow `other` | TG2-4 (the dry run), TG2-5 |
 | N1 | `test_workflow_nextflow_stub.py` (planned) | `nextflow` | TG5 |
 | N2 | `test_workflow_nextflow_stub.py` (planned) | `nextflow` | TG5 |
 | N3 | `test_workflow_nextflow_stub.py` (planned) | `nextflow` | TG5 |

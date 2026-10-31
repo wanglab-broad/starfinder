@@ -2,10 +2,13 @@
 
 INVENTORY transcribes the rows of the inventory saved before the legacy translation left the Python path (the keys
 and value aliases the base revision accepted, with their native forms). One test checks that the parse-time
-tables of starfinder.dataset.workflow and the lists of the schema's backend guard hold exactly these rows, so that no
-row is missed in either; the other runs every row in every position it applies to (an active rule, a rule that does
-not run, a disabled block, a registration step, a recovery alternative, a channel override) and asserts that the
-parse-time check names the native form and that the Snakefile's validation (with default insertion) refuses it.
+tables of starfinder.dataset.workflow and the lists of the MATLAB schema's backend guard hold exactly these rows, so
+that no row is missed in either; the other runs every row in every position it applies to (an active rule, a rule
+that does not run, a disabled block, a registration step, a recovery alternative, a channel override) and asserts
+that the translators' check names the native form and that the package refuses it (W-750: the Python workflow
+validates with the package, not the Snakefile): the row in the processing block of a configuration in the Python
+shape is refused (by the Python schema, naming the key, or by the translator, naming the native form), and a rule that
+does not run has no place in that shape (D4: a Python configuration names no rule, and the package refuses ``rules``).
 """
 import copy
 import re
@@ -17,7 +20,7 @@ import yaml
 from starfinder.dataset import from_workflow_config
 from starfinder.dataset import workflow
 
-from .test_workflow_config_validation import snakefile_errors
+from . import workflow_tasks as T
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -146,12 +149,33 @@ def cases():
 CASES = cases()
 
 
+def python_shape(config):
+    """The configuration in the Python shape: the dataset keys of the minimal example and, as its processing block,
+    the parameters of the rule that runs without their run flags; a top-level legacy key stays where it is."""
+    base = T.dataset_keys("/work", n_rounds=MINIMAL["n_rounds"], seq_channel_order=MINIMAL["seq_channel_order"])
+    parameters = copy.deepcopy(config["rules"]["rsf_single_fov"]["parameters"])
+    processing = {k: ({n: v for n, v in value.items() if n != "run"} if isinstance(value, dict) else value)
+                  for k, value in parameters.items()}
+    top = {k: v for k, v in config.items() if k not in MINIMAL}
+    return dict(base, processing=processing, **top)
+
+
 @pytest.mark.parametrize("config, native", [c[1:] for c in CASES], ids=[c[0] for c in CASES])
 def test_every_inventory_row_raises_in_every_position_naming_its_native_form(config, native):
     for check in (workflow._check_python_dialect, from_workflow_config):
         with pytest.raises(ValueError, match=re.escape(native)):
             check(copy.deepcopy(config))
-    assert snakefile_errors(copy.deepcopy(config))
+    disabled = [rule for rule in config["rules"] if rule != "rsf_single_fov"]
+    if disabled:
+        # A rule that does not run: the Python shape has no such place; the package refuses the rules (D4).
+        assert "rules left the Python configuration" in T.validation_error(dict(python_shape(config),
+                                                                               rules=config["rules"]))
+    else:
+        # The Python schema refuses a legacy key of the rule as an unknown key of the processing block, naming it; the
+        # translator refuses the others naming the native form (both assert the refusal the Snakefile's validation
+        # gave before W-750).
+        error = T.validation_error(python_shape(config))
+        assert error and (native in error or "was unexpected" in error), error
 
 
 def test_the_shared_ref_round_keys_stay_valid():
@@ -161,5 +185,5 @@ def test_the_shared_ref_round_keys_stay_valid():
                                    "registration": {"steps": [{"method": "translation"}], "reference_round": "round1"}})
     workflow._check_python_dialect(config)
     assert from_workflow_config(config).pipeline.registration.reference_round == "round1"
-    assert snakefile_errors(copy.deepcopy(config)) == []
-    assert snakefile_errors(copy.deepcopy(MINIMAL)) == []
+    assert T.validation_error(python_shape(config)) is None
+    assert T.validation_error(python_shape(MINIMAL)) is None
