@@ -693,12 +693,16 @@ uncached processes run it (`cache false`, one local job each):
    carries that token, and the next invocation finds its cache under it and runs nothing. A consumer of a
    rerun task reruns because the emitted record it stages changes, and a stale task's consumers are
    stale too (their fingerprints include its). A record with no token, written by another engine or by
-   hand, counts as not complete here: Nextflow has no cache entry to re-emit, and the task reruns once.
+   hand, gets `rerun:<id>` too: Nextflow has no cache entry to re-emit, and the task reruns once. `verify`
+   still reports that task complete, because completion is one rule for both engines and a person, and
+   Snakemake passes no token.
 2. **`VERIFY_AFTER`, after the last task**, runs with `--final`: every task of the manifest must be
    complete, or the run fails (exit 1) naming each task that is not and recording them in
    `workflow/verify.json`. By the rule above it should never fire on a run that ended normally; it is the
    check that D8's rule held at the end, for an output removed during the run or a task that lied. The
    next invocation reruns whatever it named, by the same rule.
+
+% Amended 2026-10-31 after W-647's review: a record with no token (the operator's decision on W-152).
 
 Why not the alternatives: with the current fingerprint as a stale task's token (the reviewed revision
 `2047004`), configuration A, then B, then A again matches the first run's cache entry while B's files

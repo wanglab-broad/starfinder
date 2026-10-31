@@ -4,7 +4,9 @@ design/specs/orchestration-engines.md, "-resume and the completion rule (D8)": a
 says ``succeeded``, lists every declared output of the task and its log, every output it lists is present with its
 recorded size (with ``hash``, its SHA-256) and its ``workflow.fingerprint`` equals the current manifest's. A complete
 task's token is the record's ``workflow.token``; every other task's is ``rerun:<id>``, ``<id>`` fresh to the
-invocation (amendment A1). The result is written to ``workflow/verify.json``.
+invocation (amendment A1), and so is a complete task's whose record holds no token (Snakemake's, or a person's): that
+task stays complete and passes ``final``, because completion is one rule for both engines and a person. The result
+is written to ``workflow/verify.json``.
 """
 from __future__ import annotations
 

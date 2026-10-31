@@ -348,6 +348,8 @@ TABLE = {
                                "workflow.blocks_sha256 is sha256:0 (recorded)"),
     "code.version": (False, lambda s: s.code(version="0.2.1"), "code.version is 0.2.0 (recorded), 0.2.1 (now)"),
     "code.git_commit": (False, lambda s: s.code(git_commit="f" * 40), "code.git_commit is 0123456789abcdef"),
+    "a recorded commit and none now": (False, lambda s: s.code(git_commit=None),
+                                       "code.git_commit is 0123456789abcdef01234567… (recorded), None (now)"),
     "git_dirty recorded": (False, lambda s: s.edit(_set_record("code", "git_dirty", value=True)),
                            "code.git_dirty is true (recorded)"),
     "git_dirty now": (False, lambda s: s.code(git_dirty=True), "code.git_dirty is true (now)"),
@@ -390,6 +392,16 @@ def test_each_row_of_the_resume_table_refuses_a_mismatch(work, monkeypatch, caps
     manifest = change(stopped)
     capsys.readouterr()
     _refused(manifest, capsys, named)
+
+
+def test_a_record_without_a_commit_resumes_with_a_package_that_has_one(work, monkeypatch):
+    """code.git_commit is compared when recorded: a record that holds none resumes under a package that has one."""
+    stopped = Stopped(work, monkeypatch)
+    stopped.edit(_set_record("code", "git_commit", value=None))
+    assert X.CLEAN_CODE["git_commit"]
+    assert X.run_task(stopped.manifest, FOV_TASK) == 0
+    task_record = json.loads(_layout.task_record(stopped.manifest.parents[1], FOV_TASK).read_text())
+    assert task_record["workflow"]["resumed_from"] == "pre_qc"
 
 
 def test_the_supplied_statistics_case_resumes_when_nothing_differs(work, monkeypatch):

@@ -124,6 +124,24 @@ def test_verify_reports_a_complete_task_with_its_records_token(done):
     assert written["tasks"] == result["tasks"] and written["invocation"] == result["invocation"]
 
 
+def test_a_complete_task_whose_record_holds_no_token_stays_complete(manifest, capsys):
+    """Run as Snakemake runs it, without --cache-token: the record's token is null; verify reports the task complete
+    with no problem, gives it a rerun: token that differs between invocations, and --final passes."""
+    from starfinder.__main__ import main
+    assert X.run_task(manifest, FOV_TASK) == 0
+    record = json.loads(_layout.task_record(manifest.parents[1], FOV_TASK).read_text())
+    assert record["workflow"]["token"] is None
+    first, second = verify(manifest, hash=True, final=True), verify(manifest, hash=True, final=True)
+    for result in (first, second):
+        entry = result["tasks"][FOV_TASK]
+        assert entry["complete"] is True and entry["problems"] == []
+        assert result["incomplete"] == [] and result["passed"]
+    tokens = [r["tasks"][FOV_TASK]["token"] for r in (first, second)]
+    assert all(t.startswith("rerun:") for t in tokens) and tokens[0] != tokens[1]
+    assert main(["workflow", "verify", "--manifest", str(manifest), "--final"]) == 0
+    assert f"{FOV_TASK}\trerun:" in capsys.readouterr().out
+
+
 def _damage(out, how):
     if how == "deleted output":
         (out / "fovs" / "FOV_001" / "molecules.csv").unlink()

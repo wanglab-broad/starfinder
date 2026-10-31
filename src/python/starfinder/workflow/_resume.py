@@ -58,9 +58,10 @@ def check(run, record, now_code):
     differences += _code_problems(code, "recorded") + _code_problems(now_code, "now")
     if code.get("version") and now_code.get("version") and code["version"] != now_code["version"]:
         differences.append(f"code.version is {code['version']} (recorded), {now_code['version']} (now)")
-    if code.get("git_commit") and now_code.get("git_commit") and code["git_commit"] != now_code["git_commit"]:
+    # "(when recorded)": a recorded commit must equal the running package's, whether or not that package has one.
+    if code.get("git_commit") and code["git_commit"] != now_code.get("git_commit"):
         differences.append(f"code.git_commit is {_short(code['git_commit'])} (recorded), "
-                           f"{_short(now_code['git_commit'])} (now)")
+                           f"{_short(now_code.get('git_commit'))} (now)")
     root = run.root
     declared = {i[len("input:"):] for i in run.task["inputs"] if i.startswith("input:")}
     recorded = {entry["path"] for entry in record.get("inputs") or []}
