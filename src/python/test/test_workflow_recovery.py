@@ -1,6 +1,6 @@
-"""X8 of design/validation/orchestration.md: verified resume of the fov task.
+"""X7, X8, X10 and X11: real-engine recovery and stale results, and verified FOV resume.
 
-On one FOV of ``tiny_sample`` with ``execution.resume_from_checkpoint``: after a stop at ``pre_qc`` (or at
+X8, on one FOV of ``tiny_sample`` with ``execution.resume_from_checkpoint``: after a stop at ``pre_qc`` (or at
 ``candidates``) the fov command resumes and its outputs equal those of a full run; with a changed ``processing`` key,
 a changed input or another package version (whichever way ``execution.code_version`` points) it refuses with exit 3
 naming every differing field; with a changed ``export`` key, a block the fov task does not read, it resumes; a
@@ -410,3 +410,149 @@ def test_the_supplied_statistics_case_resumes_when_nothing_differs(work, monkeyp
     record = json.loads(stopped.path.read_text())
     assert record["preprocessing"]["supplied_statistics"]["path"].endswith(SUPPLIED_FILE)
     assert X.run_task(stopped.manifest, FOV_TASK) == 0
+
+
+# X7, X10 and X11 use real engine jobs; the X8 tests above retain their inputs
+# and assertions, including their in-process stop injection.
+from . import workflow_engine_validation as E
+
+ENGINES = ["snakemake", pytest.param("nextflow", marks=pytest.mark.nextflow)]
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.parametrize("engine", ENGINES)
+def test_x7_sigkill_partial_task_recovers_with_only_its_downstream(tmp_path, engine):
+    """Kill a real CLI task with SIGKILL immediately after its molecule table is written."""
+    import os
+    import subprocess
+    import sys
+    run = E.EngineRun(tmp_path / "kill", engine)
+    run.invoke({t["id"] for t in run.data["tasks"]})
+    uninterrupted = E.snapshot(run)
+    task = next(t for t in run.data["tasks"] if t["id"] == FOV_TASK)
+    for name in [*task["outputs"], task["record"]]:
+        path = run.out / name
+        shutil.rmtree(path) if path.is_dir() else path.unlink(missing_ok=True)
+    hook = tmp_path / "kill-hook"
+    hook.mkdir()
+    marker = hook / "killed.json"
+    (hook / "sitecustomize.py").write_text(
+        "import sys\n"
+        "if '--task' in sys.argv and sys.argv[sys.argv.index('--task') + 1] == 'fov/sample/FOV_001':\n"
+        " import os, signal, json, hashlib\n"
+        " from pathlib import Path\n"
+        " from starfinder.dataset.fov import FOV\n"
+        " original = FOV.export_spots\n"
+        " def kill(self, *args, **kwargs):\n"
+        "  result = original(self, *args, **kwargs)\n"
+        f"  p = Path({str(run.out / 'fovs/FOV_001/molecules.csv')!r})\n"
+        f"  Path({str(marker)!r}).write_text(json.dumps({{'pid': os.getpid(), 'bytes': p.stat().st_size, "
+        "'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}))\n"
+        "  os.kill(os.getpid(), signal.SIGKILL)\n"
+        " FOV.export_spots = kill\n")
+    env = dict(os.environ, PYTHONPATH=str(hook) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    command = [sys.executable, "-m", "starfinder", *task["command"][1:], "--attempt", "1"]
+    killed = subprocess.run(command, env=env, capture_output=True, text=True, timeout=180)
+    assert killed.returncode == -9, killed.stdout + killed.stderr
+    assert marker.is_file() and (run.out / "fovs/FOV_001/molecules.csv").is_file()
+    assert not (run.out / task["record"]).exists()
+    E.evidence(run.work, "x7-killed.json", {"command": command, "returncode": killed.returncode,
+                "partial_output": json.loads(marker.read_text()), "record_exists": False})
+    run.invoke(E.downstream(run.data, {FOV_TASK}))
+    E.compare(run, uninterrupted, E.snapshot(run), name="x7-recovered.json")
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.nextflow
+@pytest.mark.parametrize("damage", ["deleted-molecules", "truncated-molecules", "deleted-index", "deleted-task"])
+def test_x10_nextflow_repairs_only_damaged_tasks_and_their_downstream(tmp_path, damage):
+    run = E.EngineRun(tmp_path / damage, "nextflow")
+    run.invoke({t["id"] for t in run.data["tasks"]})
+    uninterrupted = E.snapshot(run)
+    before = run.records()
+    run.invoke(set())
+    assert run.records() == before
+    target = FOV_TASK if "molecules" in damage else "compare" if damage == "deleted-index" else "assign/sample/FOV_001/default"
+    task = next(t for t in run.data["tasks"] if t["id"] == target)
+    if damage == "deleted-task":
+        for name in [*task["outputs"], task["record"], task["log"]]:
+            path = run.out / name
+            shutil.rmtree(path) if path.is_dir() else path.unlink()
+    elif damage == "deleted-index":
+        (run.out / "report/index.html").unlink()
+    else:
+        path = run.out / "fovs/FOV_001/molecules.csv"
+        if damage == "truncated-molecules":
+            payload = path.read_bytes().splitlines(keepends=True)
+            assert len(payload) > 1
+            path.write_bytes(b"".join(payload[:-1]))
+        else:
+            path.unlink()
+    run.invoke(E.downstream(run.data, {target}))
+    E.compare(run, uninterrupted, E.snapshot(run), name=f"x10-{damage}.json")
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.parametrize("engine", ENGINES)
+@pytest.mark.parametrize("case", ["processing", "export", "restored-twice", "raw-size", "raw-older", "fingerprint"])
+def test_x11_stale_results_rerun_only_readers_and_downstream(tmp_path, engine, case):
+    import copy
+    import os
+    from starfinder.__main__ import main
+    from starfinder.workflow import verify
+    run = E.EngineRun(tmp_path / case, engine)
+    run.invoke({t["id"] for t in run.data["tasks"]})
+    if case == "fingerprint":
+        task = next(t for t in run.data["tasks"] if t["id"] == FOV_TASK)
+        path = run.out / task["record"]
+        record = json.loads(path.read_text())
+        record["workflow"]["fingerprint"] = "sha256:" + "0" * 64
+        path.write_text(json.dumps(record))
+        assert main(["workflow", "verify", "--manifest", str(run.manifest), "--final"]) == 1
+        result = verify(run.manifest, final=True)
+        E.evidence(run.work, "x11-edited-fingerprint.json", result)
+        assert not result["passed"] and FOV_TASK in result["incomplete"]
+        assert "fingerprint" in " ".join(result["tasks"][FOV_TASK]["problems"])
+        return
+    original = copy.deepcopy(run.config)
+    failures = []
+    for iteration, changed in enumerate([True, False, True, False] if case == "restored-twice" else [True]):
+        config = copy.deepcopy(original)
+        if case.startswith("raw-"):
+            raw = X.input_root(run.work) / "round2/FOV_002/ch01.ome.tif"
+            declaring = {t["id"] for t in run.data["tasks"] if "input:round2/FOV_002/ch01.ome.tif" in t["inputs"]}
+            assert declaring == {"summarize/sample/percentile_normalization/FOV_002", "fov/sample/FOV_002"}
+            affected = E.downstream(run.data, declaring)
+            stat = raw.stat()
+            if case == "raw-size":
+                raw.write_bytes(raw.read_bytes() + b"\n")
+                assert raw.stat().st_size != stat.st_size
+            else:
+                import tifffile
+                with tifffile.TiffFile(raw) as tif:
+                    assert int(tif.pages[0].compression) == 1
+                    offset = tif.pages[0].dataoffsets[0]
+                payload = bytearray(raw.read_bytes())
+                payload[offset] ^= 1
+                raw.write_bytes(payload)
+                os.utime(raw, ns=(stat.st_atime_ns, stat.st_mtime_ns - 86_400 * 10**9))
+                assert raw.stat().st_size == stat.st_size and raw.stat().st_mtime_ns < stat.st_mtime_ns
+        else:
+            block = "export" if case == "export" else "processing"
+            affected = E.downstream(run.data, {t["id"] for t in run.data["tasks"] if block in t["blocks"]})
+            if block == "export":
+                assert affected == {"export/sample", "report/sample", "compare"}
+                config["export"]["previews"] = False
+            elif changed:
+                config["processing"]["spot_finding"]["threshold_value"] = 6.0
+        run.replan(config)
+        stale = verify(run.manifest)
+        E.evidence(run.work, f"x11-{iteration}-stale.json", stale)
+        assert set(stale["incomplete"]) == affected
+        assert all("fingerprint" in " ".join(stale["tasks"][task]["problems"]) for task in affected)
+        run.invoke(affected)
+        failures.extend(E.fresh_comparison(run, E.snapshot(run), name=f"x11-{iteration}-fresh.json", rerun_tasks=affected))
+    assert not failures, sorted(set(failures))

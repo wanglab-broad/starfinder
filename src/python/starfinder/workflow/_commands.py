@@ -627,7 +627,8 @@ def export(run):
     With export.previews on the route per FOV with ``assemble`` (the plan then declares export/<sample>/previews/),
     each assembled FOV's assignment figures with its ownership, into previews/<fov>/ (P5), over the FOV's reference
     image when it is a declared input; the folder exists, empty, when the assemble part was neither written nor
-    reused.
+    reused. Before Dataset.export, the command removes its earlier previews/ whatever export.previews says;
+    no export record lists that folder.
     """
     config, assembly = _translate.export(run.configuration.plain())
     dataset = run.dataset()
@@ -642,9 +643,12 @@ def export(run):
             dataset.load_codebook(_codebook(run), encoding=_from_plain(codebook["encoding"]),
                                   layout=_from_plain(codebook["layout"]))
     sample = run.identity["sample"]
+    previews = _layout.export_previews_dir(run.out, sample)
+    if previews.exists():
+        import shutil
+        shutil.rmtree(previews)
     record = dataset.export(sample, placement=_layout.stitching_dir(run.out, sample), assignment=assembly.assignment,
                             config=config, output_dir=_layout.export_dir(run.out, sample))
-    previews = _layout.export_previews_dir(run.out, sample)
     if f"{Path(os.path.relpath(previews, run.out)).as_posix()}/" not in run.task["outputs"]:
         return
     from starfinder.workflow._previews import ownership_figures
@@ -665,10 +669,19 @@ def report(run):
     from starfinder.workflow._translate import _base
     configuration = run.configuration.plain()
     config = _report_block(dict(_base(configuration), report=configuration["report"]))
+    from starfinder.report._collect import PAGE_FILE
+    from starfinder.report._schema import REPORT_FILE, TABLE_DIR
+    import shutil
     sample = run.identity["sample"]
+    report_dir = _layout.report_dir(run.out, sample)
+    if not (report_dir / REPORT_FILE).exists():
+        (report_dir / PAGE_FILE).unlink(missing_ok=True)
+        tables = report_dir / TABLE_DIR
+        if tables.is_dir():
+            shutil.rmtree(tables)
     run.dataset().report(sample, list(run.manifest["membership"]["samples"][sample]),
                          assignment=(configuration.get("assembly") or {}).get("assignment"), config=config,
-                         output_dir=_layout.report_dir(run.out, sample))
+                         output_dir=report_dir)
 
 
 def compare(run):

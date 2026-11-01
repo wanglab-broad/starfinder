@@ -31,8 +31,10 @@ from starfinder.workflow._shape import (COMMANDS, FAILED_FORMAT, MANIFEST_FORMAT
 logger = logging.getLogger("starfinder.workflow")
 
 #: The kinds whose command removes the earlier declared outputs before its work: the others' API entries manage
-#: their folders (the export and the report remove what their earlier record lists; the Fiji task's dataset.xml is
-#: the tool's, written in the same job before the check).
+#: their folders (export and report remove what their earlier record lists; without report.json, the report command
+#: first removes only the page and tables, preserving foreign files for the public guard; export first removes its
+#: unlisted previews/ whatever export.previews says; the Fiji task's dataset.xml is the tool's, written in the same
+#: job before the check).
 PRE_REMOVE = frozenset({"summarize", "merge", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment",
                         "assign", "bigstitcher_macro", "bigstitcher_import", "stitch"})
 

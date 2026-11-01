@@ -154,3 +154,106 @@ def test_the_report_and_compare_commands_write_the_report_and_the_comparison_pag
     samples = pd.read_csv(out / "report" / "samples.csv")
     assert samples.iloc[:, 0].tolist() == [REPORT_SAMPLE] and "fovs_expected" in samples
     assert (out / "report" / "index.html").is_file()
+
+
+def _report_rerun_case(tmp_path):
+    from .report_fixtures import DATASET, FOVS, SAMPLE_ID, report_records
+    from .report_fixtures import SAMPLE as sample
+    config = report_config(tmp_path, {}, {"stitching": MERGED})
+    config.update(dataset_id=DATASET, sample_id=SAMPLE_ID, output_id="output")
+    T.write_inputs(config, "sample,fov_id\n" + "".join(f"{sample},{fov}\n" for fov in FOVS))
+    manifest, _ = T.plan(tmp_path, "rerun", config)
+    out = T.output_root(config)
+    report_records(out)
+    # Earlier tasks' outputs are the hand-written report fixture, as in the real-entry test above.
+    T.succeed(manifest, "fov", "stitch")
+    for relative in T.task(manifest, "report", sample=sample)["inputs"]:
+        path = out / relative
+        if not path.exists():
+            assert "/checkpoints/" in relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{}")
+    folder = out / "report" / sample
+    (folder / "tables").mkdir(parents=True)
+    (folder / "report.html").write_text("old page")
+    (folder / "tables/stale.csv").write_text("old table")
+    return manifest, sample, folder
+
+
+def test_report_task_replaces_page_and_tables_without_record(tmp_path):
+    manifest, sample, folder = _report_rerun_case(tmp_path)
+    assert T.run(manifest, f"report/{sample}") == 0
+    record = load_report(folder)
+    assert {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()} == {
+        "report.json", *(entry["path"] for entry in record["files"])}
+
+
+def test_report_task_preserves_and_names_a_foreign_file(tmp_path, capsys):
+    manifest, sample, folder = _report_rerun_case(tmp_path)
+    foreign = folder / "foreign.txt"
+    foreign.write_text("owner file")
+    assert T.run(manifest, f"report/{sample}") == 1
+    assert "foreign.txt" in capsys.readouterr().err
+    assert foreign.read_text() == "owner file"
+
+
+def test_report_command_removes_nothing_when_record_exists(tmp_path, monkeypatch):
+    manifest, sample, folder = _report_rerun_case(tmp_path)
+    (folder / "report.json").write_text("record owned by Dataset.report")
+    before = {p.relative_to(folder): p.read_bytes() for p in folder.rglob("*") if p.is_file()}
+    calls = spy(monkeypatch, "report")
+    T.call(manifest, f"report/{sample}")
+    assert len(calls) == 1
+    assert {p.relative_to(folder): p.read_bytes() for p in folder.rglob("*") if p.is_file()} == before
+
+
+@pytest.fixture
+def preview_export(tmp_path):
+    import importlib.util
+    if any(importlib.util.find_spec(module) is None for module in ("anndata", "multiview_stitcher")):
+        pytest.skip("export preview checks need the anndata and multiview-stitcher extras")
+    import dask
+    from .test_workflow_export_tasks import scene_export
+    with dask.config.set(scheduler="synchronous"):
+        folder, manifest = scene_export(tmp_path, {"route": "per_fov", "fuse": False})
+        yield folder, manifest
+
+
+@pytest.mark.integration
+def test_export_task_removes_earlier_previews_when_key_is_off(tmp_path, preview_export):
+    from .test_workflow_export_tasks import SCENE_SAMPLE, plan_scene
+    folder, _ = preview_export
+    manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "fuse": False}, export_previews=False)
+    previews = folder.export_dir / "previews"
+    previews.mkdir(parents=True)
+    (previews / "stale.png").write_bytes(b"earlier figure")
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    assert not previews.exists()
+
+
+@pytest.mark.integration
+def test_export_task_rebuilds_current_figures_without_stale_files(preview_export):
+    from .test_workflow_export_tasks import SCENE_SAMPLE
+    folder, manifest = preview_export
+    previews = folder.export_dir / "previews"
+    previews.mkdir(parents=True)
+    stale = previews / "stale.txt"
+    stale.write_text("not a current figure")
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    assert not stale.exists()
+    expected = {f"{fov}/{name}" for fov in folder.scene.ids
+                for name in ("assignment.png", "assignment_single_layer.png")}
+    assert {p.relative_to(previews).as_posix() for p in previews.rglob("*") if p.is_file()} == expected
+    assert all((previews / name).read_bytes().startswith(b"\x89PNG\r\n\x1a\n") for name in expected)
+
+
+@pytest.mark.integration
+def test_export_task_preserves_foreign_file_outside_previews(tmp_path, preview_export):
+    from .test_workflow_export_tasks import SCENE_SAMPLE, plan_scene
+    folder, _ = preview_export
+    manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "fuse": False}, export_previews=False)
+    folder.export_dir.mkdir(parents=True, exist_ok=True)
+    foreign = folder.export_dir / "owner.txt"
+    foreign.write_text("owner file")
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    assert foreign.read_text() == "owner file"

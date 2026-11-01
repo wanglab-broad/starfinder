@@ -923,12 +923,21 @@ The files each task kind declares, resolved through `_layout`, by route and opti
 `export.json` and `report.json` stay the one declared file of their folders, as today
 (`_export_sample_files`, `_snakemake.py:834`; `_report_sample_files`, `:959`): which parts an
 export writes depends on its extras and inputs (a part that cannot run is recorded `not_run`,
-`_run_export`, `:888`), so the record that lists them is the declaration. Today's undeclared
+`_run_export`, `:888`), so the record that lists them is the declaration. The report's other files outlive
+that declaration: Snakemake removes `report.json` before a rerun, a failed attempt removes it
+too, and `Dataset.report` refuses a folder that holds files and no `report.json`. So when the
+folder has no `report.json`, the `report` command first removes the page and `tables/`; any
+other file stays and the refusal names it. No record lists the export's previews, so the
+`export` command removes `previews/` before its work, whatever `export.previews` says. Today's undeclared
 outputs become declared: the morphology task's prepared images and channel images (O8), the stage
 records the report reads (today the report rule declares only `export.json`, `placement.json` or
 `run.json` as its input, `_report_sample_files`, and reads the stages without declaring them), the
 placement's `fovs.csv` and `links.csv`, the assignment folder's tables, the macro's tiles and the
 comparison page.
+
+% Amended 2026-11-01 after W-652's first run: the report command's removal (the operator's decision, W-652 and W-152).
+% Amended 2026-11-01 after W-652's second run: the export command's removal of its previews (the operator's decision, W-652
+% and W-152).
 
 **The worked example's comparison.** For the three variants of the [worked example](#worked-example)
 that today's workflow can express, the declared outputs of each task kind equal what today's
