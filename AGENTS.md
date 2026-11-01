@@ -92,6 +92,10 @@ selections"), run on these occasions:
 * Learned, `learned`: when a dependency of the learned tests changes, and at a
   batch's end if one changed.
 * Extended, `extended and not learned`: at a batch's end and before merge.
+* Nextflow, `nextflow`: when `nextflow/` or the workflow package changes, at a
+  batch's end and before merge. It needs Nextflow 26.10.4 or newer and Java 17 or
+  newer on `PATH`, and it skips without them. CI's job has the minimal extras, so
+  the real-engine tests skip there and run only at the controller.
 * Documentation: the reference audit on every change; the strict build
   (`uv run --group docs sphinx-build -n -W --keep-going -b html ../../docs
   /external/new-run/html`) at a batch's end, before merge, and on a change to
