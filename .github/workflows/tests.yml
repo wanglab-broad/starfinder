@@ -13,9 +13,9 @@ concurrency:
   group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# Two jobs with the selections of docs/contributing.md, "Test selections":
+# Python jobs with the selections of docs/contributing.md, "Test selections":
 # `fast` runs the fast tier R and `slow-extended` runs the slow and extended
-# tests that are not learned. Each pytest step is limited to 30 minutes; a
+# tests that are not learned; Nextflow has its own job below. Each pytest step is limited to 30 minutes; a
 # measured overrun is split by file or node ID.
 jobs:
   fast:
@@ -115,3 +115,59 @@ jobs:
         env:
           UV_NO_SYNC: 'true'
         run: /usr/bin/time -v uv run pytest test/ -v -rs -m "(slow or extended) and not learned"
+
+  nextflow:
+    name: Nextflow contract and resume tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: src/python
+    env:
+      UV_PYTHON: '3.12'
+      UV_LOCKED: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+      ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: '1'
+      CUDA_VISIBLE_DEVICES: ''
+      MPLBACKEND: Agg
+      NXF_VER: '26.10.4'
+      NXF_OPTS: '-Xms128m -Xmx1g -XX:ActiveProcessorCount=1'
+      STARFINDER_NEXTFLOW_EVIDENCE: '${{ runner.temp }}/nextflow-evidence'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: '0.9.28'
+          enable-cache: true
+          cache-dependency-glob: src/python/uv.lock
+      - name: Install locked workflow test dependencies
+        run: uv sync --locked --extra dev --extra local-registration --extra checkpoint --group workflow
+      - name: Install Nextflow 26.10.4
+        run: |
+          mkdir -p "$RUNNER_TEMP/nextflow-bin"
+          curl -fsSL https://github.com/nextflow-io/nextflow/releases/download/v26.10.4/nextflow -o "$RUNNER_TEMP/nextflow-bin/nextflow"
+          chmod +x "$RUNNER_TEMP/nextflow-bin/nextflow"
+          echo "$RUNNER_TEMP/nextflow-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/nextflow-bin/nextflow" -version
+      - name: Nextflow stub, retry and cache checks
+        timeout-minutes: 45
+        env:
+          UV_NO_SYNC: 'true'
+        run: /usr/bin/time -v uv run pytest test/ -v -rs -m nextflow
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nextflow-traces
+          path: '${{ runner.temp }}/nextflow-evidence'

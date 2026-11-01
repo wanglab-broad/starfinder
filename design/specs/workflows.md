@@ -3,7 +3,7 @@
 The sequencing workflow turns round/FOV TIFF directories and a codebook into
 per-FOV molecule CSVs, and its later rules segment cells and assign molecules to
 them, stitch each sample's FOVs, assemble and export the sample and write its
-processing report. An engine (Snakemake; Nextflow with task group 5) runs the tasks of the plan's
+processing report. An engine (Snakemake or Nextflow) runs the tasks of the plan's
 manifest: whole FOVs, or tiles of a FOV; load, rotate, enhance, register, detect, extract and filter are
 operations inside those tasks, not seven independent tasks ([orchestration](orchestration.md); the
 MATLAB backend's rules schedule whole FOVs or subtiles as before). Segmentation and assignment are

@@ -125,6 +125,7 @@ explicit = true
 testpaths = ["test"]
 addopts = "-v --tb=short --strict-markers -m 'not extended'"
 markers = [
+    "nextflow: runs the Nextflow workflow; requires Nextflow on PATH",
     "extended: full-pipeline end-to-end comparisons on the session's synthetic data; run with -m extended",
     # Subsystem: the package whose behavior the test asserts. Every test has at least one (test/conftest.py).
     "core: starfinder.image, the method registry helper and execution settings",

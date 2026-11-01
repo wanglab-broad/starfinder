@@ -24,7 +24,7 @@ def test_registered_markers_are_the_agreed_set():
     options = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())
     options = options["tool"]["pytest"]["ini_options"]
     registered = {line.split(":")[0] for line in options["markers"]}
-    assert registered == SUBSYSTEM_MARKERS | COST | KIND | {"extended"}
+    assert registered == SUBSYSTEM_MARKERS | COST | KIND | {"extended", "nextflow"}
     assert "--strict-markers" in options["addopts"].split()
 
 

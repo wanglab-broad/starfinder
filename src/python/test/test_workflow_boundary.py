@@ -194,3 +194,19 @@ def test_the_python_workflow_includes_no_file_of_the_old_python_workflow():
     named = {rule for text in texts.values() for rule in rules.findall(text)}
     assert not named & {"report_sample", "report_dataset", "export_sample", "stitch_sample", "bigstitcher_engine",
                         "bigstitcher_macro_sample"}
+
+
+def test_nextflow_calls_the_package_only_through_commands():
+    """C8's Nextflow half: the only literal package commands are planning and verification."""
+    import re
+    for path in nextflow_files():
+        source = path.read_text()
+        commands = re.findall(r"\bstarfinder\s+([^\n]+)", source)
+        assert all(re.match(r"workflow\s+(plan|verify)\b", command) for command in commands), path
+        assert not re.search(r"(?:python|python3)\s+(?:-m|-c)", source), path
+        if path.parent.name == "modules":
+            assert "TaskCommands.run(" in source, path
+    helper = ROOT / "nextflow/lib/TaskCommands.groovy"
+    assert helper.is_file()
+    assert "t.command.collect" in helper.read_text()
+    assert "import starfinder" not in helper.read_text()
