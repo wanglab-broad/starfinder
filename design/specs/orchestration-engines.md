@@ -1164,7 +1164,8 @@ legacy-module draft lists them for Jiahao's decision on their fate. `create_segm
 is retired (no rule calls it, the baseline's O21). The Google Cloud backup rule file of
 `workflow/rules/` leaves `workflow/` (OC1): it belongs to neither workflow and opens a Google Cloud
 Storage client when parsed (the baseline's O1). W-740 removed it and kept it nowhere else, because
-Jiahao said on 2026-10-30 that the backup is no longer used.
+Jiahao said on 2026-10-30 that the backup could be deleted.
+% Amended 2026-11-01 after W-740: its reason in Jiahao's words (the operator's decision on W-152).
 
 ## Additions to the contract
 
