@@ -36,7 +36,7 @@ already configured. `report_sample` writes the sample reports and `report_datase
 writes the comparison page. The block uses the `ReportConfig` field names;
 `markers` holds mappings with `name` and `genes`, `marker_pairs` holds gene pairs,
 and `limits` holds the `ReportLimits` fields. See
-{doc}`workflow configuration <workflow-configuration>` for the complete workflow.
+the {doc}`workflow reference <workflow/reference>` for the complete workflow.
 
 ## What it does
 

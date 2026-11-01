@@ -1,7 +1,7 @@
 # MATLAB API
 
 MATLAB classes and functions, grouped by processing stage and parsed from source.
-The {doc}`workflow guide <../workflows>` shows how to run the MATLAB backend; the
+The {doc}`MATLAB workflow guide <../workflow/matlab-legacy>` shows how to run the MATLAB backend; the
 {doc}`array reference <contracts>` lists the MATLAB boundary conventions.
 
 ```{toctree}

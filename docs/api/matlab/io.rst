@@ -1,7 +1,7 @@
 TIFF input and output
 =====================
 
-MATLAB TIFF input and output helpers. The :doc:`workflow guide <../../workflows>`
+MATLAB TIFF input and output helpers. The :doc:`MATLAB workflow guide <../../workflow/matlab-legacy>`
 shows how to run them through the workflow; the :doc:`array reference <../contracts>`
 lists the MATLAB boundary conventions.
 

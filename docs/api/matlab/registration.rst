@@ -2,7 +2,7 @@ Registration
 ============
 
 MATLAB global and local registration helpers. The
-:doc:`workflow guide <../../workflows>` shows the processing workflow; the
+:doc:`MATLAB workflow guide <../../workflow/matlab-legacy>` shows the processing workflow; the
 :doc:`array reference <../contracts>` lists shift and axis conventions.
 
 .. mat:currentmodule:: .

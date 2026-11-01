@@ -1,63 +1,85 @@
-"""Materialize a schema-validated, dry-run-only workflow example outside Git.
+"""Write a run configuration from one of the workflow examples, outside the checkout.
 
-No microscopy images are generated. Never execute this placeholder input tree.
-Run from src/python with uv run --with 'snakemake>=9,<10' python ...
+The example's keys stay as written; only root_input_path and root_output_path change, to
+the input tree and to RUN/output. With --input-root the run reads that tree, for example
+the synthetic fixture that ``scripts/workflow_golden.py fixture WORK`` writes under
+WORK/input. Without it, a placeholder input tree is written under RUN/input: fovs.csv
+with one FOV, a codebook row, a positions table and a blank 1 x 8 x 8 image for each
+image and label file the plan looks for. The plan accepts it; it is not data to run.
+Run from src/python, for example:
+
+    uv run python ../../docs/examples/prepare_workflow.py minimal RUN --input-root WORK/input
+    uv run starfinder workflow plan --config RUN/config.yaml
 """
 
 import argparse
+import json
 from pathlib import Path
 
+import numpy as np
+import tifffile
 import yaml
-from snakemake.utils import validate
+
+TEMPLATES = ("minimal", "full", "recipe-2")
+PLACEHOLDER_FOV = "FOV_001"
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("output", type=Path, help="new directory outside the checkout")
-    parser.add_argument("--template", choices=["minimal", "full"], default="minimal")
-    parser.add_argument("--mode", choices=["free", "direct", "subtile", "deep"])
-    args = parser.parse_args()
+def _label(entry):
+    return entry if isinstance(entry, str) else entry["channel"]
+
+
+def placeholder_inputs(config, root):
+    """The placeholder input tree of ``config`` under ``root`` (the input root): plan only."""
+    folder = root / config["dataset_id"] / config["sample_id"]
+    template = config.get("image_dir_template", "{round}/{fov}")
+    images = {f"round{i}": config["seq_channel_order"] for i in range(1, config["n_rounds"] + 1)}
+    images[config["ref_round"]] = [*images[config["ref_round"]], *(config.get("reference_stains") or [])]
+    for entry in config.get("additional_round") or []:
+        images[entry["round_name"]] = entry.get("channel_order") or []
+    for round_name, channels in images.items():
+        directory = folder / template.format(round=round_name, fov=PLACEHOLDER_FOV)
+        directory.mkdir(parents=True, exist_ok=True)
+        for entry in channels:
+            tifffile.imwrite(directory / f"{_label(entry)}.tif", np.zeros((1, 8, 8), np.uint16))
+    (folder / "fovs.csv").write_text(f"sample,fov_id\n{config['sample_id']},{PLACEHOLDER_FOV}\n")
+    (folder / "genes.csv").write_text("ExampleGene,CACCC\n")
+    for run in (config.get("segmentation") or {}).get("runs") or []:
+        if run.get("method") == "import" and not Path(run["path"]).is_absolute():
+            labels = folder / run["path"].replace("{fov_id}", PLACEHOLDER_FOV)
+            labels.parent.mkdir(parents=True, exist_ok=True)
+            tifffile.imwrite(labels, np.zeros((1, 8, 8), np.uint16))
+    positions = ((config.get("stitching") or {}).get("positions") or {}).get("table")
+    if positions and not Path(positions).is_absolute():
+        (folder / positions).write_text(f"fov_id,x,y\n{PLACEHOLDER_FOV},0,0\n")
+    (folder / "PLAN_ONLY.txt").write_text("Blank placeholder images for the plan; not data to run.\n")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("template", choices=TEMPLATES, help="the example: workflow-<template>.yaml")
+    parser.add_argument("run", type=Path, help="a new directory outside the checkout")
+    parser.add_argument("--input-root", type=Path,
+                        help="the input tree's root_input_path; default a placeholder tree under RUN/input")
+    args = parser.parse_args(argv)
     repo = Path(__file__).resolve().parents[2]
-    output = args.output.resolve()
-    if output == repo or repo in output.parents:
-        parser.error("output must be outside the checkout")
-    if output.exists():
-        parser.error("output must be a new directory (existing runs are preserved)")
+    run = args.run.resolve()
+    if run == repo or repo in run.parents:
+        parser.error("RUN must be outside the checkout")
+    if run.exists():
+        parser.error("RUN must be a new directory (existing runs are kept)")
     source = Path(__file__).with_name(f"workflow-{args.template}.yaml")
-    config = yaml.safe_load(source.read_text())
-    config.update(
-        config_path=str(output / "config.yaml"),
-        starfinder_path=str(repo),
-        root_input_path=str(output / "input"),
-        root_output_path=str(output / "output"),
-    )
-    # The full template keeps the downstream keys; the minimal one has none (no rule it runs reads them).
-    for key, name in (("envs_path", "unavailable-envs"), ("fiji_path", "unavailable-fiji")):
-        if key in config:
-            config[key] = str(output / name)
-    if args.mode:
-        config["workflow_mode"] = args.mode
-    required = {
-        "subtile": {"gr_single_fov_subtile", "lrsf_single_fov_subtile", "stitch_subtile"},
-        "deep": {"deep_create_subtile", "deep_rsf_subtile", "stitch_subtile"},
-    }.get(config["workflow_mode"], {"rsf_single_fov"})
-    if not required.issubset(config["rules"]):
-        parser.error("subtile/deep require --template full")
-    validate(config, str(repo / "workflow/schemas/config.schema.yaml"))
-    output.mkdir(parents=True)
-    (output / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
-    input_dir = output / "input" / config["dataset_id"] / config["sample_id"]
-    input_dir.mkdir(parents=True)
-    (input_dir / "genes.csv").write_text("ExampleGene,ACGTCC\n")
-    for r in range(1, config["n_rounds"] + 1):
-        (input_dir / f"round{r}" / "tile_1").mkdir(parents=True)
-    # The Python FOV membership: one sample of one FOV.
-    (input_dir / "fovs.csv").write_text("sample,fov_id\nsample,tile_1\n")
-    (output / "DRY_RUN_ONLY.txt").write_text(
-        "Empty round/FOV directories satisfy DAG existence checks only.\n"
-        "No TIFF, MATLAB, segmentation, assignment or scientific validation.\n"
-    )
-    print(f"Validated {source.name}; prepared {output / 'config.yaml'} for --dry-run only")
+    text = source.read_text()
+    config = yaml.safe_load(text)
+    input_root = args.input_root.resolve() if args.input_root else run / "input"
+    run.mkdir(parents=True)
+    if args.input_root is None:
+        placeholder_inputs(config, input_root)
+    # The example as written, its two root lines replaced: its comments stay.
+    roots = {"root_input_path": input_root, "root_output_path": run / "output"}
+    lines = [f"{key}: {json.dumps(str(roots[key]))}" if (key := line.split(":", 1)[0]) in roots else line
+             for line in text.splitlines()]
+    (run / "config.yaml").write_text("\n".join(lines) + "\n")
+    print(run / "config.yaml")
 
 
 if __name__ == "__main__":

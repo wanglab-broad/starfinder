@@ -291,8 +291,8 @@ For `backend: python`, replace MATLAB-style blocks with native stage settings:
 | A percent-style FOV pattern | A `{i}` pattern |
 | Hand-built round-first copies | Set `image_dir_template="{fov}/{round}"` for FOV-first inputs |
 
-The [workflow guide](workflows.md) and
-[reference](workflow-configuration.md) show complete native configurations.
+The [workflow guide](workflow/index.md) and
+[reference](workflow/reference.md) show complete native configurations.
 
 (workflow-python-shape)=
 

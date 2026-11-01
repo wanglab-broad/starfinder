@@ -1,4 +1,7 @@
+---
+orphan: true
+---
+
 # Nextflow
 
-This checkout has no Nextflow pipeline, configuration or execution profile.
-Use the {doc}`Snakemake workflow <snakemake>` to run STARfinder over a dataset.
+This page moved: the {doc}`workflow guide <index>` has the Nextflow Quick start.

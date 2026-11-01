@@ -98,8 +98,8 @@ Review and position-conversion settings. See
 
 ## Workflow keys
 
-The Python workflow's `stitching` block exposes these keys; see
-{doc}`workflow configuration <workflow-configuration>` for its surrounding setup.
+The Python workflow's `stitching` block exposes these keys; see the
+{doc}`workflow reference <workflow/reference>` for its surrounding setup.
 
 | Key | Purpose |
 | --- | --- |

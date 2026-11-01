@@ -242,7 +242,7 @@ def test_schema_validates_spot_finding_blocks(block, valid):
     assert (not errors) == valid
 
 
-EXAMPLE = yaml.safe_load((ROOT / "docs/examples/workflow-recipe-2.yaml").read_text())
+EXAMPLE = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-recipe-2.yaml").read_text())
 # The keys that name and select the FOVs of a MATLAB configuration (the Python backend reads fovs.csv and refuses
 # them).
 MATLAB_FOVS = {"fov_id_pattern": "tile_{i}", "n_fovs": 1, "subset_list": [], "subset_range": False, "subset_start": 1,

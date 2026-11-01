@@ -78,8 +78,8 @@ Fiji, then pass its `dataset.xml`, view map, table, reference grids and configur
 {py:func}`~starfinder.stitching.import_bigstitcher`. The import returns a
 `PlacementResult`. The Python-only workflow's `stitching` block coordinates the
 export, Fiji engine task and import with `method: bigstitcher`;
-`bigstitcher_save_dir` names the local working folder and `fiji_path` the Fiji
-executable. See {doc}`workflow configuration <workflow-configuration>`.
+`bigstitcher_save_dir` names the local working folder and `execution.fiji` the Fiji
+executable; only Snakemake runs the Fiji task. See the {doc}`workflow reference <workflow/reference>`.
 
 ## What you get
 

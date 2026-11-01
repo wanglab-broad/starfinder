@@ -88,7 +88,7 @@ del config['backend']
 from_workflow_config(config)
 print('matlab', 'starfinder.dataset._legacy_config' in sys.modules)
 """
-    example = ROOT / "docs" / "examples" / "workflow-minimal.yaml"
+    example = ROOT / "src/python/test/data/workflow_examples/workflow-minimal.yaml"
     result = subprocess.run([sys.executable, "-c", script, str(example)], capture_output=True, text=True, cwd=tmp_path)
     assert result.stdout.split() == ["python", "False", "matlab", "True"], result.stderr
     workflow = (ROOT / "src" / "python" / "starfinder" / "dataset" / "workflow.py").read_text()

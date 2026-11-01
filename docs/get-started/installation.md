@@ -1,7 +1,7 @@
 # Installation
 
 STARfinder is a Python package in `src/python` of the repository, with optional extras
-for backends, a separate Snakemake environment for the workflow and a MATLAB backend.
+for backends, the `workflow` dependency group for Snakemake and a MATLAB backend.
 The [single-FOV demo](single-fov-demo.md) and the [quickstart](../recipes.md#quick-start) need
 only the package itself; the [multi-FOV / sample demo](multi-fov-demo.md) also needs the
 `multiview-stitcher` and `anndata` extras.
@@ -81,11 +81,18 @@ are in
 {doc}`../learned-detectors`; the segmentation models and their environment are in the
 [segmentation guide](../segmentation-contract.md#models).
 
-## Snakemake
+(snakemake)=
 
-The Python workflow uses Snakemake 9.15.0 and the cluster-generic executor from the
-locked `workflow` dependency group. Broad UGER jobs run in the image built from
-that lock; see {doc}`../workflow/broad-uger` for the profile and environment settings.
+## Snakemake and Nextflow
+
+The {doc}`workflow <../workflow/index>` runs under Snakemake 9.15.0 and the
+cluster-generic executor of the locked `workflow` dependency group: from
+`src/python`, `uv run --group workflow snakemake ...` installs the group into the
+project's environment and runs Snakemake there. Nextflow is not a Python package:
+install Nextflow 26.10.4 or newer and Java 17 or newer, and run `nextflow` with
+`uv run`, so that its tasks find the `starfinder` command. On Broad UGER the tasks
+run in the image built from the lock, with the CPU extras and the `workflow`
+group; see {doc}`../workflow/broad-uger` for the profiles and the image.
 
 The frozen MATLAB workflow keeps its separate conda environment in
 `workflow/envs/matlab-legacy.yaml`, with the environment name `starfinder-v9`.
@@ -94,10 +101,10 @@ Its Broad profile is `profile/broad-uger-matlab/` and activates the shared
 
 ## MATLAB
 
-The MATLAB backend (`backend: matlab`, the workflow's default) targets **MATLAB R2023b or
+The MATLAB backend (`backend: matlab`; the workflow's default is `python`) targets **MATLAB R2023b or
 newer** with the Image Processing Toolbox; the full list of requirements is in
 [the MATLAB runtime notes](https://github.com/wanglab-broad/starfinder/blob/dev/design/notes/matlab-api.md#runtime-requirements-and-validation-limits). The
 workflow starts MATLAB through `matlab_launcher`: the default `path` runs the executable
 named by `STARFINDER_MATLAB_EXECUTABLE`, or `matlab` on `PATH`
-([MATLAB launcher](../workflow-configuration.md#matlab-launcher)). The Python package,
+([MATLAB launcher](../workflow/matlab-legacy.md#matlab-launcher)). The Python package,
 the single-FOV demo and the documentation build need no MATLAB or MATLAB license.

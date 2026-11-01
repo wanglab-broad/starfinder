@@ -63,8 +63,9 @@ html_show_sourcelink = True
 # one of the five sections and keeps the section navigation. The section and
 # subsection index pages are maps of cards, so they drop the page table of
 # contents and use its width.
+# The Workflow section's index page is its guide and keeps the table of contents.
 SECTION_PAGES = [
-    "get-started/index", "workflow/index", "api/index", "benchmark/index", "wiki",
+    "get-started/index", "api/index", "benchmark/index", "wiki",
     "wiki/design", "wiki/pipeline-stages", "wiki/dataset", "wiki/synthetic",
     "wiki/real-data", "wiki/development",
 ]

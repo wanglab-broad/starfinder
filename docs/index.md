@@ -52,8 +52,9 @@ Install the package and run two small demos on a local CPU.
 :class-card: sf-card
 Run every FOV and sample of a dataset with a scalable workflow framework.
 +++
-[Snakemake](workflow/snakemake.md)
-[Nextflow](workflow/nextflow.md)
+[Guide](workflow/index.md)
+[Reference](workflow/reference.md)
+[Broad UGER](workflow/broad-uger.md)
 :::
 
 :::{grid-item-card} {fas}`code` [API](api/index.md)

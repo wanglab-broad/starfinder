@@ -272,7 +272,7 @@ def test_schema_segmentation_methods_equal_the_registry():
 
 
 def base_config():
-    config = yaml.safe_load((ROOT / "docs/examples/workflow-full.yaml").read_text())
+    config = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-full.yaml").read_text())
     config["backend"] = "python"
     return config
 

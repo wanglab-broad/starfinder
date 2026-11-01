@@ -372,7 +372,7 @@ def test_no_second_lookup_is_left_in_the_plan_or_the_fov():
 # --- Workflow translation ---------------------------------------------------------------------------------
 
 def full_config(**change):
-    config = yaml.safe_load((ROOT / "docs/examples/workflow-full.yaml").read_text())
+    config = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-full.yaml").read_text())
     config.update(change)
     return config
 

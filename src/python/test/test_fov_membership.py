@@ -145,7 +145,7 @@ def test_the_schema_refuses_the_matlab_fov_keys_for_python_and_requires_them_for
     from . import workflow_tasks as T
     schema = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
     validator = jsonschema.validators.validator_for(schema)(schema)
-    config = yaml.safe_load((ROOT / "docs/examples/workflow-minimal.yaml").read_text())
+    config = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-minimal.yaml").read_text())
     matlab = dict(config, backend="matlab", fov_id_pattern="tile_{i}", n_fovs=1, subset_list=[], subset_range=False,
                   subset_start=1, subset_end=1, subset_random=False, n_random_tests=1,
                   rules={"rsf_single_fov": MATLAB_RSF})
@@ -177,7 +177,7 @@ def common_names(config, monkeypatch, *, checks=False):
 
 
 def python_example(tmp_path, **extra):
-    config = yaml.safe_load((ROOT / "docs/examples/workflow-minimal.yaml").read_text())
+    config = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-minimal.yaml").read_text())
     config.update(root_input_path=str(tmp_path / "input"), root_output_path=str(tmp_path), **extra)
     return config
 

@@ -23,7 +23,7 @@ when the site is built. For method options, see the
 
 The pipeline profiles below are read from `benchmarks/configs/pipeline.json`.
 For the processing configuration, see the
-{doc}`workflow reference <workflow-configuration>`.
+{doc}`workflow reference <workflow/reference>`.
 
 ```{benchmark-profiles} pipeline
 ```

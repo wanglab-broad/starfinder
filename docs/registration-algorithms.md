@@ -180,6 +180,6 @@ back.
 
 ## Workflow keys
 
-The {doc}`workflow reference <workflow-configuration>` generates the accepted keys
-from the schema. The [workflow specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#explicit-registration-recipe)
+The {doc}`workflow reference <workflow/reference>` generates the accepted keys
+from the package. The [workflow specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/workflow-configuration.md#explicit-registration-recipe)
 keeps route and backend rules.

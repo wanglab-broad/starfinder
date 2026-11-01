@@ -122,7 +122,7 @@ def test_wf1_the_block_is_python_only_in_the_schema():
     (workflow/rules/legacy.smk), so a MATLAB run, which never reaches the adapter, must be refused there: backend
     matlab and an omitted backend (the schema's default, matlab) refuse the block, while the same configuration
     without it is valid. (The Python workflow validates with the package's schema: the test above.)"""
-    base = wf_config("docs/examples/workflow-minimal.yaml")
+    base = wf_config("src/python/test/data/workflow_examples/workflow-minimal.yaml")
     # The MATLAB backend names and selects its FOVs by fov_id_pattern, n_fovs and the subset keys (the Python one
     # by fovs.csv).
     without = {**{k: v for k, v in base.items() if k != "backend"}, "fov_id_pattern": "tile_{i}", "n_fovs": 1,

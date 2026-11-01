@@ -131,7 +131,7 @@ are in µm. Local coordinates remain in voxel indices.
 ## Workflow keys
 
 The Python workflow's `assembly` block combines configuration fields with the
-coordination keys below. See {doc}`workflow configuration <workflow-configuration>`
+coordination keys below. See the {doc}`workflow reference <workflow/reference>`
 for a complete workflow.
 
 | Key | API counterpart |

@@ -12,7 +12,7 @@ shows the complete molecule-output route.
 | `ImportError` naming SimpleITK | Install the `local-registration` extra in the environment used to run the call; see the [backend reference](api/backends.md). |
 | `InsufficientLandmarksError` or `RegistrationEstimationError` | Inspect the registration inputs and landmark matches; use the [registration guide](registration-contract.md) to choose a method. |
 | Installing SpatialData does not create a store | Request the SpatialData export through the [sample-output guide](sample-output-contract.md); installing an extra alone does not run an export. |
-| MATLAB fails before processing | Inspect the printed launcher command, executable path, license and toolboxes on the execution host; see the [launcher settings](workflow-configuration.md#matlab-launcher). |
+| MATLAB fails before processing | Inspect the printed launcher command, executable path, license and toolboxes on the execution host; see the [launcher settings](workflow/matlab-legacy.md#matlab-launcher). |
 
 ## Image shape, channel and dtype errors
 
@@ -50,17 +50,17 @@ see the {doc}`coordinate reference <api/contracts>`.
 
 ## Configuration and workflow startup
 
-Use the [bounded dry run](workflows.md#small-reproducible-dry-run) to inspect the
-DAG before processing. A dry run does not inspect image content.
+Plan the run and use the [dry run of the Quick start](workflow/index.md#quick-start) to inspect the
+jobs before processing. A dry run does not inspect image content.
 
 | Symptom | What to do |
 | --- | --- |
-| Schema validation error | Read the field path in the error and compare with the [workflow reference](workflow-configuration.md). |
+| Schema validation error | Read the field path in the error and compare with the [workflow reference](workflow/reference.md). |
 | Missing `fovs.csv` for a Python workflow | Create the membership file under the input root with `sample,fov_id` columns; use `selected_fovs` to select members. |
 | A Python rule rejects a MATLAB key | Use native `preprocessing`, `registration` and `spot_finding` settings from the [migration guide](migration.md#one-python-configuration-dialect). |
 | Only config preparation is scheduled | Request the target `all` in the documented dry-run command. |
 | Reference round is not found | Compare `ref_round` with configured round names and actual inputs. |
-| A YAML edit seems ineffective | Check the selected rule and resolved configuration; compare with its [parameter reference](workflow-configuration.md). |
+| A YAML edit seems ineffective | Check the selected rule and resolved configuration; compare with the [workflow reference](workflow/reference.md). |
 | Projection export asks for segmentation settings | Configure segmentation after fusion or choose `route: per_fov` for existing per-FOV assignments; see [sample segmentation](sample-segmentation-contract.md). |
 
 Preserve the failed stage's diagnostics before rerunning. Edit the source YAML,

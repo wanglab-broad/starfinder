@@ -107,7 +107,7 @@ class Wildcards(dict):
 
 
 def wf_config(name):
-    return yaml.safe_load((ROOT / "docs/examples" / name).read_text())
+    return yaml.safe_load((ROOT / "src/python/test/data/workflow_examples" / name).read_text())
 
 
 def with_blocks(config, *, stitching=STITCHING, assembly=ASSEMBLY, export=EXPORT):

@@ -346,7 +346,7 @@ def test_the_schema_refuses_tophat_for_python_rules_and_validates_it_for_matlab(
     package (W-750: the Python workflow validates with the package), while the MATLAB schema keeps the key's
     definition for a MATLAB-backend configuration, and its translation."""
     schema = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
-    config = yaml.safe_load((ROOT / "docs/examples/workflow-full.yaml").read_text())
+    config = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-full.yaml").read_text())
     matlab = yaml.safe_load((ROOT / "tests/tissue_2D_test.yaml").read_text())
     for rule in ("rsf_single_fov", "gr_single_fov_subtile", "lrsf_single_fov_subtile", "deep_create_subtile", "deep_rsf_subtile"):
         candidate = copy.deepcopy(config)

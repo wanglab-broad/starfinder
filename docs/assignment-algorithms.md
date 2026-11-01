@@ -220,5 +220,5 @@ Without an `assembly` block the rule writes:
 | `expr/{fovID}/assignment_single_layer.png` | An additional middle-plane figure for label images with Z > 1 |
 | `expr/{fovID}/log.txt` | The molecule totals |
 
-The run record keeps the legacy keys under `workflow.legacy`. {doc}`workflow-downstream`
-describes the rule's outputs with an `assembly` block.
+The run record keeps the legacy keys under `workflow.legacy`. The
+{doc}`workflow reference <workflow/reference>` lists the `assign` task's outputs.

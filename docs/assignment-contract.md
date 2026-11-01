@@ -194,8 +194,7 @@ The `reads_assignment` rule assigns each FOV's molecules to the label image of t
 `stardist_segmentation` rule. In `rules.reads_assignment.parameters`, `expand_labels:
 true` with `dilation_distance` grows the cells once, in each plane, by that many pixels.
 Without an `assembly` block the rule writes `expr/{fovID}/raw.h5ad` and
-`expr/{fovID}/reads_assignment.csv`; {doc}`workflow-downstream` describes its outputs
-with one.
+`expr/{fovID}/reads_assignment.csv`; the {doc}`MATLAB workflow guide <workflow/matlab-legacy>` lists the legacy rules.
 
 With `backend: python`, the top-level `assignment` block holds the settings of
 `FOV.assign_molecules`:

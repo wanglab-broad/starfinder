@@ -1,8 +1,10 @@
 """Schema-generated workflow reference and incremental rebuild coverage; the workflow package's tables against the
-contract's (design/specs/orchestration.md)."""
+contract's (design/specs/orchestration.md); the downloadable examples planned as written, and the reference's tables
+generated from the package (docs/workflow/reference.md)."""
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 
 import pytest
@@ -107,3 +109,69 @@ def test_the_migration_guide_renders_the_contracts_migration_table(monkeypatch):
     table = method_tables._table(header, rows, literal_columns=set())
     assert len(list(table.findall(lambda node: node.tagname == "row"))) == len(rows) + 1
     assert "```{workflow-migration}" in docs_pages.section(docs_pages.read("migration.md"), "workflow-python-shape")
+
+
+EXAMPLES = ("minimal", "full", "recipe-2")
+#: The tasks each downloadable example plans on the placeholder input tree of prepare_workflow.py (one FOV).
+EXAMPLE_KINDS = {
+    "minimal": {"fov": 1}, "recipe-2": {"fov": 1},
+    "full": {"summarize": 1, "merge": 1, "fov": 1, "morphology": 1, "segment": 2, "assign": 1, "stitch": 1,
+             "export": 1, "report": 1, "compare": 1}}
+
+
+@pytest.mark.parametrize("name", EXAMPLES)
+def test_each_downloadable_example_plans_as_written(tmp_path, name):
+    """The three files users download, docs/examples/workflow-<name>.yaml, are configurations of the Python shape that
+    the plan accepts as written: prepare_workflow.py changes only the two roots, and the plan of its placeholder input
+    tree holds the example's tasks (the examples' check of the old Snakefile validation, W-750's ledger)."""
+    import runpy
+    from starfinder.workflow import plan
+    from starfinder.workflow._shape import LEFT_KEYS, MATLAB_KEYS
+    example = yaml.safe_load((ROOT / "docs" / "examples" / f"workflow-{name}.yaml").read_text())
+    assert example.get("backend", "python") == "python"
+    assert not set(example) & (set(LEFT_KEYS) | set(MATLAB_KEYS))
+    run = tmp_path / "run"
+    runpy.run_path(str(ROOT / "docs" / "examples" / "prepare_workflow.py"))["main"]([name, str(run)])
+    config = yaml.safe_load((run / "config.yaml").read_text())
+    assert config == dict(example, root_input_path=str(run / "input"), root_output_path=str(run / "output"))
+    manifest = plan(run / "config.yaml")
+    kinds = {}
+    for task in manifest["tasks"]:
+        kinds[task["kind"]] = kinds.get(task["kind"], 0) + 1
+    assert kinds == EXAMPLE_KINDS[name]
+
+
+def _directive_content(page, name, argument=""):
+    """The content lines of the one fenced directive ``{name} argument`` of a page."""
+    head = f"```{{{name}}}" + (f" {argument}" if argument else "")
+    lines = page.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.rstrip() == head]
+    assert len(starts) == 1, f"{head} occurs {len(starts)} times"
+    end = lines.index("```", starts[0] + 1)
+    return lines[starts[0] + 1:end]
+
+
+def test_the_reference_tables_cover_the_commands_task_kinds_and_keys(monkeypatch):
+    """docs/workflow/reference.md generates its tables from the package (docs/_ext/workflow_config.py): a row for every
+    command of the parser and every task kind, and a key table for the dataset keys, every block and execution, whose
+    plan defaults are the plan's and whose content describes exactly the keys that no class describes."""
+    pytest.importorskip("sphinx", reason="documentation extra required")
+    monkeypatch.syspath_prepend(str(ROOT / "docs/_ext"))
+    import workflow_config
+    from starfinder.workflow._shape import BLOCKS, COMMANDS, EXECUTION_DEFAULTS, KINDS
+    page = docs_pages.read("workflow/reference.md")
+    commands, arguments = workflow_config.command_rows(_directive_content(page, "workflow-commands"))
+    assert [row[0] for row in commands] == [f"starfinder workflow {c}" for c in ("plan", "verify")] + \
+        [f"starfinder workflow {c}" for c in sorted(COMMANDS.values())]
+    assert all(row[4] for row in arguments)
+    assert [row[0] for row in workflow_config.task_rows()] == list(KINDS)
+    for block in ("dataset", *BLOCKS, "processing.tiled", "execution", "execution.defaults"):
+        rows = workflow_config.key_rows(block, _directive_content(page, "workflow-keys", block))
+        assert [row[0] for row in rows] == [key for key, _ in workflow_config.block_keys(block)]
+    defaults = {row[0]: row[2] for row in workflow_config.key_rows("execution.defaults", _directive_content(
+        page, "workflow-keys", "execution.defaults"))}
+    assert defaults == {key: json.dumps(value) for key, value in EXECUTION_DEFAULTS.items()}
+    with pytest.raises(ValueError, match="describe runs"):
+        workflow_config.key_rows("segmentation", ["device: cpu or cuda"])
+    with pytest.raises(ValueError, match="no segmentation key named colour"):
+        workflow_config.key_rows("segmentation", ["device: d", "runs: r", "colour: c"])

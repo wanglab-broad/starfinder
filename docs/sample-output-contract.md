@@ -42,7 +42,7 @@ export:
 ```
 
 This block goes into a workflow with stitching and assembly configured;
-{doc}`workflow configuration <workflow-configuration>` gives the complete setup.
+the {doc}`workflow reference <workflow/reference>` lists the blocks' keys.
 
 ## What it does
 

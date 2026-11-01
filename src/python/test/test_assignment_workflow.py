@@ -366,7 +366,7 @@ def test_schema_assignment_keys_equal_the_config_fields_and_the_assign_arguments
 
 
 def test_the_assignment_block_validates_on_the_python_backend_only():
-    config = yaml.safe_load((ROOT / "docs/examples/workflow-full.yaml").read_text())
+    config = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-full.yaml").read_text())
     config.update(backend="python", **BLOCK)
     jsonschema.validate(config, SCHEMA)
     with pytest.raises(jsonschema.ValidationError):

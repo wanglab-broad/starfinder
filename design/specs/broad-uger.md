@@ -7,8 +7,9 @@ This record does not certify a UGER submission; task group 4 owns that execution
 
 ## Environment
 
-The Python workflow runs in the image from `uv.lock` through Apptainer 1.3.2 on
-UGER compute nodes. RHEL 7 CPU nodes cannot host the lock's uv environment because
+The workflow runs in the image of the lock (`uv.lock`) through Apptainer 1.3.2 on
+UGER compute nodes; the head of either engine runs as a UGER job. The MATLAB
+legacy workflow keeps its conda environment and profile. RHEL 7 CPU nodes cannot host the lock's uv environment because
 several wheels require a newer glibc. The Snakemake head runs as a UGER job in the
 same image with 8 GiB memory, so its generated job command's absolute Python path
 exists inside each job's image. `/stanley` and `/local/scratch` are bound in.
@@ -49,8 +50,9 @@ submits with `qsub -P broad -S /bin/bash`. It retains `-pe smp <threads>`, linea
 binding, per-slot `h_vmem` (total `mem_mb` divided by threads), `h_rt` from runtime
 minutes, and reservation above 15 GiB or at four or more threads. GPU jobs alone
 add `-l gpu=TRUE,operating_system=RedHat8`; CPU jobs request no OS override.
-Logs go under `<output root>/workflow/logs/engine/`; UGER's job IDs distinguish
-attempts. The status script consults `qstat` then `qacct` and treats absent
+Each task writes `workflow/logs/<task>.log`; the job's standard output and error
+stay the profile's, under `<output root>/workflow/logs/engine/`; UGER's job IDs
+distinguish attempts. The status script consults `qstat` then `qacct` and treats absent
 accounting as still running. The job script returns Apptainer's exit status.
 
 UGER assigns no GPU device. For a GPU job the job script queries `nvidia-smi`,

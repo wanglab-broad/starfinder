@@ -1,16 +1,11 @@
-# Recipe 2 on the Python backend: scalar background subtraction, kept as the
+# Recipe 2 in the processing block: scalar background subtraction, kept as the
 # snapshot bg_corrected, then percentile normalization. Detection and
 # registration use the normalized (detection) image; extraction reads the
-# background-corrected snapshot before normalization. The Python backend reads
-# only the native keys (preprocessing, registration, the spot_finding fields).
-# Parameter values are the provisional defaults, not tissue tuning.
-config_path: /absolute/run/config.yaml
-starfinder_path: /absolute/starfinder
+# background-corrected snapshot before normalization. Parameter values are the
+# provisional defaults, not tissue tuning. prepare_workflow.py fills in the two roots.
 root_input_path: /absolute/input
 root_output_path: /absolute/output
-envs_path: /absolute/conda-envs
-fiji_path: /absolute/Fiji.app/ImageJ-linux64
-dataset_id: example
+dataset_id: sample-tiny-v1
 sample_id: sample
 output_id: recipe2
 # The FOVs are the rows of <root_input_path>/<dataset_id>/<sample_id>/fovs.csv
@@ -18,28 +13,20 @@ output_id: recipe2
 n_rounds: 4
 ref_round: round1
 rotate_angle: 0
-img_col: 32
-img_row: 32
-backend: python
-workflow_mode: direct
-additional_round: []
-seq_channel_order: [ch00, ch02, ch01, ch03]
-rules:
-  rsf_single_fov:
-    run: true
-    parameters:
-      preprocessing:
-        steps:
-          - method: scalar_background
-            percentile: 10.0
-            save_as: bg_corrected
-          - method: percentile_normalization
-            p_low: 1.0
-            p_high: 99.9
-        extraction_source: bg_corrected
-      registration:
-        steps:
-          - {method: translation}
-      spot_finding: {run: true, threshold_mode: noise, threshold_value: 5.0}
-      reads_extraction: {run: true, voxel_size: [1, 2, 2]}
-      reads_filtration: {run: true, end_base: CC, start_base: C}
+seq_channel_order: [ch00, ch01, ch02, ch03]
+processing:
+  preprocessing:
+    steps:
+      - method: scalar_background
+        percentile: 10.0
+        save_as: bg_corrected
+      - method: percentile_normalization
+        p_low: 1.0
+        p_high: 99.9
+    extraction_source: bg_corrected
+  registration:
+    steps:
+      - {method: translation}
+  spot_finding: {threshold_mode: noise, threshold_value: 5.0}
+  reads_extraction: {voxel_size: [1, 2, 2]}
+  reads_filtration: {end_base: CC, start_base: C}

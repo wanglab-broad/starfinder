@@ -1,32 +1,28 @@
-# Minimal Python direct-mode example. Replace /absolute paths for real data,
-# or use prepare_workflow.py to materialize a dry-run-only input tree.
-config_path: /absolute/run/config.yaml
-starfinder_path: /absolute/starfinder
+# The minimal workflow configuration: the processing block alone, one fov task per FOV.
+# Its dataset keys match the synthetic fixture of src/python/scripts/workflow_golden.py
+# (preset sample-tiny-v1); prepare_workflow.py fills in the two roots. For your data, set
+# the roots, the identifiers, the rounds and the channels.
 root_input_path: /absolute/input
 root_output_path: /absolute/output
-dataset_id: example
+dataset_id: sample-tiny-v1
 sample_id: sample
-output_id: direct
+output_id: minimal
 # The FOVs are the rows of <root_input_path>/<dataset_id>/<sample_id>/fovs.csv
 # (sample,fov_id); the optional selected_fovs list restricts a run.
 n_rounds: 4
 ref_round: round1
 rotate_angle: 0
-# img_row and img_col are read only by the subtile windows and the legacy tile configuration writer
-# (stitching method bigstitcher without an assembly block); this direct-mode run needs neither.
-img_col: 32
-img_row: 32
-backend: python
-workflow_mode: direct
-additional_round: []
-seq_channel_order: [ch00, ch02, ch01, ch03]
-rules:
-  rsf_single_fov:
-    run: true
-    parameters:
-      registration:
-        steps:
-          - {method: translation}
-      spot_finding: {run: true, threshold_mode: noise, threshold_value: 5.0}
-      reads_extraction: {run: true, voxel_size: [1, 2, 2]}
-      reads_filtration: {run: true, end_base: CC, start_base: C}
+seq_channel_order: [ch00, ch01, ch02, ch03]
+processing:
+  registration:
+    steps:
+      - {method: translation}
+  spot_finding: {method: local_maxima, exclude_border: false}
+  reads_extraction: {voxel_size: [1, 2, 2]}
+  reads_filtration: {end_base: CC, start_base: C}
+  decoding: {method: wta, negative_policy: clip_negative}
+execution:
+  # One thread per fov task (the default is 4): Nextflow's local executor refuses a
+  # task that requests more CPUs than the machine has.
+  tasks:
+    fov: {threads: 1}

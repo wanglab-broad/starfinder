@@ -93,7 +93,7 @@ In a Python workflow, `assembly.assignment` names the saved per-FOV assignment;
 assignment and ownership figures on the saved-assignment route. The configuration
 fields also live in `assembly`.
 The `export` block controls which parts of `Dataset.export` run. See the
-{doc}`workflow configuration <workflow-configuration>` and the reference's
+{doc}`workflow reference <workflow/reference>` and the assembly reference's
 [workflow keys](assembly-algorithms.md#workflow-keys).
 
 ## Limits

@@ -2,7 +2,7 @@
 
 :::{container} sf-lead
 Function and class references for Python and MATLAB, grouped by topic.
-The {doc}`workflow guide <../workflows>` shows the processing workflow; the
+The {doc}`workflow guide <../workflow/index>` shows the processing workflow; the
 {doc}`array reference <contracts>` lists shared conventions.
 :::
 

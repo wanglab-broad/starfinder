@@ -188,7 +188,7 @@ With `backend: python`, the top-level `segmentation` block holds a plan; no rule
 | `runs[].method` | A method of the table above, or `import` |
 | The config's fields | The fields of that method's config, or of `LabelImportConfig` |
 
-{doc}`workflow-configuration` describes the block.
+The {doc}`workflow reference <workflow/reference>` describes the block.
 
 ### Legacy StarDist keys
 

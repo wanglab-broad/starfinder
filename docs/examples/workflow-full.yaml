@@ -1,134 +1,94 @@
-# Full configuration reference: one small FOV, all core mode sections, and
-# disabled downstream sections. Values are illustrative, not tissue tuning.
-# This is a Python template; see backend differences before using MATLAB.
-config_path: /absolute/run/config.yaml
-starfinder_path: /absolute/starfinder
+# Every block of the Python configuration shape and the execution section: the
+# workflow contract's worked example "per-fov", on the synthetic fixture that
+# src/python/scripts/workflow_golden.py writes (preset sample-tiny-v1). A present
+# block enables its step; leave a block out to skip it. Values illustrate the keys,
+# not tissue tuning. prepare_workflow.py fills in the two roots; the relative paths
+# below are relative to the input folder <root_input_path>/<dataset_id>/<sample_id>/.
+backend: python                   # the default
 root_input_path: /absolute/input
 root_output_path: /absolute/output
-envs_path: /absolute/conda-envs
-fiji_path: /absolute/Fiji.app/ImageJ-linux64
-dataset_id: example
+dataset_id: sample-tiny-v1
 sample_id: sample
 output_id: full
-# The FOVs are the rows of <root_input_path>/<dataset_id>/<sample_id>/fovs.csv
-# (sample,fov_id); the optional selected_fovs list restricts a run.
+# The FOVs are the rows of the input folder's fovs.csv (sample,fov_id);
+# selected_fovs restricts a run to some of them.
+selected_fovs: null
 n_rounds: 4
 ref_round: round1
 ref_channel: DAPI
-# The reference round's stain files besides the sequencing colours (nuclei_registration, rotate_nuclei).
+seq_channel_order: [ch00, ch01, ch02, ch03]
+# The reference round's nuclear stain, read by the morphology task.
 reference_stains:
   - {channel: ch04, name: DAPI}
-rotate_angle: 0
-maximum_projection: false
-img_col: 32
-img_row: 32
-img_z: 8
-voxel_size_xy: 1.0
+additional_round:
+  - round_name: flamingo
+    channel_order:
+      - {channel: ch04, name: DAPI}
+      - {channel: ch05, name: Flamingo}
+rotate_angle: 0                   # 0: no rotation
+voxel_size_xy: 0.5
 voxel_size_z: 1.0
-seq_channel_order: [ch00, ch02, ch01, ch03]
-additional_round: []
-backend: python
-# MATLAB rules only: 'path' (STARFINDER_MATLAB_EXECUTABLE or matlab on PATH)
-# or 'broad' (use Matlab on the Broad cluster); true adds -singleCompThread.
-matlab_launcher: path
-matlab_single_thread: false
-workflow_mode: direct
-rules:
-  rsf_single_fov:
-    run: true
-    resources: {mem_mb: 8000, runtime: 30}
-    parameters:
-      streaming: false
-      preprocessing:
-        steps:
-          - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
-      registration:
-        signal: {mode: max}
-        steps:
-          - {method: translation}
-      reference_image_view: {mode: max}
-      spot_finding: {run: true, ref_round: round1, threshold_mode: noise, threshold_value: 5.0}
-      load_codebook: {run: true, split_index: []}
-      reads_extraction: {run: true, voxel_size: [1, 2, 2]}
-      reads_filtration: {run: true, end_base: CC, start_base: C, n_barcode_segments: 1, split_index: []}
-  gr_single_fov_subtile:
-    run: false
-    resources: {mem_mb: 8000, runtime: 30}
-    parameters:
-      streaming: false
-      preprocessing:
-        steps:
-          - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
-      registration:
-        steps:
-          - {method: translation}
-      create_subtiles: {run: true, sqrt_pieces: 2}
-  lrsf_single_fov_subtile:
-    run: false
-    resources: {mem_mb: 8000, runtime: 30}
-    parameters:
-      spot_finding: {run: true, ref_round: round1, threshold_mode: noise, threshold_value: 5.0}
-      load_codebook: {run: true, split_index: []}
-      reads_extraction: {run: true, voxel_size: [1, 2, 2]}
-      reads_filtration: {run: true, end_base: CC, start_base: C, n_barcode_segments: 1, split_index: []}
-  deep_create_subtile:
-    run: false
-    resources: {mem_mb: 8000, runtime: 30}
-    parameters:
-      streaming: false
-      registration:
-        steps:
-          - {method: translation}
-      create_subtiles: {run: true, sqrt_pieces: 2}
-  deep_rsf_subtile:
-    run: false
-    resources: {mem_mb: 8000, runtime: 30}
-    parameters:
-      spot_finding: {run: true, ref_round: round1, threshold_mode: noise, threshold_value: 5.0}
-      load_codebook: {run: true, split_index: []}
-      reads_extraction: {run: true, voxel_size: [1, 2, 2]}
-      reads_filtration: {run: true, end_base: CC, start_base: C, n_barcode_segments: 1, split_index: []}
-  stitch_subtile:
-    run: false
-    resources: {mem_mb: 8000, runtime: 5}
-  nuclei_registration:
-    run: false
-    resources: {mem_mb: 8000}
-  rotate_nuclei:
-    run: false
-    resources: {mem_mb: 8000}
-  create_nuclei_amplicon_overlay:
-    run: false
-    parameters: {maximum_projection: false}
-  enhance_dapi_with_flamingo:
-    run: false
-  stardist_segmentation:
-    run: false
-    resources: {mem_mb: 8000, runtime: 30}
-    parameters:
-      stardist_base_path: /absolute/stardist-models
-      stardist_model_name: replace-with-your-trained-model
-      segmentation_input_folder: overlay
-      prob_thresh: 0.8
-      nms_thresh: 0.1
-      rescale: false
-      expand_labels: false
-      distance: 0
-  # The legacy sample rules below run with backend matlab only; the Python backend uses the
-  # stitching and assembly blocks.
-  stitching_preparation:
-    run: false
-  create_BigStitcher_macro:
-    run: false
-  run_BigStitcher_macro:
-    run: false
-    resources: {mem_mb: 8000, runtime: 30}
-  create_tile_config:
-    run: false
-  reads_assignment:
-    run: false
-    parameters: {expand_labels: false, dilation_distance: 0}
-  create_sample_h5ad:
-    run: false
-  create_sample_reads_assignment:
-    run: false
+processing:
+  mode: direct                    # or tiled
+  load_codebook: {}
+  preprocessing:
+    steps:
+      - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
+      # fit: supplied fits the step on the whole sample: summarize and merge tasks run first.
+      - {method: percentile_normalization, p_low: 1.0, p_high: 99.9, fit: supplied}
+      - {method: white_tophat, radius_yx: 3}
+  registration:
+    steps:
+      - {method: translation}
+    signal: {mode: max}
+  spot_finding: {method: local_maxima, exclude_border: false}
+  reads_extraction: {voxel_size: [1, 2, 2]}
+  reads_filtration: {end_base: CC, start_base: C}
+  decoding: {method: wta, negative_policy: clip_negative}
+  deduplication: {}
+  checkpoints: [candidates, pre_qc]
+morphology: {}
+segmentation:
+  device: cpu
+  runs:
+    # One label file per FOV; a method (stardist, cellpose, seeded_watershed) with its
+    # fields segments instead.
+    - name: nucleus
+      target: nucleus
+      method: import
+      path: labels/{fov_id}.tif
+    - name: cell
+      target: cell
+      method: import
+      path: labels/{fov_id}.tif
+assignment:
+  cells: cell
+  nuclei: nucleus
+  name: default
+  previews: true
+stitching:
+  # multiview_stitcher runs in the stitch task; bigstitcher (the default) adds a Fiji
+  # task, which only Snakemake runs, unless stitching.dataset_xml supplies its result.
+  method: multiview_stitcher
+  config: {binning_zyx: [1, 2, 2], quality_threshold: -1.0}
+  positions:
+    source: table
+    table: positions.csv
+assembly:
+  assignment: default
+export:
+  route: per_fov
+  images: [reference_merged, reference_stain]
+  previews: true
+report: {}
+execution:
+  defaults: {threads: 1, memory_mb: 8000, runtime_min: 30, gpu: false}
+  # One thread per fov task (the default is 4): Nextflow's local executor refuses a
+  # task that requests more CPUs than the machine has.
+  tasks:
+    fov: {threads: 1}
+  container: null                 # the image by digest
+  fiji: null                      # the BigStitcher engine task's Fiji
+  resume_from_checkpoint: false
+  code_version: keep              # or rerun: a new package version reruns the tasks
+  log_level: INFO

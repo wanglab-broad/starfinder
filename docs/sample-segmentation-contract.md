@@ -6,8 +6,8 @@ It sits between {doc}`image fusion <sample-output-contract>` and the sample tabl
 written by {doc}`assembly <assembly-contract>`.
 
 `Dataset.export` also supports segmentation per FOV followed by assembly. Choose the
-route with `ExportConfig.route`; the {doc}`workflow guide <workflow-downstream>` shows
-how to make that choice in a file-based run.
+route with `ExportConfig.route`; the {doc}`workflow reference <workflow/reference>` lists
+the `export` keys that make that choice in a file-based run.
 
 ## Quick start
 

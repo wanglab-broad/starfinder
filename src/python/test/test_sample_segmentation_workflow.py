@@ -80,7 +80,7 @@ def synchronous():
 def base_config(**blocks):
     """The repository's full example configuration on the Python backend with a stitching block and the given
     blocks."""
-    config = yaml.safe_load((ROOT / "docs/examples/workflow-full.yaml").read_text())
+    config = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-full.yaml").read_text())
     return {**config, "backend": "python", "stitching": copy.deepcopy(MULTIVIEW), **copy.deepcopy(blocks)}
 
 

@@ -24,7 +24,7 @@ pytestmark = [pytest.mark.preprocessing, pytest.mark.contract]
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
-EXAMPLE = yaml.safe_load((ROOT / "docs/examples/workflow-recipe-2.yaml").read_text())
+EXAMPLE = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-recipe-2.yaml").read_text())
 PYTHON_RULES = ("rsf_single_fov", "gr_single_fov_subtile", "lrsf_single_fov_subtile", "deep_create_subtile",
                 "deep_rsf_subtile")
 LEGACY = {"enhance_contrast": {"run": False}, "hist_equalize": {"run": False}, "morph_recon": {"run": False},

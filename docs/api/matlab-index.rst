@@ -3,7 +3,7 @@ MATLAB functions and classes A–Z
 
 Project-owned top-level interfaces; class methods appear alphabetically on the
 class page. Third-party add-ons and local nested functions are excluded.
-The :doc:`workflow guide <../workflows>` shows the MATLAB backend; the
+The :doc:`MATLAB workflow guide <../workflow/matlab-legacy>` shows the MATLAB backend; the
 :doc:`array reference <contracts>` lists its boundary conventions.
 
 * :mat:func:`AdjustSizeAcrossRound`

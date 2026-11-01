@@ -153,7 +153,7 @@ def declared_outputs(rule, names, fovs, subtiles):
 def test_the_final_targets_branch_on_the_backend(tmp_path, monkeypatch, backend, rule):
     """The MATLAB rule set's final targets: each an output of the rule in the MATLAB rule files; the rules keep their
     logs (deep_create_subtile requests none) and write no run.json."""
-    config = yaml.safe_load((ROOT / "docs/examples/workflow-minimal.yaml").read_text())
+    config = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-minimal.yaml").read_text())
     config["root_output_path"] = str(tmp_path)
     output_root = tmp_path / config["dataset_id"] / config["output_id"]
     config.update(backend=backend, workflow_mode="free", rules={rule: {"run": True}})

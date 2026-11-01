@@ -33,7 +33,7 @@ reads → filter reads. Segmentation and assignment are separate calls after
 Per sample: stitch FOVs into a placement → assemble tables → export images, labels
 and SpatialData → write the processing report. Sample segmentation offers a route
 that segments the fused image. See the {doc}`pipeline-stage index <wiki/pipeline-stages>`
-for the guide and reference of a stage, and {doc}`workflows` for Snakemake.
+for the guide and reference of a stage, and the {doc}`workflow guide <workflow/index>` for Snakemake and Nextflow.
 
 ## Shared representations
 

@@ -100,7 +100,7 @@ For other rounds, external references and morphology preparation, see
 {py:meth}`~starfinder.dataset.FOV.register`,
 {py:class}`~starfinder.registration.ExternalReference` and
 {py:meth}`~starfinder.dataset.FOV.prepare_morphology`.
-The {doc}`workflow reference <workflow-configuration>` lists workflow keys.
+The {doc}`workflow reference <workflow/reference>` lists workflow keys.
 
 ## Limits
 

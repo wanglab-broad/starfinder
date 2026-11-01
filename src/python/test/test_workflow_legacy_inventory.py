@@ -26,7 +26,7 @@ pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = yaml.safe_load((ROOT / "workflow" / "schemas" / "config.schema.yaml").read_text())
-MINIMAL = yaml.safe_load((ROOT / "docs" / "examples" / "workflow-minimal.yaml").read_text())
+MINIMAL = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-minimal.yaml").read_text())
 
 # The inventory's rows, by where the key sits: (example value, a fragment of the native form the error names).
 INVENTORY = {
