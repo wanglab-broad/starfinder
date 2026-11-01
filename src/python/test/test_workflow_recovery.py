@@ -556,3 +556,121 @@ def test_x11_stale_results_rerun_only_readers_and_downstream(tmp_path, engine, c
         run.invoke(affected)
         failures.extend(E.fresh_comparison(run, E.snapshot(run), name=f"x11-{iteration}-fresh.json", rerun_tasks=affected))
     assert not failures, sorted(set(failures))
+
+
+# W-758: keep one complete run per engine and restore copies of its output tree
+# between cases; only export/report/compare need real jobs after that setup.
+@pytest.fixture(scope="module", params=ENGINES)
+def export_engine_base(tmp_path_factory, request):
+    run = E.EngineRun(tmp_path_factory.mktemp("export-record") / "work", request.param)
+    run.invoke({t["id"] for t in run.data["tasks"]})
+    saved = run.out.with_name(run.out.name + "-baseline")
+    shutil.copytree(run.out, saved, symlinks=True)
+    return run, saved
+
+
+@pytest.fixture
+def export_engine(export_engine_base):
+    import copy
+    run, saved = export_engine_base
+    shutil.rmtree(run.out)
+    shutil.copytree(saved, run.out, symlinks=True)
+    run.replan(copy.deepcopy(run.config))
+    yield run
+
+
+EXPORT_DOWNSTREAM = {"export/sample", "report/sample", "compare"}
+
+
+def _export_files(run):
+    return {p for p in E.tree_names(run.out) if p.startswith("export/") and not E.is_marker(run, p, run.engine)}
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_export_record_part_off_matches_a_fresh_export(export_engine):
+    import copy
+    run = export_engine
+    config = copy.deepcopy(run.config)
+    config["export"]["fuse"] = False
+    run.replan(config)
+    run.invoke(EXPORT_DOWNSTREAM)
+    rerun = _export_files(run)
+    # Fresh export on the same completed upstream results, with no saved export
+    # record in either location; do not repeat the complete FOV pipeline.
+    shutil.rmtree(run.out / "export")
+    (run.out / "workflow/exports/sample.json").unlink(missing_ok=True)
+    for task_id in EXPORT_DOWNSTREAM:
+        _layout.task_record(run.out, task_id).unlink()
+    run.invoke(EXPORT_DOWNSTREAM)
+    fresh = _export_files(run)
+    E.evidence(run.work, "w758-part-off.json", {"engine": run.engine, "rerun": sorted(rerun),
+               "fresh": sorted(fresh), "differences": sorted(rerun ^ fresh)})
+    assert rerun == fresh
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_export_record_failed_attempt_is_kept_for_retry(export_engine, tmp_path):
+    import copy
+    import os
+    import subprocess
+    import sys
+    from starfinder.export._record import PARTS, listed_files
+    run = export_engine
+    config = copy.deepcopy(run.config)
+    config["export"].update(images=[f"attempt=file:{run.out}/fovs/{{fov_id}}/reference.tif"], previews=False)
+    run.replan(config)
+    hook = tmp_path / "fail-hook"
+    hook.mkdir()
+    (hook / "sitecustomize.py").write_text(
+        "import sys\n"
+        "if '--task' in sys.argv and sys.argv[sys.argv.index('--task') + 1] == 'export/sample':\n"
+        " import starfinder.dataset._export as export\n"
+        " original = export.fuse_images\n"
+        " def fail(*args, **kwargs):\n"
+        "  original(*args, **kwargs)\n"
+        "  raise RuntimeError('W-758 injected failure after fusion')\n"
+        " export.fuse_images = fail\n")
+    task = next(t for t in run.data["tasks"] if t["id"] == "export/sample")
+    command = [sys.executable, "-m", "starfinder", *task["command"][1:], "--engine", run.engine]
+    environment = dict(os.environ, PYTHONPATH=str(hook) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    failed = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=180)
+    folder = run.out / "export/sample"
+    log = _layout.task_log(run.out, "export/sample").read_text()
+    E.evidence(run.work, "w758-failed-attempt.json", {"command": command, "returncode": failed.returncode,
+               "stdout": failed.stdout, "stderr": failed.stderr, "task_log": log})
+    assert failed.returncode == 1 and "W-758 injected failure after fusion" in log
+    assert not (folder / "export.json").exists()
+    assert list(folder.glob("attempt*.tif")), "failure must leave a newly named, previously listed fused image"
+    foreign = folder / "foreign.txt"
+    foreign.write_bytes(b"not owned by Dataset.export")
+    config["export"]["fuse"] = False
+    run.replan(config)
+    run.invoke(EXPORT_DOWNSTREAM)
+    record = json.loads((folder / "export.json").read_text())
+    listed = {"export.json", *(name for part in PARTS for name in listed_files(record, part))}
+    unlisted = {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()} - listed
+    E.evidence(run.work, "w758-retry.json", {"engine": run.engine, "listed": sorted(listed),
+               "unlisted": sorted(unlisted), "foreign": foreign.read_text()})
+    assert unlisted == {"foreign.txt"}
+    assert foreign.read_bytes() == b"not owned by Dataset.export"
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_export_record_saved_assembly_is_reused(export_engine):
+    import copy
+    run = export_engine
+    folder = run.out / "export/sample"
+    before = {p.relative_to(folder).as_posix(): p.read_bytes() for p in (folder / "tables").glob("*")}
+    assert before and (folder / "sample.h5ad").is_file()
+    before["sample.h5ad"] = (folder / "sample.h5ad").read_bytes()
+    config = copy.deepcopy(run.config)
+    config["export"].update(assemble=False, fuse=False, fuse_labels=True, previews=False)
+    run.replan(config)
+    run.invoke(EXPORT_DOWNSTREAM)
+    record = json.loads((folder / "export.json").read_text())
+    E.evidence(run.work, "w758-reused-assembly.json", record)
+    assert record["parts"]["assemble"] == "reused" and record["parts"]["fuse_labels"] == "written"
+    assert {name: (folder / name).read_bytes() for name in before} == before

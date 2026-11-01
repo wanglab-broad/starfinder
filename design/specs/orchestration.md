@@ -935,6 +935,13 @@ records the report reads (today the report rule declares only `export.json`, `pl
 placement's `fovs.csv` and `links.csv`, the assignment folder's tables, the macro's tiles and the
 comparison page.
 
+The `export` command keeps an atomic copy of `export.json` at `workflow/exports/<sample>.json`
+after each attempt, including failures, and restores it before `Dataset.export` when `export.json`
+is absent and a listed output still exists, so the API can remove earlier listed files and reuse
+saved assembly after an engine removes the declared record.
+
+% Amended 2026-11-01 after W-758: the export command's record copy survives engine output removal.
+
 % Amended 2026-11-01 after W-652's first run: the report command's removal (the operator's decision, W-652 and W-152).
 % Amended 2026-11-01 after W-652's second run: the export command's removal of its previews (the operator's decision, W-652
 % and W-152).

@@ -628,8 +628,12 @@ def export(run):
     each assembled FOV's assignment figures with its ownership, into previews/<fov>/ (P5), over the FOV's reference
     image when it is a declared input; the folder exists, empty, when the assemble part was neither written nor
     reused. Before Dataset.export, the command removes its earlier previews/ whatever export.previews says;
-    no export record lists that folder.
+    no export record lists that folder. A copy of export.json under workflow/ survives engine removal of the
+    declared record, so Dataset.export can remove earlier listed files and reuse saved assembly on a rerun.
     """
+    import shutil
+    from starfinder.export._record import PARTS, listed_files
+
     config, assembly = _translate.export(run.configuration.plain())
     dataset = run.dataset()
     export_api = run.api["export"]
@@ -645,10 +649,26 @@ def export(run):
     sample = run.identity["sample"]
     previews = _layout.export_previews_dir(run.out, sample)
     if previews.exists():
-        import shutil
         shutil.rmtree(previews)
-    record = dataset.export(sample, placement=_layout.stitching_dir(run.out, sample), assignment=assembly.assignment,
-                            config=config, output_dir=_layout.export_dir(run.out, sample))
+    folder = _layout.export_dir(run.out, sample)
+    record_path = folder / _layout.EXPORT_FILE
+    saved = _layout.workflow_export_record(run.out, sample)
+    if not record_path.exists() and saved.is_file():
+        previous = json.loads(saved.read_text())
+        # A removed folder (even recreated empty or with foreign files) has no saved assembly to reuse:
+        # do not resurrect its record and turn the API's "no saved assembly" refusal into a missing-table error.
+        if any((folder / name).exists() for part in PARTS for name in listed_files(previous, part)):
+            with atomic_file(record_path) as tmp:
+                shutil.copyfile(saved, tmp)
+    try:
+        record = dataset.export(sample, placement=_layout.stitching_dir(run.out, sample),
+                                assignment=assembly.assignment, config=config, output_dir=folder)
+    finally:
+        # _task removes declared outputs only after the command raises; keep a failed attempt's record too.
+        # SIGKILL runs no finally: files listed only by the killed attempt can outlive this earlier copy.
+        if record_path.is_file():
+            with atomic_file(saved) as tmp:
+                shutil.copyfile(record_path, tmp)
     if f"{Path(os.path.relpath(previews, run.out)).as_posix()}/" not in run.task["outputs"]:
         return
     from starfinder.workflow._previews import ownership_figures

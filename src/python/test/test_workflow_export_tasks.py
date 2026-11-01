@@ -12,6 +12,7 @@ into the plan's output root as the earlier tasks would have written it, their re
 import copy
 import importlib.util
 import json
+import shutil
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -201,6 +202,57 @@ def scene_export(work, export, *, export_previews=True):
     folder = write_scene(work / "output" / "data", SCENES["fused_pair"]())
     per_fov_routes(folder)
     return folder, plan_scene(work, folder, export, export_previews=export_previews)
+
+
+@needs_anndata
+@pytest.mark.parametrize("recreate", [None, "empty", "foreign"])
+def test_a_removed_export_folder_does_not_restore_a_saved_assembly(tmp_path, recreate):
+    """An undeclared copy cannot resurrect tables removed by hand, even if an engine recreates the parent."""
+    from starfinder import _layout
+    folder, manifest = scene_export(tmp_path, {"route": "per_fov", "fuse": False}, export_previews=False)
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    copy = _layout.workflow_export_record(folder.root, SCENE_SAMPLE)
+    assert copy.read_bytes() == (folder.export_dir / "export.json").read_bytes()
+    shutil.rmtree(folder.export_dir)
+    if recreate:
+        folder.export_dir.mkdir()
+    if recreate == "foreign":
+        (folder.export_dir / "foreign.txt").write_bytes(b"keep this file")
+    manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "assemble": False, "fuse": False,
+                                           "fuse_labels": True}, export_previews=False)
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 1
+    log = _layout.task_log(folder.root, f"export/{SCENE_SAMPLE}").read_text()
+    assert "holds no saved assembly; run with assemble on first" in log
+    assert "FileNotFoundError" not in log
+    assert not (folder.export_dir / "export.json").exists()
+    if recreate == "foreign":
+        assert (folder.export_dir / "foreign.txt").read_bytes() == b"keep this file"
+
+
+@needs_anndata
+def test_a_present_export_record_takes_precedence_over_its_workflow_copy(tmp_path):
+    """A stale copy must not resurrect an already removed assembly or remove a foreign file."""
+    from starfinder import _layout
+    folder, manifest = scene_export(tmp_path, {"route": "per_fov", "fuse": False}, export_previews=False)
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    copy = _layout.workflow_export_record(folder.root, SCENE_SAMPLE)
+    old_record = copy.read_bytes()
+    foreign = folder.export_dir / "foreign.txt"
+    foreign.write_bytes(b"keep this file")
+    manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "assemble": False, "fuse": False},
+                          export_previews=False)
+    # Replace the authoritative record with one which lists no assembly. The
+    # workflow copy still lists the old tables, which are now foreign to the API.
+    (folder.export_dir / "export.json").write_text('{"sample": "' + SCENE_SAMPLE + '"}\n')
+    assert old_record != (folder.export_dir / "export.json").read_bytes()
+    before = {p.name: p.read_bytes() for p in (folder.export_dir / "tables").glob("*")}
+    assert before
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    record = json.loads((folder.export_dir / "export.json").read_text())
+    assert record["parts"]["assemble"] == "off"
+    assert {p.name: p.read_bytes() for p in (folder.export_dir / "tables").glob("*")} == before
+    assert foreign.read_bytes() == b"keep this file"
+    assert copy.read_bytes() == (folder.export_dir / "export.json").read_bytes()
 
 
 def plan_scene(work, folder, export, *, export_previews=True):

@@ -223,6 +223,11 @@ def workflow_dir(output_root) -> Path:
     return Path(output_root) / WORKFLOW
 
 
+def workflow_export_record(output_root, sample) -> Path:
+    """``workflow/exports/<sample>.json``, the export record kept across engine output removal."""
+    return workflow_dir(output_root) / "exports" / f"{sample}.json"
+
+
 def resolved_file(output_root) -> Path:
     """``workflow/resolved.json``, the resolved configuration the plan writes."""
     return workflow_dir(output_root) / RESOLVED_FILE
