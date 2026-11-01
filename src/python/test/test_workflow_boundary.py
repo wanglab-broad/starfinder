@@ -10,10 +10,12 @@ exists.
 """
 import ast
 import io
+import re
 import tokenize
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -210,3 +212,9 @@ def test_nextflow_calls_the_package_only_through_commands():
     assert helper.is_file()
     assert "t.command.collect" in helper.read_text()
     assert "import starfinder" not in helper.read_text()
+
+
+def test_no_workflow_or_job_env_uses_the_runner_context():
+    doc = yaml.safe_load((ROOT / ".github" / "workflows" / "tests.yml").read_text())
+    scopes = [doc.get("env", {}), *(job.get("env", {}) for job in doc["jobs"].values())]
+    assert not [v for scope in scopes for v in scope.values() if re.search(r"\$\{\{[^}]*\brunner\.", str(v))]

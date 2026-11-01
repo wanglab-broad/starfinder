@@ -65,6 +65,9 @@ Markers are registered in `src/python/pyproject.toml`.
   `contract`. Unmarked kinds are ordinary unit tests.
 * Use `learned` for tests loading detector models or needing
   `STARFINDER_WEIGHTS_DIR`.
+* Use `nextflow` for tests that run the Nextflow workflow. They skip without
+  Nextflow on `PATH`, and also carry `slow`, so that each stays in the slow or
+  extended selection.
 * Mark a test `slow` when it takes at least 5 seconds on one CPU and one
   numerical thread in the locked environment, excluding one-time imports.
   Include cached setup cost paid by the first selected user. Measure with
@@ -120,6 +123,7 @@ Run from `src/python` with the `dev` dependency group installed. A command-line
 | Slow | `slow and not (learned or extended) and <subsystem>` | affected subsystems; all at batch end |
 | Learned | `learned` | changed dependencies; batch end if changed |
 | Extended | `extended and not learned` | batch end and before merge |
+| Nextflow | `nextflow` | `nextflow/` or the workflow package changed; batch end and before merge |
 | Documentation | reference audit and strict Sphinx build | audit every change; build for docs/public interfaces, batch end and before merge |
 
 Shared paths are `image`, `io`, `dataset`, `conftest.py`, `pyproject.toml` and
@@ -128,6 +132,10 @@ registration; spot_finding; and other excluding those four.
 `scripts/selection_coverage.py` checks that R, slow, learned and extended
 cover collected tests once. `scripts/marker_drift.py` reads a durations log to
 review cost markers. Review new and changed test markers before merging.
+
+`-m nextflow` needs Nextflow 26.10.4 or newer and Java 17 or newer on `PATH`. CI
+runs it in its own job with the minimal extras, where the tests of the real
+per-FOV route skip for want of `anndata` and `multiview-stitcher`.
 
 The selections are independent: they may run at the same time when each has its
 own core and temporary directory.
