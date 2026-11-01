@@ -1,38 +1,44 @@
 #!/usr/bin/env bash
 # properties = {properties}
-# This script gets executed on a compute node on the cluster
-
-source /broad/software/scripts/useuse
-use UGER
-use Anaconda3
-
-# Activate conda environment first, then load MATLAB
-# This ensures MATLAB path is added last and takes precedence
-source activate /stanley/WangLab/envs/starfinder-v9
-
-use Matlab
-
-echo -e "JOB ID\t$JOB_ID"
-echo "=============================="
-
-{exec_job}
-EXIT_STATUS=$?
-
-# Report resource consumption because it's not reported by default
-echo "------------------------------"
-qstat -j $JOB_ID | grep '^usage'
-
-# if the job succeeds, snakemake
-# touches jobfinished, thus if it exists cat succeeds. if cat fails, the error
-# code indicates job failure
-# an error code of 100 is needed since UGER only prevents execution of
-# dependent jobs if the preceding
-# job exits with error code 100
-
-cat $1 &>/dev/null
-if [[ $? -eq 0 ]]; then
-    exit 0
-else
-    exit $EXIT_STATUS
+# Snakemake formats only properties and exec_job; shell braces are doubled.
+set -e
+if [[ -r /broad/software/scripts/useuse ]]; then
+    source /broad/software/scripts/useuse
+    use UGER
 fi
 
+: "${{STARFINDER_IMAGE:?set by broad-submit.py}}"
+: "${{STARFINDER_SIF:?set by broad-submit.py}}"
+: "${{STARFINDER_THREADS:?set by broad-submit.py}}"
+export APPTAINER_CACHEDIR=${{APPTAINER_CACHEDIR:-/stanley/WangLab/.apptainer}}
+export APPTAINER_TMPDIR=${{TMPDIR:-/local/scratch/${{JOB_ID:?UGER job ID is required}}}}
+mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
+
+nv=()
+device=""
+if [[ ${{STARFINDER_GPU:-0}} == 1 ]]; then
+    # UGER's gpu is a host boolean: it assigns no device (W-641).
+    device=$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits |
+        awk -F, '$2 + 0 == 0 {{gsub(/ /, "", $1); print $1; exit}}')
+    if [[ -z "$device" ]]; then
+        echo "No GPU with zero used memory is available on this UGER node" >&2
+        exit 1
+    fi
+    nv=(--nv)
+fi
+
+environment=(--env "STARFINDER_IMAGE=$STARFINDER_IMAGE" --env "JOB_ID=${{JOB_ID:-}}"
+    --env "CUDA_VISIBLE_DEVICES=$device" --env "TMPDIR=$APPTAINER_TMPDIR")
+for variable in OMP_NUM_THREADS OPENBLAS_NUM_THREADS MKL_NUM_THREADS ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS NUMEXPR_NUM_THREADS; do
+    environment+=(--env "$variable=$STARFINDER_THREADS")
+done
+if [[ -n ${{STARFINDER_WEIGHTS_DIR:-}} ]]; then
+    environment+=(--env "STARFINDER_WEIGHTS_DIR=$STARFINDER_WEIGHTS_DIR")
+fi
+
+# A quoted heredoc preserves the generated command's quotes and shell variables.
+# The head runs in this same image: its absolute Python path is /opt/starfinder/bin/python.
+exec apptainer exec --cleanenv --bind /stanley,/local/scratch "${{nv[@]}}" "${{environment[@]}}" \
+    "$STARFINDER_SIF" bash <<'STARFINDER_EXEC_JOB'
+{exec_job}
+STARFINDER_EXEC_JOB

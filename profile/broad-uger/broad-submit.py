@@ -1,109 +1,82 @@
 #!/usr/bin/env python3
-"""
-Script to submit a snakemake task to the Broad UGER cluster
-"""
+"""Submit a Python workflow job to Broad UGER; never deploy software on a node."""
 
+import datetime
+import json
 import os
-import re
-import sys
-import getpass
+from pathlib import Path
+import shlex
 import subprocess
-from datetime import datetime
+import sys
 
 from snakemake.utils import read_job_properties
 
-__author__ = "Lucas van Dijk <lvandijk@broadinstitute.org>"
 
-# Whether we're on UGER or UGES
-CLUSTER_TYPE = "UGER"
+# W-648's CPU image; SIFs are built beside the archives by task group 4.
+CPU_IMAGE = "sha256:ed3b3b5f7dccbd040f85527d1af82103cae0b152c96faf7eb0ff738c0d2fd4d2"
+CONTAINERS = "/stanley/WangLab/jiahao/test/starfinder_benchmark/containers"
 
-dependencies = sys.argv[1:-1]
-jobscript = sys.argv[-1]
 
-# Start figuring out the requested resources for this job
-job = read_job_properties(jobscript)
-cluster_conf = job.get('cluster', {})
-job_resources = job.get('resources', {})
-# print(job_resources)
+def _context(job):
+    """Read the task's image and output root from the command's manifest."""
+    words = shlex.split(job["params"]["command"])
+    manifest_path = Path(words[words.index("--manifest") + 1])
+    task_id = words[words.index("--task") + 1]
+    manifest = json.loads(manifest_path.read_text())
+    task = next(task for task in manifest["tasks"] if task["id"] == task_id)
+    image = task["execution"]["container"] or os.environ.get("STARFINDER_IMAGE", CPU_IMAGE)
+    if not image.startswith("sha256:") or len(image) != 71 or any(c not in "0123456789abcdef" for c in image[7:]):
+        raise ValueError("the UGER image must be an OCI manifest digest (sha256:<64 hex digits>)")
+    return Path(manifest["roots"]["output"]), image
 
-matches = re.match(r'(\S+)/snakejob\.\S+\.(\d+)\.sh', jobscript)
-if not matches:
-    raise Exception("Error parsing snakemake job ID: jobscript did not match"
-                    " pattern.\n\nJobscript: {}".format(jobscript))
 
-sm_tmpdir, sm_jobid = matches.groups()
-jobname = "{rule}-{jobid}".format(rule=job['rule'], jobid=sm_jobid)
+def main():
+    """Submit the last argument's job script, with any preceding job dependencies."""
+    dependencies, jobscript = sys.argv[1:-1], sys.argv[-1]
+    job = read_job_properties(jobscript)
+    resources = job.get("resources", {})
+    cluster = job.get("cluster", {})
+    threads = job.get("threads", 1)
+    mem_mb = cluster.get("mem_mb", resources.get("mem_mb"))
+    runtime = cluster.get("runtime", resources.get("runtime"))
+    jobid = str(job["jobid"])
+    root, image = _context(job)
+    logs = root / "workflow" / "logs" / "engine"
+    logs.mkdir(parents=True, exist_ok=True)
+    # UGER adds its job ID to this directory's log names, so retries keep their logs.
+    command = ["qsub", "-terse", "-N", f"{job['rule']}-{jobid}", "-r", "y", "-cwd", "-S", "/bin/bash",
+               "-P", cluster.get("project", "broad"), "-o", str(logs), "-j", "y"]
+    if threads > 1:
+        command.extend(["-pe", "smp", str(threads), "-binding", f"linear:{threads}"])
+    if (mem_mb and mem_mb > 15 * 1024) or threads >= 4:
+        command.extend(["-R", "y"])
+    if mem_mb:
+        command.extend(["-l", f"h_vmem={round(mem_mb / threads, 2)}M"])
+    if runtime:
+        command.extend(["-l", f"h_rt={datetime.timedelta(minutes=runtime)}"])
+    gpu = bool(resources.get("gpu", 0))
+    if gpu:
+        command.extend(["-l", "gpu=TRUE,operating_system=RedHat8"])
+    if dependencies:
+        command.extend(["-hold_jid", ",".join(dependencies)])
 
-# Cluster memory configuration gets precedence over memory specification in
-# resources section of a rule.
-# Specify with --cluster-config to snakemake command
-mem_mb = cluster_conf.get('mem_mb', job_resources.get('mem_mb', None))
-threads = job.get('threads', 1)
-project = cluster_conf.get('project', 'broad')
-queue = cluster_conf.get('queue', '')
-runtime = cluster_conf.get('runtime', job_resources.get('runtime', None))
+    # qsub does not inherit arbitrary head-job variables. Export only the container context,
+    # not the head's Python paths or software environment, into the clean container.
+    environment = {
+        "STARFINDER_IMAGE": image,
+        "STARFINDER_SIF": os.environ.get("STARFINDER_SIF", f"{CONTAINERS}/starfinder-{image[7:]}.sif"),
+        "STARFINDER_THREADS": str(threads),
+        "STARFINDER_GPU": str(int(gpu)),
+    }
+    for name in ("APPTAINER_CACHEDIR", "STARFINDER_WEIGHTS_DIR"):
+        if name in os.environ:
+            environment[name] = os.environ[name]
+    if any("," in value or "\n" in value for value in environment.values()):
+        raise ValueError("UGER exported container settings cannot contain commas or newlines")
+    command.extend(["-v", ",".join(f"{key}={value}" for key, value in environment.items()), jobscript])
+    proc = subprocess.run(command, stdout=subprocess.PIPE, check=True, encoding="utf-8")
+    print(proc.stdout.strip())
 
-# -terse flag makes sure qsub only outputs job ID to stdout
-# -r signals that jobs may be restarted in cases of *cluster* crashes
-command = ['qsub', '-terse', '-N', jobname, '-r', 'y', '-cwd']
 
-# Add project or queue
-if CLUSTER_TYPE == "UGER":
-    command.extend(['-P', project])
-elif CLUSTER_TYPE == "UGES":
-    command.extend(['-q', queue])
-
-if "log" in job and len(job['log']) > 0:
-    logfile = os.path.splitext(job['log'][0])[0] + "-qsub.log"
-else:
-    # username = getpass.getuser()
-    # path = f"/home/unix/{username}/snakemake-logs/{job['rule']}/"
-
-    if 'uger_log' in job['params']:
-        path = os.path.dirname(job['params']['uger_log'])
-        os.makedirs(path, exist_ok=True)
-
-        log_fname = os.path.basename(job['params']['uger_log'])
-        log_date = datetime.now().strftime('%Y-%m-%d-%H%M%S')
-        logfile = f"{path}/{log_date}-jobid{sm_jobid}-{log_fname}"
-    else:
-        username = getpass.getuser()
-        path = f"/home/unix/{username}/snakemake-logs/{job['rule']}/"
-        os.makedirs(path, exist_ok=True)
-        log_date = datetime.now().strftime('%Y-%m-%d-%H%M%S')
-        logfile = (path + log_date + f"-jobid{sm_jobid}.txt")
-
-command.extend(['-o', logfile, '-j', 'y'])
-
-if threads > 1:
-    command.extend(['-pe', 'smp', str(threads), '-binding',
-                    'linear:{}'.format(threads)])
-
-# Allow for reservation
-if (mem_mb and mem_mb > (15*1024)) or threads >= 4:
-    command.extend(['-R', 'y'])
-
-# The memory we request will be per core, so we divide the requested memory by
-# the number of cpus
-if mem_mb:
-    mem_mb = round(mem_mb / threads, 2)
-    command.extend(['-l', 'h_vmem={}M'.format(mem_mb)])
-
-if runtime:
-    import datetime
-    runtime_uger = datetime.timedelta(minutes=runtime)
-    command.extend(['-l', 'h_rt={}'.format(str(runtime_uger))])
-
-if dependencies:
-    command.extend(['-hold_jid', ",".join(dependencies)])
-
-command.append(jobscript)
-
-# Pass the path of the 'jobfinished' file which will be created by snakemake
-# on success. The jobscript itself will use this to determine the right exit
-# code.
-command.append("{}/{}.jobfinished".format(sm_tmpdir, sm_jobid))
-
-proc = subprocess.run(command, stdout=subprocess.PIPE, check=True,
-                      encoding='utf-8')
-print(proc.stdout.strip())
+if __name__ == "__main__":
+    main()

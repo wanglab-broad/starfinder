@@ -32,10 +32,9 @@ Additional sources: [Single Cell Portal](https://singlecell.broadinstitute.org/s
 
 ## Usage
 For the Python backend, follow the [installation](docs/get-started/installation.md) and the [quickstart](docs/recipes.md#quick-start).
-For the existing Conda-based workflow demos, download the
-[latest release](https://github.com/wanglab-broad/starfinder/releases) and create the workflow environment:
+For the frozen MATLAB workflow, create its legacy environment:
 ```bash
-conda env create -f ./config/environment.yaml
+conda env create -f workflow/envs/matlab-legacy.yaml
 ```
 
 ### Demos

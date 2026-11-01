@@ -83,23 +83,14 @@ are in
 
 ## Snakemake
 
-The workflow runs under Snakemake 9, in an environment separate from the package's uv
-environment. `config/environment-v9.yaml` describes a conda environment with Snakemake 9
-(Python ≥3.11, <3.13) and the cluster-generic executor:
+The Python workflow uses Snakemake 9.15.0 and the cluster-generic executor from the
+locked `workflow` dependency group. Broad UGER jobs run in the image built from
+that lock; see {doc}`../workflow/broad-uger` for the profile and environment settings.
 
-```bash
-conda env create -f config/environment-v9.yaml
-conda activate starfinder-v9
-```
-
-When the workflow uses the Python backend, or runs the segmentation and assignment rules
-on either backend, install the package and the extras those rules need into the
-environment that runs Snakemake; StarDist runs there with the `stardist` extra
-({doc}`../workflow-downstream`). To check a configuration and the job graph without
-creating that environment, the [dry run](../workflows.md#small-reproducible-dry-run)
-adds Snakemake to a uv run with `uv run --with 'snakemake>=9,<10'`. Snakemake is not part
-of the `docs` group. The {doc}`../workflow/index` section describes the workflow and its
-configuration.
+The frozen MATLAB workflow keeps its separate conda environment in
+`workflow/envs/matlab-legacy.yaml`, with the environment name `starfinder-v9`.
+Its Broad profile is `profile/broad-uger-matlab/` and activates the shared
+`/stanley/WangLab/envs/starfinder-v9` environment.
 
 ## MATLAB
 

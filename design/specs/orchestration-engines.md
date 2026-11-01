@@ -814,30 +814,81 @@ follows. A third job installs Java 17 and Nextflow 26.10.4 for the stub-run (TG5
 
 ### The image
 
-**A Containerfile from `uv.lock`.** A sketch, to land with task group 3 (no Containerfile is added by
-this batch):
+**A Containerfile from `uv.lock`.** The sketch below matches W-648's committed
+`Containerfile`, including the two targets and the learned target's headless OpenCV reinstall:
 
 ```dockerfile
+# The workflow image from uv.lock (design/specs/orchestration-engines.md, "The image").
+#
+# Two targets from the same lock: `cpu`, the default image (the CPU extras and the `workflow` group), and
+# `learned`, which adds the learned extras on CPU for `segment` and the learned detectors (W-646: two images).
+# The build context has no .git: the version is `git describe`'s on the build host, passed in, and the
+# revision and the lock's SHA-256 are passed in for the labels; the build stops if the lock differs.
+#
+#   docker buildx build --builder <docker-container builder> --target cpu \
+#     --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<commit> \
+#     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
+#     --output type=oci,dest=starfinder-cpu-<version>.oci.tar .
+#
+# No GPU variant (torch is locked from the CPU index on Linux), and no Fiji, MATLAB, Java or Nextflow.
+
+ARG CPU_EXTRAS="--extra ome --extra local-registration --extra checkpoint --extra anndata --extra multiview-stitcher --extra spatialdata"
+ARG LEARNED_EXTRAS="--extra stardist --extra cellpose --extra spotiflow --extra piscis"
+
 FROM ghcr.io/astral-sh/uv:0.9.28@sha256:59240a65d6b57e6c507429b45f01b8f2c7c0bbeee0fb697c41a39c6a8e3a4cfb AS uv
+
 FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS build
 COPY --from=uv /uv /usr/local/bin/uv
-ENV UV_LOCKED=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/opt/starfinder
+ENV UV_LOCKED=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/opt/starfinder \
+    UV_CACHE_DIR=/root/.cache/uv
 WORKDIR /src/python
 COPY src/python/pyproject.toml src/python/uv.lock ./
-RUN uv sync --no-install-project --no-default-groups --group workflow \
-      --extra ome --extra local-registration --extra checkpoint --extra anndata \
-      --extra multiview-stitcher --extra spatialdata
+ARG UV_LOCK_SHA256
+RUN echo "${UV_LOCK_SHA256}  uv.lock" | sha256sum -c -
+
+FROM build AS build-cpu
+ARG CPU_EXTRAS
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-default-groups --group workflow $CPU_EXTRAS
 COPY src/python/ ./
-# The build context has no .git: the version is `git describe`'s on the build host (the contract's code identity).
+# hatch-vcs honours SETUPTOOLS_SCM_PRETEND_VERSION, not the _FOR_STARFINDER form (W-734).
 ARG STARFINDER_VERSION
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=$STARFINDER_VERSION
-RUN uv sync --no-default-groups --group workflow --no-editable \
-      --extra ome --extra local-registration --extra checkpoint --extra anndata \
-      --extra multiview-stitcher --extra spatialdata
-FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337
-COPY --from=build /opt/starfinder /opt/starfinder
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-default-groups --group workflow --no-editable $CPU_EXTRAS
+
+FROM build AS build-learned
+ARG CPU_EXTRAS
+ARG LEARNED_EXTRAS
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-default-groups --group workflow $CPU_EXTRAS $LEARNED_EXTRAS
+COPY src/python/ ./
+ARG STARFINDER_VERSION
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=$STARFINDER_VERSION
+# piscis locks opencv-python and cellpose opencv-python-headless, and both write cv2/: the copy that remains depends on
+# the order of installation. The GUI copy needs X11, OpenGL and GLib libraries the slim base lacks, so the headless
+# copy, the same locked wheel, is installed again last; no learned package uses OpenCV's GUI.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-default-groups --group workflow --no-editable \
+      --reinstall-package opencv-python-headless $CPU_EXTRAS $LEARNED_EXTRAS
+
+FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS runtime
 ENV PATH=/opt/starfinder/bin:$PATH OMP_NUM_THREADS=1 MPLBACKEND=Agg
-LABEL org.opencontainers.image.revision=<commit> org.starfinder.uv-lock-sha256=<sha256 of uv.lock>
+ARG STARFINDER_VERSION
+ARG STARFINDER_REVISION
+ARG UV_LOCK_SHA256
+LABEL org.opencontainers.image.title=starfinder \
+      org.opencontainers.image.version=$STARFINDER_VERSION \
+      org.opencontainers.image.revision=$STARFINDER_REVISION \
+      org.starfinder.uv-lock-sha256=$UV_LOCK_SHA256
+
+FROM runtime AS learned
+COPY --from=build-learned /opt/starfinder /opt/starfinder
+LABEL org.starfinder.variant=learned
+
+FROM runtime AS cpu
+COPY --from=build-cpu /opt/starfinder /opt/starfinder
+LABEL org.starfinder.variant=cpu
 ```
 
 The digests are the index digests of the two public images read from their registries on
@@ -852,17 +903,24 @@ type=oci,dest=<file>`), never a tag in a registry: the image's identity is the m
 that archive, which `--image` passes to every task and the task record keeps. Publishing to a
 registry needs its own authorization (D9).
 
-**Size.** Estimated from the recommended lock (compressed wheel sizes of each set for CPython 3.12
-on Linux x86_64, scaled by the ratio of installed to compressed bytes of W-642's golden scratch
-environment, 3.24; `results/image/size-estimate.json`), plus about 120 MB of base (W-641's trivial
-build):
+**Size (measured; E-4 closed by W-648).** The two images were built on 2026-10-31;
+`runs/W-648/20261031T224549Z-23bc2f92/results/manifest.json` under the external
+benchmark root records the archive checksums, image digests and measured sizes.
+GB here means decimal GB: CPU 1.66 GB uncompressed (+1.3 % over the earlier
+1.64 GB estimate), learned 4.77 GB (+8.5 % over 4.39 GB).
 
-| Content | Packages | Wheels | Installed (estimate) |
-| --- | --- | --- | --- |
-| Core and `workflow` | 104 | 0.18 GB | 0.57 GB |
-| CPU extras (`ome`, `local-registration`, `checkpoint`, `anndata`, `multiview-stitcher`, `spatialdata`) and `workflow` | 178 | 0.47 GB | 1.51 GB |
-| As above and the learned extras (`stardist`, `cellpose`, `spotiflow`, `piscis`; torch from the CPU index) | 242 | 1.32 GB | 4.27 GB |
-| As above and `registration-elastix` | 250 | 1.63 GB | 5.26 GB |
+| Image | OCI archive bytes | Uncompressed bytes | Difference from estimate | OCI manifest digest |
+| --- | --- | --- | --- | --- |
+| cpu | 517,632,512 | 1,657,120,975 | +1.3 % | `sha256:ed3b3b5f7dccbd040f85527d1af82103cae0b152c96faf7eb0ff738c0d2fd4d2` |
+| learned | 1,521,014,784 | 4,765,124,093 | +8.5 % | `sha256:6d02993abe80bec71cd47de1277ed3b5463653707ca68d2e524d46fe89012fb3` |
+
+The committed `Containerfile` and the sketch above install the locked
+`opencv-python-headless` wheel last in the learned target with
+`--reinstall-package opencv-python-headless`: Piscis brings `opencv-python` and
+Cellpose brings `opencv-python-headless`, both writing `cv2/`. The GUI copy needs
+X11, OpenGL and GLib libraries absent from the slim base; no learned package
+uses OpenCV's GUI. The reinstall makes the remaining copy deterministic without
+changing the lock or adding GUI libraries.
 
 #### Choice: the image's extras
 
@@ -883,11 +941,11 @@ are not locked. The plan defers it: the first implementation runs `segment` with
 task group 4 checks `--nv` on a GPU node; a GPU variant then needs its own lock decision (a CUDA
 index for torch with uv's conflicting extras, and TensorFlow's `and-cuda` extra).
 
-**The scratch image of this batch was not built.** The batch builds it only if `df -h /` shows at
-least 40 GB free before the build; it showed 31 GB on 2026-10-30 (`results/image/preflight.json`).
-Docker builds on GP099 (W-641), and BuildKit there is `buildx` 0.9.1 with the `docker` driver, which
-cannot export an OCI archive: the build needs a `docker-container` builder (`docker buildx create
---driver docker-container`), removed with its cache after the build (`docker buildx rm`).
+**The W-648 build.** W-645's scratch build was deferred with less than 40 GB
+free; W-648 later built both targets with a `docker-container` builder on CPU 8,
+exported OCI archives and removed its own builder and cache. Its manifest above
+replaces the estimates with measurements. SIF construction and real Apptainer
+execution on Broad remain task group 4's work.
 
 ### Apptainer on UGER
 
@@ -1169,8 +1227,11 @@ D1 to D10 to a draft are in `drafts/README.md`.
 * **E-2.** Apptainer `--nv` on the RHEL 8 GPU nodes (W-641 did not try it); task group 4 checks it
   before any GPU task runs in the image.
 * **E-3.** Whether UGER has RHEL 8 CPU nodes for the shared environment; task group 4 asks.
-* **E-4.** The scratch image of this batch was not built (less than 40 GB free); task group 3
-  builds it, records its size and digest, and replaces the estimate above.
+* **E-4 (closed, W-648).** Both images were built: CPU 1,657,120,975 bytes uncompressed
+  (1.66 GB, +1.3 %), learned 4,765,124,093 bytes (4.77 GB, +8.5 %). The measured
+  table above gives both manifest digests; the source is
+  `runs/W-648/20261031T224549Z-23bc2f92/results/manifest.json`. The learned
+  target reinstalls `opencv-python-headless` last, as the committed Containerfile does.
 * **E-5.** Whether the lab's Fiji runs headless inside the image with `/stanley` bound. If it does
   not (a system library its Java needs missing from the slim base), the image adds that library, or the
   Fiji task takes the `fiji-bigstitcher` image (the Fiji choice's B); task group 4 checks it.
