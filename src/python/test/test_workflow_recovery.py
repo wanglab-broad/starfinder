@@ -558,6 +558,106 @@ def test_x11_stale_results_rerun_only_readers_and_downstream(tmp_path, engine, c
     assert not failures, sorted(set(failures))
 
 
+# W-760: preserve both the completed output tree and Snakemake's metadata at the
+# same paths, so each damage case starts from one identical real-engine run.
+@pytest.fixture(scope="module")
+def snakemake_damage_base(tmp_path_factory):
+    run = E.EngineRun(tmp_path_factory.mktemp("snakemake-damage") / "work", "snakemake")
+    run.invoke({t["id"] for t in run.data["tasks"]})
+    uninterrupted = E.snapshot(run)
+    saved = run.work / "undamaged"
+    shutil.copytree(run.out, saved / "output", symlinks=True)
+    shutil.copytree(run.work / "snakemake", saved / "engine", symlinks=True)
+    return run, saved, uninterrupted
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.parametrize("triggers", ["default", "profile"])
+@pytest.mark.parametrize("damage", ["none", "deleted-molecules", "deleted-fov", "deleted-index",
+                                    "deleted-directory", "deleted-record", "deleted-log",
+                                    "truncated-newer", "truncated-preserved"])
+def test_x10_snakemake_missing_outputs_and_damage_limits(snakemake_damage_base, damage, triggers):
+    """Missing permanent outputs rerun their producer; logs and resized files remain verify's job."""
+    import os
+    import re
+    import time
+    from collections import Counter
+    from starfinder.__main__ import main
+    from starfinder.workflow import verify
+    run, saved, uninterrupted = snakemake_damage_base
+    for source, target in ((saved / "output", run.out), (saved / "engine", run.work / "snakemake")):
+        shutil.rmtree(target)
+        shutil.copytree(source, target, symlinks=True)
+    task = next(t for t in run.data["tasks"] if t["id"] == FOV_TASK)
+    target = FOV_TASK
+    expected = set()
+    if damage == "deleted-index":
+        (run.out / "report/index.html").unlink()
+        target = "compare"
+    elif damage == "deleted-directory":
+        target = "assign/sample/FOV_001/default"
+        directory_task = next(t for t in run.data["tasks"] if t["id"] == target)
+        directory = next(o for o in directory_task["outputs"] if o.endswith("/"))
+        shutil.rmtree(run.out / directory)
+    elif damage == "deleted-fov":
+        shutil.rmtree(run.out / "fovs/FOV_001")
+    elif damage == "deleted-record":
+        (run.out / task["record"]).unlink()
+    elif damage == "deleted-log":
+        (run.out / task["log"]).unlink()
+    elif damage != "none":
+        path = run.out / "fovs/FOV_001/molecules.csv"
+        if damage == "deleted-molecules":
+            path.unlink()
+        else:
+            stat = path.stat()
+            lines = path.read_bytes().splitlines(keepends=True)
+            assert len(lines) > 1
+            path.write_bytes(b"".join(lines[:-1]))
+            assert path.stat().st_size < stat.st_size
+            # Explicitly newer than every completed output, without a sleep or
+            # dependence on the filesystem's timestamp resolution.
+            stamp = max(time.time_ns(), max(p.stat().st_mtime_ns for p in run.out.rglob("*")
+                                            if p.is_file())) + 2_000_000_000
+            os.utime(path, ns=(stat.st_atime_ns, stamp if damage == "truncated-newer" else stat.st_mtime_ns))
+    if damage.startswith("deleted-") and damage != "deleted-log":
+        roots = {target}
+        if damage == "deleted-fov":
+            roots = {t["id"] for t in run.data["tasks"] if any(
+                o.startswith("fovs/FOV_001/") for o in t["outputs"])}
+        expected = E.downstream(run.data, roots)
+    elif damage == "truncated-newer":
+        readers = {t["id"] for t in run.data["tasks"] if "fovs/FOV_001/molecules.csv" in t["inputs"]}
+        expected = E.downstream(run.data, readers)
+        assert FOV_TASK not in expected
+    before = {t["id"]: (run.out / t["record"]).read_bytes() for t in run.data["tasks"]
+              if (run.out / t["record"]).is_file()}
+    done = E.snakemake(run.work, run.path, "--rerun-incomplete", *(E.TRIGGERS if triggers == "profile" else []))
+    tag = f"x10-snakemake-{damage}-{triggers}"
+    # Save the engine's full output even on the base revision where scheduling
+    # assertions fail; limits deliberately do not use EngineRun.invoke's check.
+    E.evidence(run.work, tag + "-engine.json", {"returncode": done.returncode, "stdout": done.stdout,
+               "stderr": done.stderr, "expected": sorted(expected)})
+    assert done.returncode == 0, done.stdout[-6000:] + done.stderr[-6000:]
+    tasks = Counter(re.findall(r" --task (\S+) ", done.stdout + done.stderr))
+    assert set(tasks) == expected and all(count == 1 for count in tasks.values()), (tasks, expected)
+    for task_id, payload in before.items():
+        path = run.out / next(t["record"] for t in run.data["tasks"] if t["id"] == task_id)
+        assert (path.read_bytes() != payload) == (task_id in expected), task_id
+    limited = damage in ("deleted-log", "truncated-newer", "truncated-preserved")
+    status = main(["workflow", "verify", "--manifest", str(run.manifest), "--final"])
+    result = verify(run.manifest, final=True)
+    E.evidence(run.work, tag + "-verify.json", result)
+    assert status == (1 if limited else 0) and result["passed"] is (not limited), result
+    if limited:
+        assert FOV_TASK in result["incomplete"]
+        problems = " ".join(result["tasks"][FOV_TASK]["problems"])
+        assert ("is missing" if damage == "deleted-log" else "bytes") in problems
+    else:
+        E.compare(run, uninterrupted, E.snapshot(run), name=tag + "-comparison.json")
+
+
 # W-758: keep one complete run per engine and restore copies of its output tree
 # between cases; only export/report/compare need real jobs after that setup.
 @pytest.fixture(scope="module", params=ENGINES)

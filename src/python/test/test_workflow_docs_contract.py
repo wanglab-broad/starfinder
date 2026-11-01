@@ -164,6 +164,11 @@ def test_the_reference_tables_cover_the_commands_task_kinds_and_keys(monkeypatch
     assert [row[0] for row in commands] == [f"starfinder workflow {c}" for c in ("plan", "verify")] + \
         [f"starfinder workflow {c}" for c in sorted(COMMANDS.values())]
     assert all(row[4] for row in arguments)
+    image_rows = [row for row in arguments if row[0] == "--image"]
+    assert len(image_rows) == 1 and image_rows[0][1] == "every task command"
+    assert image_rows[0][4] == (
+        "The image the engine gives the task: a digest under Snakemake's UGER profile, "
+        "a reference by digest on Google Batch, the SIF path under Nextflow's sge profile, or none")
     assert [row[0] for row in workflow_config.task_rows()] == list(KINDS)
     for block in ("dataset", *BLOCKS, "processing.tiled", "execution", "execution.defaults"):
         rows = workflow_config.key_rows(block, _directive_content(page, "workflow-keys", block))

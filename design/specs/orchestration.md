@@ -218,7 +218,9 @@ and calls the API entry. The API itself does not change: the seam kept is `Workf
 | `--manifest PATH` | The manifest, which names the resolved configuration (path and hash), the roots and the task |
 | `--task ID` | The task id in the manifest; its identity (FOV, tile, run, sample, step) comes from there |
 | `--engine NAME` | `snakemake`, `nextflow` or `manual`: recorded in the execution context |
-| `--job-id ID`, `--attempt N`, `--image REF` | The engine's job id, the attempt number (1 for the first) and the image reference by digest; recorded, never interpreted |
+| `--job-id ID`, `--attempt N`, `--image REF` | The engine's job id, the attempt number (1 for the first) and the image the engine passes: a digest under Snakemake's UGER profile, a reference by digest on Google Batch, the SIF path under Nextflow's `sge` profile, or `none`; recorded, never interpreted |
+
+% Amended 2026-11-01 for W-760: the image context includes the SIF path passed by Nextflow on UGER.
 
 The command checks, before any work, that the task exists, that the resolved configuration's file
 hashes to the manifest's `configuration.sha256`, that every task it `needs` has a task record with
@@ -615,11 +617,13 @@ report: {}
 execution:
   defaults: {threads: 1, memory_mb: 8000, runtime_min: 30, gpu: false}
   tasks: {fov: {threads: 4, memory_mb: 16000}}
-  container: null               # the image by digest (D9)
+  container: null               # digest for Snakemake UGER, reference by digest for Google Batch, SIF path for Nextflow sge (D9)
   fiji: null                    # the BigStitcher engine task's tool (D3)
   resume_from_checkpoint: false
   code_version: keep            # or rerun: a new code version reruns the tasks (A4)
 ```
+
+% Amended 2026-11-01 for W-760: container interpretation depends on the engine/profile; null leaves the profile's choice.
 
 **The blocks.**
 
@@ -1151,8 +1155,10 @@ written into every task record:
 | `manifest_sha256` | The manifest's hash |
 | `fingerprint`, `token` | The fingerprint the task ran with, and for Nextflow its cache token (the engine record, "The task fingerprint" and "`-resume` and the completion rule") |
 | `code` | `version`, `git_commit`, `git_dirty` of the package that ran the task; a tree with more than one is flagged by the report |
-| `execution_context` | `engine`, `engine_version`, `job_id`, `attempt`, `image` (by digest), `host` |
+| `execution_context` | `engine`, `engine_version`, `job_id`, `attempt`, `image` (a digest under Snakemake UGER, a reference by digest on Google Batch, a SIF path under Nextflow `sge`, or `none`), `host` |
 | `wall_s`, `cpu_s`, `peak_rss_kib` | The task's wall time, user and system CPU time of the process and its children, and peak resident memory (`resource.getrusage`), as `export.json` records them for its parts |
+
+% Amended 2026-11-01 for W-760: execution_context.image records the engine's value without converting a SIF path to a digest.
 
 `workflow_config` (today the path and SHA-256 of `config_path`, `checkpoints.md`) records the
 resolved configuration (`workflow/resolved.json`, relative to the output root, and its SHA-256).

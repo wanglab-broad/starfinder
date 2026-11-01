@@ -41,7 +41,8 @@ def add_parser(groups):
         task.add_argument("--engine-version")
         task.add_argument("--job-id")
         task.add_argument("--attempt", type=int, default=1)
-        task.add_argument("--image", help="The image reference by digest, or none")
+        task.add_argument("--image", help="The image the engine gives the task: a digest under Snakemake's UGER profile, "
+                          "a reference by digest on Google Batch, the SIF path under Nextflow's sge profile, or none")
         task.add_argument("--cache-token", help="The engine's cache token, kept as the record's workflow.token")
     return workflow
 

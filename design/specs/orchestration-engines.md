@@ -94,7 +94,9 @@ Each engine does the same four things, in its own syntax:
 | `engine_version` | `snakemake.__version__`, read by the Snakefile when it is parsed | `nextflow.version` |
 | `job_id` | `$JOB_ID` on UGER (set by the scheduler in the job), else Snakemake's job number (`{jobid}` of the shell command) | `$JOB_ID` on UGER, else `task.hash` |
 | `attempt` | the job's attempt, through a resource `attempt=lambda wildcards, attempt: attempt` | `task.attempt` |
-| `image` | `$STARFINDER_IMAGE`, which the profile's job script sets to the image digest, else `none` | `task.container` (by digest), else `none` |
+| `image` | `$STARFINDER_IMAGE`, which the UGER profile's job script sets to the image digest, else `none` | `task.container`: the SIF path under `sge`, a reference by digest on Google Batch, else `none` without an image |
+
+% Amended 2026-11-01 for W-760: the recorded image is what the engine passes, including the SIF path under `sge`.
 
 ### Exit status and retries
 
@@ -175,13 +177,15 @@ and the Nextflow guide names it.
 
 The plan computes the fingerprints in the manifest's task order, which respects `needs`. Each task
 record keeps the fingerprint it ran with, `workflow.fingerprint`, beside `configuration_sha256` and
-`manifest_sha256` (the contract, "Logging and records"). **The staleness rule, one for both engines and
-for a person:** a task is complete only when its record says `succeeded`, every output it lists is
-present with its recorded size (or SHA-256 with `--hash`), and its `workflow.fingerprint` equals the
+`manifest_sha256` (the contract, "Logging and records"). **The completion rule applied by `verify`:**
+a task is complete only when its record says `succeeded`, every output it lists is present with its recorded size (or SHA-256 with `--hash`), and its `workflow.fingerprint` equals the
 current manifest's `tasks[].fingerprint`; the `verify` command applies this rule
-([below](#-resume-and-the-completion-rule-d8)). Snakemake carries the fingerprint in the rule's
-`params`; Nextflow carries it in the task entry `t` and in `VERIFY_BEFORE`'s token, both part of the
-process's cache hash.
+([below](#-resume-and-the-completion-rule-d8)). Snakemake does not read the records: it decides
+what to rerun by its own triggers, with the fingerprint in the rule's `params` and records and
+non-temporary declared outputs as targets. Nextflow carries the fingerprint in the task entry `t`
+and in `VERIFY_BEFORE`'s token, both part of the process's cache hash.
+
+% Amended 2026-11-01 for W-760: distinguish Snakemake's triggers from the record-based completion check.
 
 #### Choice: what the fingerprint covers
 
@@ -714,10 +718,14 @@ sequences of twelve changes with kills) leaves every tree current and complete o
 
 D8's rule stays the authority: completion is decided by the `verify` command on the records and files
 in the output root, the same rule the commands apply; Nextflow's cache only saves rerunning a task that
-the rule already finds complete. Both engines and the manual remedy share one staleness rule: a task is
-complete only when its record says `succeeded`, lists its outputs intact, and carries the current
-manifest's fingerprint. `verify` is a contract addition
+the rule already finds complete. Nextflow and the manual check apply the record-based completion
+rule: a task is complete only when its record says `succeeded`, lists its outputs intact, and carries
+the current manifest's fingerprint. Snakemake decides by its own rerun triggers and does not read
+these records; a deleted log or a resized output can therefore leave a task incomplete until
+`verify --final` reports it. `verify` is a contract addition
 ([additions to the contract](#additions-to-the-contract)).
+
+% Amended 2026-11-01 for W-760: Snakemake's scheduling is not the record-based completion rule.
 
 #### Choice: Nextflow's cache, deleted outputs and stale results
 

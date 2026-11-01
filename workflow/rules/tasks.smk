@@ -139,9 +139,13 @@ def _rules():
 
 RULES = _rules()
 BY_ID = {task["id"]: task for task in MANIFEST["tasks"]}
-# The targets of the dispatcher's rule all: every task's record, so that snakemake <record> runs one task and its
-# upstream.
-TASK_RECORDS = [_path(task["record"]) for task in MANIFEST["tasks"]]
+# The targets of the dispatcher's rule all: every task's record and non-temporary declared outputs, so a missing
+# output reruns its producer even when its record remains. Removed temporary outputs stay exempt after completion;
+# an explicit snakemake <record> target still selects only that task and its upstream.
+_GROUPS = {group["name"]: group for group in MANIFEST["groups"]}
+TASK_RECORDS = [_path(task["record"]) for task in MANIFEST["tasks"]] + [
+    _path(output) for task in MANIFEST["tasks"] for output in task["outputs"]
+    if output not in {_fill(template, task["identity"]) for template in _GROUPS[task["group"]]["temporary"]}]
 
 
 for _name, _group, _tasks, _names, _fixed in RULES:

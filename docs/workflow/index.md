@@ -113,11 +113,15 @@ applies that rule to every task.
 tasks and again at the end: with `-resume` it keeps the complete tasks and reruns
 the others and the tasks downstream of them, and the run fails if a task is still
 not complete. Snakemake does not read the records. It reruns a task when the
-task's record is missing, its fingerprint has changed or an input is newer than
-its outputs, and then the tasks downstream. It does not rerun a task for a deleted
-output or log, or for an output of another size; when a changed output has a new
+task's record or a declared non-temporary output is missing (including a whole
+FOV folder or a terminal output), its fingerprint has changed or an input is newer
+than its outputs, and then the tasks downstream. Removed temporary outputs do not
+schedule jobs after a completed tiled run. Snakemake uses its own rerun triggers:
+it does not rerun a task for a deleted log or for an output of another size;
+when a changed output has a newer
 modification time, the tasks that read it rerun on the changed file, and the run
-still exits 0. So end a Snakemake run with `verify --final`, as the Quick start
+still exits 0; with its original modification time, no task reruns. So end a
+Snakemake run with `verify --final`, as the Quick start
 does. To rerun a task it names, remove the task's record,
 `workflow/tasks/<task>.json`, and run Snakemake again.
 

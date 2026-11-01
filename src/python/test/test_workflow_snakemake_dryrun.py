@@ -36,7 +36,7 @@ import pytest
 import yaml
 
 from starfinder._execution import THREAD_VARIABLES
-from starfinder.workflow import TASK_BLOCKS
+from starfinder.workflow import TASK_BLOCKS, plan
 
 from . import tiled_fixtures as T
 from . import workflow_examples as X
@@ -144,6 +144,33 @@ def test_a_dry_run_after_a_completed_tiled_run_schedules_nothing(tmp_path):
     assert not (out / "fovs" / T.FOV / "tiled" / "registered.h5").exists()
     assert (out / "fovs" / T.FOV / "molecules.csv").is_file()
     assert scheduled(snakemake(tmp_path, path, "--dry-run", *TRIGGERS)) == ({}, Counter())
+
+
+def test_an_explicit_record_runs_only_its_task_and_upstream(tiny):
+    """W-760: the broader default targets do not broaden an explicit task-record target."""
+    _snakemake()
+    config = dict(X.variants(tiny)["per-fov"], output_id="record-target")
+    path = X.write_config(tiny, "record-target", config)
+    data = plan(path)
+    out = Path(data["roots"]["output"])
+    by_id = {task["id"]: task for task in data["tasks"]}
+    target = "assign/sample/FOV_001/default"
+    expected = set()
+
+    def upstream(task_id):
+        if task_id not in expected:
+            expected.add(task_id)
+            for need in by_id[task_id]["needs"]:
+                upstream(need)
+
+    upstream(target)
+    assert 1 < len(expected) < len(by_id)
+    record = str(out / by_id[target]["record"])
+    assert set(scheduled(snakemake(tiny, path, "--dry-run", "--", record))[1]) == expected
+    done = snakemake(tiny, path, "--", record)
+    assert done.returncode == 0, done.stdout[-6000:] + done.stderr[-6000:]
+    assert set(re.findall(r" --task (\S+) ", done.stdout + done.stderr)) == expected
+    assert {task_id for task_id, task in by_id.items() if (out / task["record"]).is_file()} == expected
 
 
 @pytest.fixture(scope="module")

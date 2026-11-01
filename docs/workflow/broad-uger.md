@@ -23,8 +23,9 @@ cluster yet.
    head's environment, and give `snakemake` absolute paths:
    `-s <checkout>/workflow/Snakefile --configfile <configuration> --profile <checkout>/profile/broad-uger`.
    End the run with `starfinder workflow verify --manifest <manifest> --final`, in
-   the image: Snakemake does not read the task records (the
-   {doc}`workflow guide <index>`, "Reruns").
+   the image: Snakemake reruns tasks with missing declared non-temporary outputs
+   and their downstream, but does not read the task records or detect a deleted
+   log or an output of another size (the {doc}`workflow guide <index>`, "Reruns").
 3. **Nextflow.** Run the head as a UGER job with Java 17 or newer and Nextflow
    26.10.4 or newer:
    `nextflow run <checkout>/nextflow/main.nf -profile sge --config <configuration> --container <SIF> -work-dir <folder under /stanley>`.
