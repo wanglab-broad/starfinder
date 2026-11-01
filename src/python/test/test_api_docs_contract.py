@@ -1,4 +1,4 @@
-"""Public constant comments survive re-exporting into API namespaces."""
+"""API pages: public constant comments survive re-exporting, and class pages describe each field once."""
 from __future__ import annotations
 
 import subprocess
@@ -49,3 +49,59 @@ def test_reexported_constants_render_source_comments(tmp_path):
     index = (tmp_path / 'html/index.html').read_text()
     assert 'What assign decided for one molecule.' in index
     assert 'Version of the benchmark appearance defaults;' in index
+
+
+def test_class_pages_describe_each_field_once(tmp_path):
+    """A dataclass field named in Parameters gets no second entry; tables list the rest."""
+    pytest.importorskip('sphinx', reason='documentation extra required')
+    source = tmp_path / 'docs'
+    (source / '_templates/autosummary').mkdir(parents=True)
+    (source / '_templates/autosummary/class.rst').write_text(
+        (ROOT / 'docs/_templates/autosummary/class.rst').read_text())
+    (tmp_path / 'sample_classes.py').write_text(
+        'import dataclasses\n\n\n'
+        '@dataclasses.dataclass\n'
+        'class Sample:\n'
+        '    """A sample.\n\n    Parameters\n    ----------\n'
+        '    size : int\n        The size.\n    """\n\n'
+        '    size: int = 1\n'
+        '    extra: int = 2\n'
+        '    _cache: dict = dataclasses.field(default_factory=dict)\n\n'
+        '    @property\n'
+        '    def double(self):\n'
+        '        """Twice the size."""\n'
+        '        return 2 * self.size\n\n'
+        '    def grow(self, step):\n'
+        '        """Grow by a step.\n\n        Parameters\n        ----------\n'
+        '        step : int\n            The step.\n        """\n'
+    )
+    (source / 'conf.py').write_text(
+        f"import sys\nsys.path[:0] = [{str(ROOT / 'docs/_ext')!r}, {str(tmp_path)!r}]\n"
+        "extensions = ['sphinx.ext.autosummary', 'sphinx.ext.napoleon', 'class_pages']\n"
+        "autosummary_generate = True\nmaster_doc = 'index'\ntemplates_path = ['_templates']\n"
+        "napoleon_use_param = False\nautodoc_typehints = 'none'\n"
+    )
+    (source / 'index.rst').write_text(
+        'Classes\n=======\n\nSee :attr:`sample_classes.Sample.size`.\n\n'
+        '.. currentmodule:: sample_classes\n\n'
+        '.. autosummary::\n   :toctree: generated\n\n   Sample\n'
+    )
+    build = subprocess.run(
+        [sys.executable, '-m', 'sphinx', '-n', '-W', '--keep-going', '-b', 'html',
+         str(source), str(tmp_path / 'html')],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert build.returncode == 0, build.stdout + build.stderr
+    page = (tmp_path / 'html/generated/sample_classes.Sample.html').read_text()
+    # The field Parameters names has no entry; the field it does not name keeps one.
+    assert 'id="sample_classes.Sample.size"' not in page
+    assert 'id="sample_classes.Sample.extra"' in page
+    assert 'id="sample_classes.Sample.double"' in page
+    assert 'id="sample_classes.Sample.grow"' in page
+    assert '_cache' not in page
+    attributes = page.split('rubric">Attributes', 1)[1].split('rubric">Methods', 1)
+    assert 'Twice the size.' in attributes[0] and 'extra' in attributes[0]
+    assert 'Grow by a step.' in attributes[1].split('id="sample_classes.Sample.', 1)[0]
+    # A reference to the removed entry points at the class.
+    index = (tmp_path / 'html/index.html').read_text()
+    assert 'href="generated/sample_classes.Sample.html#sample_classes.Sample"' in index

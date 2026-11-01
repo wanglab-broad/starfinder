@@ -45,6 +45,18 @@ enums, constants and private dataclass fields are exempt. The quick-gate contrac
 test checks all public config dataclasses, every `config-options` target and
 every API object, including public methods defined by listed classes.
 
+A class page follows scanpy's class pages and describes each parameter once.
+The signature comes first, without fields whose names start with `_`. Then the
+docstring, whose `Parameters` section gives each field's type, default and
+description. An `Attributes` table lists the properties and other public
+attributes that `Parameters` does not name, and is left out when there are none;
+a `Methods` table lists the public methods, one line each. The full entry of
+each method and attribute follows. A dataclass field named in `Parameters` gets
+no entry of its own, and a reference to it, such as
+`` :attr:`Dataset.input_root` ``, links to the class. The `class_pages` extension
+in `docs/_ext/` applies these rules to every class from `dataclasses.fields` and
+the `Parameters` names; no class needs a setting of its own.
+
 Specifications, validation designs, baselines and proposals are design records
 in [design/](https://github.com/wanglab-broad/starfinder/blob/dev/design/README.md),
 never site pages. An implementation batch's last issue writes the section's

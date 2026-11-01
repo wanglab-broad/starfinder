@@ -19,6 +19,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
+    "class_pages",
     "sphinx.ext.viewcode",
     "sphinxcontrib.matlab",
     "sphinx_design",
