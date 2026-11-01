@@ -23,7 +23,7 @@ def executable():
     return path
 
 
-def run(work, config, *arguments, stub=True, environment=None):
+def run(work, config, *arguments, stub=True, environment=None, profile="local"):
     """One invocation in a persistent local cache; capture logs and a unique trace even on refusal."""
     executable_path = executable()
     folder = Path(work) / "nextflow"
@@ -35,7 +35,7 @@ def run(work, config, *arguments, stub=True, environment=None):
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
     env.update(environment or {})
     command = [executable_path, "-log", str(prefix.with_suffix(".nextflow.log")), "run",
-               str(X.ROOT / "nextflow" / "main.nf"), "-ansi-log", "false", "-profile", "local",
+               str(X.ROOT / "nextflow" / "main.nf"), "-ansi-log", "false", "-profile", profile,
                "-with-trace", str(trace), "--config", str(config), *(["-stub-run"] if stub else []), *arguments]
     import yaml
     config_data = yaml.safe_load(Path(config).read_text())

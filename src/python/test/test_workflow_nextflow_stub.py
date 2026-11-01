@@ -37,9 +37,19 @@ def configuration(work, variant):
 
 
 @pytest.mark.parametrize("variant", [*X.VARIANTS, "two-supplied-steps", "empty"])
-def test_n1_every_task_runs_once_after_its_needs(tiny, variant):
-    config = X.write_config(tiny, variant, configuration(tiny, variant))
-    done, rows = N.run(tiny / variant, config)
+@pytest.mark.parametrize("profile", ["local", "google-batch,local"])
+def test_n1_every_task_runs_once_after_its_needs(tiny, variant, profile):
+    settings = configuration(tiny, variant)
+    name = variant
+    arguments = []
+    environment = None
+    if profile == "google-batch,local":
+        name += "-google-batch"
+        settings["output_id"] += "-google-batch"
+        arguments = ["-work-dir", str(tiny / name / "work")]
+        environment = {"NXF_OFFLINE": "true", "NXF_PLUGINS_DEFAULT": "false"}
+    config = X.write_config(tiny, name, settings)
+    done, rows = N.run(tiny / name, config, *arguments, environment=environment, profile=profile)
     assert done.returncode == 0, done.stdout + done.stderr
     manifest = N.manifest(config)
     checks = [r for r in rows if r["name"] in ("PLAN", "VERIFY_BEFORE", "VERIFY_AFTER")]
