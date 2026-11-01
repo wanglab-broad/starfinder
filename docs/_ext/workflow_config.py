@@ -298,7 +298,9 @@ def _defaults_probe():
 
 
 #: Defaults the plan derives from other keys (starfinder/workflow/_plan.py, resolve), written in words.
-DERIVED = {("morphology", "rounds"): "every additional_round"}
+DERIVED = {("morphology", "rounds"): "every additional_round",
+           # check_tiled writes the minimum in place of null (_plan.py, check_tiled).
+           ("processing.tiled", "halo"): "the minimum: the largest footprint of the tile's operations"}
 
 
 def _schema_node(schema, block):
@@ -382,10 +384,10 @@ def key_rows(block, content=()):
     node = _schema_node(schema(), block)
     rows = []
     for key, description in keys:
-        if block == "processing.tiled":
+        if (block, key) in DERIVED or (block.split(".")[0], key) in DERIVED:
+            default = DERIVED.get((block, key)) or DERIVED[(block.split(".")[0], key)]
+        elif block == "processing.tiled":
             default = _value(TILED_DEFAULTS[key])
-        elif (block.split(".")[0], key) in DERIVED:
-            default = DERIVED[(block.split(".")[0], key)]
         else:
             g, r = given, resolved
             for part in [] if block == "dataset" else block.split("."):

@@ -200,7 +200,7 @@ previews: true draws the ownership figures into export/<sample>/previews/ on the
 ```{workflow-keys} execution
 defaults: The resources of every task, below.
 tasks: Resources per task kind, over the defaults and each kind's threads.
-container: The image the tasks run in, by digest, where the engine runs tasks in an image; null names none.
+container: The image of a task, where the engine runs tasks in an image: under Snakemake's UGER profile an OCI manifest digest, under Nextflow the value of its container directive (on sge the SIF's path); null uses the engine's default.
 fiji: The Fiji executable of the bigstitcher_engine task.
 resume_from_checkpoint: true lets a fov task resume from its checkpoints after it checks run.json; a mismatch exits 3.
 code_version: keep, or rerun to rerun finished tasks after the package version changes.

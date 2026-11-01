@@ -87,7 +87,7 @@ execution:
   # task that requests more CPUs than the machine has.
   tasks:
     fov: {threads: 1}
-  container: null                 # the image by digest
+  container: null                 # the task image: a digest (Snakemake on UGER) or Nextflow's container value
   fiji: null                      # the BigStitcher engine task's Fiji
   resume_from_checkpoint: false
   code_version: keep              # or rerun: a new package version reruns the tasks

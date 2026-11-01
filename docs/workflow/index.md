@@ -104,10 +104,22 @@ task record last.
 **Records.** Exit status 0 means the task succeeded; 1, that it failed, after it
 removed its declared outputs; 2, that it refused before any work; 3, that a
 verified resume was refused. A task is complete when its record says `succeeded`
-and lists every declared output, each still there with its recorded size, and its
-fingerprint (its configuration, inputs and needs) has not changed. `starfinder
-workflow verify` applies that rule to every task; the engines rerun a task that is
-not complete.
+and lists its declared outputs and its log, each still there with its recorded
+size (a temporary output may since have been removed), and its fingerprint (its
+configuration, inputs and needs) has not changed. `starfinder workflow verify`
+applies that rule to every task.
+
+**Reruns.** The engines decide differently. Nextflow runs `verify` before its
+tasks and again at the end: with `-resume` it keeps the complete tasks and reruns
+the others and the tasks downstream of them, and the run fails if a task is still
+not complete. Snakemake does not read the records. It reruns a task when the
+task's record is missing, its fingerprint has changed or an input is newer than
+its outputs, and then the tasks downstream. It does not rerun a task for a deleted
+output or log, or for an output of another size; when a changed output has a new
+modification time, the tasks that read it rerun on the changed file, and the run
+still exits 0. So end a Snakemake run with `verify --final`, as the Quick start
+does. To rerun a task it names, remove the task's record,
+`workflow/tasks/<task>.json`, and run Snakemake again.
 
 ## What you get
 

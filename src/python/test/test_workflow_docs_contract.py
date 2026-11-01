@@ -171,6 +171,15 @@ def test_the_reference_tables_cover_the_commands_task_kinds_and_keys(monkeypatch
     defaults = {row[0]: row[2] for row in workflow_config.key_rows("execution.defaults", _directive_content(
         page, "workflow-keys", "execution.defaults"))}
     assert defaults == {key: json.dumps(value) for key, value in EXECUTION_DEFAULTS.items()}
+    # processing.tiled: the plan writes its halo minimum in place of null, and the defaults of the other keys.
+    from starfinder.workflow._plan import resolve
+    minimal = yaml.safe_load((ROOT / "docs" / "examples" / "workflow-minimal.yaml").read_text())
+    minimal["processing"]["mode"] = "tiled"
+    written = resolve(minimal, None)["configuration"]["processing"]["tiled"]
+    tiled = {row[0]: row[2] for row in workflow_config.key_rows("processing.tiled", ())}
+    assert isinstance(written.pop("halo"), int) and tiled.pop("halo") == workflow_config.DERIVED[
+        ("processing.tiled", "halo")]
+    assert tiled == {key: json.dumps(value) for key, value in written.items()}
     with pytest.raises(ValueError, match="describe runs"):
         workflow_config.key_rows("segmentation", ["device: cpu or cuda"])
     with pytest.raises(ValueError, match="no segmentation key named colour"):

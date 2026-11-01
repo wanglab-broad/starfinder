@@ -22,6 +22,9 @@ cluster yet.
    to the image's OCI manifest digest and `STARFINDER_SIF` to its SIF in the
    head's environment, and give `snakemake` absolute paths:
    `-s <checkout>/workflow/Snakefile --configfile <configuration> --profile <checkout>/profile/broad-uger`.
+   End the run with `starfinder workflow verify --manifest <manifest> --final`, in
+   the image: Snakemake does not read the task records (the
+   {doc}`workflow guide <index>`, "Reruns").
 3. **Nextflow.** Run the head as a UGER job with Java 17 or newer and Nextflow
    26.10.4 or newer:
    `nextflow run <checkout>/nextflow/main.nf -profile sge --config <configuration> --container <SIF> -work-dir <folder under /stanley>`.
@@ -31,8 +34,13 @@ cluster yet.
 Without `STARFINDER_IMAGE`, the Snakemake jobs use the profile's default CPU image
 digest; without `STARFINDER_SIF`, they look for
 `/stanley/WangLab/jiahao/test/starfinder_benchmark/containers/starfinder-<digest hex>.sif`.
-A task's `execution.container`, when the configuration sets it, selects the image
-digest under both engines; keep the head's image and the SIF consistent with it.
+A task's `execution.container`, when the configuration sets it, replaces that
+task's image, and each engine reads it its own way. Under Snakemake it is an OCI
+manifest digest; the submit script refuses anything else. `STARFINDER_SIF`, when
+set, is used for every job whatever the digest, so leave it unset when tasks name
+their own digests and the SIF is found by the digest. Under Nextflow the value goes
+to the `container` directive as it is, so under `sge` it is the SIF's path on the
+shared drive. A configuration's value therefore suits one engine.
 
 ## What it does
 
