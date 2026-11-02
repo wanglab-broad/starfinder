@@ -1,6 +1,7 @@
 """X9: direct versus locally registered tiles on thick_medium/gaussian_small.
 
-Run on CPU 8 under /usr/bin/time -v. The watchdog stops at 8 GiB RSS,
+Run on CPU 8 under /usr/bin/time -v with an explicit --rss-limit-gib grant.
+The watchdog stops at the granted RSS limit,
 three hours or less than 15 GB free on root. Transient local scratch is
 removed at exit; only molecule tables and measurements are retained.
 --smoke exercises the same execution branch on the small exactness fixture,
@@ -120,9 +121,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--scratch", type=Path, required=True)
+    parser.add_argument("--rss-limit-gib", type=int, required=True,
+                        help="Granted process RSS limit in GiB (required; no default)")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--worker", choices=("generate", "direct", "512", "256", "32", "22"), help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.rss_limit_gib <= 0:
+        parser.error("--rss-limit-gib must be positive")
     if args.worker:
         return _worker(args)
     temporary_root = Path(os.environ["TMPDIR"]).resolve()
@@ -136,20 +141,20 @@ def main():
               "initial_root_free_bytes": shutil.disk_usage("/").free,
               "threads": {key: os.environ.get(key) for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS", "NUMEXPR_NUM_THREADS", "CUDA_VISIBLE_DEVICES")},
               "rss_poll_seconds": 1 if args.smoke else 10, "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "commands": [], "host": platform.node(), "status": "running", "measurements": [],
-              "grant": {"affinity": [8], "cpu": 1, "rss_kib": (4 if args.smoke else 8) * 1024**2, "wall_seconds": 1800 if args.smoke else 10800},
+              "grant": {"affinity": [8], "cpu": 1, "rss_kib": args.rss_limit_gib * 1024**2, "wall_seconds": 1800 if args.smoke else 10800},
               "scratch": str(args.scratch), "peak_scratch_bytes": 0, "scratch_deleted": False,
               "against_x6": {"direct_matched_minimum": .95, "tiled_matched_minimum": .95,
                              "relative_count_difference_maximum": .05, "conclusion": "Not yet measured."}}
     import psutil
     start = time.monotonic()
-    rss_limit = (4 if args.smoke else 8) * 1024**3
+    rss_limit = args.rss_limit_gib * 1024**3
     wall_limit = 1800 if args.smoke else 10800
     args.scratch.mkdir(parents=True)
     _save(args.output, record)
     process = None
     try:
         for stage in ("generate", "direct", *(('32', '22') if args.smoke else ('512', '256'))):
-            command = [sys.executable, str(Path(__file__).resolve()), "--output", str(args.output), "--scratch", str(args.scratch), "--worker", stage]
+            command = [sys.executable, str(Path(__file__).resolve()), "--output", str(args.output), "--scratch", str(args.scratch), "--rss-limit-gib", str(args.rss_limit_gib), "--worker", stage]
             if args.smoke:
                 command.append("--smoke")
             record["commands"].append(command)
@@ -191,7 +196,8 @@ def main():
                 with Path(os.environ["STEP_WRITES"]).open("a") as handle:
                     handle.write(str(log) + "\n")
             if reason:
-                record.update(status="not_run", reason=reason, stopped_stage=stage, stopped_stage_sampled_rss_kib=sampled_rss // 1024)
+                record.update(status="not_run", attempt_status="not_run" if reason.startswith("Sandbox") else "resource_stop",
+                              reason=reason, stopped_stage=stage, stopped_stage_sampled_rss_kib=sampled_rss // 1024)
                 break
             if process.returncode:
                 record.update(status="failed", reason=f"Execution error in {stage}; see {log}")
@@ -204,7 +210,7 @@ def main():
                 record["measurements"].append(measured)
             _save(args.output, record)
             if measured["maximum_rss_kib"] * 1024 > rss_limit:
-                record.update(status="not_run", reason=f"{rss_limit // 1024**3} GiB RSS limit exceeded in measured maximum", stopped_stage=stage)
+                record.update(status="not_run", attempt_status="resource_stop", reason=f"{rss_limit // 1024**3} GiB RSS limit exceeded in measured maximum", stopped_stage=stage)
                 break
         else:
             record["status"] = "passed" if all(m["passed"] for m in record["measurements"]) else "failed"
