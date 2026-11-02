@@ -15,9 +15,10 @@ concurrency:
 
 # Python jobs with the selections of docs/contributing.md, "Test selections":
 # `fast` runs the fast tier R and `slow-extended` runs the slow and extended
-# tests that are not learned. Each of their pytest steps is limited to 30
-# minutes; a measured overrun is split by file or node ID. `nextflow` runs the
-# Nextflow selection, limited to 45 minutes (23 measured on one CPU, W-650).
+# tests that are not learned. The fast tier's pytest step is limited to 30
+# minutes and the slow and extended step to 45 (26 measured, W-754); a measured
+# overrun is split by file or node ID. `nextflow` runs the Nextflow selection,
+# limited to 45 minutes (23 measured on one CPU, W-650).
 jobs:
   fast:
     name: Fast tier R
@@ -71,7 +72,7 @@ jobs:
   slow-extended:
     name: Slow and extended, not learned
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash
@@ -112,7 +113,7 @@ jobs:
       # MATLAB is never executed: the launcher tests mock subprocess.
       # `-rs` lists each skipped test with its reason, the inventory of what did not run.
       - name: Slow and extended, not learned
-        timeout-minutes: 30
+        timeout-minutes: 45
         env:
           UV_NO_SYNC: 'true'
         run: /usr/bin/time -v uv run pytest test/ -v -rs -m "(slow or extended) and not learned"
