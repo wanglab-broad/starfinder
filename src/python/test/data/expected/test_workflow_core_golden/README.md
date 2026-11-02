@@ -65,3 +65,12 @@ columns) with `rtol=1e-9`, `atol=1e-12`; the fixture's digests, the output file 
 environment (`compare --other-environment` skips them). X4 compares the refactored `fov`
 task's outputs with these values and leaves out the contract's exceptions (OC3: the frame ids carry
 `/rotate:0`; OC4: the frame ids and inputs name absolute paths, written `<work>` here).
+
+W-764 amendment, 2026-11-02: the raw session TIFFs have unknown spacing, so loading now
+applies the declared `(1.0, 0.5, 0.5)` micrometre calibration. The existing X4 test's
+`record_core_values.extract` regenerated the actual records; only the calibration fields
+in the two candidate records and two run records were copied here, plus the physical
+translation summaries derived from that spacing. Historical rotation fields and every
+other value remain as recorded. Tables, arrays, digests and tolerances are unchanged.
+The issue's external `worker/expected-changes.json` lists every old and new field and its
+derivation against `e913b4e`.

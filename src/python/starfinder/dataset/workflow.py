@@ -1463,7 +1463,7 @@ def _stitching_block(config, *, tasks=False) -> _StitchingBlock:
     which replaces the macro and Fiji tasks and needs no bigstitcher_save_dir.
     """
     from starfinder.stitching import STITCHING_METHODS, BigStitcherConfig, ReviewPolicy
-    from ._stitching import POSITION_KEYS, _check_input
+    from ._stitching import _check_input, _check_position_keys
     _python_only(config, ['stitching'])
     values = config['stitching']
     if not isinstance(values, dict):
@@ -1494,7 +1494,7 @@ def _stitching_block(config, *, tasks=False) -> _StitchingBlock:
     positions = values.get('positions')
     if not isinstance(positions, dict):
         raise ValueError('stitching.positions (the positions mapping of Dataset.stitch) is required')
-    _known(positions, POSITION_KEYS, 'stitching.positions')
+    _check_position_keys(positions, context='stitching.positions')
     if positions.get('source') == 'stage_file' and positions.get('stage_axes') is None:
         raise ValueError('stitching.positions.stage_axes ({x, y}) is required with source stage_file; it has no '
                          'default and is never inferred from rotate_angle')

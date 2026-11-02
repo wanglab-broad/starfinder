@@ -334,6 +334,14 @@ class ReferenceGrid:
   `FileNotFoundError`; with the reference round resident, the file must equal its channel
   maximum (shape, metadata, dtype and values; a YX file, its projection), else
   `ValueError`.
+  With both voxel sizes set, raw loading in direct and tiled modes fills unknown
+  spacing before rotation with `(voxel_size_z, voxel_size_xy, voxel_size_xy)` in
+  `micrometer`, preserving known spacing and every other metadata field; the saved
+  reference image and stains carry it. Stored metadata remains authoritative here,
+  including stored unknown spacing.
+
+% Amended 2026-11-02 (W-764): the two keys calibrate unknown raw spacing at load, before saved reference images are read.
+
 * `reference_grid_from_file(path, *, metadata=None)` reads a TIFF with `load_volume`:
   the shape from the array, the metadata from the file's `starfinder_metadata`
   description, or from `metadata` when the file has none (a file with neither raises).

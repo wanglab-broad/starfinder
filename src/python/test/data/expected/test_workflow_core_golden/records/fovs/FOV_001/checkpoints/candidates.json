@@ -109,10 +109,14 @@
  ],
  "metadata": {
   "frame_id": "<work>/input/session/small/FOV_001/round1/rotate:0",
-  "spacing_zyx": null,
+  "spacing_zyx": [
+   1.0,
+   0.5,
+   0.5
+  ],
   "origin_zyx": null,
   "direction_zyx": null,
-  "spatial_unit": null
+  "spatial_unit": "micrometer"
  },
  "detection_config": {
   "threshold_mode": "noise",
@@ -294,10 +298,14 @@
   ],
   "metadata": {
    "frame_id": "<work>/input/session/small/FOV_001/round1/rotate:0",
-   "spacing_zyx": null,
+   "spacing_zyx": [
+    1.0,
+    0.5,
+    0.5
+   ],
    "origin_zyx": null,
    "direction_zyx": null,
-   "spatial_unit": null
+   "spatial_unit": "micrometer"
   },
   "extraction_config": {
    "neighborhood_radius_zyx": [

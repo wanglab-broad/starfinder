@@ -1,4 +1,10 @@
-"""The reference grid of a saved FOV: the file's stored metadata, else the grid declared by the configuration.
+"""Saved reference grids: stored metadata wins, else the configuration declares the grid.
+
+Raw rounds acquire the declared spacing at ``FOV.load_images`` when their
+loaded spacing is unknown and both voxel sizes are set, in direct and tiled
+modes. Their other metadata stays as loaded; saved reference images and stains
+therefore carry that calibration. These readers do not fill a stored unknown
+spacing: the saved metadata remains authoritative.
 
 design/specs/sample-output.md ("The export entry") and design/specs/assembly.md ("Workflow
 configuration"). One rule for ``Dataset.export`` (the assembly and fusion inputs),
@@ -58,8 +64,8 @@ def declared_metadata(dataset_id, output_id, fov_id, *, voxel_size_xy=None, voxe
     Frame ``declared:<dataset_id>/<output_id>/<fov_id>``; with both voxel sizes
     the spacing ``(voxel_size_z, voxel_size_xy, voxel_size_xy)`` in
     ``micrometer``, no origin and no direction; with either missing, the frame
-    alone. The workflow's segmentation and assignment rules declare the files
-    they read with this metadata.
+    alone. This fallback is for saved files without stored metadata. Raw loading
+    uses the same spacing rule but preserves the loaded frame, origin and direction.
     """
     # The §2.9 workflow
     from starfinder.image import ImageMetadata
@@ -77,7 +83,9 @@ def reference_grid(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=
     The default is ``fovs/<fov_id>/reference.tif``. A file with a
     ``starfinder_metadata`` description is read as
     :func:`starfinder.segmentation.reference_grid_from_file` reads it, and its
-    metadata wins. A file without one takes the grid declared by the
+    metadata wins, including stored unknown spacing; raw loading fills unknown
+    spacing before these files are written when both voxel sizes are set.
+    A file without stored metadata takes the grid declared by the
     configuration: the file's shape, :func:`declared_metadata`, the source
     ``declared`` and no hash. Without stored metadata and without both voxel
     sizes it raises ``ValueError`` naming what to configure; a missing file
@@ -120,7 +128,7 @@ def _declared_grid_metadata(path, fov_id, *, dataset_id, output_id, voxel_size_x
     if missing:
         raise ValueError(f"{path} stores no calibration (no starfinder_metadata description), so its grid is declared "
                          f"by the dataset configuration, which lacks {' and '.join(missing)}: set "
-                         f"{' and '.join(missing)} (µm) in the workflow configuration, or the Dataset fields of the "
+                         "voxel_size_xy and voxel_size_z (µm) in the workflow configuration, or the Dataset fields of the "
                          "same names")
     return declared_metadata(dataset_id, output_id, fov_id, voxel_size_xy=voxel_size_xy, voxel_size_z=voxel_size_z)
 
@@ -130,7 +138,8 @@ def reference_volume(output_root, fov_id, *, dataset_id, output_id, voxel_size_x
     """(grid, the loaded file, its path) of :func:`reference_grid`, for a caller that also needs the pixels.
 
     The file is loaded whole with ``load_volume``; the grid is the one
-    :func:`reference_grid` returns.
+    :func:`reference_grid` returns. Stored metadata, including unknown spacing,
+    wins; only a file without stored metadata takes the declared grid.
     """
     from starfinder.io import load_volume
     from starfinder.segmentation import ReferenceGrid

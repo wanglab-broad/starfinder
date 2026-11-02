@@ -19,7 +19,7 @@ from starfinder.image import IncompatibleGeometryError
 from ._import import LabelImportConfig, import_labels
 from ._inputs import CompositeConfig, FlamingoEnhancementConfig, composite_nuclei_amplicon, enhance_with_flamingo
 from ._labels import SegmentationResult, _check_target, _grid_record, _json, array_sha256
-from ._methods import DEVICES, ROLES, SEGMENTATION_METHODS
+from ._methods import DEVICES, ROLES, SEGMENTATION_METHODS, SeededWatershedConfig
 from ._operations import ExpandLabelsConfig, ZExtensionConfig, expand_labels, extend_labels_through_z
 from ._segment import SegmentationInput, segment
 
@@ -443,6 +443,10 @@ def segment_fov(fov, plan, *, device="cpu", inputs=None, only=None):
             record = dict(result.record)
         else:
             segmentation_input, stack = assemble_input(fov, run, grid)
+            if isinstance(run.method, SeededWatershedConfig) and segmentation_input.grid.metadata.spacing_zyx is None:
+                raise ValueError("seeded_watershed needs a spacing: set voxel_size_xy and voxel_size_z "
+                                 "(micrometres) before loading raw images, or supply a reference image with "
+                                 "known spacing")
             if inputs is not None:
                 inputs[run.name] = segmentation_input
             seeds = None if run.seeds is None else results.get(run.seeds, fov.segmentation_results.get(run.seeds))

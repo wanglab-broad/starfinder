@@ -87,8 +87,8 @@ reference_stains: The reference round's stain files besides the sequencing chann
 seq_channel_order: The channel labels of a sequencing round in colour order; each label matches one file *<label>*.tif of the round's folder.
 additional_round: The other rounds, each a round_name and its channel_order, which the morphology block registers.
 rotate_angle: The rotation of each FOV in degrees; 0 is no rotation.
-voxel_size_xy: The voxel size in Y and X in microns, for stitching and the declared calibration of the images segmentation and assignment read.
-voxel_size_z: The voxel size in Z in microns, as voxel_size_xy.
+voxel_size_xy: The voxel size in Y and X in micrometres; with voxel_size_z, fills unknown raw-image spacing at load in direct and tiled modes, preserving all other metadata and any known spacing, and declares the grid of saved reference files without stored metadata.
+voxel_size_z: The voxel size in Z in micrometres; both voxel sizes must be set to calibrate raw images, giving spacing (voxel_size_z, voxel_size_xy, voxel_size_xy) in micrometer before rotation.
 reference_image: The file pattern, with {fov_id}, of each FOV's saved reference image, absolute or relative to the output root.
 reference_image_import: The file pattern, with {fov_id}, of a reference image another tool wrote; the processing tasks then write none. It excludes reference_image.
 image_dir_template: The folder of one round of one FOV under the input folder.

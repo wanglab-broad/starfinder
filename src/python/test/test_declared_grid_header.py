@@ -8,8 +8,10 @@ whose header does not settle the shape ``load_volume`` gives are read whole as b
 The expected outcomes are explicit (W-574): per layout the ZYX shape or the refusal, and the pages
 decoded (``EXPECTED_GRIDS``); per voxel setting the declared metadata or the sizes it lacks
 (``DECLARED``, ``LACKS``); for the callers the declared grids of their samples. They hold what the
-copied base-revision function (``ec4774a``) these tests compared with gave. Fixtures, all written in
-the test: one small synthetic file per layout ``load_volume`` reads or refuses (``LAYOUTS``), and the
+copied base-revision function (``ec4774a``) these tests compared with gave, except that W-764's
+missing-calibration remedy names both voxel keys while still identifying exactly which are absent.
+Fixtures, all written in the test: one small synthetic file per layout ``load_volume`` reads or refuses
+(``LAYOUTS``), and the
 plain copy of W-390's synthetic sample scene (``sample-tiny-v1``, 2 × 2 FOVs of 5×36×36, its
 reference images written as pages without metadata) for the export. Pages decoded are counted by
 wrapping tifffile's pixel readers (``PixelReads``).
@@ -141,9 +143,10 @@ DECLARED = ImageMetadata(f"declared:{DATASET_ID}/{OUTPUT_ID}/{FOV}", spacing_zyx
                          spatial_unit="micrometer")
 LACKS = {"given": None, "missing": "voxel_size_xy and voxel_size_z", "xy only": "voxel_size_z",
          "z only": "voxel_size_xy"}
+# W-764 (2026-11-02): name both keys in the remedy; LACKS still names only the absent sizes.
 NO_CALIBRATION = ("{path} stores no calibration (no starfinder_metadata description), so its grid is declared by the "
-                  "dataset configuration, which lacks {lacks}: set {lacks} (µm) in the workflow configuration, or the "
-                  "Dataset fields of the same names")
+                  "dataset configuration, which lacks {lacks}: set voxel_size_xy and voxel_size_z (µm) in the "
+                  "workflow configuration, or the Dataset fields of the same names")
 
 
 def write_layout(root, kind):

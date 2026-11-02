@@ -396,9 +396,14 @@ class StitchingInput:
 * The legacy `images/DAPI/{fovID}.tif` (rotated, optionally projected DAPI) is accepted as
   `file:<path>` only when its shape equals the reference grid's; it carries no metadata, so
   its grid is the reference grid read from the FOV's reference image.
-* The spacing is the reference grid's: the YAML `voxel_size_xy` and `voxel_size_z` give it
-  only for a reference image that stores no metadata, since the stitching input files
-  carry no calibration (the input inventory's `inputs.md`).
+* The spacing is the reference grid's: the YAML `voxel_size_xy` and `voxel_size_z`,
+  when both set, fill unknown raw-image spacing at load in direct and tiled modes,
+  before rotation, with `(voxel_size_z, voxel_size_xy, voxel_size_xy)` in `micrometer`.
+  Known spacing and all other loaded metadata stay as loaded. Saved reference images
+  and stains retain that calibration. For a saved reference image without stored
+  metadata, the two keys still declare its grid; stored metadata always wins.
+
+% Amended 2026-11-02 (W-764): both voxel sizes calibrate unknown raw spacing at load; saved metadata stays authoritative.
 
 % the image W-323 names; W-323 `inputs.md`
 
@@ -718,10 +723,11 @@ and the import's legacy view must reproduce its pinned `TILE_CONFIG` from the fi
 | One row per grid cell, blanks included with offsets | One row per acquired FOV; padding views only in the method record | Placeholders stay inside the BigStitcher path |
 | FOV identity = the grid's `id` (Leica `PositionID`) | `fov_id` from the tile position table | `fovs.csv` names FOVs (`fov_id_pattern` for the MATLAB backend) |
 | Non-overlap rectangles from `img_col` and `img_row` | none | Ownership is assemble's ([assembly-contract](assembly.md)), from each grid's shape |
-| Calibration from `voxel_size_xy`, `voxel_size_z` | From each FOV's reference grid | The files carry no calibration; the YAML values are rounded for LN |
+| Calibration from `voxel_size_xy`, `voxel_size_z` | From each FOV's reference grid | Both keys fill unknown raw spacing at load; known spacing wins, and the saved grid retains the calibration |
 | No status, no links, no method record | Statuses, links with quality, provenance, review | The failure policy needs them |
 
 % Ownership is assemble's (W-326)
+% Amended 2026-11-02 (W-764): raw calibration is applied at load and retained in the reference grid.
 
 The legacy writer of `tile_config_{sample}.csv` stays for the rule chain that reads it
 (`reads_assignment` through the workflow adapter) until assemble replaces it; it takes

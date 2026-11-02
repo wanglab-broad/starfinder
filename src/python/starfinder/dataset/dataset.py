@@ -121,9 +121,12 @@ class Dataset:
     the codebook; ``direct`` assigns each candidate the direct_panel gene of its
     own round and channel.
     voxel_size_xy and voxel_size_z (µm, the workflow keys of the same names)
-    declare the calibration of saved files that store none: ``stitch`` and
-    ``export`` take a FOV's grid from the stored metadata of its reference
-    image, or else from these sizes. reference_image (the workflow key of the
+    fill unknown spacing when raw rounds are loaded, in direct and tiled modes,
+    with ``(voxel_size_z, voxel_size_xy, voxel_size_xy)`` in ``micrometer``.
+    Both must be set; known spacing and all other loaded metadata are preserved.
+    ``stitch`` and ``export`` take a FOV's grid from the stored metadata of its
+    reference image, or, for a file without stored metadata, from these sizes.
+    reference_image (the workflow key of the
     same name) is the file pattern of that image, with ``{fov_id}``, absolute
     or relative to the output root; the default is
     ``fovs/{fov_id}/reference.tif``, the file ``FOV.save_reference_image``
@@ -190,7 +193,7 @@ class Dataset:
     # Stain files of the reference round's folder that are not sequencing colours
     reference_stains: tuple[ChannelInfo, ...] = ()
 
-    # The declared calibration (µm) of saved files that store none, as the workflow's voxel_size_xy and voxel_size_z
+    # Declared calibration (µm): unknown raw spacing at load, and saved files without stored metadata.
     voxel_size_xy: float | None = None
     voxel_size_z: float | None = None
     # The file pattern of a FOV's reference image, as the workflow's reference_image, or of an imported one, as the

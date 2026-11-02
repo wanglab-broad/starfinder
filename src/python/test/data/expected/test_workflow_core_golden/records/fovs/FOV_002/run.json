@@ -966,7 +966,11 @@
         "p95": 2.449489742783178,
         "max": 2.449489742783178
        },
-       "displacement_physical": null,
+       "displacement_physical": {
+        "median": 1.5,
+        "p95": 1.5,
+        "max": 1.5
+       },
        "fold_fraction": 0.0
       },
       "optimizer": null
@@ -1120,7 +1124,11 @@
         "p95": 1.7320508075688772,
         "max": 1.7320508075688772
        },
-       "displacement_physical": null,
+       "displacement_physical": {
+        "median": 1.224744871391589,
+        "p95": 1.224744871391589,
+        "max": 1.224744871391589
+       },
        "fold_fraction": 0.0
       },
       "optimizer": null
@@ -1274,7 +1282,11 @@
         "p95": 4.58257569495584,
         "max": 4.58257569495584
        },
-       "displacement_physical": null,
+       "displacement_physical": {
+        "median": 2.449489742783178,
+        "p95": 2.449489742783178,
+        "max": 2.449489742783178
+       },
        "fold_fraction": 0.0
       },
       "optimizer": null
@@ -1302,17 +1314,25 @@
       ],
       "reference_metadata": {
        "frame_id": "<work>/input/session/small/FOV_002/round1/rotate:0",
-       "spacing_zyx": null,
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
        "origin_zyx": null,
        "direction_zyx": null,
-       "spatial_unit": null
+       "spatial_unit": "micrometer"
       },
       "moving_metadata": {
        "frame_id": "<work>/input/session/small/FOV_002/round2/rotate:0",
-       "spacing_zyx": null,
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
        "origin_zyx": null,
        "direction_zyx": null,
-       "spatial_unit": null
+       "spatial_unit": "micrometer"
       },
       "direction": "reference_to_moving",
       "units": "voxel_index",
@@ -1375,17 +1395,25 @@
       ],
       "reference_metadata": {
        "frame_id": "<work>/input/session/small/FOV_002/round1/rotate:0",
-       "spacing_zyx": null,
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
        "origin_zyx": null,
        "direction_zyx": null,
-       "spatial_unit": null
+       "spatial_unit": "micrometer"
       },
       "moving_metadata": {
        "frame_id": "<work>/input/session/small/FOV_002/round3/rotate:0",
-       "spacing_zyx": null,
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
        "origin_zyx": null,
        "direction_zyx": null,
-       "spatial_unit": null
+       "spatial_unit": "micrometer"
       },
       "direction": "reference_to_moving",
       "units": "voxel_index",
@@ -1448,17 +1476,25 @@
       ],
       "reference_metadata": {
        "frame_id": "<work>/input/session/small/FOV_002/round1/rotate:0",
-       "spacing_zyx": null,
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
        "origin_zyx": null,
        "direction_zyx": null,
-       "spatial_unit": null
+       "spatial_unit": "micrometer"
       },
       "moving_metadata": {
        "frame_id": "<work>/input/session/small/FOV_002/round4/rotate:0",
-       "spacing_zyx": null,
+       "spacing_zyx": [
+        1.0,
+        0.5,
+        0.5
+       ],
        "origin_zyx": null,
        "direction_zyx": null,
-       "spatial_unit": null
+       "spatial_unit": "micrometer"
       },
       "direction": "reference_to_moving",
       "units": "voxel_index",

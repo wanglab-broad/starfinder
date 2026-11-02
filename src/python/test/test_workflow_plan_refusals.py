@@ -72,6 +72,21 @@ def test_backend_matlab(work, capsys):
              "frozen MATLAB workflow")
 
 
+@pytest.mark.parametrize("section", [None, "regular_grid", "snap_to_grid"])
+def test_unknown_stitching_positions_keys_are_refused_before_tasks(work, capsys, section):
+    config = X.variants(work)["per-fov"]
+    positions = config["stitching"]["positions"]
+    if section is None:
+        positions["not_a_position_key"] = True
+    else:
+        positions[section] = dict(X.grid()["regular_grid"] if section == "regular_grid" else {"overlap": 0.2},
+                                  not_a_position_key=True)
+        if section == "regular_grid":
+            positions["source"] = "regular_grid"
+    context = "stitching.positions" + (f".{section}" if section else "")
+    _refused(work, config, capsys, context, "not_a_position_key")
+
+
 def test_a_missing_round_folder(work, capsys):
     shutil.rmtree(X.input_root(work) / "round3" / "FOV_002")
     _refused(work, X.variants(work)["molecules-only"], capsys, "FOV FOV_002", "round round3", "does not exist")

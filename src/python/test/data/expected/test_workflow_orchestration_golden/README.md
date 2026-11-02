@@ -61,3 +61,12 @@ float64 values (a record's floats and the tables' non-integer float columns) wit
 `atol=1e-12` (the script compares a float32 image's statistics with `rtol=1e-6`, `atol=1e-6`; this
 run has none); the output file digests (`compare: same_environment`) only in the recording
 environment (`compare --other-environment` skips them).
+
+W-764 amendment, 2026-11-02: the four `nuclei_registration.json` records now expect
+zero physical displacement summaries in their Flamingo application QC, rather than
+unknown physical displacement. The raw Flamingo and reference-stain files have no
+calibration; both declared voxel sizes now calibrate them at load, making the physical
+size of the identity displacement known. The existing G3 test's `workflow_golden.extract`
+regenerated the actual records; only these four summaries were copied here. Every
+other value, table, array, digest and tolerance remains as recorded. The issue's external
+`worker/expected-changes.json` lists every old and new field against `e913b4e`.

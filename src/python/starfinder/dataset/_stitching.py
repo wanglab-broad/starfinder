@@ -18,6 +18,31 @@ INPUTS = ("reference_merged", "reference_stain")
 POSITION_KEYS = ("source", "stage_axes", "snap_to_grid", "regular_grid", "tile_shape_yx", "spacing_yx", "table",
                  "unit", "stage_file")
 POSITION_SOURCES = ("stage_file", "regular_grid", "table")
+POSITION_SECTIONS = {"regular_grid": ("columns", "rows", "order", "overlap"), "snap_to_grid": ("overlap",)}
+
+
+def _check_position_keys(positions, *, context="positions"):
+    """Reject unknown mapping keys before planning or reading positions."""
+    unknown = [k for k in positions if k not in POSITION_KEYS]
+    if unknown:
+        raise ValueError(f"unknown {context} keys {unknown}; expected among {list(POSITION_KEYS)}")
+    for name, allowed in POSITION_SECTIONS.items():
+        section = positions.get(name)
+        if section is None:
+            continue
+        if not isinstance(section, Mapping):
+            raise ValueError(f"{context}.{name} must be a mapping with {', '.join(allowed)}")
+        unknown = [k for k in section if k not in allowed]
+        if unknown:
+            raise ValueError(f"unknown {context}.{name} keys {unknown}; expected among {list(allowed)}")
+
+
+def _require_spacing(grid, fov):
+    """Explain the raw-input remedy at the dataset boundary, including with explicit positions spacing."""
+    if grid.metadata.spacing_zyx is None:
+        raise IncompatibleGeometryError(
+            f"FOV {fov!r} has unknown spacing on its reference grid; set voxel_size_xy and voxel_size_z "
+            "(micrometres) before loading raw images, or supply a reference image with known spacing")
 
 
 def _check_input(name):
@@ -49,9 +74,11 @@ def read_inputs(output_root, fov_ids, input_name, *, reference) -> dict[str, Sti
     for fov in fov_ids:
         if input_name == "reference_merged":
             grid, volume, reference_path = reference_volume(output_root, fov, **reference)
+            _require_spacing(grid, fov)
             loaded[fov] = StitchingInput(fov, volume.image, grid, input_name, file_sha256(reference_path))
             continue
         grid = reference_grid(output_root, fov, **reference)
+        _require_spacing(grid, fov)
         if input_name == "reference_stain":
             path, source = reference_stain_path(output_root, fov), input_name
         else:
@@ -87,10 +114,13 @@ def _shared(grids, what, value):
         groups.setdefault(value(grid), []).append(fov)
     if None in groups:
         raise IncompatibleGeometryError(f"{what} cannot be taken from the reference grids: FOVs "
-                                        f"{_names(groups[None])} have unknown spacing; give {what} explicitly")
+                                        f"{_names(groups[None])} have unknown spacing; set voxel_size_xy and "
+                                        "voxel_size_z before loading raw images, or supply calibrated reference images")
     if len(groups) > 1:
         described = "; ".join(f"FOVs {_names(fovs)}: {key!r}" for key, fovs in groups.items())
-        raise IncompatibleGeometryError(f"the FOVs do not share one {what} ({described}); give {what} explicitly")
+        remedy = ("supply reference grids with matching spacing" if what == "spacing_yx"
+                  else f"give {what} explicitly")
+        raise IncompatibleGeometryError(f"the FOVs do not share one {what} ({described}); {remedy}")
     return next(iter(groups))
 
 
@@ -168,13 +198,11 @@ def table_from_positions(positions, fov_ids, grids, *, fov_pattern, position_ids
     """
     if not isinstance(positions, Mapping):
         raise TypeError("table must be a TilePositionTable or the workflow's positions mapping")
-    unknown = [k for k in positions if k not in POSITION_KEYS]
-    if unknown:
-        raise ValueError(f"unknown positions keys {unknown}; expected among {list(POSITION_KEYS)}")
+    _check_position_keys(positions)
     source = positions.get("source")
     geometry = None
     if source == "regular_grid":
-        grid = _section(positions, "regular_grid", ("columns", "rows", "order", "overlap"))
+        grid = _section(positions, "regular_grid", POSITION_SECTIONS["regular_grid"])
         tile, spacing, geometry = _geometry(positions, grids)
         table = _rows_of(positions_from_grid(columns=grid["columns"], rows=grid["rows"], order=grid["order"],
                                              overlap=grid["overlap"], tile_shape_yx=tile, spacing_yx=spacing,
@@ -189,7 +217,7 @@ def table_from_positions(positions, fov_ids, grids, *, fov_pattern, position_ids
         path = Path(positions["stage_file"])
         snap = None
         if positions.get("snap_to_grid") is not None:
-            section = _section(positions, "snap_to_grid", ("overlap",))
+            section = _section(positions, "snap_to_grid", POSITION_SECTIONS["snap_to_grid"])
             tile, spacing, geometry = _geometry(positions, grids)
             snap = GridSnap(overlap=section["overlap"], tile_shape_yx=tile, spacing_yx=spacing)
         ids = _selected_positions(path, fov_ids, fov_pattern, position_ids)

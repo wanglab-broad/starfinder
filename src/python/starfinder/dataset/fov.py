@@ -374,6 +374,10 @@ class FOV:
         """Load raw TIFF stacks for specified rounds, optionally rotated.
 
         Delegates to ``starfinder.io.load_round()`` per round.
+        When loaded spacing is unknown and both dataset voxel sizes are set,
+        fills spacing with ``(voxel_size_z, voxel_size_xy, voxel_size_xy)`` in
+        micrometres before rotation. All other metadata stays as loaded;
+        known spacing always wins, and either missing size leaves it unknown.
 
         Parameters
         ----------
@@ -433,6 +437,10 @@ class FOV:
             loaded = load_round(self.input_dir(folder), config=load_config)
             self.images[round_name] = loaded.image
             self.metadata[round_name] = loaded.metadata
+            xy, z = self.dataset.voxel_size_xy, self.dataset.voxel_size_z
+            if loaded.metadata.spacing_zyx is None and xy is not None and z is not None:
+                self.metadata[round_name] = replace(loaded.metadata, spacing_zyx=(z, xy, xy),
+                                                    spatial_unit="micrometer")
             self.load_diagnostics[round_name] = loaded.diagnostics
             if self._run_record is not None:
                 self._run_record.add_inputs(loaded.source_paths)

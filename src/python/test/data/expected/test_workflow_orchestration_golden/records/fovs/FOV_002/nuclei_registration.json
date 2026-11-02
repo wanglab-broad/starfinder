@@ -181,7 +181,11 @@
         "p95": 0.0,
         "max": 0.0
        },
-       "displacement_physical": null,
+       "displacement_physical": {
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+       },
        "fold_fraction": 0.0
       },
       "optimizer": null
