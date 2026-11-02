@@ -10,7 +10,16 @@ fi
 : "${{STARFINDER_IMAGE:?set by broad-submit.py}}"
 : "${{STARFINDER_SIF:?set by broad-submit.py}}"
 : "${{STARFINDER_THREADS:?set by broad-submit.py}}"
-export APPTAINER_CACHEDIR=${{APPTAINER_CACHEDIR:-/stanley/WangLab/.apptainer}}
+# /stanley/WangLab is root's, so the default cache is in the user's own lab folder (W-766).
+if [[ -z ${{APPTAINER_CACHEDIR:-}} ]]; then
+    user=${{USER:-$(id -un)}}
+    if [[ ! -d /stanley/WangLab/$user ]]; then
+        echo "/stanley/WangLab/$user does not exist; set APPTAINER_CACHEDIR to a writable folder on /stanley" >&2
+        exit 1
+    fi
+    APPTAINER_CACHEDIR=/stanley/WangLab/$user/.apptainer
+fi
+export APPTAINER_CACHEDIR
 export APPTAINER_TMPDIR=${{TMPDIR:-/local/scratch/${{JOB_ID:?UGER job ID is required}}}}
 mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
 

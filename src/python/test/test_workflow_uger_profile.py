@@ -151,6 +151,25 @@ def test_the_apptainer_job_script_runs_and_preserves_failure(tmp_path, gpu, busy
     print(done.stdout, end="")
 
 
+def test_the_job_script_refuses_without_a_cache_and_a_lab_folder(tmp_path):
+    # W-766: the default cache is /stanley/WangLab/<user>/.apptainer; with no such folder the job stops.
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    (tools / "apptainer").write_text(APPTAINER)
+    (tools / "apptainer").chmod(0o755)
+    script = tmp_path / "job.sh"
+    script.write_text((PROFILE / "broad-jobscript.sh").read_text().format(properties="{}", exec_job="true"))
+    environment = {k: v for k, v in os.environ.items() if k != "APPTAINER_CACHEDIR"}
+    environment.update(PATH=str(tools) + os.pathsep + os.environ["PATH"], CALLS=str(tmp_path / "apptainer.json"),
+                       TMPDIR=str(tmp_path / "scratch"), JOB_ID="12345", STARFINDER_THREADS="1", STARFINDER_GPU="0",
+                       STARFINDER_IMAGE="sha256:" + "b" * 64, STARFINDER_SIF=str(tmp_path / "image.sif"),
+                       USER="w766-no-such-user")
+    done = subprocess.run(["bash", str(script)], env=environment, capture_output=True, text=True, timeout=30)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert "/stanley/WangLab/w766-no-such-user does not exist; set APPTAINER_CACHEDIR" in done.stderr
+    assert not (tmp_path / "apptainer.json").exists()
+
+
 def test_profile_paths_and_rerun_triggers_resolve_outside_the_repository(tmp_path):
     pytest.importorskip("snakemake", reason="Snakemake not installed")
     pytest.importorskip("snakemake_executor_plugin_cluster_generic", reason="cluster-generic executor not installed")

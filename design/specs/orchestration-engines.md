@@ -1055,13 +1055,15 @@ Today's profile (`profile/broad-uger/`) has four defects for Snakemake 9.15.0:
 
 Recommendation: A.
 
+% Amended 2026-11-02 for W-766: the outline's cache is the user's own lab folder; `/stanley/WangLab/.apptainer`
+% cannot be created by a lab member (W-649's U1).
 The Python job script, in outline:
 
 ```bash
 #!/usr/bin/env bash
 # properties = {properties}
 source /broad/software/scripts/useuse; use UGER
-export STARFINDER_IMAGE=<digest> APPTAINER_CACHEDIR=/stanley/WangLab/.apptainer APPTAINER_TMPDIR=/local/scratch/$JOB_ID
+export STARFINDER_IMAGE=<digest> APPTAINER_CACHEDIR=/stanley/WangLab/$USER/.apptainer APPTAINER_TMPDIR=/local/scratch/$JOB_ID
 export OMP_NUM_THREADS=<threads> CUDA_VISIBLE_DEVICES=<the free GPU, for a gpu job>
 apptainer exec --cleanenv --bind /stanley,/local/scratch [--nv] <sif> bash -c '{exec_job}'
 ```

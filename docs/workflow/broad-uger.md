@@ -55,8 +55,10 @@ script asks `qstat`, then `qacct`, and counts a job without accounting as still
 running. The job script runs the task's command with `apptainer exec --cleanenv
 --bind /stanley,/local/scratch`, passes the image, the job id, the thread
 variables and `STARFINDER_WEIGHTS_DIR` explicitly, and exits with Apptainer's
-status. `APPTAINER_CACHEDIR` defaults to `/stanley/WangLab/.apptainer`; temporary
-files use the job's local scratch.
+status. `APPTAINER_CACHEDIR` defaults to `/stanley/WangLab/<user>/.apptainer`, in
+the user's own lab folder, because `/stanley/WangLab` itself is not writable; the job
+stops if that folder does not exist, so set `APPTAINER_CACHEDIR` to another
+folder on `/stanley` then. Temporary files use the job's local scratch.
 
 **Nextflow** (the `sge` profile of `nextflow/nextflow.config`). The SGE executor
 submits each task with the `smp` parallel environment, `-P broad`, `h_vmem` per

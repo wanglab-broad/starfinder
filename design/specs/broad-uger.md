@@ -24,10 +24,13 @@ digest; `STARFINDER_SIF` supplies its SIF path, or the default is
 `/stanley/WangLab/jiahao/test/starfinder_benchmark/containers/starfinder-<digest hex>.sif`.
 The caller keeps the head, manifest digest and SIF consistent.
 
+% Amended 2026-11-02 for W-766: the default cache moved from `/stanley/WangLab/.apptainer`, which a
+% lab member cannot create (`/stanley/WangLab` is root's), to the user's own lab folder (Jiahao, option A).
 Apptainer runs with `--cleanenv`; the job script passes the image identity, job ID,
 thread counts, selected CUDA device, scratch directory and optional
 `STARFINDER_WEIGHTS_DIR` explicitly. `APPTAINER_CACHEDIR` defaults to
-`/stanley/WangLab/.apptainer`, and `APPTAINER_TMPDIR` uses UGER's local `TMPDIR`
+`/stanley/WangLab/<user>/.apptainer`, in the user's own lab folder (the job stops if it
+does not exist), and `APPTAINER_TMPDIR` uses UGER's local `TMPDIR`
 or `/local/scratch/$JOB_ID`. The interactive shared uv environment is a separate
 [RHEL 8 procedure](../notes/broad-shared-environment.md).
 
