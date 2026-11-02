@@ -107,6 +107,31 @@ def test_invalid_names_and_launchers_raise_without_running(config, name, message
     run.assert_not_called()
 
 
+def test_stage_comparison_entry_script_runs_through_the_launcher(local_matlab, tmp_path, capsys):
+    """W-212: the Snakefile written by prepare calls run_matlab_scripts, which runs the entry script with the
+    path launcher, one thread and -batch."""
+    spec = importlib.util.spec_from_file_location('matlab_stage_comparison',
+                                                  ROOT / 'src/python/scripts/matlab_stage_comparison.py')
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    root = tmp_path / "it's here"
+    param, entry = tool.matlab_invocation(root)
+    snakefile = tool.snakefile_text(root)
+    assert f"include: {str(ROOT / 'workflow/rules/common.smk')!r}" in snakefile
+    assert f'run_matlab_scripts({param!r}, {entry!r})' in snakefile
+    config = tool.snakemake_config(root)
+    assert (config['matlab_launcher'], config['matlab_single_thread']) == ('path', True)
+    _, run = local_matlab
+    launcher.run_matlab_scripts(config, param, entry)
+    config_path = str(root / 'matlab-config.json').replace("'", "''")
+    argv = ['/opt/matlab/bin/matlab', '-singleCompThread', '-batch',
+            f"addpath('{ROOT}/workflow/scripts'); compare_matlab_stages('{config_path}');"]
+    run.assert_called_once_with(argv, check=True)
+    assert capsys.readouterr().out == shlex.join(argv) + '\n'
+    script = ROOT / 'workflow/scripts/compare_matlab_stages.m'
+    assert script.read_text().splitlines()[0] == 'function compare_matlab_stages(config_path)'
+
+
 def test_rules_delegate_to_the_launcher():
     common = (ROOT / 'workflow/rules/common.smk').read_text()
     assert 'matlab_launcher.run_matlab_scripts(config, param_string, matlab_script_name)' in common

@@ -1,0 +1,150 @@
+{
+ "schema": "starfinder.matlab_stage_reference/1",
+ "fixture": "matlab-stage-comparison-v1",
+ "fixture_sha256": "9edaab33f4e70111a3802d4a468bc597404313345ef5b868921f6627ed80c90c",
+ "protocol": {
+  "path": "design/validation/matlab-stage-comparison.md",
+  "sha256": "cac3c9811452241a432d45c15e4cae7d387537ea7029c84cf6cff2b7abcc35c3"
+ },
+ "matlab": {
+  "release": "2023b",
+  "version": "23.2.0.2380103 (R2023b) Update 1",
+  "matlabroot": "/usr/local/MATLAB/R2023b",
+  "computer": "GLNXA64",
+  "threads": 1,
+  "licenses": {
+   "Image_Toolbox": 1,
+   "Statistics_Toolbox": 1
+  },
+  "toolboxes": [
+   {
+    "name": "Bioinformatics Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Computer Vision Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Curve Fitting Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Deep Learning Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "GPU Coder",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Image Acquisition Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Image Processing Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "MATLAB",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "MATLAB Coder",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "MATLAB Compiler",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "MATLAB Compiler SDK",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Medical Imaging Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Optimization Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Parallel Computing Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Signal Processing Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   },
+   {
+    "name": "Statistics and Machine Learning Toolbox",
+    "version": "23.2",
+    "release": "(R2023b)"
+   }
+  ],
+  "date": "2026-11-02T21:54:01Z"
+ },
+ "launcher": {
+  "module": "workflow/rules/matlab_launcher.py",
+  "helper": "run_matlab_scripts (workflow/rules/common.smk)",
+  "matlab_launcher": "path",
+  "matlab_single_thread": true,
+  "entry": "compare_matlab_stages",
+  "command": [
+   "/usr/local/MATLAB/R2023b/bin/matlab",
+   "-singleCompThread",
+   "-batch",
+   "addpath('/home/unix/jiahao/Github/starfinder/.worktrees/s213-w212-20261102/workflow/scripts'); compare_matlab_stages('/tmp/linear-runner/s213-w212-20261102/record/matlab-run/matlab-config.json');"
+  ]
+ },
+ "sources": {
+  "src/matlab/SpotFindingMax3D.m": "baa559662f7269895897289b89250175f5f4009113262e895fd20c494b4d5dd3",
+  "src/matlab/DFTRegister3D.m": "1e5867e90e47f23e39bdf2d71c3e8e94a42f17293e381af79203114fd45a2c34",
+  "src/matlab/DFTApply3D.m": "c69b29a94a7b5a47adb905bfcf4ab2fda93d336dfe4e789df3cac6e7ac2efccd",
+  "src/matlab/DFTRegister2D.m": "2efef93f62241c664d1406b3a08506211a2ab7c8a2ccedd1b43dbbadb0d2678d",
+  "src/matlab/DFTApply2D.m": "a89385f6bc5e8fab3b05182be67485dc290c4c9ab77cfe4b555325660321f3ad",
+  "src/matlab/ExtractFromLocation.m": "06acae597abe279944cc9327236f582a7b997d1cdcbcf3c75ecf6ae0f52626fd",
+  "src/matlab/EncodeBases.m": "b4bfe7c83266c10fe2494dd431ff459067ad2e1bb401a35a5987aa4ca5381777",
+  "src/matlab/DecodeCS.m": "7a34dc622da1b40b624bbf6a71df5a9294eec2f8ac3d89ab50a117bcec4d210a",
+  "src/matlab/FilterReads.m": "aaffb342cd68e28a90dbc142af109581dd7453ee7e8a62ddd848085f77f0bfae",
+  "workflow/scripts/compare_matlab_stages.m": "41f736aeb2b268bbb0dfac3c1334718fd090d782eac4d2539caa681224be9346",
+  "workflow/rules/matlab_launcher.py": "ae52535a76e020b0db950229ae0541a3685916798f421732c461bd66e184da44",
+  "workflow/rules/common.smk": "e62357565db972f2630bacc8aaaf8789dd740eccd246b5814515995383d6a245",
+  "src/python/scripts/matlab_stage_comparison.py": "47f6a141376471a953b368c1a34c271e3f752682e2e83064f80c8613fa262a34",
+  "design/validation/matlab-stage-comparison.md": "cac3c9811452241a432d45c15e4cae7d387537ea7029c84cf6cff2b7abcc35c3"
+ },
+ "commit": "f35abad6a132a2b6db34a0d2fcb732bba9540dfe",
+ "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "raw_sha256": {
+  "matlab-command.json": "2c984368fa965458349fed052201d9093463586464cd9411029c3ede4ba4b919",
+  "matlab-runtime.json": "3a7996cd4f6ae7da220ef9d89d5c36d621bfebfc724f73a83c757b1e41362b4e",
+  "matlab-ver.txt": "717a063c6d456f2fe5f4e7c49dd3a1a83cc9fd98fef01463f9e593817c144565",
+  "z5-matlab.mat": "e9301364cd20a114c4242844acd77216e6c01aab915a693f551a3aea29371586",
+  "z1-matlab.mat": "362d0f3abaaf1ac1063c9b5acc4efee02bdc00fed0c4acf28d360dfc130ef7e3",
+  "z5-r0-filtered.csv": "cd144db87686843d83ec35dfe641200117c153b361d018893a0ef47f08e28dd9",
+  "z5-r1-filtered.csv": "cd144db87686843d83ec35dfe641200117c153b361d018893a0ef47f08e28dd9",
+  "z1-r0-filtered.csv": "0c9a2a70bf520cbfb220daa14bf28fc4d7cd5e699de89824af33c6e69cef57cf",
+  "z1-r1-filtered.csv": "0c9a2a70bf520cbfb220daa14bf28fc4d7cd5e699de89824af33c6e69cef57cf"
+ },
+ "regeneration": [
+  "python scripts/matlab_stage_comparison.py prepare <dir>",
+  "STARFINDER_MATLAB_EXECUTABLE=<matlab> snakemake --snakefile <dir>/Snakefile --cores 1 --directory <dir>",
+  "python scripts/matlab_stage_comparison.py export-reference <dir>"
+ ]
+}
