@@ -3,8 +3,11 @@
 # Snakemake formats only properties and exec_job; shell braces are doubled.
 set -e
 if [[ -r /broad/software/scripts/useuse ]]; then
+    # Dotkit returns non-zero inside `use`: under set -e the job would end there with status 8 (W-767).
+    set +e
     source /broad/software/scripts/useuse
     use UGER
+    set -e
 fi
 
 : "${{STARFINDER_IMAGE:?set by broad-submit.py}}"

@@ -170,6 +170,27 @@ def test_the_job_script_refuses_without_a_cache_and_a_lab_folder(tmp_path):
     assert not (tmp_path / "apptainer.json").exists()
 
 
+def test_a_dotkit_that_returns_non_zero_does_not_stop_the_job(tmp_path):
+    # W-767: Broad's `use` returns non-zero inside; under the script's set -e it ended every UGER job with 8.
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    (tools / "apptainer").write_text(APPTAINER)
+    (tools / "apptainer").chmod(0o755)
+    dotkit = tmp_path / "useuse"
+    dotkit.write_text("false\nuse() { return 8; }\n")
+    script = tmp_path / "job.sh"
+    text = (PROFILE / "broad-jobscript.sh").read_text().replace("/broad/software/scripts/useuse", str(dotkit))
+    script.write_text(text.format(properties="{}", exec_job="echo the task ran; exit 3"))
+    environment = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"],
+                       CALLS=str(tmp_path / "apptainer.json"), TMPDIR=str(tmp_path / "scratch"),
+                       APPTAINER_CACHEDIR=str(tmp_path / "cache"), JOB_ID="12345", STARFINDER_THREADS="1",
+                       STARFINDER_GPU="0", STARFINDER_IMAGE="sha256:" + "b" * 64,
+                       STARFINDER_SIF=str(tmp_path / "image.sif"))
+    done = subprocess.run(["bash", str(script)], env=environment, capture_output=True, text=True, timeout=30)
+    assert done.returncode == 3, done.stdout + done.stderr
+    assert done.stdout == "the task ran\n"
+
+
 def test_profile_paths_and_rerun_triggers_resolve_outside_the_repository(tmp_path):
     pytest.importorskip("snakemake", reason="Snakemake not installed")
     pytest.importorskip("snakemake_executor_plugin_cluster_generic", reason="cluster-generic executor not installed")
