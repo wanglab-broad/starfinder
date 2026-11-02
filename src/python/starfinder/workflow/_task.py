@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import logging
-import resource
 import shutil
 import socket
 import sys
@@ -25,6 +24,7 @@ from pathlib import Path
 
 from starfinder import _layout
 from starfinder._records import atomic_file, file_sha256
+from starfinder._resources import process_resources
 from starfinder.workflow._shape import (COMMANDS, FAILED_FORMAT, MANIFEST_FORMAT, TASK_FORMAT, ConfigurationView,
     sha256)
 
@@ -236,7 +236,6 @@ class Run:
     def workflow_section(self):
         """The ``workflow`` section of the task record and of the fov kinds' run.json (D8), measured until now."""
         from starfinder.workflow._plan import package_identity
-        own, children = resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN)
         context = self.context
         return {
             "task": {"id": self.id, "kind": self.kind},
@@ -252,9 +251,7 @@ class Run:
                                   "job_id": context.job_id, "attempt": context.attempt, "image": context.image,
                                   "host": socket.gethostname()},
             "resumed_from": None if self.resume is None else self.resume[0],
-            "wall_s": time.perf_counter() - self.started,
-            "cpu_s": own.ru_utime + own.ru_stime + children.ru_utime + children.ru_stime,
-            "peak_rss_kib": max(own.ru_maxrss, children.ru_maxrss),
+            **process_resources(self.started),
         }
 
 

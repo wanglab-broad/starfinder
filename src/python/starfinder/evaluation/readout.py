@@ -5,9 +5,10 @@ import numpy as np
 import pandas as pd
 from scipy.stats import rankdata
 
-from ._result import _result
+from ._result import EvaluationResult, _result
+from .matching import match_points
 
-__all__ = ["evaluate_decoding", "evaluate_deduplication", "ranking_quality"]
+__all__ = ["evaluate_decoding", "evaluate_deduplication", "ranking_quality", "correct_fraction"]
 
 
 def evaluate_decoding(decoded, truth, *, matches, sequence_column="observed_color_sequence"):
@@ -253,3 +254,64 @@ def evaluate_deduplication(groups, source, *, pairs):
                     "unattributed_pairs": unattributed, "merged_pairs": int(merged)},
                    {"population": "supplied pairs", "merged": "equal nonmissing group labels"},
                    reasons=reasons, details={"missed_pairs": missed, "false_merge_pairs": false})
+
+
+def correct_fraction(detected, truth, *, policy, threshold, boundary, units,
+                     reference_metadata, observed_metadata) -> EvaluationResult:
+    """Correct accepted reads divided by truth molecules (M10).
+
+    Parameters
+    ----------
+    detected : pandas.DataFrame
+        Detected spots joined positionally to reads: ``z, y, x, gene_id, accepted``.
+        Include rejected reads so matching uses the full detection population.
+    truth : pandas.DataFrame
+        Truth molecules with ``z, y, x, gene_id`` columns.
+    policy : str
+        One-to-one spatial ``match_points`` policy.
+    threshold : float
+        Spatial matching distance limit.
+    boundary : str
+        ``inclusive`` or ``exclusive`` distance comparison.
+    units : str
+        Coordinate unit, ``voxel`` or the metadata spatial unit.
+    reference_metadata : ImageMetadata
+        Truth coordinate frame and geometry.
+    observed_metadata : ImageMetadata
+        Detection coordinate frame and geometry.
+
+    Returns
+    -------
+    EvaluationResult
+        Correct fraction over all truth molecules; correct, wrong-gene and
+        false-detection counts among accepted reads, and spatial match details.
+        A zero truth denominator is undefined.
+    """
+    if not {"z", "y", "x", "gene_id", "accepted"} <= set(detected.columns):
+        raise ValueError("detected requires z, y, x, gene_id and accepted columns")
+    if not {"z", "y", "x", "gene_id"} <= set(truth.columns):
+        raise ValueError("truth requires z, y, x and gene_id columns")
+    accepted = detected.accepted.to_numpy()
+    if accepted.dtype != bool:
+        raise ValueError("accepted must be Boolean")
+    matches = match_points(truth[["z", "y", "x"]].to_numpy(float),
+                           detected[["z", "y", "x"]].to_numpy(float),
+                           policy=policy, threshold=threshold, boundary=boundary, units=units,
+                           reference_metadata=reference_metadata, observed_metadata=observed_metadata)
+    matched = {j: i for i, j, _ in matches.details["matched_pairs"]}
+    correct = wrong = false = 0
+    for j, (gene, keep) in enumerate(zip(detected.gene_id, accepted)):
+        if not keep:
+            continue
+        i = matched.get(j)
+        if i is None:
+            false += 1
+        elif pd.notna(gene) and str(gene) == str(truth.gene_id.iat[i]):
+            correct += 1
+        else:
+            wrong += 1
+    return _result({"correct_fraction": correct / len(truth) if len(truth) else None},
+                   {"correct_fraction": "fraction"},
+                   {**matches.counts, "reads_accepted": correct + wrong + false, "reads_correct": correct,
+                    "reads_wrong_gene": wrong, "reads_false_detection": false},
+                   {**matches.config, "denominator": "truth molecules"}, details=matches.details)

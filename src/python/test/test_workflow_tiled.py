@@ -155,19 +155,6 @@ def assert_counts_equal(direct, tiled, path="counts"):
         assert type(direct) is type(tiled) and direct == tiled, path
 
 
-def _matched(a, b):
-    """Rows of ``a`` with a row of ``b`` of the same gene within one voxel (Chebyshev distance at most 1)."""
-    from scipy.spatial import cKDTree
-    matched = 0
-    for gene, part in a.groupby("gene_id"):
-        other = b[b.gene_id == gene]
-        if len(other):
-            distance, _ = cKDTree(other[["z", "y", "x"]].to_numpy(dtype=float)).query(
-                part[["z", "y", "x"]].to_numpy(dtype=float), p=np.inf)
-            matched += int((distance <= 1 + 1e-9).sum())
-    return matched
-
-
 @pytest.mark.registration
 @pytest.mark.validation
 @pytest.mark.slow
@@ -180,9 +167,14 @@ def test_x6_tiled_with_local_registration_meets_the_proposed_proportions(tmp_pat
     assert tiles == grid
     tiled = _table(folder / _layout.SPOT_TABLES["molecules"])
     assert len(direct) > 0
-    found, kept = _matched(direct, tiled) / len(direct), _matched(tiled, direct) / len(tiled)
+    from starfinder.evaluation.matching import evaluate_molecules
+    from starfinder.image import ImageMetadata
+    metadata = ImageMetadata("x6/reference")
+    agreement = evaluate_molecules(direct, tiled, policy="any_neighbor", threshold=1 + 1e-9,
+                                   units="voxel", reference_metadata=metadata, observed_metadata=metadata)
+    found, kept = agreement.values["reference_fraction"], agreement.values["observed_fraction"]
     print(json.dumps({"size": size, "direct": len(direct), "tiled": len(tiled), "direct_matched": found,
-                      "tiled_matched": kept, "count_difference": abs(len(tiled) - len(direct)) / len(direct)}))
+                      "tiled_matched": kept, "count_difference": agreement.values["count_difference"]}))
     assert found >= 0.95
     assert kept >= 0.95
     assert abs(len(tiled) - len(direct)) <= 0.05 * len(direct)
