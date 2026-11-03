@@ -27,8 +27,9 @@ November 2026; where a run found a limit, the page states it.
    cluster's scheduler commands: after `use UGER`, run it with
    `apptainer exec --cleanenv --bind /stanley,/broad/uge,/local/scratch`, put the
    folder of `qsub` first on the image's `PATH` and pass every `SGE_*` variable
-   with `--env`. Point `XDG_CACHE_HOME`, `MPLCONFIGDIR` and `NUMBA_CACHE_DIR` at a
-   folder under `/stanley`, not the home folder.
+   with `--env`. For the Snakemake head's container, point `XDG_CACHE_HOME`,
+   `MPLCONFIGDIR` and `NUMBA_CACHE_DIR` at a folder under `/stanley`, not the
+   home folder.
    End the run with `starfinder workflow verify --manifest <manifest> --final`, in
    the image: Snakemake reruns tasks with missing declared non-temporary outputs
    and their downstream, but does not read the task records or detect a deleted
@@ -65,7 +66,10 @@ script asks `qstat`, then `qacct`, and counts a job without accounting as still
 running. The job script runs the task's command with `apptainer exec --cleanenv
 --bind /stanley,/local/scratch`, passes the image, the job id, the thread
 variables and `STARFINDER_WEIGHTS_DIR` explicitly, and exits with Apptainer's
-status. `APPTAINER_CACHEDIR` defaults to `/stanley/WangLab/<user>/.apptainer`, in
+status. Its `XDG_CACHE_HOME`, `MPLCONFIGDIR` and `NUMBA_CACHE_DIR` point to the
+`cache`, `matplotlib` and `numba` folders under the task's `APPTAINER_TMPDIR`,
+respectively; the job script creates those folders before `apptainer exec`.
+`APPTAINER_CACHEDIR` defaults to `/stanley/WangLab/<user>/.apptainer`, in
 the user's own lab folder, because `/stanley/WangLab` itself is not writable; the job
 stops if that folder does not exist, so set `APPTAINER_CACHEDIR` to another
 folder on `/stanley` then. Temporary files use the job's local scratch.
@@ -123,8 +127,6 @@ folder.
   `dataset.xml`.
 * Under Nextflow, tasks of learned methods get no `STARFINDER_WEIGHTS_DIR` and so
   find no weights; run them under Snakemake, whose head passes the variable on.
-* Under Snakemake the tasks see the home folder, and libraries write their caches
-  under `~/.cache` there; the Broad home is small.
 * The {doc}`MATLAB legacy workflow <matlab-legacy>` keeps its own profile,
   `profile/broad-uger-matlab/`, and its conda environment.
 

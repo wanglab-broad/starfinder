@@ -102,6 +102,11 @@ while a[0].startswith("--"):
     else:
         assert option in ("--cleanenv", "--nv")
 assert a.pop(0).endswith(".sif")
+for name, folder in (("XDG_CACHE_HOME", "cache"), ("MPLCONFIGDIR", "matplotlib"),
+                     ("NUMBA_CACHE_DIR", "numba")):
+    expected = str(Path(env["TMPDIR"]) / folder)
+    assert env[name] == expected
+    assert Path(expected).is_dir(), f"{name} does not exist before apptainer runs"
 sys.exit(subprocess.run(a, env=env).returncode)
 '''
 
@@ -137,12 +142,37 @@ def test_the_apptainer_job_script_runs_and_preserves_failure(tmp_path, gpu, busy
         return
     arguments = json.loads((tmp_path / "apptainer.json").read_text())
     assert ("--nv" in arguments) == gpu
+    environment_args = [
+        f"STARFINDER_IMAGE={environment['STARFINDER_IMAGE']}",
+        "JOB_ID=12345",
+        f"CUDA_VISIBLE_DEVICES={'1' if gpu else ''}",
+        f"TMPDIR={environment['TMPDIR']}",
+        f"XDG_CACHE_HOME={environment['TMPDIR']}/cache",
+        f"MPLCONFIGDIR={environment['TMPDIR']}/matplotlib",
+        f"NUMBA_CACHE_DIR={environment['TMPDIR']}/numba",
+        "OMP_NUM_THREADS=4",
+        "OPENBLAS_NUM_THREADS=4",
+        "MKL_NUM_THREADS=4",
+        "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=4",
+        "NUMEXPR_NUM_THREADS=4",
+        "STARFINDER_WEIGHTS_DIR=/stanley/weights with spaces",
+    ]
+    expected_arguments = ["exec", "--cleanenv", "--bind", "/stanley,/local/scratch"]
+    if gpu:
+        expected_arguments.append("--nv")
+    for value in environment_args:
+        expected_arguments.extend(("--env", value))
+    expected_arguments.extend((environment["STARFINDER_SIF"], "bash"))
+    assert arguments == expected_arguments
     inside = json.loads(result.read_text())
     assert inside["CUDA_VISIBLE_DEVICES"] == ("1" if gpu else "")
     assert inside["STARFINDER_IMAGE"] == environment["STARFINDER_IMAGE"]
     assert inside["JOB_ID"] == "12345"
     assert inside["STARFINDER_WEIGHTS_DIR"] == "/stanley/weights with spaces"
     assert inside["TMPDIR"] == str(tmp_path / "scratch")
+    assert inside["XDG_CACHE_HOME"] == str(tmp_path / "scratch" / "cache")
+    assert inside["MPLCONFIGDIR"] == str(tmp_path / "scratch" / "matplotlib")
+    assert inside["NUMBA_CACHE_DIR"] == str(tmp_path / "scratch" / "numba")
     assert all(inside[name] == "4" for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                                                "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS", "NUMEXPR_NUM_THREADS"))
     assert "HOST_ONLY_VALUE" not in inside
