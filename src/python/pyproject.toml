@@ -52,6 +52,21 @@ cellpose = [
     "torch==2.7.1; python_version < '3.14'",
     "torchvision==0.22.1; python_version < '3.14'",
 ]
+# The four learned backends with CUDA builds, for the learned-cuda image (W-792): torch
+# and torchvision from the PyTorch cu126 index, and TensorFlow with its CUDA libraries.
+# The other learned extras take torch from the CPU index on Linux, so this extra
+# conflicts with spotiflow, piscis and cellpose ([tool.uv] conflicts) and lists their
+# packages itself.
+cuda = [
+    "stardist==0.9.2; python_version >= '3.11' and python_version < '3.14'",
+    "csbdeep==0.8.2; python_version >= '3.11' and python_version < '3.14'",
+    "tensorflow[and-cuda]==2.20.0; python_version >= '3.11' and python_version < '3.14'",
+    "cellpose==4.2.1.1; python_version < '3.14'",
+    "spotiflow==0.6.5; python_version < '3.14'",
+    "piscis==1.1.0; python_version < '3.14'",
+    "torch==2.7.1; python_version < '3.14'",
+    "torchvision==0.22.1; python_version < '3.14'",
+]
 # Stitching backend (§2.10). multiview-stitcher 0.1.62 requires Python 3.11, as the
 # package does, and lists 3.11 to 3.13, so the extra is empty on 3.14 and later.
 multiview-stitcher = [
@@ -111,14 +126,36 @@ workflow = [
 # are held at the versions W-305 and W-306 measured with TensorFlow 2.20.0.
 constraint-dependencies = ["torch==2.7.1", "torchvision==0.22.1", "huggingface-hub==1.16.1",
                            "keras==3.15.1", "tensorboard==2.20.0"]
+conflicts = [
+    [{ extra = "cuda" }, { extra = "spotiflow" }],
+    [{ extra = "cuda" }, { extra = "piscis" }],
+    [{ extra = "cuda" }, { extra = "cellpose" }],
+]
 
 [tool.uv.sources]
-torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
-torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+# On Linux the learned extras take torch from the CPU index and the cuda extra from the
+# cu126 index; a source without an extra would also apply to the cuda extra's torch.
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'", extra = "spotiflow" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'", extra = "piscis" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'", extra = "cellpose" },
+    { index = "pytorch-cu126", marker = "sys_platform == 'linux'", extra = "cuda" },
+]
+torchvision = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'", extra = "spotiflow" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'", extra = "piscis" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'", extra = "cellpose" },
+    { index = "pytorch-cu126", marker = "sys_platform == 'linux'", extra = "cuda" },
+]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [tool.pytest.ini_options]
