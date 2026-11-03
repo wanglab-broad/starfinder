@@ -8,7 +8,8 @@ from scipy.stats import rankdata
 from ._result import EvaluationResult, _result
 from .matching import match_points
 
-__all__ = ["evaluate_decoding", "evaluate_deduplication", "ranking_quality", "correct_fraction"]
+__all__ = ["evaluate_decoding", "evaluate_deduplication", "ranking_quality", "correct_fraction",
+           "read_status_summary", "cutoff_curve"]
 
 
 def evaluate_decoding(decoded, truth, *, matches, sequence_column="observed_color_sequence"):
@@ -315,3 +316,113 @@ def correct_fraction(detected, truth, *, policy, threshold, boundary, units,
                    {**matches.counts, "reads_accepted": correct + wrong + false, "reads_correct": correct,
                     "reads_wrong_gene": wrong, "reads_false_detection": false},
                    {**matches.config, "denominator": "truth molecules"}, details=matches.details)
+
+
+def read_status_summary(reads: pd.DataFrame) -> EvaluationResult:
+    """Count decoded statuses over every read, including rejected reads (M17/M18).
+
+    Parameters
+    ----------
+    reads : pandas.DataFrame
+        Decoded read table with ``call_status`` values ``assigned``, ``unmatched``,
+        ``ambiguous`` or ``no_signal``. Acceptance flags are ignored.
+
+    Returns
+    -------
+    EvaluationResult
+        Assigned count and unmatched/all-reads rate, with each status count.
+        An empty table has assigned count zero and an undefined unmatched rate.
+    """
+    statuses = ("assigned", "unmatched", "ambiguous", "no_signal")
+    if "call_status" not in reads or not reads.call_status.isin(statuses).all():
+        raise ValueError("call_status must contain valid decoded statuses without missing values")
+    counts = {"total": len(reads), **{s: int(reads.call_status.eq(s).sum()) for s in statuses}}
+    return _result({"unmatched_rate": counts["unmatched"] / len(reads) if len(reads) else None,
+                    "assigned": counts["assigned"]},
+                   {"unmatched_rate": "fraction", "assigned": "count"}, counts,
+                   {"denominator": "all decoded reads, including rejected reads"})
+
+
+def cutoff_curve(reads: pd.DataFrame, *, score_column: str, cutoffs, orientation: str,
+                 correct_column: str | None = None) -> EvaluationResult:
+    """Reduce saved decoder scores at inclusive, supplied cutoffs (M41).
+
+    Parameters
+    ----------
+    reads : pandas.DataFrame
+        All decoded reads with ``call_status``, ``gene_id`` and the score column.
+        Rejected reads remain in the population. No decoding or scoring is run.
+    score_column : str
+        Saved score column, such as qc_score, WTA, codebook-aware or direct score.
+        The caller supplies a homogeneous score population and its provenance.
+    cutoffs : iterable of float
+        Finite inclusive cutoffs in output order; no optimum is selected.
+    orientation : str
+        ``higher`` retains scores greater than or equal to a cutoff; ``lower``
+        retains scores less than or equal to it.
+    correct_column : str or None
+        Optional nullable Boolean truth-correctness column. Missing truth is
+        counted and excluded from truth error; None omits error entirely.
+
+    Returns
+    -------
+    EvaluationResult
+        ``details['curve']`` holds retention over all supplied reads, unmatched
+        rate over retained reads, assigned-gene counts and retained fractions
+        relative to each gene's full-table count, and optional truth error.
+        Missing scores are excluded and counted with a reason. No defined
+        scores leaves retention undefined; empty retained populations leave
+        unmatched rate and truth error undefined with reasons in each row.
+    """
+    read_status_summary(reads)
+    if "gene_id" not in reads or score_column not in reads:
+        raise ValueError("reads require gene_id and the saved score column")
+    if orientation not in ("higher", "lower"):
+        raise ValueError("orientation must be 'higher' or 'lower'")
+    thresholds = np.asarray(list(cutoffs), dtype=float)
+    if thresholds.ndim != 1 or not len(thresholds) or not np.isfinite(thresholds).all():
+        raise ValueError("cutoffs must be a nonempty finite vector")
+    scores = reads[score_column].to_numpy(dtype=float, na_value=np.nan)
+    if np.isinf(scores).any():
+        raise ValueError("scores must be finite or missing")
+    defined = ~np.isnan(scores)
+    if correct_column is not None:
+        if correct_column not in reads:
+            raise ValueError("missing truth-correctness column")
+        truth = reads[correct_column]
+        if any(not isinstance(v, (bool, np.bool_)) for v in truth.dropna()):
+            raise ValueError("truth correctness must be Boolean or missing")
+    assigned = reads.call_status.eq("assigned")
+    genes = {str(g): int(n) for g, n in reads.loc[assigned, "gene_id"].value_counts().items()}
+    curve = []
+    for cutoff in thresholds:
+        keep = defined & (scores >= cutoff if orientation == "higher" else scores <= cutoff)
+        retained = reads.loc[keep]
+        summary = read_status_summary(retained)
+        counts = {str(g): int(n) for g, n in retained.loc[retained.call_status.eq("assigned"),
+                                                       "gene_id"].value_counts().items()}
+        reasons = dict(summary.reasons)
+        retention = len(retained) / len(reads) if defined.any() else None
+        if retention is None:
+            reasons["retention"] = "no defined scores"
+        row = {"cutoff": float(cutoff), "retained": len(retained), "retention": retention,
+               "unmatched_rate": summary.values["unmatched_rate"], "gene_counts": counts,
+               "gene_retained_fraction": {g: counts.get(g, 0) / n for g, n in genes.items()},
+               "reasons": reasons}
+        if correct_column is not None:
+            available = truth[keep].dropna()
+            row["truth_defined"] = len(available)
+            row["truth_undefined"] = len(retained) - len(available)
+            row["truth_error"] = float((~available.astype(bool)).mean()) if len(available) else None
+            if not len(available):
+                reasons["truth_error"] = "no retained reads with available truth"
+        curve.append(row)
+    excluded = int((~defined).sum())
+    reasons = {"score_undefined": "missing scores excluded from every cutoff"} if excluded else {}
+    if not defined.any():
+        reasons["retention"] = "no defined scores"
+    return _result({}, {}, {"total": len(reads), "scored": int(defined.sum()), "score_undefined": excluded},
+                   {"score_column": score_column, "orientation": orientation,
+                    "cutoffs": thresholds.tolist(), "boundary": "inclusive", "correct_column": correct_column,
+                    "retention_denominator": "all supplied reads", "gene_denominator": "all assigned reads per gene"},
+                   details={"curve": curve}, reasons=reasons)
