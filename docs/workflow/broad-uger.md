@@ -6,10 +6,9 @@ engine runs as a UGER job, and every task runs in the workflow image built from
 the package's lock, through Apptainer on the compute nodes.
 :::
 
-This page says how the profiles are meant to work. The Snakemake profile is
-checked locally with stand-in scheduler commands; a UGER submission under either
-engine, a GPU job, the SIF and Fiji in the image have not been checked on the
-cluster yet.
+This page says how the profiles work on UGER. Both engines, the image's SIF, the
+memory limits, the GPU route and Fiji in the image were run on the cluster in
+November 2026; where a run found a limit, the page states it.
 
 ## Quick start
 
@@ -20,28 +19,39 @@ cluster yet.
 2. **Snakemake.** Run the head as a UGER job with 8 GiB of memory, in the same
    image, with the checkout and the data under `/stanley`. Set `STARFINDER_IMAGE`
    to the image's OCI manifest digest and `STARFINDER_SIF` to its SIF in the
-   head's environment, and give `snakemake` absolute paths:
+   head's environment, with `STARFINDER_WEIGHTS_DIR`, a folder under `/stanley`
+   that holds the weights, when a task uses a learned method; give `snakemake`
+   absolute paths:
    `-s <checkout>/workflow/Snakefile --configfile <configuration> --profile <checkout>/profile/broad-uger`.
+   The head submits the tasks from inside the image, so the image needs the
+   cluster's scheduler commands: after `use UGER`, run it with
+   `apptainer exec --cleanenv --bind /stanley,/broad/uge,/local/scratch`, put the
+   folder of `qsub` first on the image's `PATH` and pass every `SGE_*` variable
+   with `--env`. Point `XDG_CACHE_HOME`, `MPLCONFIGDIR` and `NUMBA_CACHE_DIR` at a
+   folder under `/stanley`, not the home folder.
    End the run with `starfinder workflow verify --manifest <manifest> --final`, in
    the image: Snakemake reruns tasks with missing declared non-temporary outputs
    and their downstream, but does not read the task records or detect a deleted
    log or an output of another size (the {doc}`workflow guide <index>`, "Reruns").
-3. **Nextflow.** Run the head as a UGER job with Java 17 or newer and Nextflow
-   26.10.4 or newer:
+   `--hash` also compares each output's SHA-256, not only its size.
+3. **Nextflow.** Run the head as a UGER job, outside the image, with Java 17 or
+   newer and Nextflow 26.10.4 or newer (`use UGER` and `use Java-17` give the
+   scheduler commands and Java):
    `nextflow run <checkout>/nextflow/main.nf -profile sge --config <configuration> --container <SIF> -work-dir <folder under /stanley>`.
    The `sge` profile refuses to start without `--container`, which the plan and
-   `verify` jobs use as well as the tasks.
+   `verify` jobs use as well as the tasks. Leave out `-with-trace`, `-with-report`
+   and `-with-timeline`: they need `ps`, which the image does not have.
 
 Without `STARFINDER_IMAGE`, the Snakemake jobs use the profile's default CPU image
 digest; without `STARFINDER_SIF`, they look for
 `/stanley/WangLab/jiahao/test/starfinder_benchmark/containers/starfinder-<digest hex>.sif`.
-A task's `execution.container`, when the configuration sets it, replaces that
-task's image, and each engine reads it its own way. Under Snakemake it is an OCI
-manifest digest; the submit script refuses anything else. `STARFINDER_SIF`, when
-set, is used for every job whatever the digest, so leave it unset when tasks name
-their own digests and the SIF is found by the digest. Under Nextflow the value goes
-to the `container` directive as it is, so under `sge` it is the SIF's path on the
-shared drive. A configuration's value therefore suits one engine.
+`execution.container`, when the configuration sets it, replaces the image of every
+task; there is no image per task kind. Each engine reads it its own way. Under
+Snakemake it is an OCI manifest digest; the submit script refuses anything else,
+and `STARFINDER_SIF`, when set, is used for every job whatever the digest. Under
+Nextflow the value goes to the `container` directive as it is, so under `sge` it
+is the SIF's path on the shared drive. A configuration's value therefore suits one
+engine.
 
 ## What it does
 
@@ -73,8 +83,11 @@ n threads to (n + 1)/n of it, under both engines.
 **GPU tasks.** A GPU task requests `gpu=TRUE,operating_system=RedHat8` under both
 engines and runs Apptainer with `--nv`. UGER assigns no device: the Snakemake job
 script picks the first GPU with no memory in use, sets `CUDA_VISIBLE_DEVICES`, and
-fails when there is none. This choice does not reserve the device against
-another job. The CPU images hold no GPU build of PyTorch.
+fails when there is none; under Nextflow the task sees every GPU of the node. A
+Broad GPU node runs one job at a time, whatever its queue, so a GPU task has the
+node and its four GPUs to itself and uses one of them. The images hold no GPU build
+of PyTorch or TensorFlow: `--nv` brings the driver but not the CUDA runtime, so a
+task with `segmentation.device: cuda` stops with "TensorFlow sees no GPU".
 
 ## What you get
 
@@ -101,9 +114,17 @@ folder.
 
 * The lock's environment needs a newer glibc than the RHEL 7 CPU nodes have,
   which is why the tasks run in the image.
-* The GPU choice above is not a reservation.
+* No GPU task can run on CUDA with the current images (above).
 * Fiji runs only under Snakemake; under Nextflow, supply BigStitcher's
-  `dataset.xml` (`stitching.dataset_xml`).
+  `dataset.xml` (`stitching.dataset_xml`). BigStitcher's defaults
+  (`stitching.config`) suit full-size tiles: its loader skips files under
+  `exclude` KB (10), and its pairwise shifts run at a 4× downsampling. Fiji exits
+  0 when its macro fails; the engine task then fails on its own check of
+  `dataset.xml`.
+* Under Nextflow, tasks of learned methods get no `STARFINDER_WEIGHTS_DIR` and so
+  find no weights; run them under Snakemake, whose head passes the variable on.
+* Under Snakemake the tasks see the home folder, and libraries write their caches
+  under `~/.cache` there; the Broad home is small.
 * The {doc}`MATLAB legacy workflow <matlab-legacy>` keeps its own profile,
   `profile/broad-uger-matlab/`, and its conda environment.
 
@@ -113,5 +134,13 @@ Focused tests resolve the profile outside the checkout, check the scheduler
 arguments the submit script builds, run the job script with a stand-in
 Apptainer. They submit no UGER job and
 run no GPU, SIF, MATLAB or Fiji job.
+
+The cluster runs of November 2026 ran both engines on UGER, on a small synthetic
+sample and on four full-size FOVs, direct and tiled, with equal outputs; a task
+killed by `h_vmem` that succeeded on its retry with twice the memory; the GPU
+route on an A30 node; the Fiji task inside the image; and the MATLAB workflow
+under its frozen profile. On the small sample's 36 × 36 tiles BigStitcher found
+no pairwise shift, so the Fiji task's successful stitch on UGER is not shown;
+its failure path is.
 
 [UGER design record](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/broad-uger.md).

@@ -40,8 +40,11 @@ The MATLAB rules keep the conda environment of `workflow/envs/matlab-legacy.yaml
 Starfinder package, so that environment needs the package and the extras those
 rules use. On Broad UGER, `profile/broad-uger-matlab/` keeps conda deployment,
 `notemp`, three retries and Broad's module loading, and its job script activates
-`/stanley/WangLab/envs/starfinder-v9` before loading MATLAB; select it with
-`matlab_launcher: broad`.
+`/stanley/WangLab/envs/starfinder-v9` and then runs `use Matlab`. Under that
+profile keep `matlab_launcher: path`, the default: `matlab` is then on `PATH`.
+`broad` repeats `use Matlab` in a shell that inherits the job script's, where it
+returns 1, so the rule exits 1 before MATLAB starts; `broad` is for a job that
+has not loaded MATLAB.
 
 ## Downstream rules
 

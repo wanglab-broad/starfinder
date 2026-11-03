@@ -71,8 +71,11 @@ image or actual GPU processing is claimed.
 path repairs: bare submit/status names, the `jobscript` key, and actual default
 resources. It retains conda deployment, `notemp`, three retries, the original
 submit/status behavior and module loading. The template activates
-`/stanley/WangLab/envs/starfinder-v9` before loading MATLAB. Select
-`backend: matlab` and `matlab_launcher: broad`.
+`/stanley/WangLab/envs/starfinder-v9` before loading MATLAB.
+% Amended 2026-11-03 for W-649 (U8) and W-784: under this profile `matlab_launcher: broad` exits 1 before MATLAB
+% starts (its second `use Matlab` returns 1 in the job script's environment); the default `path` runs.
+Select `backend: matlab` and keep `matlab_launcher: path`, the default: the
+template's `use Matlab` puts `matlab` on `PATH`.
 The environment description moved unchanged to `workflow/envs/matlab-legacy.yaml`;
 its historical header still names its original basename.
 
