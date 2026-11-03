@@ -128,6 +128,8 @@ deduplication: Present, duplicate reads are removed: distance_voxels and compati
 ```{workflow-keys} processing.tiled
 ```
 
+For a full-size Position400 FOV in tiled mode, the whole `tile_merge` task measured 6.37–7.08 GiB RSS, which its table-processing code does not explain; the 8,000 MB default left about 397 MB above U4's maximum observed peak.
+
 (workflow-keys-morphology)=
 ### `morphology`
 
