@@ -1,7 +1,7 @@
 """X4 of design/validation/orchestration.md: the refactored per-FOV core against the original's values.
 
 The ``fov`` command on ``session_dataset`` (the pytest session's small synthetic dataset) reproduces ``core_values``
-(``data/expected/test_workflow_core_golden/``, recorded by W-734 with today's ``rsf_single_fov`` rule): the molecule
+(``data/expected/test_workflow_core_golden/``, recorded by W-734 and updated only for W-790's removed spots): the molecule
 tables, ``run.json`` and the checkpoint stage records, the stage tables and the reference images, compared by
 ``workflow_golden.compare`` with ``same_environment=False``, so that the result depends on neither the caller nor the
 host. Each command runs in its own process with every variable of ``_execution.THREAD_VARIABLES`` set to "1". The

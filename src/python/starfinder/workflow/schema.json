@@ -212,7 +212,7 @@
         "null"
        ],
        "minimum": 0,
-       "description": "The halo in voxels; null is the plan's minimum, the largest footprint of the tile's operations."
+       "description": "The halo in voxels; null is the plan's minimum, the largest footprint of the tile's operations; regional maxima meeting the core must also fit the window, checked by the tile task."
       },
       "local_registration": {
        "type": [
@@ -230,7 +230,7 @@
       },
       "exact": {
        "type": "boolean",
-       "description": "true (default): refuse operations without a finite footprint, so that tiled equals direct."
+       "description": "true (default): refuse operations without a finite footprint and fail a tile when a regional maximum meeting its core touches an internal window edge, naming a conservative containing halo covering the full FOV; false records per-channel truncated_maxima counts."
       }
      }
     },

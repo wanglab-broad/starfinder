@@ -4,8 +4,11 @@ design/specs/readout.md, "Optional deduplication", "Runtime order and defaults" 
 "Checkpoints and reruns"; design/specs/readout-algorithms.md, "Deduplication" and "Engineering
 validation design". R13 checks the known answers on the crosstalk fixture (seeds 100 to
 102). R14 (extended tier) checks the false merges on the W-278 held-out scenes (cal and
-dense, seeds 103 to 105) against W-278 duplicates.csv (heldout, all_calibrated,
-same_sequence, d = 1: 5 of 763); the grouping, representative and conflict rule are
+dense, seeds 103 to 105) against the unchanged 0.7 % bound from W-278 duplicates.csv
+(heldout, all_calibrated, same_sequence, d = 1: historically 5 of 763). W-790's
+regional-maximum collapse gives a subset population with 4 links of 651 distinct
+pairs; its candidate removals and unchanged kept readout values are independently
+audited in that issue's repair evidence. The grouping, representative and conflict rule are
 provisional there, and missed duplicates are reported, not gated. R15 checks that the
 stage is off by default and unavailable in direct mode, R17 the reruns from checkpoints
 with deduplication and R18 the filter on golden, two_seg and crosstalk. Every hand-built fixture runs
@@ -170,8 +173,10 @@ def test_r14_false_merges_on_calibrated_scenes():
                 merges[name]["missed"] += evaluation.values["missed_duplicates"]
     print(f"\nR14 pooled over {len(scenes.CONDITIONS)} conditions x seeds {scenes.HELDOUT_SEEDS}: {totals}; "
           f"after grouping {merges}")
-    # The W-278 population is reproduced: 1927 candidates, 763 distinct pairs within 5 voxels, 5 links.
-    assert (totals["candidates"], totals["distinct"], totals["measured_rule_links"]) == (1927, 763, 5)
+    # W-790's independently audited subset of the historical W-278 population (1927, 763, 5):
+    # 169 plateau/shoulder candidates removed, taking 112 distinct pairs and one measured link with them.
+    # Kept extracted/decoded values and source attributions are unchanged; the 0.7 % bounds below stay fixed.
+    assert (totals["candidates"], totals["distinct"], totals["measured_rule_links"]) == (1758, 651, 4)
     # (a) Pairwise links: at most 0.7 % of the distinct pairs (W-278 duplicates.csv: 5 of 763).
     assert totals["links"] <= totals["measured_rule_links"]
     assert totals["links"] / totals["distinct"] <= 0.007

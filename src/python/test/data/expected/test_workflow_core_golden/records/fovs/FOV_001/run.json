@@ -1535,110 +1535,110 @@
   }
  },
  "counts": {
-  "spots": 74,
-  "intensities": 74,
+  "spots": 65,
+  "intensities": 65,
   "call_status": {
-   "assigned": 74
+   "assigned": 65
   },
   "scoring": {
-   "total": 74,
-   "scored": 74,
+   "total": 65,
+   "scored": 65,
    "no_assignment": 0,
    "background_unavailable": 0
   },
   "deduplication": {
-   "total": 74,
+   "total": 65,
    "groups": 14,
-   "merged_reads": 17,
+   "merged_reads": 14,
    "conflicting_groups": 0
   },
   "filtering": {
-   "total": 74,
-   "accepted": 57,
-   "rejected": 17,
-   "endpoint_valid": 74,
+   "total": 65,
+   "accepted": 51,
+   "rejected": 14,
+   "endpoint_valid": 65,
    "fractions": {
-    "accepted": 0.7702702702702703,
+    "accepted": 0.7846153846153846,
     "endpoint_valid": 1.0
    }
   },
   "summary": {
    "readout_mode": "multiplexed",
-   "reads": 74,
+   "reads": 65,
    "call_status": {
-    "assigned": 74,
+    "assigned": 65,
     "ambiguous": 0,
     "no_signal": 0,
     "unmatched": 0
    },
    "failure_reason": {},
    "call_type": {
-    "exact": 74
+    "exact": 65
    },
    "genes": {
     "GeneA": 2,
     "GeneB": 2,
     "GeneC": 2,
-    "GeneD": 12,
-    "GeneE": 10,
+    "GeneD": 9,
+    "GeneE": 8,
     "GeneF": 2,
     "GeneG": 2,
     "GeneH": 9,
-    "GeneI": 14,
+    "GeneI": 12,
     "GeneJ": 8,
-    "GeneK": 5,
-    "GeneL": 6
+    "GeneK": 4,
+    "GeneL": 5
    },
    "entries": {
-    "CAAAC": 14,
+    "CAAAC": 12,
     "CAACC": 8,
     "CACGC": 2,
     "CATGC": 2,
     "CCATC": 2,
-    "CCCGC": 5,
-    "CCTCC": 6,
+    "CCCGC": 4,
+    "CCTCC": 5,
     "CGAAC": 2,
     "CGCTC": 9,
-    "CGTAC": 12,
+    "CGTAC": 9,
     "CTAGC": 2,
-    "CTGAC": 10
+    "CTGAC": 8
    },
    "qc_score": {
     "exact": {
-     "n": 74,
-     "q05": 0.11564259768613622,
-     "q25": 0.1549064569710481,
-     "q50": 0.21638365605013465,
+     "n": 65,
+     "q05": 0.11458448978596643,
+     "q25": 0.1540387255456723,
+     "q50": 0.21440744946282997,
      "q75": 0.25103681280629664,
-     "q95": 0.4155885184090679
+     "q95": 0.42017056877996245
     }
    },
    "scoring": {
-    "scored": 74,
+    "scored": 65,
     "no_assignment": 0,
     "background_unavailable": 0
    },
    "deduplication": {
-    "total": 74,
+    "total": 65,
     "groups": 14,
-    "merged_reads": 17,
+    "merged_reads": 14,
     "conflicting_groups": 0
    },
    "filtering": {
-    "total": 74,
-    "accepted": 57,
-    "rejected": 17,
+    "total": 65,
+    "accepted": 51,
+    "rejected": 14,
     "rejection_reasons": {
-     "duplicate": 17
+     "duplicate": 14
     }
    },
    "intensities": {
-    "candidates": 74,
+    "candidates": 65,
     "valid": {
-     "round1": 74,
-     "round2": 74,
-     "round3": 74,
-     "round4": 74
+     "round1": 65,
+     "round2": 65,
+     "round3": 65,
+     "round4": 65
     },
     "invalid": {
      "round1": 0,
@@ -1655,22 +1655,22 @@
     "medians": {
      "round1": {
       "ch00": {
-       "sum": 93.0,
+       "sum": 94.0,
        "background": 1.0,
        "noise": 1.4826
       },
       "ch01": {
-       "sum": 810.0,
+       "sum": 298.0,
        "background": 1.0,
        "noise": 1.4826
       },
       "ch02": {
-       "sum": 233.0,
+       "sum": 235.0,
        "background": 2.0,
        "noise": 1.4826
       },
       "ch03": {
-       "sum": 105.5,
+       "sum": 113.0,
        "background": 1.0,
        "noise": 1.4826
       }
@@ -1687,12 +1687,12 @@
        "noise": 1.4826
       },
       "ch02": {
-       "sum": 106.0,
+       "sum": 130.0,
        "background": 1.0,
        "noise": 1.4826
       },
       "ch03": {
-       "sum": 209.5,
+       "sum": 200.0,
        "background": 1.0,
        "noise": 1.4826
       }
@@ -1704,17 +1704,17 @@
        "noise": 1.4826
       },
       "ch01": {
-       "sum": 186.5,
+       "sum": 180.0,
        "background": 1.0,
        "noise": 1.4826
       },
       "ch02": {
-       "sum": 111.5,
+       "sum": 107.0,
        "background": 1.0,
        "noise": 1.4826
       },
       "ch03": {
-       "sum": 133.0,
+       "sum": 135.0,
        "background": 2.0,
        "noise": 1.4826
       }
@@ -1726,17 +1726,17 @@
        "noise": 1.4826
       },
       "ch01": {
-       "sum": 129.0,
+       "sum": 139.0,
        "background": 1.0,
        "noise": 1.4826
       },
       "ch02": {
-       "sum": 107.0,
+       "sum": 106.0,
        "background": 1.0,
        "noise": 1.4826
       },
       "ch03": {
-       "sum": 142.5,
+       "sum": 133.0,
        "background": 1.0,
        "noise": 1.4826
       }
@@ -1745,7 +1745,7 @@
    },
    "cross_channel_pairs": {
     "distance_voxels": 1.0,
-    "pairs": 17
+    "pairs": 14
    }
   }
  },
@@ -1756,7 +1756,7 @@
   },
   "pre_qc": {
    "path": "checkpoints/pre_qc.json",
-   "sha256": "bc24f8d719e80880b21483c9c015e3f6e9a1f91982f1c287f0299190598be393"
+   "sha256": "afccd9a375ae5d5778872b19eba58a976fe36c9818136b984ed4963cec4be18d"
   }
  },
  "outputs": {
@@ -1765,8 +1765,8 @@
   },
   "molecules": {
    "path": "molecules.csv",
-   "sha256": "7e3ce44dc608bc6f1716d324e9a99dfb5907cbfcbca8594f815eabe8d64c0157",
-   "molecules_sha256": "562cb75ae49a6a1e62ff6c3b347e8ca3e63672c398f0770d4c059695561ea2b2",
+   "sha256": "7ff12f1f41b15ef1e85401606099b41b9e4b19b757beffecd1aad2dce900e76e",
+   "molecules_sha256": "3aec03c1324aa91d10084e1ebd252c98e41c53877f925d0d28b974a398a004eb",
    "dtypes": {
     "spot_namespace": "string",
     "spot_id": "string",
@@ -1777,7 +1777,7 @@
     "entry_id": "string",
     "qc_score": "float64"
    },
-   "rows": 57
+   "rows": 51
   }
  }
 }

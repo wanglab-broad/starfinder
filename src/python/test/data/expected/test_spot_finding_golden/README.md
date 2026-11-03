@@ -1,5 +1,11 @@
 # Expected values of `test_spot_finding_golden.py`
 
+W-790 (2026-11-03) regenerated these tables with the generator below after
+regional-maximum collapse: only non-representative plateau and shoulder rows
+are removed, and spot identities renumber. Fixture pixels, thresholds, dtypes
+and comparison tolerances are unchanged. The independent removal audit and
+per-file row ledger are retained with W-790's implementation evidence.
+
 The explicit expected values of the spot-finding golden test on its seeded fixture (W-267; W-573
 replaced the SHA-256 digests pinned before): `<mode>-<border|noborder>-<3d|z1>.csv` is the
 `find_spots` table of each of the 16 cases, which is also the reloaded candidates table of

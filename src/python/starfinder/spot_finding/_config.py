@@ -86,11 +86,23 @@ class LocalMaximaConfig:
     channel maximum, adaptive_round the image maximum, global the uint8/uint16
     maximum (fraction units [0,1]); absolute is threshold_value itself, in the
     image's grey levels (the tiled tile task's FOV-level thresholds, one per
-    channel). Border exclusion uses min_distance_voxels.
-    Singleton Z is treated as a 2D plane, excluding only the YX border.
+    channel). Each 26-connected equal-valued regional maximum above the
+    threshold gives one representative voxel; all its neighbours must be lower.
+    The centroid rounds half up on each axis if that voxel belongs to the
+    maximum; otherwise the nearest voxel wins, ties by smallest z, y, x.
+    Rows are ordered by channel, decreasing value, then representative z, y, x.
+    Border exclusion applies to the representative, with width min_distance_voxels.
+    Above distance 1, the size 2d+1 maximum window and greedy Chebyshev
+    spacing apply to the representatives.
+    Singleton Z uses 8-connectivity in a 2D plane, excluding only the YX border.
     Optional peak_intensity is the original pixel value, without normalization.
 
-    merge_radius_zyx (None: off, the legacy result) is the opt-in
+    diagnostics['plateaus'] reports maxima with more than one voxel and the
+    removed voxel count per channel (maxima, removed_voxels), before border,
+    window and spacing exclusions. It is omitted when all counts are zero,
+    preserving the diagnostics of images without tied maxima.
+
+    merge_radius_zyx (None: off) is the opt-in
     within-channel merge: after border exclusion a channel's maxima are
     ordered by decreasing pixel value, then increasing z, y, x, and a maximum
     is dropped when an earlier kept maximum of the same channel lies within

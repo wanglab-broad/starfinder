@@ -1664,49 +1664,49 @@
   }
  },
  "counts": {
-  "spots": 16,
-  "intensities": 16,
+  "spots": 15,
+  "intensities": 15,
   "call_status": {
    "assigned": 13,
-   "unmatched": 3
+   "unmatched": 2
   },
   "scoring": {
-   "total": 16,
+   "total": 15,
    "scored": 13,
-   "no_assignment": 3,
+   "no_assignment": 2,
    "background_unavailable": 0
   },
   "deduplication": {
-   "total": 16,
+   "total": 15,
    "groups": 0,
    "merged_reads": 0,
    "conflicting_groups": 0
   },
   "filtering": {
-   "total": 16,
+   "total": 15,
    "accepted": 13,
-   "rejected": 3,
+   "rejected": 2,
    "endpoint_valid": 0,
    "fractions": {
-    "accepted": 0.8125,
+    "accepted": 0.8666666666666667,
     "endpoint_valid": 0.0
    }
   },
   "summary": {
    "readout_mode": "multiplexed",
-   "reads": 16,
+   "reads": 15,
    "call_status": {
     "assigned": 13,
     "ambiguous": 0,
     "no_signal": 0,
-    "unmatched": 3
+    "unmatched": 2
    },
    "failure_reason": {
-    "not_in_codebook": 3
+    "not_in_codebook": 2
    },
    "call_type": {
     "exact": 13,
-    "no_call": 3
+    "no_call": 2
    },
    "genes": {
     "balanced-02": 1,
@@ -1740,30 +1740,30 @@
    },
    "scoring": {
     "scored": 13,
-    "no_assignment": 3,
+    "no_assignment": 2,
     "background_unavailable": 0
    },
    "deduplication": {
-    "total": 16,
+    "total": 15,
     "groups": 0,
     "merged_reads": 0,
     "conflicting_groups": 0
    },
    "filtering": {
-    "total": 16,
+    "total": 15,
     "accepted": 13,
-    "rejected": 3,
+    "rejected": 2,
     "rejection_reasons": {
-     "call_status": 3
+     "call_status": 2
     }
    },
    "intensities": {
-    "candidates": 16,
+    "candidates": 15,
     "valid": {
-     "round1": 16,
-     "round2": 16,
-     "round3": 16,
-     "round4": 16
+     "round1": 15,
+     "round2": 15,
+     "round3": 15,
+     "round4": 15
     },
     "invalid": {
      "round1": 0,
@@ -1780,88 +1780,88 @@
     "medians": {
      "round1": {
       "ch00": {
-       "sum": 258.5,
+       "sum": 278.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch01": {
-       "sum": 174.5,
+       "sum": 184.0,
        "background": 2.0,
        "noise": 1.4826
       },
       "ch02": {
-       "sum": 205.5,
+       "sum": 234.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch03": {
-       "sum": 286.0,
+       "sum": 298.0,
        "background": 3.0,
        "noise": 2.9652
       }
      },
      "round2": {
       "ch00": {
-       "sum": 277.0,
+       "sum": 291.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch01": {
-       "sum": 213.5,
-       "background": 3.75,
+       "sum": 234.0,
+       "background": 3.5,
        "noise": 2.9652
       },
       "ch02": {
-       "sum": 589.0,
+       "sum": 832.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch03": {
-       "sum": 287.0,
-       "background": 3.5,
+       "sum": 288.0,
+       "background": 4.0,
        "noise": 2.9652
       }
      },
      "round3": {
       "ch00": {
-       "sum": 228.0,
+       "sum": 258.0,
        "background": 4.0,
        "noise": 2.9652
       },
       "ch01": {
-       "sum": 227.5,
+       "sum": 229.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch02": {
-       "sum": 240.5,
+       "sum": 287.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch03": {
-       "sum": 225.0,
+       "sum": 226.0,
        "background": 3.0,
        "noise": 2.9652
       }
      },
      "round4": {
       "ch00": {
-       "sum": 249.5,
+       "sum": 262.0,
        "background": 4.0,
        "noise": 2.9652
       },
       "ch01": {
-       "sum": 254.0,
+       "sum": 259.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch02": {
-       "sum": 241.5,
-       "background": 2.25,
+       "sum": 244.0,
+       "background": 2.0,
        "noise": 2.9652
       },
       "ch03": {
-       "sum": 244.5,
+       "sum": 248.0,
        "background": 3.0,
        "noise": 2.9652
       }
@@ -1878,11 +1878,11 @@
  "checkpoints": {
   "candidates": {
    "path": "checkpoints/candidates.json",
-   "sha256": "81ac0b4468f15902cb1e019af4c8228a82887cd42912af5cb175e1ad08296df0"
+   "sha256": "66862d7d781e82a4a36e3c05507da0d2d7000e19912abfd0c6e7af3a8c2569bb"
   },
   "pre_qc": {
    "path": "checkpoints/pre_qc.json",
-   "sha256": "77216728cbc73f89be4a3328f4cfdf8f7513a671e22ab3acba83fcdeade97ee9"
+   "sha256": "cf37e5717c9dced9452ce211562c764a024b3dfed493fb6cd9da3fc7cad9f074"
   }
  },
  "outputs": {
@@ -1892,8 +1892,8 @@
   },
   "molecules": {
    "path": "molecules.csv",
-   "sha256": "93c45e3be7e25ffa8cca0e7a082c0aff00c4dfcaf9e276db4dfb300f57e02b2d",
-   "molecules_sha256": "ec4e3d6c3ad982c2906c8a43deca10bbad883e70f2fe221ce89f2f2a71a0b1d2",
+   "sha256": "8f7b35b86782e5f14e087d309c749de23b7fd6e8f66345345f8b1468d31c2362",
+   "molecules_sha256": "fe58970637eedcade7c654750472f395322a248b2426044f414c7cbb0786ef89",
    "dtypes": {
     "spot_namespace": "string",
     "spot_id": "string",

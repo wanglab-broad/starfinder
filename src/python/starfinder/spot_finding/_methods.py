@@ -1,14 +1,17 @@
 """The spot-finding method registry: exact config type -> SpotFindingSpec, and the private method functions."""
 from collections.abc import Callable, Mapping
 from dataclasses import KW_ONLY, dataclass, field
+from itertools import product
 import re
 import sys
 
 import numpy as np
 import pandas as pd
-from scipy.ndimage import center_of_mass, label
+from scipy.ndimage import center_of_mass, find_objects, label, maximum_filter
 from scipy.spatial import cKDTree
+from skimage._shared.coord import ensure_spacing
 from skimage.feature import peak_local_max
+from skimage.morphology import local_maxima
 
 from starfinder._registry import Dependency, check_shared, require
 from ._config import (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, PiscisConfig, SpotiflowConfig,
@@ -72,7 +75,9 @@ class SpotFindingSpec:
     detected channel in context.channels order (one value for a method that
     combines channels), and for local maxima ``noise``, one record per
     detected channel, and ``merged``, the removed count per detected channel
-    when the merge is on. A method may add ``geometry`` (a mapping),
+    when the merge is on. Local maxima and noise landmarks add ``plateaus``,
+    per channel the ``maxima`` and ``removed_voxels`` counts before exclusions;
+    find_spots omits the key when every count is zero. A method may add ``geometry`` (a mapping),
     ``measurements`` (column -> meaning), ``effective`` (one config per
     detected channel with the native defaults that None resolved) and
     ``model`` (the weights record of a learned method). find_spots calls it
@@ -121,13 +126,81 @@ class SpotFindingSpec:
             raise ValueError(f"column_fields of {self.name!r} must map each optional column to a config field")
 
 
-def _peaks(channel, distance, threshold, border=True):
-    # Explicit singleton-Z support; volumetric ordering/policy is unchanged.
+def _regional_maxima(channel, threshold, *, include_constant=False):
+    """Yield full-connectivity maxima above threshold, as lexicographically ordered ZYX voxels."""
     plane = channel.shape[0] == 1
-    coords = peak_local_max(channel[0] if plane else channel,
-                            min_distance=distance, threshold_abs=threshold,
-                            exclude_border=border)
-    return np.column_stack((np.zeros(len(coords), dtype=int), coords)) if plane else coords
+    image = channel[0] if plane else channel
+    if include_constant and image.min() == image.max() and image.flat[0] > threshold:
+        yield np.argwhere(np.ones(channel.shape, dtype=bool))
+        return
+    mask = local_maxima(image, connectivity=image.ndim, allow_borders=True) & (image > threshold)
+    components, _ = label(mask, structure=np.ones((3,) * image.ndim, dtype=bool))
+    for number, box in enumerate(find_objects(components), 1):
+        points = np.argwhere(components[box] == number) + np.array([s.start for s in box])
+        yield np.column_stack((np.zeros(len(points), dtype=int), points)) if plane else points
+
+
+def _representative(points):
+    """Centroid rounded half up if in the maximum, otherwise nearest with ZYX tie-break."""
+    centroid = points.mean(axis=0)
+    rounded = np.floor(centroid + 0.5).astype(int)
+    if np.any(np.all(points == rounded, axis=1)):
+        return rounded
+    # Squared distances times n, omitting the common centroid term: n * ||p||² - 2 p·sum(points).
+    # Integer arithmetic makes distance ties exact, independent of axis summation order.
+    count, largest = len(points), int(points.max())
+    if 9 * count * largest ** 2 <= np.iinfo(np.int64).max:
+        scores = count * np.sum(points * points, axis=1) - 2 * (points @ points.sum(axis=0))
+        return points[np.argmin(scores)]
+    totals = tuple(sum(map(int, points[:, axis])) for axis in range(3))
+    nearest = min(range(count), key=lambda i: count * sum(int(v) ** 2 for v in points[i])
+                  - 2 * sum(int(v) * total for v, total in zip(points[i], totals)))
+    return points[nearest]
+
+
+def _peaks(channel, distance, threshold, border=True):
+    plane = channel.shape[0] == 1
+    image = channel[0] if plane else channel
+    # Probe before border/window/spacing exclusions, so suppressed plateaus still get counted.
+    candidates = peak_local_max(image, min_distance=1, threshold_abs=threshold, exclude_border=False)
+    candidates = np.column_stack((np.zeros(len(candidates), dtype=int), candidates)) if plane else candidates
+    tied = False
+    values = channel[tuple(candidates.T)]
+    for offset in product((0,) if plane else (-1, 0, 1), (-1, 0, 1), (-1, 0, 1)):
+        if not any(offset):
+            continue
+        neighbours = candidates + offset
+        inside = np.all((neighbours >= 0) & (neighbours < channel.shape), axis=1)
+        if np.any(channel[tuple(neighbours[inside].T)] == values[inside]):
+            tied = True
+            break
+    if not tied:
+        # Use the original numerical window and spacing path verbatim on untied maxima.
+        # This also preserves scipy's source-dtype window behaviour for large integers.
+        coords = peak_local_max(image, min_distance=distance, threshold_abs=threshold, exclude_border=border)
+        coords = np.column_stack((np.zeros(len(coords), dtype=int), coords)) if plane else coords
+        return coords, {'maxima': 0, 'removed_voxels': 0}
+    regions = list(_regional_maxima(channel, threshold))
+    plateaus = {'maxima': sum(len(p) > 1 for p in regions),
+                'removed_voxels': sum(len(p) - 1 for p in regions)}
+    coords = np.asarray([_representative(p) for p in regions], dtype=int).reshape(-1, 3)
+    if not len(coords):
+        return coords, plateaus
+    axes = slice(1, None) if plane else slice(None)
+    if border:
+        active = coords[:, axes]
+        shape = np.array(channel.shape)[axes]
+        coords = coords[np.all((active >= distance) & (active < shape - distance), axis=1)]
+    if distance > 1:
+        window = maximum_filter(channel[0] if plane else channel, size=2 * distance + 1, mode='nearest')
+        maxima = window[tuple(coords[:, axes].T)]
+        coords = coords[channel[tuple(coords.T)] == maxima]
+    # Sort in the source dtype, as peak_local_max did (uint64 can exceed float64 precision).
+    values = channel[tuple(coords.T)]
+    coords = coords[np.lexsort((coords[:, 2], coords[:, 1], coords[:, 0], -values))]
+    if distance > 1:
+        coords = ensure_spacing(coords, spacing=distance, p_norm=np.inf)
+    return coords, plateaus
 
 
 def _noise_record(image, channel, mode, value):
@@ -152,25 +225,27 @@ def _noise_record(image, channel, mode, value):
 def _maxima(image, config, context, mode, value, border):
     """Per-channel maxima above each channel's threshold; rows ordered by channel, then intensity.
 
-    Returns the rows, the thresholds and, per channel, the noise record:
-    zero fraction, median, MAD (unscaled) and threshold, computed in float64.
+    Returns the rows, thresholds and per-channel noise and plateau records.
+    Noise holds zero fraction, median, MAD (unscaled) and threshold in float64.
     """
     if mode == 'global' and image.dtype not in (np.dtype('uint8'), np.dtype('uint16')):
         raise ValueError("global thresholds require uint8/uint16")
-    rows, thresholds, noise = [], [], []
+    rows, thresholds, noise, plateaus = [], [], [], []
     for c in context.channels:
         channel = image[..., c] if image.ndim == 4 else image
         record = _noise_record(image, channel, mode, value)
         thresholds.append(record['threshold'])
         noise.append(record)
         if channel.max() == 0:
+            plateaus.append({'maxima': 0, 'removed_voxels': 0})
             continue
-        coords = _peaks(channel, config.min_distance_voxels, record['threshold'], border)
+        coords, collapsed = _peaks(channel, config.min_distance_voxels, record['threshold'], border)
+        plateaus.append(collapsed)
         for z, y, x in coords:
             rows.append((z, y, x, c, float(channel[z, y, x])))
     table = pd.DataFrame(rows, columns=['z', 'y', 'x', 'channel', 'peak_intensity']).astype(
         {'z': 'float64', 'y': 'float64', 'x': 'float64', 'channel': 'int64', 'peak_intensity': 'float64'})
-    return table, tuple(thresholds), noise
+    return table, tuple(thresholds), noise, plateaus
 
 
 def _merge(table, radius, channels):
@@ -204,9 +279,9 @@ def _merge(table, radius, channels):
 
 def _local_maxima(image, config, context):
     """Pipeline peaks per channel; see LocalMaximaConfig."""
-    table, thresholds, noise = _maxima(image, config, context, config.threshold_mode, config.threshold_value,
+    table, thresholds, noise, plateaus = _maxima(image, config, context, config.threshold_mode, config.threshold_value,
                                        config.exclude_border)
-    details = {'thresholds': thresholds, 'noise': noise}
+    details = {'thresholds': thresholds, 'noise': noise, 'plateaus': plateaus}
     if config.merge_radius_zyx is not None:
         table, details['merged'] = _merge(table, np.asarray(config.merge_radius_zyx, dtype=float), context.channels)
     if not config.measure_peak_intensity:
@@ -216,11 +291,11 @@ def _local_maxima(image, config, context):
 
 def _noise_landmark(image, config, context):
     """Registration landmarks: noise-mode peaks with the border excluded, deduplicated across channels."""
-    table, thresholds, _ = _maxima(image, config, context, 'noise', config.noise_sigma, True)
+    table, thresholds, _, plateaus = _maxima(image, config, context, 'noise', config.noise_sigma, True)
     if len(table) > 1 and image.ndim == 4:
         pairs = cKDTree(table[['z', 'y', 'x']]).query_pairs(r=config.min_distance_voxels)
         table = table.drop(index={max(i, j) for i, j in pairs}).reset_index(drop=True)
-    return table[['z', 'y', 'x']], {'thresholds': thresholds}
+    return table[['z', 'y', 'x']], {'thresholds': thresholds, 'plateaus': plateaus}
 
 
 def _percentile_centroid(image, config, context):
@@ -287,7 +362,8 @@ def _local_maxima_constant(image, config, channels, verified):
         raise ValueError("global thresholds require uint8/uint16")
     noise = [_noise_record(image, image[..., c] if image.ndim == 4 else image, config.threshold_mode,
                            config.threshold_value) for c in channels]
-    details = {'thresholds': tuple(r['threshold'] for r in noise), 'noise': noise}
+    details = {'thresholds': tuple(r['threshold'] for r in noise), 'noise': noise,
+               'plateaus': [{'maxima': 0, 'removed_voxels': 0} for _ in channels]}
     if config.merge_radius_zyx is not None:
         details['merged'] = [0] * len(channels)
     return details
@@ -341,7 +417,7 @@ def skips_constant(config) -> bool:
 def constant_details(image, config, channels, verified) -> dict:
     """The thresholds of constant channels, without running the method (a method with an entry in _CONSTANT).
 
-    Local maxima adds the noise records (and merged counts 0) and the LoG its
+    Local maxima adds the noise records (and merged and plateau counts 0) and the LoG its
     memory estimate (geometry) and measurements, which need no detection.
     Spotiflow and Piscis still check the geometry and verify the weights
     and add the model record, unless verified (the method function has

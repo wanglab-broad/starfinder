@@ -6,7 +6,8 @@ plan's manifest) on W-642's fixture and A to D migrated to the Python shape (``s
 (invocation D, G2) recorded with the workflow before the dispatcher, except the contract's exceptions
 (design/specs/orchestration.md, "The exception of the golden comparison"), each difference named by its decision
 (``workflow_golden.compare_migrated``: OC3, D6, D8). G1 and G2 ran that workflow, which no longer exists for
-``backend: python``; G3 compares with the same two expected folders, which no run of this workflow re-records. The
+``backend: python``; G3 compares with the same two expected folders, updated only for W-790's removed spots
+using the maintained task commands and extractors, with a per-file ledger and independent audit in that issue. The
 runs use Snakemake 9 from the ``workflow`` dependency group, the one beside the interpreter, and skip with a stated
 reason where it is absent. The file digests and the stage-record digests are identities of the recording environment
 only (the expected folders' README.md), so the comparison leaves them out.

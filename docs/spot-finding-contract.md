@@ -107,8 +107,9 @@ The reference lists every column and diagnostic.
 
 * The method config: which method runs, with its settings. For `local_maxima`, the
   options most often changed are `threshold_mode` and `threshold_value` (below),
-  `min_distance_voxels` (the smallest distance between two maxima),
-  `exclude_border` and `merge_radius_zyx` (merges maxima of one channel that lie close
+  `min_distance_voxels` (the maximum-window radius and minimum Chebyshev spacing
+  between representatives), `exclude_border` (applied to the representative)
+  and `merge_radius_zyx` (merges maxima of one channel that lie close
   together).
 * `model`: the pretrained weights of `spotiflow` and `piscis`. Every run names one;
   there is no default model.
@@ -227,6 +228,16 @@ Under `backend: python`, local maxima takes the field names `threshold_mode`,
 
 A golden test pins the local-maxima results of the four threshold modes on a small
 seeded fixture, in 3D and at Z=1, and the candidates checkpoint that `FOV.run` writes.
+Each equal-valued 26-connected regional maximum (8-connected for Z=1) gives
+one representative voxel, with half-up centroid rounding and nearest-voxel
+fallback, ties by z, y, x; a shoulder next to a higher voxel is rejected.
+The [algorithm reference](spot-finding-algorithms.md#local-maxima) defines the order
+and plateau diagnostic. In tiled execution the planned footprint stays
+`min_distance_voxels`, and the task checks maxima meeting the core for contact
+with an internal window edge. Such truncation fails with `exact: true`, naming
+a conservative containing halo covering the full FOV; `exact: false` records
+the per-channel `truncated_maxima` count. FOV plateau diagnostics sum the
+counts owned by each tile's representative.
 Tests compare the Starfish LoG with saved starfish results exactly, and check the four
 pipeline methods on small synthetic scenes against their truth positions; the
 learned-detector tests need the extras and the weights. The validation design is in

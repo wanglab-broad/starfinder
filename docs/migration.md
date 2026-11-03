@@ -202,6 +202,7 @@ For changed composition and resampling behavior, consult the
 | Before | After |
 | --- | --- |
 | Subclassing a detector config to select a method | Use a registered config type; see [adding a method](method-registry.md) |
+| One detection per voxel of a tied local maximum | One representative per regional maximum; plateau and shoulder rows are removed and spot identities renumber ([rule](spot-finding-algorithms.md#local-maxima)) |
 | `PipelineConfig(detection=LocalMaximaConfig(...))` | `PipelineConfig(spot_finding=LocalMaximaConfig(...))` |
 | Several detection rounds decoded as multiplexed reads | Detect in the reference round for multiplexed readout; use `readout_mode="direct"` for a direct assay |
 | `voxel_size=(...)` extraction arguments | `NeighborhoodSumConfig(neighborhood_radius_zyx=(...))` |

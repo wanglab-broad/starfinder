@@ -238,8 +238,9 @@ provisional and appear only in the tile's files. The merge gives every candidate
 FOV's namespace `[dataset, sample, fov, null]`, the namespace direct writes: the rank of the
 candidate in the detector's order. For `local_maxima` the order is channel, then decreasing pixel
 value, then z, y, x: `_maxima` (`_methods.py:123`) detects channel by channel, and
-`peak_local_max` returns peaks by decreasing value, ties in C order (scikit-image 0.26,
-`_get_high_intensity_peaks`, a stable sort of `np.nonzero`'s output); `_detect`
+regional maxima are collapsed to representatives and sorted by decreasing value, then
+representative z, y, x (half-up centroid rounding if in the maximum, otherwise nearest
+voxel with ties by z, y, x); `_detect`
 (`starfinder/spot_finding/__init__.py:202`) numbers the rows in that order (line 271). The
 merged IDs are therefore unique (one owner per candidate), deterministic (they depend on values
 and positions only, not on the grid) and equal to direct's. Measured: equal on every grid of the
@@ -277,9 +278,11 @@ configuration again; on the real FOV the twelve more tasks of 512 against 1024 c
 load: 1,408 s against 1,051 s), and doubling it to 1024 makes a `thick_medium` tile as large as its global task
 (5.64 GiB).
 
+% Amended 2026-11-03 W-790: detector order is over regional-maximum representatives.
+
 ## The halo rule
 
-The halo is the largest footprint of the operations the tile runs, so that every result for a voxel
+The planned minimum halo is the largest footprint of the operations the tile runs; regional maxima must also fit their windows, checked at task time, so that every result for a voxel
 or candidate of the core reads only voxels of the window:
 
 ```text
@@ -288,13 +291,15 @@ h = max(detection footprint, local registration margin, extraction neighbourhood
 
 | Operation | Footprint (lateral, voxels) | Source |
 | --- | --- | --- |
-| `local_maxima` | `min_distance_voxels` (`d`): the maximum filter of size `2d + 1` (scikit-image's `_get_peak_mask`, `mode="nearest"`) and the border exclusion of width `d` (`exclude_border`, `_peaks`, `_methods.py:97`). With `d > 1` the spacing step (`ensure_spacing`) and with `merge_radius_zyx` the within-channel merge (`_merge`, `_methods.py:147`) are greedy over the whole channel: not bounded (below) | `LocalMaximaConfig`, `starfinder/spot_finding/_config.py:59` |
+| `local_maxima` | Planned minimum `min_distance_voxels` (`d`), for the window and border rule; plateau extent is unbounded. The tile task checks every regional maximum meeting its core: if it touches a window edge that is not an FOV edge, fail under `exact: true`, naming a conservative containing halo covering the FOV, or count per-channel `truncated_maxima` under `exact: false`. Greedy spacing for `d > 1` and `merge_radius_zyx` remain unbounded. | `LocalMaximaConfig` |
 | `starfish_log` | `ceil(3 · max_sigma)` per axis, the Laplacian of Gaussian's support | `StarfishLogConfig` |
 | `spotiflow`, `piscis` | The model's receptive field, which the method must declare; the tile also needs at least the method's minimum shape (`min_shape_zyx`) | `SPOT_FINDING_METHODS`, `_methods.py` |
 | Extraction (`neighborhood_sum`) | `max(neighborhood_radius_zyx[1:], background.outer_radius_zyx[1:])`; defaults (2, 2) and (6, 6): 6 | `NeighborhoodSumConfig`, `LocalBackgroundConfig`, `extraction.py:27-82`; boxes are clipped at the image's faces (`extract_intensities`, `extraction.py:293-294`), so a box clipped at a window face differs from the FOV's |
 | Decoding, scoring, filtering | 0: per read | `decode_reads`, `decoding.py:306`; `score_reads`, `scoring.py:107`; `filter_reads`, `filtering.py:124` |
 | Deduplication | Not bounded: links reads within `distance_voxels` transitively | `DeduplicationConfig`, `starfinder/readout/deduplication.py:36`; runs in the merge (below) |
 | Local registration | The margin of the next section | — |
+
+% Amended 2026-11-03 W-790: the planned footprint stays unchanged; plateau containment is checked by each tile task, and plateau diagnostics sum representative owners.
 
 With the defaults of the measured configurations (`min_distance_voxels` 1, extraction box (1, 2, 2),
 ring (1, 6, 6)) the rule gives `h = 6`. The synthetic series shows that 6 is the tight value: with
@@ -468,14 +473,15 @@ Recommendation: A.
 ## Equivalence with direct
 
 **Without local registration, tiled equals direct exactly** when the halo meets the rule and every
-operation of the tile has a finite footprint. The argument:
+operation of the tile has a finite footprint and every regional maximum meeting a core fits its window. The argument:
 
 1. The global task runs the same calls on the same FOV as direct's `FOV.run` up to the
    post-registration steps (streaming, the same recipe), so its registered rounds are direct's,
    value for value; the chunked checkpoint stores them losslessly (uncompressed, the same dtype).
 2. A tile's window holds, for every voxel of its core, every voxel within `h` of it, so an
    operation whose footprint is at most `h` gives at a core voxel the result it gives in the FOV:
-   the maximum filter and the threshold comparison of `local_maxima` (with the FOV-level threshold),
+   the regional-maximum representative and threshold comparison of `local_maxima` (with the FOV-level threshold),
+   provided the complete maximum fits the window (checked by the tile task),
    the border exclusion (a window face at distance `h ≥ d` from the core is not a FOV face; where
    the window face is the FOV face, direct excludes the same border), and the extraction box and
    ring (clipped only at FOV faces).
@@ -491,14 +497,17 @@ gene and entry; the scores differ by at most 2.2e-16 (synthetic), 3.6e-15 (`thic
 FOV), the last bit of float64 arithmetic that numpy vectorizes differently over arrays of different lengths; the
 files are therefore not byte-equal, and a comparison uses the tolerance of `docs/contributing.md` for scores.
 
+% Amended 2026-11-03 W-790: exactness additionally requires complete regional maxima in each core-intersecting window.
+
 **Where exactness does not hold, and why:**
 
 * `local_maxima` with `min_distance_voxels > 1`: `ensure_spacing` keeps peaks greedily by
   decreasing value over the whole channel, so a chain of peaks can carry a decision across any
   distance; the same holds for `merge_radius_zyx` (`_merge`).
-* A channel constant over a whole window: `peak_local_max` returns no peak for a trivial image
-  (`_get_peak_mask`), where the FOV, not constant, returns the window's voxels above the threshold.
-  Only a window entirely saturated or empty in one channel can meet it.
+* A regional maximum can extend arbitrarily far. A core-intersecting maximum touching an
+  internal window edge, including a constant-above-threshold window of a nonconstant FOV
+  channel, fails under `exact: true`; the error names a conservative containing halo
+  covering the FOV. Under `exact: false`, the tile counts it per channel as `truncated_maxima`.
 * Learned detectors: their output near a window face depends on the receptive field and the model's
   own tiling; exactness holds only with a halo at least the declared receptive field.
 * Deduplication in a tile (chains across faces); the merge runs it instead.
@@ -641,7 +650,7 @@ Every kind also declares its task record and log (D8). The configuration keys ar
 `processing.mode` (`direct` or `tiled`), `processing.recipe` (null or `deep`) and
 `processing.tiled`: `tile_size_yx`, `halo` (null: the plan's minimum), `local_registration` (null
 or a registration recipe), `post_local_registration` (null or preprocessing steps run in the tile
-after its local registration), `exact` (true: refuse operations without a finite footprint).
+after its local registration), `exact` (true: refuse operations without a finite footprint and truncated core-intersecting regional maxima).
 
 ## Choices in brief
 
@@ -665,7 +674,10 @@ after its local registration), `exact` (true: refuse operations without a finite
   deformation preset.
 * **OT2.** Each detector's ordering key and footprint as registry fields (`SPOT_FINDING_METHODS`);
   until they exist the plan accepts `local_maxima` (with `min_distance_voxels` 1 and no merge
-  radius) and refuses the others in tiled mode with `exact: true`.
+  radius) and refuses the others in tiled mode with `exact: true`; each tile also checks
+  core-intersecting regional maxima for truncation at internal window edges.
+
+  % Amended 2026-11-03 W-790: OT2 requires the tile-time plateau containment check in addition to the planned footprint.
 * **OT3.** `FOV.load_registered_round` reading the HDF5 form of `registered`, for a segmentation run
   on a sequencing round of a tiled FOV.
 * **OT4 (fixed by W-722).** WTA decoding's per-read rebuild of `Codebook.seq_to_gene` (`decoding.py:215`), which

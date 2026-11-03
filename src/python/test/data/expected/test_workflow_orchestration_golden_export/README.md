@@ -1,5 +1,12 @@
 # Expected values of the golden baseline's stitching, export and report
 
+W-790 (2026-11-03) updates detection-dependent molecule identities, summaries
+and record fields after regional-maximum collapse, using the maintained
+migrated task commands and extractor. Only differences between the same
+fixtures at base and result are applied; existing migration exceptions,
+unaffected values and tolerances remain unchanged. The per-file ledger is
+retained with W-790's implementation evidence.
+
 The rest of the golden baseline of the current Snakemake workflow (`backend: python`): stitching
 with `multiview_stitcher`, the export on each route the fixture allows and the report after the
 export, which the workflow orchestration refactor must reproduce (W-643, open point P1 of W-642;

@@ -1664,49 +1664,49 @@
   }
  },
  "counts": {
-  "spots": 40,
-  "intensities": 40,
+  "spots": 39,
+  "intensities": 39,
   "call_status": {
    "assigned": 31,
-   "unmatched": 9
+   "unmatched": 8
   },
   "scoring": {
-   "total": 40,
+   "total": 39,
    "scored": 31,
-   "no_assignment": 9,
+   "no_assignment": 8,
    "background_unavailable": 0
   },
   "deduplication": {
-   "total": 40,
+   "total": 39,
    "groups": 1,
    "merged_reads": 1,
    "conflicting_groups": 0
   },
   "filtering": {
-   "total": 40,
+   "total": 39,
    "accepted": 31,
-   "rejected": 9,
+   "rejected": 8,
    "endpoint_valid": 11,
    "fractions": {
-    "accepted": 0.775,
-    "endpoint_valid": 0.275
+    "accepted": 0.7948717948717948,
+    "endpoint_valid": 0.28205128205128205
    }
   },
   "summary": {
    "readout_mode": "multiplexed",
-   "reads": 40,
+   "reads": 39,
    "call_status": {
     "assigned": 31,
     "ambiguous": 0,
     "no_signal": 0,
-    "unmatched": 9
+    "unmatched": 8
    },
    "failure_reason": {
-    "not_in_codebook": 9
+    "not_in_codebook": 8
    },
    "call_type": {
     "exact": 31,
-    "no_call": 9
+    "no_call": 8
    },
    "genes": {
     "balanced-01": 3,
@@ -1750,31 +1750,31 @@
    },
    "scoring": {
     "scored": 31,
-    "no_assignment": 9,
+    "no_assignment": 8,
     "background_unavailable": 0
    },
    "deduplication": {
-    "total": 40,
+    "total": 39,
     "groups": 1,
     "merged_reads": 1,
     "conflicting_groups": 0
    },
    "filtering": {
-    "total": 40,
+    "total": 39,
     "accepted": 31,
-    "rejected": 9,
+    "rejected": 8,
     "rejection_reasons": {
-     "call_status": 9,
+     "call_status": 8,
      "duplicate": 1
     }
    },
    "intensities": {
-    "candidates": 40,
+    "candidates": 39,
     "valid": {
-     "round1": 40,
-     "round2": 40,
-     "round3": 40,
-     "round4": 40
+     "round1": 39,
+     "round2": 39,
+     "round3": 39,
+     "round4": 39
     },
     "invalid": {
      "round1": 0,
@@ -1791,88 +1791,88 @@
     "medians": {
      "round1": {
       "ch00": {
-       "sum": 293.0,
+       "sum": 257.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch01": {
-       "sum": 335.0,
+       "sum": 414.0,
        "background": 2.0,
        "noise": 1.4826
       },
       "ch02": {
-       "sum": 300.0,
+       "sum": 265.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch03": {
-       "sum": 252.5,
+       "sum": 244.0,
        "background": 3.0,
        "noise": 2.9652
       }
      },
      "round2": {
       "ch00": {
-       "sum": 425.0,
+       "sum": 315.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch01": {
-       "sum": 254.0,
+       "sum": 252.0,
        "background": 4.0,
        "noise": 2.9652
       },
       "ch02": {
-       "sum": 309.5,
+       "sum": 381.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch03": {
-       "sum": 204.5,
+       "sum": 206.0,
        "background": 3.0,
        "noise": 2.9652
       }
      },
      "round3": {
       "ch00": {
-       "sum": 225.0,
+       "sum": 221.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch01": {
-       "sum": 276.0,
+       "sum": 270.0,
        "background": 4.0,
        "noise": 2.9652
       },
       "ch02": {
-       "sum": 271.5,
+       "sum": 268.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch03": {
-       "sum": 312.5,
+       "sum": 317.0,
        "background": 3.0,
        "noise": 2.9652
       }
      },
      "round4": {
       "ch00": {
-       "sum": 226.0,
+       "sum": 229.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch01": {
-       "sum": 273.5,
+       "sum": 260.0,
        "background": 3.5,
        "noise": 2.9652
       },
       "ch02": {
-       "sum": 548.5,
+       "sum": 458.0,
        "background": 3.0,
        "noise": 2.9652
       },
       "ch03": {
-       "sum": 249.0,
+       "sum": 251.0,
        "background": 3.0,
        "noise": 2.9652
       }
@@ -1889,11 +1889,11 @@
  "checkpoints": {
   "candidates": {
    "path": "checkpoints/candidates.json",
-   "sha256": "e4286cab18df93905707e46c1efeaa6d9f2c2db55c052c2074dd6b7122dda769"
+   "sha256": "052207aef78102815280411cad17aa5103a554ac07fcdfa6368354b53a453229"
   },
   "pre_qc": {
    "path": "checkpoints/pre_qc.json",
-   "sha256": "d9bd4441bbd78a9bb07ef21830f4bbba75e95d7056bdad1606f99434d58a8007"
+   "sha256": "17c5f64864ead35d55a562d26b10e208e04e893c7c48565afc70b6fcd129aa5a"
   }
  },
  "outputs": {
@@ -1903,8 +1903,8 @@
   },
   "molecules": {
    "path": "molecules.csv",
-   "sha256": "a283415006a206d083fefca22ed1fb18392725bc742a01d98331f9712f142465",
-   "molecules_sha256": "cbe1464d2872b53f19233c97537e49dd5d53d654580ed417ab4c214c3fa89699",
+   "sha256": "14a4bddf9cc83f8a76883a05d6f51889f892099f54cc588bd4ef64799edbdb0b",
+   "molecules_sha256": "e6a504453845daa388e0d71a4c33fa5feb30b6f089f1b5e2099f69d60967ee37",
    "dtypes": {
     "spot_namespace": "string",
     "spot_id": "string",

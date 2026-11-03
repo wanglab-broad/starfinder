@@ -1,5 +1,12 @@
 # Expected values of the per-FOV core on the session dataset
 
+W-790 (2026-11-03) updates detection-dependent tables and record fields after
+regional-maximum collapse, using the maintained extractor below. Only the
+base-to-result differences are applied; existing migration exceptions and
+unaffected values remain historical. The independent audit checks every kept
+candidate's extracted and decoded values and records the per-file row ledger
+with W-790's implementation evidence; no tolerance changes.
+
 The per-FOV core values of the current workflow (`backend: python`) on the pytest session's small
 synthetic dataset, recorded before any §2.13 refactor lands, which the refactored `fov` task must
 reproduce: `core_values` of check X4 (`design/validation/orchestration.md`). No test reads them yet:

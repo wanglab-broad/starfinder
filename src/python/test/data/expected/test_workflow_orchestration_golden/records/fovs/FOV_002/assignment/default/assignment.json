@@ -58,7 +58,7 @@
   "molecules": {
    "population": "final",
    "n": 13,
-   "sha256": "ec4e3d6c3ad982c2906c8a43deca10bbad883e70f2fe221ce89f2f2a71a0b1d2",
+   "sha256": "fe58970637eedcade7c654750472f395322a248b2426044f414c7cbb0786ef89",
    "genes": [
     "balanced-01",
     "balanced-02",
@@ -80,7 +80,7 @@
    "source": {
     "spot_namespace": "[\"sample-tiny-v1\",\"sample\",\"FOV_002\",null]",
     "path": "<work>/output/sample-tiny-v1/golden/fovs/FOV_002/molecules.csv",
-    "sha256": "93c45e3be7e25ffa8cca0e7a082c0aff00c4dfcaf9e276db4dfb300f57e02b2d"
+    "sha256": "8f7b35b86782e5f14e087d309c749de23b7fd6e8f66345345f8b1468d31c2362"
    }
   },
   "cells": {
@@ -300,7 +300,7 @@
  "files": {
   "molecules": {
    "path": "molecules.csv",
-   "sha256": "bc47e0fdbba0db106577d5498958c3a526667d7a3b9dc28ba994d1e533a1e3e7",
+   "sha256": "ddc8faafaa870ac81c52fae834dd0d76509d8a07242448403c9df8c296184f18",
    "dtypes": {
     "spot_namespace": "string",
     "spot_id": "string",

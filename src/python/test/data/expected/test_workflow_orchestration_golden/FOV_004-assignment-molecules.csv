@@ -24,9 +24,9 @@ spot_namespace,spot_id,z,y,x,gene_id,voxel_z,voxel_y,voxel_x,assignment_status,c
 "[""sample-tiny-v1"",""sample"",""FOV_004"",null]",28,4,10,16,balanced-11,4,10,16,assigned,8,<NA>,<NA>,<NA>,unavailable
 "[""sample-tiny-v1"",""sample"",""FOV_004"",null]",29,1,28,18,balanced-10,1,28,18,assigned,3,<NA>,<NA>,<NA>,unavailable
 "[""sample-tiny-v1"",""sample"",""FOV_004"",null]",30,0,32,14,balanced-09,0,32,14,assigned,6,<NA>,<NA>,<NA>,unavailable
-"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",33,4,14,26,balanced-09,4,14,26,assigned,3,<NA>,<NA>,<NA>,unavailable
-"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",34,3,26,14,balanced-15,3,26,14,assigned,6,<NA>,<NA>,<NA>,unavailable
-"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",35,4,19,26,balanced-14,4,19,26,assigned,3,<NA>,<NA>,<NA>,unavailable
-"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",36,3,30,32,balanced-14,3,30,32,assigned,7,<NA>,<NA>,<NA>,unavailable
-"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",37,1,33,27,balanced-13,1,33,27,assigned,7,<NA>,<NA>,<NA>,unavailable
-"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",38,1,7,0,balanced-13,1,7,0,assigned,8,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",32,4,14,26,balanced-09,4,14,26,assigned,3,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",33,3,26,14,balanced-15,3,26,14,assigned,6,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",34,4,19,26,balanced-14,4,19,26,assigned,3,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",35,3,30,32,balanced-14,3,30,32,assigned,7,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",36,1,33,27,balanced-13,1,33,27,assigned,7,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_004"",null]",37,1,7,0,balanced-13,1,7,0,assigned,8,<NA>,<NA>,<NA>,unavailable

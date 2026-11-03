@@ -95,7 +95,7 @@
  "files": [
   {
    "path": "candidates.csv",
-   "sha256": "d471d3ff0f6c48555e68be740d70cfbecf782e451192f1df600e8acc59bf8705"
+   "sha256": "c82432b4d174219e41101d9e16a4aaef9080dd5c6807479d772b551773479911"
   }
  ],
  "spot_namespace": "[\"session\",\"small\",\"FOV_001\",null]",
@@ -170,9 +170,9 @@
   },
   "counts": {
    "ch00": 11,
-   "ch01": 28,
-   "ch02": 22,
-   "ch03": 13
+   "ch01": 22,
+   "ch02": 20,
+   "ch03": 12
   },
   "outcomes": {
    "ch00": "ok",
@@ -280,6 +280,24 @@
     "OPENBLAS_NUM_THREADS": "1",
     "NUMEXPR_NUM_THREADS": "1",
     "NUMBA_NUM_THREADS": "1"
+   }
+  },
+  "plateaus": {
+   "ch00": {
+    "maxima": 0,
+    "removed_voxels": 0
+   },
+   "ch01": {
+    "maxima": 5,
+    "removed_voxels": 6
+   },
+   "ch02": {
+    "maxima": 2,
+    "removed_voxels": 2
+   },
+   "ch03": {
+    "maxima": 1,
+    "removed_voxels": 1
    }
   }
  },

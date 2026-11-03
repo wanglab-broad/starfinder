@@ -2,7 +2,8 @@
 
 `version-2-candidates.csv` is the spot table that S11 expects when the current code loads the
 committed version-2 checkpoint `test/data/spot_finding_candidates_7a178da/` (unchanged): the case
-`global`, `exclude_border` true, Z=1 of the spot-finding golden test. Every column compares
+`global`, `exclude_border` true, Z=1 of the historical spot-finding golden test, before W-790
+collapsed tied maxima. This old-format round trip retains its original rows. Every column compares
 exactly (an old-format round trip). Before W-573, S11 compared the table's digest with the golden
 pin of that case.
 

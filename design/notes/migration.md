@@ -827,6 +827,19 @@ always an absolute path (`~` expanded, relative paths resolved).
 
 ### Local-maxima duplicate merge
 
+% Amended 2026-11-03 W-790: regional maxima have one representative before the optional merge.
+
+Local maxima and noise landmarks now collapse each 26-connected equal-valued
+regional maximum (8-connected for a plane) to one voxel: the centroid rounded
+half up if it belongs to the maximum, otherwise the nearest voxel with ties by
+z, y, x. Equal-valued shoulders next to a higher voxel disappear. Spot IDs
+renumber; thresholds and defaults stay unchanged. Untied outputs remain
+byte-identical. The optional `plateaus` diagnostic reports per-channel `maxima`
+and `removed_voxels` before exclusions and is absent when all counts are zero.
+Tile tasks check core-intersecting maxima at internal window edges, fail under
+`exact: true` with a conservative full-FOV containing halo, or count them under
+`truncated_maxima` with `exact: false`; merged plateau counts sum their owners.
+
 % Local-maxima W-218 merge
 
 `LocalMaximaConfig.merge_radius_zyx` (default `None`) is the opt-in
@@ -834,10 +847,10 @@ within-channel duplicate merge: after border exclusion, a channel's maxima are v
 decreasing pixel value, then increasing z, y, x, and a maximum is dropped when an
 earlier kept maximum of the same channel lies within the ellipsoid
 Σ (Δᵢ / rᵢ)² ≤ 1 (radii in voxels; the Z radius is unused for Z=1). It removes
-tied maxima of a plateau and split maxima of one amplicon; kept maxima are
+split maxima of one amplicon after regional-maximum collapse; kept maxima are
 unchanged, identities are assigned after the merge, and `diagnostics["merged"]`
 records the number removed per channel. The spot-finding acceptance of 2026-10-01 kept `None` as the default, so
-detections are unchanged unless the option is set; channels are never merged with
+detections now always follow the regional-maximum rule; channels are never merged with
 each other (cross-channel duplicates belong to readout). `exclude_border` is settable in
 YAML for the border misses that the duplicate classification of the spot-finding baseline reported.
 

@@ -19,8 +19,8 @@ the channel and a uint16 peak) and compares exactly; the thresholds are computed
 values and compare within ``FLOAT64`` (docs/contributing.md, "Expected values and
 tolerances"). The fixture inputs stay pinned by digest (integer data).
 
-The fixture holds a saturated multi-voxel amplicon whose plateau gives tied maxima
-(W-218), a two-lobe amplicon whose lobes give split maxima, spots on and next to the
+The fixture holds a saturated multi-voxel amplicon whose plateau gives one representative
+(W-790), a two-lobe amplicon whose lobes give split maxima, spots on and next to the
 volume faces, a channel with more than half its voxels zero (noise-mode MAD 0), and a
 dim channel whose maximum is below the image maximum (adaptive differs from
 adaptive_round). The first digests were produced with the locked project environment
@@ -262,11 +262,11 @@ def test_noise_mode_mad_zero_keeps_threshold_and_warns(dims):
     assert [w.category for w in caught] == [SpotFindingWarning]
 
 
-def test_saturated_plateau_gives_tied_maxima():
-    # W-218 legacy behavior: every voxel of a plateau that is a local maximum is a candidate.
+def test_saturated_plateau_gives_one_representative():
+    # W-790: centroid (6, 24.5, 24), rounded half up to a voxel of the plateau.
     spots = detect("noise", "3d").spots
     tied = spots[(spots.channel == 0) & (spots.peak_intensity == SATURATION)]
-    assert len(tied) > 1
+    assert tied[["z", "y", "x"]].to_numpy(dtype=int).tolist() == [[6, 25, 24]]
 
 
 @pytest.mark.parametrize("case", CASES, ids=case_id)

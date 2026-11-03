@@ -708,8 +708,8 @@ def test_s11_candidates_checkpoint_round_trip(method, source, seed, table_format
 
 
 def test_s11_a_version_2_checkpoint_from_before_the_plan_keys_loads_unchanged(tmp_path):
-    """The golden test helper's checkpoint (global, exclude_border true, Z=1; its table and CSV digests equal
-    the 42f652d pins of test_spot_finding_golden.py, data/spot_finding_candidates_7a178da/README.md). The
+    """The golden test helper's historical voxel-wise checkpoint (global, exclude_border true, Z=1;
+    data/spot_finding_candidates_7a178da/README.md), preserved after W-790's plateau collapse. The
     reloaded table equals its own expected table, data/expected/test_spot_finding_validation/
     version-2-candidates.csv (README.md there): an old-format round trip, so every column compares exactly."""
     header = json.loads((VERSION_2_CHECKPOINT / "FOV_001" / "candidates.json").read_text())
