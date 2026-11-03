@@ -50,6 +50,7 @@ uv sync --locked --no-default-groups --extra local-registration --extra checkpoi
 | `piscis` | piscis 1.1.0, torch 2.7.1, torchvision 0.22.1 | The learned spot detector Piscis (below) |
 | `stardist` | stardist 0.9.2, csbdeep 0.8.2, tensorflow 2.20.0 | StarDist segmentation (below) |
 | `cellpose` | cellpose 4.2.1.1, torch 2.7.1, torchvision 0.22.1 | Cellpose segmentation (below) |
+| `cuda` | The packages of `stardist`, `cellpose`, `spotiflow` and `piscis`, with CUDA builds of torch and torchvision and TensorFlow's CUDA libraries | StarDist and Cellpose segmentation on a GPU (below); not together with `spotiflow`, `piscis` or `cellpose` |
 | `multiview-stitcher` | multiview-stitcher 0.1.62 | The multiview-stitcher stitching method, and the fused image and label export of `Dataset.export` |
 | `checkpoint` | pyarrow ≥15 | Parquet tables (`table_format: "parquet"`) in checkpoints and records ({doc}`../checkpoints`) |
 | `spatialdata` | spatialdata ≥0.1, spatialdata-io ≥0.1 | The SpatialData store of `Dataset.export`; without it the export records that part as not run |
@@ -70,6 +71,15 @@ The learned spot detectors (`spotiflow`, `piscis`) and the learned segmenters
 TensorFlow 2.20.0 have no wheel for Python 3.14, so they need Python 3.11 to 3.13 and
 install nothing on Python 3.14 and later. On Linux, `[tool.uv.sources]` takes torch and
 torchvision from the CPU index of PyTorch, so the environment holds the CPU build.
+
+The `cuda` extra holds the same four backends with CUDA builds: on Linux, torch
+2.7.1 and torchvision 0.22.1 from PyTorch's CUDA 12.6 index, and TensorFlow 2.20.0
+with NVIDIA's CUDA libraries (`tensorflow[and-cuda]`). One environment cannot hold
+both builds of torch, so uv refuses `cuda` together with `spotiflow`, `piscis` or
+`cellpose`: install it in their place, `uv sync --locked --extra cuda`. The driver
+comes from the host. With it, `device="cuda"` runs StarDist and Cellpose on the GPU;
+spot finding runs on the CPU. The workflow's `learned-cuda` image holds this extra.
+
 Importing `starfinder.spot_finding` or `starfinder.segmentation` and constructing a config
 never need the extras; running a learned method without its extra raises an
 `ImportError`, `SpotFindingBackendUnavailableError` or

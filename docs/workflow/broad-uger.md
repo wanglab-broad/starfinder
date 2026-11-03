@@ -14,8 +14,9 @@ November 2026; where a run found a limit, the page states it.
 
 1. **The image.** Build the SIF from the CPU image's OCI archive on a Broad
    compute node, under `/stanley`, and record its checksum. The CPU image holds
-   the CPU extras and the `workflow` group; a second image adds the learned
-   extras, on CPU.
+   the CPU extras and the `workflow` group; a second image, `learned`, adds the
+   learned extras on CPU, and a third, `learned-cuda`, the same backends built for
+   CUDA, for GPU tasks (below).
 2. **Snakemake.** Run the head as a UGER job with 8 GiB of memory, in the same
    image, with the checkout and the data under `/stanley`. Set `STARFINDER_IMAGE`
    to the image's OCI manifest digest and `STARFINDER_SIF` to its SIF in the
@@ -39,8 +40,10 @@ November 2026; where a run found a limit, the page states it.
    scheduler commands and Java):
    `nextflow run <checkout>/nextflow/main.nf -profile sge --config <configuration> --container <SIF> -work-dir <folder under /stanley>`.
    The `sge` profile refuses to start without `--container`, which the plan and
-   `verify` jobs use as well as the tasks. Leave out `-with-trace`, `-with-report`
-   and `-with-timeline`: they need `ps`, which the image does not have.
+   `verify` jobs use as well as the tasks. `-with-trace`, `-with-report` and
+   `-with-timeline` need `ps` in the task's image: the images built from the
+   current `Containerfile` hold it (procps), those built before November 3, 2026
+   do not.
 
 Without `STARFINDER_IMAGE`, the Snakemake jobs use the profile's default CPU image
 digest; without `STARFINDER_SIF`, they look for
@@ -85,9 +88,20 @@ engines and runs Apptainer with `--nv`. UGER assigns no device: the Snakemake jo
 script picks the first GPU with no memory in use, sets `CUDA_VISIBLE_DEVICES`, and
 fails when there is none; under Nextflow the task sees every GPU of the node. A
 Broad GPU node runs one job at a time, whatever its queue, so a GPU task has the
-node and its four GPUs to itself and uses one of them. The images hold no GPU build
-of PyTorch or TensorFlow: `--nv` brings the driver but not the CUDA runtime, so a
-task with `segmentation.device: cuda` stops with "TensorFlow sees no GPU".
+node and its four GPUs to itself and uses one of them.
+
+A GPU task needs the `learned-cuda` image. `--nv` brings the driver but not the
+CUDA runtime, and the `cpu` and `learned` images hold the CPU build of PyTorch and
+TensorFlow without its CUDA libraries, so with them a task with
+`segmentation.device: cuda` stops with "TensorFlow sees no GPU". The
+`learned-cuda` image holds the lock's `cuda` extra (the
+{doc}`installation guide <../get-started/installation>`, "Learned extras"): torch
+built for CUDA 12.6 and TensorFlow with NVIDIA's CUDA libraries, besides the CPU
+extras and the `workflow` group, so it runs every task of a run. Give it to a run
+with GPU tasks as `STARFINDER_IMAGE` under Snakemake or `--container` under
+Nextflow. StarDist and Cellpose run on the GPU; spot finding runs on the CPU. The
+image is 4.4 GB as an OCI archive and 9.5 GB unpacked, against 1.5 and 4.8 GB for
+`learned`.
 
 ## What you get
 
@@ -114,7 +128,9 @@ folder.
 
 * The lock's environment needs a newer glibc than the RHEL 7 CPU nodes have,
   which is why the tasks run in the image.
-* No GPU task can run on CUDA with the current images (above).
+* The `learned-cuda` image was checked on a workstation GPU, an RTX A5000; it has
+  not yet run on UGER's A30 nodes. Nextflow's trace, report and timeline have not
+  yet run on UGER with the images that hold `ps`.
 * Fiji runs only under Snakemake; under Nextflow, supply BigStitcher's
   `dataset.xml` (`stitching.dataset_xml`). BigStitcher's defaults
   (`stitching.config`) suit full-size tiles: its loader skips files under

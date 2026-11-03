@@ -955,6 +955,87 @@ exported OCI archives and removed its own builder and cache. Its manifest above
 replaces the estimates with measurements. SIF construction and real Apptainer
 execution on Broad remain task group 4's work.
 
+% Amended 2026-11-03 for W-792: the CUDA variant, `ps` in every image, and the profile's default CPU image.
+
+**The CUDA variant (amended 2026-11-03, W-792).** W-649's U5 ran `apptainer exec --nv` on UGER's A30
+nodes and found that the images had no CUDA runtime: StarDist with `device: cuda` stopped with
+"TensorFlow sees no GPU". Jiahao decided C1 to C4 of W-792 on 2026-11-03, and the paragraph "A GPU
+variant" above is superseded:
+
+* **The lock (C1).** One `uv.lock`. The extra `cuda` holds the four learned backends (StarDist and
+  csbdeep, Cellpose, Spotiflow, Piscis) with torch 2.7.1 and torchvision 0.22.1 from the explicit
+  index `pytorch-cu126` on Linux, and `tensorflow[and-cuda]==2.20.0`. A source without an extra would
+  also apply to the `cuda` extra's own torch, and uv then refuses the lock ("conflicting indexes for
+  package torch"). So the CPU index now applies per extra (`spotiflow`, `piscis`, `cellpose`), and
+  `[tool.uv] conflicts` declares `cuda` against each of the three. uv refuses `--extra cuda` together
+  with any of them.
+* **The NVIDIA libraries (C2).** TensorFlow's `and-cuda` ranges admit torch's cu126 pins, and the lock
+  resolves them together: cuBLAS 12.6.4.1, CUPTI 12.6.80, NVRTC and the runtime 12.6.77, cuDNN
+  9.5.1.17, cuFFT 11.3.0.4, cuFile 1.11.1.6, cuRAND 10.3.7.77, cuSOLVER 11.7.1.2, cuSPARSE 12.5.4.2,
+  cuSPARSELt 0.6.3, NCCL 2.26.2, nvJitLink 12.6.85, NVTX 12.6.77, and `triton` 3.3.1.
+  `nvidia-cuda-nvcc-cu12` 12.9.86 is TensorFlow's alone; it is unpinned there, so the resolver takes
+  the newest 12.x. CuPy stays out of scope.
+* **The default install is unchanged.** `uv lock` 0.9.28 added 19 packages (385 → 404) and removed
+  none; no existing wheel's hash changed. Seven entries gained wheel listings for the new forks.
+  `uv export` of six selections, from the old and the new lock, was evaluated on five platforms ×
+  Python 3.11 to 3.14. The selections: the default `--group docs --extra local-registration`, no
+  flags, CI's, the CPU image's, the learned image's, and every extra but `cuda` with all groups.
+  * The resolved sets are equal, except the CPU image's set on Intel macOS with Python 3.14: numba
+    0.62.1 and llvmlite 0.45.1 instead of 0.63.1 and 0.46.0. Neither pair has a wheel for that
+    platform.
+  * On Linux x86_64 with Python 3.12, every selection installs the same wheels, the CPU torch
+    included.
+  * A constraint `numba>=0.63; python_version >= '3.14'` removed the difference only when uv started
+    from the new lock. Starting from the committed one, it was unsatisfiable, so it is not used.
+  * The record is in `runs/W-792/20261103T161447Z-cuda-variant/results/lock/` under the external
+    benchmark root. CI is unchanged.
+* **The image (C3, C4).** The `Containerfile` adds the target `learned-cuda` on the same
+  `python:3.12-slim-bookworm` base, from `--extra cuda` with the headless OpenCV reinstall of
+  `learned`. The CUDA runtime comes from NVIDIA's wheels and the driver from the host (`--nv`,
+  `--gpus`). Every target's runtime stage installs bookworm's `procps` 2:4.0.2-3, the only release in
+  bookworm, bookworm-updates and bookworm-security on 2026-11-03. Nextflow's `-with-trace`,
+  `-with-report` and `-with-timeline` need it (W-786, option A). Spot finding accepts only
+  `device: cpu`, so in `learned-cuda` Spotiflow and Piscis still run on the CPU.
+* **The rebuild.** All three targets were built on 2026-11-03 at `92c723b` (version
+  `0.1.dev719+g92c723b15`), with the W-648 procedure on CPU 6 of GP099-29C. The archives and their
+  records are in `starfinder_benchmark/containers/`. The profile's default image
+  (`profile/broad-uger/broad-submit.py`, `CPU_IMAGE`) moves to the new CPU digest. The SIFs of these
+  digests are not built yet.
+
+| Image | OCI archive bytes | Uncompressed bytes | OCI manifest digest |
+| --- | --- | --- | --- |
+| cpu | 518,056,448 | 1,658,507,141 | `sha256:ac4604d2955e1532d0ba5ecc208f8299cfd5053feb506544439d6c58433d6ec9` |
+| learned | 1,521,440,256 | 4,766,509,090 | `sha256:5071b75c52ca03b194fbf7277bf385a32302c44b881c3f4ca617942c7fa01ee8` |
+| learned-cuda | 4,398,162,944 | 9,463,169,709 | `sha256:83ab81349a4957abb6002be3269c27441f8c99482ed27ceac2eef60049e21b72` |
+
+The CPU and learned images are 1.4 MB larger uncompressed than W-648's: `procps` and the code changes
+since then. `learned-cuda` is 2.0 times the learned image uncompressed and 2.9 times its archive.
+
+**The GPU checks (GP099-29C, RTX A5000, driver 580.178.04).** In `learned-cuda` with `docker run --gpus
+device=0` (no network, one CPU, 4 GiB):
+
+* torch 2.7.1+cu126 reports CUDA available (CUDA 12.6, cuDNN 9.5.1), and TensorFlow 2.20.0 lists
+  `GPU:0`. Each computes a 256 × 256 matmul on the GPU, and its sum is exactly 2²⁴. TensorFlow's XLA
+  found `ptxas` in the NVIDIA wheel and compiled on the GPU. Without `--gpus`, neither framework sees
+  a GPU.
+* One StarDist and one Cellpose segmentation went through `segment(..., device="cuda")`. They were
+  compared with the `learned` image's `device="cpu"` result under contributing's rule for labels
+  (exact). Each call ran twice and was repeatable on its device.
+  * StarDist (`2D_versatile_fluo`, scale 1, the L10 input `P3_discs_61x67_2d` cropped to 61 × 64):
+    5 objects, labels equal.
+  * Cellpose (`cpsam_v2`, diameter 10, the L11 input, 1 × 32 × 32, with the default
+    `bfloat16: true`): 6 objects in both, but 6 of 1,024 pixels differ at object borders (matched
+    IoU 0.92 to 1.0), so the comparison fails.
+  * With `bfloat16: false`, the CUDA labels equal the CPU labels, with TF32 on and with
+    `NVIDIA_TF32_OVERRIDE=0`. On one device, bfloat16 and float32 differ by 3 pixels on the CPU and 3
+    on the GPU. The difference is therefore bfloat16 rounding on two devices; the image computes the
+    float32 result exactly.
+* The peak RSS of the containers was 3.25 GiB (Cellpose on CUDA). The records are in
+  `runs/W-792/20261103T161447Z-cuda-variant/results/gpu/`.
+
+The UGER check is the coordinating session's: W-649's U5 rerun, with a SIF of `learned-cuda` on an A30
+node.
+
 ### Apptainer on UGER
 
 Apptainer 1.3.2 runs on UGER compute nodes, not on the login node, and runs Docker images (W-641).

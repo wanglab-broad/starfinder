@@ -12,8 +12,8 @@ import sys
 from snakemake.utils import read_job_properties
 
 
-# W-648's CPU image; SIFs are built beside the archives by task group 4.
-CPU_IMAGE = "sha256:ed3b3b5f7dccbd040f85527d1af82103cae0b152c96faf7eb0ff738c0d2fd4d2"
+# W-792's CPU image (0.1.dev719+g92c723b15, with procps); SIFs are built beside the archives on a Broad node.
+CPU_IMAGE = "sha256:ac4604d2955e1532d0ba5ecc208f8299cfd5053feb506544439d6c58433d6ec9"
 CONTAINERS = "/stanley/WangLab/jiahao/test/starfinder_benchmark/containers"
 
 

@@ -191,7 +191,14 @@ uv run starfinder weights fetch cellpose cpsam_v2
 ## Devices
 
 `device="cuda"` runs StarDist and Cellpose on a GPU; the default is `"cpu"`. The seeded
-watershed runs on the CPU.
+watershed runs on the CPU. On Linux the `stardist` extra installs TensorFlow without its
+CUDA libraries and the `cellpose` extra the CPU build of torch; a GPU needs the `cuda`
+extra in their place, `uv sync --locked --extra cuda`
+([installation](get-started/installation.md#learned-extras)).
+
+`CellposeConfig`'s default `bfloat16=True` rounds differently on a GPU and a CPU, so
+their labels can differ at a few object borders; with `bfloat16=False` the two devices
+gave the same labels on a 32 × 32 check. StarDist gave the same labels on both.
 
 ## Troubleshooting
 
