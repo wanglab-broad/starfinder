@@ -41,13 +41,15 @@ proposals authorize datasets, cluster work or scientific sweeps.
 
 ## Implemented private trial input and record
 
+% Amended 2026-11-03 for W-797: the entry gains the spot_finding (E02) and segmentation (E04) modules, cellular scene inputs and the `execution` record field; source lines updated.
+
 Entry: `python -m starfinder.benchmark._trial trial.json` (JSON or YAML mapping).
-Source: `src/python/starfinder/benchmark/_trial.py:29–111,124–194`.
+Source: `src/python/starfinder/benchmark/_trial.py:56–168,195–327` and `_scene_inputs.py`.
 
 | Input field | Implemented rule |
 | --- | --- |
-| `method` | `module: registration` plus registered `method` and optional `config`, or `module: preprocessing` plus nonempty ordered `steps` of `{method, config}`. Registry dataclasses resolve defaults and canonical type/method names; unknown keys/types fail. No spot-finding or segmentation adapter yet. |
-| `inputs` | Registration: exactly `reference`, `moving`; preprocessing: `image`, optionally `reference`. Each value is a path or `{path, sha256}`. Paths resolve relative to the trial file, including absolute paths; they are not confined to an input root. Hashes are computed during resolution and checked again during loading. |
+| `method` | `module: registration` plus registered `method` and optional `config`; `module: preprocessing` plus nonempty ordered `steps` of `{method, config}`; `module: spot_finding` plus a `SPOT_FINDING_METHODS` `method`, optional `config`, `device` (default `cpu`) and `spot_namespace` (default `trial`); or `module: segmentation` plus a `SEGMENTATION_METHODS` `method`, optional `config`, required `target` and `roles` (one per image channel), optional `device` (default `cpu`) and `label_namespace` (default `trial`). Registry dataclasses resolve defaults and canonical type/method names, and JSON lists become the tuples of spot-finding and segmentation configs; unknown methods, keys and a `type` other than the method's fail. |
+| `inputs` | Registration: exactly `reference`, `moving`; preprocessing: `image`, optionally `reference`; spot finding: exactly `image` (ZYX or ZYXC); segmentation: `image` (ZYX gains one channel), optionally nucleus `seeds` labels for a seeded method. Each value is a path or `{path, sha256}`. Paths resolve relative to the trial file, including absolute paths; they are not confined to an input root. Hashes are computed during resolution and checked again during loading. A preprocessing or spot-finding input may instead name the `uncalibrated_preprocessing` amplicon `scene` with `round` and optional `channel`; a segmentation `image` may name a `CELLULAR_PRESETS` scene (preset, version, seed equal to the trial seed, optional condition label) with `fov`, `round` (`reference` default, or `morphology`) and ordered `stains`, stacked as channels. Each module accepts only its own scene kind; `seeds` are always files. |
 | `metadata` | One common `ImageMetadata` mapping; default frame `trial/reference`. It is used for both registration images, so separate grids are not expressible here. Unknown calibration stays unknown. |
 | `seed` | Required integer in `[0, 2**32)`, excluding Boolean. Seeds Python and NumPy; supplies `random_seed` only if a method has that field and it was not supplied explicitly. |
 | `condition` | Optional mapping/context retained in the resolved configuration, default `{}`; the standalone resolver does not validate a condition schema. |
@@ -58,6 +60,14 @@ remain ZYX/ZYXC. Stage APIs do their own validity checks; `_load` does not itsel
 assert all arrays finite. Preprocessing executes `run_step` in order and supplies
 a reference only to `needs_reference` steps; it is not the sample-fitting/FOV
 pipeline. Registration estimates and applies a transform through the package.
+Spot finding calls `find_spots` with the trial's image, configuration, metadata,
+namespace and device, and writes its table unchanged. Segmentation calls
+`segment` on a `SegmentationInput` with a `declared` `ReferenceGrid` of the
+image's shape and the trial metadata; seeds become a nucleus result on that
+grid. Before any input is loaded or generated, a learned method's weights are
+verified in the installed cache (spot finding `resolve_model` with every listed
+file, segmentation the entry's own model check); missing weights fail with
+`MissingModelError` and nothing is downloaded.
 
 `record.json` has format `starfinder.benchmark.trial/1` and these fields:
 
@@ -65,7 +75,8 @@ pipeline. Registration estimates and applies a transform through the package.
 | --- | --- |
 | `configuration`, `configuration_sha256` | Resolved configuration and workflow canonical hash after successful resolution. On resolution failure configuration stays the original mapping and the hash is absent. |
 | `seed`, `inputs` | Requested seed; resolved absolute paths and SHA-256 values after resolution, otherwise empty inputs. Inputs are not copied into the output. |
-| `outputs` | Relative `path`, SHA-256 and `bytes` for `image.npy` and `transform.json` (plus `transform.npz` for dense/B-spline arrays), or `preprocessing.json` containing configs, fitted records and diagnostics. Does not include `record.json` itself. |
+| `outputs` | Relative `path`, SHA-256 and `bytes` for `image.npy` and `transform.json` (plus `transform.npz` for dense/B-spline arrays), or `preprocessing.json` containing configs, fitted records and diagnostics; for spot finding `spots.csv` (the `SpotFindingResult` table, no index) and `spot_finding.json` (its diagnostics); for segmentation `labels.npy` (`uint32` ZYX) and `segmentation.json` (the run record and diagnostics). Scene inputs add `scenes.json` with the generated image hashes. Does not include `record.json` itself. |
+| `execution` | Spot finding and segmentation only, after success: the `device` the method ran on and `model`, the learned model's identity (spot finding: `diagnostics['model']`; segmentation: method, model, model path and verified artifacts), `null` for a method without weights. Registration and preprocessing records keep their fields. |
 | `status`, `error` | `succeeded` with null error, or `failed` with exception type/message. Declared partial outputs are removed after a caught failure; outputs list stays empty. |
 | `wall_s`, `cpu_s`, `peak_rss_kib` | Shared process-resource fields, described below. |
 

@@ -1,17 +1,33 @@
 """Private one-process method runner: ``python -m starfinder.benchmark._trial trial.json``.
 
-A trial has ``method`` (module, method/config for registration or steps for
-preprocessing), ``inputs`` (reference/moving or image), ``seed`` and
-``root_output_path``. Input paths are relative to the trial file; each may
-instead be a {path, sha256} entry. Optional ``metadata`` describes the common
-ImageMetadata grid. Preprocessing inputs may instead name a regenerative
-``scene`` identity, ``round`` and optional ``channel``; resolution checks the
-installed preset/configuration and generation occurs only inside the trial.
-Optional preprocessing ``reference_steps`` run on the supplied reference first.
-NPY inputs are finite package-order arrays; other image
-files enter through load_volume. Outputs are NPY images, registration transform
-JSON/NPZ or preprocessing fitted records, and record.json. A fresh output folder
-is required. This entry runs methods only; it never computes metrics.
+A trial has ``method`` (module, method/config for registration, spot_finding or
+segmentation, or steps for preprocessing), ``inputs`` (reference/moving or
+image), ``seed`` and ``root_output_path``. Input paths are relative to the trial
+file; each may instead be a {path, sha256} entry. Optional ``metadata``
+describes the common ImageMetadata grid. Preprocessing and spot-finding inputs
+may instead name a regenerative amplicon ``scene`` identity, ``round`` and
+optional ``channel``; a segmentation image may name a cellular ``scene``
+identity, ``fov``, ``round`` and ``stains``. Resolution checks the installed
+preset/configuration and generation occurs only inside the trial. Optional
+preprocessing ``reference_steps`` run on the supplied reference first.
+
+A spot_finding method also takes an optional ``device`` (``cpu``) and
+``spot_namespace`` (``trial``); its ``image`` (ZYX or ZYXC) goes through
+find_spots unchanged, and its outputs are spots.csv and spot_finding.json (the
+diagnostics). A segmentation method also takes ``target``, ``roles`` (one per
+channel), optional ``device`` (``cpu``) and ``label_namespace`` (``trial``); its
+``image`` (ZYX gains one channel) and optional nucleus ``seeds`` label file go
+through segment on a declared grid, and its outputs are labels.npy and
+segmentation.json (the run record and diagnostics). Learned weights are only
+verified in the installed cache, before any input is loaded or output written;
+missing weights fail with MissingModelError. These two modules add the device
+and model identity to record.json as ``execution``.
+
+NPY inputs are finite package-order arrays; other image files enter through
+load_volume. Outputs are NPY images, registration transform JSON/NPZ,
+preprocessing fitted records, spot tables or label images, and record.json. A
+fresh output folder is required. This entry runs methods only; it never
+computes metrics.
 """
 from __future__ import annotations
 
@@ -24,7 +40,7 @@ import time
 import numpy as np
 import yaml
 
-from starfinder._records import file_sha256, jsonable, write_json
+from starfinder._records import file_sha256, jsonable, tuples, write_json
 from starfinder._resources import process_resources
 from starfinder.image import ImageMetadata
 from starfinder.workflow._shape import configuration_sha256, plain
@@ -84,6 +100,23 @@ def _method(value, seed):
                    for s in reference_config.steps):
                 raise ValueError("reference_steps cannot themselves require a reference")
             resolved["reference_steps"] = reference_method["steps"]
+    elif module in ("spot_finding", "segmentation"):
+        if module == "spot_finding":
+            from starfinder.spot_finding import SPOT_FINDING_METHODS as registry
+        else:
+            from starfinder.segmentation import SEGMENTATION_METHODS as registry
+        name = value.pop("method")
+        # JSON has lists where these frozen configs hold tuples.
+        config = _config(name, tuples(value.pop("config", {})), registry)
+        resolved = {"module": module, "method": name, "config": plain(config), "device": value.pop("device", "cpu")}
+        if module == "spot_finding":
+            resolved["spot_namespace"] = value.pop("spot_namespace", "trial")
+        else:
+            roles = value.pop("roles")
+            if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
+                raise ValueError("segmentation roles must be a list of channel roles")
+            resolved.update(target=value.pop("target"), roles=roles,
+                            label_namespace=value.pop("label_namespace", "trial"))
     else:
         raise ValueError(f"unsupported trial module {module!r}")
     if value:
@@ -98,19 +131,23 @@ def _resolve(value, base):
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**32:
         raise ValueError("seed must be an integer in [0, 2**32)")
     method, _ = _method(value["method"], seed)
-    expected = {"reference", "moving"} if method["module"] == "registration" else {"image"}
-    # A preprocessing step that needs a reference may explicitly supply it.
+    module = method["module"]
+    expected = {"reference", "moving"} if module == "registration" else {"image"}
+    # A preprocessing step that needs a reference, or a seeded segmentation, may explicitly supply it.
+    optional = {"preprocessing": "reference", "segmentation": "seeds"}.get(module)
     keys = set(value["inputs"])
-    if keys != expected and not (method["module"] == "preprocessing" and keys == {"image", "reference"}):
-        raise ValueError(f"inputs must name {sorted(expected)} (preprocessing may also supply reference)")
+    if keys != expected and keys != expected | {optional}:
+        raise ValueError(f"inputs must name {sorted(expected)} (preprocessing may also supply reference, "
+                         "segmentation seeds)")
     inputs = {}
     for role, entry in value["inputs"].items():
         entry = {"path": entry} if isinstance(entry, str) else dict(entry)
         if "scene" in entry:
-            if method["module"] != "preprocessing":
-                raise ValueError("scene inputs are supported for preprocessing only")
+            if module not in ("preprocessing", "spot_finding", "segmentation") or role == "seeds":
+                raise ValueError("scene inputs are supported for preprocessing, spot-finding and segmentation "
+                                 "images only")
             from ._scene_inputs import resolve_scene_input
-            inputs[role] = resolve_scene_input(entry, seed)
+            inputs[role] = resolve_scene_input(entry, seed, module)
             continue
         if set(entry) - {"path", "sha256"}:
             raise ValueError("unsupported input keys")
@@ -155,14 +192,55 @@ def _preprocess(image, config, metadata, reference=None):
     return image, records
 
 
-def _run(configuration, out):
+def _check_weights(method, config):
+    """Verify a learned method's installed weights before any output; nothing is downloaded."""
+    if method["module"] == "spot_finding":
+        from starfinder.spot_finding import SPOT_FINDING_METHODS
+        from starfinder.spot_finding._weights import listed_files, resolve_model
+        if SPOT_FINDING_METHODS[type(config)].weights:
+            resolve_model(method["method"], config.model, extracted=listed_files(method["method"], config.model))
+    elif method["module"] == "segmentation":
+        from starfinder.segmentation import SEGMENTATION_METHODS
+        from starfinder.segmentation._segment import _resolve_model
+        spec = SEGMENTATION_METHODS[type(config)]
+        if spec.models:
+            _resolve_model(spec, config)
+
+
+def _find_spots(image, method, config, metadata, out, paths):
+    from starfinder.spot_finding import find_spots
+    result = find_spots(image, config=config, metadata=metadata, spot_namespace=method["spot_namespace"],
+                        device=method["device"])
+    result.spots.to_csv(out / "spots.csv", index=False)
+    write_json(jsonable(result.diagnostics), out / "spot_finding.json")
+    paths += [out / "spots.csv", out / "spot_finding.json"]
+    return {"device": result.diagnostics["execution"]["device"], "model": result.diagnostics.get("model")}
+
+
+def _segment(inputs, method, config, metadata):
+    from starfinder.segmentation import ReferenceGrid, SegmentationInput, SegmentationResult, segment, to_label_dtype
+    image = inputs["image"]
+    image = image[..., np.newaxis] if image.ndim == 3 else image
+    grid = ReferenceGrid(tuple(image.shape[:3]), metadata, "declared")
+    seeds = None
+    if "seeds" in inputs:
+        labels = np.ascontiguousarray(to_label_dtype(inputs["seeds"]))
+        seeds = SegmentationResult(labels, grid, "nucleus", "plane" if labels.shape[0] == 1 else "volume",
+                                   method["label_namespace"], {}, {})
+    return segment(SegmentationInput(image, grid, tuple(method["roles"])), config=config, target=method["target"],
+                   seeds=seeds, device=method["device"], label_namespace=method["label_namespace"])
+
+
+def _run(configuration, out, execution):
     method, config = _method(configuration["method"], configuration["seed"])
+    _check_weights(method, config)
     scenes = {}
     inputs = {name: _load(entry, scenes) for name, entry in configuration["inputs"].items()}
     metadata = ImageMetadata(**configuration["metadata"])
     paths = []
     if scenes:
-        write_json([{"scene_configuration_sha256": key, "image_sha256": scene.provenance["image_sha256"]}
+        from ._scene_inputs import scene_hashes
+        write_json([{"scene_configuration_sha256": key, "image_sha256": scene_hashes(scene)}
                     for key, scene in scenes.items()], out / "scenes.json")
         paths.append(out / "scenes.json")
         scenes.clear()
@@ -182,6 +260,19 @@ def _run(configuration, out):
             paths.append(out / field_name)
         write_json(jsonable(_transform_json(result, 0, field_name, result.application_config)), out / "transform.json")
         paths.append(out / "transform.json")
+    elif method["module"] == "spot_finding":
+        execution.update(_find_spots(inputs["image"], method, config, metadata, out, paths))
+        return _outputs(paths)
+    elif method["module"] == "segmentation":
+        result = _segment(inputs, method, config, metadata)
+        np.save(out / "labels.npy", result.labels, allow_pickle=False)
+        write_json(jsonable({"record": result.record, "diagnostics": result.diagnostics}), out / "segmentation.json")
+        paths += [out / "labels.npy", out / "segmentation.json"]
+        entry = result.record["methods"][0]
+        execution.update(device=entry["execution"]["device"], model=None if not entry["artifacts"] else {
+            "method": method["method"], "model": getattr(config, "model", None),
+            "model_path": getattr(config, "model_path", None), "artifacts": entry["artifacts"]})
+        return _outputs(paths)
     else:
         reference = inputs.get("reference")
         if "reference_steps" in method:
@@ -195,6 +286,10 @@ def _run(configuration, out):
         paths.append(out / "preprocessing.json")
     np.save(out / "image.npy", image, allow_pickle=False)
     paths.append(out / "image.npy")
+    return _outputs(paths)
+
+
+def _outputs(paths):
     return [{"path": p.name, "sha256": file_sha256(p), "bytes": p.stat().st_size} for p in paths]
 
 
@@ -215,13 +310,17 @@ def _main(path):
                       configuration_sha256=configuration_sha256(configuration))
         random.seed(configuration["seed"])
         np.random.seed(configuration["seed"])
-        record["outputs"] = _run(configuration, out)
+        execution = {}
+        record["outputs"] = _run(configuration, out, execution)
+        if configuration["method"]["module"] in ("spot_finding", "segmentation"):
+            record["execution"] = execution
         record["status"] = "succeeded"
     except Exception as error:
         record["error"] = {"type": type(error).__name__, "message": str(error)}
         # Only the private entry's declared files in its freshly reserved folder.
         for name in ("transform.npz", "transform.json", "preprocessing.json", "image.npy", "scenes.json",
-                     "reference_preprocessing.json"):
+                     "reference_preprocessing.json", "spots.csv", "spot_finding.json", "labels.npy",
+                     "segmentation.json"):
             (out / name).unlink(missing_ok=True)
     record.update(process_resources(started))
     write_json(record, out / "record.json")
