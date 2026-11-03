@@ -23,6 +23,7 @@ See the :doc:`amplicon scene guide <../synthetic-specification>`.
    BENCHMARK_PRESETS
    benchmark_scene_preset
    CALIBRATED_CONDITIONS
+   calibrated_preprocessing_scene_config
    calibrated_scene_preset
    deformation_geometry
    DEFORMATION_PRESETS
@@ -32,6 +33,7 @@ See the :doc:`amplicon scene guide <../synthetic-specification>`.
    development_preset_factors
    development_scene_preset
    DEVELOPMENT_SIZES
+   EXTRA_CALIBRATED_CONDITIONS
    forward_displacement
    generate_amplicon_dataset
    generate_amplicon_scene
@@ -39,6 +41,8 @@ See the :doc:`amplicon scene guide <../synthetic-specification>`.
    generate_registration_pair
    GeometryConfig
    NoiseConfig
+   PREPROCESSING_CONDITIONS
+   preprocessing_scene_config
    PRESET_VERSION
    ReadoutEffectsConfig
    registration_scene_preset

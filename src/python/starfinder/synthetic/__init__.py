@@ -17,6 +17,9 @@ from ._datasets import (SyntheticDataset, forward_displacement, generate_amplico
                         generate_registration_pair)
 from ._calibrated import (CALIBRATED_CONDITIONS as _CALIBRATED_CONDITIONS, calibrated_scene_preset,
                           development_codebook)
+from ._preprocessing import (preprocessing_scene_config, calibrated_preprocessing_scene_config,
+                             CONDITIONS as _PREPROCESSING_CONDITIONS,
+                             ADDED_CONDITIONS as _EXTRA_CALIBRATED_CONDITIONS)
 from ._sample import (SAMPLE_PRESET_VERSION, SAMPLE_PRESETS as _SAMPLE_PRESETS, SAMPLE_TRUTH_VERSION,
                       AcquisitionConfig, CellsConfig, SampleScene, SampleSceneConfig, StainConfig,
                       generate_sample_scene, sample_scene_preset, save_sample_scene)
@@ -42,6 +45,10 @@ DEVELOPMENT_FIXTURES = _DEVELOPMENT_FIXTURES
 DEVELOPMENT_SIZES = _DEVELOPMENT_SIZES
 #: Calibrated (calibrated-development-v1) condition names mapped to the factors added to clean.
 CALIBRATED_CONDITIONS = _CALIBRATED_CONDITIONS
+#: Field-group controls used by preprocessing_scene_config.
+PREPROCESSING_CONDITIONS = _PREPROCESSING_CONDITIONS
+#: Additional calibrated controls used by calibrated_preprocessing_scene_config.
+EXTRA_CALIBRATED_CONDITIONS = _EXTRA_CALIBRATED_CONDITIONS
 
 #: Benchmark preset names mapped to historical shape, count, seed, FOVs, shifts and genes.
 BENCHMARK_PRESETS = _BENCHMARK_PRESETS
@@ -56,7 +63,9 @@ CELLULAR_PRESETS = _CONTEXT_PRESETS
 #: Real-appearance scene presets (appearance-presets-v1), separate from CELLULAR_PRESETS.
 APPEARANCE_PRESETS = _APPEARANCE_PRESETS
 
-__all__ = ['BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset', 'DEVELOPMENT_FACTORS',
+__all__ = ['PREPROCESSING_CONDITIONS', 'EXTRA_CALIBRATED_CONDITIONS', 'preprocessing_scene_config',
+           'calibrated_preprocessing_scene_config',
+           'BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset', 'DEVELOPMENT_FACTORS',
            'DEVELOPMENT_FIXTURES', 'DEVELOPMENT_SIZES', 'development_codebook', 'development_preset_factors',
            'development_scene_preset',
            'amplicon_scene_preset', 'AmpliconScene', 'AmpliconSceneConfig', 'generate_amplicon_scene',
