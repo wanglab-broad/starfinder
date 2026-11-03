@@ -31,6 +31,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from starfinder.evaluation._segmentation_helpers import l12_agreement
 from starfinder.image import ImageMetadata
 from starfinder.segmentation import KNOWN_MODELS, ExpandLabelsConfig, expand_labels, rescale_input
 from starfinder._weights import weights_directory
@@ -98,32 +99,6 @@ def test_l7_rescaling_seg_golden_divides_the_spacing_and_records_the_rescale():
 
 # --- L12: CPU against GPU ----------------------------------------------------------------------------
 
-def l12_agreement(reference, other):
-    """(labels in reference, labels in other, matched fraction of the reference labels, median matched IoU).
-
-    Pairs at IoU ≥ 0.5 are matched one to one, the larger IoU first (two pairs can share a label only
-    at exactly 0.5).
-    """
-    a, b = np.asarray(reference).ravel(), np.asarray(other).ravel()
-    ids_a, size_a = np.unique(a[a > 0], return_counts=True)
-    ids_b, size_b = np.unique(b[b > 0], return_counts=True)
-    sizes_a, sizes_b = dict(zip(ids_a.tolist(), size_a.tolist())), dict(zip(ids_b.tolist(), size_b.tolist()))
-    both = (a > 0) & (b > 0)
-    pairs, overlaps = np.unique(np.stack([a[both], b[both]]), axis=1, return_counts=True)
-    candidates = []
-    for (i, j), overlap in zip(pairs.T.tolist(), overlaps.tolist()):
-        iou = overlap / (sizes_a[i] + sizes_b[j] - overlap)
-        if iou >= 0.5:
-            candidates.append((-iou, i, j))
-    used_a, used_b, matched = set(), set(), []
-    for negative, i, j in sorted(candidates):
-        if i not in used_a and j not in used_b:
-            used_a.add(i)
-            used_b.add(j)
-            matched.append(-negative)
-    fraction = len(matched) / len(sizes_a) if sizes_a else 1.0
-    median = float(np.median(matched)) if matched else float("nan")
-    return len(sizes_a), len(sizes_b), fraction, median
 
 
 def within_l12_bounds(n_reference, n_other, fraction, median):

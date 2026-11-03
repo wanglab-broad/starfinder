@@ -174,7 +174,7 @@ which the short set requests as accompanying measurements.
 | M15, M16 | `evaluation/preprocessing.py:152,180` `detected_spot_intensity_spread`, `fov_variation`: M09 formula on observed sequences/detected coordinates, and population std/mean across FOV values. No groups/nonpositive mean or any missing FOV value gives null; negative/infinite FOV values fail. Caller separates edge/dense. |
 | M17, M18 | `readout` decoded table `call_status`: unmatched/all reads; assigned count. Proposed pure evaluation reducer, including rejected reads in the denominator; do not equate assigned with accepted or correct. |
 | M21 | `evaluation/registration.py:663` `evaluate_displacement_field`: median, linear p95 and max Euclidean error on explicit valid-overlap mask, voxel or component-scaled physical units. Empty mask null. |
-| M24 | `evaluation/registration.py:276` `evaluate_landmark_alignment`: supplied-landmark recall using explicit matching policy, called separately before and after. Proposed protocol selects greedy for M01 consistency and held-out landmarks for fitted methods. |
+| M24 | `evaluation/registration.py:276` `evaluate_landmark_alignment`: supplied-landmark recall using an explicit matching-policy parameter frozen by each experiment, called separately before and after. E01a freezes `nearest_candidate` within 2 voxels; fitted methods use held-out landmarks. |
 | M26, M29 | `evaluation/registration.py:551` `registration_qc`: Pearson NCC before/after/gain on common valid overlap; fold fraction of det(I+gradient u) ≤ 0 over the transform grid, not just overlap. Central differences with existing edge handling; not independent evidence for image-similarity optimizers. |
 | M34 | `evaluation/matching.py:106` `evaluate_molecules`, `any_neighbor`, inclusive Chebyshev `1 + 1e-9`; same-gene fractions in each direction, count ratio and absolute relative count difference. Many-to-one permitted; direct is reference. |
 | M36 | `evaluation/spot_finding.py:219` `classify_detections`: unmatched detections near a matched truth are duplicates, others spurious; explicit radius/boundary and optional same/other channel groups. |
@@ -189,6 +189,8 @@ which the short set requests as accompanying measurements.
 | M75, M76 | `workflow/_task.py:263`, `_verify.py:24,60`: task failure records and final completion/hash verification. Proposed retry aggregation from engine logs and pure cross-engine output comparison; current verifier is not that comparison. |
 | M77, M78 | Proposed saved-evidence readers for actual attributed GCP billing and counted human steps. No simulated bill or automatically inferred human count. |
 | M79 | Proposed `evaluation` resource-prediction reducer: median/max absolute relative error and underprediction count on held-out dataset records; zero measured resources undefined with explicit count. |
+
+% Amended 2026-11-02 for W-775, amendment A1: M24 freezes matching policy per experiment, with E01a nearest_candidate within 2 voxels.
 
 `direct_metrics` keeps W-770's exact stage semantics. No-background `none`/`pct`
 uses zero background estimate; background arms use raw minus `bg_corrected`

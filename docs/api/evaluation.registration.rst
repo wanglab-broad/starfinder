@@ -24,9 +24,11 @@ Readout metrics
    :toctree: generated
 
    correct_fraction
+   cutoff_curve
    evaluate_decoding
    evaluate_deduplication
    ranking_quality
+   read_status_summary
 
 Point matching
 --------------
@@ -87,6 +89,48 @@ output keys. Detected-spot spread uses observed color sequences; call
    detected_spot_intensity_spread
    direct_metrics
    fov_variation
+
+Segmentation metrics
+--------------------
+
+Instance F1 uses inclusive IoU thresholds from 0.5 to 0.9 with descending-IoU
+greedy matching and label-ID ties. Split counts include both qualifying owners
+at an exact half tie; merge counts count predicted labels, with distinct merged
+truth instances reported separately.
+
+.. currentmodule:: starfinder.evaluation.segmentation
+
+.. autosummary::
+   :toctree: generated
+
+   instance_f1
+   label_size_summary
+   split_merge_counts
+
+Stitching metrics
+-----------------
+
+Coordinates supplied to these metrics are already in a common physical frame
+and unit. Origin errors remove the translation of a stated anchor; overlap
+populations use explicit half-open physical bounds.
+
+.. currentmodule:: starfinder.evaluation.stitching
+
+.. autosummary::
+   :toctree: generated
+
+   gauge_aligned_origin_error
+   overlap_molecules
+
+Resource predictions
+--------------------
+
+.. currentmodule:: starfinder.evaluation.resources
+
+.. autosummary::
+   :toctree: generated
+
+   resource_prediction_errors
 
 Examples
 --------
