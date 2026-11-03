@@ -10,7 +10,8 @@ This module adds:
   and the per-segment end checks of entry reads and of the planted wrong-end reads;
 * R3 on ``one_base``: the golden geometry with a one_base codebook;
 * R5 on ``dropout``: required rounds and acquisition-local failures on the golden geometry;
-* R6: the golden expected values and the 141c093 output on ``cal`` seed 103, without the new
+* R6: the golden expected values on ``cal`` seed 103 (141c093 values at kept coordinates,
+  with W-790's plateau removals and renumbered identities), without the new
   columns (the computed float columns of the decoding tables within the float64 tolerance of
   docs/contributing.md, every other column exact);
 * R8 (extended tier) on ``cal_direct``: the ranking of direct calls;
@@ -264,7 +265,8 @@ def test_r5_required_rounds_and_acquisition_local_failures(tmp_path, seed, decod
 
 #: R6 on ``cal`` seed 103: the explicit expected values of the W-278 cal pipeline
 #: (readout_scenes.pipeline: LocalMaximaConfig() on round 1, NeighborhoodSumConfig((1, 2, 2)), both decoders
-#: at their defaults), equal to the 141c093 output (data/expected/test_readout_validation/README.md):
+#: at their defaults), equal to the 141c093 values at kept coordinates after W-790's plateau removals
+#: and identity renumbering (data/expected/test_readout_validation/README.md):
 #: cal-<condition>-spots.csv, cal-<condition>-<decoder>.csv (without the §2.8 columns) and the sums and
 #: ``valid`` of cal-intensities.npz. The spot tables (voxel coordinates, channels, uint16 peaks) and the sums
 #: of uint16 pixels hold integers and compare exactly, as do the strings and statuses of the decoding

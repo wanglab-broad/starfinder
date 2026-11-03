@@ -1,5 +1,11 @@
 # Expected values of `test_readout_validation.py`
 
+W-790 (2026-11-03) regenerated the cal tables and arrays with the generator
+below after regional-maximum collapse. Extraction and decoding retain their
+values at every kept coordinate; rows are removed and spot identities
+renumber. Fixture inputs and tolerances are unchanged. The independent audit
+and per-file row ledger are retained with W-790's implementation evidence.
+
 The explicit expected values of R6 on `cal` seed 103: the W-278 cal pipeline of
 `readout_scenes.pipeline` in each of the eight cal conditions (W-573 replaced the 141c093 digests
 and the float columns of `test/data/readout_r6_cal_141c093/`, which these values equal):

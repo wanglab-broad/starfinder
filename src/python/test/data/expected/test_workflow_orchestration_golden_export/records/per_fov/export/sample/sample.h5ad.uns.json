@@ -185,12 +185,12 @@
      "folder": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_002/assignment/default",
      "source": "folder",
      "tables": {
-      "molecules": "bc47e0fdbba0db106577d5498958c3a526667d7a3b9dc28ba994d1e533a1e3e7",
+      "molecules": "ddc8faafaa870ac81c52fae834dd0d76509d8a07242448403c9df8c296184f18",
       "cells": "4f7d4b901e30c17a9f99849077178f3d930f321c445064880710880d641c1001",
       "counts": "9bac1286347c680fd78d7e536a832fa4a570d046c0d81009dc85685ab780cc00"
      }
     },
-    "molecules_sha256": "ec4e3d6c3ad982c2906c8a43deca10bbad883e70f2fe221ce89f2f2a71a0b1d2",
+    "molecules_sha256": "fe58970637eedcade7c654750472f395322a248b2426044f414c7cbb0786ef89",
     "nuclei": false,
     "territories": {
      "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_002/assignment/default/cell_labels.tif",
@@ -349,12 +349,12 @@
      "folder": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_004/assignment/default",
      "source": "folder",
      "tables": {
-      "molecules": "f87663674ba3e7b78d9c4056ab97a29e98197bd4cf0c6fa8cf46a24e5009bfde",
+      "molecules": "a273d019a70d22e9cd6336b1cc67e0f3cd9402563b3de7f3198cceeb5221d079",
       "cells": "7ee395e906ad2741bd604b86be9e7241a043044b93f65dfcd13c2c4a9851c5ca",
       "counts": "7913c91c816b52b79833a7ecc58b04343544c3c0daa884877dae6081fdeec4b1"
      }
     },
-    "molecules_sha256": "cbe1464d2872b53f19233c97537e49dd5d53d654580ed417ab4c214c3fa89699",
+    "molecules_sha256": "e6a504453845daa388e0d71a4c33fa5feb30b6f089f1b5e2099f69d60967ee37",
     "nuclei": false,
     "territories": {
      "path": "<work>/output/sample-tiny-v1/golden-per-fov/fovs/FOV_004/assignment/default/cell_labels.tif",

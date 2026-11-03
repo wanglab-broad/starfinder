@@ -300,7 +300,8 @@ def _defaults_probe():
 #: Defaults the plan derives from other keys (starfinder/workflow/_plan.py, resolve), written in words.
 DERIVED = {("morphology", "rounds"): "every additional_round",
            # check_tiled writes the minimum in place of null (_plan.py, check_tiled).
-           ("processing.tiled", "halo"): "the minimum: the largest footprint of the tile's operations"}
+           ("processing.tiled", "halo"): "the minimum: the largest footprint of the tile's operations; "
+                                         "regional maxima must also fit the window (checked by the tile task)"}
 
 
 def _schema_node(schema, block):

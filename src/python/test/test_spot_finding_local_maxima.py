@@ -70,8 +70,8 @@ PAIR = [(5, 26, 8), (5, 26, 13)]
 
 def test_the_fixture_has_every_tied_and_split_maximum_without_the_merge():
     result = detect(merge_fixture(), CONFIG)
-    assert sorted(positions(result)) == sorted([(*p, 0) for p in PLATEAU + TIE + LOBES + PAIR]
-                                               + [(*p, 1) for p in PLATEAU + PAIR])
+    assert sorted(positions(result)) == sorted([(*p, 0) for p in [PLATEAU[1], TIE[0]] + LOBES + PAIR]
+                                               + [(*p, 1) for p in [PLATEAU[1]] + PAIR])
     assert "merged" not in result.diagnostics and result.diagnostics["warnings"] == ()
     peak = {p[:3]: v for p, v in zip(positions(result), result.spots.peak_intensity) if p[3] == 0}
     assert peak[(3, 20, 22)] > peak[(3, 20, 20)]
@@ -82,10 +82,10 @@ def test_the_merge_keeps_one_maximum_per_plateau_tie_and_amplicon_and_both_membe
     legacy = detect(image, CONFIG)
     merged = detect(image, replace(CONFIG, merge_radius_zyx=RADIUS))
     # The brightest maximum of each group, ties broken by z, then y, then x; the pair is 5 voxels apart.
-    kept = {(2, 5, 5, 0), (4, 10, 20, 0), (3, 20, 22, 0), (5, 26, 8, 0), (5, 26, 13, 0),
-            (2, 5, 5, 1), (5, 26, 8, 1), (5, 26, 13, 1)}
+    kept = {(2, 5, 6, 0), (4, 10, 20, 0), (3, 20, 22, 0), (5, 26, 8, 0), (5, 26, 13, 0),
+            (2, 5, 6, 1), (5, 26, 8, 1), (5, 26, 13, 1)}
     assert set(positions(merged)) == kept
-    assert merged.diagnostics["merged"] == {"0": 4, "1": 1}
+    assert merged.diagnostics["merged"] == {"0": 1, "1": 0}
     # Kept maxima keep their rows (order, coordinates, peak_intensity); identities follow the merge.
     rows = [i for i, p in enumerate(positions(legacy)) if p in kept]
     expected = legacy.spots.drop(columns="spot_id").iloc[rows].reset_index(drop=True)
@@ -105,11 +105,10 @@ def test_the_merge_without_peak_intensity_keeps_the_same_maxima():
 
 def test_the_ellipsoid_uses_per_axis_radii_and_includes_its_surface():
     image = merge_fixture()
-    # Z radius 0.5: the tie member one plane down, (5, 10, 21), lies outside the ellipsoid of (4, 10, 20),
-    # while (4, 11, 21), one voxel away in Y and X, lies inside it.
+    # The connected tie is already represented once before the optional ellipsoid merge.
     flat = detect(image, replace(CONFIG, merge_radius_zyx=(0.5, 2.0, 2.0)))
     assert {p[:3] for p in positions(flat) if p[3] == 0} == {
-        (2, 5, 5), (4, 10, 20), (5, 10, 21), (3, 20, 22), (5, 26, 8), (5, 26, 13)}
+        (2, 5, 6), (4, 10, 20), (3, 20, 22), (5, 26, 8), (5, 26, 13)}
     # An X radius of exactly 5 voxels reaches the pair (the ellipsoid includes its surface); the tie of
     # equal values is broken by X.
     wide = detect(image, replace(CONFIG, merge_radius_zyx=(2.0, 2.0, 5.0)))
@@ -120,8 +119,8 @@ def test_the_merge_on_a_plane_ignores_the_z_radius():
     plane = merge_fixture()[2:3]   # Z=1: at half the maximum, only the plateau of both channels
     for radius in ((0.1, 2.0, 2.0), (50.0, 2.0, 2.0)):
         result = detect(plane, replace(CONFIG, threshold_value=0.5, merge_radius_zyx=radius))
-        assert positions(result) == [(0, 5, 5, 0), (0, 5, 5, 1)]
-        assert result.diagnostics["merged"] == {"0": 1, "1": 1}
+        assert positions(result) == [(0, 5, 6, 0), (0, 5, 6, 1)]
+        assert result.diagnostics["merged"] == {"0": 0, "1": 0}
 
 
 def test_the_default_merge_radius_is_none_and_merges_nothing():

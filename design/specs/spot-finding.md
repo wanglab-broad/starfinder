@@ -128,9 +128,11 @@ directly. `min_shape_zyx` applies to 3D inputs, and a Z=1 input is checked again
 its last two entries. A smaller input, or Z=1 for a method without `2` in
 `dimensions`, raises `IncompatibleGeometryError` before the method runs.
 
+% Amended 2026-11-03 W-790: local maxima and noise landmarks share regional-maximum representatives; registry capabilities are unchanged.
+
 | Name | Config | `pipeline` | `dimensions` | `min_shape_zyx` | `output_columns` | `requires` (extra) | `weights` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `local_maxima` | `LocalMaximaConfig` (with `merge_radius_zyx`) | yes | 2, 3 | (1, 1, 1) | `z, y, x, channel, peak_intensity?` | none | no |
+| `local_maxima` | `LocalMaximaConfig` (regional-maximum representatives, optional `merge_radius_zyx`) | yes | 2, 3 | (1, 1, 1) | `z, y, x, channel, peak_intensity?` | none | no |
 | `noise_landmark` | `NoiseLandmarkConfig` | no | 2, 3 | (1, 1, 1) | `z, y, x` | none | no |
 | `percentile_centroid` | `PercentileCentroidConfig` | no | 2, 3 | (1, 1, 1) | `z, y, x` (fractional) | none | no |
 | `starfish_log` | `StarfishLogConfig` | yes | 2, 3 | (1, 1, 1) | `z, y, x, channel, peak_intensity, radius` | none | no |
@@ -150,8 +152,13 @@ scores only through its intermediate feature maps), so it has no score column.
 % W-266
 
 The three configs that predate the spot-finding work kept their names, fields and defaults, except
-the optional `LocalMaximaConfig.merge_radius_zyx` (default `None`, the earlier
-behavior). Exact-type lookup rejects subclasses, which the earlier `isinstance` check
+the optional `LocalMaximaConfig.merge_radius_zyx` (default `None`). Regional maxima now
+give one representative, using half-up centroid rounding if in the maximum, otherwise
+the nearest voxel with ties by z, y, x; noise landmarks share this rule.
+
+% Amended 2026-11-03 W-790: regional-maximum representatives replace voxel-wise ties; fields and defaults stay unchanged.
+
+Exact-type lookup rejects subclasses, which the earlier `isinstance` check
 accepted; no caller, script or test subclassed them at `42f652d`.
 
 % §2.7
@@ -175,7 +182,7 @@ Every config is a frozen dataclass validated in `__post_init__`, with
 
 | Config | Fields (default) |
 | --- | --- |
-| `LocalMaximaConfig` | the fields of `42f652d`, plus `merge_radius_zyx: tuple[float, float, float] \| None = None`: the opt-in within-channel merge of tied or split maxima ([spot-finding-algorithms](spot-finding-algorithms.md), "Local maxima"). Positive finite radii; the Z radius is unused for Z=1. |
+| `LocalMaximaConfig` | the fields of `42f652d`, plus `merge_radius_zyx: tuple[float, float, float] \| None = None`: the opt-in within-channel merge of split maxima after regional-maximum collapse ([spot-finding-algorithms](spot-finding-algorithms.md), "Local maxima"). Positive finite radii; the Z radius is unused for Z=1. The W-790 regional-maximum rule also applies when this option is None. |
 | `StarfishLogConfig` | `min_sigma`, `max_sigma`: a number or a ZYX 3-tuple, required; `num_sigma: int`, required; `threshold: float`, required (starfish `BlobDetector` has no defaults for these four); `overlap: float = 0.5`; `exclude_border: bool \| int = False` (the starfish and `blob_log` defaults). |
 | `SpotiflowConfig` | `model: str`, required (a `spotiflow` row of the known-weights table); `prob_thresh: float \| None = None` (the threshold stored with the weights); `min_distance: int = 1`; `exclude_border: bool = False`; `subpix: bool \| None = None` (the model configuration's choice); `n_tiles: tuple[int, ...] \| None = None` (the library's choice); `scale: float = 1.0` (only 1 is accepted). |
 | `PiscisConfig` | `model: str`, required (a `piscis` row of the known-weights table); `threshold: float = 0.5`; `min_distance: int = 1`; `input_size: int \| None = None` (the tile side in pixels passed to the `Piscis` constructor, which rounds it to a multiple of 8; `None` keeps the model's 256); `scale: float = 1.0` (only 1 is accepted). The `Piscis` class is used, never `PiscisLegacy`. |

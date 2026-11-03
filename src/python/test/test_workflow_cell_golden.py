@@ -1,5 +1,8 @@
 """The morphology and assign commands against W-642's golden values (design/baselines/orchestration.md).
 
+W-790 updates only identities and downstream values resulting from collapsed regional maxima;
+every kept spot's extracted and decoded values are unchanged, as independently audited in that issue.
+
 W-642's invocations A and B (``scripts/workflow_golden.py``, ``configurations``) migrated to the Python shape on their
 fixture (``tiny_sample``): A's processing block without its run flags, a morphology block with
 ``morphology.channel_images`` (the images the nuclei_registration rule wrote), one segment run per FOV that imports the

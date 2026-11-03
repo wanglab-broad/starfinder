@@ -8,7 +8,7 @@ spot_namespace,spot_id,z,y,x,gene_id,voxel_z,voxel_y,voxel_x,assignment_status,c
 "[""sample-tiny-v1"",""sample"",""FOV_002"",null]",6,0,4,30,balanced-07,0,4,30,assigned,8,<NA>,<NA>,<NA>,unavailable
 "[""sample-tiny-v1"",""sample"",""FOV_002"",null]",7,0,22,35,balanced-05,0,22,35,assigned,2,<NA>,<NA>,<NA>,unavailable
 "[""sample-tiny-v1"",""sample"",""FOV_002"",null]",8,2,0,30,balanced-07,2,0,30,assigned,8,<NA>,<NA>,<NA>,unavailable
-"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",11,1,31,7,balanced-11,1,31,7,unassigned,<NA>,<NA>,<NA>,<NA>,<NA>
-"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",12,3,27,25,balanced-12,3,27,25,assigned,2,<NA>,<NA>,<NA>,unavailable
-"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",13,3,4,15,balanced-13,3,4,15,assigned,8,<NA>,<NA>,<NA>,unavailable
-"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",14,0,6,24,balanced-13,0,6,24,assigned,8,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",10,1,31,7,balanced-11,1,31,7,unassigned,<NA>,<NA>,<NA>,<NA>,<NA>
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",11,3,27,25,balanced-12,3,27,25,assigned,2,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",12,3,4,15,balanced-13,3,4,15,assigned,8,<NA>,<NA>,<NA>,unavailable
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",13,0,6,24,balanced-13,0,6,24,assigned,8,<NA>,<NA>,<NA>,unavailable

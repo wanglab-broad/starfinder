@@ -1,5 +1,12 @@
 # Expected values of the workflow orchestration golden baseline
 
+W-790 (2026-11-03) updates only detection-dependent tables and record fields
+after regional-maximum collapse, using the maintained migrated task commands
+and extractor. Existing migration exceptions and unaffected values remain
+historical. The independent audit checks every kept candidate's extracted and
+decoded values and records per-file row counts with W-790's implementation
+evidence; no tolerance changes.
+
 The golden baseline of the current Snakemake workflow (`backend: python`), which the workflow
 orchestration refactor must reproduce (W-642; decision D10 of the §2.13 planning;
 `design/baselines/orchestration.md`, "The golden baseline"). No test reads these files yet: the

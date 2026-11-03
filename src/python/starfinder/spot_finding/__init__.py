@@ -170,6 +170,10 @@ def find_spots(
     when a channel's MAD is 0 or more than half of its voxels are zero; the
     threshold is unchanged. With merge_radius_zyx set, diagnostics['merged']
     holds the number of maxima the within-channel merge removed per channel.
+    Local maxima and noise landmarks report diagnostics['plateaus'] per
+    channel (maxima, removed_voxels): tied regional maxima collapsed and
+    voxels removed, before border and spacing exclusions. The key is omitted
+    if all channels have zero collapsed maxima, preserving untied outputs.
     The Starfish LoG records its scale-space memory estimate in
     diagnostics['geometry'] (scale_space_bytes_estimate, 10.4 bytes x
     num_sigma x voxels). Spotiflow and Piscis need their extras and named
@@ -272,7 +276,7 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
     constant = ({c for c in range(n_channels) if _is_constant(image[..., c] if image.ndim == 4 else image)}
                 if per_channel(spec) and skips_constant(base) else set())
     tables, thresholds, noise, merged, geometry, measurements = [], {}, {}, {}, [], None
-    effective, models = {}, []
+    effective, models, plateaus = {}, [], {}
     for group_config, channels in groups:
         ran = tuple(c for c in channels if c not in constant)
         details = {}
@@ -286,6 +290,7 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
                 thresholds = dict(enumerate(details['thresholds']))
             noise.update(zip(ran, details.get('noise', ())))
             merged.update(zip(ran, details.get('merged', ())))
+            plateaus.update(zip(ran, details.get('plateaus', ())))
             effective.update(zip(ran, details.get('effective', ())))
             if 'model' in details:
                 models.append((ran, details['model']))
@@ -298,6 +303,7 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
             thresholds.update(zip(still, skipped['thresholds']))
             noise.update(zip(still, skipped.get('noise', ())))
             merged.update(zip(still, skipped.get('merged', ())))
+            plateaus.update(zip(still, skipped.get('plateaus', ())))
             if 'geometry' in skipped:
                 geometry.append(skipped['geometry'])
             if 'model' in skipped:
@@ -326,6 +332,9 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
                                                for column in native} for c in range(n_channels)}
     if merged:
         diagnostics['merged'] = {keys[c]: merged[c] for c in sorted(merged)}
+    # Preserve every diagnostic byte on inputs without tied maxima (W-790).
+    if any(p['maxima'] for p in plateaus.values()):
+        diagnostics['plateaus'] = {keys[c]: plateaus[c] for c in sorted(plateaus)}
     if geometry:
         # Channels are detected one at a time, so the largest estimate of the channels' configs is the peak.
         diagnostics['geometry'] = max(geometry, key=lambda g: g.get('scale_space_bytes_estimate', 0))
@@ -371,7 +380,7 @@ def _software(spec):
 
 
 # Per-round diagnostics, which a result of several rounds keeps under diagnostics['rounds'][<round>].
-_ROUND_KEYS = ('thresholds', 'counts', 'outcomes', 'noise', 'merged')
+_ROUND_KEYS = ('thresholds', 'counts', 'outcomes', 'noise', 'merged', 'plateaus')
 
 
 def _combine_rounds(results, plan):

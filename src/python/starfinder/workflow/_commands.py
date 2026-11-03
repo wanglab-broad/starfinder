@@ -203,7 +203,7 @@ def tile(run):
     tiles = {t.id: t for t in _grid(run, grid, record)}
     run_tile(adapted.dataset.fov(run.identity["fov"]), pipeline, tiles[run.identity["tile"]],
              store=tiled / _layout.CHUNKED_CHECKPOINT, statistics=record["statistics"],
-             directory=_layout.tile_dir(folder, run.identity["tile"]), halo=grid.halo,
+             directory=_layout.tile_dir(folder, run.identity["tile"]), halo=grid.halo, exact=grid.exact,
              local_registration=grid.local_registration, post_local_registration=grid.post_local_registration,
              execution=adapted.execution, attempt=run.context.attempt)
 

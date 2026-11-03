@@ -117,7 +117,7 @@
   {
    "path": "export/sample/tables/molecules.csv",
    "kind": "export_table",
-   "sha256": "38d9dfb68cabeb452416e6b4d38d4e5c3185c2e6d14484b23615e56d3bba032d",
+   "sha256": "442b82f2b422f9669e474ea79b8941183c3e69eac0479c6a6104a41ce67deda3",
    "bytes": 19358,
    "verified": true
   },
@@ -290,7 +290,7 @@
   },
   {
    "path": "tables/readout_totals.csv",
-   "sha256": "b5abaed8297671e61f3f2e094c8be3cd91768c89c122af66a45645f6faac01a4",
+   "sha256": "79ec01a3f41c8860a2a3dac6c6ca63ac8998201ffb31794445944e4fab221497",
    "bytes": 303,
    "dtypes": {
     "level": "string",
@@ -683,7 +683,7 @@
   "fovs_with_run_record": 4,
   "fovs_succeeded": 4,
   "spots_median_per_fov": 29.5,
-  "matched_fraction": 0.8434782608695652,
+  "matched_fraction": 0.8584070796460177,
   "counted_cells": 9,
   "reads_per_cell_median": 6.0,
   "genes_per_cell_median": 5.0,

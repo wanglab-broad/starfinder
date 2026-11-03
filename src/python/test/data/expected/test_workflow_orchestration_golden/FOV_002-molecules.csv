@@ -8,7 +8,7 @@ spot_namespace,spot_id,z,y,x,gene_id,entry_id,qc_score
 "[""sample-tiny-v1"",""sample"",""FOV_002"",null]",6,0,4,30,balanced-07,TCGAC,0.1162437634499124
 "[""sample-tiny-v1"",""sample"",""FOV_002"",null]",7,0,22,35,balanced-05,ACAAC,0.075318372648962503
 "[""sample-tiny-v1"",""sample"",""FOV_002"",null]",8,2,0,30,balanced-07,TCGAC,0.41934461545293011
-"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",11,1,31,7,balanced-11,ACCTC,0.1447409711939226
-"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",12,3,27,25,balanced-12,GCATC,0.092822232648862996
-"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",13,3,4,15,balanced-13,GCGGC,0.29228854983172953
-"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",14,0,6,24,balanced-13,GCGGC,0.0997195654175691
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",10,1,31,7,balanced-11,ACCTC,0.1447409711939226
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",11,3,27,25,balanced-12,GCATC,0.092822232648862996
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",12,3,4,15,balanced-13,GCGGC,0.29228854983172953
+"[""sample-tiny-v1"",""sample"",""FOV_002"",null]",13,0,6,24,balanced-13,GCGGC,0.0997195654175691

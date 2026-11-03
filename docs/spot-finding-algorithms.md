@@ -19,8 +19,16 @@ Each method's name is its `method` value, used by the workflow key. `FOV.find_sp
 
 ### Local maxima
 
-Finds the local maxima of each channel above the channel's threshold with
-scikit-image's `peak_local_max`. The guide's
+Finds each channel's regional maxima above its threshold: 26-connected sets
+of equal-valued voxels whose neighbours are all lower (8-connectivity for Z=1).
+Each gives one representative: the centroid rounded half up on each axis if
+that voxel is in the maximum, otherwise the nearest voxel, ties by smallest
+z, y, x. Rows are ordered by channel, decreasing value, then representative
+z, y, x. Border exclusion applies to the representative; at distance above 1,
+the existing size `2d + 1` maximum window and greedy Chebyshev spacing apply
+to representatives before the optional ellipsoid merge. An equal-valued set
+next to a higher voxel gives no row. `noise_landmark` shares this path.
+The guide's
 [threshold modes](spot-finding-contract.md#threshold-modes) say how the threshold is
 computed. See {py:class}`~starfinder.spot_finding.LocalMaximaConfig`.
 
@@ -107,6 +115,7 @@ See {py:class}`~starfinder.spot_finding.SpotFindingPlan` and
 | `effective_settings` | Per channel, the channel's config |
 | `noise` | `local_maxima`: per channel, `zero_fraction`, `median`, `mad` and `threshold` |
 | `merged` | `local_maxima` with `merge_radius_zyx`: the maxima removed per channel |
+| `plateaus` | Local maxima and noise landmarks: per channel, `maxima` counts multi-voxel maxima collapsed and `removed_voxels` counts their removed voxels, before border and spacing exclusions; omitted when all counts are zero |
 | `warnings` | The messages of the `SpotFindingWarning`s emitted |
 | `native` | `starfish_log` and `spotiflow`: per channel, the minimum, median and maximum of `radius` or `probability`, or `None` without candidates |
 | `geometry` | `starfish_log`: the scale-space memory estimate; `spotiflow`: the tiling; `piscis`: the mode, tile size, overlap and tile boundaries |

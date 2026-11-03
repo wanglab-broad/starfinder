@@ -95,7 +95,7 @@
  "files": [
   {
    "path": "candidates.csv",
-   "sha256": "716d0043b52d0dce8ada065c29e30ea79b72bba179bc958fa8e65db5cba31d75"
+   "sha256": "fc25b4c7c1a8a7cae384b18048866df9694c6d0c3cbc3ceca0a05d66c62d9815"
   }
  ],
  "spot_namespace": "[\"session\",\"small\",\"FOV_002\",null]",
@@ -169,10 +169,10 @@
    "peak_intensity": "original pixel intensity at the detected channel maximum"
   },
   "counts": {
-   "ch00": 12,
-   "ch01": 39,
-   "ch02": 30,
-   "ch03": 23
+   "ch00": 11,
+   "ch01": 31,
+   "ch02": 29,
+   "ch03": 18
   },
   "outcomes": {
    "ch00": "ok",
@@ -280,6 +280,24 @@
     "OPENBLAS_NUM_THREADS": "1",
     "NUMEXPR_NUM_THREADS": "1",
     "NUMBA_NUM_THREADS": "1"
+   }
+  },
+  "plateaus": {
+   "ch00": {
+    "maxima": 1,
+    "removed_voxels": 1
+   },
+   "ch01": {
+    "maxima": 5,
+    "removed_voxels": 7
+   },
+   "ch02": {
+    "maxima": 1,
+    "removed_voxels": 1
+   },
+   "ch03": {
+    "maxima": 1,
+    "removed_voxels": 2
    }
   }
  },

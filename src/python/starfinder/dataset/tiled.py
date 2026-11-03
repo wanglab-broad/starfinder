@@ -128,7 +128,7 @@ def _detection_configs(spot_finding):
 
 
 def unbounded_operations(pipeline, local_registration=None) -> list[str]:
-    """The operations of a tile without a finite footprint, each named; [] when tiled equals direct.
+    """The operations of a tile without a finite footprint, each named; [] passes the planning check.
 
     Parameters
     ----------
@@ -143,6 +143,7 @@ def unbounded_operations(pipeline, local_registration=None) -> list[str]:
         One line per operation: a detector other than ``local_maxima`` (no declared footprint or order, OT2),
         ``local_maxima`` with ``min_distance_voxels`` above 1 or a ``merge_radius_zyx`` (greedy over the channel),
         and a detection plan with rounds (whose merged order is not declared).
+        Each tile task must additionally check that its core-intersecting regional maxima fit its window.
     """
     from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
     problems = []
@@ -178,7 +179,8 @@ def tile_footprints(pipeline, local_registration=None) -> dict:
         the background ring's Y and X radii) and ``local_registration`` (per step the largest displacement,
         ``LOCAL_REGISTRATION_DISPLACEMENT``, plus for demons ``3 * smoothing_sigma * 2 ** (levels - 1)``), each
         present when the operation runs. Decoding, scoring and filtering act per read (footprint 0); deduplication
-        runs in the merge.
+        runs in the merge. The detection footprint is the planned minimum, not a bound on plateau extent:
+        each tile task also checks core-intersecting maxima for truncation at internal window edges.
     """
     from starfinder.spot_finding import LocalMaximaConfig
     footprints = {}
@@ -399,7 +401,44 @@ def _subset_intensities(result, keep, ids):
     return replace(result, spot_ids=ids, **fields)
 
 
-def run_tile(fov, pipeline, tile, *, store, statistics, directory, halo, local_registration=None,
+def _tile_maxima_diagnostics(fov, tile, statistics, shape_yx, exact):
+    """Check core-intersecting maxima for truncation and count plateaus by representative ownership."""
+    from starfinder.spot_finding._methods import _regional_maxima, _representative
+    ref = fov.dataset.rounds.reference_round
+    image = fov.images[ref]
+    wy0, wy1, wx0, wx1 = tile.window_yx
+    height, width = shape_yx
+    plateaus, truncated = {}, {}
+    for c, entry in enumerate(statistics['detection']['channels']):
+        collapsed = {'maxima': 0, 'removed_voxels': 0}
+        count = 0
+        for points in _regional_maxima(image[..., c], entry['threshold'], include_constant=not entry['constant']):
+            y, x = points[:, 1] + wy0, points[:, 2] + wx0
+            meets_core = np.any(tile.contains(y, x))
+            touches_edge = ((wy0 > 0 and np.any(y == wy0)) or (wy1 < height and np.any(y == wy1 - 1))
+                            or (wx0 > 0 and np.any(x == wx0)) or (wx1 < width and np.any(x == wx1 - 1)))
+            count += int(meets_core and touches_edge)
+            representative = _representative(points)
+            if len(points) > 1 and tile.contains(representative[1] + wy0, representative[2] + wx0):
+                collapsed['maxima'] += 1
+                collapsed['removed_voxels'] += len(points) - 1
+        plateaus[entry['channel']], truncated[entry['channel']] = collapsed, count
+    if exact and any(truncated.values()):
+        y0, y1, x0, x1 = tile.core_yx
+        # A full-FOV window is a conservative guaranteed containing halo; no extra image is loaded.
+        containing_halo = max(y0, height - y1, x0, width - x1)
+        raise ValueError(f"tile {tile.id}: truncated regional maximum meeting the core; use halo >= "
+                         f"{containing_halo} (contains the full FOV), or set exact false")
+    diagnostics = dict(fov.spot_result.diagnostics)
+    diagnostics.pop('plateaus', None)
+    if any(p['maxima'] for p in plateaus.values()):
+        diagnostics['plateaus'] = plateaus
+    if any(truncated.values()):
+        diagnostics['truncated_maxima'] = truncated
+    fov.spot_result = replace(fov.spot_result, diagnostics=diagnostics)
+
+
+def run_tile(fov, pipeline, tile, *, store, statistics, directory, halo, exact=True, local_registration=None,
              post_local_registration=None, execution=None, attempt=1) -> dict:
     """The tile task of tiled execution: one tile's window detected, extracted, decoded and scored.
 
@@ -420,6 +459,10 @@ def run_tile(fov, pipeline, tile, *, store, statistics, directory, halo, local_r
         ``tile.json``.
     halo : int
         The halo the grid was made with (recorded).
+    exact : bool
+        Fail on a regional maximum meeting the core and an internal window edge; defaults to true.
+        The error names a conservative containing halo covering the full FOV. False records counts under
+        ``diagnostics.spot_finding.truncated_maxima`` per channel instead.
     local_registration : RegistrationRecipe or None
         A registration of each moving round's window on the reference round's window; None registers nothing.
     post_local_registration : tuple of PreprocessingStep or None
@@ -440,10 +483,11 @@ def run_tile(fov, pipeline, tile, *, store, statistics, directory, halo, local_r
     the merge replaces. It keeps the candidates whose (y, x), in FOV coordinates (the window's start added), lie in its
     half-open core, and their reads; ``candidates.csv`` holds the columns of the ``candidates`` stage table and
     ``reads.csv`` those of the ``pre_qc`` stage table (decoding and scoring). Filtering and deduplication run in the
-    merge.
+    merge. A regional maximum meeting the core and an internal window edge fails under ``exact``;
+    otherwise its count is recorded. Plateau diagnostics count only maxima owned by their representative.
     """
     from starfinder.dataset.config import ExecutionConfig
-    from starfinder.io.chunked import read_window
+    from starfinder.io.chunked import read_chunked_record, read_window
     from starfinder.preprocessing import PreprocessingRecipe
     directory = Path(directory)
     fov.tile = tile.id
@@ -472,6 +516,9 @@ def run_tile(fov, pipeline, tile, *, store, statistics, directory, halo, local_r
                   spot_finding=plan, deduplication=None, filtering=None)
     device = "cpu" if execution is None else execution.device
     fov.run(run, execution=ExecutionConfig("batch", False, device), checkpoints=None)
+    reference = fov.dataset.rounds.reference_round
+    shape = read_chunked_record(store)['entries'][reference]['shape_zyxc'][1:3]
+    _tile_maxima_diagnostics(fov, tile, statistics, shape, exact)
     wy0, _, wx0, _ = tile.window_yx
     spots = fov.spot_result.spots.copy()
     spots["y"] = spots["y"] + wy0
@@ -526,7 +573,7 @@ def _namespace(fov):
     return json.dumps([fov.dataset.dataset_id, fov.dataset.sample_id, fov.fov_id, None], separators=(",", ":"))
 
 
-def _merged_detection(fov, pipeline, statistics, first, spots):
+def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
     """The FOV's SpotFindingResult of the merged candidates, with direct's diagnostics from the FOV-level statistics."""
     from starfinder.spot_finding import SpotFindingResult
     from starfinder.spot_finding import _noise_warning
@@ -534,7 +581,15 @@ def _merged_detection(fov, pipeline, statistics, first, spots):
     labels = tuple(fov.dataset.channel_order)
     channels = statistics["detection"]["channels"]
     diagnostics = {key: tuples(value) for key, value in first.items()
-                   if key not in ("thresholds", "counts", "outcomes", "noise", "effective_settings", "warnings")}
+                   if key not in ("thresholds", "counts", "outcomes", "noise", "effective_settings", "warnings",
+                                  "plateaus", "truncated_maxima")}
+    for key in ('plateaus', 'truncated_maxima'):
+        entries = [r['diagnostics']['spot_finding'].get(key, {}) for r in records]
+        if any(entries):
+            diagnostics[key] = {
+                label: ({field: sum(e.get(label, {}).get(field, 0) for e in entries)
+                         for field in ('maxima', 'removed_voxels')} if key == 'plateaus' else
+                        sum(e.get(label, 0) for e in entries)) for label in labels}
     diagnostics["thresholds"] = tuple(float(e["threshold"]) for e in channels)
     counts = spots["channel"].value_counts() if "channel" in spots else pd.Series(dtype=int)
     diagnostics["counts"] = {labels[c]: int(counts.get(c, 0)) for c in range(len(labels))}
@@ -667,7 +722,8 @@ def merge_tiles(fov, pipeline, tiles, *, tile_directories, global_record, global
     else:
         spots, values, valid, background = candidates, None, None, None
     spots = spots[spot_columns].reset_index(drop=True)
-    fov.spot_result = _merged_detection(fov, pipeline, statistics, first["diagnostics"]["spot_finding"], spots)
+    fov.spot_result = _merged_detection(fov, pipeline, statistics, first["diagnostics"]["spot_finding"], spots,
+                                       records=list(records.values()))
     shape = list(global_record["shape_zyxc"][:3])
     if values is not None:
         measured = {}
