@@ -759,7 +759,7 @@ layer, in its own CI job with Java and Nextflow.
 | Profile | Settings |
 | --- | --- |
 | `local` | `executor 'local'`; `apptainer.enabled` or `docker.enabled` with the image, or neither (the locked environment on `PATH`); `executor.cpus` the host's allowance |
-| `sge` | `executor 'sge'`; `penv 'smp'`; `clusterOptions` `-P broad -S /bin/bash -l h_vmem=<memory / cpus>M -l h_rt=<time>` (as W-641's run used: `-P broad -l h_vmem=1G -l h_rt=00:10:00 -S /bin/bash`, two tasks on UGER); the label `gpu` adds `-l gpu=TRUE,operating_system=RedHat8`; `apptainer.enabled`, `apptainer.cacheDir` and `NXF_HOME` on `/stanley`, `apptainer.runOptions '--bind /stanley,/local/scratch'`; `executor.queueSize 200`, `pollInterval '30 sec'`; `params.max_retries 2` |
+| `sge` | `executor 'sge'`; `penv 'smp'` above one CPU; `clusterOptions` `-P broad -S /bin/bash -l h_vmem=<memory / cpus>M -l h_rt=<time>` (as W-641's run used: `-P broad -l h_vmem=1G -l h_rt=00:10:00 -S /bin/bash`, two tasks on UGER); the label `gpu` adds `-l gpu=TRUE,operating_system=RedHat8`; `apptainer.enabled`, `apptainer.cacheDir` and `NXF_HOME` on `/stanley`, `apptainer.runOptions '--bind /stanley,/local/scratch'`; `executor.queueSize 200`, `pollInterval '30 sec'`; `params.max_retries 2` |
 | `google-batch` | [Google Batch readiness](#google-batch-readiness) |
 
 The Nextflow head on UGER is a job itself (W-641's `nextflow_head.sh`: `use UGER`, `use Java-17`,
@@ -1077,7 +1077,9 @@ as a UGER job with the same image (`h_vmem=8G`), so the profile works from any h
 
 ### Nextflow's `sge` configuration
 
-As in [the profiles](#the-profiles) above: `penv 'smp'`; `clusterOptions` built from `task.cpus`,
+% Amended 2026-11-02 for W-778: `penv 'smp'` only above one CPU. UGER's `smp` holds a job to `h_vmem` x (slots + 1)
+% (`job_is_first_task FALSE`; W-649's U7 probes), so a 1-CPU task in `smp` was allowed twice its request (Jiahao, option A).
+As in [the profiles](#the-profiles) above: `penv 'smp'` above one CPU; `clusterOptions` built from `task.cpus`,
 `task.memory` and `task.time` into `-P broad -S /bin/bash -l h_vmem=<memory / cpus>M -l h_rt=<time>`,
 because `h_vmem` is a per-slot consumable on UGER (W-641); the label `gpu` adds `-l
 gpu=TRUE,operating_system=RedHat8` and `apptainer.runOptions` `--nv`; `apptainer.enabled true` with

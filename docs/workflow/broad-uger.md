@@ -61,9 +61,14 @@ stops if that folder does not exist, so set `APPTAINER_CACHEDIR` to another
 folder on `/stanley` then. Temporary files use the job's local scratch.
 
 **Nextflow** (the `sge` profile of `nextflow/nextflow.config`). The SGE executor
-submits each task with the `smp` parallel environment, `-P broad`, `h_vmem` per
-slot and `h_rt`, and runs it with Apptainer, `/stanley` bound, in the task's
+submits each task with `-P broad`, `h_vmem` per slot and `h_rt`, and a task of more
+than one CPU with the `smp` parallel environment, as the Snakemake profile does, and runs it with Apptainer, `/stanley` bound, in the task's
 `execution.container` or the `--container` image.
+
+**Memory.** UGER reserves `h_vmem` per slot and kills a job that uses more than it
+is allowed. In the `smp` parallel environment the allowance includes one slot more,
+for the job's master task: a task of one thread is held to its memory, and a task of
+n threads to (n + 1)/n of it, under both engines.
 
 **GPU tasks.** A GPU task requests `gpu=TRUE,operating_system=RedHat8` under both
 engines and runs Apptainer with `--nv`. UGER assigns no device: the Snakemake job
