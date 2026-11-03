@@ -12,7 +12,8 @@ from ._calibrated import CALIBRATED_CONDITIONS, calibrated_scene_preset
 from ._formed import AmpliconSceneConfig
 from starfinder.readout import Codebook
 
-__all__ = ["preprocessing_scene_config", "calibrated_preprocessing_scene_config"]
+__all__ = ["preprocessing_scene_config", "calibrated_preprocessing_scene_config",
+           "uncalibrated_preprocessing_scene_config"]
 
 INTENSITY_SCALE = {"uint8": 12.0, "uint16": 192.0}
 
@@ -40,6 +41,13 @@ CALIBRATED_VERSION = "calibrated-development-v1"
 ADDED_CONDITIONS = ("bright_outliers", "saturation", "gain_strong", "clean_unbalanced")
 
 CALIBRATED_ALL = tuple(CALIBRATED_CONDITIONS) + ADDED_CONDITIONS
+
+#: A pilot identity, explicitly not a calibrated appearance version.
+UNCALIBRATED_PREPROCESSING_VERSION = "uncalibrated-preprocessing-pilot-v1"
+UNCALIBRATED_PREPROCESSING_CONDITIONS = (
+    "clean", "combined", "baseline", "gradient", "regions", "texture", "gain", "trend",
+    "gain_strong", "bright_outliers", "saturation", "clean_unbalanced", "dense",
+)
 
 BRIGHT_OUTLIERS = dict(count=4, axial_width=1.5, lateral_width=2.0, brightness_factor=4.0, log_sd=0.1)
 
@@ -197,5 +205,68 @@ def calibrated_preprocessing_scene_config(condition, *, dtype, seed, k=None, fov
     if scene_key is not None:
         config = replace(config, scene_key=scene_key)
     return book, config
+
+
+def uncalibrated_preprocessing_scene_config(
+        condition: str = "clean", *, seed: int = 0, k: float | None = None
+) -> tuple[Codebook, AmpliconSceneConfig]:
+    """Configure an explicitly uncalibrated uint8 preprocessing pilot scene.
+
+    Parameters
+    ----------
+    condition : str
+        Name in UNCALIBRATED_PREPROCESSING_CONDITIONS. ``dense`` adds only molecule
+        density to clean; other names retain their calibrated controls.
+    seed : int
+        Root seed for the scene random streams.
+    k : float or None
+        Required intensity multiplier for the saturation condition, passed
+        through to calibrated_preprocessing_scene_config.
+
+    Returns
+    -------
+    tuple of Codebook and AmpliconSceneConfig
+        Four-round, four-channel codebook and 30 x 512 x 512 uint8 scene with
+        5,000 uniformly placed molecules, or 12,000 for ``dense``.
+
+    Notes
+    -----
+    Clean at seed 0 misses clutter SNR (14.16 versus 6.05--9.96), pixel SNR
+    (37.00 versus 14.5--32) and channel gain spread (1.152 versus 1.28--2.64).
+    Combined misses clutter SNR (12.65) and pixel SNR (32.39) against the same
+    ranges. The complete measured comparisons and target sources are in
+    ``runs/W-779/20261103T040857Z-5f9d78e8/results/statistics/clean-against-targets.csv``
+    and ``combined-against-targets.csv`` beside it, outside the repository.
+    This preset has no calibrated version; its cleaner appearance makes
+    absolute performance optimistic. Calibration belongs to W-93.
+
+    Only molecule count, texture count and region extent change from the small preset.
+    Texture density is preserved with the volume ratio 240; region centres
+    keep their fractional positions and region sigma is (15, 80, 80).
+    Allocation guards grow to fit the explicit counts. Spot widths, noise
+    and correlation lengths are unchanged. Background opening radii belong
+    to preprocessing configurations, not this scene; no Z-radius cap is
+    applied here. The original candidate's random-stream key is retained so
+    the measured images and corrected local pilot remain unchanged.
+    """
+    if condition not in UNCALIBRATED_PREPROCESSING_CONDITIONS:
+        raise ValueError(f"unknown uncalibrated preprocessing condition: {condition}")
+    base = "clean" if condition == "dense" else condition
+    book, config = calibrated_preprocessing_scene_config(base, dtype="uint8", seed=seed, k=k)
+    shape = (30, 512, 512)
+    count = 12000 if condition == "dense" else 5000
+    background = config.background
+    ratio = math.prod(shape) // math.prod(config.shape_zyx)
+    texture_count = background.texture.count * ratio
+    centres = tuple(tuple(float(c * (new - 1) / (old - 1))
+                          for c, old, new in zip(centre, config.shape_zyx, shape))
+                    for centre in background.region_centers)
+    background = replace(background, region_centers=centres,
+                         region_sigma_zyx=((15.0, 80.0, 80.0),) * len(centres),
+                         texture=replace(background.texture, count=texture_count,
+                                         max_count=max(background.texture.max_count, texture_count)))
+    return book, replace(config, dataset_version=f"{UNCALIBRATED_PREPROCESSING_VERSION}-{condition}",
+                         scene_key="scaled-calibrated-preprocessing-candidate", shape_zyx=shape,
+                         count=count, max_count=count, background=background)
 
 

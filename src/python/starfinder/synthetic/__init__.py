@@ -18,6 +18,8 @@ from ._datasets import (SyntheticDataset, forward_displacement, generate_amplico
 from ._calibrated import (CALIBRATED_CONDITIONS as _CALIBRATED_CONDITIONS, calibrated_scene_preset,
                           development_codebook)
 from ._preprocessing import (preprocessing_scene_config, calibrated_preprocessing_scene_config,
+                             uncalibrated_preprocessing_scene_config, UNCALIBRATED_PREPROCESSING_VERSION,
+                             UNCALIBRATED_PREPROCESSING_CONDITIONS as _UNCALIBRATED_PREPROCESSING_CONDITIONS,
                              CONDITIONS as _PREPROCESSING_CONDITIONS,
                              ADDED_CONDITIONS as _EXTRA_CALIBRATED_CONDITIONS)
 from ._sample import (SAMPLE_PRESET_VERSION, SAMPLE_PRESETS as _SAMPLE_PRESETS, SAMPLE_TRUTH_VERSION,
@@ -49,6 +51,8 @@ CALIBRATED_CONDITIONS = _CALIBRATED_CONDITIONS
 PREPROCESSING_CONDITIONS = _PREPROCESSING_CONDITIONS
 #: Additional calibrated controls used by calibrated_preprocessing_scene_config.
 EXTRA_CALIBRATED_CONDITIONS = _EXTRA_CALIBRATED_CONDITIONS
+#: Thirteen conditions of the explicitly uncalibrated preprocessing pilot, including dense.
+UNCALIBRATED_PREPROCESSING_CONDITIONS = _UNCALIBRATED_PREPROCESSING_CONDITIONS
 
 #: Benchmark preset names mapped to historical shape, count, seed, FOVs, shifts and genes.
 BENCHMARK_PRESETS = _BENCHMARK_PRESETS
@@ -64,6 +68,8 @@ CELLULAR_PRESETS = _CONTEXT_PRESETS
 APPEARANCE_PRESETS = _APPEARANCE_PRESETS
 
 __all__ = ['PREPROCESSING_CONDITIONS', 'EXTRA_CALIBRATED_CONDITIONS', 'preprocessing_scene_config',
+           'UNCALIBRATED_PREPROCESSING_CONDITIONS', 'UNCALIBRATED_PREPROCESSING_VERSION',
+           'uncalibrated_preprocessing_scene_config',
            'calibrated_preprocessing_scene_config',
            'BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset', 'DEVELOPMENT_FACTORS',
            'DEVELOPMENT_FIXTURES', 'DEVELOPMENT_SIZES', 'development_codebook', 'development_preset_factors',

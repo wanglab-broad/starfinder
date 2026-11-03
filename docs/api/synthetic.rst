@@ -52,6 +52,9 @@ See the :doc:`amplicon scene guide <../synthetic-specification>`.
    SCENE_PRESETS
    SyntheticDataset
    TextureConfig
+   UNCALIBRATED_PREPROCESSING_CONDITIONS
+   uncalibrated_preprocessing_scene_config
+   UNCALIBRATED_PREPROCESSING_VERSION
 
 Sample scene
 ------------
