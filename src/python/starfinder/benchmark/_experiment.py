@@ -2,7 +2,7 @@
 
 YAML/JSON experiment mappings contain lists ``methods``, ``conditions``,
 ``seeds`` and ``inputs``. Methods use _trial's method mapping. Each condition
-is {name, method} with optional recursive method overrides; each input is a
+is {name, method, inputs} with optional recursive method/input overrides; each input is a
 _trial input-role mapping. Optional common ``metadata`` is passed to trials.
 No processing runs during expansion and no engine is imported.
 """
@@ -37,17 +37,23 @@ def expand_experiment(path, output_dir):
     """
     path, output_dir = Path(path).resolve(), Path(output_dir).resolve()
     experiment = _read(path)
-    if set(experiment) - {"methods", "conditions", "seeds", "inputs", "metadata"}:
+    if set(experiment) - {"methods", "conditions", "seeds", "inputs", "metadata", "root_output_path"}:
         raise ValueError("unsupported experiment keys")
     axes = [experiment[key] for key in ("methods", "conditions", "seeds", "inputs")]
     if any(not isinstance(axis, list) or not axis for axis in axes):
         raise ValueError("each experiment axis must be a nonempty list")
     resolved = []
+    output_root = (path.parent / experiment.get("root_output_path", str(output_dir))).resolve()
     for i, (method, condition, seed, inputs) in enumerate(product(*axes)):
-        if set(condition) - {"name", "method"}:
-            raise ValueError("condition accepts name and method overrides only")
-        trial = {"method": _merge(method, condition.get("method", {})), "inputs": inputs, "seed": seed,
-                 "condition": condition, "root_output_path": str(output_dir / f"trial-{i:06d}")}
+        if set(condition) - {"name", "method", "inputs"}:
+            raise ValueError("condition accepts name, method and input overrides only")
+        trial_inputs = _merge(inputs, condition.get("inputs", {}))
+        for entry in trial_inputs.values():
+            if isinstance(entry, dict) and "scene" in entry:
+                entry["scene"].setdefault("condition", condition.get("name"))
+                entry["scene"].setdefault("seed", seed)
+        trial = {"method": _merge(method, condition.get("method", {})), "inputs": trial_inputs, "seed": seed,
+                 "condition": condition, "root_output_path": str(output_root / f"trial-{i:06d}")}
         if "metadata" in experiment:
             trial["metadata"] = experiment["metadata"]
         configuration = _resolve(trial, path.parent)

@@ -20,7 +20,23 @@ four rounds and four channels and write `uint16` unless asked for `uint8`. Versi
 | `formed-small-v1`, `formed-z1-v1` | `amplicon_scene_preset(name)` | Tests of the amplicon model: 8 × 32 × 32 or one plane, every effect off |
 | `z1-clean`, `z1-combined`, `small-clean`, `small-combined` | `development_scene_preset(condition, size=...)` | Small scenes with two amplicons for exact tests |
 | `calibrated-development-v1` | `calibrated_scene_preset(condition, ...)` | One 8 × 64 × 64 FOV under each of the conditions in `CALIBRATED_CONDITIONS`, for preprocessing evaluation |
+| `uncalibrated-preprocessing-pilot-v1` | `uncalibrated_preprocessing_scene_config(condition, ...)` | One explicitly uncalibrated 30 × 512 × 512 uint8 FOV with 5,000 molecules, or 12,000 in `dense` |
 | Registration pairs | `generate_registration_pair(preset, deformation=...)` | A reference and a moved round of a benchmark preset; the deformations are in `DEFORMATION_PRESETS` |
+
+The pilot exposes `UNCALIBRATED_PREPROCESSING_CONDITIONS`: `clean`, `combined`,
+`baseline`, `gradient`, `regions`, `texture`, `gain`, `trend`, `gain_strong`,
+`bright_outliers`, `saturation`, `clean_unbalanced` and `dense` (clean with more
+molecules). Saturation requires an explicit intensity multiplier `k`, as the
+small preprocessing controls do. Texture counts scale by the volume ratio of
+240 and region sigma is (15, 80, 80) voxels; spot size, noise and correlation
+length retain the small preset's values.
+
+Its version, `UNCALIBRATED_PREPROCESSING_VERSION`, explicitly identifies an
+uncalibrated pilot. At seed 0, clean misses clutter SNR, pixel SNR and channel
+gain spread; combined misses clutter SNR and pixel SNR. Its API docstring lists
+the measured values, target intervals and evidence paths. The scene is cleaner
+than the targets, so absolute performance is optimistic; calibration remains
+with W-93. The existing calibrated preset and its version remain unchanged.
 
 ### Sample scene
 
