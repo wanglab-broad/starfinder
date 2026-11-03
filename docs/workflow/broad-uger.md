@@ -132,8 +132,10 @@ folder.
 
 * The lock's environment needs a newer glibc than the RHEL 7 CPU nodes have,
   which is why the tasks run in the image.
-* The `learned-cuda` image was checked on a workstation GPU, an RTX A5000; it has
-  not yet run on UGER's A30 nodes. Nextflow's trace, report and timeline have not
+* The `learned-cuda` image was checked on a workstation GPU, an RTX A5000, and
+  under Snakemake on a UGER A30 node, where a StarDist task with
+  `segmentation.device: cuda` ran on the GPU (November 3, 2026). It has not yet
+  run under Nextflow on UGER, and Nextflow's trace, report and timeline have not
   yet run on UGER with the images that hold `ps`.
 * Fiji runs only under Snakemake; under Nextflow, supply BigStitcher's
   `dataset.xml` (`stitching.dataset_xml`). BigStitcher's defaults
