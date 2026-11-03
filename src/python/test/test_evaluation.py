@@ -22,6 +22,38 @@ CONFIG = dict(policy="greedy", threshold=2., units="voxel",
               reference_metadata=META, observed_metadata=META)
 
 
+@pytest.fixture(autouse=True)
+def compare_existing_greedy_calls_with_dense_oracle(monkeypatch):
+    """Every existing evaluation test also checks greedy identity against the old implementation."""
+    from .evaluation_matching_oracle import dense_greedy_oracle
+    import starfinder.evaluation.matching as matching
+    import starfinder.evaluation.spot_finding as spots
+    import starfinder.evaluation.registration as registration
+    import starfinder.evaluation.readout as readout
+    original = matching.match_points
+
+    def checked(reference, observed, **kwargs):
+        result = original(reference, observed, **kwargs)
+        if kwargs["policy"] == "greedy":
+            reference, observed = np.asarray(reference, float), np.asarray(observed, float)
+            er = kwargs.get("eligible_reference")
+            eo = kwargs.get("eligible_observed")
+            er = np.ones(len(reference), bool) if er is None else np.asarray(er)
+            eo = np.ones(len(observed), bool) if eo is None else np.asarray(eo)
+            pairs = dense_greedy_oracle(reference, observed, kwargs["threshold"],
+                                        kwargs.get("boundary", "inclusive"), er, eo)
+            assert result.details["matched_pairs"] == pairs
+            assert result.counts["matched"] == len(pairs)
+            assert result.values["recall"] == (len(pairs) / er.sum() if er.sum() else None)
+            assert result.values["precision"] == (len(pairs) / eo.sum() if eo.sum() else None)
+            assert result.values["mean_distance"] == (float(np.mean([p[2] for p in pairs])) if pairs else None)
+        return result
+
+    monkeypatch.setitem(globals(), "match_points", checked)
+    for module in (matching, spots, registration, readout):
+        monkeypatch.setattr(module, "match_points", checked)
+
+
 def test_matching_policies_and_eligibility():
     ref = np.array([[0, 0, 0], [0, 0, .2]])
     obs = np.array([[0, 0, .1], [0, 0, 1.]])

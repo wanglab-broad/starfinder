@@ -3,12 +3,12 @@ from dataclasses import asdict, is_dataclass
 import numpy as np
 from scipy.ndimage import binary_erosion
 from skimage.metrics import structural_similarity as _ssim
-from ._result import _result, _geometry, _threshold
+from ._result import EvaluationResult, _result, _geometry, _threshold
 from .matching import match_points
 
 __all__ = ["evaluate_translation", "structural_similarity", "normalized_cross_correlation",
            "evaluate_mask_overlap", "evaluate_landmark_alignment", "evaluate_registration",
-           "registration_qc", "evaluate_displacement_field"]
+           "registration_qc", "evaluate_displacement_field", "shift_difference"]
 
 # Routine QC: SSIM on Z maximum projections with a uniform 7x7 window.
 _QC_WINDOW = 7
@@ -717,3 +717,51 @@ def evaluate_displacement_field(estimated, truth, *, mask, spacing_zyx=None):
                    {"percentile_method": "linear",
                     "spacing_zyx": None if spacing_zyx is None else [float(v) for v in spacing_zyx],
                     "error": "Euclidean norm of estimated minus truth pull displacement"}, reasons=reasons)
+
+
+def shift_difference(reference, observed, *, reference_metadata, observed_metadata) -> EvaluationResult:
+    """Compare per-round detected shifts in ZYX voxels (M69).
+
+    Parameters
+    ----------
+    reference : mapping
+        Round labels mapped to finite detected-displacement ZYX triples.
+    observed : mapping
+        Round labels mapped to detected-displacement ZYX triples, or None for
+        missing estimates; extra rounds are refused.
+    reference_metadata : ImageMetadata
+        Reference coordinate frame and geometry.
+    observed_metadata : ImageMetadata
+        Observed coordinate frame and geometry, equal to the reference.
+
+    Returns
+    -------
+    EvaluationResult
+        Maximum axis difference, mean Euclidean difference, population counts
+        and signed observed-minus-reference differences per round. Missing
+        rounds retain partial values with status ``missing``.
+
+    Notes
+    -----
+    Convert at the caller's MATLAB boundary: DFTRegister3D correction parameters
+    ``(row, column, Z)`` become detected ZYX ``-(Z, row, column)``. The sign is
+    specified by ``docs/api/contracts.md``, Registration signs: Python samples
+    ``moving[p + displacement_zyx]``, while MATLAB supplies correction parameters
+    to DFTApply3D (``src/matlab/DFTApply3D.m:21``, the negative Fourier
+    phase applies the correction). A one-based coordinate offset cancels in a shift.
+    """
+    if not set(observed) <= set(reference):
+        raise ValueError("observed shifts contain rounds absent from reference")
+    result = evaluate_translation(observed, reference, reference_metadata=reference_metadata,
+                                  observed_metadata=observed_metadata, units="voxel", tolerance=None)
+    per_round = {label: {**entry,
+                        "difference_zyx": (np.asarray(entry["detected"]) - entry["gt"]).tolist()}
+                 for label, entry in result.details["per_round"].items()}
+    return _result({"max_axis_difference": result.values["max_error"],
+                    "mean_difference_l2": result.values["mean_error_l2"]},
+                   {"max_axis_difference": "voxel", "mean_difference_l2": "voxel"}, result.counts,
+                   {"units": "voxel", "convention": "detected displacement ZYX",
+                    "frame_id": reference_metadata.frame_id},
+                   details={"per_round": per_round},
+                   reasons={k: v for k, v in result.reasons.items() if k != "passed"},
+                   status="missing" if result.counts["missing"] else None)

@@ -23,6 +23,7 @@ Readout metrics
 .. autosummary::
    :toctree: generated
 
+   correct_fraction
    evaluate_decoding
    evaluate_deduplication
    ranking_quality
@@ -35,6 +36,7 @@ Point matching
 .. autosummary::
    :toctree: generated
 
+   evaluate_molecules
    match_points
 
 Registration metrics
@@ -52,6 +54,7 @@ Registration metrics
    evaluate_translation
    normalized_cross_correlation
    registration_qc
+   shift_difference
    structural_similarity
 
 Spot metrics
