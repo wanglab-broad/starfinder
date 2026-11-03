@@ -65,9 +65,28 @@ Spot metrics
 .. autosummary::
    :toctree: generated
 
+   auprc
    classify_detections
    evaluate_spots
+   f1_score
    localization_errors
+   scored_detection_auprc
+
+Preprocessing metrics
+---------------------
+
+``direct_metrics`` retains the development evaluation's background stages and
+output keys. Detected-spot spread uses observed color sequences; call
+``fov_variation`` separately for each metric and each supplied FOV population.
+
+.. currentmodule:: starfinder.evaluation.preprocessing
+
+.. autosummary::
+   :toctree: generated
+
+   detected_spot_intensity_spread
+   direct_metrics
+   fov_variation
 
 Examples
 --------

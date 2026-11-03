@@ -1,11 +1,126 @@
 """Detection evaluation against supplied, explicitly eligible truth."""
+import math
+
 import numpy as np
 from scipy.spatial.distance import cdist
 
-from ._result import _result
+from ._result import EvaluationResult, _eligible, _result
 from .matching import match_points
 
-__all__ = ["evaluate_spots", "localization_errors", "classify_detections"]
+__all__ = ["evaluate_spots", "localization_errors", "classify_detections", "f1_score", "auprc",
+           "scored_detection_auprc"]
+
+
+def f1_score(detected, truth, **matching_config) -> EvaluationResult:
+    """Compute detection F1 at a supplied spatial matching threshold (M03).
+
+    Parameters
+    ----------
+    detected : array_like
+        Finite (N, 3) ZYX detections retained at the chosen detection threshold.
+    truth : array_like
+        Finite (N, 3) ZYX truth coordinates.
+    **matching_config : dict
+        Required match_points policy, threshold, boundary, units and metadata.
+
+    Returns
+    -------
+    EvaluationResult
+        F1, precision, recall, distances, counts and matching details. F1 is
+        2*precision*recall/(precision+recall), zero without matches when truth
+        exists, and None without truth, as in the preprocessing sweep.
+    """
+    result = evaluate_spots(detected, truth, **matching_config)
+    precision, recall = result.values["precision"], result.values["recall"]
+    f1 = (2 * precision * recall / (precision + recall) if precision is not None and recall is not None
+          and precision + recall > 0 else 0.0 if result.counts["eligible_reference"] else None)
+    return _result({**result.values, "f1": f1}, {**result.units, "f1": "fraction"},
+                   result.counts, result.config, details=result.details)
+
+
+def auprc(rows) -> float | None:
+    """Integrate a subset detection precision-recall curve in threshold order (M05).
+
+    Parameters
+    ----------
+    rows : iterable of mapping
+        Rows containing threshold, recall and precision. Higher thresholds
+        must select subsets of the detections at the lowest threshold, with
+        nondecreasing recall as thresholds decrease. None or NaN is undefined.
+
+    Returns
+    -------
+    float or None
+        Sum of recall increments times current precision, starting at recall
+        zero, without interpolation or precision envelopes. Undefined precision
+        at zero recall adds no area; undefined recall returns None.
+
+    Notes
+    -----
+    This is the pre-move preprocessing script's integration algorithm. The
+    caller supplies the subset curve; scored_detection_auprc constructs one
+    from a single scored detection population without rerunning detection.
+    """
+    def defined(value):
+        return value is not None and not (isinstance(value, float) and math.isnan(value))
+
+    area, previous = 0.0, 0.0
+    for row in sorted(rows, key=lambda r: -r["threshold"]):
+        recall, precision = row["recall"], row["precision"]
+        if not defined(recall):
+            return None
+        if recall > previous:
+            if not defined(precision):
+                raise ValueError("recall increased at a threshold with undefined precision")
+            area += (recall - previous) * precision
+            previous = recall
+    return area
+
+
+def scored_detection_auprc(detected, truth, scores, *, thresholds, **matching_config) -> EvaluationResult:
+    """Compute M05 from subsets of one run at the lowest detection threshold.
+
+    Parameters
+    ----------
+    detected : array_like
+        Finite (N, 3) ZYX detections from one lowest-threshold run.
+    truth : array_like
+        Finite (N, 3) ZYX truth coordinates.
+    scores : array_like
+        Finite score per detection; larger means stronger detection.
+    thresholds : iterable of float
+        Nonempty finite threshold grid; each subset keeps scores strictly
+        greater than its threshold, including the lowest threshold.
+    **matching_config : dict
+        Required match_points policy, spatial threshold, boundary, units and
+        metadata, plus optional eligibility masks on the original populations.
+        Matching is recomputed on each detection subset.
+
+    Returns
+    -------
+    EvaluationResult
+        AUPRC and threshold curve details. No truth leaves AUPRC undefined;
+        no detections with nonempty truth gives zero area.
+    """
+    detected, truth = _points(detected, "detected"), _points(truth, "truth")
+    scores = np.asarray(scores, dtype=float)
+    thresholds = np.asarray(list(thresholds), dtype=float)
+    if scores.shape != (len(detected),) or not np.isfinite(scores).all():
+        raise ValueError("scores must be finite with one value per detection")
+    if thresholds.ndim != 1 or not len(thresholds) or not np.isfinite(thresholds).all():
+        raise ValueError("thresholds must be a nonempty finite grid")
+    eligible = _eligible(matching_config.get("eligible_observed"), len(detected))
+    rows = []
+    for cutoff in thresholds:
+        keep = scores > cutoff
+        subset_config = {**matching_config, "eligible_observed": eligible[keep]}
+        result = evaluate_spots(detected[keep], truth, **subset_config)
+        rows.append({"threshold": float(cutoff), "precision": result.values["precision"],
+                     "recall": result.values["recall"]})
+    return _result({"auprc": auprc(rows)}, {"auprc": "fraction"},
+                   {"total_reference": len(truth), "total_observed": len(detected)},
+                   {**result.config, "detection_thresholds": thresholds.tolist(), "subset": "score > threshold"},
+                   details={"curve": rows})
 
 
 def evaluate_spots(detected, truth, **matching_config):
