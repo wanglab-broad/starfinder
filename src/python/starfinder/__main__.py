@@ -46,8 +46,9 @@ def _parser():
                                 help='New or empty folder outside every source')
     report_saved = experiment_commands.add_parser(
         'report', help='Render a saved evaluation as a review report, without processing',
-        description='Read evaluation.json, values.csv and metrics/ of experiment evaluate and the saved records and '
-                    'files they name, each checked against its SHA-256, and write report.html, report.json, tables/ '
+        description='Read evaluation.json, values.csv and metrics/ of experiment evaluate (they have no recorded '
+                    'SHA-256; values.csv must equal evaluation.json) and the saved records and figure files they '
+                    'name, each checked against its recorded SHA-256, and write report.html, report.json, tables/ '
                     'and figures/. Exit 0 with the report written, 2 for a saved file or revision that does not '
                     'check, an invalid protocol, or an output folder that is not new or empty or lies inside the '
                     'evaluation or a source (nothing is written).')

@@ -3,8 +3,9 @@
 `starfinder experiment report` renders a saved evaluation as a review page, so
 that you can understand an experiment before you inspect its provenance. It
 reads the folder `starfinder experiment evaluate` wrote and the saved records
-and files that evaluation names, and checks each against its SHA-256. It
-processes, detects and generates nothing, and computes no metric. It is not
+and files that evaluation names, checking each record and file that has a
+recorded SHA-256 against it (see Limits). It processes, detects and generates
+nothing, and computes no metric. It is not
 the sample-processing report of `starfinder.report`. The
 {doc}`commands reference <commands>` lists its arguments and output files.
 
@@ -41,13 +42,14 @@ The summary comes first, in the order of the W-237 review format:
 
 1. **Setup.** The qualification (pilot or scientific), the route and the
    input and truth provenance. Then each trial's resolved method,
-   configuration, condition and seed, and the trial setups. Then the
+   configuration, condition and seed, and the setups. Then the
    conditions, seeds, modes and dtype. Then each metric's meaning, population
    and frozen parameters, the fixed cut-offs and the missing prerequisites.
    Last come the resources by scope, and the revision check.
 2. **One card per method or mode.** Each card gives the purpose and the
    targeted conditions, and those absent from the evaluation. The key metrics
-   follow, before and after side by side, as ranges across seeds and FOVs.
+   follow as ranges across seeds and FOVs, in three columns: before, after
+   and without a side, so a value with no side is shown beside the others.
    Each range keeps its unit, denominators, missing seeds or FOVs, undefined
    values with their reasons, failures, and the `values.csv` rows it comes
    from. Then come the supplied precondition and harm results, a verdict only
@@ -60,6 +62,12 @@ The summary comes first, in the order of the W-237 review format:
    unresolved revision. The protocol's own findings and hypotheses follow,
    with the hypotheses set apart.
 4. **Reading order**, linking every card and figure.
+
+A card's anchor, its details anchor and its figure file names carry a readable
+slug of its method and mode followed by the first 8 hexadecimal characters of
+the SHA-256 of the exact pair, as in `card-translation-c437d4bb` (the bounded example's card). Cards whose
+names differ only in punctuation stay apart, and two cards that would still
+share an identifier refuse the report.
 
 The method details and figures follow. Each card has a dot plot of its numeric
 key metrics, one dot per saved row, with undefined values counted, not drawn.
@@ -84,7 +92,12 @@ cut-offs; missing prerequisites; metric notes; `rows`; the cards in `methods`;
 with a card, conditions, a cut-off, a hypothesis and an image figure.
 
 Rows take their method, seed and condition name from the trial records, and
-their FOV from the workflow task records. A protocol row assigns a metric to a
+their FOV from the workflow task records (else from the workflow manifest's
+task entry, else the task id). A metric the evaluation did not compute may have
+stopped before recording which task it reads. Its tasks then come from the
+metrics specification the evaluation recorded, checked against its SHA-256;
+when that file is missing or changed, the FOV stays empty and a finding says
+why. A protocol row assigns a metric to a
 card (`method`, `mode`) and a `side`, and fills a condition, seed or FOV that
 the records do not give. It cannot change one they do give. A key metric is
 written `ID` or `function` for all its values, or `ID:value` for one, such as
@@ -96,15 +109,24 @@ or a files source's `file`, by name.
 * The renderer recomputes nothing. It derives only ranges of saved values and,
   for a list-valued value, the mean over its items, labelled with their
   number.
-* It selects no threshold, default or optimum. Rows of different trial setups
-  (method, configuration or condition), units or parameter sets are never
-  pooled into one range.
+* It selects no threshold, default or optimum. Rows of different setups, units
+  or parameter sets are never pooled into one range. A trial's setup is its
+  method, configuration and condition. A workflow task's setup is its kind and
+  the configuration and blocks hashes of its task record, else of the
+  workflow manifest. The setups are listed under Setup, and the before and
+  after pairs name each side's setup. Checkpoint and files sources save no
+  configuration identity, so rows reading only them have no setup and are
+  told apart only by the protocol's cards and sides.
 * Assigned-read counts and agreement scores are shown with their populations;
   they are not accuracy.
-* Every file the report reads is checked against the SHA-256 that the
-  evaluation or a checked record holds. `values.csv` must equal the rows of
-  `evaluation.json`. A changed or missing file refuses the report, and nothing
-  is written.
+* The trial records, workflow manifests and task records, and every image or
+  table a figure draws, are checked against the SHA-256 that the evaluation or
+  a checked record holds. A changed or missing one refuses the report, and
+  nothing is written. `values.csv` must equal the rows of `evaluation.json`.
+  `evaluation.json` itself, each metric's details file and the protocol have no
+  recorded SHA-256: the report reads them, hashes them and lists them in
+  `report.json` as read only. The recorded metrics specification is read, and
+  checked, only for a metric that was not computed (see the protocol section).
 * The evaluation's recorded commit must be an ancestor of this checkout's
   HEAD. For an evaluation of a clean tree, `starfinder/benchmark/_evaluate.py`
   and `starfinder/evaluation/` must be unchanged since that commit. A dirty

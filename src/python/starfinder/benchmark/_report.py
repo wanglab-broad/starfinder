@@ -2,8 +2,11 @@
 
 design/specs/benchmark.md, "Proposed public names and migration"; design/proposals/benchmark-drafts/report-template.md.
 The renderer reads a saved evaluation (``evaluation.json``, ``values.csv`` and ``metrics/`` of ``starfinder experiment
-evaluate``), the saved records its sources name (a trial's ``record.json``, a workflow task record) and the saved files
-a figure names, each checked against the SHA-256 that the evaluation or a checked record holds. An optional protocol
+evaluate``). The saved records its sources name (a trial's ``record.json``, a workflow manifest and task record), the
+metrics specification it recorded (read only for a metric it did not compute) and the saved files a figure names are
+each checked against the SHA-256 that the evaluation or a checked record holds. ``values.csv`` must equal the rows of
+``evaluation.json``. ``evaluation.json`` itself, the metrics' details files and the protocol have no recorded SHA-256:
+they are read, hashed and listed in ``report.json`` as read only. An optional protocol
 supplies the text a renderer cannot know: purposes, targeted conditions, the fixed cut-offs, supplied precondition,
 harm and verdict results, findings and hypotheses. Nothing is processed, detected or generated and no metric is
 computed: the only numbers derived are ranges (minimum and maximum) of saved values and, for a list-valued value, the
@@ -180,7 +183,8 @@ def _bare(digest):
 # --- Saved files ----------------------------------------------------------------------------------------------------
 
 class Saved:
-    """Every file the report reads, checked as it is read; ``verified`` lists each with what it was checked against."""
+    """Every file the report reads, hashed as it is read and checked against its recorded SHA-256 where it has one;
+    ``verified`` lists each with what it was checked against (``recorded SHA-256`` or ``read only``)."""
 
     def __init__(self):
         self.verified = {}
@@ -260,9 +264,11 @@ class SavedEvaluation:
                 continue
             if Path(name).is_absolute() or ".." in Path(name).parts:
                 raise SourceMismatch(f"the details file {name!r} is outside the evaluation folder")
+            # The evaluation records no SHA-256 for a details file: it is read, hashed and listed as read only.
+            data = saved.read(self.folder / name, "a metric's details file (no recorded SHA-256)")
             try:
-                self.details[metric["name"]] = json.loads(saved.read(self.folder / name, "a metric's details file"))
-            except ValueError as error:
+                self.details[metric["name"]] = json.loads(data)
+            except json.JSONDecodeError as error:
                 raise SourceMismatch(f"{name} is not JSON: {error}") from None
         self.sources = {s["name"]: s for s in record["sources"]}
 
@@ -428,12 +434,18 @@ def _method_label(method):
 
 
 class Records:
-    """The trial records and workflow task records the evaluation's sources name, each checked against its hash."""
+    """The trial records, workflow manifests and task records the evaluation's sources name, each checked against
+    its hash; and, when needed, the metrics specification the evaluation recorded."""
 
     def __init__(self, evaluation, saved):
         self.evaluation, self.saved = evaluation, saved
-        self.trials, self.tasks = {}, {}
+        self.trials, self.tasks, self.manifests = {}, {}, {}
+        self._specification = None
         for name, source in evaluation.sources.items():
+            manifest = source.get("manifest") if source.get("kind") == "workflow" else None
+            if isinstance(manifest, dict) and manifest.get("sha256"):
+                self.manifests[name] = json.loads(saved.read(manifest["path"], f"workflow manifest of source {name!r}",
+                                                             manifest["sha256"]))
             if source.get("kind") == "trial" and source.get("record"):
                 entry = source["record"]
                 record = json.loads(saved.read(entry["path"], f"trial record of source {name!r}", entry["sha256"]))
@@ -462,6 +474,40 @@ class Records:
         configuration = self.trials[name].get("configuration") or {}
         return json.dumps({"method": configuration.get("method"), "condition": configuration.get("condition") or {}},
                           sort_keys=True)
+
+    def task_identity(self, source, task):
+        """(FOV, setup) of a workflow task: the FOV from its checked task record's identity, else from the checked
+        manifest's task entry, else the task id; the setup from the configuration and blocks hashes the task record
+        holds, else the manifest's, as canonical JSON (None when neither is saved)."""
+        record = self.tasks.get((source, task)) or {}
+        manifest = self.manifests.get(source) or {}
+        entry = next((t for t in manifest.get("tasks") or [] if t.get("id") == task), {})
+        fov = (record.get("identity") or {}).get("fov")
+        if fov is None:
+            fov = (entry.get("identity") or {}).get("fov")
+        section = record.get("workflow") or {}
+        configuration = section.get("configuration_sha256") or \
+            (manifest.get("configuration") or {}).get("configuration_sha256")
+        blocks = section.get("blocks_sha256") or entry.get("blocks_sha256")
+        kind = record.get("kind") or entry.get("kind")
+        setup = None if configuration is None and blocks is None else json.dumps(
+            {"workflow": {"kind": kind, "configuration_sha256": configuration, "blocks_sha256": blocks}},
+            sort_keys=True)
+        return (fov if fov is not None else task), setup
+
+    def specification(self):
+        """{metric name: its entry} of the metrics specification the evaluation recorded (``inputs.metrics``),
+        checked against its recorded SHA-256; or a string saying why it cannot be used."""
+        if self._specification is None:
+            entry = self.evaluation.record["inputs"].get("metrics") or {}
+            try:
+                data = self.saved.read(entry.get("path"), "the evaluation's metrics specification",
+                                       entry.get("sha256"))
+                metrics = (yaml.safe_load(data) or {}).get("metrics") or []
+                self._specification = {m["name"]: m for m in metrics if isinstance(m, dict) and "name" in m}
+            except (SourceMismatch, yaml.YAMLError, AttributeError, TypeError) as error:
+                self._specification = f"the metrics specification cannot be used: {error}"
+        return self._specification
 
     def file(self, spec):
         """(path, bytes) of a figure's file: a trial's listed output or recorded input, or a files source's file."""
@@ -512,8 +558,11 @@ def _arguments(described):
 def identities(evaluation, records, protocol):
     """{metric name: {method, mode, condition, seed, fov, side, provenance}} from the saved records and protocol.
 
-    A trial source gives the method, seed and condition name; a workflow task record gives the FOV. A field that the
-    sources read by one metric give differently stays empty and is noted. The protocol's rows assign the card's
+    A trial source gives the method, seed and condition name and its setup (method and condition); a workflow task
+    gives the FOV and its setup (task kind, configuration and blocks hashes). A metric the evaluation did not compute
+    may have stopped before recording its arguments: its tasks then come from the recorded metrics specification,
+    checked against its SHA-256, and when that cannot be used the FOV stays empty with a note saying why. A field that
+    the sources read by one metric give differently stays empty and is noted. The protocol's rows assign the card's
     method and mode and the side, and fill an empty condition, seed or FOV; one that contradicts a saved condition,
     seed or FOV is refused. The trial's own method stays in ``trial_method``.
     """
@@ -525,19 +574,37 @@ def identities(evaluation, records, protocol):
     for metric in evaluation.record["metrics"]:
         found = {key: set() for key in IDENTITY}
         setups = set()
+        notes = []
         # A metric skipped at its first argument records no arguments, but names every source it used.
         read = [pair for argument in metric.get("arguments", {}).values() for pair in _arguments(argument)]
         read += [(source, None) for source in metric.get("sources") or []]
+        workflow = [s for s in metric.get("sources") or []
+                    if (evaluation.sources.get(s) or {}).get("kind") == "workflow"]
+        if metric.get("outcome") != "computed" and workflow:
+            # Its recorded arguments may be incomplete: the specification names every task it would have read.
+            specification = records.specification()
+            if isinstance(specification, dict) and metric["name"] in specification:
+                read += [pair for argument in (specification[metric["name"]].get("arguments") or {}).values()
+                         for pair in _arguments(argument)]
+            elif not any(task for source, task in read if source in workflow):
+                why = specification if isinstance(specification, str) else \
+                    "the metrics specification does not name it"
+                notes.append(f"it was {metric.get('outcome')} before recording which workflow task it reads, and "
+                             f"{why}, so its FOV is unknown")
         for source, task in read:
             for key, value in records.trial_identity(source).items():
                 if value is not None:
                     found[key].add(json.dumps(value))
             if source in records.trials:
                 setups.add(records.trial_setup(source))
-            if task is not None and (source, task) in records.tasks:
-                fov = (records.tasks[(source, task)].get("identity") or {}).get("fov")
-                found["fov"].add(json.dumps(fov if fov is not None else task))
-        identity, provenance, notes = {}, {}, []
+            if task is not None and (evaluation.sources.get(source) or {}).get("kind") == "workflow":
+                fov, setup = records.task_identity(source, task)
+                found["fov"].add(json.dumps(fov))
+                if setup is not None:
+                    setups.add(setup)
+        if len(setups) > 1:
+            notes.append(f"its sources have {len(setups)} different setups, so it is given none")
+        identity, provenance = {}, {}
         for key in IDENTITY:
             values = sorted(found[key])
             if len(values) == 1:
@@ -545,7 +612,8 @@ def identities(evaluation, records, protocol):
             else:
                 identity[key] = None
                 if len(values) > 1:
-                    notes.append(f"its sources give different {key} values ({', '.join(values)})")
+                    notes.append(f"its sources give different {key} values ({', '.join(values)}), so it is given "
+                                 f"no {key}")
             if key == "method":
                 trial_method = identity[key]
             supplied = rows.get(metric["name"], {}).get(key)
@@ -687,10 +755,31 @@ def card_key(method, mode):
     return (method, mode)
 
 
-def card_anchor(key):
+def card_slug(key):
+    """The card's identifier: a readable slug of its method and mode and the first 8 hexadecimal characters of the
+    SHA-256 of the exact key, so that distinct keys whose slugs agree (``("x-y", "z")`` and ``("x", "y-z")``, or
+    ``"a b"`` and ``"a-b"``) stay distinct. The card's anchor, its details anchor, its figure anchors and its figure
+    file names all derive from it."""
     method, mode = key
-    text = "unassigned" if method is None else method if mode is None else f"{method}-{mode}"
-    return "card-" + re.sub(r"[^A-Za-z0-9_-]+", "-", str(text))
+    text = "unassigned" if method is None else str(method)
+    if mode is not None:
+        text += f"-{mode}"
+    digest = _sha(json.dumps([method, mode]).encode())[:8]
+    return re.sub(r"[^A-Za-z0-9_-]+", "-", text) + "-" + digest
+
+
+def card_anchor(key):
+    return "card-" + card_slug(key)
+
+
+def check_slugs(keys):
+    """ReportError when two distinct card keys would share an identifier (a backstop: nothing is overwritten)."""
+    seen = {}
+    for key in keys:
+        slug = card_slug(key)
+        if slug in seen and seen[slug] != key:
+            raise ReportError(f"the cards {seen[slug]} and {key} would share the identifier {slug!r}")
+        seen[slug] = key
 
 
 def card_order(frame, protocol):
@@ -756,8 +845,8 @@ def _key_row(card_rows, selector, value_name, unit, parameter_set, condition, pa
         gone = lost[lost["side"].isna()] if side is None else lost[lost["side"] == side]
         if here.empty and gone.empty:
             continue
-        # Rows of different trial setups (method, configuration, condition) on one side are shown apart, never
-        # pooled into one range.
+        # Rows of different setups (a trial's method, configuration and condition; a workflow task's kind,
+        # configuration and blocks hashes) on one side are shown apart, never pooled into one range.
         setups = list(dict.fromkeys([*here["setup"], *gone["setup"]]))
         cells = []
         for setup in setups:
@@ -766,7 +855,7 @@ def _key_row(card_rows, selector, value_name, unit, parameter_set, condition, pa
             label = None
             if len(setups) > 1:
                 methods = _labels([*mine["trial_method"], *failed["trial_method"]])
-                label = f"{setup or 'no trial setup'}" + (f" (trial method {methods})" if methods else "")
+                label = f"{setup or 'no setup'}" + (f" (trial method {methods})" if methods else "")
             cells.append(_side_cell(universe, mine, failed, label))
         sides["single" if side is None else side] = cells
     return {"selector": selector, "value_name": value_name, "unit": None if pd.isna(unit) else unit,
@@ -826,10 +915,13 @@ def pair_rows(frame):
                         "before": None if b is None else b.value, "before_outcome": None if b is None else b.outcome,
                         "before_reason": None if b is None else b.reason,
                         "after": None if a is None else a.value, "after_outcome": None if a is None else a.outcome,
-                        "after_reason": None if a is None else a.reason, "pairing": pairing,
+                        "after_reason": None if a is None else a.reason,
+                        "before_setup": None if b is None else b.setup, "after_setup": None if a is None else a.setup,
+                        "pairing": pairing,
                         "rows": ", ".join(str(r.row) for r in (b, a) if r is not None)})
     return pd.DataFrame(out, columns=[*columns, "before", "before_outcome", "before_reason", "after",
-                                      "after_outcome", "after_reason", "pairing", "rows"])
+                                      "after_outcome", "after_reason", "before_setup", "after_setup", "pairing",
+                                      "rows"])
 
 
 def collapsed(points):
@@ -1076,10 +1168,11 @@ def full_table(frame, source, anchor, caption="", row_ids=None):
             piece_id = f"{anchor}-r{i}c{j}" if many else anchor
             label = f"rows {block.start + 1} to {block.stop} of {len(frame)}, columns {j + 1} of {len(chunks)}" \
                 if many else f"{len(frame)} rows"
+            columns = "".join(f"<col style=\"width:{widths[c]}px\">" for c in shown)
             pieces.append(f"<div class=\"full\" id=\"{piece_id}\" style=\"width:{width}px\">"
                           f"<p class=\"source\">{_e(caption)} Source: <code>{_e(source)}</code>, {label}.</p>"
-                          f"<table><colgroup>{''.join(f'<col style=\"width:{widths[c]}px\">' for c in shown)}"
-                          f"</colgroup><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>")
+                          f"<table><colgroup>{columns}</colgroup><thead><tr>{head}</tr></thead>"
+                          f"<tbody>{''.join(body)}</tbody></table></div>")
     return "".join(pieces)
 
 
@@ -1112,7 +1205,7 @@ def _side_text(cells):
     texts = [_cell_text(cell) for cell in cells]
     if len(cells) == 1:
         return texts[0]
-    return "<span class=\"error\">different trial setups, not pooled</span><hr>" + "<hr>".join(
+    return "<span class=\"error\">different setups, not pooled</span><hr>" + "<hr>".join(
         f"<a href=\"#setups\">{_e(cell['setup'])}</a>:<br>{text}" for cell, text in zip(cells, texts))
 
 
@@ -1212,7 +1305,7 @@ def _findings(evaluation, frame, resources, pairs, card_tables, curve_tables, re
                            f"FOVs {cell['missing_fovs']}" if cell["missing_fovs"] else ""]
                 if any(missing):
                     where = side + (f", {entry['condition']}" if entry["condition"] else "")
-                    out.append(("finding", f"{card_anchor(key)[5:]}: {entry['selector']} {entry['value_name']} "
+                    out.append(("finding", f"{_card_title(key, {})}: {entry['selector']} {entry['value_name']} "
                                 f"({where}) has no row for {' and '.join(m for m in missing if m)}.", "values.csv"))
     unpaired = pairs[pairs["pairing"] != "paired"]
     if len(unpaired):
@@ -1229,7 +1322,7 @@ def _findings(evaluation, frame, resources, pairs, card_tables, curve_tables, re
     ambiguous = frame[frame["identity_notes"] != ""]
     for name in ambiguous["metric"].unique():
         note = ambiguous[ambiguous["metric"] == name]["identity_notes"].iloc[0]
-        out.append(("finding", f"Metric {name}: {note}; it is not assigned by those fields.", "values.csv"))
+        out.append(("finding", f"Metric {name}: {note}.", "values.csv"))
     for name, curve in curve_tables.items():
         if collapsed(curve):
             out.append(("finding", f"The precision-recall curve of {name} collapses to one point.",
@@ -1254,6 +1347,7 @@ def build(evaluation, records, protocol, revision, protocol_path=None):
     pairs = pair_rows(frame)
     curve_tables = curves(evaluation)
     keys = card_order(frame, protocol)
+    check_slugs(keys)
     cards = {card_key(c["method"], c.get("mode")): c for c in protocol.get("methods", [])}
     card_tables = {}
     for key in keys:
@@ -1264,9 +1358,9 @@ def build(evaluation, records, protocol, revision, protocol_path=None):
     for key in keys:
         panels, facts = metric_figure(card_tables[key])
         if panels:
-            name = f"figures/{card_anchor(key)[5:]}-metrics.png"
+            name = f"figures/{card_slug(key)}-metrics.png"
             figure_files[name] = draw_metric_figure(_in_card(frame, key), panels)
-            figures[key].append((f"fig-{card_anchor(key)[5:]}-metrics", name,
+            figures[key].append((f"fig-{card_slug(key)}-metrics", name,
                                  "Saved values of the key metrics, one dot per row; before and after are separate "
                                  "columns, undefined values are counted in each panel's title, not drawn.", facts))
     for n, figure in enumerate(protocol.get("figures", []), start=1):
@@ -1286,7 +1380,7 @@ def build(evaluation, records, protocol, revision, protocol_path=None):
         if not isinstance(peaks, int) or not 0 <= peaks < len(panels):
             raise ReportError(f"protocol figure {n}: peaks is the index of a panel")
         png, facts = method_figure(panels, detections, truth, peaks)
-        name = f"figures/{card_anchor(key)[5:]}-{n}.png"
+        name = f"figures/{card_slug(key)}-{n}.png"
         figure_files[name] = png
         caption = (f"{figure.get('title') or 'Saved images'}: maximum projections over Z on one linear display range "
                    f"{_fmt(facts['display_range'][0])} to {_fmt(facts['display_range'][1])}.")
@@ -1297,7 +1391,7 @@ def build(evaluation, records, protocol, revision, protocol_path=None):
             caption += (f" Green crosses: representative truth puncta by realized peak (3 × 3 × 3 maximum) in "
                         f"{facts['peaks_from']}; 1 is the dim punctum, truth row {d['index']} at ZYX {d['center']} "
                         f"with peak {_fmt(d['peak'])}.")
-        figures[key].append((f"fig-{card_anchor(key)[5:]}-{n}", name, caption, facts))
+        figures[key].append((f"fig-{card_slug(key)}-{n}", name, caption, facts))
 
     title = protocol.get("title") or "Saved-evaluation report"
     page = Page()
@@ -1328,7 +1422,7 @@ def build(evaluation, records, protocol, revision, protocol_path=None):
     order = [("setup", "Setup")] + [(card_anchor(k), f"Card: {_card_title(k, cards.get(k, {}))}") for k in keys] + \
         [("findings", "Findings and anomalies"), ("hypotheses", "Hypotheses")]
     for key in keys:
-        order.append((f"details-{card_anchor(key)[5:]}", f"Details: {_card_title(key, cards.get(key, {}))}"))
+        order.append((f"details-{card_slug(key)}", f"Details: {_card_title(key, cards.get(key, {}))}"))
         order += [(anchor, f"Figure: {Path(name).name}") for anchor, name, _c, _f in figures[key]]
     order += [("appendix", "Appendix"), ("identity", "Identity, revision and checksums"),
               ("a-values", "Every value, per seed and FOV"), ("a-pairs", "Before and after pairs"),
@@ -1340,7 +1434,7 @@ def build(evaluation, records, protocol, revision, protocol_path=None):
 
     page.section("method-details", "Method details and figures")
     for key in keys:
-        anchor = f"details-{card_anchor(key)[5:]}"
+        anchor = f"details-{card_slug(key)}"
         page.section(anchor, f"Details: {_card_title(key, cards.get(key, {}))}", 3)
         page.add(f"<p><a href=\"#{card_anchor(key)}\">Back to the card</a>.</p>")
         for fig_anchor, name, caption, _facts in figures[key]:
@@ -1449,11 +1543,13 @@ def _setup(page, evaluation, records, protocol, frame, resources, revision, prot
                 if trials else "No trial source; the protocol's rows name methods.</p>"))
     setups = frame[["setup", "setup_json"]].dropna().drop_duplicates()
     page.anchors.append("setups")
-    page.add("<div id=\"setups\"><p><b>Trial setups.</b> Rows whose trials differ in method, configuration or "
-             "condition have different setups and are never pooled into one range.</p>" +
-             (_table(["setup", "method and condition"], [[_e(r.setup), f"<code>{_e(r.setup_json)}</code>"]
-                                                        for r in setups.itertuples()]) if len(setups)
-              else "<p>No metric reads a trial source.</p>") + "</div>")
+    page.add("<div id=\"setups\"><p><b>Setups.</b> Rows whose trials differ in method, configuration or condition, "
+             "or whose workflow tasks differ in kind, configuration hash or blocks hash, have different setups and "
+             "are never pooled into one range. Checkpoint and files sources save no configuration identity and give "
+             "no setup.</p>" +
+             (_table(["setup", "trial method and condition, or workflow task kind and hashes"],
+                     [[_e(r.setup), f"<code>{_e(r.setup_json)}</code>"] for r in setups.itertuples()])
+              if len(setups) else "<p>No metric reads a trial or workflow source with a saved setup.</p>") + "</div>")
     conditions = sorted({str(c) for c in frame["condition"].dropna()} | set(protocol.get("conditions", {})))
     page.add("<p><b>Conditions.</b></p>" + (_table(["condition", "description"], [
         [_e(c), _e(protocol.get("conditions", {}).get(c)) if c in protocol.get("conditions", {}) else
@@ -1525,13 +1621,14 @@ def _card(page, key, card, table, frame, evaluation, figures):
             label += f" <span class=\"source\">parameter set {_e(entry['parameter_set'])}</span>"
         if meaning:
             label += f"<br><span class=\"source\">population: {_e(meaning[1])}</span>"
-        body.append([label, _e(_cell(entry["unit"])), _e(_cell(entry["condition"]) or "—"),
-                     _side_text(entry["sides"].get("before")) if any(s in entry["sides"] for s in SIDES)
-                     else _side_text(entry["sides"].get("single")),
-                     _side_text(entry["sides"].get("after")) if any(s in entry["sides"] for s in SIDES) else "—",
+        # Every side the entry has is shown in its own column; a row without a side is never hidden by its
+        # before and after neighbours.
+        sides = [_side_text(entry["sides"][side]) if side in entry["sides"] else "—"
+                 for side in (*SIDES, "single")]
+        body.append([label, _e(_cell(entry["unit"])), _e(_cell(entry["condition"]) or "—"), *sides,
                      "values.csv rows " + _rows_link(entry["rows"])])
-    page.add("<p><b>Key metrics</b>, before and after, as ranges across seeds and FOVs.</p>" +
-             (_table(["metric", "unit", "condition", "before (or the value)", "after", "source"], body, "key")
+    page.add("<p><b>Key metrics</b>, before, after and without a side, as ranges across seeds and FOVs.</p>" +
+             (_table(["metric", "unit", "condition", "before", "after", "without a side", "source"], body, "key")
               if body else "<p class=\"undefined\">No key metric has a row in this card.</p>"))
     for field, title in (("preconditions", "Preconditions supplied"), ("harm", "Harm results supplied")):
         items = card.get(field, [])
@@ -1562,7 +1659,7 @@ def _card(page, key, card, table, frame, evaluation, figures):
     notes += [_e(t) for t in card.get("limitations", [])]
     page.add("<p><b>Failures, null reasons and limitations.</b></p>" +
              ("<ul>" + "".join(f"<li>{n}</li>" for n in notes) + "</ul>" if notes else "<p>None.</p>"))
-    links = [f"<a href=\"#details-{anchor[5:]}\">details</a>"] + [f"<a href=\"#{a}\">{_e(Path(n).name)}</a>"
+    links = [f"<a href=\"#details-{card_slug(key)}\">details</a>"] + [f"<a href=\"#{a}\">{_e(Path(n).name)}</a>"
                                                                   for a, n, _c, _f in figures]
     page.add(f"<p>Read next: {', '.join(links)}.</p></article>")
 
@@ -1590,7 +1687,7 @@ def _identity(page, evaluation, revision, protocol_path, records):
              f"<code>{_e(', '.join(revision['sources']))}</code>.</p>")
     page.anchors.append("a-verified")
     verified = pd.DataFrame(list(records.saved.verified.values()))
-    page.add(full_table(verified, "report.json", "a-verified", "Every file this report read, checked as read."))
+    page.add(full_table(verified, "report.json", "a-verified", "Every file this report read, hashed as read; checked_against says whether a recorded SHA-256 checked it."))
     page.end()
 
 
@@ -1631,7 +1728,7 @@ def _omitted(frame, card_tables, figures, keys, evaluation):
     for key in keys:
         for _a, _n, _c, facts in figures[key]:
             for item in facts.get("omitted", []):
-                out.append(f"{card_anchor(key)[5:]}: the metric figure shows {MAX_PANELS} panels; "
+                out.append(f"{_card_title(key, {})}: the metric figure shows {MAX_PANELS} panels; "
                            f"{' '.join(str(i) for i in item if i is not None)} is in the card table only.")
     if evaluation.details:
         out.append("Each metric's details file is listed in the diagnostics with its path; only saved curves are "

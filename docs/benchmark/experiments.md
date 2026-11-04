@@ -42,7 +42,7 @@ an accuracy experiment.
 | `starfinder experiment expand` | Resolves every trial (registry defaults, input SHA-256) before writing, then writes `trial-NNNNNN.json` per trial and `manifest.json`. No processing runs and no engine is imported. |
 | `starfinder trial run` | Runs one trial configuration in this process and writes its outputs and `record.json`. There is no scheduler and no retry. |
 | `starfinder experiment evaluate` | Reads the listed sources, checks every file it consumes against its SHA-256, calls the selected metrics and writes `evaluation.json`, `values.csv` and `metrics/`. |
-| `starfinder experiment report` | Renders a saved evaluation as a review page, checking every file it reads against its SHA-256; see the {doc}`report guide <report>`. |
+| `starfinder experiment report` | Renders a saved evaluation as a review page, checking the saved records and figure files against their recorded SHA-256; see the {doc}`report guide <report>`. |
 
 The §2.13 workflow stays the executor for FOV and downstream work: run it with
 `starfinder workflow`, then evaluate its outputs. To run many trials, give each

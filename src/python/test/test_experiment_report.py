@@ -30,6 +30,9 @@ from starfinder.workflow._shape import configuration_sha256
 pytestmark = [pytest.mark.benchmark, pytest.mark.contract]
 
 DOCS = Path(__file__).resolve().parents[3] / "docs"
+#: The study's card identifiers: a readable slug and the first 8 hex characters of the exact key's SHA-256.
+NOISE, ADAPTIVE = R.card_slug(("white_tophat", "noise")), R.card_slug(("white_tophat", "adaptive"))
+UNASSIGNED = R.card_slug((None, None))
 SHAPE = (4, 32, 32)
 TRUTH = [(2, 8, 8), (2, 8, 24), (2, 24, 8), (2, 24, 24)]
 GENES = ["a", "b", "a", "b"]
@@ -225,11 +228,11 @@ def _card(text, anchor):
 
 def test_calibrated_cards_follow_the_page_order_and_cover_every_method(rendered):
     out, text, summary = rendered
-    cards = ["card-white_tophat-noise", "card-white_tophat-adaptive"]
-    figures = ["fig-white_tophat-noise-metrics", "fig-white_tophat-noise-1", "fig-white_tophat-adaptive-metrics"]
+    cards = [f"card-{NOISE}", f"card-{ADAPTIVE}"]
+    figures = [f"fig-{NOISE}-metrics", f"fig-{NOISE}-1", f"fig-{ADAPTIVE}-metrics"]
     anchors = ["summary", "setup", "setups", "cards", *cards, "findings", "findings-list", "hypotheses",
-               "reading-order", "method-details", "details-white_tophat-noise", "fig-white_tophat-noise-metrics",
-               "fig-white_tophat-noise-1", "details-white_tophat-adaptive", "fig-white_tophat-adaptive-metrics",
+               "reading-order", "method-details", f"details-{NOISE}", f"fig-{NOISE}-metrics",
+               f"fig-{NOISE}-1", f"details-{ADAPTIVE}", f"fig-{ADAPTIVE}-metrics",
                "appendix", "identity", "revision", "a-verified", "a-sources", "a-values", "a-pairs", "a-resources",
                "a-diagnostics", "a-omitted"]
     positions = [text.index(f"id=\"{a}\"") for a in anchors]
@@ -248,17 +251,26 @@ def test_calibrated_cards_follow_the_page_order_and_cover_every_method(rendered)
         assert (out / figure["path"]).read_bytes().startswith(b"\x89PNG")
         assert f"href=\"#{figure['anchor']}\"" in order
     assert "src=\"http" not in text and "href=\"http" not in text
+    _links_resolve(text)
+
+
+def _links_resolve(text):
+    """Every id is unique and every in-page link names one."""
+    ids = re.findall(r"\sid=\"([^\"]+)\"", text)
+    assert len(ids) == len(set(ids))
+    targets = set(re.findall(r"href=\"#([^\"]+)\"", text))
+    assert targets and targets <= set(ids), targets - set(ids)
 
 
 def test_every_method_mode_and_condition_has_report_text(study, rendered, tmp_path, monkeypatch):
     _out, text, _summary = rendered
-    for anchor in ("card-white_tophat-noise", "card-white_tophat-adaptive"):
+    for anchor in (f"card-{NOISE}", f"card-{ADAPTIVE}"):
         card = _card(text, anchor)
         for phrase in ("Purpose.", "Targeted conditions.", "Key metrics", "Preconditions supplied.",
                        "Harm results supplied.", "Verdict", "Failures, null reasons and limitations."):
             assert phrase in card
     assert "Removes the flat background before detection." in text and "No added noise." in text
-    assert "absent: high_background" in _card(text, "card-white_tophat-noise")
+    assert "absent: high_background" in _card(text, f"card-{NOISE}")
     for sentence in R.LIMITATIONS:
         assert html_text(sentence) in text
     # Without a protocol every missing text is stated, not left out.
@@ -269,7 +281,7 @@ def test_every_method_mode_and_condition_has_report_text(study, rendered, tmp_pa
                    "report makes none."):
         assert phrase in bare
     # Without rows, the different threshold modes stay apart as trial setups in one card.
-    assert "different trial setups, not pooled" in bare
+    assert "different setups, not pooled" in bare
 
 
 def html_text(sentence):
@@ -279,7 +291,7 @@ def html_text(sentence):
 
 def test_known_values_keep_units_denominators_conditions_seeds_and_sources(rendered):
     out, text, _summary = rendered
-    card = _card(text, "card-white_tophat-noise")
+    card = _card(text, f"card-{NOISE}")
     row = card[card.index("<b>M03</b> f1"):card.index("</tr>", card.index("<b>M03</b> f1"))]
     before, after = row.split("<td>")[3], row.split("<td>")[4]
     # F1 before: .5 (seed 0) and 1/3 (seed 1); after: 1 (seed 0) and .75 (seed 1); seed 2 failed.
@@ -466,7 +478,7 @@ def test_sources_are_verified_against_the_manifest(study, tmp_path):
 
 def test_calibrated_scenes_outputs_and_detections_match_the_saved_run(rendered, study):
     _out, text, summary = rendered
-    (figure,) = [f for f in summary["figures"] if f["anchor"] == "fig-white_tophat-noise-1"]
+    (figure,) = [f for f in summary["figures"] if f["anchor"] == f"fig-{NOISE}-1"]
     facts = figure["facts"]
     detections = pd.read_csv(study["trials"] / "noise-tophat-0" / "spots.csv")
     assert facts["detections"] == len(detections) == 4
@@ -491,7 +503,7 @@ def test_dim_punctum_is_the_lowest_realized_peak_and_leads_the_colour_view(rende
     edge[1, 3, 3] = 3
     assert R.dim_punctum([(0, 0, 0), (1, 3, 3)], edge)["index"] == 0
     _out, _text, summary = rendered
-    (figure,) = [f for f in summary["figures"] if f["anchor"] == "fig-white_tophat-noise-1"]
+    (figure,) = [f for f in summary["figures"] if f["anchor"] == f"fig-{NOISE}-1"]
     assert figure["facts"]["dim_punctum"] == {"index": 0, "center": [2, 8, 8], "peak": 40.0}
     assert figure["facts"]["puncta"][0]["index"] == 0
 
@@ -555,7 +567,7 @@ def test_undefined_is_visible(tmp_path, monkeypatch):
                  "--metrics", str(_yaml(tmp_path / "m.yaml", metrics)), "--output", str(tmp_path / "ev")]) == 0
     _no_processing(monkeypatch)
     text = (R.render(tmp_path / "ev", tmp_path / "report") / "report.html").read_text()
-    card = _card(text, "card-unassigned")
+    card = _card(text, f"card-{UNASSIGNED}")
     assert "<span class=\"undefined\">undefined</span>" in card and "tolerance gate not requested" in card
     assert "<b>0.125</b>" in card
     assert "passed is undefined: tolerance gate not requested" in text
@@ -564,7 +576,7 @@ def test_undefined_is_visible(tmp_path, monkeypatch):
 def test_report_never_chooses_an_optimum_pools_methods_hides_fovs_or_takes_assigned_reads_as_accuracy(
         study, rendered, tmp_path, monkeypatch):
     out, text, summary = rendered
-    noise, adaptive = _card(text, "card-white_tophat-noise"), _card(text, "card-white_tophat-adaptive")
+    noise, adaptive = _card(text, f"card-{NOISE}"), _card(text, f"card-{ADAPTIVE}")
     # Two fixed modes, two cards: each holds its own rows only, and no range crosses the modes.
     values = pd.read_csv(out / "tables" / "values.csv")
     assert set(values[values.metric.str.contains("adaptive")]["mode"]) == {"adaptive"}
@@ -591,7 +603,7 @@ def test_report_never_chooses_an_optimum_pools_methods_hides_fovs_or_takes_assig
     protocol["rows"]["f1-adaptive-raw-0"] = {"method": "white_tophat", "mode": "noise", "side": "before"}
     text = (R.render(study["evaluation"], tmp_path / "y", _yaml(tmp_path / "q.yaml", protocol)) /
             "report.html").read_text()
-    assert "different trial setups, not pooled" in _card(text, "card-white_tophat-noise")
+    assert "different setups, not pooled" in _card(text, f"card-{NOISE}")
     # A verdict without its failing clause is refused.
     protocol = yaml.safe_load(study["protocol"].read_text())
     del protocol["methods"][0]["verdict"]["failing_clause"]
@@ -601,6 +613,167 @@ def test_report_never_chooses_an_optimum_pools_methods_hides_fovs_or_takes_assig
     protocol["findings"][0]["label"] = "fact"
     with pytest.raises(R.ReportError, match="finding or hypothesis"):
         R.render(study["evaluation"], tmp_path / "z", _yaml(tmp_path / "r.yaml", protocol))
+    # Two workflow sources of different configurations are not pooled, and a FOV with no row is named missing.
+    folder = _workflow_evaluation(tmp_path / "workflow")
+    text = (R.render(folder, tmp_path / "w", revision_check=_revision) / "report.html").read_text()
+    card = _card(text, f"card-{UNASSIGNED}")
+    assert "different setups, not pooled" in card and "0.2 to 0.8" not in card
+    assert "<b>0.2</b>" in card and "<b>0.8</b>" in card and "missing FOVs FOV_002" in card
+
+
+# --- Identity, sides and links (the review of 8f57c63) ----------------------------------------------------------
+
+def _revision(code):
+    return {"revision": "0" * 40, "head": "0" * 40, "dirty": False, "version": None, "sources": [],
+            "resolved": True, "changed": [], "match": "not checked in this test"}
+
+
+def _write_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=1))
+    return {"path": str(path), "sha256": _sha(path)}
+
+
+def _workflow_evaluation(root, specification="kept"):
+    """A saved evaluation in the approved schema, written by hand: two workflow sources (runs A and B) whose
+    manifests and task records name different configuration and blocks hashes; M17's unmatched rate 0.2 for run A's
+    FOV_001 and 0.8 for run B's FOV_001; and run A's FOV_002 metric, skipped before it recorded its arguments (its
+    task is incomplete), whose task only the recorded metrics specification names. ``specification`` is ``kept``,
+    ``changed`` (its bytes differ from the recorded SHA-256) or ``missing``."""
+    sources, configuration = [], {"A": "a" * 64, "B": "b" * 64}
+    for run in ("A", "B"):
+        folder = root / f"run{run}"
+        # blocks_sha256 depends on the configuration and the task kind only (workflow/_shape.py), so one per run.
+        tasks = [{"id": f"fov/s/{fov}", "kind": "fov", "identity": {"sample": "s", "fov": fov},
+                  "blocks_sha256": f"{run.lower()}1" * 32} for fov in ("FOV_001", "FOV_002")]
+        manifest = _write_json(folder / "workflow" / "manifest.json", {
+            "format": "test", "roots": {"output": str(folder)}, "tasks": tasks,
+            "configuration": {"configuration_sha256": configuration[run]}})
+        summary = {}
+        for task in tasks:
+            complete = task["identity"]["fov"] == "FOV_001"
+            record = None
+            if complete:
+                record = _write_json(folder / "records" / f"{task['identity']['fov']}.json", {
+                    "id": task["id"], "kind": "fov", "identity": task["identity"], "status": "succeeded",
+                    "workflow": {"configuration_sha256": configuration[run], "blocks_sha256": task["blocks_sha256"],
+                                 "wall_s": 1.0, "cpu_s": 1.0, "peak_rss_kib": 10}})
+                record["status"] = "succeeded"
+            summary[task["id"]] = {"kind": "fov", "complete": complete,
+                                   "problems": [] if complete else ["the task record is missing"], "record": record}
+        sources.append({"name": f"run{run}", "kind": "workflow", "status": "verified", "error": None,
+                        "limitations": [], "consumed": [], "manifest": manifest, "roots": {"output": str(folder)},
+                        "tasks": summary, "incomplete": ["fov/s/FOV_002"]})
+
+    def computed(name, run, value):
+        return {"name": name, "metric": "M17", "function": "readout.read_status_summary", "parameters": {},
+                "arguments": {"reads": {"source": f"run{run}", "task": "fov/s/FOV_001", "output": "reads.csv"}},
+                "sources": [f"run{run}"], "outcome": "computed", "status": "ok",
+                "values": {"unmatched_rate": value}, "units": {"unmatched_rate": "fraction"},
+                "counts": {"total": 10}, "reasons": {}, "config": {}}
+    metrics = [computed("rate-A-1", "A", 0.2), computed("rate-B-1", "B", 0.8),
+               {"name": "rate-A-2", "metric": "M17", "function": "readout.read_status_summary", "parameters": {},
+                "arguments": {}, "sources": ["runA"], "outcome": "skipped",
+                "reason": "workflow task fov/s/FOV_002 is not complete: the task record is missing"}]
+    specified = {"metrics": [{"name": m["name"], "metric": "M17", "function": "readout.read_status_summary",
+                              "arguments": {"reads": {"source": "runA" if "A" in m["name"] else "runB",
+                                                      "task": "fov/s/FOV_00" + m["name"][-1],
+                                                      "output": "reads.csv"}}} for m in metrics]}
+    path = root / "metrics.yaml"
+    spec = _write_json(path, specified)  # JSON is YAML
+    if specification == "changed":
+        path.write_text(path.read_text().replace("FOV_002", "FOV_003"))
+    elif specification == "missing":
+        path.unlink()
+    folder = root / "evaluation"
+    record = {"format": R.EVALUATION_FORMAT, "generated_at": "2026-11-04T00:00:00+00:00",
+              "software": {"code": {"git_commit": None}}, "inputs": {"sources": spec, "metrics": spec},
+              "sources": sources, "metrics": metrics, "status": "incomplete",
+              "counts": {"sources": 2, "failed_sources": 0, "metrics": 3, "computed": 2, "skipped": 1,
+                         "unavailable": 0, "failed": 0}}
+    _write_json(folder / "evaluation.json", record)
+    pd.DataFrame(R.value_rows(metrics), columns=R.VALUE_COLUMNS).to_csv(folder / "values.csv", index=False)
+    return folder
+
+
+def test_workflow_setups_are_not_pooled_and_a_skipped_metric_keeps_its_fov(tmp_path, monkeypatch):
+    _no_processing(monkeypatch)
+    out = R.render(_workflow_evaluation(tmp_path / "kept"), tmp_path / "report", revision_check=_revision)
+    text = (out / "report.html").read_text()
+    values = pd.read_csv(out / "tables" / "values.csv").set_index("metric")
+    # The skipped metric's FOV comes from the checked specification and the checked manifest's task entry.
+    assert values.loc["rate-A-2", "fov"] == "FOV_002" and values.loc["rate-A-2", "outcome"] == "skipped"
+    assert values.loc["rate-A-1", "fov"] == "FOV_001" and values.loc["rate-B-1", "fov"] == "FOV_001"
+    assert values.loc["rate-A-1", "setup"] == values.loc["rate-A-2", "setup"] != values.loc["rate-B-1", "setup"]
+    card = _card(text, f"card-{UNASSIGNED}")
+    assert "skipped at FOV FOV_002" in card and "missing FOVs FOV_002" in card  # run B has no FOV_002 row
+    assert "different setups, not pooled" in card and "0.2 to 0.8" not in card
+    setups = text[text.index("id=\"setups\""):text.index("<b>Conditions.</b>")]
+    assert setups.count("configuration_sha256") == 2 and "a" * 64 in setups and "b" * 64 in setups
+    summary = json.loads((out / "report.json").read_text())
+    assert any(v["what"] == "the evaluation's metrics specification" and v["checked_against"] == "recorded SHA-256"
+               for v in summary["verified"])
+    assert any(v["what"].startswith("workflow manifest") for v in summary["verified"])
+    _links_resolve(text)
+    # A changed or missing specification leaves the FOV empty, with a finding that says why; nothing is refused.
+    for case, why in (("changed", "differs from its recorded SHA-256"), ("missing", "is missing")):
+        out = R.render(_workflow_evaluation(tmp_path / case, case), tmp_path / f"report-{case}",
+                       revision_check=_revision)
+        values = pd.read_csv(out / "tables" / "values.csv").set_index("metric")
+        assert pd.isna(values.loc["rate-A-2", "fov"])
+        findings = json.loads((out / "report.json").read_text())["findings"]
+        assert any(f["text"].startswith("Metric rate-A-2: it was skipped before recording which workflow task")
+                   and why in f["text"] and "its FOV is unknown" in f["text"] for f in findings)
+    # A changed manifest refuses the report, as a changed trial record does.
+    folder = _workflow_evaluation(tmp_path / "manifest")
+    manifest = tmp_path / "manifest" / "runA" / "workflow" / "manifest.json"
+    manifest.write_text(manifest.read_text().replace("FOV_002", "FOV_009"))
+    with pytest.raises(R.SourceMismatch, match="differs from its recorded SHA-256"):
+        R.render(folder, tmp_path / "refused", revision_check=_revision)
+
+
+def test_a_value_without_a_side_is_shown_beside_before_and_after(tmp_path, monkeypatch):
+    """The review's probe: before 0.2 and a selected value without a side, 0.8, in one card and condition."""
+    folder = _workflow_evaluation(tmp_path / "study")
+    protocol = _yaml(tmp_path / "protocol.yaml", {
+        "rows": {"rate-A-1": {"method": "m", "side": "before"}, "rate-B-1": {"method": "m"},
+                 "rate-A-2": {"method": "m", "side": "after"}},
+        "methods": [{"method": "m", "key_metrics": ["M17:unmatched_rate"]}]})
+    _no_processing(monkeypatch)
+    out = R.render(folder, tmp_path / "report", protocol, revision_check=_revision)
+    card = _card((out / "report.html").read_text(), f"card-{R.card_slug(('m', None))}")
+    row = card[card.index("<b>M17</b> unmatched_rate"):]
+    row = row[:row.index("</tr>")]
+    before, after, single = row.split("<td>")[3:6]
+    assert "<b>0.2</b>" in before and "skipped at FOV FOV_002" in after and "<b>0.8</b>" in single
+    assert "without a side" in card
+
+
+def test_card_identifiers_stay_distinct_and_every_link_resolves(tmp_path, monkeypatch):
+    keys = [("x-y", "z"), ("x", "y-z"), ("a b", None), ("a-b", None)]
+    slugs = [R.card_slug(k) for k in keys]
+    assert len(set(slugs)) == 4 and slugs[0].startswith("x-y-z-") and slugs[2].startswith("a-b-")
+    folder = _workflow_evaluation(tmp_path / "study")
+    rows = {"rate-A-1": {"method": "x-y", "mode": "z"}, "rate-B-1": {"method": "x", "mode": "y-z"},
+            "rate-A-2": {"method": "a b"}}
+    _no_processing(monkeypatch)
+    out = R.render(folder, tmp_path / "report", _yaml(tmp_path / "p.yaml", {"rows": rows}),
+                   revision_check=_revision)
+    text = (out / "report.html").read_text()
+    summary = json.loads((out / "report.json").read_text())
+    anchors = [c["anchor"] for c in summary["cards"]]
+    assert anchors == [f"card-{R.card_slug(k)}" for k in keys[:3]]
+    figures = [f["path"] for f in summary["figures"]]
+    assert len(figures) == len(set(figures)) == 2 and all((out / f).is_file() for f in figures)
+    for slug in slugs[:3]:
+        assert f"id=\"details-{slug}\"" in text and f"href=\"#card-{slug}\"" in text
+    _links_resolve(text)
+    # The backstop: two distinct keys that would share an identifier refuse the report.
+    monkeypatch.setattr(R, "card_slug", lambda key: "same")
+    with pytest.raises(R.ReportError, match="would share the identifier 'same'"):
+        R.render(folder, tmp_path / "refused", _yaml(tmp_path / "p.yaml", {"rows": rows}),
+                 revision_check=_revision)
+    assert not (tmp_path / "refused").exists()
 
 
 # --- Revision -------------------------------------------------------------------------------------------------------

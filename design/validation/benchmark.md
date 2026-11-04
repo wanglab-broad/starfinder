@@ -92,6 +92,8 @@ Test paths below are relative to `src/python/test/`. Abbreviations:
 
 ## Evaluation, records and retirement checks
 
+% Amended 2026-11-04 (W-782): the saved evaluation (`starfinder.experiment.evaluation/1`) records no SHA-256 for `evaluation.json` itself or for a metric's details file under `metrics/`, so the report cannot verify them: it reads them, hashes them and lists them in `report.json` as read only, and `values.csv` must equal the rows of `evaluation.json`. The images and tables a report figure draws are verified against the SHA-256 that the evaluation or a checked trial record holds, and so are the trial records, workflow manifests and task records it reads.
+
 Retain all existing `test_benchmark_trial.py` checks: subprocess execution,
 failed method/input record, full product/ordering/hash stability and condition
 merge/relocation. Add source-preserving evaluate-only tests with processing
