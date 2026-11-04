@@ -105,7 +105,10 @@ The sources file names each source and its kind:
 * `checkpoint`: a per-FOV checkpoint folder and one `stage` (`registered`,
   `candidates` or `pre_qc`), restored with `starfinder.dataset.load_checkpoint`.
 * `trial`: a trial's output folder, its `record.json` and its listed outputs.
-* `files`: explicit files with their SHA-256, such as truth tables.
+* `files`: explicit files, each with its required SHA-256, such as truth tables.
+
+A required SHA-256 or byte count that is missing or malformed fails its source
+before any metric reads it.
 
 The metrics file names each metric, an optional short-set ID in `metric`, the
 `function` (`<module>.<name>` of a module of `starfinder.evaluation`), its

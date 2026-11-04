@@ -443,3 +443,79 @@ def test_a_file_with_its_recorded_hash_that_cannot_be_read_fails_its_source(work
     assert by_name["translation"]["outcome"] == "skipped" and "failed while it was read" in by_name["translation"]["reason"]
     # The metrics that read the truth before it failed were computed from verified files.
     assert by_name["molecules"]["outcome"] == by_name["spots"]["outcome"] == "computed"
+
+
+def _truth_entry(sources, key):
+    return next(s for s in sources["sources"] if s["name"] == "truth")["files"][key]
+
+
+def _record_output(trial, name, change):
+    record = json.loads((trial / "record.json").read_text())
+    change(next(o for o in record["outputs"] if o["path"] == name))
+    (trial / "record.json").write_text(json.dumps(record))
+
+
+def _record_input(trial, role, change):
+    record = json.loads((trial / "record.json").read_text())
+    change(record["inputs"][role])
+    (trial / "record.json").write_text(json.dumps(record))
+
+
+# (case, source that fails, the field the message names, how to make the omission). Each required SHA-256 or byte
+# count that is missing or malformed fails its source as a SourceFailure before any metric reads it.
+_REQUIRED = [
+    ("files-null", "truth", "file 'spots' field sha256", lambda s, w, t: _truth_entry(s, "spots").update(sha256=None)),
+    ("files-malformed", "truth", "file 'spots' field sha256",
+     lambda s, w, t: _truth_entry(s, "spots").update(sha256="sha256:" + "A" * 64)),
+    ("files-short", "truth", "file 'spots' field sha256", lambda s, w, t: _truth_entry(s, "spots").update(sha256="ab12")),
+    ("files-missing", "truth", "file 'spots' field sha256", lambda s, w, t: _truth_entry(s, "spots").pop("sha256")),
+    ("trial-output-sha256", "trial", "output 'transform.json' field sha256",
+     lambda s, w, t: _record_output(t, "transform.json", lambda o: o.pop("sha256"))),
+    ("trial-output-bytes", "trial", "output 'transform.json' field bytes",
+     lambda s, w, t: _record_output(t, "transform.json", lambda o: o.pop("bytes"))),
+    ("trial-output-bytes-text", "trial", "output 'image.npy' field bytes",
+     lambda s, w, t: _record_output(t, "image.npy", lambda o: o.update(bytes=str(o["bytes"])))),
+    ("trial-input-sha256", "trial", "input 'moving' field sha256",
+     lambda s, w, t: _record_input(t, "moving", lambda i: i.pop("sha256"))),
+    ("trial-record-null", "trial", "source 'trial' field sha256",
+     lambda s, w, t: next(x for x in s["sources"] if x["name"] == "trial").update(sha256=None)),
+    ("manifest-malformed", "run", "source 'run' field sha256",
+     lambda s, w, t: next(x for x in s["sources"] if x["name"] == "run").update(sha256="not-a-digest")),
+]
+
+
+@pytest.mark.parametrize("case,source,field,omit", _REQUIRED, ids=[c[0] for c in _REQUIRED])
+def test_required_hashes_and_sizes_fail_their_source_when_missing_or_malformed(work, trial, tmp_path, monkeypatch,
+                                                                                 case, source, field, omit):
+    sources, metrics, _ = _all_sources(work, trial, tmp_path)
+    omit(sources, work, trial)
+    before = _tree(work, trial.parent, tmp_path / "truth")
+    _no_processing(monkeypatch)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert _tree(work, trial.parent, tmp_path / "truth") == before
+    assert status == 1 and record["status"] == "incomplete"
+    failed = {s["name"]: s for s in record["sources"] if s["status"] == "failed"}
+    assert set(failed) == {source}
+    assert failed[source]["error"]["type"] == "SourceFailure"
+    assert field in failed[source]["error"]["message"] and "is required" in failed[source]["error"]["message"]
+    readers = {"truth": {"molecules", "spots", "translation"}, "trial": {"translation"}, "run": {"molecules"}}[source]
+    for name, metric in by_name.items():
+        assert metric["outcome"] == ("skipped" if name in readers else "computed"), (case, name, metric)
+
+
+def test_an_inventory_digest_is_required_for_a_version_2_checkpoint(work, trial, tmp_path, monkeypatch):
+    sources, metrics, _ = _all_sources(work, trial, tmp_path)
+    folder = _output(work) / CHECKPOINTS
+    _version_2(folder)
+    metrics["metrics"] = [m for m in metrics["metrics"] if m["name"] == "spots"]
+    sources["sources"] = [s for s in sources["sources"] if s["name"] in ("candidates", "truth")]
+    sources["sources"][0]["inventory"] = [{"path": "candidates.json", "sha256": _sha(folder / "candidates.json")},
+                                          {"path": "candidates.csv", "sha256": None}]
+    before = _tree(folder)
+    _no_processing(monkeypatch)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert _tree(folder) == before
+    candidates = next(s for s in record["sources"] if s["name"] == "candidates")
+    assert status == 1 and candidates["status"] == "failed" and candidates["error"]["type"] == "SourceFailure"
+    assert "inventory 'candidates.csv' field sha256" in candidates["error"]["message"]
+    assert by_name["spots"]["outcome"] == "skipped"

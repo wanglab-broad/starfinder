@@ -25,12 +25,15 @@ the site is built.
 
 A sources file is a mapping with one list, `sources`. Every source has a unique
 `name` and its `kind`; paths are relative to the sources file.
+A SHA-256 is 64 lowercase hexadecimal characters, bare or prefixed `sha256:`.
+A required hash or byte count that is missing or malformed fails its source
+before any metric reads it.
 
 ```{evaluation-sources}
 workflow: The plan's manifest and optionally the tasks to read (default every task); each task is checked read-only with the completion rule and SHA-256, and a metric reads a listed output of a complete task, checked against the task record's size and SHA-256
 checkpoint: One stage of a per-FOV checkpoint folder through load_checkpoint; version 3 checks the header's payload hashes, versions 1 and 2 need an inventory of every stage file with its SHA-256
-trial: A trial's output folder: record.json, with its configuration hash recomputed, and every listed output by size and SHA-256; a recorded input a metric reads is checked against the record's SHA-256; optional sha256 of record.json
-files: A files mapping of key to {path, sha256}, such as truth tables, codebooks or original inputs
+trial: A trial's output folder: record.json, with its configuration hash recomputed, and every listed output by its size and SHA-256, both required; a recorded file input must carry its SHA-256, which is checked when a metric reads it; optional sha256 of record.json itself
+files: A files mapping of key to {path, sha256}, the SHA-256 required, such as truth tables, codebooks or original inputs
 ```
 
 ## Metrics

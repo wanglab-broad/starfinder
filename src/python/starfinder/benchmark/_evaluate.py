@@ -55,6 +55,7 @@ METRIC_MODULES = ("matching", "preprocessing", "readout", "registration", "resou
                   "spot_finding", "stitching")
 READS = ("table", "points", "column", "array", "json", "volume")
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_DIGEST = re.compile(r"^(?:sha256:)?[0-9a-f]{64}$")
 _ARGUMENT_KEYS = {"source", "output", "input", "task", "file", "read", "key", "where", "columns", "column",
                   "metadata", "mapping"}
 
@@ -87,6 +88,28 @@ def _sha(data):
 
 def _bare(digest):
     return digest.removeprefix("sha256:") if isinstance(digest, str) else digest
+
+
+def _digest(value, where):
+    """A required SHA-256 (64 lowercase hex characters, bare or ``sha256:``-prefixed), bare; SourceFailure naming
+    ``where`` (the source, the entry and the field) when it is missing or malformed."""
+    if not isinstance(value, str) or not _DIGEST.match(value):
+        raise SourceFailure(f"{where}: a SHA-256 of 64 lowercase hex characters (optionally sha256:-prefixed) is "
+                            f"required, not {value!r}")
+    return _bare(value)
+
+
+def _size(value, where):
+    """A required byte count (a nonnegative integer); SourceFailure naming ``where`` when missing or malformed."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise SourceFailure(f"{where}: an integer byte count is required, not {value!r}")
+    return value
+
+
+def _optional_digest(entry, key, where):
+    """The sources file's own SHA-256 of a record that holds no recorded hash elsewhere: None when the key is
+    absent, else a required digest."""
+    return _digest(entry[key], where) if key in entry else None
 
 
 def _read_value(data, path, read, spec):
@@ -133,8 +156,18 @@ class _Source:
         return (self.base / self.entry[key]).resolve()
 
     def consume(self, path, sha256=None, size=None, checked_against=None):
-        """A file's bytes, hashed as they are read and checked against the recorded size and SHA-256."""
+        """A file's bytes, hashed as they are read and checked against the recorded size and SHA-256.
+
+        ``sha256`` and ``size`` are optional only for the files that have no recorded hash or size anywhere: a trial's
+        record.json and a workflow manifest when the sources file gives no ``sha256`` for them, a workflow task
+        record, and a version-3 checkpoint header without an inventory (their bytes are hashed and listed). Every
+        other caller passes a value it has already required with ``_digest`` and ``_size``.
+        """
         path = Path(path)
+        if sha256 is not None:
+            sha256 = _digest(sha256, f"the {checked_against} entry for {path}")
+        if size is not None:
+            size = _size(size, f"the {checked_against} entry for {path}")
         if not path.is_file():
             raise Unavailable(f"{path} is missing")
         data = path.read_bytes()
@@ -165,10 +198,13 @@ class _Files(_Source):
             raise ValueError(f"source {self.name!r} needs a nonempty mapping files: {{key: {{path, sha256}}}}")
         self.files = {}
         for key, item in files.items():
-            if not isinstance(item, dict) or set(item) != {"path", "sha256"}:
+            if not isinstance(item, dict) or set(item) - {"path", "sha256"} or not isinstance(item.get("path"), str):
                 raise ValueError(f"source {self.name!r} file {key!r} needs exactly path and sha256")
-            self.files[key] = ((self.base / item["path"]).resolve(), item["sha256"])
+            self.files[key] = ((self.base / item["path"]).resolve(), item.get("sha256"))
         self.record["files"] = {key: {"path": str(p), "sha256": _bare(s)} for key, (p, s) in self.files.items()}
+        # Every file's SHA-256 is required, and checked before any metric reads the source.
+        self.files = {key: (path, _digest(digest, f"source {self.name!r} file {key!r} field sha256"))
+                      for key, (path, digest) in self.files.items()}
         for path, digest in self.files.values():
             self.consume(path, digest, checked_against="sources file")
 
@@ -195,7 +231,8 @@ class _Trial(_Source):
         record_file = self.folder / "record.json"
         if not record_file.is_file():
             raise SourceFailure(f"{record_file} is missing")
-        data = self.consume(record_file, self.entry.get("sha256"), checked_against="sources file")
+        data = self.consume(record_file, _optional_digest(self.entry, "sha256", f"source {self.name!r} field sha256"),
+                            checked_against="sources file")
         try:
             record = json.loads(data)
         except ValueError as error:
@@ -210,16 +247,24 @@ class _Trial(_Source):
         if record.get("status") == "succeeded":
             if record.get("configuration_sha256") != configuration_sha256(record["configuration"]):
                 raise SourceFailure(f"{record_file}'s configuration_sha256 differs from its configuration's")
+            # A succeeded trial lists every output with its SHA-256 and byte count (_trial._outputs), and every
+            # file input with its SHA-256; a missing or malformed value fails the source before any metric reads it.
+            for role, entry in (record.get("inputs") or {}).items():
+                if isinstance(entry, dict) and "path" in entry:
+                    _digest(entry.get("sha256"), f"source {self.name!r} input {role!r} field sha256")
             for output in record.get("outputs") or []:
                 self._output(output)
 
     def _output(self, output):
+        if not isinstance(output, dict) or not isinstance(output.get("path"), str):
+            raise SourceFailure(f"source {self.name!r}: a trial output entry needs a path, not {output!r}")
         name = Path(output["path"])
         if name.is_absolute() or ".." in name.parts:
             raise SourceFailure(f"trial output {output['path']!r} is outside its folder")
+        where = f"source {self.name!r} output {output['path']!r} field"
+        digest, size = _digest(output.get("sha256"), f"{where} sha256"), _size(output.get("bytes"), f"{where} bytes")
         try:
-            return self.consume(self.folder / name, output.get("sha256"), output.get("bytes"),
-                                checked_against="trial record")
+            return self.consume(self.folder / name, digest, size, checked_against="trial record")
         except Unavailable as error:
             raise SourceFailure(f"listed trial output {error}") from None
 
@@ -240,7 +285,8 @@ class _Trial(_Source):
                 raise Unavailable(f"trial {self.folder} has no file input {spec['input']!r} (a generated scene "
                                   "input has no file)")
             path = Path(entry["path"])
-            return _read_value(self.consume(path, entry["sha256"], checked_against="trial record"), path,
+            digest = _digest(entry.get("sha256"), f"source {self.name!r} input {spec['input']!r} field sha256")
+            return _read_value(self.consume(path, digest, checked_against="trial record"), path,
                                spec.get("read"), spec)
         raise ValueError(f"an argument of trial source {self.name!r} names output, input or metadata: true")
 
@@ -260,7 +306,8 @@ class _Workflow(_Source):
         self.record["manifest"] = {"path": str(path)}
         if not path.is_file():
             raise SourceFailure(f"the manifest {path} is missing")
-        data = self.consume(path, self.entry.get("sha256"), checked_against="sources file")
+        data = self.consume(path, _optional_digest(self.entry, "sha256", f"source {self.name!r} field sha256"),
+                            checked_against="sources file")
         try:
             manifest = json.loads(data)
         except ValueError as error:
@@ -320,8 +367,11 @@ class _Workflow(_Source):
             entry, path = item, path / item["path"]
         if declared in exempt and not path.is_file():
             raise Unavailable(f"the temporary workflow output {declared} of {task_id} is gone")
+        where = f"source {self.name!r} task {task_id!r} output {declared!r}" + (
+            f" file {spec.get('file')!r}" if declared.endswith("/") else "") + " field"
+        digest, size = _digest(entry.get("sha256"), f"{where} sha256"), _size(entry.get("bytes"), f"{where} bytes")
         try:
-            data = self.consume(path, entry.get("sha256"), entry.get("bytes"), checked_against="task record")
+            data = self.consume(path, digest, size, checked_against="task record")
         except Unavailable as error:
             raise SourceFailure(f"listed workflow output {error}") from None
         return _read_value(data, path, spec.get("read"), spec)
@@ -365,7 +415,8 @@ class _Checkpoint(_Source):
             if not isinstance(inventory, list) or any(not isinstance(i, dict) or set(i) != {"path", "sha256"}
                                                       for i in inventory):
                 raise ValueError(f"source {self.name!r}: inventory is a list of {{path, sha256}}")
-            inventory = {i["path"]: i["sha256"] for i in inventory}
+            inventory = {i["path"]: _digest(i["sha256"], f"source {self.name!r} inventory {i['path']!r} field sha256")
+                         for i in inventory}
         self.record.update(format_version=version, header={"path": str(header_file)},
                            channel_labels=header.get("channel_labels"), round_labels=header.get("round_labels"),
                            readout_mode=header.get("readout_mode"))
@@ -378,8 +429,9 @@ class _Checkpoint(_Source):
                 name = Path(entry["path"])
                 if name.is_absolute() or ".." in name.parts:
                     raise SourceFailure(f"{stage} checkpoint names {entry['path']!r}, outside its folder")
+                digest = _digest(entry.get("sha256"), f"source {self.name!r} header file {entry['path']!r} field sha256")
                 try:
-                    self.consume(folder / name, entry["sha256"], checked_against="checkpoint header")
+                    self.consume(folder / name, digest, checked_against="checkpoint header")
                 except Unavailable as error:
                     raise SourceFailure(f"{stage} checkpoint payload {error}") from None
         else:
