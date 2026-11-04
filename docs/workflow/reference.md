@@ -17,7 +17,7 @@ changes what a task does.
 --manifest: The plan's workflow/manifest.json
 --engine: The engine that runs the task, recorded in the task record
 --engine-version: The engine's version, recorded in the task record
---job-id: The scheduler's or the engine's job id, recorded in the task record
+--job-id: The scheduler's job id, else the engine's (Snakemake's job number, Nextflow's task hash), recorded in the task record
 --attempt: The engine's attempt number, recorded in the task record
 ```
 

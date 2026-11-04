@@ -1,10 +1,13 @@
-"""W-787: the ``sge`` profile's container options for a CPU and a GPU task, rendered by Nextflow without UGER."""
+"""W-787, W-805: the ``sge`` profile's container options for a CPU and a GPU task, and a task record's job id, rendered by
+Nextflow without UGER."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -21,36 +24,64 @@ WEIGHTS = "/stanley/WangLab/weights"
 #: Folders a shell would split or unquote if the profile inserted them as they are.
 FOLDERS = [WEIGHTS, "/stanley/model weights", "/stanley/it's a 'model' folder"]
 
+#: The scheduler's job id the stand-in ``qsub`` gives the job script (UGER's `segment` job of W-795 was 62751475).
+JOB_ID = "62751475"
+#: The scheduler's job id, passed into the container by the job script's shell (W-805).
+JOB = "--env JOB_ID=$JOB_ID"
 #: The options at the base revision (e78f755, before W-787): the thread variables and the caches, with ``--nv`` first
-#: for a GPU task. With ``weights_dir`` unset the rendered options must stay exactly these.
-BASE_OPTIONS = {"cpu": " ".join(f"--env {name}=1" for name in THREADS) + " " + CACHES,
-                "gpu": "--nv " + " ".join(f"--env {name}=1" for name in THREADS) + " " + CACHES}
+#: for a GPU task, and W-805's job id after them. With ``weights_dir`` unset the rendered options must stay exactly these.
+BASE_OPTIONS = {"cpu": " ".join(f"--env {name}=1" for name in THREADS) + " " + CACHES + " " + JOB,
+                "gpu": "--nv " + " ".join(f"--env {name}=1" for name in THREADS) + " " + CACHES + " " + JOB}
 
 # Stand-ins for the scheduler and the container runtime, which the render needs only to start each task. ``qsub``
 # runs the job script `.command.run` that Nextflow wrote and so reaches the ``apptainer`` line, which records its
 # arguments, as the shell of the job script passed them, and runs the task's own command, with the ``--env`` pairs
 # it was given, outside any container.
-QSUB = '''#!/bin/bash
-bash "${@: -1}" > /dev/null 2>&1
-echo 'Your job 1 ("stand-in") has been submitted'
+QSUB = f'''#!/bin/bash
+export JOB_ID={JOB_ID}
+bash "${{@: -1}}" > /dev/null 2>&1
+echo 'Your job {JOB_ID} ("stand-in") has been submitted'
 '''
 QSTAT = "#!/bin/bash\nexit 0\n"
 APPTAINER = '''#!/bin/bash
 mkdir -p "$(dirname "$0")/argv"
 printf '%s\\0' "$@" > "$(dirname "$0")/argv/${APPTAINERENV_NXF_TASK_WORKDIR//\\//_}"
 shift
+pairs=()
 while [[ "$1" == -* ]]; do
-  case "$1" in --env) export "$2"; shift 2;; --bind|-B) shift 2;; *) shift;; esac
+  case "$1" in --env) pairs+=("$2"); shift 2;; --bind|-B) shift 2;; *) shift;; esac
 done
 shift
-for name in $(compgen -e APPTAINERENV_); do export "${name#APPTAINERENV_}=${!name}"; done
-exec "$@"
+for name in $(compgen -e APPTAINERENV_); do pairs+=("${name#APPTAINERENV_}=${!name}"); done
+# As the container starts: nothing of the job script's environment but PATH, the --env pairs and the APPTAINERENV_ ones.
+exec env -i PATH="$PATH" "${pairs[@]}" "$@"
+'''
+# The task commands of the render that does not stub: the plan and the verification are the package's own; a task's
+# command writes the record Nextflow copies, holding the execution context it was given.
+STARFINDER = f'''#!{sys.executable}
+import json
+import os
+import sys
+from pathlib import Path
+
+argv = sys.argv[1:]
+if argv[1] in ("plan", "verify"):
+    if "--final" in argv:
+        sys.exit(0)
+    os.execv(sys.executable, [sys.executable, "-m", "starfinder", *argv])
+option = lambda name: argv[argv.index(name) + 1]
+manifest = json.loads(Path(option("--manifest")).read_text())
+task = next(t for t in manifest["tasks"] if t["id"] == option("--task"))
+record = Path(manifest["roots"]["output"]) / task["record"]
+record.parent.mkdir(parents=True, exist_ok=True)
+record.write_text(json.dumps({{"status": "succeeded", "workflow": {{"execution_context": {{
+    "engine": option("--engine"), "job_id": option("--job-id"), "attempt": int(option("--attempt"))}}}}}}) + "\\n")
 '''
 
 
 def stand_ins(folder):
     folder.mkdir(parents=True)
-    for name, text in (("qsub", QSUB), ("qstat", QSTAT), ("apptainer", APPTAINER)):
+    for name, text in (("qsub", QSUB), ("qstat", QSTAT), ("apptainer", APPTAINER), ("starfinder", STARFINDER)):
         (folder / name).write_text(text)
         (folder / name).chmod(folder.joinpath(name).stat().st_mode | stat.S_IXUSR)
     return folder
@@ -68,8 +99,10 @@ def apptainer_lines(work, tools):
     return found
 
 
-def render(tmp_path_factory, *arguments):
-    """Run the morphology-only variant (a CPU morphology task and a CUDA StarDist task) as stubs under ``sge``."""
+def render(tmp_path_factory, *arguments, stub=True):
+    """Run the morphology-only variant (a CPU morphology task and a CUDA StarDist task) under ``sge``: as stubs, or, with
+    ``stub=False``, with the stand-in ``starfinder`` as every task's command. Returns the `apptainer exec` lines, or,
+    for ``stub=False``, the work folder and the manifest."""
     N.executable()
     work = tmp_path_factory.mktemp("sge-render")
     X.golden().write_fixture(work)
@@ -79,10 +112,10 @@ def render(tmp_path_factory, *arguments):
     done, rows = N.run(work, path, "--container", str(work / "image.sif"), "-work-dir", str(work / "work"),
                        *arguments, environment={"PATH": str(tools) + os.pathsep + os.environ["PATH"],
                                                 "NXF_OFFLINE": "true", "NXF_PLUGINS_DEFAULT": "false"},
-                       profile="sge")
+                       profile="sge", stub=stub)
     assert done.returncode == 0, done.stdout + done.stderr
     assert {r["status"] for r in N.tasks(rows)} == {"COMPLETED"}
-    return apptainer_lines(work / "work", tools)
+    return apptainer_lines(work / "work", tools) if stub else (work / "work", N.manifest(path))
 
 
 @pytest.fixture(scope="module")
@@ -126,3 +159,59 @@ def test_without_weights_dir_the_options_are_the_base_revisions(unset, label):
 def test_the_parameter_is_declared_and_unset_by_default():
     text = (X.ROOT / "nextflow" / "nextflow.config").read_text()
     assert re.search(r"^\s+weights_dir = null$", text, re.MULTILINE)
+
+
+def task_records(work, manifest):
+    """{task id: (its record, the `.command.sh` that wrote it)}: the record is the one copied into the task's work folder."""
+    found = {}
+    for task in manifest["tasks"]:
+        record = task["id"].replace("/", ".") + ".json"
+        (script,) = [s for s in Path(work).glob("*/*/.command.sh") if f"'--task' '{task['id']}'" in s.read_text()]
+        found[task["id"]] = (json.loads((script.parent / record).read_text()), script)
+    return found
+
+
+@pytest.fixture(scope="module")
+def sge_tasks(tmp_path_factory):
+    work, manifest = render(tmp_path_factory, stub=False)
+    return manifest, task_records(work, manifest)
+
+
+def test_under_sge_each_record_holds_the_schedulers_job_id(sge_tasks):
+    """The stand-in ``qsub`` sets JOB_ID before it runs `.command.run`; the stand-in ``apptainer`` starts the task with
+    nothing of that environment but the --env pairs, so the id reaches the record only through the profile's pair (W-805)."""
+    manifest, records = sge_tasks
+    assert set(records) == {t["id"] for t in manifest["tasks"]}
+    assert {t["execution"]["gpu"] for t in manifest["tasks"]} == {True, False}
+    for task_id, (record, script) in records.items():
+        assert record["workflow"]["execution_context"]["job_id"] == JOB_ID, task_id
+        assert '--job-id "${JOB_ID:-$task_hash}"' in script.read_text(), task_id
+
+
+def test_the_fallback_is_the_task_hash_from_its_work_folder(local_tasks):
+    manifest, records = local_tasks
+    assert set(records) == {t["id"] for t in manifest["tasks"]}
+    for task_id, (record, script) in records.items():
+        job_id = record["workflow"]["execution_context"]["job_id"]
+        assert job_id == script.parent.parent.name + script.parent.name, task_id
+        assert re.fullmatch(r"[0-9a-f]{32}", job_id), task_id
+    assert len({r["workflow"]["execution_context"]["job_id"] for r, _ in records.values()}) == len(records)
+
+
+@pytest.fixture(scope="module")
+def local_tasks(tmp_path_factory):
+    """The same variant under ``local``: no scheduler, so no JOB_ID, and the command is the stand-in ``starfinder``."""
+    N.executable()
+    work = tmp_path_factory.mktemp("local-render")
+    X.golden().write_fixture(work)
+    config = N.small_resources(X.variants(work)["morphology-only"])
+    config["segmentation"]["device"] = "cpu"  # ``local`` has no accelerator
+    path = X.write_config(work, "local", config)
+    tools = stand_ins(work / "tools")
+    done, rows = N.run(work, path, "-work-dir", str(work / "work"), stub=False,
+                       environment={"PATH": str(tools) + os.pathsep + os.environ["PATH"], "NXF_OFFLINE": "true",
+                                    "NXF_PLUGINS_DEFAULT": "false"})
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert {r["status"] for r in N.tasks(rows)} == {"COMPLETED"}
+    manifest = N.manifest(path)
+    return manifest, task_records(work / "work", manifest)
