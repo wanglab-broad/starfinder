@@ -128,7 +128,9 @@ or run outputs. Expansion does no processing and imports no engine.
 
 ## Proposed evaluate-only contract
 
-% Amended 2026-11-03 for W-803: a version-3 checkpoint source requires the header's `files` inventory, naming every file of the stage folder besides the header ([checkpoints](checkpoints.md)).
+% Amended 2026-11-03 for W-803: a version-3 checkpoint source requires the header's `files` inventory, naming the stage's files besides the header ([checkpoints](checkpoints.md)).
+
+% Amended 2026-11-04 for W-803 (clarified): the inventory must name the stage's files besides the header, not every file of a shared folder: every file in `registered/` for `registered`; `<stage>.json` and each present `<stage>.<format>` table for `candidates` and `pre_qc`, which share the FOV's checkpoint folder.
 
 This section specifies new behavior, not the existing `evaluate_benchmark` API.
 A saved evaluation has a new output directory and explicitly selected metrics,
@@ -154,8 +156,14 @@ Three sources are admitted:
    for `registered`, `candidates` or `pre_qc`; use restored typed results and
    metadata (`src/python/starfinder/_checkpoint.py:611–700`). Version 3 checks
    payload hashes and requires the header's nonempty `files` inventory, naming
-   every file of the stage folder besides the header, before any payload is
-   read; versions 1/2 lack them and require an explicit external source
+   the stage's files besides the header, before any payload is read. The
+   stage's files are every file in `registered/` for `registered`, which has a
+   folder of its own; for `candidates` and `pre_qc`, which share the FOV's
+   checkpoint folder with each other and with other records, they are
+   `<stage>.json` and `<stage>.<format>` for each table format present, and the
+   folder's other files are not that stage's payload. Every file
+   `load_checkpoint` reads is a stage file, so every byte a metric uses is
+   hash-checked. Versions 1/2 lack them and require an explicit external source
    inventory with that limitation recorded. Missing snapshots or truth needed by
    a metric make that metric unavailable. This permits comparisons of stored
    stages; it is not a changed-config verified resume. Workflow resume rejects

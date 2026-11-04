@@ -12,7 +12,9 @@ lists named sources of four kinds:
 ``checkpoint``
     A per-FOV checkpoint folder and one ``stage`` (``registered``, ``candidates`` or ``pre_qc``), restored with
     ``starfinder.dataset.load_checkpoint``. A version-3 header's payload hashes are checked: its ``files`` must be
-    the nonempty inventory ``load_checkpoint`` requires and name every file of the stage folder besides the header.
+    the nonempty inventory ``load_checkpoint`` requires and name the stage's files besides the header (_stage_files:
+    every file in ``registered/``; ``<stage>.json`` and each present ``<stage>.<format>`` table for ``candidates`` and
+    ``pre_qc``, which share the FOV's checkpoint folder with other records).
     Versions 1 and 2 hold none, so they need an explicit ``inventory`` of every stage file with its SHA-256, and the
     record keeps that limitation.
 ``trial``
@@ -379,7 +381,11 @@ class _Workflow(_Source):
 
 
 def _stage_files(directory, stage):
-    """Every file of one checkpoint stage that is present, relative to the stage header's folder."""
+    """Every file of one checkpoint stage that is present, relative to the stage header's folder.
+
+    ``registered`` has a folder of its own: every file in it. ``candidates`` and ``pre_qc`` share the FOV's checkpoint
+    folder with each other and with other records: ``<stage>.json`` and ``<stage>.<format>`` per table format present.
+    """
     from starfinder._checkpoint import header_path
     from starfinder._records import TABLE_FORMATS
     folder = header_path(directory, stage).parent
@@ -426,7 +432,7 @@ class _Checkpoint(_Source):
             self.record["payload_check"] = "the header's SHA-256 of each payload file"
             self.consume(header_file, inventory.get(header_name) if inventory else None,
                          checked_against="inventory" if inventory else None)
-            # The header's inventory, as load_checkpoint requires it, and every file of the stage folder in it.
+            # The header's inventory, as load_checkpoint requires it, and every stage file (_stage_files) in it.
             try:
                 entries = payload_entries(folder, header, stage)
             except ValueError as error:

@@ -27,6 +27,7 @@ tile's in `tiles/<tile>/`; its merge writes the FOV folder's records as a direct
 | `checkpoints/pre_qc.csv` or `.parquet`, `pre_qc.json` | Reads and header |
 | `other_rounds/<name>/image.ome.tif`, `registration.json`, optional `field.npz` | Prepared morphology image and its record |
 | `segmentation/<run>/labels.tif`, `segmentation.json` | Saved segmentation; computed runs also have `input.ome.tif` |
+| `assignment/<name>/` | Assignment tables, label files and `assignment.json`; see the {doc}`assignment reference <assignment-algorithms>` |
 
 ## Payload hashes
 
@@ -41,7 +42,6 @@ missing entry or a malformed digest raises `ValueError` naming the stage, the
 folder and the entry. A listed file that is missing or changed raises
 `ValueError` naming the file. Headers of versions 1 and 2 hold no hashes and
 load without the check.
-| `assignment/<name>/` | Assignment tables, label files and `assignment.json`; see the {doc}`assignment reference <assignment-algorithms>` |
 
 ## registered
 

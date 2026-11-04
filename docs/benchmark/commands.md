@@ -31,7 +31,7 @@ before any metric reads it.
 
 ```{evaluation-sources}
 workflow: The plan's manifest and optionally the tasks to read (default every task); each task is checked read-only with the completion rule and SHA-256, and a metric reads a listed output of a complete task, checked against the task record's size and SHA-256
-checkpoint: One stage of a per-FOV checkpoint folder through load_checkpoint; version 3 requires the header's nonempty files inventory, naming every file of the stage folder besides the header, and checks its payload hashes; versions 1 and 2 need an inventory of every stage file with its SHA-256
+checkpoint: One stage of a per-FOV checkpoint folder through load_checkpoint; version 3 requires the header's nonempty files inventory, naming the stage's files besides the header (every file in registered/ for registered; <stage>.json and each present <stage>.csv or <stage>.parquet table for candidates and pre_qc, whose shared folder's other files are not that stage's), and checks its payload hashes; versions 1 and 2 need an inventory of every stage file with its SHA-256
 trial: A trial's output folder: record.json, with its configuration hash recomputed, and every listed output by its size and SHA-256, both required; a recorded file input must carry its SHA-256, which is checked when a metric reads it; optional sha256 of record.json itself
 files: A files mapping of key to {path, sha256}, the SHA-256 required, such as truth tables, codebooks or original inputs
 ```

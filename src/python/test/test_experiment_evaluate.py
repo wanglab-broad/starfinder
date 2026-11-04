@@ -521,7 +521,7 @@ def test_an_inventory_digest_is_required_for_a_version_2_checkpoint(work, trial,
     assert by_name["spots"]["outcome"] == "skipped"
 
 
-# W-803: a version-3 header must hold its payload inventory, which names every file of the stage folder. Each case
+# W-803: a version-3 header must hold its payload inventory, which names every stage file besides the header. Each case
 # edits one stage header of the workflow's run; the source fails before it reads a payload file or a metric reads it.
 HEADERS = {"registered": "registered/transforms.json", "candidates": "candidates.json", "pre_qc": "pre_qc.json"}
 READERS = {"registered": "registered", "candidates": "spots", "pre_qc": "reads"}
@@ -538,7 +538,7 @@ def _unnamed(header, stage, folder):
 
 
 def _stray(header, stage, folder):
-    """A file in the stage folder that the header does not name."""
+    """A stage file that the header does not name: a file in registered/, or the stage's other table format."""
     (folder / ("extra.npz" if stage == "registered" else f"{stage}.parquet")).write_bytes(b"stray")
 
 
@@ -581,3 +581,49 @@ def test_a_version_3_checkpoint_needs_its_inventory_of_every_stage_file(work, tr
     # Only the header was read; no payload file and no metric.
     assert [Path(item["path"]) for item in summary["consumed"]] == [header_file]
     assert by_name[READERS[stage]]["outcome"] == "skipped" and "values" not in by_name[READERS[stage]]
+
+
+@pytest.mark.parametrize("stage,other", [("candidates", "pre_qc"), ("pre_qc", "candidates")])
+def test_a_shared_checkpoint_folder_holds_other_stages_and_records_outside_the_inventory(work, trial, tmp_path,
+                                                                                         monkeypatch, stage, other):
+    """candidates and pre_qc share the FOV's checkpoint folder: the other stage's files and another record there are
+    not this stage's files, so its unchanged header verifies without naming them."""
+    sources, metrics, answers = _all_sources(work, trial, tmp_path)
+    sources["sources"] = [s for s in sources["sources"] if s["name"] in (stage, "truth")]
+    metrics["metrics"] = [m for m in metrics["metrics"] if m["name"] == READERS[stage]]
+    folder = _output(work) / CHECKPOINTS
+    (folder / "notes.json").write_text("{}")
+    assert {f"{other}.json", f"{other}.csv", "notes.json"} <= {p.name for p in folder.iterdir()}
+    header = json.loads((folder / HEADERS[stage]).read_text())
+    assert [e["path"] for e in header["files"]] == [f"{stage}.csv"]
+    before = _tree(work, tmp_path / "truth")
+    _no_processing(monkeypatch)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert _tree(work, tmp_path / "truth") == before
+    summary = next(s for s in record["sources"] if s["name"] == stage)
+    assert status == 0 and summary["status"] == "verified" and summary["error"] is None
+    assert {Path(i["path"]).name: i["checked_against"] for i in summary["consumed"]} == {
+        f"{stage}.json": None, f"{stage}.csv": "checkpoint header"}
+    assert by_name[READERS[stage]]["outcome"] == "computed"
+    for key, value in answers.get(READERS[stage], {}).items():
+        assert by_name[READERS[stage]]["values"][key] == pytest.approx(value, rel=1e-9, abs=1e-12)
+
+
+def test_a_registered_checkpoint_fails_on_any_unlisted_file_in_its_own_folder(work, trial, tmp_path, monkeypatch):
+    """registered has a folder of its own: a file of any name there, nested or not, must be in the header's files."""
+    sources, metrics, _ = _all_sources(work, trial, tmp_path)
+    sources["sources"] = [s for s in sources["sources"] if s["name"] == "registered"]
+    metrics["metrics"] = [m for m in metrics["metrics"] if m["name"] == "registered"]
+    folder = _output(work) / CHECKPOINTS / "registered"
+    (folder / "notes").mkdir()
+    (folder / "notes" / "readme.txt").write_text("not a payload file")
+    before = _tree(work)
+    _no_processing(monkeypatch)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert _tree(work) == before
+    summary = next(s for s in record["sources"] if s["name"] == "registered")
+    assert status == 1 and summary["status"] == "failed" and summary["error"]["type"] == "SourceFailure"
+    assert summary["error"]["message"] == ("source 'registered': the registered checkpoint header's files do not name "
+                                           "the stage files ['notes/readme.txt']")
+    assert [Path(i["path"]).name for i in summary["consumed"]] == ["transforms.json"]
+    assert by_name["registered"]["outcome"] == "skipped" and "values" not in by_name["registered"]
