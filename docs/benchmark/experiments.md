@@ -151,6 +151,10 @@ input error, with nothing written.
   snapshot or value it needs is absent) or `failed` (the metric raised). A
   computed metric whose value is undefined, such as F1 without truth, keeps a
   null value with a reason; no missing value becomes zero.
+* A checkpoint header of version 3 must hold its `files` inventory, naming
+  every file of the stage folder besides the header with a well-formed SHA-256.
+  A header without it, or with an entry missing or malformed, fails its source
+  before any payload file or metric is read.
 * Checkpoint headers of versions 1 and 2 hold no payload hashes. Such a source
   needs an `inventory` of every stage file with its SHA-256, and the evaluation
   records that its files were checked only against that inventory.

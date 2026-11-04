@@ -128,6 +128,8 @@ or run outputs. Expansion does no processing and imports no engine.
 
 ## Proposed evaluate-only contract
 
+% Amended 2026-11-03 for W-803: a version-3 checkpoint source requires the header's `files` inventory, naming every file of the stage folder besides the header ([checkpoints](checkpoints.md)).
+
 This section specifies new behavior, not the existing `evaluate_benchmark` API.
 A saved evaluation has a new output directory and explicitly selected metrics,
 source manifests/records and their hashes, population filters, frames, units,
@@ -151,7 +153,9 @@ Three sources are admitted:
 2. **Checkpoints.** Call public `starfinder.dataset.load_checkpoint(path, stage)`
    for `registered`, `candidates` or `pre_qc`; use restored typed results and
    metadata (`src/python/starfinder/_checkpoint.py:611–700`). Version 3 checks
-   payload hashes; versions 1/2 lack them and require an explicit external source
+   payload hashes and requires the header's nonempty `files` inventory, naming
+   every file of the stage folder besides the header, before any payload is
+   read; versions 1/2 lack them and require an explicit external source
    inventory with that limitation recorded. Missing snapshots or truth needed by
    a metric make that metric unavailable. This permits comparisons of stored
    stages; it is not a changed-config verified resume. Workflow resume rejects

@@ -519,3 +519,65 @@ def test_an_inventory_digest_is_required_for_a_version_2_checkpoint(work, trial,
     assert status == 1 and candidates["status"] == "failed" and candidates["error"]["type"] == "SourceFailure"
     assert "inventory 'candidates.csv' field sha256" in candidates["error"]["message"]
     assert by_name["spots"]["outcome"] == "skipped"
+
+
+# W-803: a version-3 header must hold its payload inventory, which names every file of the stage folder. Each case
+# edits one stage header of the workflow's run; the source fails before it reads a payload file or a metric reads it.
+HEADERS = {"registered": "registered/transforms.json", "candidates": "candidates.json", "pre_qc": "pre_qc.json"}
+READERS = {"registered": "registered", "candidates": "spots", "pre_qc": "reads"}
+TABLES = {"registered": "round2.ome.tif", "candidates": "candidates.csv", "pre_qc": "pre_qc.csv"}
+
+
+def _header_digest(value):
+    return lambda header, stage, folder: header["files"][0].update(sha256=value)
+
+
+def _unnamed(header, stage, folder):
+    """The stage table's entry names another file, so the list stays nonempty."""
+    next(e for e in header["files"] if e["path"] == TABLES[stage]).update(path=f"earlier-{TABLES[stage]}")
+
+
+def _stray(header, stage, folder):
+    """A file in the stage folder that the header does not name."""
+    (folder / ("extra.npz" if stage == "registered" else f"{stage}.parquet")).write_bytes(b"stray")
+
+
+_INVENTORY = {
+    "missing": (lambda header, stage, folder: header.pop("files"), "needs a nonempty files list"),
+    "null": (lambda header, stage, folder: header.update(files=None), "needs a nonempty files list"),
+    "empty": (lambda header, stage, folder: header.update(files=[]), "needs a nonempty files list"),
+    "unnamed": (_unnamed, "files does not name"),
+    "unlisted": (_stray, "files do not name the stage files"),
+    "malformed-digest": (_header_digest("sha256:" + "A" * 64), "needs a SHA-256 of 64 lowercase hex"),
+    "null-digest": (_header_digest(None), "needs a SHA-256 of 64 lowercase hex"),
+}
+
+
+@pytest.mark.parametrize("stage", list(HEADERS))
+@pytest.mark.parametrize("case", list(_INVENTORY))
+def test_a_version_3_checkpoint_needs_its_inventory_of_every_stage_file(work, trial, tmp_path, monkeypatch, stage,
+                                                                         case):
+    sources, metrics, _ = _all_sources(work, trial, tmp_path)
+    sources["sources"] = [s for s in sources["sources"] if s["name"] in (stage, "truth")]
+    metrics["metrics"] = [m for m in metrics["metrics"] if m["name"] == READERS[stage]]
+    header_file = _output(work) / CHECKPOINTS / HEADERS[stage]
+    header = json.loads(header_file.read_text())
+    edit, message = _INVENTORY[case]
+    edit(header, stage, header_file.parent)
+    header_file.write_text(json.dumps(header))
+    before = _tree(work, tmp_path / "truth")
+    _no_processing(monkeypatch)
+    import starfinder.dataset
+
+    def read(*args, **kwargs):
+        raise AssertionError("load_checkpoint read the checkpoint")
+    monkeypatch.setattr(starfinder.dataset, "load_checkpoint", read)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert _tree(work, tmp_path / "truth") == before
+    summary = next(s for s in record["sources"] if s["name"] == stage)
+    assert status == 1 and summary["status"] == "failed" and summary["error"]["type"] == "SourceFailure"
+    assert f"source {stage!r}" in summary["error"]["message"] and message in summary["error"]["message"]
+    assert f"{stage} checkpoint" in summary["error"]["message"]
+    # Only the header was read; no payload file and no metric.
+    assert [Path(item["path"]) for item in summary["consumed"]] == [header_file]
+    assert by_name[READERS[stage]]["outcome"] == "skipped" and "values" not in by_name[READERS[stage]]

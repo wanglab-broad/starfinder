@@ -11,9 +11,10 @@ lists named sources of four kinds:
     unavailable.
 ``checkpoint``
     A per-FOV checkpoint folder and one ``stage`` (``registered``, ``candidates`` or ``pre_qc``), restored with
-    ``starfinder.dataset.load_checkpoint``. A version-3 header's payload hashes are checked; versions 1 and 2 hold
-    none, so they need an explicit ``inventory`` of every stage file with its SHA-256, and the record keeps that
-    limitation.
+    ``starfinder.dataset.load_checkpoint``. A version-3 header's payload hashes are checked: its ``files`` must be
+    the nonempty inventory ``load_checkpoint`` requires and name every file of the stage folder besides the header.
+    Versions 1 and 2 hold none, so they need an explicit ``inventory`` of every stage file with its SHA-256, and the
+    record keeps that limitation.
 ``trial``
     A private trial's output folder: ``record.json`` (format ``starfinder.benchmark.trial/1``, its configuration hash
     recomputed) and every output it lists, by size and SHA-256. A recorded input a metric reads is checked against
@@ -396,7 +397,7 @@ class _Checkpoint(_Source):
         return [self._path("path")]
 
     def verify(self):
-        from starfinder._checkpoint import STAGES, header_path, read_header
+        from starfinder._checkpoint import STAGES, header_path, payload_entries, read_header
         self.directory = self._path("path")
         stage = self.entry.get("stage")
         if stage not in STAGES:
@@ -425,11 +426,16 @@ class _Checkpoint(_Source):
             self.record["payload_check"] = "the header's SHA-256 of each payload file"
             self.consume(header_file, inventory.get(header_name) if inventory else None,
                          checked_against="inventory" if inventory else None)
-            for entry in header.get("files") or []:
-                name = Path(entry["path"])
-                if name.is_absolute() or ".." in name.parts:
-                    raise SourceFailure(f"{stage} checkpoint names {entry['path']!r}, outside its folder")
-                digest = _digest(entry.get("sha256"), f"source {self.name!r} header file {entry['path']!r} field sha256")
+            # The header's inventory, as load_checkpoint requires it, and every file of the stage folder in it.
+            try:
+                entries = payload_entries(folder, header, stage)
+            except ValueError as error:
+                raise SourceFailure(f"source {self.name!r}: {error}") from None
+            unlisted = sorted(set(present) - {header_name} - {name for name, _ in entries})
+            if unlisted:
+                raise SourceFailure(f"source {self.name!r}: the {stage} checkpoint header's files do not name the "
+                                    f"stage files {unlisted}")
+            for name, digest in entries:
                 try:
                     self.consume(folder / name, digest, checked_against="checkpoint header")
                 except Unavailable as error:

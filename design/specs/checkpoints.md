@@ -166,6 +166,8 @@ images gives the registered images bit for bit.
 
 % W-337
 
+% Amended 2026-11-03 for W-803: a version-3 header's `files` inventory is required (nonempty, naming every payload file the stage reads, with well-formed digests); before, a header without it loaded unchecked. The format, its writer and its version are unchanged.
+
 The header `format_version` is 3 for the three stages (since 2026-10-24). A header of
 version 3 holds `files`: every payload file it relies on, `path` relative to the
 header's folder and `sha256` of its bytes. For `candidates.json` and `pre_qc.json`
@@ -174,9 +176,18 @@ that is the table (`candidates.csv`, `pre_qc.parquet`, ...); for
 (`<snapshot>/<round>.ome.tif`) and the field files (`<round>_field.npz`), each
 hashed as it is written (in streaming mode, round by round). The readers
 ({py:func}`~starfinder.dataset.load_checkpoint`,
-{py:meth}`~starfinder.dataset.FOV.load_checkpoint`) check every listed file before
-they read anything: a missing file or another SHA-256 raises `ValueError` naming
-the file. Headers of versions 1 and 2 hold no hashes and load without the check
+{py:meth}`~starfinder.dataset.FOV.load_checkpoint`) require that inventory and
+check it before they read any payload file. In a header of version 3 `files` is a
+nonempty list of `{path, sha256}` entries that names every payload file the stage
+reads (the table; the round images, snapshots and field files the header's
+`image_rounds`, `snapshots` and `transforms` name), each `path` inside the
+header's folder and each `sha256` 64 lowercase hexadecimal characters, bare or
+prefixed `sha256:`. A header whose `files` is missing, `null` or `[]`, misses a
+file the stage reads, or holds a malformed or `null` digest raises `ValueError`
+naming the stage, the folder and the entry; a listed file that is missing or has
+another SHA-256 raises `ValueError` naming the file. The package writes `files` in
+every version-3 header, so only an edited or malformed header fails the inventory
+check. Headers of versions 1 and 2 hold no hashes and load without the check
 (`READ_VERSIONS` is 1 to 3); version 2 has the layout of version 3 without
 `files`. A version-1 registered checkpoint (before the registration recipe) holds
 translation and dense results, each with its own `application_config`, which
