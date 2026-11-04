@@ -92,11 +92,14 @@ Each engine does the same four things, in its own syntax:
 | --- | --- | --- |
 | `engine` | `snakemake` | `nextflow` |
 | `engine_version` | `snakemake.__version__`, read by the Snakefile when it is parsed | `nextflow.version` |
-| `job_id` | `$JOB_ID` on UGER (set by the scheduler in the job), else Snakemake's job number (`{jobid}` of the shell command) | `$JOB_ID` on UGER, else `task.hash` |
+| `job_id` | `$JOB_ID` on UGER (set by the scheduler in the job), else Snakemake's job number (`{jobid}` of the shell command) | `$JOB_ID` on UGER (the `sge` profile passes it into the container), else the task's hash, read from its work folder |
 | `attempt` | the job's attempt, through a resource `attempt=lambda wildcards, attempt: attempt` | `task.attempt` |
 | `image` | `$STARFINDER_IMAGE`, which the UGER profile's job script sets to the image digest, else `none` | `task.container`: the SIF path under `sge`, a reference by digest on Google Batch, else `none` without an image |
 
 % Amended 2026-11-01 for W-760: the recorded image is what the engine passes, including the SIF path under `sge`.
+% Amended 2026-11-04 for W-805: `task.hash` renders as `null` in a `script:` block at a task's first attempt, so the fallback is the
+% hash read from the work folder (`<first two hex digits>/<the rest>`), which Nextflow names after it; and Apptainer starts from an
+% empty environment, so the `sge` profile passes `$JOB_ID`.
 
 ### Exit status and retries
 
@@ -517,8 +520,9 @@ process FOV {
     output: tuple val(task_id), path("${task_id.replace('/', '.')}.json"), emit: done
     script:
     """
+    task_hash=\$(basename \$(dirname \$PWD))\$(basename \$PWD)
     ${t.command.join(' ')} --engine nextflow --engine-version ${nextflow.version} \\
-        --job-id \${JOB_ID:-${task.hash}} --attempt ${task.attempt} --image ${task.container ?: 'none'} \\
+        --job-id \${JOB_ID:-\$task_hash} --attempt ${task.attempt} --image ${task.container ?: 'none'} \\
         --cache-token ${t.token}
     cp ${params.output_root}/${t.record} .
     """
@@ -1166,6 +1170,10 @@ because `h_vmem` is a per-slot consumable on UGER (W-641); the label `gpu` adds 
 gpu=TRUE,operating_system=RedHat8` and `apptainer.runOptions` `--nv`; `apptainer.enabled true` with
 the SIF of the image; job logs are Nextflow's `.command.log` in the work folder, which sits under
 `/stanley` (`-work-dir`), and the task logs are the commands' own under the output root.
+
+The container starts from an empty environment, so `containerOptions` pass the scheduler's job id as `--env JOB_ID=$JOB_ID`,
+which the job script's shell expands, and the task's `--job-id` reads (W-805). Without a scheduler, as under `local`, the task
+passes the hash of its work folder.
 
 ### Google Batch readiness
 

@@ -6,7 +6,7 @@ process MERGE {
     output:
     tuple val(task_id), path("${task_id.replace('/', '.')}.json"), emit: done
     script:
-    TaskCommands.run(TaskCommands.entry(manifest_path, task_id), manifest_path, token, nextflow.version, task.attempt, task.container, task.hash)
+    TaskCommands.run(TaskCommands.entry(manifest_path, task_id), manifest_path, token, nextflow.version, task.attempt, task.container)
     stub:
     """
     ${TaskCommands.quote(params.stub_runner)} ${TaskCommands.quote(manifest_path)} ${TaskCommands.quote(task_id)} ${TaskCommands.quote(token)} ${task.attempt}
