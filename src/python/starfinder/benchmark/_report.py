@@ -560,8 +560,9 @@ def identities(evaluation, records, protocol):
 
     A trial source gives the method, seed and condition name and its setup (method and condition); a workflow task
     gives the FOV and its setup (task kind, configuration and blocks hashes). A metric the evaluation did not compute
-    may have stopped before recording its arguments: its tasks then come from the recorded metrics specification,
-    checked against its SHA-256, and when that cannot be used the FOV stays empty with a note saying why. A field that
+    may have stopped before recording all its arguments and sources: its sources and tasks then also come from the
+    recorded metrics specification, checked against its SHA-256, whatever its recorded sources hold; when that cannot
+    be used (missing, changed, or not naming the metric) a note says that any FOV it reads is unknown, and why. A field that
     the sources read by one metric give differently stays empty and is noted. The protocol's rows assign the card's
     method and mode and the side, and fill an empty condition, seed or FOV; one that contradicts a saved condition,
     seed or FOV is refused. The trial's own method stays in ``trial_method``.
@@ -575,22 +576,20 @@ def identities(evaluation, records, protocol):
         found = {key: set() for key in IDENTITY}
         setups = set()
         notes = []
-        # A metric skipped at its first argument records no arguments, but names every source it used.
+        # A metric that stopped early records only the arguments and sources it reached before the failure.
         read = [pair for argument in metric.get("arguments", {}).values() for pair in _arguments(argument)]
         read += [(source, None) for source in metric.get("sources") or []]
-        workflow = [s for s in metric.get("sources") or []
-                    if (evaluation.sources.get(s) or {}).get("kind") == "workflow"]
-        if metric.get("outcome") != "computed" and workflow:
-            # Its recorded arguments may be incomplete: the specification names every task it would have read.
+        if metric.get("outcome") != "computed":
+            # Whatever its recorded sources hold, the checked specification names every source and task it reads.
             specification = records.specification()
             if isinstance(specification, dict) and metric["name"] in specification:
                 read += [pair for argument in (specification[metric["name"]].get("arguments") or {}).values()
                          for pair in _arguments(argument)]
-            elif not any(task for source, task in read if source in workflow):
+            else:
                 why = specification if isinstance(specification, str) else \
                     "the metrics specification does not name it"
-                notes.append(f"it was {metric.get('outcome')} before recording which workflow task it reads, and "
-                             f"{why}, so its FOV is unknown")
+                notes.append(f"it was {metric.get('outcome')}, so its recorded arguments may be incomplete, and "
+                             f"{why}: any FOV it reads is unknown")
         for source, task in read:
             for key, value in records.trial_identity(source).items():
                 if value is not None:
@@ -1649,6 +1648,10 @@ def _card(page, key, card, table, frame, evaluation, figures):
     for row in rows[rows["value_name"].notna() & rows["value"].isna()].itertuples():
         notes.append(f"<span class=\"undefined\">{_e(row.metric)} {_e(row.value_name)} undefined</span>: "
                      f"{_e(row.reason)}")
+    # What the saved records could not tell about a row's identity, such as an unknown FOV, is said on the card too.
+    for name, note in dict(zip(rows["metric"], rows["identity_notes"])).items():
+        if note:
+            notes.append(f"<span class=\"error\">{_e(name)} identity</span>: {_e(note)}")
     used = set(", ".join(rows["sources"]).split(", ")) - {""}
     for source in evaluation.record["sources"]:
         if source["name"] in used:

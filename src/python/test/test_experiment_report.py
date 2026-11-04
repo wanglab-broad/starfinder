@@ -634,12 +634,15 @@ def _write_json(path, value):
     return {"path": str(path), "sha256": _sha(path)}
 
 
-def _workflow_evaluation(root, specification="kept"):
+def _workflow_evaluation(root, specification="kept", early=False):
     """A saved evaluation in the approved schema, written by hand: two workflow sources (runs A and B) whose
     manifests and task records name different configuration and blocks hashes; M17's unmatched rate 0.2 for run A's
     FOV_001 and 0.8 for run B's FOV_001; and run A's FOV_002 metric, skipped before it recorded its arguments (its
     task is incomplete), whose task only the recorded metrics specification names. ``specification`` is ``kept``,
-    ``changed`` (its bytes differ from the recorded SHA-256) or ``missing``."""
+    ``changed`` (its bytes differ from the recorded SHA-256), ``missing`` or ``unnamed`` (it does not name that
+    metric). With ``early``, the review's probe of a644a01: the FOV_002 metric first reads a failed files source,
+    ``bad_truth``, so the evaluation records ``sources = ['bad_truth']`` and no workflow source at all
+    (``_evaluate.py`` records only what it reached before the failure)."""
     sources, configuration = [], {"A": "a" * 64, "B": "b" * 64}
     for run in ("A", "B"):
         folder = root / f"run{run}"
@@ -664,6 +667,10 @@ def _workflow_evaluation(root, specification="kept"):
         sources.append({"name": f"run{run}", "kind": "workflow", "status": "verified", "error": None,
                         "limitations": [], "consumed": [], "manifest": manifest, "roots": {"output": str(folder)},
                         "tasks": summary, "incomplete": ["fov/s/FOV_002"]})
+    if early:
+        sources.append({"name": "bad_truth", "kind": "files", "status": "failed", "limitations": [], "consumed": [],
+                        "error": {"type": "SourceFailure", "message": "truth.csv has SHA-256 0…, the sources file 1…"},
+                        "files": {"truth": {"path": str(root / "truth.csv"), "sha256": "1" * 64}}})
 
     def computed(name, run, value):
         return {"name": name, "metric": "M17", "function": "readout.read_status_summary", "parameters": {},
@@ -673,12 +680,16 @@ def _workflow_evaluation(root, specification="kept"):
                 "counts": {"total": 10}, "reasons": {}, "config": {}}
     metrics = [computed("rate-A-1", "A", 0.2), computed("rate-B-1", "B", 0.8),
                {"name": "rate-A-2", "metric": "M17", "function": "readout.read_status_summary", "parameters": {},
-                "arguments": {}, "sources": ["runA"], "outcome": "skipped",
-                "reason": "workflow task fov/s/FOV_002 is not complete: the task record is missing"}]
+                "arguments": {}, "sources": ["bad_truth"] if early else ["runA"], "outcome": "skipped",
+                "reason": "source 'bad_truth' failed: truth.csv has SHA-256 0…" if early else
+                "workflow task fov/s/FOV_002 is not complete: the task record is missing"}]
     specified = {"metrics": [{"name": m["name"], "metric": "M17", "function": "readout.read_status_summary",
-                              "arguments": {"reads": {"source": "runA" if "A" in m["name"] else "runB",
+                              "arguments": {**({"truth": {"source": "bad_truth", "file": "truth"}}
+                                               if early and m["name"] == "rate-A-2" else {}),
+                                            "reads": {"source": "runA" if "A" in m["name"] else "runB",
                                                       "task": "fov/s/FOV_00" + m["name"][-1],
-                                                      "output": "reads.csv"}}} for m in metrics]}
+                                                      "output": "reads.csv"}}}
+                             for m in metrics if not (specification == "unnamed" and m["name"] == "rate-A-2")]}
     path = root / "metrics.yaml"
     spec = _write_json(path, specified)  # JSON is YAML
     if specification == "changed":
@@ -715,21 +726,44 @@ def test_workflow_setups_are_not_pooled_and_a_skipped_metric_keeps_its_fov(tmp_p
                for v in summary["verified"])
     assert any(v["what"].startswith("workflow manifest") for v in summary["verified"])
     _links_resolve(text)
-    # A changed or missing specification leaves the FOV empty, with a finding that says why; nothing is refused.
-    for case, why in (("changed", "differs from its recorded SHA-256"), ("missing", "is missing")):
-        out = R.render(_workflow_evaluation(tmp_path / case, case), tmp_path / f"report-{case}",
-                       revision_check=_revision)
-        values = pd.read_csv(out / "tables" / "values.csv").set_index("metric")
-        assert pd.isna(values.loc["rate-A-2", "fov"])
-        findings = json.loads((out / "report.json").read_text())["findings"]
-        assert any(f["text"].startswith("Metric rate-A-2: it was skipped before recording which workflow task")
-                   and why in f["text"] and "its FOV is unknown" in f["text"] for f in findings)
+    # A changed, missing or unnamed specification leaves the FOV empty, with a note that says why, on the card and
+    # among the findings; nothing is refused.
+    for case, why in (("changed", "differs from its recorded SHA-256"), ("missing", "is missing"),
+                      ("unnamed", "the metrics specification does not name it")):
+        for early in (False, True):
+            out = R.render(_workflow_evaluation(tmp_path / f"{case}-{early}", case, early),
+                           tmp_path / f"report-{case}-{early}", revision_check=_revision)
+            values = pd.read_csv(out / "tables" / "values.csv").set_index("metric")
+            assert pd.isna(values.loc["rate-A-2", "fov"])
+            card = _card((out / "report.html").read_text(), f"card-{UNASSIGNED}")
+            assert "rate-A-2 identity</span>: it was skipped, so its recorded arguments may be incomplete" in card
+            assert why in card and "any FOV it reads is unknown" in card
+            findings = json.loads((out / "report.json").read_text())["findings"]
+            assert any(f["text"].startswith("Metric rate-A-2: it was skipped") and why in f["text"]
+                       and "any FOV it reads is unknown" in f["text"] for f in findings)
     # A changed manifest refuses the report, as a changed trial record does.
     folder = _workflow_evaluation(tmp_path / "manifest")
     manifest = tmp_path / "manifest" / "runA" / "workflow" / "manifest.json"
     manifest.write_text(manifest.read_text().replace("FOV_002", "FOV_009"))
     with pytest.raises(R.SourceMismatch, match="differs from its recorded SHA-256"):
         R.render(folder, tmp_path / "refused", revision_check=_revision)
+
+
+def test_an_early_files_failure_still_gives_the_skipped_metric_its_fov(tmp_path, monkeypatch):
+    """The review's probe of a644a01: a failed files source read before the workflow argument leaves the metric's
+    recorded sources without its workflow source; the checked specification still gives FOV_002, on the card."""
+    _no_processing(monkeypatch)
+    for early in (True, False):  # the probe, and its control with the workflow source already recorded
+        out = R.render(_workflow_evaluation(tmp_path / f"study-{early}", early=early), tmp_path / f"report-{early}",
+                       revision_check=_revision)
+        values = pd.read_csv(out / "tables" / "values.csv").set_index("metric")
+        assert values.loc["rate-A-2", "fov"] == "FOV_002" and values.loc["rate-A-2", "outcome"] == "skipped"
+        assert values.loc["rate-A-2", "setup"] == values.loc["rate-A-1", "setup"]
+        card = _card((out / "report.html").read_text(), f"card-{UNASSIGNED}")
+        assert "skipped at FOV FOV_002" in card and "missing FOVs FOV_002" in card  # run B has no FOV_002 row
+        assert "rate-A-2 identity" not in card and "FOV it reads is unknown" not in card
+        if early:
+            assert "bad_truth" in card  # the failed source is named on the card
 
 
 def test_a_value_without_a_side_is_shown_beside_before_and_after(tmp_path, monkeypatch):

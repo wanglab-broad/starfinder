@@ -94,10 +94,12 @@ with a card, conditions, a cut-off, a hypothesis and an image figure.
 Rows take their method, seed and condition name from the trial records, and
 their FOV from the workflow task records (else from the workflow manifest's
 task entry, else the task id). A metric the evaluation did not compute may have
-stopped before recording which task it reads. Its tasks then come from the
-metrics specification the evaluation recorded, checked against its SHA-256;
-when that file is missing or changed, the FOV stays empty and a finding says
-why. A protocol row assigns a metric to a
+stopped before recording every source and task it reads, for example when an
+earlier files source failed. For every such metric, its sources and tasks also
+come from the metrics specification the evaluation recorded, checked against
+its SHA-256, whatever its recorded sources hold. When that file is missing or
+changed, or does not name the metric, a finding says that any FOV the metric
+reads is unknown, and why. A protocol row assigns a metric to a
 card (`method`, `mode`) and a `side`, and fills a condition, seed or FOV that
 the records do not give. It cannot change one they do give. A key metric is
 written `ID` or `function` for all its values, or `ID:value` for one, such as
