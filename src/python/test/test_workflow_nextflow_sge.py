@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import stat
 from pathlib import Path
 
@@ -17,6 +18,8 @@ THREADS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "ITK_GL
            "NUMEXPR_NUM_THREADS")
 CACHES = "--env XDG_CACHE_HOME=$NXF_TASK_WORKDIR/.cache --env MPLCONFIGDIR=$NXF_TASK_WORKDIR/.config/matplotlib"
 WEIGHTS = "/stanley/WangLab/weights"
+#: Folders a shell would split or unquote if the profile inserted them as they are.
+FOLDERS = [WEIGHTS, "/stanley/model weights", "/stanley/it's a 'model' folder"]
 
 #: The options at the base revision (e78f755, before W-787): the thread variables and the caches, with ``--nv`` first
 #: for a GPU task. With ``weights_dir`` unset the rendered options must stay exactly these.
@@ -25,13 +28,16 @@ BASE_OPTIONS = {"cpu": " ".join(f"--env {name}=1" for name in THREADS) + " " + C
 
 # Stand-ins for the scheduler and the container runtime, which the render needs only to start each task. ``qsub``
 # runs the job script `.command.run` that Nextflow wrote and so reaches the ``apptainer`` line, which records its
-# arguments and runs the task's own command, with the ``--env`` pairs it was given, outside any container.
+# arguments, as the shell of the job script passed them, and runs the task's own command, with the ``--env`` pairs
+# it was given, outside any container.
 QSUB = '''#!/bin/bash
 bash "${@: -1}" > /dev/null 2>&1
 echo 'Your job 1 ("stand-in") has been submitted'
 '''
 QSTAT = "#!/bin/bash\nexit 0\n"
 APPTAINER = '''#!/bin/bash
+mkdir -p "$(dirname "$0")/argv"
+printf '%s\\0' "$@" > "$(dirname "$0")/argv/${APPTAINERENV_NXF_TASK_WORKDIR//\\//_}"
 shift
 while [[ "$1" == -* ]]; do
   case "$1" in --env) export "$2"; shift 2;; --bind|-B) shift 2;; *) shift;; esac
@@ -50,13 +56,15 @@ def stand_ins(folder):
     return folder
 
 
-def apptainer_lines(work):
-    """{label: the `apptainer exec` line of a task's `.command.run`} for one CPU task and the GPU task."""
+def apptainer_lines(work, tools):
+    """{label: (the `apptainer exec` line of a task's `.command.run`, the arguments the stand-in received)} for one CPU
+    task and the GPU task."""
     found = {}
     for script in sorted(Path(work).glob("*/*/.command.run")):
         lines = [line for line in script.read_text().splitlines() if "apptainer exec" in line]
         assert len(lines) == 1, script
-        found.setdefault("gpu" if " --nv " in lines[0] else "cpu", lines[0])
+        argv = (tools / "argv" / str(script.parent).replace("/", "_")).read_text().split("\0")[:-1]
+        found.setdefault("gpu" if " --nv " in lines[0] else "cpu", (lines[0], argv))
     return found
 
 
@@ -74,30 +82,37 @@ def render(tmp_path_factory, *arguments):
                        profile="sge")
     assert done.returncode == 0, done.stdout + done.stderr
     assert {r["status"] for r in N.tasks(rows)} == {"COMPLETED"}
-    return apptainer_lines(work / "work")
+    return apptainer_lines(work / "work", tools)
 
 
 @pytest.fixture(scope="module")
 def unset(tmp_path_factory):
-    return render(tmp_path_factory)
+    return {label: line for label, (line, _) in render(tmp_path_factory).items()}
 
 
-@pytest.fixture(scope="module")
-def given(tmp_path_factory):
-    return render(tmp_path_factory, "--weights_dir", WEIGHTS)
+@pytest.fixture(scope="module", params=FOLDERS, ids=["plain", "spaces", "quotes"])
+def given(request, tmp_path_factory):
+    return request.param, render(tmp_path_factory, "--weights_dir", request.param)
 
 
 def test_each_label_runs_in_the_rendered_job_script(unset, given):
-    assert set(unset) == set(given) == {"cpu", "gpu"}
+    assert set(unset) == set(given[1]) == {"cpu", "gpu"}
 
 
 @pytest.mark.parametrize("label", ["cpu", "gpu"])
 def test_weights_dir_is_passed_to_apptainer_for_cpu_and_gpu_tasks(given, label):
-    line = given[label]
-    assert line.count("STARFINDER_WEIGHTS_DIR") == 1
-    assert f"--env STARFINDER_WEIGHTS_DIR={WEIGHTS} " in line
+    folder, rendered = given
+    line, argv = rendered[label]
+    words = shlex.split(line)
+    pair = f"STARFINDER_WEIGHTS_DIR={folder}"
+    # The folder is one argument of the apptainer command, as the line of the job script reads and as the shell passed it.
+    for arguments in (words, argv):
+        assert [w for w in arguments if "STARFINDER_WEIGHTS_DIR" in w] == [pair]
+        assert arguments[arguments.index(pair) - 1] == "--env"
     # The rest of the options are the base revision's, in their order, with the new pair after the caches.
-    assert f"{BASE_OPTIONS[label]} --env STARFINDER_WEIGHTS_DIR={WEIGHTS} " in line
+    base = shlex.split(BASE_OPTIONS[label])
+    end = words.index(pair) - 1
+    assert words[end - len(base):end] == base
 
 
 @pytest.mark.parametrize("label", ["cpu", "gpu"])
