@@ -1034,6 +1034,9 @@ device=0` (no network, one CPU, 4 GiB):
     `NVIDIA_TF32_OVERRIDE=0`. On one device, bfloat16 and float32 differ by 3 pixels on the CPU and 3
     on the GPU. The difference is therefore bfloat16 rounding on two devices; the image computes the
     float32 result exactly.
+  * Jiahao accepted the bfloat16 difference on 2026-11-04. Cellpose keeps its default
+    `bfloat16: true` on a GPU, and its CUDA labels need not equal the CPU's. A run whose labels must
+    match a CPU run's sets `bfloat16: false`.
 * The peak RSS of the containers was 3.25 GiB (Cellpose on CUDA). The records are in
   `runs/W-792/20261103T161447Z-cuda-variant/results/gpu/`.
 
