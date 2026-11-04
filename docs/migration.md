@@ -149,6 +149,15 @@ need adjustment in the stage entries below.
 | --- | --- |
 | `benchmark.synthetic` | `synthetic` |
 | Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate`, `starfinder benchmark run/evaluate/report` |
+| `python -m starfinder.benchmark._trial trial.json` | `starfinder trial run --config trial.json` |
+| `starfinder.benchmark._experiment.expand_experiment(path, output)` | `starfinder experiment expand --config PATH --output DIR` (a new or empty output folder) |
+| Evaluating saved workflow outputs, checkpoints or trial outputs | `starfinder experiment evaluate --sources PATH --metrics PATH --output DIR` |
+| The engine comparison of `scripts/workflow_golden.py` | `starfinder.evaluation.workflow` (the script calls it) |
+
+The `starfinder benchmark run`, `evaluate` and `report` commands and the
+benchmark lifecycle objects stay, unchanged, until their approved retirement
+(W-781); the new commands do not read or write their records. See the
+{doc}`experiments guide <benchmark/experiments>`.
 
 ## Image I/O and preprocessing calls
 

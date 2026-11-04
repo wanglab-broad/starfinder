@@ -391,3 +391,144 @@ def test_segmentation_trial_generates_a_real_cellular_scene(tmp_path):
     assert labels.shape == (8, 64, 64) and labels[4, 20, 20] == 1 and labels[4, 44, 44] == 2
     scenes = json.loads((tmp_path / "out/scenes.json").read_text())
     assert {"FOV_001/reference/PI", "FOV_004/reference/PI"} <= set(scenes[0]["image_sha256"])
+
+
+# --- The saved trial outputs read by `starfinder experiment evaluate` (W-793; the replacements that
+# design/baselines/benchmark.md names for the old lifecycle's saved-artifact tests) --------------------------------
+
+def _evaluate_trial(tmp_path, monkeypatch, trial, metric, files=None):
+    """``starfinder experiment evaluate`` of one metric on one trial output, with processing patched to raise."""
+    from starfinder.__main__ import main
+    from .test_experiment_evaluate import _no_processing, _tree
+    sources = [dict(name="trial", kind="trial", path=str(trial))]
+    if files:
+        sources.append(dict(name="truth", kind="files", files={
+            key: dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+            for key, path in files.items()}))
+    (tmp_path / "sources.yaml").write_text(yaml.safe_dump(dict(sources=sources)))
+    (tmp_path / "metrics.yaml").write_text(yaml.safe_dump(dict(metrics=[metric])))
+    before = _tree(trial, *(files or {}).values())
+    with monkeypatch.context() as patch:
+        _no_processing(patch)
+        status = main(["experiment", "evaluate", "--sources", str(tmp_path / "sources.yaml"),
+                       "--metrics", str(tmp_path / "metrics.yaml"), "--output", str(tmp_path / "evaluation")])
+    assert _tree(trial, *(files or {}).values()) == before
+    return status, json.loads((tmp_path / "evaluation" / "evaluation.json").read_text())["metrics"][0]
+
+
+def test_nonempty_output_is_preserved(tmp_path, capsys):
+    """The private trial refuses a nonempty output folder, through the entry and the command; nothing in it
+    changes (the old lifecycle's resume protocol is not part of a trial)."""
+    from starfinder.__main__ import main
+    _inputs(tmp_path)
+    (tmp_path / "out").mkdir()
+    (tmp_path / "out" / "earlier.txt").write_text("an earlier attempt")
+    path = tmp_path / "trial.json"
+    path.write_text(json.dumps(dict(method=dict(module="registration", method="translation"),
+                                    inputs=dict(reference="reference.npy", moving="moving.npy"), seed=1,
+                                    root_output_path="out")))
+    with pytest.raises(FileExistsError, match="must be empty"):
+        _main(path)
+    with pytest.raises(SystemExit) as error:
+        main(["trial", "run", "--config", str(path)])
+    assert error.value.code == 2 and "must be empty" in capsys.readouterr().err
+    assert [p.name for p in (tmp_path / "out").iterdir()] == ["earlier.txt"]
+    assert (tmp_path / "out" / "earlier.txt").read_text() == "an earlier attempt"
+
+
+_FRACTIONAL = dict(frame_id="trial/fractional", spacing_zyx=[0.35, 0.65, 0.65], origin_zyx=[0.25, -1.5, 2.125])
+
+
+def _demons(tmp_path):
+    if importlib.util.find_spec("SimpleITK") is None:
+        pytest.skip("SimpleITK required for the demons trial")
+    _inputs(tmp_path)
+    status, record = _main_record(tmp_path, dict(
+        method=dict(module="registration", method="demons", config=dict(iterations=[2], pyramid_mode="sitk")),
+        inputs=dict(reference="reference.npy", moving="moving.npy"), metadata=_FRACTIONAL, seed=5))
+    assert status == 0, record["error"]
+    return record
+
+
+def test_float_transform_and_dense_artifacts(tmp_path, monkeypatch):
+    """Fractional metadata survives the trial record and transform.json exactly; the dense field in transform.npz is
+    the array the evaluation reads (its error against itself is exactly zero)."""
+    record = _demons(tmp_path)
+    assert record["configuration"]["metadata"]["spacing_zyx"] == _FRACTIONAL["spacing_zyx"]
+    assert record["configuration"]["metadata"]["origin_zyx"] == _FRACTIONAL["origin_zyx"]
+    transform = json.loads((tmp_path / "out" / "transform.json").read_text())
+    for key in ("reference_metadata", "moving_metadata"):
+        assert transform["transform"][key]["spacing_zyx"] == _FRACTIONAL["spacing_zyx"]
+        assert transform["transform"][key]["origin_zyx"] == _FRACTIONAL["origin_zyx"]
+    listed = {o["path"]: o for o in record["outputs"]}
+    assert set(listed) == {"transform.npz", "transform.json", "image.npy"}
+    npz = tmp_path / "out" / "transform.npz"
+    assert listed["transform.npz"]["sha256"] == hashlib.sha256(npz.read_bytes()).hexdigest()
+    with np.load(npz) as arrays:
+        field = arrays["result_0"]
+    assert field.shape == (8, 24, 24, 3) and field.dtype.kind == "f" and np.isfinite(field).all()
+    saved = {"source": "trial", "output": "transform.npz", "key": "result_0"}
+    status, metric = _evaluate_trial(tmp_path, monkeypatch, tmp_path / "out", dict(
+        name="identity", function="registration.evaluate_displacement_field",
+        parameters=dict(mask=None, spacing_zyx=_FRACTIONAL["spacing_zyx"]),
+        arguments=dict(estimated=saved, truth=saved)))
+    assert status == 0 and metric["outcome"] == "computed"
+    assert all(value == 0.0 for value in metric["values"].values())
+    assert metric["counts"] == {"total": 8 * 24 * 24, "masked": 8 * 24 * 24}
+
+
+def test_demons_saved_field(tmp_path, monkeypatch):
+    """The saved demons field, evaluated against a supplied zero field: the error norms are the field's own norms,
+    computed here independently, in voxels and in the fractional spacing's physical units."""
+    _demons(tmp_path)
+    with np.load(tmp_path / "out" / "transform.npz") as arrays:
+        field = arrays["result_0"].astype(np.float64)
+    np.save(tmp_path / "zero.npy", np.zeros_like(field))
+    status, metric = _evaluate_trial(
+        tmp_path, monkeypatch, tmp_path / "out", dict(
+            name="demons", metric="M21", function="registration.evaluate_displacement_field",
+            parameters=dict(mask=None, spacing_zyx=_FRACTIONAL["spacing_zyx"]),
+            arguments=dict(estimated={"source": "trial", "output": "transform.npz", "key": "result_0"},
+                           truth={"source": "truth", "file": "zero"})),
+        files={"zero": tmp_path / "zero.npy"})
+    assert status == 0 and metric["outcome"] == "computed"
+    norms = np.linalg.norm(field, axis=-1).ravel()
+    physical = np.linalg.norm(field * np.asarray(_FRACTIONAL["spacing_zyx"]), axis=-1).ravel()
+    assert norms.max() > 0
+    expected = {"median_error": np.median(norms), "p95_error": np.percentile(norms, 95), "max_error": norms.max(),
+                "median_error_physical": np.median(physical), "p95_error_physical": np.percentile(physical, 95),
+                "max_error_physical": physical.max()}
+    for key, value in expected.items():
+        assert metric["values"][key] == pytest.approx(value, rel=1e-9, abs=1e-12), key
+
+
+@pytest.mark.synthetic
+def test_generated_registration_pair_evaluate_only(tmp_path, monkeypatch):
+    """A generated registration pair (``starfinder synthetic generate --mode registration --preset tiny``), its
+    translation trial, then evaluate-only: the saved displacement against the generator's truth shift, within the old
+    lifecycle test's tolerance of one voxel per axis."""
+    from starfinder.__main__ import main
+    assert main(["synthetic", "generate", "--mode", "registration", "--preset", "tiny", "--seed", "42",
+                 "--owner", "pytest", "--output", str(tmp_path / "pair")]) == 0
+    root = tmp_path / "pair" / "synthetic" / "tiny"
+    path = tmp_path / "trial.json"
+    path.write_text(json.dumps(dict(method=dict(module="registration", method="translation"),
+                                    inputs=dict(reference=str(root / "ref.tif"), moving=str(root / "mov_shift.tif")),
+                                    seed=42, root_output_path="out")))
+    assert main(["trial", "run", "--config", str(path)]) == 0
+    truth = json.loads((root / "ground_truth.json").read_text())["pairs"]["shift"]["shift_zyx"]
+    status, metric = _evaluate_trial(
+        tmp_path, monkeypatch, tmp_path / "out", dict(
+            name="shift", function="registration.evaluate_translation",
+            parameters=dict(units="voxel", tolerance=1.0),
+            arguments=dict(
+                detected={"mapping": {"moving": {"source": "trial", "output": "transform.json",
+                                                 "key": "transform.displacement_zyx"}}},
+                truth={"mapping": {"moving": {"source": "truth", "file": "truth", "key": "pairs.shift.shift_zyx"}}},
+                reference_metadata={"source": "trial", "metadata": True},
+                observed_metadata={"source": "trial", "metadata": True})),
+        files={"truth": root / "ground_truth.json"})
+    assert status == 0 and metric["outcome"] == "computed" and metric["values"]["passed"] is True
+    displacement = json.loads((tmp_path / "out" / "transform.json").read_text())["transform"]["displacement_zyx"]
+    assert metric["values"]["max_error"] == pytest.approx(
+        float(np.max(np.abs(np.subtract(displacement, truth)))), rel=1e-9, abs=1e-12)

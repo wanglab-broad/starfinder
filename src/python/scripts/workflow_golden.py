@@ -70,6 +70,9 @@ REPO = HERE.parents[2]
 sys.path.insert(0, str(HERE.parent / "test"))
 import expected_values as EV  # noqa: E402
 from starfinder._execution import THREAD_VARIABLES  # noqa: E402
+# R8: the comparison lives in the package's evaluation; this script records the goldens and calls it.
+from starfinder.evaluation.workflow import (TOLERANCES, array_differences, record_differences,  # noqa: E402
+                                            table_differences, value_differences, values_match as _close)
 
 PRESET = "sample-tiny-v1"
 DATASET_ID = PRESET
@@ -710,7 +713,6 @@ def extract_export(work, out):
 
 # --- the comparison -----------------------------------------------------------------------------------------------
 
-TOLERANCES = {"float64": EV.FLOAT64, "float32": {"rtol": 1e-6, "atol": 1e-6}}
 # The digest a run record holds of each checkpoint stage record: candidates.json names the software it ran with
 # (detection_diagnostics.software), so the digest is an identity of the recording environment, like the file digests,
 # and a comparison across environments skips it (W-643: NumPy 2.3.5 against 2.2.6 changed only that leaf).
@@ -729,49 +731,12 @@ OUTPUT_FILE_DIGEST = re.compile(r"^records/fovs/[^/]+/(?:checkpoints/pre_qc\.jso
                                 r"run\.json\.outputs\.molecules)\.sha256: ")
 
 
-def _close(actual, expected, kind):
-    """Whether a value matches: exactly, or within the tolerance of its kind for two non-Boolean numbers."""
-    numbers = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (actual, expected))
-    if kind in ("exact", "same_environment") or not numbers:
-        return type(actual) is type(expected) and actual == expected
-    return bool(np.isclose(actual, expected, equal_nan=True, **TOLERANCES[kind]))
-
-
-def record_differences(actual, expected, where=""):
-    """How a normalized record differs: floats within the float64 tolerance, every other leaf exactly."""
-    if isinstance(expected, dict) and isinstance(actual, dict):
-        lines = [f"{where}.{k}: only in {'expected' if k in expected else 'actual'}"
-                 for k in sorted(set(expected) ^ set(actual))]
-        for key in expected:
-            if key in actual:
-                lines += record_differences(actual[key], expected[key], f"{where}.{key}")
-        return lines
-    if isinstance(expected, list) and isinstance(actual, list):
-        if len(actual) != len(expected):
-            return [f"{where}: {len(actual)} items != {len(expected)}"]
-        return [line for i, (a, e) in enumerate(zip(actual, expected))
-                for line in record_differences(a, e, f"{where}[{i}]")]
-    kind = "float64" if isinstance(expected, float) else "exact"
-    return [] if _close(actual, expected, kind) else [f"{where}: {actual!r} != {expected!r} ({kind})"]
-
-
 def compare(expected_dir, actual_dir, *, same_environment=True):
     """The differences between two ``extract`` folders, as readable lines (empty when they match)."""
     expected_dir, actual_dir = Path(expected_dir), Path(actual_dir)
-    lines = []
-    expected = json.loads((expected_dir / "values.json").read_text())
-    actual = json.loads((actual_dir / "values.json").read_text())
-    for key in sorted(set(expected) | set(actual)):
-        if key not in actual or key not in expected:
-            lines.append(f"{key}: only in {'expected' if key in expected else 'actual'}")
-            continue
-        e, a = expected[key], actual[key]
-        if e["compare"] != a["compare"]:
-            lines.append(f"{key}: comparison {a['compare']} != {e['compare']}")
-        elif not same_environment and (e["compare"] == "same_environment" or key.startswith(FIXTURE_DIGEST)):
-            continue
-        elif not _close(a["value"], e["value"], e["compare"]):
-            lines.append(f"{key}: {a['value']!r} != {e['value']!r} ({e['compare']})")
+    lines = value_differences(json.loads((expected_dir / "values.json").read_text()),
+                              json.loads((actual_dir / "values.json").read_text()),
+                              same_environment=same_environment, environment_keys=(FIXTURE_DIGEST,))
     names = lambda folder: {p.relative_to(folder / "records").as_posix() for p in (folder / "records").rglob("*.json")}
     for name in sorted(names(expected_dir) | names(actual_dir)):
         e, a = expected_dir / "records" / name, actual_dir / "records" / name
@@ -791,20 +756,9 @@ def compare(expected_dir, actual_dir, *, same_environment=True):
             continue
         e, a = EV.read_table(expected_dir / name), EV.read_table(actual_dir / name)
         close = [c for c, d in dtypes_e[name].items() if d == "float64" and not _integral(e[c])]
-        lines += [f"{name}: {line}" for line in EV.table_differences(a, e, close)]
-    e, a = EV.read_arrays(expected_dir / "arrays.npz"), EV.read_arrays(actual_dir / "arrays.npz")
-    for name in sorted(set(e) | set(a)):
-        if name not in a or name not in e:
-            lines.append(f"arrays {name}: only in {'expected' if name in e else 'actual'}")
-        elif e[name].dtype != a[name].dtype or e[name].shape != a[name].shape:
-            lines.append(f"arrays {name}: differ")
-        elif e[name].dtype.kind == "f":
-            # A float array (an AnnData matrix, repair 1) within the tolerance of its dtype, NaN equal to NaN.
-            tolerance = TOLERANCES["float32" if e[name].dtype == np.float32 else "float64"]
-            if not np.allclose(a[name], e[name], equal_nan=True, **tolerance):
-                lines.append(f"arrays {name}: differ")
-        elif not np.array_equal(e[name], a[name]):
-            lines.append(f"arrays {name}: differ")
+        lines += [f"{name}: {line}" for line in table_differences(a, e, close)]
+    # A float array (an AnnData matrix, repair 1) within the tolerance of its dtype, NaN equal to NaN.
+    lines += array_differences(EV.read_arrays(expected_dir / "arrays.npz"), EV.read_arrays(actual_dir / "arrays.npz"))
     return lines
 
 

@@ -1,8 +1,9 @@
 # Benchmark
 
 :::{container} sf-lead
-The benchmark tools run explicit cases on stated inputs, evaluate the saved outputs and
-report them with their provenance.
+The benchmark tools expand experiments into one-process trials, evaluate saved
+trial, workflow and checkpoint outputs without processing them again, and keep
+every result with its provenance.
 :::
 
 ::::{grid} 1 1 3 3
@@ -19,7 +20,7 @@ Input identities and synthetic presets.
 :link: experiments
 :link-type: doc
 :class-card: sf-card
-The benchmark lifecycle, recipes and research scripts.
+Experiment, trial and evaluation commands, the benchmark lifecycle, recipes and research scripts.
 :::
 
 :::{grid-item-card} Results

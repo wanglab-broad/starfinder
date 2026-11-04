@@ -132,6 +132,28 @@ Resource predictions
 
    resource_prediction_errors
 
+Workflow output comparison
+--------------------------
+
+The comparison of two workflow runs' extracted values, moved from
+``scripts/workflow_golden.py``, which records the workflow goldens and calls
+it. Identities (``exact``, ``same_environment``) never take a tolerance;
+``float64`` and ``float32`` values compare within the tolerances of
+:doc:`../contributing` ("Expected values and tolerances").
+
+.. currentmodule:: starfinder.evaluation.workflow
+
+.. autosummary::
+   :toctree: generated
+
+   array_differences
+   COMPARISON_KINDS
+   record_differences
+   table_differences
+   TOLERANCES
+   value_differences
+   values_match
+
 Examples
 --------
 

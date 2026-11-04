@@ -28,6 +28,7 @@ extensions = [
     "benchmark_profiles",
     "report_tables",
     "workflow_config",
+    "experiment_commands",
 ]
 # Parse only project-owned MATLAB code; no MATLAB process or license is needed.
 matlab_src_dir = str(Path(__file__).resolve().parents[1] / "src" / "matlab")

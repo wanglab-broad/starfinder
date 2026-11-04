@@ -6,6 +6,11 @@ evaluate their saved outputs, and write JSON and CSV reports. Use the
 {doc}`dataset catalog <datasets>` to identify inputs. The
 {doc}`benchmark API <api/benchmark>` provides the Python entry points.
 
+The `starfinder experiment` and `starfinder trial` commands, which expand
+experiments, run one trial per process and evaluate saved workflow, checkpoint
+and trial outputs, are described in the {doc}`experiments guide <benchmark/experiments>`.
+The lifecycle commands on this page stay until their approved retirement.
+
 ## Quick start
 
 From `src/python`, run this smoke example with a new output directory:

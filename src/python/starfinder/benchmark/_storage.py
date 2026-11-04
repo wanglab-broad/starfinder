@@ -5,18 +5,14 @@ from pathlib import Path
 import numpy as np
 
 from starfinder._records import file_sha256
+# The exclusive-creation JSON writer and the file reference are the synthetic command's too (R7).
+from starfinder.synthetic._storage import _reference, _write
 
 SCHEMA_VERSION = 1
 
 
 def _identity(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, allow_nan=False).encode()).hexdigest()
-
-
-def _write(path, value):
-    # Exclusive creation: even interrupted attempts are never overwritten.
-    with Path(path).open('x') as stream:
-        json.dump(value, stream, indent=2, sort_keys=True, allow_nan=False)
 
 
 def _read(path):
@@ -29,10 +25,6 @@ def _inside(root, name):
     if not path.is_relative_to(Path(root).resolve()):
         raise ValueError(f'artifact escapes root: {name}')
     return path
-
-
-def _reference(root, path):
-    return {'path': str(Path(path).relative_to(root)), 'sha256': file_sha256(path)}
 
 
 def _verified(root, ref):
