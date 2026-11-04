@@ -123,7 +123,7 @@ See {py:class}`~starfinder.spot_finding.SpotFindingPlan` and
 | `software` | The versions of starfinder, NumPy, SciPy, scikit-image and the method's libraries |
 | `execution` | The device, the torch build for the learned methods, and the thread settings |
 | `coordinate_units`, `singleton_z_policy`, `measurements` | `voxel_index`, how a Z=1 image is detected, and what each measured column means |
-| `rounds` | A plan with `rounds`: per round, `thresholds`, `counts`, `outcomes`, `noise` and `merged`, which are then not at the top level |
+| `rounds` | A plan with `rounds`: per round, `thresholds`, `counts`, `outcomes`, `noise`, `merged` and `plateaus`, which are then not at the top level |
 
 ## Pretrained weights
 
