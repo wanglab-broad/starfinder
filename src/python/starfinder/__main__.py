@@ -1,5 +1,4 @@
-"""Command line adapters for synthetic generation, experiments and trials, the benchmark lifecycle, pretrained weights
-and the workflow."""
+"""Command line adapters for synthetic generation, experiments and trials, pretrained weights and the workflow."""
 import argparse
 from pathlib import Path
 import sys
@@ -68,19 +67,6 @@ def _parser():
     trial_run.add_argument('--config', type=Path, required=True,
                            help='Trial mapping (YAML or JSON), such as a trial-NNNNNN.json of experiment expand; its '
                                 'root_output_path must be new or empty')
-    benchmark = groups.add_parser('benchmark', help='Run, reevaluate, or report saved trials')
-    commands = benchmark.add_subparsers(dest='command', required=True)
-    run = commands.add_parser('run')
-    run.add_argument('--config', type=Path, required=True, help='JSON: schema_version, cases, repetitions, optional provenance')
-    run.add_argument('--input-root', type=Path, required=True)
-    run.add_argument('--output-root', type=Path, required=True)
-    run.add_argument('--owner', required=True)
-    run.add_argument('--run-id')
-    run.add_argument('--resume', action='store_true', help='Verify identity and skip completed trials; no overwrite')
-    evaluate = commands.add_parser('evaluate')
-    evaluate.add_argument('--run-dir', type=Path, required=True)
-    report = commands.add_parser('report')
-    report.add_argument('--evaluation-dir', type=Path, required=True)
     weights = groups.add_parser('weights', help='Fetch, list and verify the known pretrained weights and '
                                 'segmentation models')
     weight_commands = weights.add_subparsers(dest='command', required=True)
@@ -113,47 +99,25 @@ def main(argv=None):
             return _weights(args)
         if args.group in ('experiment', 'trial'):
             return _experiment(args)
-        if args.group == 'synthetic':
-            from starfinder.synthetic import BENCHMARK_PRESETS
-            from starfinder.synthetic._storage import (MANIFEST_SCHEMA_VERSION, _reference, _write, _write_dataset,
-                                                       _write_registration_pairs)
-            if not args.owner.strip():
-                raise ValueError('owner must be nonempty')
-            if args.preset not in BENCHMARK_PRESETS:
-                raise ValueError(f'unknown preset {args.preset!r}; choose from {list(BENCHMARK_PRESETS)}')
-            args.output.mkdir(parents=True, exist_ok=False)
-            options = dict(seed=args.seed, dtype=args.dtype, noise=not args.no_noise)
-            if args.mode == 'e2e':
-                _write_dataset(args.preset, args.output, **options)
-            else:
-                _write_registration_pairs(args.preset, args.output, **options)
-            _write(args.output / 'manifest.json', {'schema_version': MANIFEST_SCHEMA_VERSION,
-                'owner': args.owner, 'command': vars(args) | {'output': str(args.output)},
-                'artifacts': [_reference(args.output, p) for p in sorted(args.output.rglob('*')) if p.is_file()],
-                'backup_status': 'unverified', 'retention': 'owner decision; retain through handoff'})
-            print(args.output)
-            return 0
-        from starfinder.benchmark import BenchmarkCase, run_benchmark, evaluate_benchmark, report_benchmark
-        from starfinder.benchmark._storage import _read, SCHEMA_VERSION
-        if args.command == 'run':
-            config = _read(args.config)
-            if config.get('schema_version') != SCHEMA_VERSION or set(config) - {'schema_version', 'cases', 'repetitions', 'provenance'}:
-                raise ValueError('unsupported benchmark configuration schema or fields')
-            path = run_benchmark([BenchmarkCase.from_dict(c) for c in config['cases']],
-                input_root=args.input_root, output_root=args.output_root, owner=args.owner,
-                repetitions=config['repetitions'], provenance=config.get('provenance'),
-                run_id=args.run_id, resume=args.resume)
-            from starfinder.benchmark._lifecycle import _load_run, _trials
-            root, manifest = _load_run(path)
-            failed = any(t.status['processing'] == 'failed' for t in _trials(root, manifest))
-        elif args.command == 'evaluate':
-            path = evaluate_benchmark(args.run_dir)
-            failed = any(t['status']['evaluation'] in ('failed', 'skipped') for t in _read(path / 'results.json'))
+        from starfinder.synthetic import BENCHMARK_PRESETS
+        from starfinder.synthetic._storage import (MANIFEST_SCHEMA_VERSION, _reference, _write, _write_dataset,
+                                                   _write_registration_pairs)
+        if not args.owner.strip():
+            raise ValueError('owner must be nonempty')
+        if args.preset not in BENCHMARK_PRESETS:
+            raise ValueError(f'unknown preset {args.preset!r}; choose from {list(BENCHMARK_PRESETS)}')
+        args.output.mkdir(parents=True, exist_ok=False)
+        options = dict(seed=args.seed, dtype=args.dtype, noise=not args.no_noise)
+        if args.mode == 'e2e':
+            _write_dataset(args.preset, args.output, **options)
         else:
-            path = report_benchmark(args.evaluation_dir)
-            failed = False
-        print(path)
-        return int(failed)
+            _write_registration_pairs(args.preset, args.output, **options)
+        _write(args.output / 'manifest.json', {'schema_version': MANIFEST_SCHEMA_VERSION,
+            'owner': args.owner, 'command': vars(args) | {'output': str(args.output)},
+            'artifacts': [_reference(args.output, p) for p in sorted(args.output.rglob('*')) if p.is_file()],
+            'backup_status': 'unverified', 'retention': 'owner decision; retain through handoff'})
+        print(args.output)
+        return 0
     except (OSError, ValueError, TypeError, KeyError) as exc:
         parser.error(str(exc))
 

@@ -144,11 +144,20 @@ def test_fov_namespace_and_downstream_identity(tmp_path):
     assert fov.spot_result.spot_namespace != namespace
 
 
-def test_mip_caller_keeps_two_spatial_axes():
-    from starfinder.benchmark._legacy_evaluation import _evaluate_images
+def test_explicit_mip_keeps_two_spatial_axes():
+    """Project explicitly, detect, then evaluate: two spots at one Y and distinct X stay two detections."""
+    from starfinder.evaluation.spot_finding import f1_score
+    from starfinder.preprocessing import ProjectionConfig, project_image
     image = np.zeros((3, 24, 24), dtype=np.uint8)
     image[1, 10, 8] = 100
     image[1, 10, 16] = 200  # same Y, distinct X must not collapse into one spot
-    report = _evaluate_images(image, image, image, use_mip=True)
-    assert report['n_spots_ref'] == 2
-    assert report['match_rate_after'] == 1.0
+    projected = project_image(image[..., None], config=ProjectionConfig())
+    assert projected.shape == (1, 24, 24, 1)
+    metadata = ImageMetadata('mip/reference')
+    spots = find_spots(projected, config=PercentileCentroidConfig(99.5), metadata=metadata,
+                       spot_namespace='mip').spots
+    assert len(spots) == 2 and sorted(spots.x) == [8, 16] and set(spots.y) == {10} and set(spots.z) == {0}
+    truth = np.array([[0., 10., 8.], [0., 10., 16.]])
+    result = f1_score(spots[['z', 'y', 'x']].to_numpy(float), truth, policy='greedy', threshold=2.0,
+                      boundary='inclusive', units='voxel', reference_metadata=metadata, observed_metadata=metadata)
+    assert result.counts['matched'] == 2 and result.values['f1'] == 1.0

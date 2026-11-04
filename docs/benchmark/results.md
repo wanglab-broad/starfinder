@@ -7,10 +7,5 @@ computed metric's details). The {doc}`experiments guide <experiments>` shows how
 to create it, and the {doc}`commands reference <commands>` lists its fields.
 `starfinder experiment report` renders it in a folder of its own, outside Git:
 `report.html`, `report.json`, `tables/` and `figures/`; the
-{doc}`report guide <report>` describes the page.
-
-The older benchmark lifecycle saves its report under its evaluation directory
-as `trials.json` and `summary.csv`. The {doc}`lifecycle guide <../benchmark>`
-shows how to create it, and the {doc}`recipe reference <../benchmark-recipes>`
-lists its files. Results describe the supplied cases and metrics; they do not
-establish accuracy on other inputs.
+{doc}`report guide <report>` describes the page. Results describe the supplied
+sources and metrics; they do not establish accuracy on other inputs.

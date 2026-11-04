@@ -2,8 +2,8 @@ starfinder.evaluation
 =====================
 
 Metrics for supplied images, points, masks and read tables. The
-:doc:`benchmark guide <../benchmark>` shows how to evaluate saved results; the
-:doc:`benchmark reference <../benchmark-recipes>` lists cases and metric outputs.
+:doc:`experiments guide <../benchmark/experiments>` shows how to evaluate saved results; the
+:doc:`commands reference <../benchmark/commands>` lists the evaluation's records and metric outputs.
 
 Result record
 -------------

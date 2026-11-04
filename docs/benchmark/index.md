@@ -20,7 +20,7 @@ Input identities and synthetic presets.
 :link: experiments
 :link-type: doc
 :class-card: sf-card
-Experiment, trial, evaluation and report commands, the benchmark lifecycle, recipes and research scripts.
+Experiment, trial, evaluation and report commands, and the codebook-aware research scripts.
 :::
 
 :::{grid-item-card} Results

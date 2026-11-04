@@ -1,8 +1,8 @@
 """Source revision record of a benchmark run: the commit and a checksum of uncommitted changes (W-288).
 
-The one definition behind the ``_revision()`` of image_statistics.py and
-preprocessing_synthetic.py, which load this file by its location so that it works
-both when they run as scripts and when they are loaded by file location.
+The one definition behind the ``_revision()`` of image_statistics.py (and of the retired
+preprocessing_synthetic.py, W-781), which loads this file by its location so that it works
+both when it runs as a script and when it is loaded by file location.
 """
 import hashlib
 import os

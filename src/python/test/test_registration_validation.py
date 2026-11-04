@@ -18,7 +18,6 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from starfinder.benchmark import BenchmarkCase, evaluate_benchmark, run_benchmark
 from starfinder.dataset import (CheckpointConfig, Dataset, PipelineConfig, RoundState)
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.evaluation.registration import (_valid_overlap, evaluate_displacement_field, evaluate_translation,
@@ -182,25 +181,27 @@ def test_v1_known_translation(size, translation, seed):
 
 
 @pytest.mark.parametrize("size,translation,seed", translation_params())
-def test_v1_known_translation_benchmark_task(size, translation, seed, tmp_path):
-    """The registration benchmark task on the same pair, with evaluation {translation: {tolerance: 0.5}}."""
+def test_v1_known_translation_trial(size, translation, seed, tmp_path):
+    """The private trial entry (``starfinder trial run``) on the same pair; evaluate_translation, called
+    independently on the saved transform, with the strict gate {tolerance: 0.5}."""
+    from starfinder.benchmark._trial import _main
     reference, moving, displacement = translation_pair(size, translation, seed)
-    inputs = tmp_path / "inputs"
-    inputs.mkdir()
-    np.save(inputs / "reference.npy", reference)
-    np.save(inputs / "moving.npy", moving)
-    (inputs / "displacement.json").write_text(json.dumps(displacement))
-    case = BenchmarkCase(f"v1-{size}-{seed}", "registration", {"reference": "reference.npy", "moving": "moving.npy"},
-                         {"registration": {"method": "translation"}, "reference_metadata": {"frame_id": "reference"},
-                          "moving_metadata": {"frame_id": "moving"},
-                          "evaluation": {"translation": {"tolerance": TRANSLATION_TOLERANCE}}},
-                         truth={"displacement": "displacement.json"})
-    run = run_benchmark([case], input_root=inputs, output_root=tmp_path / "runs", owner="pytest")
-    (record,) = json.loads((evaluate_benchmark(run) / "results.json").read_text())
-    assert record["status"]["processing"] == "success"
-    metric = record["metrics"]["translation"]
-    assert metric["config"]["tolerance"] == TRANSLATION_TOLERANCE and metric["config"]["boundary"] == "exclusive"
-    assert metric["values"]["passed"] is True and metric["values"]["max_error"] < TRANSLATION_TOLERANCE, metric
+    np.save(tmp_path / "reference.npy", reference)
+    np.save(tmp_path / "moving.npy", moving)
+    trial = tmp_path / "trial.json"
+    trial.write_text(json.dumps({"method": {"module": "registration", "method": "translation"},
+                                 "inputs": {"reference": "reference.npy", "moving": "moving.npy"},
+                                 "seed": seed, "root_output_path": "out"}))
+    assert _main(trial) == 0
+    record = json.loads((tmp_path / "out" / "record.json").read_text())
+    assert record["status"] == "succeeded" and record["configuration"]["method"]["method"] == "translation"
+    saved = json.loads((tmp_path / "out" / "transform.json").read_text())["transform"]
+    metadata = ImageMetadata(**record["configuration"]["metadata"])
+    metric = evaluate_translation({"moving": saved["displacement_zyx"]}, {"moving": displacement},
+                                  reference_metadata=metadata, observed_metadata=metadata, units="voxel",
+                                  tolerance=TRANSLATION_TOLERANCE)
+    assert metric.config["tolerance"] == TRANSLATION_TOLERANCE and metric.config["boundary"] == "exclusive"
+    assert metric.values["passed"] is True and metric.values["max_error"] < TRANSLATION_TOLERANCE, metric
 
 
 # ============================================================================ V2, V3: known rigid and affine maps

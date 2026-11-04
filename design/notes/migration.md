@@ -24,7 +24,7 @@ are not examples of the current API.
 | `decode_color_seq` | `readout.colors_to_bases` |
 | `benchmark.synthetic` | `synthetic` |
 | `registration.metrics`, benchmark truth comparisons | Pure domain functions in `evaluation` |
-| Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate`, `starfinder benchmark run/evaluate/report` |
+| Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate`, `starfinder benchmark run/evaluate/report` (the benchmark commands were removed in W-781; see docs/migration.md) |
 | `io.read_checkpoint` | `dataset.load_checkpoint` (no alias) |
 | `io.export_spots` | `readout.export_spots` (no alias) |
 | `sample_output.SampleSegmentation` | `segmentation.SampleSegmentation` (no alias) |
@@ -450,7 +450,7 @@ truth records, or streams each round to a callback; `synthetic.save_amplicon_dat
 writes an in-memory dataset. The CLI persists generated inputs; benchmark cases
 explicitly select them.
 `evaluation` accepts supplied results/truth and explicit matching/units; it does
-not rerun algorithms. [Benchmark](../../docs/benchmark.md) documents immutable processing
+not rerun algorithms. [Benchmark](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/docs/benchmark.md) (the lifecycle guide, removed in W-781) documented immutable processing
 runs, checksum validation, and separate saved-output evaluations/reports.
 
 ### Generate synthetic data with one generator
@@ -2622,7 +2622,7 @@ reinterpreted as a single-segment predicate.
 
 Detailed numerical policies, tolerances and edge cases remain canonical in
 [contracts](../../docs/api/contracts.md), [evaluation](../../docs/api/evaluation.registration.rst),
-[synthetic](../../docs/api/synthetic.rst) and [benchmark recipes](../../docs/benchmark-recipes.md).
+[synthetic](../../docs/api/synthetic.rst) and [benchmark recipes](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/docs/benchmark-recipes.md) (removed in W-781).
 This guide does not claim bitwise equivalence or MATLAB runtime validation.
 Scientific qualification remains separate; notably, molecular truth and
 calibration of synthetic appearance remain unresolved.

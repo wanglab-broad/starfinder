@@ -25,7 +25,6 @@ extensions = [
     "sphinx_design",
     "synthetic_presets",
     "method_tables",
-    "benchmark_profiles",
     "report_tables",
     "workflow_config",
     "experiment_commands",

@@ -4,11 +4,12 @@ design/specs/benchmark.md, "Proposed public names and migration". Each command h
 statuses (0 done, 1 a method, source or metric failure with its record written, 2 a usage or input error with nothing
 written), and writes the records the specification names: ``manifest.json`` (``starfinder.benchmark.experiment/1``),
 ``record.json`` (``starfinder.benchmark.trial/1``) and ``evaluation.json``. No scheduler, retry or workflow task kind is
-added, and the old ``benchmark`` commands stay until W-781.
+added. W-781 removed the old ``benchmark`` commands and lifecycle objects: they are refused, with no alias.
 """
 import hashlib
 import json
 from pathlib import Path
+import re
 
 import numpy as np
 import pytest
@@ -48,17 +49,24 @@ def _exit(capsys, *argv):
 
 
 @pytest.mark.parametrize("command", [
-    ("experiment",), ("experiment", "expand"), ("experiment", "evaluate"), ("trial",), ("trial", "run"),
-    ("benchmark", "run"), ("benchmark", "evaluate"), ("benchmark", "report"), ("synthetic", "generate"),
+    ("experiment",), ("experiment", "expand"), ("experiment", "evaluate"), ("experiment", "report"), ("trial",),
+    ("trial", "run"), ("synthetic", "generate"),
 ])
 def test_commands_help_and_exit_status(capsys, command):
     status, captured = _exit(capsys, *command, "--help")
     assert status == 0 and captured.out.startswith("usage: starfinder " + " ".join(command))
-    if command in [("experiment", "expand"), ("experiment", "evaluate"), ("trial", "run")]:
+    if command in [("experiment", "expand"), ("experiment", "evaluate"), ("experiment", "report"), ("trial", "run")]:
         text = " ".join(captured.out.split())
         assert "Exit 0" in text and "2 for" in text
-        if command != ("experiment", "expand"):
+        if command not in [("experiment", "expand"), ("experiment", "report")]:
             assert "1 when" in text
+
+
+@pytest.mark.parametrize("command", [("benchmark", "run"), ("benchmark", "evaluate"), ("benchmark", "report")])
+def test_old_benchmark_commands_are_refused(capsys, command):
+    """W-781 removed ``starfinder benchmark``: usage error 2, nothing run."""
+    status, captured = _exit(capsys, *command, "--help")
+    assert status == 2 and "invalid choice: 'benchmark'" in captured.err
 
 
 def test_expand_writes_the_private_manifest_and_refuses_a_nonempty_output(tmp_path, capsys):
@@ -167,3 +175,66 @@ def test_the_reference_names_every_metric_module_and_outcome():
     guide = (DOCS / "benchmark" / "experiments.md").read_text()
     assert all(f"`{module}`" in reference for module in METRIC_MODULES)
     assert all(f"`{outcome}`" in guide for outcome in OUTCOMES)
+
+
+def test_removed_api_and_invalid_config(tmp_path, capsys):
+    """The removed lifecycle names stay removed, with no alias, and unknown fields fail explicitly."""
+    import starfinder.benchmark as benchmark
+    for name in ("BenchmarkSuite", "BenchmarkResult", "RegistrationBenchmarkRunner", "RegistrationResult", "benchmark",
+                 "measure", "run_comparison", "BenchmarkCase", "BenchmarkTrialResult", "run_benchmark",
+                 "evaluate_benchmark", "report_benchmark"):
+        assert not hasattr(benchmark, name), name
+    import starfinder
+    assert not any("benchmark" in name.lower() for name in starfinder.__all__)
+    _inputs(tmp_path)
+    good = dict(method=dict(module="registration", method="translation"),
+                inputs=dict(reference="reference.npy", moving="moving.npy"), seed=1)
+    # An unknown trial key and an unknown method field: the trial fails with its record saying why (exit 1).
+    for name, change, error in (("key", dict(typo=True), ("ValueError", "unsupported trial keys")),
+                                ("field", dict(method=dict(good["method"], config=dict(typo=1))),
+                                 ("TypeError", "unexpected keyword argument 'typo'"))):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(dict(good, root_output_path=name, **change)))
+        assert main(["trial", "run", "--config", str(path)]) == 1
+        record = json.loads((tmp_path / name / "record.json").read_text())
+        assert record["status"] == "failed" and record["outputs"] == []
+        assert record["error"]["type"] == error[0] and error[1] in record["error"]["message"]
+    # An unknown experiment key is refused before anything is written (exit 2).
+    experiment = tmp_path / "experiment.yaml"
+    experiment.write_text(yaml.safe_dump(dict(methods=[good["method"]], conditions=[{}], seeds=[1],
+                                              inputs=[good["inputs"]], cases=[])))
+    status, captured = _exit(capsys, "experiment", "expand", "--config", str(experiment), "--output",
+                             str(tmp_path / "expanded"))
+    assert status == 2 and "unsupported experiment keys" in captured.err and not (tmp_path / "expanded").exists()
+
+
+#: The archive links of docs/migration.md: the GitHub blob of a removed file at an immutable revision.
+ARCHIVE = re.compile(r"https://github\.com/wanglab-broad/starfinder/blob/([0-9a-f]+)/([^)#\s]+)")
+
+
+def test_explicit_config_and_archive_links(tmp_path, monkeypatch, capsys):
+    """The documented replacement configuration is explicit and expands with no processing; each archive link of
+    docs/migration.md names a file that is gone from the tree, at a full immutable revision that holds it."""
+    import runpy
+    import subprocess
+    monkeypatch.setattr("sys.argv", ["experiment_inputs.py", str(tmp_path / "example")])
+    runpy.run_path(str(DOCS / "examples" / "experiment_inputs.py"), run_name="__main__")
+    config = yaml.safe_load((tmp_path / "example" / "experiment.yaml").read_text())
+    assert set(config) <= {"methods", "conditions", "seeds", "inputs", "metadata", "root_output_path"}
+    manifest = expand_experiment(tmp_path / "example" / "experiment.yaml", tmp_path / "trials")
+    assert len(manifest["trials"]) == len(config["methods"]) * len(config["conditions"]) * len(config["seeds"]) * len(
+        config["inputs"])
+    assert not any(p.name == "record.json" for p in tmp_path.rglob("*"))
+    capsys.readouterr()
+    links = ARCHIVE.findall((DOCS / "migration.md").read_text())
+    removed = {"benchmarks/recipes.py", "benchmarks/report_saved.py", "benchmarks/preprocessing_synthetic.py",
+               "benchmarks/preprocessing_report.py", "src/python/starfinder/benchmark/_lifecycle.py",
+               "design/notes/benchmark-recipes.md"}
+    assert removed <= {path for _, path in links}
+    root = DOCS.parent
+    git = (root / ".git").exists()
+    for revision, path in links:
+        assert len(revision) == 40, (revision, path)
+        assert not (root / path).exists(), f"{path} is a live file, not an archived one"
+        if git:
+            subprocess.run(["git", "-C", str(root), "cat-file", "-e", f"{revision}:{path}"], check=True)

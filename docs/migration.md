@@ -148,18 +148,37 @@ need adjustment in the stage entries below.
 | Before | After |
 | --- | --- |
 | `benchmark.synthetic` | `synthetic` |
-| Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate`, `starfinder benchmark run/evaluate/report` |
+| Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate` and the experiment commands below |
 | `python -m starfinder.benchmark._trial trial.json` | `starfinder trial run --config trial.json` |
 | `starfinder.benchmark._experiment.expand_experiment(path, output)` | `starfinder experiment expand --config PATH --output DIR` (a new or empty output folder) |
 | Evaluating saved workflow outputs, checkpoints or trial outputs | `starfinder experiment evaluate --sources PATH --metrics PATH --output DIR` |
-| `starfinder benchmark report --evaluation-dir DIR` (and the saved preprocessing report of `benchmarks/preprocessing_report.py`) | `starfinder experiment report --evaluation DIR --output DIR [--protocol PATH]`, over the saved evaluation of `experiment evaluate`; it does not read the old lifecycle's records |
 | The engine comparison of `scripts/workflow_golden.py` | `starfinder.evaluation.workflow` (the script calls it) |
 
-The `starfinder benchmark run`, `evaluate` and `report` commands and the
-benchmark lifecycle objects stay, unchanged, until their approved retirement
-(W-781); the new commands do not read or write their records. See the
-{doc}`experiments guide <benchmark/experiments>` and the
+See the {doc}`experiments guide <benchmark/experiments>` and the
 {doc}`report guide <benchmark/report>`.
+
+### Removed benchmark lifecycle
+
+W-781 removed the old benchmark lifecycle, with no alias or compatibility
+shim. Each name below is gone; use its replacement. The new commands neither
+read nor write the old run, evaluation and report folders. To read an old
+run, check out the revision that wrote it. Each source link points to the file
+at `8094b30`, the last revision that has it.
+
+| Removed | Replacement |
+| --- | --- |
+| `starfinder benchmark run --config --input-root --output-root --owner [--run-id] [--resume]` | `starfinder experiment expand --config PATH --output DIR`, then one `starfinder trial run --config trial-NNNNNN.json` per process; the {doc}`workflow <workflow/index>` for FOV and downstream work. There is no resume: a trial refuses an output folder that is not empty |
+| `starfinder benchmark evaluate --run-dir DIR` | `starfinder experiment evaluate --sources PATH --metrics PATH --output DIR` over saved trial, workflow and checkpoint outputs |
+| `starfinder benchmark report --evaluation-dir DIR` | `starfinder experiment report --evaluation DIR --output DIR [--protocol PATH]` |
+| `benchmark.BenchmarkCase`, `benchmark.BenchmarkTrialResult` ([`_records.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/src/python/starfinder/benchmark/_records.py)) | A trial mapping (`method`, `inputs`, `seed`, `root_output_path`) and its `record.json` (`starfinder.benchmark.trial/1`) |
+| `benchmark.run_benchmark`, `evaluate_benchmark`, `report_benchmark` ([`_lifecycle.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/src/python/starfinder/benchmark/_lifecycle.py), [`_adapters.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/src/python/starfinder/benchmark/_adapters.py), [`_pipeline.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/src/python/starfinder/benchmark/_pipeline.py), [`_storage.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/src/python/starfinder/benchmark/_storage.py)) | The three commands above |
+| The registration evaluation adapter ([`_legacy_evaluation.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/src/python/starfinder/benchmark/_legacy_evaluation.py)) | An explicit projection and detection, then `starfinder.evaluation` metrics in `experiment evaluate` |
+| The printed registration quality report ([`_reporting.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/src/python/starfinder/benchmark/_reporting.py)) | `experiment report`, which shows undefined values with their reasons |
+| The case builders and profiles: [`benchmarks/recipes.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks/recipes.py), [`benchmarks/configs/registration.json`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks/configs/registration.json), [`benchmarks/configs/pipeline.json`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks/configs/pipeline.json) and the source map [`benchmarks/configs/source-map.json`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks/configs/source-map.json) | An explicit experiment or trial mapping, such as the one {download}`experiment_inputs.py <examples/experiment_inputs.py>` writes |
+| The saved-table report [`benchmarks/report_saved.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks/report_saved.py) | `experiment report`; its `tables/resources.csv` keeps each source's resource scope |
+| The preprocessing comparison [`benchmarks/preprocessing_synthetic.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks/preprocessing_synthetic.py) and its report [`benchmarks/preprocessing_report.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks/preprocessing_report.py) | Preprocessing and spot-finding trials, `experiment evaluate` with `starfinder.evaluation.preprocessing` and `spot_finding`, and `experiment report`. No threshold or development-seed selection is reinstated |
+| The examples [`docs/examples/benchmark_lifecycle.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/docs/examples/benchmark_lifecycle.py), [`docs/examples/benchmark_recipes.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/docs/examples/benchmark_recipes.py) and [`docs/examples/preprocessing_comparison.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/docs/examples/preprocessing_comparison.py) | {download}`experiment_inputs.py <examples/experiment_inputs.py>` and {download}`experiment_report_inputs.py <examples/experiment_report_inputs.py>` |
+| The guides [`docs/benchmark.md`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/docs/benchmark.md) and [`docs/benchmark-recipes.md`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/docs/benchmark-recipes.md), the `benchmark-profiles` directive ([`benchmark_profiles.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/docs/_ext/benchmark_profiles.py)), the notes [`design/notes/benchmark-recipes.md`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/design/notes/benchmark-recipes.md) and [`design/notes/benchmark-navigation/`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/design/notes/benchmark-navigation/index.md) | The {doc}`Benchmark section <benchmark/index>` |
 
 ## Image I/O and preprocessing calls
 

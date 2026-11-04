@@ -21,7 +21,6 @@ Modules (alphabetical)
 
    assembly
    assignment
-   benchmark
    dataset
    evaluation.registration
    export

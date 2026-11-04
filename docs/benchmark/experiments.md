@@ -11,8 +11,6 @@ select from `starfinder.evaluation`, without processing anything again. The
 
 Experiment commands reference <commands>
 Experiment report <report>
-Benchmark lifecycle <../benchmark>
-Maintained benchmark recipes <../benchmark-recipes>
 Codebook-aware research scripts <../research-scripts>
 ```
 
@@ -171,8 +169,10 @@ input error, with nothing written.
 * `record.json`'s `wall_s` starts after the output folder is reserved; `cpu_s`
   and `peak_rss_kib` cover the whole process and its reaped children, RSS as the
   larger of the two high-water marks. They are measurements, not limits.
-* The old `starfinder benchmark` commands remain beside these until their
-  retirement; the two do not share records.
+* The old `starfinder benchmark run`, `evaluate` and `report` commands and the
+  Python lifecycle objects were removed, with no alias; these commands do not
+  read their records. The {doc}`migration guide <../migration>` names each
+  replacement and links each removed file's source at `8094b30`.
 
 ## How it is checked
 

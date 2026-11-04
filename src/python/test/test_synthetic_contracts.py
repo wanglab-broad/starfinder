@@ -45,6 +45,12 @@ import starfinder.benchmark as benchmark
 assert importlib.util.find_spec('starfinder.benchmark.synthetic') is None
 for name in ['SyntheticConfig', 'generate_synthetic_dataset', 'create_test_volume', 'SIZE_PRESETS']:
     assert not hasattr(benchmark, name), name
+# W-781 (R1, R2): the old lifecycle's names and modules are gone; the package stays for the private trial entries.
+for name in ['BenchmarkCase', 'BenchmarkTrialResult', 'run_benchmark', 'evaluate_benchmark', 'report_benchmark']:
+    assert not hasattr(benchmark, name), name
+for module in ['_records', '_lifecycle', '_adapters', '_pipeline', '_storage', '_legacy_evaluation', '_reporting']:
+    assert importlib.util.find_spec('starfinder.benchmark.' + module) is None, module
+assert importlib.util.find_spec('starfinder.benchmark._trial') is not None
 '''], check=True, timeout=120)
 
 

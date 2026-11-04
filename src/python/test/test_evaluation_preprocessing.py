@@ -1,6 +1,11 @@
-"""W-770 metric known answers and exact same-environment extraction parity."""
-import importlib.util
-from pathlib import Path
+"""W-770 metric known answers and exact same-environment extraction parity.
+
+The scenes and recipes are the explicit package ones of ``preprocessing_scenes`` (W-781 retired the
+benchmarks/preprocessing_synthetic.py script that held them); the pre-move algorithms stay in
+``evaluation_preprocessing_oracle``.
+"""
+from dataclasses import replace
+import math
 from types import SimpleNamespace
 
 import numpy as np
@@ -8,15 +13,14 @@ import pandas as pd
 import pytest
 
 from starfinder.evaluation.preprocessing import (detected_spot_intensity_spread, direct_metrics, fov_variation)
+from starfinder.evaluation.readout import correct_fraction
 from starfinder.evaluation.spot_finding import auprc, f1_score, scored_detection_auprc
 from starfinder.image import ImageMetadata
+from starfinder.synthetic import calibrated_preprocessing_scene_config, preprocessing_scene_config
 from . import evaluation_preprocessing_oracle as oracle
+from . import preprocessing_scenes as scenes
 
 pytestmark = [pytest.mark.evaluation, pytest.mark.preprocessing, pytest.mark.benchmark, pytest.mark.spot_finding]
-ROOT = Path(__file__).resolve().parents[3]
-spec = importlib.util.spec_from_file_location("preprocessing_w770", ROOT / "benchmarks/preprocessing_synthetic.py")
-script = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(script)
 
 
 def matching():
@@ -25,9 +29,16 @@ def matching():
                 reference_metadata=metadata, observed_metadata=metadata)
 
 
-def bind_oracle(monkeypatch):
-    for name in ("_pipeline", "_cutoffs", "_key"):
-        monkeypatch.setattr(oracle, name, getattr(script, name), raising=False)
+def _scene(calibrated, condition, dtype, seed):
+    """A bounded scene as the existing preprocessing tests used it, its truth and its 3D background radius."""
+    if calibrated:
+        book, config = calibrated_preprocessing_scene_config(condition, dtype=dtype, seed=seed, shape=(8, 32, 32),
+                                                             count=12)
+        radius = scenes.calibrated_background_radius(config)[0]
+    else:
+        book, config = preprocessing_scene_config(condition, dtype=dtype, seed=seed, shape=(10, 32, 32), count=12)
+        radius = scenes.background_radius(config)
+    return book, config, scenes.generate(book, config), radius
 
 
 @pytest.mark.slow
@@ -35,28 +46,21 @@ def bind_oracle(monkeypatch):
     (False, "clean", "uint8", 0), (False, "baseline", "uint8", 100),
     (False, "baseline", "uint16", 1), (True, "combined", "uint8", 100),
 ])
-def test_moved_metrics_and_sweep_equal_pre_move_scenes(tmp_path, monkeypatch, calibrated, condition, dtype, seed):
-    # The scenes and dimensions used by the existing preprocessing tests.
-    configure = script.calibrated_scene_config if calibrated else script.scene_config
-    shape = (8, 32, 32) if calibrated else (10, 32, 32)
-    book, config = configure(condition, dtype=dtype, seed=seed, shape=shape, count=12)
-    scene, background, signal, truth = script.generate(book, config)
-    radius = script.calibrated_background_radius(config)[0] if calibrated else script.background_radius(config)
-    bind_oracle(monkeypatch)
-    for arm, recipe, fov in script.processed_arms(scene, book, config.FOV_id, tmp_path, radius, False):
+def test_moved_metrics_equal_pre_move_scenes(tmp_path, calibrated, condition, dtype, seed):
+    """Every arm's package direct metrics equal the pre-move implementation exactly, on the same FOV."""
+    book, config, (scene, background, signal, truth), radius = _scene(calibrated, condition, dtype, seed)
+    arms = set()
+    for arm, recipe, fov in scenes.processed_arms(scene, book, config.FOV_id, tmp_path, radius):
         args = (fov, scene.rounds, background, signal, truth, book, arm, recipe)
-        assert direct_metrics(*args) == oracle.direct_metrics(*args)
-        if arm in ("none", "r1", "r2_scalar_xsrc"):
-            for mode, grid, verify_value in (("noise", script.THRESHOLDS, 5.0),
-                                              ("adaptive", script.THRESHOLD_MODES["adaptive"]["grid"], 0.2)):
-                before = oracle.sweep(fov, truth, mode=mode, grid=grid, verify_value=verify_value)
-                after = script.sweep(fov, truth, mode=mode, grid=grid, verify_value=verify_value)
-                pd.testing.assert_frame_equal(pd.DataFrame(after), pd.DataFrame(before), check_exact=True)
-                assert auprc(after) == oracle._auprc(before)
+        assert direct_metrics(*args) == oracle.direct_metrics(*args), arm
+        arms.add(arm)
+    assert arms == set(scenes.arms(radius))
 
 
 @pytest.mark.parametrize("empty", [False, True])
-def test_sweep_read_classification_parity_with_wrong_false_rejected_and_color_calls(monkeypatch, empty):
+def test_read_classification_parity_with_wrong_false_rejected_and_color_calls(monkeypatch, empty):
+    """Package M10 (correct_fraction) and the color-call agreement computed from its own matched pairs equal the
+    pre-move read loop on the same detections and reads, with wrong-gene, false, rejected and color calls."""
     metadata = ImageMetadata("read-parity")
     fov = SimpleNamespace(rounds=SimpleNamespace(reference_round="r"), metadata={"r": metadata},
                           images={"r": np.zeros((1, 1, 1, 1))})
@@ -68,17 +72,101 @@ def test_sweep_read_classification_parity_with_wrong_false_rejected_and_color_ca
                               channel=[0] * 5, peak_intensity=[20., 12., 6., 9., 3.]))
     reads = pd.DataFrame(dict(gene_id=["a", "wrong", "c", "a", None], accepted=[True, True, False, True, True],
                               observed_color_sequence=["1", "2", "wrong", "1", "1"]))
-    monkeypatch.setattr(script, "_pipeline", lambda *args: (spots, reads, [2.0]))
-    monkeypatch.setattr(script, "_cutoffs", lambda image, value, mode: [value])
-    bind_oracle(monkeypatch)
-    before = oracle.sweep(fov, truth, verify=False)
-    after = script.sweep(fov, truth, verify=False)
-    pd.testing.assert_frame_equal(pd.DataFrame(after), pd.DataFrame(before), check_exact=True)
+    # The oracle's read loop at one threshold that keeps every detection; no detection is rerun.
+    monkeypatch.setattr(oracle, "_pipeline", lambda *args: (spots, reads, [2.0]), raising=False)
+    monkeypatch.setattr(oracle, "_cutoffs", lambda image, value, mode: [value], raising=False)
+    (row,) = oracle.sweep(fov, truth, verify=False, grid=(2.0,))
+    detected = pd.concat([spots[["z", "y", "x"]], reads[["gene_id", "accepted"]]], axis=1)
+    result = correct_fraction(detected, truth, reference_metadata=metadata, observed_metadata=metadata,
+                              **oracle.MATCHING)
+    for key in ("reads_accepted", "reads_correct", "reads_wrong_gene", "reads_false_detection"):
+        assert result.counts[key] == row[key], key
+    assert result.values["correct_fraction"] == row["correct_fraction"]
+    pairs = result.details["matched_pairs"]
+    agree = sum(str(reads.observed_color_sequence.iat[j]) == str(truth.color_sequence.iat[i]) for i, j, _ in pairs)
+    agreement = agree / len(pairs) if pairs else None
+    assert agreement == row["color_call_agreement"]
     if not empty:
-        assert after[0]["reads_correct"] == 1
-        assert after[0]["reads_wrong_gene"] == 1
-        assert after[0]["reads_false_detection"] == 2
-        assert after[0]["color_call_agreement"] == pytest.approx(2 / 3, rel=1e-9, abs=1e-12)
+        assert (result.counts["reads_correct"], result.counts["reads_wrong_gene"],
+                result.counts["reads_false_detection"]) == (1, 1, 2)
+        assert agreement == pytest.approx(2 / 3, rel=1e-9, abs=1e-12)
+    else:
+        assert result.values["correct_fraction"] is None and agreement is None
+
+
+def test_shared_arms_equal_direct_recipe_runs(tmp_path):
+    """An arm rebuilt from another arm's images equals its own recipe run directly by FOV.run."""
+    book, config, (scene, *_), radius = _scene(False, "baseline", "uint16", 1)
+    recipes = scenes.arms(radius)
+    shared = {arm: fov for arm, _, fov in scenes.processed_arms(scene, book, config.FOV_id, tmp_path, radius)
+              if arm in scenes.SHARED}
+    assert set(shared) == set(scenes.SHARED)
+    for arm, fov in shared.items():
+        direct = scenes.preprocess(scenes.make_fov(scene, book, config.FOV_id, tmp_path), recipes[arm])
+        for name in book.round_labels:
+            np.testing.assert_array_equal(fov.images[name], direct.images[name])
+        assert direct.preprocessing_record.get("recipe", {}).get("extraction_source") is None
+
+
+def test_normalized_truth_follows_the_fitted_value_map():
+    """Recipe 1's background truth is mapped through the observed raw -> normalized value map (interpolated between
+    observed raw values) and reported in normalized units, through public direct_metrics."""
+    raw = np.array([0, 10, 20, 10], dtype=np.uint8).reshape(1, 1, 4, 1)
+    normalized = (raw * 2).astype(np.uint8)
+    background = np.array([5.0, 15.0, 30.0, 0.0]).reshape(1, 1, 4, 1)
+    book = SimpleNamespace(round_labels=("r",), color_to_channel={"1": 0})
+    fov = SimpleNamespace(images={"r": normalized}, snapshots={})
+    truth = pd.DataFrame(dict(z=[], y=[], x=[], color_sequence=[]))
+    out = direct_metrics(fov, {"r": raw}, {"r": background}, {"r": np.zeros(raw.shape)}, truth, book, "r1", None)
+    # Mapped truth [10, 30, 40, 0]; recipe 1's estimate is 0 in normalized units.
+    assert out["bg_units"] == "recipe 1 normalized"
+    assert out["bg_truth_mean"] == pytest.approx(20.0, rel=1e-9, abs=1e-12)
+    assert out["bg_bias"] == pytest.approx(-20.0, rel=1e-9, abs=1e-12)
+    assert out["bg_rmse"] == pytest.approx(math.sqrt((100 + 900 + 1600 + 0) / 4), rel=1e-9, abs=1e-12)
+
+
+def test_background_ablation_rows_have_before_and_after_background_error(tmp_path):
+    """pct has no background step: its estimate is 0, measured in input units before normalization, the stage of
+    r2's bg_corrected snapshot, so both sides of each background ablation (pct -> r2_scalar, pct -> r2_3d) report a
+    background error in the same units."""
+    book, config, (scene, background, signal, truth), radius = _scene(False, "baseline", "uint8", 100)
+    rows = {arm: direct_metrics(fov, scene.rounds, background, signal, truth, book, arm, recipe)
+            for arm, recipe, fov in scenes.processed_arms(scene, book, config.FOV_id, tmp_path, radius)}
+    assert rows["pct"]["bg_bias"] == -rows["pct"]["bg_truth_mean"]
+    assert rows["pct"]["bg_stage"].startswith("before normalization, in input units")
+    for before, after in (("pct", "r2_scalar"), ("pct", "r2_3d"), ("none", "scalar"), ("none", "bg3d")):
+        for arm in (before, after):
+            assert rows[arm]["bg_units"] == "input intensity", arm
+            assert all(math.isfinite(rows[arm][key]) for key in ("bg_rmse", "bg_bias", "bg_truth_mean")), arm
+    assert rows["r2_scalar"]["bg_stage"] == "background step output (bg_corrected), before normalization"
+    assert rows["r1"]["bg_units"] == rows["r1_recon"]["bg_units"] == "recipe 1 normalized"
+    # Arms without a background estimate keep the stage distinction by reporting none.
+    assert "bg_rmse" not in rows["minmax"] and "bg_rmse" not in rows["hist"]
+
+
+def test_background_radius_caps_r_z_at_three_on_eight_planes():
+    _, config = calibrated_preprocessing_scene_config("regions", dtype="uint8", seed=0)
+    assert config.shape_zyx[0] == 8
+    assert scenes.calibrated_background_radius(config) == ((3, 5, 5), (6, 5, 5))
+    with pytest.raises(ValueError, match="capped Z footprint 7 exceeds 6"):
+        scenes.calibrated_background_radius(replace(config, shape_zyx=(6, 32, 32)))
+
+
+def test_fov_spread_strata_and_fixed_conditions():
+    """M16 per fixed condition and per FOV stratum: each fixed threshold value and each population (dense, edge)
+    is its own group, never pooled with another; there is no development-selected point."""
+    # Per-FOV correct fractions of two FOVs (dense, edge) at two fixed adaptive values, as W-239's fixture had them.
+    values = {0.2: {"dense": 0.8, "edge": 0.7}, 0.4: {"dense": 0.9, "edge": 0.4}}
+    spread = {value: fov_variation(list(per_fov.values())) for value, per_fov in values.items()}
+    # Population std / mean: 0.05 / 0.75 and 0.25 / 0.65.
+    assert spread[0.2] == pytest.approx(1 / 15, rel=1e-9, abs=1e-12)
+    assert spread[0.4] == pytest.approx(5 / 13, rel=1e-9, abs=1e-12)
+    pooled = fov_variation([v for per_fov in values.values() for v in per_fov.values()])
+    assert pooled not in (pytest.approx(spread[0.2]), pytest.approx(spread[0.4]))
+    # One FOV per stratum and fixed value: no spread to report within a stratum.
+    assert {fov_variation([per_fov[s]]) for per_fov in values.values() for s in ("dense", "edge")} == {0.0}
+    # A stratum missing its value at a fixed condition stays undefined, not dropped.
+    assert fov_variation([values[0.2]["dense"], None]) is None
 
 
 def test_f1_known_answer_and_empty_populations():
@@ -112,6 +200,8 @@ def test_scored_auprc_known_answer_subsets_and_undefined():
             dict(threshold=10., recall=.5, precision=1.), dict(threshold=15., recall=0., precision=float("nan"))]
     assert auprc(rows) == oracle._auprc(rows)
     assert auprc(rows) == pytest.approx(.625, rel=1e-9, abs=1e-12)
+    # Recall 0 at every threshold, precision undefined (no detections): no area, not undefined.
+    assert auprc([dict(threshold=v, recall=0., precision=float("nan")) for v in (2., 5.)]) == 0.0
     assert auprc([dict(threshold=2., recall=None, precision=None)]) is None
     with pytest.raises(ValueError, match="undefined precision"):
         auprc([dict(threshold=2., recall=1., precision=None)])

@@ -627,3 +627,332 @@ def test_a_registered_checkpoint_fails_on_any_unlisted_file_in_its_own_folder(wo
                                            "the stage files ['notes/readme.txt']")
     assert [Path(i["path"]).name for i in summary["consumed"]] == ["transforms.json"]
     assert by_name["registered"]["outcome"] == "skipped" and "values" not in by_name["registered"]
+
+
+# W-781: the replacements the baseline's test-disposition table names for the retired lifecycle and R4 scripts.
+
+def test_metric_failure_is_distinct(trial, tmp_path, monkeypatch):
+    """A metric that raises on a succeeded trial is ``failed`` beside the trial's own ``succeeded`` status; another
+    metric of the same trial is still computed (processing and evaluation keep separate statuses)."""
+    bad = tmp_path / "truth" / "bad-shift.json"
+    bad.parent.mkdir()
+    bad.write_text(json.dumps({"displacement": [1.0, 2.0]}))
+    sources = {"sources": [{"name": "trial", "kind": "trial", "path": str(trial)},
+                           {"name": "truth", "kind": "files", "files": {"shift": {"path": str(bad),
+                                                                                  "sha256": _sha(bad)}}}]}
+    metrics = {"metrics": [
+        {"name": "translation", "function": "registration.evaluate_translation",
+         "parameters": {"units": "voxel", "tolerance": 0.5},
+         "arguments": {"detected": {"mapping": {"moving": {"source": "trial", "output": "transform.json",
+                                                            "key": "transform.displacement_zyx"}}},
+                       "truth": {"mapping": {"moving": {"source": "truth", "file": "shift", "key": "displacement"}}},
+                       "reference_metadata": {"source": "trial", "metadata": True},
+                       "observed_metadata": {"source": "trial", "metadata": True}}},
+        {"name": "ncc", "function": "registration.normalized_cross_correlation",
+         "arguments": {"ref": {"source": "trial", "input": "reference"},
+                       "observed": {"source": "trial", "output": "image.npy"}}}]}
+    before = _tree(trial.parent, tmp_path / "truth")
+    _no_processing(monkeypatch)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert _tree(trial.parent, tmp_path / "truth") == before
+    assert status == 1 and record["status"] == "incomplete"
+    source = next(s for s in record["sources"] if s["name"] == "trial")
+    assert source["status"] == "verified" and source["trial_status"] == "succeeded" and source["trial_error"] is None
+    assert by_name["translation"]["outcome"] == "failed" and by_name["translation"]["error"]["type"] == "ValueError"
+    assert "values" not in by_name["translation"]
+    assert by_name["ncc"]["outcome"] == "computed" and by_name["ncc"]["status"] == "ok"
+    assert record["counts"] == {"sources": 2, "failed_sources": 0, "metrics": 2, "computed": 1, "skipped": 0,
+                                "unavailable": 0, "failed": 1}
+
+
+def test_canonical_image_metrics_and_policy(trial, tmp_path, monkeypatch):
+    """NCC and SSIM of saved trial images are the package metrics on the same arrays, with the SSIM policy (volume or
+    MIP) and data range stated explicitly; no detection runs (find_spots is patched to raise)."""
+    record = json.loads((trial / "record.json").read_text())
+    reference = np.load(record["inputs"]["reference"]["path"])
+    registered = np.load(trial / "image.npy")
+    sources = {"sources": [{"name": "trial", "kind": "trial", "path": str(trial)}]}
+    ref = {"source": "trial", "input": "reference"}
+    image = {"source": "trial", "output": "image.npy"}
+    metrics = {"metrics": [
+        {"name": "ncc", "function": "registration.normalized_cross_correlation",
+         "arguments": {"ref": ref, "observed": image}},
+        *({"name": f"ssim-{policy}", "function": "registration.structural_similarity",
+           "parameters": {"data_range": 100.0, "policy": policy}, "arguments": {"ref": ref, "observed": image}}
+          for policy in ("volume", "mip")),
+        {"name": "ssim-identity", "function": "registration.structural_similarity",
+         "parameters": {"data_range": 100.0, "policy": "mip"}, "arguments": {"ref": ref, "observed": ref}}]}
+    _no_processing(monkeypatch)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert status == 0 and all(m["outcome"] == "computed" for m in by_name.values())
+    from starfinder.evaluation.registration import normalized_cross_correlation, structural_similarity
+    direct = {"ncc": normalized_cross_correlation(reference, registered),
+              "ssim-volume": structural_similarity(reference, registered, data_range=100.0, policy="volume"),
+              "ssim-mip": structural_similarity(reference, registered, data_range=100.0, policy="mip")}
+    for name, result in direct.items():
+        assert by_name[name]["values"] == pytest.approx(dict(result.values), rel=1e-9, abs=1e-12), name
+        assert by_name[name]["config"] == json.loads(json.dumps(result.config)), name
+    assert by_name["ssim-volume"]["config"]["policy"] == "volume" and by_name["ssim-mip"]["config"]["policy"] == "mip"
+    assert by_name["ssim-identity"]["values"]["ssim"] == pytest.approx(1.0, rel=1e-9, abs=1e-12)
+    assert by_name["ncc"]["values"]["ncc"] == pytest.approx(1.0, rel=0, abs=0.05)
+
+
+@pytest.fixture(scope="module")
+def batch_and_streaming(tmp_path_factory):
+    """One FOV run by the workflow twice: batch (``single``) and streaming round residency (``streaming``)."""
+    work = tmp_path_factory.mktemp("residency") / "work"
+    X.golden().write_fixture(work)
+    with pytest.MonkeyPatch.context() as patch:
+        X.fix_code(patch)
+        from starfinder.workflow import plan
+        for output_id, streaming in (("single", False), ("streaming", True)):
+            config = X.single_fov(work, output_id)
+            config["processing"]["streaming"] = streaming
+            plan(X.write_config(work, output_id, config))
+            assert X.run_task(X.output_root(work, output_id) / "workflow" / "manifest.json", FOV_TASK) == 0
+    return work
+
+
+@pytest.mark.slow
+def test_workflow_batch_streaming_saved_only(batch_and_streaming, tmp_path, monkeypatch):
+    """Batch and streaming runs of one FOV give the same molecules when evaluated from their saved outputs; the
+    evaluation leaves both runs unchanged, and a missing output fails its task's metric instead of a zero."""
+    work = tmp_path / "work"
+    shutil.copytree(batch_and_streaming, work, symlinks=True)
+    for output_id in ("single", "streaming"):
+        manifest = X.output_root(work, output_id) / "workflow" / "manifest.json"
+        manifest.write_text(manifest.read_text().replace(str(batch_and_streaming), str(work)))
+    sources = {"sources": [
+        *({"name": name, "kind": "workflow", "manifest": str(X.output_root(work, name) / "workflow" / "manifest.json")}
+          for name in ("single", "streaming")),
+        *({"name": f"pre_qc-{name}", "kind": "checkpoint", "path": str(X.output_root(work, name) / CHECKPOINTS),
+           "stage": "pre_qc"} for name in ("single", "streaming"))]}
+    molecules = {name: {"source": name, "task": FOV_TASK, "output": MOLECULES} for name in ("single", "streaming")}
+    metrics = {"metrics": [
+        {"name": "parity", "metric": "M70", "function": "matching.evaluate_molecules", "parameters": _matching(),
+         "arguments": {"reference": molecules["single"], "observed": molecules["streaming"],
+                       "reference_metadata": VOXEL, "observed_metadata": VOXEL}},
+        *({"name": f"reads-{name}", "metric": "M17", "function": "readout.read_status_summary",
+           "arguments": {"reads": {"source": f"pre_qc-{name}", "key": "decoding_result.table"}}}
+          for name in ("single", "streaming"))]}
+    batch = pd.read_csv(X.output_root(work, "single") / MOLECULES)
+    pd.testing.assert_frame_equal(batch, pd.read_csv(X.output_root(work, "streaming") / MOLECULES))
+    before = _tree(work)
+    _no_processing(monkeypatch)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert _tree(work) == before
+    assert not any((X.output_root(work, n) / "workflow" / "verify.json").exists() for n in ("single", "streaming"))
+    parity = by_name["parity"]
+    assert parity["outcome"] == "computed", parity
+    assert parity["values"]["reference_fraction"] == parity["values"]["observed_fraction"] == 1.0
+    assert parity["counts"]["matched_reference"] == parity["counts"]["matched_observed"] == len(batch) > 0
+    reads = {name: by_name[f"reads-{name}"] for name in ("single", "streaming")}
+    assert status == 0 and all(m["outcome"] == "computed" for m in reads.values())
+    assert reads["single"]["values"] == reads["streaming"]["values"]
+    assert reads["single"]["counts"] == reads["streaming"]["counts"]
+    # A missing output of the streaming run: its task is no longer complete, so its metrics are skipped.
+    (X.output_root(work, "streaming") / MOLECULES).unlink()
+    status, record, by_name = _evaluate(tmp_path, sources, metrics, "missing")
+    streaming = next(s for s in record["sources"] if s["name"] == "streaming")
+    assert status == 1 and streaming["incomplete"] == [FOV_TASK]
+    assert by_name["parity"]["outcome"] == "skipped" and "not complete" in by_name["parity"]["reason"]
+    assert "values" not in by_name["parity"]
+
+
+@pytest.fixture(scope="module")
+def recovery_runs(tmp_path_factory):
+    """One FOV whose TPS registration fails on the fixture (too few landmarks): ``recovered`` names demons as its
+    recovery alternative, ``failed`` names none."""
+    work = tmp_path_factory.mktemp("recovery") / "work"
+    X.golden().write_fixture(work)
+    tps = {"method": "tps", "recovery": {"allowed_errors": ["InsufficientLandmarksError"],
+                                         "alternatives": [{"method": "demons", "iterations": [1]}]}}
+    with pytest.MonkeyPatch.context() as patch:
+        X.fix_code(patch)
+        from starfinder.workflow import plan
+        for output_id, step, code in (("recovered", tps, 0), ("failed", {"method": "tps"}, 1)):
+            config = X.single_fov(work, output_id)
+            config["processing"]["registration"]["steps"] = [step]
+            config["processing"]["checkpoints"] = ["registered", "candidates", "pre_qc"]
+            plan(X.write_config(work, output_id, config))
+            assert X.run_task(X.output_root(work, output_id) / "workflow" / "manifest.json", FOV_TASK) == code
+    return work
+
+
+def test_workflow_recovery_records(recovery_runs, tmp_path, monkeypatch):
+    """The workflow's task records keep the requested and actual methods and every attempt of a recovered
+    registration, and a failed task's metrics are skipped, not evaluated as zero."""
+    pytest.importorskip("SimpleITK", reason="the recovery alternative demons needs SimpleITK (local-registration)")
+    sources = {"sources": [
+        *({"name": name, "kind": "workflow",
+           "manifest": str(X.output_root(recovery_runs, name) / "workflow" / "manifest.json")}
+          for name in ("recovered", "failed")),
+        {"name": "registered", "kind": "checkpoint",
+         "path": str(X.output_root(recovery_runs, "recovered") / CHECKPOINTS), "stage": "registered"}]}
+    metrics = {"metrics": [
+        *({"name": f"molecules-{name}", "metric": "M70", "function": "matching.evaluate_molecules",
+           "parameters": _matching(),
+           "arguments": {"reference": {"source": "recovered", "task": FOV_TASK, "output": MOLECULES},
+                         "observed": {"source": name, "task": FOV_TASK, "output": MOLECULES},
+                         "reference_metadata": VOXEL, "observed_metadata": VOXEL}} for name in ("recovered", "failed")),
+        {"name": "registered", "function": "registration.normalized_cross_correlation",
+         "arguments": {"ref": {"source": "registered", "key": "images.round1"},
+                       "observed": {"source": "registered", "key": "images.round2"}}}]}
+    before = _tree(recovery_runs)
+    _no_processing(monkeypatch)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert _tree(recovery_runs) == before
+    tasks = {s["name"]: s["tasks"][FOV_TASK] for s in record["sources"] if s["kind"] == "workflow"}
+    assert tasks["recovered"]["complete"] and tasks["recovered"]["record"]["status"] == "succeeded"
+    # A failed attempt leaves no task record, only workflow/tasks/<task>.failed.json and its log, so it is incomplete.
+    assert not tasks["failed"]["complete"] and tasks["failed"]["record"] is None
+    assert any("no task record" in problem for problem in tasks["failed"]["problems"])
+    assert status == 1
+    assert by_name["molecules-recovered"]["outcome"] == by_name["registered"]["outcome"] == "computed"
+    assert by_name["molecules-failed"]["outcome"] == "skipped" and "not complete" in by_name["molecules-failed"][
+        "reason"]
+    # The recovered task's record names run.json with the SHA-256 the evaluation checks; it holds every attempt.
+    out = X.output_root(recovery_runs, "recovered")
+    task_record = json.loads(Path(tasks["recovered"]["record"]["path"]).read_text())
+    assert _sha(tasks["recovered"]["record"]["path"]) == tasks["recovered"]["record"]["sha256"]
+    listed = {o["path"]: o for o in task_record["outputs"]}
+    assert listed["fovs/FOV_001/run.json"]["sha256"].removeprefix("sha256:") == _sha(out / "fovs/FOV_001/run.json")
+    attempts = json.loads((out / "fovs/FOV_001/run.json").read_text())["registration"]
+    for name in ("round2", "round3", "round4"):
+        estimation = [a for a in attempts[name] if a["record"] == "estimation"]
+        assert [(a["requested_method"], a["actual_method"], a["fallback"], a["outcome"]) for a in estimation] == [
+            ("tps", "tps", False, "failed"), ("tps", "demons", True, "succeeded")]
+        assert estimation[0]["failure"]["type"] == "InsufficientLandmarksError"
+    failed = json.loads((X.output_root(recovery_runs, "failed") / "workflow" / "tasks" /
+                         "fov.sample.FOV_001.failed.json").read_text())
+    assert failed["status"] == "failed" and "InsufficientLandmarksError" in json.dumps(failed)
+
+
+def _study(tmp_path, book, config, radius, arms, modes):
+    """A bounded preprocessing study from saved trials: the scene's reference round and truth as files, one
+    preprocessing trial per arm, spot-finding trials expanded over the frozen threshold modes and values, and one
+    F1 metric (M03, with its recall M01 and precision M02) per arm and threshold. Returns (sources, metrics, spot trial
+    folders by (arm, mode, value), truth)."""
+    from starfinder.preprocessing import PREPROCESSING_METHODS
+    from starfinder.workflow._shape import plain
+    from . import preprocessing_scenes as scenes
+    scene, _background, _signal, truth = scenes.generate(book, config)
+    folder = tmp_path / "study"
+    folder.mkdir()
+    np.save(folder / "reference-round.npy", scene.rounds[book.round_labels[0]])
+    truth_csv = _truth(tmp_path, "spots.csv", truth[["z", "y", "x"]])
+    images = {}
+    recipes = scenes.arms(radius)
+    for arm in arms:
+        if recipes[arm] is None:
+            images[arm] = folder / "reference-round.npy"
+            continue
+        # The arm's recipe steps as a trial's explicit {method, config} entries (the trial's own resolved form).
+        steps = [{"method": PREPROCESSING_METHODS[type(step.config)].name, "config": plain(step.config)}
+                 for step in recipes[arm].steps]
+        path = folder / f"preprocess-{arm}.json"
+        path.write_text(json.dumps({"method": {"module": "preprocessing", "steps": steps},
+                                    "inputs": {"image": "reference-round.npy"}, "seed": config.seed,
+                                    "root_output_path": f"preprocessed/{arm}"}))
+        assert main(["trial", "run", "--config", str(path)]) == 0
+        images[arm] = folder / "preprocessed" / arm / "image.npy"
+    conditions = [{"name": f"{mode}-{value:g}", "method": {"config": {"threshold_mode": mode,
+                                                                      "threshold_value": value}}}
+                  for mode, values in modes.items() for value in values]
+    experiment = folder / "detection.yaml"
+    experiment.write_text(yaml.safe_dump({
+        "methods": [{"module": "spot_finding", "method": "local_maxima"}], "conditions": conditions,
+        "seeds": [config.seed], "inputs": [{"image": str(images[arm])} for arm in arms]}))
+    assert main(["experiment", "expand", "--config", str(experiment), "--output", str(folder / "detection")]) == 0
+    manifest = json.loads((folder / "detection" / "manifest.json").read_text())
+    trials = {}
+    for index, entry in enumerate(manifest["trials"]):
+        condition, arm = conditions[index // len(arms)], arms[index % len(arms)]
+        assert main(["trial", "run", "--config", str(folder / "detection" / entry["path"])]) == 0
+        settings = condition["method"]["config"]
+        trials[arm, settings["threshold_mode"], settings["threshold_value"]] = (
+            folder / "detection" / Path(entry["path"]).stem)
+    sources = {"sources": [{"name": "truth", "kind": "files", "files": {"spots": {"path": str(truth_csv),
+                                                                                  "sha256": _sha(truth_csv)}}},
+                           *({"name": f"{arm}-{mode}-{value:g}", "kind": "trial", "path": str(path)}
+                             for (arm, mode, value), path in trials.items())]}
+    matching = {"policy": "greedy", "threshold": 2.0, "boundary": "inclusive", "units": "voxel"}
+    metrics = {"metrics": [
+        {"name": f"f1-{arm}-{mode}-{value:g}", "metric": "M03", "function": "spot_finding.f1_score",
+         "parameters": matching,
+         "arguments": {"detected": {"source": f"{arm}-{mode}-{value:g}", "output": "spots.csv",
+                                    "columns": ["z", "y", "x"]},
+                       "truth": {"source": "truth", "file": "spots", "columns": ["z", "y", "x"]},
+                       "reference_metadata": VOXEL, "observed_metadata": VOXEL}}
+        for (arm, mode, value) in trials]}
+    return sources, metrics, trials, truth
+
+
+def _check_study(tmp_path, sources, metrics, trials, truth, modes, monkeypatch):
+    """The study's evaluation: every source verified and unchanged, every metric computed and equal to f1_score on
+    the saved detections, and the evaluation's tables in the approved schema."""
+    from starfinder.evaluation.spot_finding import f1_score
+    from starfinder.image import ImageMetadata
+    before = _tree(tmp_path / "study", tmp_path / "truth")
+    _no_processing(monkeypatch)
+    status, record, by_name = _evaluate(tmp_path, sources, metrics)
+    assert _tree(tmp_path / "study", tmp_path / "truth") == before
+    assert status == 0 and record["status"] == "complete" and record["format"] == "starfinder.experiment.evaluation/1"
+    assert record["counts"]["computed"] == len(trials) == record["counts"]["metrics"]
+    assert {(mode, value) for _, mode, value in trials} == {(m, v) for m, values in modes.items() for v in values}
+    consumed = [item for source in record["sources"] for item in source["consumed"]]
+    assert all(item["sha256"] == _sha(item["path"]) for item in consumed)
+    metadata = ImageMetadata("evaluation/voxel")
+    points = truth[["z", "y", "x"]].to_numpy(float)
+    assert len(points) > 0
+    for (arm, mode, value), path in trials.items():
+        saved = json.loads((path / "record.json").read_text())
+        assert saved["status"] == "succeeded"
+        assert (saved["configuration"]["method"]["config"]["threshold_mode"],
+                saved["configuration"]["method"]["config"]["threshold_value"]) == (mode, value)
+        spots = pd.read_csv(path / "spots.csv")[["z", "y", "x"]].to_numpy(float)
+        direct = f1_score(spots, points, policy="greedy", threshold=2.0, boundary="inclusive", units="voxel",
+                          reference_metadata=metadata, observed_metadata=metadata)
+        metric = by_name[f"f1-{arm}-{mode}-{value:g}"]
+        assert metric["metric"] == "M03" and metric["outcome"] == "computed"
+        assert metric["values"] == pytest.approx(dict(direct.values), rel=1e-9, abs=1e-12)
+        assert metric["counts"] == json.loads(json.dumps(direct.counts))
+    table = pd.read_csv(tmp_path / "evaluation" / "values.csv")
+    assert list(table.columns) == ["metric", "metric_id", "function", "outcome", "status", "value_name", "value",
+                                   "unit", "reason"]
+    assert set(table.metric) == set(by_name) and set(table.outcome) == {"computed"}
+    assert {"f1", "precision", "recall"} <= set(table.value_name)
+    for name in by_name:
+        assert (tmp_path / "evaluation" / by_name[name]["details_file"]).is_file()
+    return record
+
+
+def test_smoke_run_writes_tables_and_manifest(tmp_path, monkeypatch):
+    """The W-233 smoke scene (baseline, uint8, 10 x 32 x 32, 12 amplicons, held-out seed 100) through saved trials:
+    four arms of the scalar-background comparison, detection at the frozen noise value 5 and adaptive value 0.2."""
+    from starfinder.synthetic import preprocessing_scene_config
+    from . import preprocessing_scenes as scenes
+    book, config = preprocessing_scene_config("baseline", dtype="uint8", seed=100, shape=(10, 32, 32), count=12)
+    modes = {"noise": (5.0,), "adaptive": (0.2,)}
+    sources, metrics, trials, truth = _study(tmp_path, book, config, scenes.background_radius(config),
+                                             ("none", "scalar", "pct", "r2_scalar"), modes)
+    _check_study(tmp_path, sources, metrics, trials, truth, modes, monkeypatch)
+    manifest = json.loads((tmp_path / "study" / "detection" / "manifest.json").read_text())
+    assert manifest["format"] == "starfinder.benchmark.experiment/1" and len(manifest["trials"]) == 8
+
+
+def test_calibrated_smoke_run_in_both_threshold_modes(tmp_path, monkeypatch):
+    """The W-239 smoke scene (calibrated clean, uint8, 8 x 32 x 32, 12 amplicons, seed 100) through saved trials:
+    the 3D-background arms with the capped radius (3, 5, 5), detection at the frozen noise value 5 and the adaptive
+    values 0.2 and 0.4; no operating point is selected."""
+    from starfinder.synthetic import calibrated_preprocessing_scene_config
+    from . import preprocessing_scenes as scenes
+    book, config = calibrated_preprocessing_scene_config("clean", dtype="uint8", seed=100, shape=(8, 32, 32), count=12)
+    radius, _ = scenes.calibrated_background_radius(config)
+    assert radius == (3, 5, 5)
+    modes = {"noise": (5.0,), "adaptive": (0.2, 0.4)}
+    sources, metrics, trials, truth = _study(tmp_path, book, config, radius, ("none", "bg3d", "r2_3d"), modes)
+    record = _check_study(tmp_path, sources, metrics, trials, truth, modes, monkeypatch)
+    saved = json.loads((tmp_path / "study" / "preprocessed" / "bg3d" / "record.json").read_text())
+    assert saved["configuration"]["method"]["steps"][0]["config"]["radius_voxels_zyx"] == [3, 5, 5]
+    assert len(record["metrics"]) == 3 * 3

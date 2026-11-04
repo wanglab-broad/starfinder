@@ -1,23 +1,15 @@
-# Benchmark recipes
+# Benchmark scripts
 
-Maintained source-derived configuration and adapters for the common
-`starfinder benchmark run/evaluate/report` lifecycle. Read
-[the recipe reference](../docs/benchmark-recipes.md) before selecting a profile.
+Evidence and measurement scripts kept beside the package. Experiments run through
+`starfinder experiment expand|evaluate|report` and `starfinder trial run`; see the
+[experiments guide](../docs/benchmark/experiments.md). W-781 retired the old
+`starfinder benchmark run/evaluate/report` lifecycle and its scripts here: the case
+builders `recipes.py` and `configs/` (registration and pipeline profiles, the source map),
+`report_saved.py`, and the §2.5 preprocessing comparison `preprocessing_synthetic.py` and
+its report `preprocessing_report.py`. Their source stays in Git at
+[`8094b30`](https://github.com/wanglab-broad/starfinder/tree/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks) and
+[the migration guide](../docs/migration.md#removed-benchmark-lifecycle) names each replacement.
 
-- `recipes.py`: build an explicit registration or pipeline case, without data discovery.
-- `configs/registration.json`: distinct method parameter profiles.
-- `configs/pipeline.json`: source-specific processing/residency profiles.
-- `configs/source-map.json`: complete bounded 56-source disposition and hash index.
-- `report_saved.py`: saved-table reporting with explicit join keys and resource scopes.
-- `preprocessing_synthetic.py`: the bounded §2.5 preprocessing comparison on synthetic
-  development presets (W-233); writes tables, curves and a manifest to a directory outside
-  Git. `--design calibrated` runs the calibrated rerun of the accepted amendment (W-239) on
-  `calibrated_scene_preset` scenes in both threshold modes. Development evidence only, with no
-  recommended defaults.
-- `preprocessing_report.py`: renders the standalone §2.5 inspection report (W-234) from a saved
-  `preprocessing_synthetic.py` output directory, after checking its checksums and source revision.
-  A calibrated output directory gives the report of the amendment's item 6 (W-249): a human summary
-  first, then the method figures, then an appendix, with both threshold modes side by side.
 - `image_statistics.py`: intensity, puncta and noise statistics of one real TIFF or synthetic channel
   volume, and the read-only real-data measurement behind the synthetic calibration targets (W-238);
   see [image statistics](../design/notes/image-statistics.md).
@@ -36,10 +28,10 @@ Maintained source-derived configuration and adapters for the common
   the `slow` tier. Reads the real
   banks through `STARFINDER_APPEARANCE_BANKS` and the models through `STARFINDER_WEIGHTS_DIR` and
   `STARFINDER_STARDIST_3D_SPLEEN`; about 2 h on one CPU and up to 13 GiB per step.
-- `revision.py`: the source revision record that `preprocessing_synthetic.py` and `image_statistics.py`
-  write into their manifests (W-288): HEAD, dirty state, the untracked paths and the sha256 of
-  `git diff HEAD --binary` followed by each untracked path's name and bytes; an untracked directory
-  entry, such as a nested Git repository, contributes its name only.
+- `revision.py`: the source revision record that `image_statistics.py` writes into its manifest
+  (W-288; the retired `preprocessing_synthetic.py` wrote it too): HEAD, dirty state, the untracked
+  paths and the sha256 of `git diff HEAD --binary` followed by each untracked path's name and bytes;
+  an untracked directory entry, such as a nested Git repository, contributes its name only.
 
 Original scripts, results and restricted reference snapshots remain external.
 These new implementations follow the Python package's declared MIT terms;
