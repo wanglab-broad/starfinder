@@ -496,8 +496,10 @@ cost of a format version and a second result container.
   round, or a channel, that the panel does not name is `unmatched` with
   `unmapped_channel`, not an error.
 * In a multi-round result the per-channel diagnostics (`thresholds`, `counts`,
-  `outcomes`, `noise`) move under `diagnostics["rounds"][<round>]`. A single-round
+  `outcomes`, `noise`, `plateaus`) move under `diagnostics["rounds"][<round>]`. A single-round
   result keeps them at the top level, as today.
+
+% Amended 2026-11-03 for W-790: include plateaus in the per-round diagnostic declaration.
 
 % §2.8
 
@@ -531,19 +533,22 @@ holds the `methods` list of provenance entries (registry move 5).
 (`method`, `channel_labels`, `thresholds`, `coordinate_units`,
 `singleton_z_policy`, `measurements`) and these:
 
+% Amended 2026-11-03 for W-790: declare plateau counts and their per-round placement.
+
 | Key | Content |
 | --- | --- |
 | `counts` | Candidates per channel (per round under `rounds` in a multi-round result). |
 | `outcomes` | Per channel: `ok` (at least one candidate), `empty` (the method ran and found nothing) or `constant` (a constant channel, which yields no candidates without running the method). A failure is never an outcome: it raises (dependency, weights, geometry, invalid input or a library exception wrapped with its message). |
 | `effective_settings` | Per channel, the effective config with resolved native defaults. |
 | `noise` | Local maxima, every threshold mode: per channel `zero_fraction`, `median`, `mad`, `threshold` (the noise-mode record of preprocessing). A `SpotFindingWarning` (a `UserWarning`) naming round and channel is emitted, and its message added to `warnings`, when MAD is 0 or more than half of the voxels are zero; the threshold does not change. |
+| `plateaus` | Local maxima and noise landmarks: per channel, `maxima` counts multi-voxel maxima collapsed and `removed_voxels` counts their removed voxels, before border and spacing exclusions; omitted when all counts are zero |
 | `warnings` | The warning messages of this call. |
 | `software` | Versions of starfinder, NumPy, SciPy and scikit-image, and of the method's library and torch. |
 | `model` | Learned methods: method, model, the `artifacts` entries and the training pixel size with its provenance. |
 | `execution` | The execution entry ("Execution device"). |
 | `native` | Per channel, the minimum, median and maximum of each native score or size column (`probability`, `radius`). |
 | `geometry` | LoG: the scale-space memory estimate; Spotiflow: the effective `n_tiles`; Piscis: the tile size and keep-boundaries per axis. |
-| `rounds` | Multi-round results: per-round `thresholds`, `counts`, `outcomes` and `noise`. |
+| `rounds` | Multi-round results: per-round `thresholds`, `counts`, `outcomes`, `noise` and `plateaus`. |
 
 % §2.5
 
