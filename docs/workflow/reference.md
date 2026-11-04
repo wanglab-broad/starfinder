@@ -241,11 +241,13 @@ flags of the processing sub-blocks (a present block enables its step),
 | Profile | Settings |
 | --- | --- |
 | `local` | The local executor, one task at a time |
-| `sge` | The SGE executor with per-slot `h_vmem`, and the `smp` parallel environment for a task of more than one CPU; Apptainer with `/stanley` bound; `--container` required; GPU tasks request RedHat8 GPU nodes and add `--nv` |
+| `sge` | The SGE executor with per-slot `h_vmem`, and the `smp` parallel environment for a task of more than one CPU; Apptainer with `/stanley` bound; `--container` required, `--weights_dir` optional; GPU tasks request RedHat8 GPU nodes and add `--nv` |
 | `google-batch` | Google Batch with spot machines and a work folder in a bucket; the project, region, bucket, run and image digests are placeholders to fill in |
 
 Every Nextflow profile takes `--config` (the configuration file), `--container`
 (the default image) and `--max_retries` (default 2); exit statuses 2 and 3 finish
-the run without a retry.
+the run without a retry. `--weights_dir` (unset by default) is read by the `sge`
+profile only: when given, it adds `--env STARFINDER_WEIGHTS_DIR=<folder>` to the
+`apptainer` command of every task, CPU and GPU, and the folder must be on `/stanley`.
 
 The {doc}`MATLAB legacy workflow <matlab-legacy>` has its own keys and profile.

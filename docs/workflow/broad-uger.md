@@ -39,10 +39,14 @@ November 2026; where a run found a limit, the page states it.
 3. **Nextflow.** Run the head as a UGER job, outside the image, with Java 17 or
    newer and Nextflow 26.10.4 or newer (`use UGER` and `use Java-17` give the
    scheduler commands and Java):
-   `nextflow run <checkout>/nextflow/main.nf -profile sge --config <configuration> --container <SIF> -work-dir <folder under /stanley>`.
+   `nextflow run <checkout>/nextflow/main.nf -profile sge --config <configuration> --container <SIF> -work-dir <folder under /stanley>`,
+   with `--weights_dir <folder under /stanley>` beside `--container` when a task
+   uses a learned method.
    The `sge` profile refuses to start without `--container`, which the plan and
-   `verify` jobs use as well as the tasks. `-with-trace`, `-with-report` and
-   `-with-timeline` need `ps` in the task's image: the images built from the
+   `verify` jobs use as well as the tasks. `--weights_dir`, when given, goes to every
+   task as `STARFINDER_WEIGHTS_DIR`, for CPU and GPU tasks alike; the folder must be
+   on `/stanley`, as for Snakemake, because the tasks bind only that drive.
+   `-with-trace`, `-with-report` and `-with-timeline` need `ps` in the task's image: the images built from the
    current `Containerfile` hold it (procps), those built before November 3, 2026
    do not.
 
@@ -123,7 +127,7 @@ folder.
   minutes, two retries, keep-going, rerun-incomplete, 1000 jobs, a 60-second
   latency wait and `rerun-triggers: [mtime, params, input]`. Give `--jobs` for
   the account's submission limit.
-* Nextflow's `--max_retries` (default 2) and `--container`.
+* Nextflow's `--max_retries` (default 2), `--container` and `--weights_dir`.
 * `execution.defaults` and `execution.tasks.<kind>` of the configuration: each
   task's threads, memory, runtime and GPU. A retry multiplies memory and runtime
   by the attempt.
@@ -143,8 +147,6 @@ folder.
   `exclude` KB (10), and its pairwise shifts run at a 4× downsampling. Fiji exits
   0 when its macro fails; the engine task then fails on its own check of
   `dataset.xml`.
-* Under Nextflow, tasks of learned methods get no `STARFINDER_WEIGHTS_DIR` and so
-  find no weights; run them under Snakemake, whose head passes the variable on.
 * The {doc}`MATLAB legacy workflow <matlab-legacy>` keeps its own profile,
   `profile/broad-uger-matlab/`, and its conda environment.
 

@@ -28,7 +28,8 @@ For `sge`, supply `--container` with the shared-drive CPU SIF for planning,
 verification and default task execution, and put `-work-dir` under `/stanley`.
 A task's `execution.container` can override that image. The profile uses Apptainer,
 Broad's per-slot `h_vmem` request, and the `smp` parallel environment for a task of
-more than one CPU. The GPU aliases
+more than one CPU. `--weights_dir <folder under /stanley>`, when given, passes
+`--env STARFINDER_WEIGHTS_DIR=<folder>` to every task. The GPU aliases
 request RedHat8 GPU nodes and add `--nv`. Exit statuses 2 and 3 finish without retry;
 other failures retry up to `--max_retries` (default 2), scaling task memory and time
 by the attempt. GPU execution and UGER submission require their separate checks.
