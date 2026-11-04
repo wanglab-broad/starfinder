@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import tifffile
 
-from starfinder.benchmark._synthetic_io import _write_dataset
+from starfinder.synthetic._storage import _write_dataset
 from starfinder.readout import EncodingConfig, load_codebook
 from starfinder.synthetic import (benchmark_scene_preset, generate_amplicon_dataset, generate_registration_pair,
                                   save_amplicon_dataset)

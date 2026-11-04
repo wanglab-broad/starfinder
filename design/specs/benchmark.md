@@ -43,7 +43,10 @@ proposals authorize datasets, cluster work or scientific sweeps.
 
 % Amended 2026-11-03 for W-797: the entry gains the spot_finding (E02) and segmentation (E04) modules, cellular scene inputs and the `execution` record field; source lines updated.
 
-Entry: `python -m starfinder.benchmark._trial trial.json` (JSON or YAML mapping).
+% Amended 2026-11-03 for W-793: the public commands `starfinder trial run` and `starfinder experiment expand` wrap these entries; `starfinder experiment evaluate` implements the evaluate-only contract.
+
+Entry: `python -m starfinder.benchmark._trial trial.json` (JSON or YAML mapping), also
+`starfinder trial run --config trial.json` (exit 2 for an unreadable configuration or a nonempty output).
 Source: `src/python/starfinder/benchmark/_trial.py:56–168,195–327` and `_scene_inputs.py`.
 
 | Input field | Implemented rule |
@@ -97,7 +100,8 @@ allocation count and null RSS; do not combine those quantities under one label.
 ## Implemented expansion manifest
 
 `starfinder.benchmark._experiment.expand_experiment(path, output_dir)` is private
-and has no CLI (`_experiment.py:18–66`). An experiment mapping accepts only
+(`_experiment.py:18–66`); `starfinder experiment expand --config PATH --output DIR`
+exposes it and refuses an output folder that is not new or empty. An experiment mapping accepts only
 `methods`, `conditions`, `seeds`, `inputs`, and optional common `metadata`.
 The four axes must be nonempty lists. Each condition accepts `name` and `method`;
 `name` is not required by code. Method overrides merge dictionaries recursively;
@@ -124,6 +128,10 @@ or run outputs. Expansion does no processing and imports no engine.
 
 ## Proposed evaluate-only contract
 
+% Amended 2026-11-03 for W-803: a version-3 checkpoint source requires the header's `files` inventory, naming the stage's files besides the header ([checkpoints](checkpoints.md)).
+
+% Amended 2026-11-04 for W-803 (clarified): the inventory must name the stage's files besides the header, not every file of a shared folder: every file in `registered/` for `registered`; `<stage>.json` and each present `<stage>.<format>` table for `candidates` and `pre_qc`, which share the FOV's checkpoint folder.
+
 This section specifies new behavior, not the existing `evaluate_benchmark` API.
 A saved evaluation has a new output directory and explicitly selected metrics,
 source manifests/records and their hashes, population filters, frames, units,
@@ -147,7 +155,15 @@ Three sources are admitted:
 2. **Checkpoints.** Call public `starfinder.dataset.load_checkpoint(path, stage)`
    for `registered`, `candidates` or `pre_qc`; use restored typed results and
    metadata (`src/python/starfinder/_checkpoint.py:611–700`). Version 3 checks
-   payload hashes; versions 1/2 lack them and require an explicit external source
+   payload hashes and requires the header's nonempty `files` inventory, naming
+   the stage's files besides the header, before any payload is read. The
+   stage's files are every file in `registered/` for `registered`, which has a
+   folder of its own; for `candidates` and `pre_qc`, which share the FOV's
+   checkpoint folder with each other and with other records, they are
+   `<stage>.json` and `<stage>.<format>` for each table format present, and the
+   folder's other files are not that stage's payload. Every file
+   `load_checkpoint` reads is a stage file, so every byte a metric uses is
+   hash-checked. Versions 1/2 lack them and require an explicit external source
    inventory with that limitation recorded. Missing snapshots or truth needed by
    a metric make that metric unavailable. This permits comparisons of stored
    stages; it is not a changed-config verified resume. Workflow resume rejects
@@ -226,9 +242,9 @@ still needs the gate. The old script and its threshold selection remain present.
 
 | Proposed command | Responsibility; current state |
 | --- | --- |
-| `starfinder experiment expand --config PATH --output DIR` | Expose deterministic expansion with validated record format; private function exists, CLI absent. |
-| `starfinder trial run --config PATH` | Expose one method/process with the trial record; private entry exists, CLI absent. No scheduler/retry logic. |
-| `starfinder experiment evaluate --sources PATH --metrics PATH --output DIR` | The evaluate-only contract above; new implementation needed for workflow/checkpoint/trial sources. |
+| `starfinder experiment expand --config PATH --output DIR` | Expose deterministic expansion with validated record format; implemented by W-793 over the private function. |
+| `starfinder trial run --config PATH` | Expose one method/process with the trial record; implemented by W-793 over the private entry. No scheduler/retry logic. |
+| `starfinder experiment evaluate --sources PATH --metrics PATH --output DIR` | The evaluate-only contract above; implemented by W-793 (`benchmark/_evaluate.py`) for workflow, checkpoint, trial and explicit file sources. |
 | `starfinder experiment report --evaluation DIR --output DIR` | W-237-based saved-evaluation report; new renderer needed. |
 
 Keep `starfinder synthetic generate` and existing `starfinder workflow` commands.

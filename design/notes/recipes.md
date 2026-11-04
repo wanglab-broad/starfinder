@@ -193,50 +193,24 @@ evaluation design is in the [preprocessing algorithms specification](https://git
 
 ### Reproduce one comparison
 
-{download}`preprocessing_comparison.py <examples/preprocessing_comparison.py>`
-reproduces the scalar-background comparison of the synthetic evaluation on a
-tiny preset. The preset uses the `baseline` condition, 10×32×32 voxels, 12
-amplicons, uint8, and seeds 0 and 100. The comparisons are isolated
-(`none` → `scalar`) and ablation (`pct` → `r2_scalar`). The script reuses the
-evaluation harness `benchmarks/preprocessing_synthetic.py`, so scenes, recipes,
-detection, decoding and matching are those of the saved evaluation. It writes
-no files. From `src/python`:
+W-781 retired the comparison example, its harness and the inspection-report renderer:
+[`docs/examples/preprocessing_comparison.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/docs/examples/preprocessing_comparison.py),
+[`benchmarks/preprocessing_synthetic.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks/preprocessing_synthetic.py) and
+[`benchmarks/preprocessing_report.py`](https://github.com/wanglab-broad/starfinder/blob/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks/preprocessing_report.py) (each at
+`8094b30`, the last revision that has it). Run a comparison now as preprocessing and
+spot-finding trials, evaluate them with `starfinder experiment evaluate` and render the
+saved evaluation with `starfinder experiment report`; see the
+[experiments guide](../../docs/benchmark/experiments.md) and the
+[report guide](../../docs/benchmark/report.md). The scenes and recipe arms of the retired
+harness are kept, without its threshold selection, in `src/python/test/preprocessing_scenes.py`.
 
-```bash
-uv run python ../../docs/examples/preprocessing_comparison.py
-```
-
-```{literalinclude} examples/preprocessing_comparison.py
-:language: python
-:pyobject: main
-```
-
-Recorded outcome (Python 3.12.12, one CPU, about 1 second). On held-out seed
-100, the isolated comparison leaves max-F1 unchanged at 0.909. It raises the
-correct-decode fraction at `threshold_value=5` from 0.083 to 0.833, a change of
-+0.750. The ablation changes neither endpoint. One seed on a tiny scene
-illustrates the method. It is not an evaluation result, and the 2-point
-low-benefit threshold is provisional.
-
-### Render the inspection report
-
-`benchmarks/preprocessing_report.py` renders a standalone HTML report from a
-saved evaluation directory. The report is organized by method and does not
-rerun the evaluation:
-
-```bash
-uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/evaluation --output /external/report.html
-```
-
-% /external/w233/evaluation, /external/w234/report.html
-
-Before it writes anything, the renderer checks the following:
-
-* every file listed in the manifest has its recorded checksum;
-* the manifest's revision matches the checkout;
-* each regenerated panel image equals its manifest checksum.
-
-Keep the report outside the checkout.
+Recorded outcome of the retired example (Python 3.12.12, one CPU, about 1 second). On
+held-out seed 100, the isolated comparison (`none` → `scalar`, `baseline` condition,
+10×32×32 voxels, 12 amplicons, uint8) left max-F1 unchanged at 0.909. It raised the
+correct-decode fraction at `threshold_value=5` from 0.083 to 0.833, a change of +0.750.
+The ablation (`pct` → `r2_scalar`) changed neither endpoint. One seed on a tiny scene
+illustrated the method. It is not an evaluation result, and the 2-point low-benefit
+threshold was provisional.
 
 ## Decode one FOV
 

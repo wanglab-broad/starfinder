@@ -23,7 +23,8 @@ per-FOV flow, followed by `segmentation` and `assignment`; `stitching` →
 `assembly` → `export` → `report` is the per-sample flow. `image` owns metadata;
 `dataset` owns coordination.
 `synthetic` produces processed images/truth; `evaluation` computes pure metrics;
-`benchmark` runs explicit cases, measures resources and writes reports.
+`benchmark` holds the private entries of `starfinder experiment` and `starfinder trial`:
+one-process trials, expansion, evaluate-only adapters and saved-evaluation reports.
 Algorithms do not depend on benchmark orchestration. Registration estimates a
 correction transform, then applies it directly. Intensity extraction, read
 decoding and read filtering are independent readout stages that retain spot identity.

@@ -9,7 +9,7 @@ run a typed Python pipeline.
 | --- | --- |
 | `assembly` | Sample coordinates, overlap ownership, retention, accounting and the sample tables |
 | `assignment` | Molecules to cells, nucleus–cell correspondence, compartments and counts on one FOV's grid |
-| `benchmark` | Cases, timing, manifests, saved-output evaluation/reporting |
+| `benchmark` | Private trial, expansion, evaluate-only and report entries behind `starfinder experiment` and `starfinder trial` |
 | `dataset` | Dataset/FOV inputs, rounds, typed pipeline and execution policy |
 | `evaluation` | Pure metrics and explicit matching policies |
 | `export` | Sample export: fusion, labels, SpatialData, the export check and the route comparison |

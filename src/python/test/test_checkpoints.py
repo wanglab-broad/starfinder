@@ -613,6 +613,118 @@ def test_tile_checkpoints_record_the_tile(tmp_path):
     assert_spots_equal(loaded.spot_result, fov.spot_result)
 
 
+# W-803: a version-3 header must hold its payload inventory. Each case edits one stage header written by the package.
+HEADERS = {'registered': 'registered/transforms.json', 'candidates': 'candidates.json', 'pre_qc': 'pre_qc.json'}
+# The payload file each stage reads whose entry the 'unnamed' case renames, so the list stays nonempty.
+READ = {'registered': 'round2.ome.tif', 'candidates': 'candidates.csv', 'pre_qc': 'pre_qc.csv'}
+
+
+def _drop(name):
+    return lambda header: header.update(files=[e for e in header['files'] if e['path'] != name])
+
+
+def _rename(name):
+    return lambda header: next(e for e in header['files'] if e['path'] == name).update(path=f'earlier-{name}')
+
+
+def _first_digest(value):
+    return lambda header: header['files'][0].update(sha256=value)
+
+
+INVENTORY_CASES = {
+    'missing': (lambda header: header.pop('files'), 'needs a nonempty files list'),
+    'null': (lambda header: header.update(files=None), 'needs a nonempty files list'),
+    'empty': (lambda header: header.update(files=[]), 'needs a nonempty files list'),
+    'unnamed': (None, 'files does not name'),
+    'uppercase-digest': (_first_digest('sha256:' + 'A' * 64), 'needs a SHA-256 of 64 lowercase hex'),
+    'short-digest': (_first_digest('ab12'), 'needs a SHA-256 of 64 lowercase hex'),
+    'null-digest': (_first_digest(None), 'needs a SHA-256 of 64 lowercase hex'),
+    'not-an-entry': (lambda header: header['files'].append('candidates.csv'), 'is not {path, sha256}'),
+    'outside': (lambda header: header['files'].append({'path': '../run.json', 'sha256': '0' * 64}),
+                'outside its folder'),
+}
+
+
+@pytest.fixture(scope='module')
+def inventoried(tmp_path_factory):
+    """Every stage written by FOV.run, with a dense field in the registered stage; once for the module."""
+    root = tmp_path_factory.mktemp('inventory')
+    config = PipelineConfig(registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),
+                                                             RegistrationStep(DemonsConfig(iterations=(1,))))),
+                            **DETECT, **DECODE)
+    resident(dataset(root)).run(config, checkpoints=CheckpointConfig())
+    return root
+
+
+def _copy(inventoried, tmp_path):
+    shutil.copytree(inventoried, tmp_path, dirs_exist_ok=True)
+    return dataset(tmp_path), tmp_path / 'out' / 'fovs' / 'FOV' / 'checkpoints'
+
+
+def _bytes(directory):
+    return {p: p.read_bytes() for p in sorted(directory.rglob('*')) if p.is_file()}
+
+
+@pytest.mark.contract
+def test_every_written_stage_names_its_payload_and_a_prefixed_digest_loads(inventoried, tmp_path):
+    ds, directory = _copy(inventoried, tmp_path)
+    names = {stage: [e['path'] for e in json.loads((directory / HEADERS[stage]).read_text())['files']]
+             for stage in HEADERS}
+    assert names == {'registered': ['round1.ome.tif', 'round2.ome.tif', 'round2_field.npz'],
+                     'candidates': ['candidates.csv'], 'pre_qc': ['pre_qc.csv']}
+    for stage in HEADERS:
+        load_checkpoint(directory, stage)
+        path = directory / HEADERS[stage]
+        header = json.loads(path.read_text())
+        for entry in header['files']:
+            entry['sha256'] = 'sha256:' + entry['sha256']
+        path.write_text(json.dumps(header))
+        load_checkpoint(directory, stage)
+        ds.fov('FOV').load_checkpoint(stage)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize('stage', list(HEADERS))
+@pytest.mark.parametrize('case', list(INVENTORY_CASES))
+def test_a_version_3_header_without_its_inventory_fails_before_any_payload_is_read(inventoried, tmp_path,
+                                                                                   monkeypatch, stage, case):
+    ds, directory = _copy(inventoried, tmp_path)
+    path = directory / HEADERS[stage]
+    header = json.loads(path.read_text())
+    edit, message = INVENTORY_CASES[case]
+    (edit or _rename(READ[stage]))(header)
+    path.write_text(json.dumps(header))
+    before = _bytes(tmp_path)
+    import starfinder._checkpoint as checkpoint
+    import starfinder.io.tiff
+
+    def read(*args, **kwargs):
+        raise AssertionError('a payload file was read')
+    for owner, name in ((checkpoint, 'check_file'), (checkpoint, '_read_table'), (checkpoint, '_field_loader'),
+                        (starfinder.io.tiff, 'load_volume_zyxc')):
+        monkeypatch.setattr(owner, name, read)
+    folder = path.parent
+    where = '' if case == 'outside' else f'version-3 {stage} checkpoint in {folder}'
+    for load in (lambda: load_checkpoint(directory, stage), lambda: ds.fov('FOV').load_checkpoint(stage)):
+        with pytest.raises(ValueError) as error:
+            load()
+        assert message in str(error.value) and where in str(error.value) and stage in str(error.value)
+    if case == 'unnamed':
+        assert repr([READ[stage]]) in str(error.value)
+    assert _bytes(tmp_path) == before
+
+
+@pytest.mark.contract
+def test_a_registered_header_must_name_its_field_file(inventoried, tmp_path):
+    _, directory = _copy(inventoried, tmp_path)
+    path = directory / HEADERS['registered']
+    header = json.loads(path.read_text())
+    _drop('round2_field.npz')(header)
+    path.write_text(json.dumps(header))
+    with pytest.raises(ValueError, match=r"files does not name \['round2_field.npz'\], which the stage reads"):
+        load_checkpoint(directory, 'registered')
+
+
 @pytest.mark.parametrize('shape,dtype', [((1, 5, 6, 1), np.float32), ((3, 5, 6, 2), np.uint16),
                                          ((1, 4, 4, 3), np.float64)])
 def test_load_volume_zyxc_preserves_shape_dtype_and_geometry(tmp_path, shape, dtype):

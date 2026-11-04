@@ -2,8 +2,8 @@ starfinder.evaluation
 =====================
 
 Metrics for supplied images, points, masks and read tables. The
-:doc:`benchmark guide <../benchmark>` shows how to evaluate saved results; the
-:doc:`benchmark reference <../benchmark-recipes>` lists cases and metric outputs.
+:doc:`experiments guide <../benchmark/experiments>` shows how to evaluate saved results; the
+:doc:`commands reference <../benchmark/commands>` lists the evaluation's records and metric outputs.
 
 Result record
 -------------
@@ -131,6 +131,28 @@ Resource predictions
    :toctree: generated
 
    resource_prediction_errors
+
+Workflow output comparison
+--------------------------
+
+The comparison of two workflow runs' extracted values, moved from
+``scripts/workflow_golden.py``, which records the workflow goldens and calls
+it. Identities (``exact``, ``same_environment``) never take a tolerance;
+``float64`` and ``float32`` values compare within the tolerances of
+:doc:`../contributing` ("Expected values and tolerances").
+
+.. currentmodule:: starfinder.evaluation.workflow
+
+.. autosummary::
+   :toctree: generated
+
+   array_differences
+   COMPARISON_KINDS
+   record_differences
+   table_differences
+   TOLERANCES
+   value_differences
+   values_match
 
 Examples
 --------

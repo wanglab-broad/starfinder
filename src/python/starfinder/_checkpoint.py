@@ -3,15 +3,16 @@
 Each stage has a small JSON header (identity, labels, typed configs and the
 column dtype map) next to its data. Since format version 3 the header's
 ``files`` names every payload file it relies on (tables, images, field files),
-relative to the header's folder, with its SHA-256, and the reader checks them
-before it reads anything. Tables are CSV by default or Parquet with the
-``checkpoint`` extra. Every file is written to a temporary name in its
-directory and moved into place with ``os.replace``.
+relative to the header's folder, with its SHA-256; the reader requires that
+inventory and checks it before it reads anything. Tables are CSV by default or
+Parquet with the ``checkpoint`` extra. Every file is written to a temporary
+name in its directory and moved into place with ``os.replace``.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 import numpy as np
 import pandas as pd
@@ -25,6 +26,8 @@ FORMAT_VERSION = 3
 # without payload hashes; version 3 adds them (files).
 READ_VERSIONS = (1, 2, 3)
 STAGES = ("registered", "candidates", "pre_qc")
+# A payload file's SHA-256 in a header: 64 lowercase hex characters, bare or sha256:-prefixed.
+_DIGEST = re.compile(r"(?:sha256:)?[0-9a-f]{64}")
 
 
 def _check_stage(stage):
@@ -198,18 +201,79 @@ def payload(directory, names):
     return [{"path": name, "sha256": file_sha256(Path(directory) / name)} for name in names]
 
 
-def verify_payload(directory, header, stage):
-    """Check every file a stage header's ``files`` names against its SHA-256; a header without ``files`` passes.
+def _read_names(folder, header, stage):
+    """The payload files a stage reads, relative to its header's folder: the table, or the round images, their
+    snapshots and the field files of dense and B-spline results."""
+    if stage != "registered":
+        return [header["table"]] if isinstance(header.get("table"), str) else []
+    names = []
+    for name in header.get("image_rounds") or []:
+        names.append(_registered_image(folder.parent, name).relative_to(folder).as_posix())
+        names += [f"{snapshot}/{name}.ome.tif" for snapshot in header.get("snapshots") or []]
+    for entries in (header.get("transforms") or {}).values():
+        for entry in entries:
+            transform = entry.get("transform") or {}
+            key = {"dense": "field", "bspline": "coefficients"}.get(transform.get("kind"))
+            if key is not None:
+                names.append(transform[key])
+    return list(dict.fromkeys(names))
 
-    ``directory`` is the header's folder. A path outside it, a missing file or
-    another SHA-256 raises ValueError naming the file.
+
+def payload_entries(directory, header, stage):
+    """The ``files`` of a version-3 stage header as (path, bare SHA-256) pairs, checked without reading a payload.
+
+    ``files`` must be a nonempty list of ``{path, sha256}`` entries that names
+    every payload file the stage reads (the table; or the round images, their
+    snapshots and the field files). Each path is relative to ``directory``,
+    the header's folder, and stays inside it; each SHA-256 is 64 lowercase hex
+    characters, bare or ``sha256:``-prefixed. Anything else raises ValueError
+    naming the stage, the folder and the missing or malformed entry.
     """
     folder = Path(directory)
-    for entry in header.get("files") or []:
+    where = f"the version-{header.get('format_version')} {stage} checkpoint in {folder}"
+    files = header.get("files")
+    if not isinstance(files, list) or not files:
+        raise ValueError(f"{where} needs a nonempty files list of {{path, sha256}} entries, not {files!r}")
+    entries = []
+    for entry in files:
+        if not isinstance(entry, dict) or set(entry) != {"path", "sha256"} or not isinstance(entry["path"], str):
+            raise ValueError(f"{where}: the files entry {entry!r} is not {{path, sha256}}")
         name = Path(entry["path"])
         if name.is_absolute() or ".." in name.parts:
             raise ValueError(f"{stage} checkpoint names {entry['path']!r}, outside its folder {folder}")
-        check_file(folder / name, entry["sha256"], f"{stage} checkpoint file")
+        digest = entry["sha256"]
+        if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
+            raise ValueError(f"{where}: the files entry {entry['path']!r} needs a SHA-256 of 64 lowercase hex "
+                             f"characters (optionally sha256:-prefixed), not {digest!r}")
+        entries.append((name.as_posix(), digest.removeprefix("sha256:")))
+    named = {name for name, _ in entries}
+    missing = [name for name in _read_names(folder, header, stage) if name not in named]
+    if missing:
+        raise ValueError(f"{where}: files does not name {missing}, which the stage reads")
+    return entries
+
+
+def verify_payload(directory, header, stage):
+    """Check the payload files of a stage header against their SHA-256 before any is read.
+
+    ``directory`` is the header's folder. A version-3 header must hold its
+    inventory (payload_entries). A missing or malformed inventory, a missing
+    file or another SHA-256 raises ValueError naming the stage and the entry
+    or file. Headers of versions 1 and 2 hold no payload hashes and pass.
+    """
+    folder = Path(directory)
+    if header["format_version"] >= 3:
+        entries = payload_entries(folder, header, stage)
+    else:
+        # Before format version 3
+        entries = []
+        for entry in header.get("files") or []:
+            name = Path(entry["path"])
+            if name.is_absolute() or ".." in name.parts:
+                raise ValueError(f"{stage} checkpoint names {entry['path']!r}, outside its folder {folder}")
+            entries.append((entry["path"], entry["sha256"]))
+    for name, digest in entries:
+        check_file(folder / name, digest, f"{stage} checkpoint file")
 
 
 def readout_mode(header):
@@ -648,18 +712,21 @@ def load_checkpoint(path: Path | str, stage: str) -> dict:
         table, without the pair diagnostics, or None when the checkpoint has no
         ``deduplication_config``).
 
-    A version-3 header's ``files`` are checked first (verify_payload): every
-    payload file it names must exist with its recorded SHA-256. Headers of
-    versions 1 and 2 hold no hashes and are read without the check.
+    A version-3 header's ``files`` are checked first (verify_payload): the
+    list is required, nonempty and names every payload file the stage reads,
+    each with a well-formed SHA-256, and every file it names must exist with
+    that SHA-256. Headers of versions 1 and 2 hold no hashes and are read
+    without the check.
 
     Raises
     ------
     FileNotFoundError
         The stage was not written in ``path``.
     ValueError
-        Unknown stage, format version or inconsistent columns, or a payload
-        file that is missing or whose SHA-256 differs from the header (naming
-        the file).
+        Unknown stage, format version or inconsistent columns; a version-3
+        header whose ``files`` is missing, empty or malformed or omits a file
+        the stage reads (naming the entry); or a payload file that is missing
+        or whose SHA-256 differs from the header (naming the file).
     ImportError
         A Parquet table is read without pyarrow.
     """

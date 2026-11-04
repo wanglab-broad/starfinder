@@ -226,16 +226,6 @@ def test_pure_report_no_detection_or_io(monkeypatch, tmp_path):
                 assert node.func.id not in ("open", "print", "find_spots", "estimate_transform")
 
 
-def test_benchmark_adapter_uses_canonical_metrics():
-    from starfinder.benchmark._legacy_evaluation import _evaluate_images
-    image = np.arange(3 * 9 * 9, dtype=float).reshape(3, 9, 9)
-    for mip in (False, True):
-        r = _evaluate_images(image, image, image, use_mip=mip)
-        assert r["ncc_after"] == pytest.approx(1)
-        assert r["ssim_after"] == 1
-        assert r["evaluation"]["config"]["structure_after"]["policy"] == ("mip" if mip else "volume")
-
-
 def test_nearest_candidate_preserves_registration_policy():
     from scipy.spatial import cKDTree
     rng = np.random.default_rng(144)
@@ -258,12 +248,10 @@ def test_invalid_matching_config(change):
         match_points(np.zeros((1, 3)), np.zeros((1, 3)), **{**CONFIG, **change})
 
 
-def test_error_only_translation_and_undefined_reporting(capsys):
-    from starfinder.benchmark._reporting import _print_quality_report
+def test_error_only_translation_and_undefined_reporting():
+    # The saved evaluation and its report show the undefined gate: test_experiment_report.py::test_undefined_is_visible.
     r = evaluate_translation({"r": (0.125, 0, 0)}, {"r": (0, 0, 0)},
         reference_metadata=META, observed_metadata=META, units="voxel", tolerance=None)
     assert r.values["mean_error_l2"] == .125
     assert r.values["passed"] is None
     assert r.reasons["passed"] == "tolerance gate not requested"
-    _print_quality_report(r)
-    assert "passed: undefined" in capsys.readouterr().out

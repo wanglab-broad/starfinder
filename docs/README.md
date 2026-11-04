@@ -30,7 +30,7 @@ license is needed to build the site. Exact dependency resolutions are in
 The five sections are Get Started (installation and the demos), Workflow (Snakemake
 and its relationship to the Python API; Nextflow is planned), API (Python and MATLAB),
 Wiki (Starfinder design with the pipeline-stage guides, datasets, the method registry and
-development) and Benchmark (data, recipes and experiments, results). Each section and
+development) and Benchmark (data, experiments, results). Each section and
 subsection has an index page with its toctree; every page belongs to exactly one toctree,
 except the `:orphan:` pointer pages that keep old addresses. The section index pages
 listed in `SECTION_PAGES` of `conf.py` show their subsections as cards above a hidden

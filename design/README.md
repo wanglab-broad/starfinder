@@ -16,7 +16,6 @@ the full rules behind it.
 | `baselines/` | What a stage did at a fixed revision before it was rewritten, with file and line pins. History; not maintained. | No |
 | `proposals/` | Designs proposed and not, or not yet, implemented. | No |
 | `notes/` | Longer notes behind a guide: calibration targets, API behaviour, research scripts, the full migration notes. | No |
-| `notes/benchmark-navigation/` | Preserved benchmark section, data, experiment and result navigation records. | No |
 
 ## How this folder relates to the site
 

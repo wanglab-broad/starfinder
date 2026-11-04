@@ -2,7 +2,7 @@
 
 These scripts inspect saved codebook-aware decoding results and create diagnostic
 tables and montages. Use the {doc}`readout guide <readout-contract>` for the
-processing API and the {doc}`benchmark lifecycle <benchmark>` for explicit trials.
+processing API and the {doc}`experiments guide <benchmark/experiments>` for explicit trials.
 
 ## Quick start
 

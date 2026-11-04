@@ -17,7 +17,7 @@ MATLAB runtime or cluster execution.
 | MATLAB launcher fails before image processing | Read the MATLAB command line printed in the Snakemake log. With `matlab_launcher: path`, set `STARFINDER_MATLAB_EXECUTABLE` or put `matlab` on `PATH`; on the Broad cluster, set `matlab_launcher: broad` and check `/broad/software/scripts/useuse` and `use Matlab`. Then check the license and required toolboxes on the execution host. See the [MATLAB launcher](../../docs/workflow-configuration.md#matlab-launcher) and [MATLAB requirements](../../docs/api/matlab.md#runtime-requirements-and-validation-limits). |
 
 See [backend behavior](../../docs/api/backends.md) for direct versus runner dependencies.
-In particular, the registration benchmark runner's warp step uses SimpleITK
+In particular, a registration trial's warp step (`starfinder trial run`) uses SimpleITK
 even for TPS/CPD, unlike their direct warp functions. A strict docs build only
 imports/parses APIs; it does not execute these optional algorithms.
 

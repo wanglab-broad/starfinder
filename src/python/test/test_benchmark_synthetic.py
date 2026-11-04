@@ -128,8 +128,9 @@ def test_tiny_e2e_cli_uint16_and_uint8(tmp_path):
     assert not noise['dependent_enabled'] and not noise['independent_enabled']
 
 
-def test_tiny_registration_cli_layout_fields_and_benchmark_run(tmp_path):
-    from starfinder.benchmark import BenchmarkCase, evaluate_benchmark, run_benchmark
+def test_tiny_registration_cli_layout_fields(tmp_path):
+    # The old lifecycle tail (a benchmark run on the shift pair) is test_benchmark_trial.py::
+    # test_generated_registration_pair_evaluate_only (W-781).
     output = generate(tmp_path, 'registration', 'tiny')
     root, truth, rounds = check_registration_layout(output, 'tiny')
     reference = rounds[rounds.round_label == 'reference'].set_index('amplicon_id')
@@ -143,18 +144,6 @@ def test_tiny_registration_cli_layout_fields_and_benchmark_run(tmp_path):
             offset = np.abs(q - voxel).sum()
             expected = moved.loc[identity, ['z', 'y', 'x']].to_numpy(float) - q
             assert np.abs(field[voxel] - expected).max() <= .5 * offset + 1e-4, deformation
-    shift = np.array(truth['pairs']['shift']['shift_zyx'])
-    (root / 'displacement.json').write_text(json.dumps(shift.tolist()))
-    case = BenchmarkCase('tiny-shift', 'registration', {'reference': 'ref.tif', 'moving': 'mov_shift.tif'},
-        {'registration': {'method': 'translation'}, 'reference_metadata': {'frame_id': 'reference'},
-         'moving_metadata': {'frame_id': 'moving'},
-         'evaluation': {'ncc': True, 'translation': {'tolerance': 1.0}}},
-        truth={'displacement': 'displacement.json'})
-    run = run_benchmark([case], input_root=root, output_root=tmp_path / 'runs', owner='pytest')
-    evaluation = evaluate_benchmark(run)
-    record = json.loads((evaluation / 'results.json').read_text())[0]
-    assert record['status']['processing'] == 'success'
-    assert record['metrics']['translation']['values']['passed'] is True
 
 
 def test_cli_rejects_unknown_preset_and_existing_output(tmp_path, capsys):

@@ -13,7 +13,7 @@ license, or optional algorithm packages. See [build instructions](../../docs/con
 | Demons estimation and SimpleITK application | Lazy SimpleITK import; missing package raises `RegistrationBackendUnavailableError` when called. Z=1 inputs are estimated as 2D (pyramid in Y and X only) |
 | Rigid, affine and B-spline estimation | elastix through `itk-elastix` 0.25.4 and `itk` 5.4.7 (extra `registration-elastix`), imported only when one of these methods runs; B-spline also needs SimpleITK to evaluate its grid. A missing extra raises `RegistrationBackendUnavailableError` naming `registration-elastix` |
 | `FOV.register` | Specific errors propagate; no automatic fallback |
-| `benchmark.run_benchmark` | Applies each result using its application_config (SciPy for TPS/CPD, SimpleITK for demons) |
+| `starfinder trial run` (a registration trial) | Applies each result using its application_config (SciPy for TPS/CPD, SimpleITK for demons) |
 | Benchmark inspection images | Base Matplotlib; file-oriented plotting selects the Agg backend |
 
 From `src/python`, enable demons with:
@@ -62,7 +62,8 @@ Python functions do not switch to those packages automatically. In particular,
 `save_volume` writes TIFF (OME-TIFF for ZYXC) through tifffile, and FOV output methods write TIFF,
 CSV, text, and NPZ; there is no public SpatialData writer in this checkout.
 
-Benchmark cases require explicit input/output roots, ownership and configuration;
-there are no public institutional default paths. See [benchmark lifecycle](../../docs/benchmark.md).
+Experiment trials and evaluations require explicit input and output paths and
+configurations; there are no public institutional default paths. See the
+[experiments guide](../../docs/benchmark/experiments.md).
 Use an external supervisor for CPU/time/memory limits. A documentation build does
 not run benchmarks or certify performance claims.

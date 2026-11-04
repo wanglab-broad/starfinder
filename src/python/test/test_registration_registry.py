@@ -8,11 +8,11 @@ import numpy as np
 import pytest
 
 from starfinder._registry import Dependency
-from starfinder.benchmark._adapters import _config as benchmark_config
 from starfinder.dataset import from_workflow_config
 from starfinder.registration import RecoveryConfig, RegistrationStep
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder._checkpoint import _registration_results, write_registered_header
+from starfinder.benchmark._trial import _method as trial_method
 from starfinder.registration import (
     REGISTRATION_METHODS,
     AffineConfig,
@@ -120,8 +120,8 @@ def rejected_everywhere(tmp_path):
         RecoveryConfig((RegistrationEstimationError,), (FixtureShiftConfig(),))
     with pytest.raises(ValueError, match="^unknown registration method fixture_shift$"):
         from_workflow_config(workflow_config(tmp_path, method="fixture_shift"))
-    with pytest.raises(ValueError, match="^unsupported registration method: fixture_shift$"):
-        benchmark_config({"method": "fixture_shift"})
+    with pytest.raises(ValueError, match="^unknown method 'fixture_shift'$"):
+        trial_method({"module": "registration", "method": "fixture_shift"}, 0)
 
 
 def test_every_registration_place_accepts_a_method_registered_only_in_the_registry(tmp_path, monkeypatch):
@@ -144,8 +144,11 @@ def test_every_registration_place_accepts_a_method_registered_only_in_the_regist
     restored = _registration_results(tmp_path, saved)[0]["round2"][0]
     assert restored.diagnostics.effective_config == FixtureShiftConfig(offset=0.5)
     assert restored.transform == result.transform
-    # The benchmark adapter builds it from a case's method name.
-    assert benchmark_config({"method": "fixture_shift", "offset": 1.0}) == FixtureShiftConfig(offset=1.0)
+    # The private trial entry resolves its name and config from a trial's method mapping.
+    resolved, config = trial_method({"module": "registration", "method": "fixture_shift",
+                                     "config": {"offset": 1.0}}, 0)
+    assert config == FixtureShiftConfig(offset=1.0)
+    assert resolved["method"] == "fixture_shift" and resolved["config"]["offset"] == 1.0
     monkeypatch.undo()
     rejected_everywhere(tmp_path)
 
