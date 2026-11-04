@@ -5,6 +5,9 @@ An evaluation of saved sources is kept in its own folder: `evaluation.json`
 units and reasons), `values.csv` (one row per metric value) and `metrics/` (each
 computed metric's details). The {doc}`experiments guide <experiments>` shows how
 to create it, and the {doc}`commands reference <commands>` lists its fields.
+`starfinder experiment report` renders it in a folder of its own, outside Git:
+`report.html`, `report.json`, `tables/` and `figures/`; the
+{doc}`report guide <report>` describes the page.
 
 The older benchmark lifecycle saves its report under its evaluation directory
 as `trials.json` and `summary.csv`. The {doc}`lifecycle guide <../benchmark>`

@@ -2,8 +2,8 @@
 
 :::{container} sf-lead
 The benchmark tools expand experiments into one-process trials, evaluate saved
-trial, workflow and checkpoint outputs without processing them again, and keep
-every result with its provenance.
+trial, workflow and checkpoint outputs without processing them again, report a
+saved evaluation as a review page, and keep every result with its provenance.
 :::
 
 ::::{grid} 1 1 3 3
@@ -20,7 +20,7 @@ Input identities and synthetic presets.
 :link: experiments
 :link-type: doc
 :class-card: sf-card
-Experiment, trial and evaluation commands, the benchmark lifecycle, recipes and research scripts.
+Experiment, trial, evaluation and report commands, the benchmark lifecycle, recipes and research scripts.
 :::
 
 :::{grid-item-card} Results

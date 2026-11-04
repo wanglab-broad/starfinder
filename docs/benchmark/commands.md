@@ -1,7 +1,8 @@
 # Experiment commands reference
 
-Look up the experiment and trial commands, the evaluation's files and the saved
-records here. The {doc}`experiments guide <experiments>` shows how to use them.
+Look up the experiment and trial commands, the evaluation's and the report's
+files and the saved records here. The {doc}`experiments guide <experiments>` and
+the {doc}`report guide <report>` show how to use them.
 The command, source and argument tables are generated from the package when
 the site is built.
 
@@ -20,6 +21,18 @@ the site is built.
 | `evaluation.json` of `experiment evaluate` | `starfinder.experiment.evaluation/1` | Below |
 | `values.csv` | — | One row per metric value: `metric`, `metric_id`, `function`, `outcome`, `status`, `value_name`, `value`, `unit`, `reason`; a metric that was not computed has one row with its reason |
 | `metrics/NNN-<name>.json` | — | A computed metric's details (pairs, per-item comparisons) |
+| `report.html` of `experiment report` | — | The review page: setup, cards, findings, reading order, method details and figures, appendix |
+| `report.json` | `starfinder.experiment.report/1` | `evaluation` (path, SHA-256 of `evaluation.json` and `values.csv`, status), `revision`, `protocol` (path, SHA-256), `anchors` in page order, `cards`, `findings` (label, text, source table), `figures` (anchor, path, facts), `omitted`, `verified` (every file read, its SHA-256 and what it was checked against) and `outputs` (every other written file with its SHA-256 and bytes) |
+| `tables/*.csv` of `experiment report` | — | `values.csv` (every row of the evaluation's `values.csv` with its method, mode, condition, seed, FOV, side, trial setup, counts and parameters), `pairs.csv` (before and after, unpaired rows kept), `resources.csv` (one row per source or task, with its scope), `sources.csv`, `consumed.csv`, `metrics.csv` and, for saved curves, `curves.csv` |
+| `figures/*.png` of `experiment report` | — | Each card's key-metric dot plot and each image figure the protocol names |
+
+## Report protocol
+
+The optional `--protocol` of `experiment report`; the
+{doc}`report guide <report>` explains each key.
+
+```{report-protocol}
+```
 
 ## Sources
 

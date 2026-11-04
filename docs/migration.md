@@ -152,12 +152,14 @@ need adjustment in the stage entries below.
 | `python -m starfinder.benchmark._trial trial.json` | `starfinder trial run --config trial.json` |
 | `starfinder.benchmark._experiment.expand_experiment(path, output)` | `starfinder experiment expand --config PATH --output DIR` (a new or empty output folder) |
 | Evaluating saved workflow outputs, checkpoints or trial outputs | `starfinder experiment evaluate --sources PATH --metrics PATH --output DIR` |
+| `starfinder benchmark report --evaluation-dir DIR` (and the saved preprocessing report of `benchmarks/preprocessing_report.py`) | `starfinder experiment report --evaluation DIR --output DIR [--protocol PATH]`, over the saved evaluation of `experiment evaluate`; it does not read the old lifecycle's records |
 | The engine comparison of `scripts/workflow_golden.py` | `starfinder.evaluation.workflow` (the script calls it) |
 
 The `starfinder benchmark run`, `evaluate` and `report` commands and the
 benchmark lifecycle objects stay, unchanged, until their approved retirement
 (W-781); the new commands do not read or write their records. See the
-{doc}`experiments guide <benchmark/experiments>`.
+{doc}`experiments guide <benchmark/experiments>` and the
+{doc}`report guide <benchmark/report>`.
 
 ## Image I/O and preprocessing calls
 

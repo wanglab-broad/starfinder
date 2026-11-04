@@ -1,11 +1,12 @@
 """Generate the experiment commands' reference tables from the package (docs/benchmark/commands.md).
 
-``experiment-commands`` renders ``starfinder experiment expand``, ``starfinder experiment evaluate`` and
-``starfinder trial run`` with their arguments from the package's own parser (``starfinder.__main__._parser``).
-``evaluation-sources`` renders the source kinds of ``experiment evaluate`` with the keys each accepts, and
-``evaluation-arguments`` the keys of a metric argument, both from ``starfinder.benchmark._evaluate``. Their content
-describes, one ``name: description`` line each, every kind or key the code has; a missing or extra line fails the
-build, so the tables cannot drift from the code.
+``experiment-commands`` renders ``starfinder experiment expand``, ``starfinder experiment evaluate``, ``starfinder
+experiment report`` and ``starfinder trial run`` with their arguments from the package's own parser
+(``starfinder.__main__._parser``). ``evaluation-sources`` renders the source kinds of ``experiment evaluate`` with the
+keys each accepts, and ``evaluation-arguments`` the keys of a metric argument, both from
+``starfinder.benchmark._evaluate``. Their content describes, one ``name: description`` line each, every kind or key
+the code has; a missing or extra line fails the build, so the tables cannot drift from the code.
+``report-protocol`` renders the keys of the report's protocol with their meaning from ``starfinder.benchmark._report``.
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from docutils.parsers.rst import Directive
 from method_tables import _table
 from workflow_config import _described
 
-COMMANDS = (("experiment", "expand"), ("experiment", "evaluate"), ("trial", "run"))
+COMMANDS = (("experiment", "expand"), ("experiment", "evaluate"), ("experiment", "report"), ("trial", "run"))
 
 
 def _choices(parser):
@@ -82,8 +83,18 @@ class EvaluationArguments(Directive):
         return [_table(["Key", "Meaning"], [[key, described[key]] for key in keys], literal_columns={0})]
 
 
+class ReportProtocol(Directive):
+    """One row per key of the report protocol, with its meaning, from the package."""
+
+    def run(self):
+        from starfinder.benchmark import _report
+        return [_table(["Key", "What it holds"], [[k, v] for k, v in _report.PROTOCOL_KEYS.items()],
+                       literal_columns={0})]
+
+
 def setup(app):
     app.add_directive("experiment-commands", ExperimentCommands)
     app.add_directive("evaluation-sources", EvaluationSources)
     app.add_directive("evaluation-arguments", EvaluationArguments)
+    app.add_directive("report-protocol", ReportProtocol)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

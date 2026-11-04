@@ -19,8 +19,8 @@ def _parser():
     generate.add_argument('--dtype', choices=['uint8', 'uint16'], default='uint16',
                           help='Image dtype (default uint16); uint8 scales intensities by 1/16')
     generate.add_argument('--owner', required=True)
-    experiment = groups.add_parser('experiment', help='Expand an experiment into trial configurations, or evaluate '
-                                   'saved workflow, checkpoint and trial outputs')
+    experiment = groups.add_parser('experiment', help='Expand an experiment into trial configurations, evaluate '
+                                   'saved workflow, checkpoint and trial outputs, or report a saved evaluation')
     experiment_commands = experiment.add_subparsers(dest='command', required=True)
     expand = experiment_commands.add_parser(
         'expand', help='Write one trial configuration per method, condition, seed and input, and manifest.json',
@@ -44,6 +44,20 @@ def _parser():
                                 help='Metrics mapping (YAML or JSON): name, metric, function, parameters, arguments')
     evaluate_saved.add_argument('--output', type=Path, required=True,
                                 help='New or empty folder outside every source')
+    report_saved = experiment_commands.add_parser(
+        'report', help='Render a saved evaluation as a review report, without processing',
+        description='Read evaluation.json, values.csv and metrics/ of experiment evaluate and the saved records and '
+                    'files they name, each checked against its SHA-256, and write report.html, report.json, tables/ '
+                    'and figures/. Exit 0 with the report written, 2 for a saved file or revision that does not '
+                    'check, an invalid protocol, or an output folder that is not new or empty or lies inside the '
+                    'evaluation or a source (nothing is written).')
+    report_saved.add_argument('--evaluation', type=Path, required=True,
+                              help='The folder experiment evaluate wrote')
+    report_saved.add_argument('--output', type=Path, required=True,
+                              help='New or empty folder outside the evaluation and every source')
+    report_saved.add_argument('--protocol', type=Path,
+                              help='Protocol mapping (YAML or JSON) of supplied text: purposes, conditions, cut-offs, '
+                                   'rows, cards, verdicts, findings and figures')
     trial = groups.add_parser('trial', help='Run one method on one input in this process')
     trial_run = trial.add_subparsers(dest='command', required=True).add_parser(
         'run', help='Run one trial configuration and write its outputs and record.json',
@@ -144,7 +158,7 @@ def main(argv=None):
 
 
 def _experiment(args):
-    """starfinder experiment expand|evaluate and starfinder trial run, over the private benchmark entries."""
+    """starfinder experiment expand|evaluate|report and starfinder trial run, over the private benchmark entries."""
     # §2.14
     import yaml
     try:
@@ -165,6 +179,10 @@ def _experiment(args):
                     for entry in manifest['trials']):
                 raise ValueError(f'the expansion in {args.output} does not match its manifest')
             print(args.output.resolve() / 'manifest.json')
+            return 0
+        if args.command == 'report':
+            from starfinder.benchmark._report import render
+            print(render(args.evaluation, args.output, args.protocol) / 'report.html')
             return 0
         from starfinder.benchmark._evaluate import evaluate
         path, failed = evaluate(args.sources, args.metrics, args.output)
