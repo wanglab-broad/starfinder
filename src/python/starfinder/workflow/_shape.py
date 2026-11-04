@@ -103,7 +103,7 @@ TASK_BLOCKS = {
     "morphology": ("morphology",), "segment": ("segmentation",), "assign": ("assignment",),
     "bigstitcher_macro": ("stitching",), "bigstitcher_engine": ("stitching",), "bigstitcher_import": ("stitching",),
     "stitch": ("stitching",), "export": ("assembly", "export", "assignment", "stitching", "processing"),
-    "report": ("report", "assembly"), "compare": ("report",),
+    "report": ("report", "assembly", "assignment"), "compare": ("report",),
 }
 KINDS = tuple(TASK_BLOCKS)
 #: The command of each kind: the kind with ``-``; the Fiji task's record is written by bigstitcher-check.

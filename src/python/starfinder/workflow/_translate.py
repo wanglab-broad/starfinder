@@ -204,6 +204,21 @@ def _export_api(configuration):
             "previews": configuration["export"]["previews"]}
 
 
+def report_assignment(configuration):
+    """The assignment name the report task passes to Dataset.report (None: a sample without cells).
+
+    ``assembly.assignment`` when the configuration has an assembly block (a name, or None for molecules only);
+    otherwise the assignment block's ``name``, which the assign tasks saved per FOV; otherwise None. The report task
+    reads the assembly and assignment blocks (``TASK_BLOCKS``), so the name is part of its cache token and is not
+    recorded in the report's ``api``.
+    """
+    assembly = configuration.get("assembly")
+    if assembly is not None:
+        return assembly.get("assignment")
+    assignment = configuration.get("assignment")
+    return None if assignment is None else assignment.get("name")
+
+
 def _report_api(configuration):
     from starfinder.dataset.workflow import _report_block
     return {"config": plain(_report_block(dict(_base(configuration), report=configuration["report"])))}

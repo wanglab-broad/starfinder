@@ -1357,7 +1357,7 @@ with each rule a `RuleLimit`.
 
 | Option | What runs | Note |
 | --- | --- | --- |
-| **WR1 (recommended)** | With a `report` block: `report_sample` per sample, calling `Dataset.report(sample, <the sample's FOVs>, assignment=<assembly.assignment>, config=…)`, declared output `report/{sample}/report.json`, declared input the last per-sample output the configuration has (`export/{sample}/export.json` with an `export` block; else `stitching/{sample}/placement.json`; else the FOVs' `log/sf_scores/{fovID}.txt`); and `report_dataset`, calling `Dataset.compare_samples` on every sample, with output `report/samples.csv`. `report: {}` gives the defaults. | A configuration without the block runs as today. |
+| **WR1 (recommended)** | With a `report` block: `report_sample` per sample, calling `Dataset.report(sample, <the sample's FOVs>, assignment=<assembly.assignment, else the assignment block's name, else None>, config=…)`, declared output `report/{sample}/report.json`, declared input the last per-sample output the configuration has (`export/{sample}/export.json` with an `export` block; else `stitching/{sample}/placement.json`; else the FOVs' `log/sf_scores/{fovID}.txt`); and `report_dataset`, calling `Dataset.compare_samples` on every sample, with output `report/samples.csv`. `report: {}` gives the defaults. | A configuration without the block runs as today. |
 | WR2 | Both rules always run with the Python backend. | Every existing configuration gains two rules and their outputs. |
 | WR3 | No rule; the user calls the entries. | The workflow writes no report. |
 

@@ -2536,6 +2536,11 @@ scripts, rules and the JSON copy are unchanged, and `common.smk` selects the sam
   `export_sample`, else its `stitch_sample`, else its FOVs' processing rule) and
   `report_dataset` (`Dataset.compare_samples` over every sample, declared output
   `report/samples.csv`). A configuration without the block gains no rule and no output.
+* **Amended 2026-11-04, W-807: the Python workflow's report without an `assembly` block.** The `report` task
+  passes `Dataset.report` the `assignment` block's `name` when the configuration has no `assembly` block
+  (`assembly.assignment` still wins when there is one), so a run with `assignment` and `report` blocks reports
+  its cells instead of a sample without cells. The task now reads the `assignment` block (an absent block is written as null), so the
+  cache token of every report task changes, and an engine that compares it runs the task again once.
 * **`workflow/notebook/create_rsf_qc_report.py.ipynb` is superseded** by the report; it is
   left in place.
 

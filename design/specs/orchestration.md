@@ -403,10 +403,11 @@ read.
 | `assign` | `assignment` | |
 | `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import`, `stitch` | `stitching` | |
 | `export` | `assembly`, `export`, `assignment`, `stitching`, `processing` | `_export_config` reads `assembly`; `_assembly_block` needs `stitching` present; the route after fusion reads `assignment` (`_sample_segmentation_block`, `workflow.py:1715`); the molecule routes load the codebook with `processing`'s encoding and layout |
-| `report` | `report`, `assembly` | It reads the other steps through their records; `assembly.assignment` names the assignment it reports |
+| `report` | `report`, `assembly`, `assignment` | It reads the other steps through their records; `assembly.assignment` names the assignment it reports, else, without an `assembly` block, the `assignment` block's `name` (W-807) |
 | `compare` | `report` | It reads the other steps through their records |
 
 % Amended 2026-10-31 after W-647's review: the rows of export, report and compare (the operator's decision on W-152).
+% Amended 2026-11-04 W-807: the report row also reads `assignment`, which names the report's assignment when there is no `assembly` block.
 
 **The map is also the command's access.** A command reads `configuration` and `api` only through a
 view limited to the common part and its kind's blocks; reading anything else raises, in every run,
@@ -830,7 +831,7 @@ guide's table (written when the implementation lands) is generated from this one
 | `export.segmentation.device`, `.cells`, `.nuclei`, `.runs` | Unchanged | `device` gives the export task its GPU (D6) |
 | `export.segmentation.runs[].name`, `.method`, `.target`, `.seeds`, `.inputs` | Unchanged |  |
 | `export.segmentation.runs[].inputs[].role`, `.image` | Unchanged |  |
-| `report` | Unchanged |  |
+| `report` | Unchanged | Its assignment is `assembly.assignment`, else the `assignment` block's `name`, else none: a run with `assignment` and `report` blocks and no `assembly` block reports its cells (W-807) |
 | `report.markers[]`, `report.limits`, `report.limits.spots_near_zero` | Unchanged |  |
 
 (orchestration-migration-fields)=

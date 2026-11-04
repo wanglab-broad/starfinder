@@ -891,7 +891,8 @@
    },
    "blocks": [
     "report",
-    "assembly"
+    "assembly",
+    "assignment"
    ],
    "blocks_sha256": "<sha256>",
    "fingerprint": "<sha256>"

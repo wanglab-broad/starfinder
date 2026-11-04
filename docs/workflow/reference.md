@@ -193,6 +193,12 @@ previews: true draws the ownership figures into export/<sample>/previews/ on the
 (workflow-keys-report)=
 ### `report`
 
+The `report` task reports the assignment that `assembly.assignment` names. A configuration
+without an `assembly` block reports the `name` of its `assignment` block, which the
+`assign` tasks saved for every FOV, so a run with `segmentation`, `assignment` and
+`report` blocks shows its cells; without either block the report is made without cells.
+The task reads the `report`, `assembly` and `assignment` blocks.
+
 ```{workflow-keys} report
 ```
 
