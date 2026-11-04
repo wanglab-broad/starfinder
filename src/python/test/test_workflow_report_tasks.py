@@ -8,12 +8,14 @@ empty files (``workflow_tasks``); the report's function is called on its task's 
 task.
 """
 import copy
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from starfinder.dataset import Dataset
 from starfinder.report import ReportConfig, load_report
+from starfinder.workflow import plan
 from starfinder.workflow._plan import PlanRefused
 
 from . import workflow_examples as X
@@ -126,9 +128,10 @@ def test_the_report_command_names_the_assignment_block_without_an_assembly_block
 
 
 def test_the_report_of_a_run_without_an_assembly_block_shows_its_cells(tmp_path):
-    """W-807, on the small synthetic dataset (report_records of F1 to F4 with each FOV's saved assignment, as the assign
-    task saves it, and no export): the real report task names the assignment, reports every FOV's cell run and the per-FOV
-    segment and assign_molecules steps as run for every FOV."""
+    """W-807, on report_fixtures' hand-written records (report_records of F1 to F4 and write_assignment_folder's saved
+    assignment and cell run of each FOV, over empty label files, and no export): the real report task names the
+    assignment, reports every FOV's cell run and the per-FOV segment and assign_molecules steps as run. The same case
+    on records that the tasks themselves write is test_the_report_task_reads_what_the_fov_segment_and_assign_tasks_wrote."""
     from .report_fixtures import DATASET, FOVS, SAMPLE_ID, report_records, write_assignment_folder
     from .report_fixtures import SAMPLE as REPORT_SAMPLE
     config = _assignment_only_config(tmp_path, {}, {})
@@ -152,6 +155,47 @@ def test_the_report_of_a_run_without_an_assembly_block_shows_its_cells(tmp_path)
     cell_steps = steps[steps["name"].isin(["segment", "assign_molecules"])]
     assert sorted(zip(cell_steps["fov_id"], cell_steps["name"], cell_steps["status"])) == sorted(
         (fov, name, "succeeded") for fov in FOVS for name in ("segment", "assign_molecules"))
+
+
+@pytest.fixture(scope="module")
+def tiny_sample(tmp_path_factory):
+    """The workflow tests' synthetic fixture (W-642's tiny_sample), as test_workflow_cell_tasks.py builds it."""
+    work = tmp_path_factory.mktemp("tiny") / "work"
+    X.golden().write_fixture(work)
+    X.write_supplied(work)
+    return work
+
+
+def test_the_report_task_reads_what_the_fov_segment_and_assign_tasks_wrote(tiny_sample):
+    """W-807 on tiny_sample, with no record written by hand: a configuration with processing, segmentation (an import
+    run of the fixture's labels), assignment and report blocks and no stitching, assembly or export block, FOV_001 and
+    FOV_002. The fov, segment, assign and report tasks all exit 0, and the report names the assignment ``default`` with
+    a folder for each FOV, lists the cell run, and has the segment and assign_molecules steps of each FOV succeeded."""
+    work = tiny_sample
+    run = {"name": "cell", "target": "cell", "method": "import", "path": str(work / "labels" / "{fov_id}.tif")}
+    fovs = ["FOV_001", "FOV_002"]
+    config = dict(X.dataset(work, "report-without-assembly"), selected_fovs=fovs,
+                  processing=copy.deepcopy(X.PROCESSING), segmentation={"runs": [run]},
+                  assignment={"cells": "cell"}, report={})
+    assert not {"stitching", "assembly", "export"} & set(config)
+    manifest = plan(X.write_config(work, "report-without-assembly", config))
+    path = Path(manifest["roots"]["output"]) / "workflow" / "manifest.json"
+    planned = [t for t in manifest["tasks"] if t["kind"] in ("fov", "segment", "assign", "report")]
+    assert sorted({t["kind"] for t in planned}) == ["assign", "fov", "report", "segment"]
+    for kind in ("fov", "segment", "assign", "report"):
+        for task in planned:
+            if task["kind"] == kind:
+                assert X.run_task(path, task["id"]) == 0, task["id"]
+    folder = Path(manifest["roots"]["output"]) / "report" / X.SAMPLE
+    record = load_report(folder)
+    assert record["fov_ids"] == fovs
+    assert record["assignment"]["name"] == "default"
+    assert sorted(record["assignment"]["folders"]) == fovs
+    assert record["segmentation"]["runs"] == {fov: {"cells": "cell", "nuclei": None} for fov in fovs}
+    steps = pd.read_csv(folder / "tables" / "steps.csv")
+    cell_steps = steps[steps["name"].isin(["segment", "assign_molecules"])]
+    assert sorted(zip(cell_steps["fov_id"], cell_steps["name"], cell_steps["status"])) == sorted(
+        (fov, name, "succeeded") for fov in fovs for name in ("segment", "assign_molecules"))
 
 
 def test_the_compare_command_calls_compare_samples_on_every_sample(tmp_path, monkeypatch):
