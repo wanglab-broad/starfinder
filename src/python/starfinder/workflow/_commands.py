@@ -683,10 +683,10 @@ def export(run):
 
 
 def report(run):
-    """Dataset.report of one sample into report/<sample>/, with the assembly block's assignment name (None without
-    an assembly block), which the plan resolves."""
+    """Dataset.report of one sample into report/<sample>/, with the assignment name of report_assignment: the assembly
+    block's (None for molecules only), else the assignment block's, which the assign tasks saved per FOV, else None."""
     from starfinder.dataset.workflow import _report_block
-    from starfinder.workflow._translate import _base
+    from starfinder.workflow._translate import _base, report_assignment
     configuration = run.configuration.plain()
     config = _report_block(dict(_base(configuration), report=configuration["report"]))
     from starfinder.report._collect import PAGE_FILE
@@ -700,7 +700,7 @@ def report(run):
         if tables.is_dir():
             shutil.rmtree(tables)
     run.dataset().report(sample, list(run.manifest["membership"]["samples"][sample]),
-                         assignment=(configuration.get("assembly") or {}).get("assignment"), config=config,
+                         assignment=report_assignment(configuration), config=config,
                          output_dir=report_dir)
 
 

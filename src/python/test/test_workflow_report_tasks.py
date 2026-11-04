@@ -8,12 +8,14 @@ empty files (``workflow_tasks``); the report's function is called on its task's 
 task.
 """
 import copy
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from starfinder.dataset import Dataset
 from starfinder.report import ReportConfig, load_report
+from starfinder.workflow import plan
 from starfinder.workflow._plan import PlanRefused
 
 from . import workflow_examples as X
@@ -87,6 +89,113 @@ def test_the_report_command_calls_dataset_report(tmp_path, monkeypatch, blocks, 
     assert args == (SAMPLE, ["Position003", "Position004", "Position005"])
     assert kwargs == {"assignment": assignment, "config": REPORT_CONFIG if block == "contract" else ReportConfig(),
                       "output_dir": out / "report" / SAMPLE}
+
+
+#: The cases of test_the_report_command_names_the_assignment_block_without_an_assembly_block: the assignment block and
+#: the name the report reads (W-807).
+ASSIGNMENT_ONLY = [({}, "default"), ({"name": "cells_v2"}, "cells_v2")]
+
+
+def _assignment_only_config(work, assignment, report):
+    """report_config of a configuration with segmentation, assignment and report blocks and no stitching, assembly or
+    export block (W-649's U4), over empty label files."""
+    labels = work / "labels" / "{fov_id}.tif"
+    segmentation = copy.deepcopy(SEGMENT)
+    segmentation["runs"][0]["path"] = str(labels)
+    return report_config(work, report, {"segmentation": segmentation, "assignment": copy.deepcopy(assignment)})
+
+
+@pytest.mark.parametrize("assignment, name", ASSIGNMENT_ONLY)
+def test_the_report_command_names_the_assignment_block_without_an_assembly_block(tmp_path, monkeypatch, assignment,
+                                                                                name):
+    """W-807: without an assembly block the assign tasks' assignment, the assignment block's name, is the report's
+    (it was None, a sample without cells, although the report task waits for each FOV's assign task)."""
+    calls = spy(monkeypatch, "report")
+    config = _assignment_only_config(tmp_path, assignment, copy.deepcopy(REPORT))
+    assert "assembly" not in config and "export" not in config
+    T.write_inputs(config, membership([(SAMPLE, 3, 5)]))
+    (tmp_path / "labels").mkdir()
+    for i in range(3, 6):
+        (tmp_path / "labels" / f"Position{i:03d}.tif").write_bytes(b"")
+    manifest, _ = T.plan(tmp_path, "assignment-only", config)
+    task = T.task(manifest, "report", sample=SAMPLE)
+    assert [i for i in task["inputs"] if i.endswith("assignment.json")] == [
+        f"fovs/Position{i:03d}/assignment/{name}/assignment.json" for i in range(3, 6)]
+    T.call(manifest, f"report/{SAMPLE}")
+    (_, args, kwargs), = calls
+    assert args == (SAMPLE, ["Position003", "Position004", "Position005"])
+    assert kwargs["assignment"] == name
+
+
+def test_the_report_of_a_run_without_an_assembly_block_shows_its_cells(tmp_path):
+    """W-807, on report_fixtures' hand-written records (report_records of F1 to F4 and write_assignment_folder's saved
+    assignment and cell run of each FOV, over empty label files, and no export): the real report task names the
+    assignment, reports every FOV's cell run and the per-FOV segment and assign_molecules steps as run. The same case
+    on records that the tasks themselves write is test_the_report_task_reads_what_the_fov_segment_and_assign_tasks_wrote."""
+    from .report_fixtures import DATASET, FOVS, SAMPLE_ID, report_records, write_assignment_folder
+    from .report_fixtures import SAMPLE as REPORT_SAMPLE
+    config = _assignment_only_config(tmp_path, {}, {})
+    config.update(dataset_id=DATASET, sample_id=SAMPLE_ID, output_id="output")
+    T.write_inputs(config, "sample,fov_id\n" + "".join(f"{REPORT_SAMPLE},{fov}\n" for fov in FOVS))
+    (tmp_path / "labels").mkdir()
+    for fov in FOVS:
+        (tmp_path / "labels" / f"{fov}.tif").write_bytes(b"")
+    manifest, _ = T.plan(tmp_path, "cells", config)
+    out = T.output_root(config)
+    case = report_records(out)
+    for fov in FOVS:
+        write_assignment_folder(case, fov)
+    T.call(manifest, f"report/{REPORT_SAMPLE}")
+    folder = out / "report" / REPORT_SAMPLE
+    record = load_report(folder)
+    assert record["assignment"]["name"] == "default"
+    assert sorted(record["assignment"]["folders"]) == list(FOVS)
+    assert record["segmentation"]["runs"] == {fov: {"cells": "cell", "nuclei": None} for fov in FOVS}
+    steps = pd.read_csv(folder / "tables" / "steps.csv")
+    cell_steps = steps[steps["name"].isin(["segment", "assign_molecules"])]
+    assert sorted(zip(cell_steps["fov_id"], cell_steps["name"], cell_steps["status"])) == sorted(
+        (fov, name, "succeeded") for fov in FOVS for name in ("segment", "assign_molecules"))
+
+
+@pytest.fixture(scope="module")
+def tiny_sample(tmp_path_factory):
+    """The workflow tests' synthetic fixture (W-642's tiny_sample), as test_workflow_cell_tasks.py builds it."""
+    work = tmp_path_factory.mktemp("tiny") / "work"
+    X.golden().write_fixture(work)
+    X.write_supplied(work)
+    return work
+
+
+def test_the_report_task_reads_what_the_fov_segment_and_assign_tasks_wrote(tiny_sample):
+    """W-807 on tiny_sample, with no record written by hand: a configuration with processing, segmentation (an import
+    run of the fixture's labels), assignment and report blocks and no stitching, assembly or export block, FOV_001 and
+    FOV_002. The fov, segment, assign and report tasks all exit 0, and the report names the assignment ``default`` with
+    a folder for each FOV, lists the cell run, and has the segment and assign_molecules steps of each FOV succeeded."""
+    work = tiny_sample
+    run = {"name": "cell", "target": "cell", "method": "import", "path": str(work / "labels" / "{fov_id}.tif")}
+    fovs = ["FOV_001", "FOV_002"]
+    config = dict(X.dataset(work, "report-without-assembly"), selected_fovs=fovs,
+                  processing=copy.deepcopy(X.PROCESSING), segmentation={"runs": [run]},
+                  assignment={"cells": "cell"}, report={})
+    assert not {"stitching", "assembly", "export"} & set(config)
+    manifest = plan(X.write_config(work, "report-without-assembly", config))
+    path = Path(manifest["roots"]["output"]) / "workflow" / "manifest.json"
+    planned = [t for t in manifest["tasks"] if t["kind"] in ("fov", "segment", "assign", "report")]
+    assert sorted({t["kind"] for t in planned}) == ["assign", "fov", "report", "segment"]
+    for kind in ("fov", "segment", "assign", "report"):
+        for task in planned:
+            if task["kind"] == kind:
+                assert X.run_task(path, task["id"]) == 0, task["id"]
+    folder = Path(manifest["roots"]["output"]) / "report" / X.SAMPLE
+    record = load_report(folder)
+    assert record["fov_ids"] == fovs
+    assert record["assignment"]["name"] == "default"
+    assert sorted(record["assignment"]["folders"]) == fovs
+    assert record["segmentation"]["runs"] == {fov: {"cells": "cell", "nuclei": None} for fov in fovs}
+    steps = pd.read_csv(folder / "tables" / "steps.csv")
+    cell_steps = steps[steps["name"].isin(["segment", "assign_molecules"])]
+    assert sorted(zip(cell_steps["fov_id"], cell_steps["name"], cell_steps["status"])) == sorted(
+        (fov, name, "succeeded") for fov in fovs for name in ("segment", "assign_molecules"))
 
 
 def test_the_compare_command_calls_compare_samples_on_every_sample(tmp_path, monkeypatch):

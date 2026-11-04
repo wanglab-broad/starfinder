@@ -789,14 +789,19 @@ configuration without the block runs as before: no report rule and no report out
   key of a given rule is null. An unknown key, at any level, raises `ValueError` naming it
   when the plan runs.
 * **`report`**, one task per sample, calls `Dataset.report(sample, <the sample's
-  FOVs from fovs.csv>, assignment=<assembly.assignment>, config=…)` and writes
+  FOVs from fovs.csv>, assignment=<the report's assignment>, config=…)` and writes
   `<OUTPUT>/report/<sample>/`. Its declared output is `report/<sample>/report.json`, which
   lists every other file of the folder. Its declared inputs are every FOV's
   `fovs/{fovID}/run.json` and stage records, the sample's last per-sample output
   (`export/<sample>/export.json` with an `assembly` block, the `export` task; else
   `stitching/<sample>/placement.json` with a `stitching` block) and, with an `assign` task,
-  each FOV's assignment record. Without an `assembly` block no task saves a per-FOV
-  assignment for the report, so it is made without cells (`assignment=None`).
+  each FOV's assignment record. The report's assignment is `assembly.assignment` when
+  the configuration has an `assembly` block (a name, or null for molecules only); otherwise
+  the `assignment` block's `name`, which the `assign` tasks saved for every FOV; otherwise
+  `assignment=None`, a sample without cells. The `segmentation` argument stays `None`: the
+  report shows the runs the assignment read. The task reads the `report`, `assembly` and
+  `assignment` blocks (W-807; before, a run with `assignment` and `report` blocks and no
+  `assembly` block made its report without cells).
 * **`compare`** calls `Dataset.compare_samples` on every sample of the run, in the
   order of fovs.csv, and writes `<OUTPUT>/report/index.html` and
   `report/samples.csv`, its declared outputs, after every sample's `report` task.

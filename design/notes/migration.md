@@ -1784,6 +1784,14 @@ The adapter's translation of a legacy configuration is `StageAxisMapping(x="+x",
 source="legacy")` with the `rotate_angle` it ran with; a configuration with a
 `stitching` block and a stage file names `stage_axes` itself.
 
+% Amended 2026-11-04 W-808: the molecules panel draws the assigned molecules on top.
+
+In the molecules panel, panel 2 of both views, `plot_assignment` draws the molecules in the order `unassigned`,
+`excluded_cell`, `assigned` (2026-11-04, W-808), so the assigned molecules lie on top. Before, it drew them in
+the legend's order, and the red unassigned markers of a dense FOV covered the blue assigned ones. The legend keeps
+the order `assigned`, `unassigned`, `excluded`; the molecules the assembly excluded stay grey and last; colours,
+sizes, outlines and panels 1, 3 and 4 do not change.
+
 ### The ownership region on the assignment figures
 
 `plot_assignment` gains the keyword `ownership=None` (2026-10-08): a `FOVOwnership` of
@@ -2536,6 +2544,11 @@ scripts, rules and the JSON copy are unchanged, and `common.smk` selects the sam
   `export_sample`, else its `stitch_sample`, else its FOVs' processing rule) and
   `report_dataset` (`Dataset.compare_samples` over every sample, declared output
   `report/samples.csv`). A configuration without the block gains no rule and no output.
+* **Amended 2026-11-04, W-807: the Python workflow's report without an `assembly` block.** The `report` task
+  passes `Dataset.report` the `assignment` block's `name` when the configuration has no `assembly` block
+  (`assembly.assignment` still wins when there is one), so a run with `assignment` and `report` blocks reports
+  its cells instead of a sample without cells. The task now reads the `assignment` block (an absent block is written as null), so the
+  cache token of every report task changes, and an engine that compares it runs the task again once.
 * **`workflow/notebook/create_rsf_qc_report.py.ipynb` is superseded** by the report; it is
   left in place.
 

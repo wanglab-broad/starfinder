@@ -69,7 +69,8 @@ in grey scale with the territory outlines in green and a dot at each cell's cent
 ``kept`` cells blue and excluded cells orange (legend entries ``kept`` and ``excluded``),
 outlines and centre dots of a fixed size in points whatever the image size;
 the same with the molecules, ``assigned`` blue, ``unassigned`` red and ``excluded_cell``
-orange with the legend entry ``excluded`` (``outside_grid`` not drawn); and the histograms
+orange with the legend entry ``excluded`` (``outside_grid`` not drawn; drawn in the order ``unassigned``,
+``excluded_cell``, ``assigned``, so the assigned molecules lie on top); and the histograms
 of voxels and of molecules per cell. ``view="z_max"`` draws the Z maximum, ``view="single_layer"`` one plane ``z``
 (default ``Z // 2``) of a volumetric result. With ``ownership``, a
 :py:class:`~starfinder.assignment.FOVOwnership` built by
