@@ -301,6 +301,7 @@ def check_drawing(result, record, *, view=None, z=None, image=None):
             if grey:
                 assert points(got[EXCLUDED]) == sorted(where[i] for i in grey)
                 assert all(tuple(c) == GREY for c in got[EXCLUDED].get_facecolors())
+                assert list(got)[-1] == EXCLUDED  # the grey points stay drawn last (W-808)
             else:
                 assert EXCLUDED not in got
             assert legend_texts(ax) == [REGION] + legend_texts(base) + ([EXCLUDED] if grey else [])

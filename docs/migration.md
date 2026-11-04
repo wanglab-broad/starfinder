@@ -143,6 +143,7 @@ need adjustment in the stage entries below.
 | `stitching.bigstitcher_macro` | `stitching.export_bigstitcher` |
 | `export.fuse` | `export.fuse_images` |
 | The workflow report of a run with `assignment` and `report` blocks and no `assembly` block (a sample without cells, its Segmentation and Assignment steps "not run") | The report names the `assignment` block's `name` and shows the cells, the cell run and the per-FOV segment and assign steps ({ref}`reference <workflow-keys-report>`). Its `report` task now also reads the `assignment` block, so every report task has a new cache token and an engine that compares it reruns the task once; a run with an `assembly` block keeps `assembly.assignment` |
+| The molecules panel of `plot_assignment` (panel 2 of `assignment.png` and `assignment_single_layer.png`, and of the workflow's `assignment.previews` and `export.previews`) drew the `unassigned` markers over the `assigned` ones | It draws the molecules in the order `unassigned`, `excluded_cell`, `assigned`, so the assigned molecules are on top; the molecules the assembly excluded stay grey and last. The legend order (`assigned`, `unassigned`, `excluded`), the colours, the sizes, the outlines and the other panels do not change |
 
 ### Evaluation and command line
 

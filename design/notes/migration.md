@@ -1784,6 +1784,14 @@ The adapter's translation of a legacy configuration is `StageAxisMapping(x="+x",
 source="legacy")` with the `rotate_angle` it ran with; a configuration with a
 `stitching` block and a stage file names `stage_axes` itself.
 
+% Amended 2026-11-04 W-808: the molecules panel draws the assigned molecules on top.
+
+In the molecules panel, panel 2 of both views, `plot_assignment` draws the molecules in the order `unassigned`,
+`excluded_cell`, `assigned` (2026-11-04, W-808), so the assigned molecules lie on top. Before, it drew them in
+the legend's order, and the red unassigned markers of a dense FOV covered the blue assigned ones. The legend keeps
+the order `assigned`, `unassigned`, `excluded`; the molecules the assembly excluded stay grey and last; colours,
+sizes, outlines and panels 1, 3 and 4 do not change.
+
 ### The ownership region on the assignment figures
 
 `plot_assignment` gains the keyword `ownership=None` (2026-10-08): a `FOVOwnership` of

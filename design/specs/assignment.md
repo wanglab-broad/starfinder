@@ -932,7 +932,11 @@ On demand, never by `FOV.assign_molecules`:
      legend only when the result has an excluded cell);
   2. the same image and outlines with the molecules: `assigned` blue, `unassigned` red,
      `excluded_cell` orange with the legend entry `excluded` (drawn and in the legend only
-     when the result has such molecules); `outside_grid` molecules are not drawn;
+     when the result has such molecules); `outside_grid` molecules are not drawn. The
+     molecules are drawn in the order `unassigned`, `excluded_cell`, `assigned`, so the
+     assigned ones lie on top where markers overlap (since 2026-11-04, W-808; before, the
+     order was that of the legend and the unassigned markers covered the assigned ones in a
+     dense FOV); the legend keeps the order `assigned`, `unassigned`, `excluded`;
   3. the histogram of voxels per cell;
   4. the histogram of molecules per cell.
 
@@ -964,7 +968,9 @@ On demand, never by `FOV.assign_molecules`:
   not change. The figure shows what assemble decided and does not apply the retention rule
   again. A mask of another Y, X than the territories, or an identity the result does not
   have, raises `ValueError`, and a value that is not a `FOVOwnership` `TypeError`, before
-  any figure is made. Without `ownership` the figure is as described above.
+  any figure is made. Without `ownership` the figure is as described above. The molecules
+  the assembly excluded are drawn grey after the three statuses, and their legend entry is the
+  last.
 
 % is shown small (W-341); `assembly.previews` (W-568); `ownership=None` (W-330, added after §2.10)
 

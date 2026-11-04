@@ -163,7 +163,7 @@ def test_four_panels_their_titles_and_colours(result, view):
     # Panel 2: the colours are unchanged; the excluded_cell molecules are listed as "excluded".
     statuses = ["assigned", "unassigned"] + (["excluded_cell"] if excluded_of(result) else [])
     scatters = molecule_scatters(figure.axes[1])
-    assert list(scatters) == statuses
+    assert sorted(scatters) == sorted(statuses)  # the drawing order is checked by the test after this one
     for status in statuses:
         assert all(hue_is(c, STATUS_HUES[status]) for c in scatters[status].get_facecolors())
     texts = legend_texts(figure.axes[1])
@@ -176,6 +176,21 @@ def test_four_panels_their_titles_and_colours(result, view):
     legends = [ax.get_legend() for ax in figure.axes[:2]]
     assert legends[0]._loc == legends[1]._loc and legends[0].markerscale == legends[1].markerscale
     assert legends[0].get_texts()[0].get_fontsize() == legends[1].get_texts()[0].get_fontsize()
+    plt.close(figure)
+
+
+@pytest.mark.parametrize("view", ["z_max", "single_layer"])
+def test_the_assigned_molecules_are_drawn_last_and_the_legend_keeps_its_order(result, view):
+    """W-808: matplotlib draws the collections by zorder, then in the order they were added; the assigned
+    molecules come after the unassigned and excluded ones, the legend still lists assigned, unassigned, excluded."""
+    figure = plot_assignment(result, image=STAIN, view=view)
+    ax = figure.axes[1]
+    scatters = [c for c in sorted(ax.collections, key=lambda c: c.get_zorder())
+                if not c.get_label().startswith("_")]
+    drawn = [STATUS_OF[c.get_label()] for c in scatters]
+    assert drawn == ["unassigned"] + (["excluded_cell"] if excluded_of(result) else []) + ["assigned"]
+    assert len({c.get_zorder() for c in scatters}) == 1
+    assert legend_texts(ax) == ["assigned", "unassigned"] + (["excluded"] if excluded_of(result) else [])
     plt.close(figure)
 
 

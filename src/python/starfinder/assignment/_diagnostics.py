@@ -22,6 +22,7 @@ _CENTRE_AREA = 30.0
 _CENTRE_EDGE = ("black", 0.5)
 _STATUS_COLOURS = {"assigned": "dodgerblue", "unassigned": "red", "excluded_cell": "orange"}
 _STATUS_LEGEND = {"assigned": "assigned", "unassigned": "unassigned", "excluded_cell": "excluded"}
+_DRAW_ORDER = ("unassigned", "excluded_cell", "assigned")  # panel 2, the last drawn on top
 _CENTRE_COLOURS = {"kept": _STATUS_COLOURS["assigned"],
                    "excluded_no_nucleus": _STATUS_COLOURS["excluded_cell"]}
 _CENTRE_LEGEND = {"kept": "kept", "excluded_no_nucleus": "excluded"}
@@ -271,7 +272,12 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None,
     image and outlines with the molecules, ``assigned`` blue, ``unassigned`` red
     and ``excluded_cell`` orange (drawn, and listed in the legend as
     ``excluded``, only when the result has such molecules); ``outside_grid``
-    molecules are not drawn. Panels 3 and 4 are the histograms of the voxels
+    molecules are not drawn. Panel 2 draws the molecules in the order
+    ``unassigned``, ``excluded_cell``, ``assigned``, so the assigned molecules
+    lie on top where markers overlap (in a dense FOV the unassigned ones
+    would otherwise cover them), and the molecules the assembly excluded
+    (below) last; its legend lists ``assigned``, ``unassigned`` and
+    ``excluded`` in that order. Panels 3 and 4 are the histograms of the voxels
     and of the molecules per cell, over every cell. The territories are the
     ones assign used (the expanded ones when it expanded), and a cell's centre
     is the centroid of that territory.
@@ -406,7 +412,9 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None,
     ax.set_title(f"cell centres, {where}")
     retained(ax, gone_centres, "cells")
     ax = axes[1]
-    for status in statuses:
+    # Drawn with the assigned last, so that the assigned molecules lie over the denser unassigned ones; the legend
+    # keeps the order of _STATUS_COLOURS, with the ownership region first and the grey entry last.
+    for status in sorted(statuses, key=_DRAW_ORDER.index):
         chosen = molecules[molecules.assignment_status.eq(status).to_numpy(dtype=bool) & ~gone_molecules]
         ax.scatter(chosen.x, chosen.y, s=size, c=_STATUS_COLOURS[status], linewidths=0,
                    label=_STATUS_LEGEND[status])
@@ -414,7 +422,10 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None,
         chosen = molecules[gone_molecules]
         ax.scatter(chosen.x, chosen.y, s=size, c=_EXCLUDED_COLOUR, linewidths=0, label=_EXCLUDED_LEGEND,
                    gid="excluded_from_sample")
-    ax.legend(**legend, markerscale=max(1.0, 12.0 / size))
+    entries = [_REGION_LEGEND, *(_STATUS_LEGEND[s] for s in statuses), _EXCLUDED_LEGEND]
+    handles, labels = ax.get_legend_handles_labels()
+    ranked = sorted(zip(handles, labels), key=lambda pair: entries.index(pair[1]))
+    ax.legend([h for h, _ in ranked], [t for _, t in ranked], **legend, markerscale=max(1.0, 12.0 / size))
     ax.set_title(f"molecules, {where}")
     retained(ax, gone_molecules, "molecules")
     for ax, column, label in ((axes[2], f"{prefix}size_voxels", "voxels per cell"),
