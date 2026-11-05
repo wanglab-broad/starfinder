@@ -1044,6 +1044,15 @@ the residual map uses arrows and colour as below.
    a rectangle's width, with a scale arrow of a round number of µm; a uniform fill;
    categories "not placed", "fell back to the stage position" (dashed outline) and
    "placeholder" (hatched). The tooltip gives the placement status and `correction_z/y/x`.
+   Above the Placement map, when the sample has no export record and `placement.json` `review.state`
+   is `required` (an export held for review), a table of the review: **Review** "required: sample
+   assembly and the export wait for `approve_placement`"; **Reasons**, `review.reasons` joined by
+   commas; **Flagged FOVs**, one line per reason of `review.flagged`, "<reason>: <FOV>, <FOV>"; and
+   **Approvals**, one line per entry of `review.approvals`, "<reviewer>, <time_utc>: <note>". A list
+   with no entry is shown as "none". Otherwise there is no table, so the page of a sample with an
+   export, or with a review that is not needed, is as before. `report.json` gains no key.
+
+   % Amended 2026-11-05 for W-814: the review of a placement on the page (Jiahao's decision at W-653, 2026-11-04, D9).
 2. **Example FOVs** (one static JPEG of three tiles, `example_1` to `example_3`, each titled
    with its FOV and role). The route's preview ("How the two routes differ"): the
    background in grey with its own range, the cell outlines in cyan (`#22d3ee`) and the

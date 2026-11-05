@@ -631,8 +631,28 @@ class _Page:
         f = self.figures
         rows = self.parts("assembly.examples")
         examples = self._figure_or_rows(f.segmentation, "segmentation", "Segmentation examples", rows, "3/1")
-        return {"cells_map": self._map(("m-cells", "lg-cells")), "placement": self._map(("m-place", "lg-place")),
+        return {"cells_map": self._map(("m-cells", "lg-cells")),
+                "placement": self.review() + self._map(("m-place", "lg-place")),
                 "seg_examples": examples, "population": '<div id="t-population"></div>'}
+
+    def review(self) -> str:
+        """The placement's review (``placement.json`` ``review``) above the placement map: its state, reasons, the
+        flagged FOVs of each reason and the approvals. Shown only when the sample has no export record and the
+        review is required, as for an export held for review; otherwise nothing."""
+        c = self.c
+        review = (c.placement or {}).get("review") if c.export is None else None
+        if not isinstance(review, dict) or review.get("state") != "required":
+            return ""
+        none = '<span class="muted">none</span>'
+        flagged = review.get("flagged") if isinstance(review.get("flagged"), dict) else {}
+        approvals = [a for a in review.get("approvals") or [] if isinstance(a, dict)]
+        rows = [("Review", "required: sample assembly and the export wait for <code>approve_placement</code>"),
+                ("Reasons", _e(", ".join(map(str, review.get("reasons") or []))) or none),
+                ("Flagged FOVs", "<br>".join(f"{_e(reason)}: {_e(', '.join(map(str, fovs)))}"
+                                             for reason, fovs in flagged.items()) or none),
+                ("Approvals", "<br>".join(f"{_e(a.get('reviewer'))}, {_e(a.get('time_utc'))}: {_e(a.get('note'))}"
+                                          for a in approvals) or none)]
+        return f'<div id="place-review">{self._table(rows)}</div>'
 
     # Sample measurements ----------------------------------------------------------------------------------------------
 

@@ -521,6 +521,39 @@ def stitch(run):
     dataset.stitch(run.identity["sample"], fov_ids, table=table, config=block.config, input=block.input,
                    review=block.review, fallback=block.fallback,
                    output_dir=_layout.stitching_dir(run.out, run.identity["sample"]), position_ids=position_ids)
+    _keep_approvals(run, block.review)
+
+
+def earlier_approvals(run):
+    """The approvals of the sample's earlier ``placement.json`` (``review.approvals``), read by the preparation of a
+    placement task before its outputs are removed; () when there is none or it cannot be read."""
+    path = _layout.stitching_dir(run.out, run.identity["sample"]) / "placement.json"
+    try:
+        approvals = (json.loads(path.read_text()).get("review") or {}).get("approvals")
+    except (OSError, ValueError, AttributeError):
+        return ()
+    return tuple(approvals) if isinstance(approvals, list) else ()
+
+
+def _keep_approvals(run, policy):
+    """Keep the earlier approvals (``run.approvals``) whose table SHA-256 equal the new placement's, the rule of
+    review_placement, and save the placement with them: an approval saved with save_placement survives a rerun of
+    the task that places the FOVs as before. Without a kept approval the saved placement stays as written."""
+    if not run.approvals:
+        return
+    import logging
+    from starfinder.stitching import ReviewPolicy, load_placement, review_placement, save_placement
+    folder = _layout.stitching_dir(run.out, run.identity["sample"])
+    result = load_placement(folder)
+    review = dict(result.record.get("review") or {}, approvals=list(run.approvals))
+    kept = review_placement(replace(result, record=dict(result.record, review=review)),
+                            ReviewPolicy() if policy is None else policy)
+    approvals = kept.record["review"]["approvals"]
+    logging.getLogger("starfinder.workflow").info(
+        f"kept {len(approvals)} of the {len(run.approvals)} approvals of the earlier placement (those whose table "
+        "SHA-256 equal the new tables')")
+    if approvals:
+        save_placement(kept, folder)
 
 
 def bigstitcher_macro(run):
@@ -604,6 +637,7 @@ def bigstitcher_import(run):
                                 review=block.review, fallback=block.fallback, sample=run.identity["sample"],
                                 macro=None if macro is None else Path(macro).read_text())
     save_placement(result, _layout.stitching_dir(run.out, run.identity["sample"]))
+    _keep_approvals(run, block.review)
 
 
 def _from_plain(value):
@@ -630,9 +664,14 @@ def export(run):
     reused. Before Dataset.export, the command removes its earlier previews/ whatever export.previews says;
     no export record lists that folder. A copy of export.json under workflow/ survives engine removal of the
     declared record, so Dataset.export can remove earlier listed files and reuse saved assembly on a rerun.
+
+    A placement that needs review and holds no approval of its tables holds the export (TaskHeld, exit 4): after
+    its declared outputs are removed, the task makes the sample report (_held_report) for the reviewer.
     """
     import shutil
     from starfinder.export._record import PARTS, listed_files
+    from starfinder.stitching import PlacementReviewRequiredError
+    from starfinder.workflow._task import TaskHeld
 
     config, assembly = _translate.export(run.configuration.plain())
     dataset = run.dataset()
@@ -663,6 +702,9 @@ def export(run):
     try:
         record = dataset.export(sample, placement=_layout.stitching_dir(run.out, sample),
                                 assignment=assembly.assignment, config=config, output_dir=folder)
+    except PlacementReviewRequiredError as error:
+        raise TaskHeld(f"{error}; then save_placement it into {_layout.stitching_dir(run.out, sample)} and run the "
+                       "workflow again", then=lambda: _held_report(run)) from error
     finally:
         # _task removes declared outputs only after the command raises; keep a failed attempt's record too.
         # SIGKILL runs no finally: files listed only by the killed attempt can outlive this earlier copy.
@@ -702,6 +744,34 @@ def report(run):
     run.dataset().report(sample, list(run.manifest["membership"]["samples"][sample]),
                          assignment=report_assignment(configuration), config=config,
                          output_dir=report_dir)
+
+
+def _held_report(run):
+    """The sample report of an export held for review: the report task's command function through that task's own
+    view, once every other task it needs has a succeeded record. It reads the FOVs' records and placement.json (the
+    held export left no export.json) and writes report/<sample>/, but no report record, so the report task runs
+    after the approval as before. Nothing when the plan has no report task."""
+    import logging
+    from starfinder.workflow._shape import COMMANDS
+    from starfinder.workflow._task import Run, read_record
+    from starfinder.workflow._translate import check_api
+    logger = logging.getLogger("starfinder.workflow")
+    sample = run.identity["sample"]
+    task = next((t for t in run.manifest["tasks"] if t["kind"] == "report" and t["identity"] == {"sample": sample}),
+                None)
+    if task is None:
+        logger.info(f"the plan has no report of sample {sample}: no report of the held export")
+        return
+    waiting = [need for need in task["needs"]
+               if need != run.id and (read_record(run.manifest, need) or {}).get("status") != "succeeded"]
+    if waiting:
+        logger.warning(f"the report of sample {sample} is not made: {task['id']} also needs {', '.join(waiting)}, "
+                       "which have no record that says succeeded")
+        return
+    held = Run(run.manifest_path, task["id"], COMMANDS["report"], run.context)
+    check_api(held.configuration, held.api, held.task["blocks"], "report")
+    report(held)
+    logger.info(f"made the report of the held export: {_layout.report_dir(run.out, sample) / 'report.html'}")
 
 
 def compare(run):

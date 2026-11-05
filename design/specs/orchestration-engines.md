@@ -85,7 +85,7 @@ Each engine does the same four things, in its own syntax:
 3. **It runs the task's command** with its execution context appended:
    `--engine <name> --engine-version <version> --job-id <id> --attempt <n> --image <digest or none>`.
 4. **It maps the exit status** ([below](#exit-status-and-retries)): 0 done; 1 retried from scratch
-   up to the profile's limit; 2 and 3 not retried.
+   up to the profile's limit; 2, 3 and 4 not retried.
 
 **The execution context per engine.** The contract records `engine`, `engine_version`, `job_id`,
 `attempt`, `image` and `host`; the command reads the host itself.
@@ -111,6 +111,7 @@ Each engine does the same four things, in its own syntax:
 | 1 | Failed; the attempt's declared outputs are removed | Retried up to the profile's `retries` | `errorStrategy` `retry` up to `maxRetries` |
 | 2 | Refused before any work | Retried like 1: Snakemake does not distinguish exit statuses (each retry refuses again in seconds) | `finish` (no retry; running tasks end) |
 | 3 | A resume refused | As 2 | `finish` |
+| 4 | An export held for review; it made the sample report | As 2: the job fails, and the run ends without `--keep-going`; with `retries` each retry holds again | `finish` |
 | 137, 140, other | Killed by the scheduler (memory or time) | Retried like 1, with the attempt's larger resources | `retry` |
 
 A retry may raise memory and runtime (an execution setting); it never changes a scientific
@@ -138,6 +139,30 @@ Recommendation: A.
 Recommendation: A. The plan refuses configuration errors before any job (exit 2 of the plan stops
 the engine before fan-out), so task refusals are rare: a changed resolved configuration under a
 running engine, or a missing input.
+
+### An export held for review and the rerun after the approval
+
+% Amended 2026-11-05 for W-814 (Jiahao's decision at W-653, 2026-11-04, D9).
+
+An export whose placement needs review exits 4, after making the sample report (the contract, "The
+report of a held export"). Both engines end the run with a failure. Nextflow finishes without retrying
+it, and `VERIFY_AFTER` fails. Snakemake fails the job, and without `--keep-going` it starts no other
+job. Neither needs anything more to make the report: it is made inside the export's job.
+
+After `approve_placement` and `save_placement`, `placement.json` differs from the bytes the placement
+task's record lists, and the placement task must run again to record it. That rerun keeps the
+approval, because the command reads the earlier `placement.json`'s approvals before it removes its
+outputs. The engines reach that rerun differently, as `test_workflow_engines_review.py` runs them:
+
+* **Nextflow** with `-resume`: `VERIFY_BEFORE` finds the placement task not complete (its
+  `placement.json` has another size) and gives it a fresh token. The task reruns and keeps the
+  approval; then `export`, `report` and `compare` run.
+* **Snakemake** removes a job's existing outputs before it runs the job, so a rerun of the placement
+  task that Snakemake scheduled would delete the approved `placement.json` first. It also does not
+  rerun a task whose output changed. The person runs the placement task by its command
+  (`starfinder workflow stitch --manifest <manifest> --task stitch/<sample>`, recorded as `manual`),
+  which keeps the approval and records the task again. Then Snakemake runs `export`, `report` and
+  `compare`, which have no records.
 
 ### The task fingerprint
 
@@ -646,9 +671,11 @@ Per process, from the task's `execution`: `cpus`, `memory` and `time` × `task.a
 from `execution.container`. The error strategy maps the exit status:
 
 ```groovy
-errorStrategy { task.exitStatus in [2, 3] ? 'finish' : (task.attempt <= params.max_retries ? 'retry' : 'finish') }
+errorStrategy { task.exitStatus in [2, 3, 4] ? 'finish' : (task.attempt <= params.max_retries ? 'retry' : 'finish') }
 maxRetries params.max_retries
 ```
+
+% Amended 2026-11-05 for W-814: exit status 4 (an export held for review) finishes like 2 and 3, since a retry holds again.
 
 `params.max_retries` is the profile's (2 for `sge`, as Snakemake's `retries` below).
 

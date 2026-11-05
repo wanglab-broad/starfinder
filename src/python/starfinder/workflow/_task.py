@@ -7,7 +7,8 @@ translate as the plan translated them (exit 2, nothing written; a refused verifi
 its earlier record, writes its log, runs one API entry, checks that every declared output exists, closes the log and
 writes its task record last (exit 0). A failure writes the traceback to the log, removes every declared output (those
 a verified resume kept included), so that no declared output but the log remains, and writes ``<task>.failed.json``
-(exit 1).
+(exit 1). A task held for review (TaskHeld: an export whose placement needs review) fails the same way, makes what the
+reviewer reads after its outputs are removed, and exits 4.
 """
 from __future__ import annotations
 
@@ -50,6 +51,16 @@ class ResumeRefused(Exception):
 
 class TaskFailed(RuntimeError):
     """A task whose API call returned but whose completion check failed (exit status 1)."""
+
+
+class TaskHeld(RuntimeError):
+    """A task held for review (exit status 4): it fails as exit 1 does, its failed record says ``held``, and
+    ``then()``, called after its declared outputs are removed and before its log closes, makes what the reviewer
+    reads (the export's: the sample report)."""
+
+    def __init__(self, message, then=None):
+        super().__init__(message)
+        self.then = then
 
 
 @dataclass(frozen=True)
@@ -138,6 +149,8 @@ class Run:
         self.kept = set()
         # A verified resume of the fov task: (stage, earlier run.json), set by the command's preparation.
         self.resume = None
+        # The approvals of a placement task's earlier placement.json, set by the command's preparation.
+        self.approvals = ()
         self.started = time.perf_counter()
         path = self.out / self.manifest["configuration"]["path"]
         try:
@@ -349,15 +362,23 @@ def execute(command, manifest_path, task_id, function, context=Context(), argv=N
         # runs from scratch. An interruption (below) leaves the files as they are.
         removed = run.remove_outputs()
         logger.error(f"removed the declared outputs: {', '.join(removed) or 'none'}")
+        held = isinstance(error, TaskHeld)
+        if held and error.then is not None:
+            try:
+                error.then()
+            except Exception as then_error:
+                logger.error(f"held for review, but what the reviewer reads was not made: "
+                             f"{type(then_error).__name__}: {then_error}\n{traceback.format_exc()}")
         section = run.workflow_section()
         close()
         _write(failed_path, {"format": FAILED_FORMAT, "id": task_id, "kind": run.kind, "identity": run.identity,
-                             "status": "failed", "started_at": started_at, "ended_at": _now(),
+                             "status": "held" if held else "failed", "started_at": started_at, "ended_at": _now(),
                              "error": {"type": type(error).__name__, "message": str(error)}, "removed": removed,
                              "log": {"path": run.task["log"], "sha256": "sha256:" + file_sha256(log_path)},
                              "workflow": section})
-        print(f"{command} failed: {task_id}: {type(error).__name__}: {error} (log {log_path})", file=sys.stderr)
-        return 1
+        print(f"{command} {'held for review' if held else 'failed'}: {task_id}: {type(error).__name__}: {error} "
+              f"(log {log_path})", file=sys.stderr)
+        return 4 if held else 1
     finally:
         # An interruption (a BaseException) leaves the files as they are, as a kill would.
         close()

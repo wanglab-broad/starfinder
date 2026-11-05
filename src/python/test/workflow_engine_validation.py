@@ -116,7 +116,9 @@ class EngineRun:
     def records(self):
         return {t["id"]: json.loads((self.out / t["record"]).read_text()) for t in self.data["tasks"]}
 
-    def invoke(self, expected=None, *, environment=None):
+    def invoke(self, expected=None, *, environment=None, held=False):
+        """Run the engine on the plan; ``held``: an export held for review (exit 4) ends the run, which fails and is
+        not checked for completion."""
         tag = f"invocation-{self.invocations:02d}"
         self.invocations += 1
         before = {t["id"]: (self.out / t["record"]).read_bytes() for t in self.data["tasks"]
@@ -135,6 +137,12 @@ class EngineRun:
         evidence(self.work, tag + ".json", {"engine": self.engine, "returncode": done.returncode,
                  "stdout": done.stdout, "stderr": done.stderr, "trace": rows,
                  "expected": sorted(expected) if expected is not None else None, "actual": sorted(actual)})
+        if held:
+            assert done.returncode != 0, done.stdout[-6000:] + done.stderr[-6000:]
+            evidence(self.work, tag + "-records.json", {t["id"]: json.loads((self.out / t["record"]).read_text())
+                                                        for t in self.data["tasks"]
+                                                        if (self.out / t["record"]).is_file()})
+            return actual
         assert done.returncode == 0, done.stdout[-6000:] + done.stderr[-6000:]
         self.data = json.loads(self.manifest.read_text())
         if self.engine == "nextflow":
@@ -162,7 +170,9 @@ class EngineRun:
         assert result["passed"], result
         for task_id, record in self.records().items():
             assert record["status"] == "succeeded" and not record.get("stub", False), task_id
-            assert record["workflow"]["execution_context"]["engine"] == self.engine, task_id
+            # A task a person ran by its command (the placement task after an approval, under Snakemake) says manual.
+            assert record["workflow"]["execution_context"]["engine"] in (
+                self.engine, *(("manual",) if task_id in getattr(self, "manual", ()) else ())), task_id
         assert f'<a href="{X.SAMPLE}/report.html">{X.SAMPLE}</a>' in (self.out / "report/index.html").read_text()
 
     def replan(self, config):

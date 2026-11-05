@@ -581,6 +581,62 @@ def test_files_hash_row_is_empty_outside_the_workflow(tmp_path):
     assert rows["Hash (FOVs ran under)"] == ""
 
 
+def _review_rows(text):
+    block = re.search(r'id="place-review">(.*?)</table>', text, re.S)
+    return None if block is None else dict(re.findall(r"<tr><td>(.*?)</td><td>(.*?)</td></tr>", block[1], re.S))
+
+
+def _required_review(case, approve=False):
+    """The fixture's placement under review criterion V1 (F3 metadata_only and F4 failed: unplaced_fovs), saved
+    again; with ``approve``, approved first."""
+    from starfinder.stitching import approve_placement, load_placement, review_placement, save_placement
+    folder = case.root / "stitching" / SAMPLE
+    result = review_placement(load_placement(folder))
+    if approve:
+        result = approve_placement(result, reviewer="A. Reviewer", note="F3 and F4 <checked>")
+    save_placement(result, folder)
+    return result.record["review"]
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("approve", [False, True])
+def test_placement_section_shows_a_required_review_without_an_export(tmp_path, approve):
+    # W-814: the report of an export held for review shows placement.json's review above the placement map.
+    case = report_records(tmp_path / "root", "placement_states")
+    review = _required_review(case, approve)
+    assert review["state"] == "required" and review["flagged"] == {"unplaced_fovs": ["F3", "F4"]}
+    folder, _ = case.collect()
+    text = (folder / "report.html").read_text(encoding="utf-8")
+    block = re.search(r'id="b-placement".*?id="m-place"', text, re.S)[0]
+    assert 'id="place-review"' in block
+    approvals = ("A. Reviewer, " + review["approvals"][0]["time_utc"] + ": F3 and F4 &lt;checked&gt;" if approve else
+                 '<span class="muted">none</span>')
+    assert _review_rows(text) == {
+        "Review": "required: sample assembly and the export wait for <code>approve_placement</code>",
+        "Reasons": "unplaced_fovs", "Flagged FOVs": "unplaced_fovs: F3, F4", "Approvals": approvals}
+    # report.json gains no key: the review is the page's alone.
+    assert list(load_report(folder)) == CONTRACT_RECORD_KEYS
+
+
+@pytest.mark.contract
+def test_placement_section_shows_no_review_when_none_is_required(tmp_path):
+    folder, _ = report_records(tmp_path / "root").collect()
+    assert _review_rows((folder / "report.html").read_text(encoding="utf-8")) is None
+
+
+def test_placement_section_shows_no_review_with_an_export(tmp_path):
+    # The report of a sample whose export succeeded is unchanged, whatever its placement's review says.
+    anndata_or_skip()
+    case = report_cells(tmp_path / "root")
+    path = case.root / "stitching" / SAMPLE / "placement.json"
+    record = json.loads(path.read_text())
+    record["review"] = {"state": "required", "reasons": ["supplied_placement"], "policy": None, "flagged": {},
+                        "approvals": []}
+    path.write_text(json.dumps(record))
+    folder, _ = case.collect()
+    assert _review_rows((folder / "report.html").read_text(encoding="utf-8")) is None
+
+
 def test_data_block_cannot_end_its_script(tmp_path):
     frames = {name: pd.DataFrame({"x": pd.Series(["</script><!--a", None], dtype="string")})
               for name in page_module.DATA_TABLES}

@@ -418,7 +418,7 @@ Every place is fixed under the output root (settled decision 1); nothing is sear
 | Codebook | `run.json` `codebook.path` (R2) | the user | The gene list of the marker check |
 | Per-FOV segmentation and assignment | `fovs/<fov>/segmentation/<run>/`, `fovs/<fov>/assignment/<assignment>/` | `segmentation/_persist.py`: `write_run`; `assignment/_persist.py`: `write_assignment` | The per-FOV lane on the route per FOV; the segmentation examples on that route |
 | Reference image | `fovs/<fov>/reference.tif`, or the `reference_image` or `reference_image_import` pattern | `dataset/fov.py`: `FOV.save_reference_image` | The background of the segmentation examples on the route per FOV; the Z size when no export exists |
-| Placement | `stitching/<sample>/placement.json`, `fovs.csv` | `stitching/_persist.py`: `save_placement` | The FOV maps, the correction from the stage position, the placement status, the owned area |
+| Placement | `stitching/<sample>/placement.json`, `fovs.csv` | `stitching/_persist.py`: `save_placement` | The FOV maps, the correction from the stage position, the placement status, the owned area; without an export record, a required review (`review`: state, reasons, flagged FOVs, approvals) above the Placement map |
 | Export record | `export/<sample>/export.json` | `export/_record.py`: `write_export`, `update_section` (through `dataset/_export.py`: `export_sample`) | The route, the parts, the population accounting, the fused image and label files, the export's software |
 | Sample tables | `export/<sample>/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `sample.h5ad` | `assembly/_persist.py`: `save_assembly`; `assembly/_anndata.py`: `write_sample_h5ad` | Cells per FOV, reads in cells, per-cell distributions, MECR, marker patterns, reads along Z |
 | Fused image | the `fusion.outputs` of `export.json` (`<image>_projection.ome.tif`, `<image>_stack.ome.tif`) | `export/_fuse.py`: `fuse_images` | The marker patterns' image; the XZ zoom (a stack) |
@@ -465,7 +465,7 @@ as not evaluated with reason `no_run_record`.
 | What exists | What the report holds | Unavailable, with reason |
 | --- | --- | --- |
 | Run records of some or all FOVs, nothing else | Summary (identity, configuration check, version, times, the key numbers up to the matched fraction), the per-FOV lane, FOV status and times, preprocessing and registration examples (replayed), the registration heatmap, the readout totals and per-FOV values, their distributions and table; the problematic FOVs of the workflow, registration and readout rules | The FOV maps (`no_placement`); Segmentation and assembly, Sample measurements, the reads assigned to cells (`no_export`); a running FOV's later values (`run_not_finished`) |
-| … and the placement | The FOV maps of registration and readout, the placement block (correction and status), the rules "not placed or fell back" | The owned area and density (`no_export`: the ownership configuration is in the export) |
+| … and the placement | The FOV maps of registration and readout, the placement block (correction and status, and a required review with its reasons, flagged FOVs and approvals: the report of an export held for review), the rules "not placed or fell back" | The owned area and density (`no_export`: the ownership configuration is in the export) |
 | … and the per-FOV assignments (route per FOV) | The segmentation examples and the per-FOV lane's segmentation and assignment | Cells per FOV, accounting, per-cell values (`no_export`) |
 | … and the export, route per FOV | Everything | Only what its parts did not write (`part_not_written`) or the configuration lacks (`no_markers`, `no_stack`) |
 | … and the export, route after fusion | Everything, with the route's meanings ("The two routes") | As above |
@@ -473,6 +473,9 @@ as not evaluated with reason `no_run_record`.
 | **The export and no run record** (amendment 2; for example an export made from saved molecule tables, as the own-folder exports of 2026-10-09 were made for LN sample1 and cell-culture-3D) | Summary identity (dataset from the `Dataset`, sample, version and the Z size from the export), the placement block and maps (from the placement folder when it exists, otherwise the export's footprints and status), the reads that passed the earlier filter per FOV (`tables/fovs.csv` `n_molecules`), the population accounting, the marker patterns, the reads along Z, and, with cells, every cell value | Everything up to the readout (`no_run_record`: steps, methods, times, status, inputs, preprocessing, registration and its QC, spots detected, correct form, matched, deduplication); the correction from the stage position without a placement folder (`no_placement`); the rounds and channels (`no_run_record`) |
 
 % A2, W-398
+
+% Amended 2026-11-05 for W-814: a required review of the placement on the page when there is no export record (Jiahao's
+% decision at W-653, 2026-11-04, D9); the report of an export held for review is made by the export task (orchestration.md).
 
 ## Unavailable parts
 
