@@ -188,12 +188,30 @@ block's `device`. Spotiflow and Piscis run on the GPU with `"cuda"`; local maxim
 the Starfish LoG run on the CPU only and refuse it. With `"cuda"` and no GPU that torch
 can see, a learned detection stops with
 `ValueError("device 'cuda' was requested, but torch sees no GPU")`. Registration and
-readout run on the CPU whatever the device. A GPU result is not assumed to equal the
-CPU's: TF32 and the GPU's kernels can change the networks' float32 outputs, so compare
-the two spot tables within the float32 tolerance rather than expect identical files.
-Starfinder does not change thread or TF32 settings: set `OMP_NUM_THREADS` and the other
-thread variables before you start Python, and `diagnostics["execution"]` records what
-was in effect, on `"cuda"` with the GPU's name and the TF32 settings.
+readout run on the CPU whatever the device.
+
+A GPU result does not equal the CPU's. With torch's defaults, cuDNN may compute the
+networks' convolutions in TF32. In one check on an RTX A5000 (Spotiflow `smfish_3d` and
+Piscis `20251212` on a 32 × 64 × 64 image), the coordinates and `probability` differed
+from the CPU's beyond the float32 tolerance (`rtol=1e-6`, `atol=1e-6`): Spotiflow's by up
+to 1.3e-3, Piscis's by up to 1.5e-5. The spot counts, `spot_id`, `channel` and
+`peak_intensity` were equal on that image, but a `probability` shift of that size can
+move a spot near the threshold across it, so the counts can differ on other images.
+When a spot table must match a CPU run's within the float32 tolerance, turn cuDNN TF32
+off before you call `find_spots` (TF32 for matrix products is off by default):
+
+```python
+import torch
+
+torch.backends.cudnn.allow_tf32 = False
+```
+
+With that setting, both methods were within the float32 tolerance of the CPU. The
+workflow has no TF32 setting, so its GPU tasks run with torch's defaults; keep the
+`spot_finding` block's `device` at `cpu` for a run whose spot tables must match a CPU
+run's. Starfinder does not change thread or TF32 settings: set `OMP_NUM_THREADS` and the
+other thread variables before you start Python, and `diagnostics["execution"]` records
+what was in effect, on `"cuda"` with the GPU's name and the TF32 settings.
 
 ## Workflow keys
 

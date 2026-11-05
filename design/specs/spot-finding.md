@@ -244,6 +244,7 @@ class SpotFindingPlan:
 ## Execution device
 
 % Amended 2026-11-05 (W-796): `"cuda"` for Spotiflow and Piscis, set in the workflow by `processing.spot_finding.device`; Jiahao's decisions of 2026-11-04, below.
+% Amended 2026-11-05 (W-821): W-809's measured CUDA/CPU difference, its cause (cuDNN TF32) and the caller's setting, under point 3 below; Jiahao's decision (a) of 2026-11-05.
 
 `ExecutionConfig` has `device: str = "cpu"`, which `FOV.run` passes to `find_spots`;
 direct `find_spots` takes the same keyword (`device="cpu"`). The value is `"cpu"` or
@@ -344,6 +345,29 @@ of each point below.
    off: the execution entry records the GPU and the TF32 settings, so that a
    difference can be traced to them. The CPU stays the device of the golden and
    validation tests.
+
+   **Measured (W-809, 2026-11-05).** W-809 ran the seam scene `seam3d` (32 × 64 × 64
+   uint16, seed 100) through `find_spots` on GP099-29C's RTX A5000 and on its CPU, in
+   W-792's `learned-cuda` image with `dev` `8d9d627` bound in (driver 580.178.04, torch
+   2.7.1+cu126, cuDNN 9.5.1). The spot counts (Spotiflow `smfish_3d` 18, Piscis
+   `20251212` 19), `spot_id`, `channel`, `peak_intensity` and Piscis's integer-valued
+   `z` were equal. With torch's default TF32 settings (matmul off, cuDNN on), the
+   float32 columns were not within the tolerance. Spotiflow's `z`, `y`, `x` and
+   `probability` differed for all 18 spots, by up to 1.3e-3 (`z`) and 5.9e-4
+   (`probability`, 368 times the tolerance bound). Piscis's `x` differed for 2 of 19
+   spots, by up to 1.5e-5 (2.8 times the bound). With cuDNN TF32 turned off by the
+   caller, both methods were within the tolerance (largest difference over bound 0.23
+   and 0.02), so the difference comes from cuDNN TF32. Two calls in one process gave
+   identical tables on each device. Jiahao chose on 2026-11-05 (W-821) to record the
+   difference and keep TF32 as it is. With torch's defaults, a CUDA spot table is
+   therefore not equal to the CPU's under this rule; a `probability` shift of this size
+   can move a spot that lies near the threshold across it, so the counts can differ on
+   other images. A caller whose spot table must match a CPU run's within the float32
+   tolerance sets `torch.backends.cudnn.allow_tf32 = False` before `find_spots` and
+   leaves `torch.backends.cuda.matmul.allow_tf32` at its default, `False`; the
+   execution entry then records both as `false`. The workflow has no TF32 setting, so
+   its GPU tasks run with torch's defaults. The records are in
+   `runs/W-809/20261105T155506Z-gpu-check/`.
 
 The GPU study's other two points: a GPU `fov` task's memory is its
 `execution.tasks.fov.memory_mb`, which the user sets for a CUDA process's host
