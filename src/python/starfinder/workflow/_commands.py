@@ -666,7 +666,8 @@ def export(run):
     declared record, so Dataset.export can remove earlier listed files and reuse saved assembly on a rerun.
 
     A placement that needs review and holds no approval of its tables holds the export (TaskHeld, exit 4): after
-    its declared outputs are removed, the task makes the sample report (_held_report) for the reviewer.
+    its declared outputs are removed, the task makes the sample report (_held_report) for the reviewer when every
+    other task the report needs has succeeded.
     """
     import shutil
     from starfinder.export._record import PARTS, listed_files

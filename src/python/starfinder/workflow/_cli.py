@@ -4,7 +4,7 @@
 ``--task`` and the execution context ``--engine``, ``--engine-version``, ``--job-id``, ``--attempt``, ``--image`` and
 ``--cache-token``, which are recorded and never interpreted. Exit status 0 succeeded, 1 failed, 2 refused before any
 work, 3 a refused verified resume, 4 held for review (an export whose placement needs review; the task made the
-sample report).
+sample report when every other task the report needs had succeeded).
 """
 from __future__ import annotations
 

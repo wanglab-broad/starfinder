@@ -2554,7 +2554,8 @@ scripts, rules and the JSON copy are unchanged, and `common.smk` selects the sam
   each FOV's run.json" when two differ, instead of the first FOV's alone (Jiahao, W-653 gate, 2026-11-04, item D2). X11's
   exception and its test follow the label and the value.
 * **Amended 2026-11-05, W-814: the report of an export held for review.** An export whose placement needs review
-  exits 4, not 1, after making the sample report from the FOVs' records and `placement.json`; its failed record says
+  exits 4, not 1, after making the sample report from the FOVs' records and `placement.json` when every other task the
+  report needs has succeeded; its failed record says
   `held`, and Nextflow's error strategy finishes on 4 as on 2 and 3, so it is not retried. The report's Placement section
   shows a required review when there is no export record. A rerun of `stitch` or `bigstitcher_import` keeps the earlier
   approvals whose table SHA-256 still match (Jiahao, W-653 gate, 2026-11-04, item D9). The plan and its manifests do not

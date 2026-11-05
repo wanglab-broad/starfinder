@@ -475,7 +475,8 @@ as not evaluated with reason `no_run_record`.
 % A2, W-398
 
 % Amended 2026-11-05 for W-814: a required review of the placement on the page when there is no export record (Jiahao's
-% decision at W-653, 2026-11-04, D9); the report of an export held for review is made by the export task (orchestration.md).
+% decision at W-653, 2026-11-04, D9); the report of an export held for review is made by the export task when the report's other needs have
+% succeeded (orchestration.md).
 
 ## Unavailable parts
 

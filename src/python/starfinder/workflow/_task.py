@@ -8,7 +8,7 @@ its earlier record, writes its log, runs one API entry, checks that every declar
 writes its task record last (exit 0). A failure writes the traceback to the log, removes every declared output (those
 a verified resume kept included), so that no declared output but the log remains, and writes ``<task>.failed.json``
 (exit 1). A task held for review (TaskHeld: an export whose placement needs review) fails the same way, makes what the
-reviewer reads after its outputs are removed, and exits 4.
+reviewer reads after its outputs are removed (when it can), and exits 4.
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ class TaskFailed(RuntimeError):
 class TaskHeld(RuntimeError):
     """A task held for review (exit status 4): it fails as exit 1 does, its failed record says ``held``, and
     ``then()``, called after its declared outputs are removed and before its log closes, makes what the reviewer
-    reads (the export's: the sample report)."""
+    reads (the export's: the sample report, when every other task the report needs has succeeded)."""
 
     def __init__(self, message, then=None):
         super().__init__(message)

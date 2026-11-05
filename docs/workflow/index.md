@@ -131,11 +131,18 @@ does. To rerun a task it names, remove the task's record,
 when a FOV is not `image_supported`, a correction exceeds half the nominal
 overlap width, a kept link's residual exceeds 1 µm (both bounds are
 `stitching.review`), the optimizer removed a link, or the placement is supplied.
-The `export` task then stops. It makes the sample report from the FOVs' records
-and `placement.json`, and the report's Placement section shows the review's
-reasons, the flagged FOVs and any approvals. The task exits 4, the run fails,
-and `verify --final` names the export held. Nextflow does not retry it;
-Snakemake retries it only with `--retries`, and it holds again each time.
+The `export` task then stops. Once every other task the report needs has
+succeeded, it makes the sample report from the FOVs' records and
+`placement.json`, and the report's Placement section shows the review's reasons,
+the flagged FOVs and any approvals. The task exits 4, the run fails, and
+`verify --final` names the export held. Nextflow does not retry it; Snakemake
+retries it only with `--retries`, and it holds again each time.
+
+With an `assignment` block and an `export.route` other than `per_fov`, the
+report also needs the `assign` tasks, which the export does not. If one of them
+has not succeeded when the export is held, no report is made, and the export's
+log names the tasks the report waits for. The review below does not need the
+report, and the run after the approval makes it.
 
 To review the placement, open it with
 `load_placement("<output root>/stitching/<sample>")`. Inspect each FOV's status

@@ -30,7 +30,7 @@ changes what a task does.
 | 1 | The task failed; its declared outputs were removed and `<task>.failed.json` written | Retried up to `--retries` | Retried up to `--max_retries` (default 2) |
 | 2 | Refused before any work; nothing was written | Retried like 1 | Not retried; the run finishes |
 | 3 | A verified resume was refused | Retried like 1 | Not retried; the run finishes |
-| 4 | The export was held for review: its placement needs review and holds no approval of its tables; it failed as 1 does, its failed record says `held`, and it made the sample report ({ref}`the route <workflow-placement-review>`) | Retried like 1 | Not retried; the run finishes |
+| 4 | The export was held for review: its placement needs review and holds no approval of its tables; it failed as 1 does, its failed record says `held`, and it made the sample report when every other task the report needs had succeeded ({ref}`the route <workflow-placement-review>`) | Retried like 1 | Not retried; the run finishes |
 
 `plan` exits 2 when it refuses a configuration and `verify` exits 1 with `--final`
 when a task is not complete. Each retry multiplies a task's memory and runtime by

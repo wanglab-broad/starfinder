@@ -264,7 +264,7 @@ failure (`starfinder/__main__.py`, `main`). The workflow commands keep that and 
 | 1 | The task failed: the API call raised, or the completion check found a declared output missing; the declared outputs this attempt wrote are removed | May retry from scratch (D8) |
 | 2 | Refused before any work: usage, an unknown task, a resolved configuration whose hash differs from the manifest's, a `needs` task without a succeeded record, a missing declared input, or a refused configuration (the plan) | Does not retry: the same call refuses again |
 | 3 | A resume refused: `resume_from_checkpoint` is on and the saved record does not match ([checkpoints and resume](#checkpoints-and-resume)) | Does not retry; the user decides |
-| 4 | Held for review: the `export` task's placement needs review and holds no approval of its tables (`PlacementReviewRequiredError`). It fails as 1 does, its failed record says `held`, and after its declared outputs are removed it makes the sample report ([the report of a held export](#the-report-of-a-held-export)) | Does not retry: the same placement holds the export again; the user reviews it |
+| 4 | Held for review: the `export` task's placement needs review and holds no approval of its tables (`PlacementReviewRequiredError`). It fails as 1 does, its failed record says `held`, and after its declared outputs are removed it makes the sample report when every other task the report needs has a succeeded record ([the report of a held export](#the-report-of-a-held-export)) | Does not retry: the same placement holds the export again; the user reviews it |
 
 % Amended 2026-11-05 for W-814: exit status 4, held for review (Jiahao's decision at W-653, 2026-11-04, D9).
 
@@ -282,6 +282,11 @@ call is `Dataset.report` over the FOVs' records and `placement.json`, the export
 `bigstitcher_import`) keeps every approval of the earlier `placement.json` whose table SHA-256 equal
 the new tables', the rule of `review_placement`; it reads them before it removes its outputs. Then the
 export completes. How each engine reaches that rerun is the engine record's.
+
+The report can need a task the export does not need: on the routes `after_fusion` and `molecules_only`
+with an `assignment` block, the report also needs the `assign` tasks. If one of them has not succeeded
+when the export is held, no report is made, the export's log names the tasks the report waits for, and
+the report comes from the run after the approval.
 
 ### Choice: the name of the command group
 
