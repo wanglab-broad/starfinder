@@ -155,8 +155,11 @@ folder with `save_placement`. Then run the workflow again.
   The rerun keeps the approval, because its tables are unchanged. Then it runs
   the export, the report and the comparison.
 * **Snakemake** removes a task's outputs before it reruns it, which would remove
-  the approval. So first run the task by its command:
-  `starfinder workflow stitch --manifest <output root>/workflow/manifest.json --task stitch/<sample>`.
+  the approval. So first run the task by its command, where the tasks run (on
+  the cluster, in the image, as `verify` is):
+  `starfinder workflow stitch --manifest <output root>/workflow/manifest.json --task stitch/<sample>`,
+  or for a BigStitcher placement `starfinder workflow bigstitcher-import` with
+  `--task bigstitcher_import/<sample>`.
   It keeps the approval and records the task again. Then run Snakemake.
 
 In both, `verify --final` then passes. An approval holds only for the tables it

@@ -3,8 +3,8 @@
 X3's named workflow token and provenance fields are checked separately before
 normalization. Directory markers are ignored only for Snakemake's declared
 directory outputs; X11's global hashes vary only on tasks outside its rerun set. Its report Hash
-cell varies only when no FOV task reran, and is checked against each tree's
-first FOV record; X11 also compares all file names outside workflow/.
+cell varies only when no FOV task reran, and is checked against every FOV
+record of each tree's sample; X11 also compares all file names outside workflow/.
 """
 from __future__ import annotations
 
