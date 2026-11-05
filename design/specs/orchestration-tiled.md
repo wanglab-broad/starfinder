@@ -677,6 +677,17 @@ after its local registration), `exact` (true: refuse operations without a finite
 * **OT1 (W-645).** The local registration margin and the tolerance of tiled against direct with
   local registration are proposals; the validation design calibrates them on `thick_medium` with a
   deformation preset.
+
+  % Amended 2026-11-05 (W-815, D3 of the W-653 gate: OT1 stays open and the measurement is recorded): W-765 ran X9 under a 48 GiB
+  % grant (`runs/W-765/20261102T160616Z-e8bba206/`; the seam and truth analysis is `runs/W-765/20261102T192613Z-position-analysis/`).
+  % Setup: `thick_medium` (100 x 1024 x 1024) with `gaussian_small`, seed 789, the default `DemonsConfig`, halo 12, tiles of 512.
+  % Molecules: direct 79,697; tiled at 512 78,863, so the counts differ by 1.05 %, against X6's 5 %. Matched (within 1 voxel
+  % with the same gene): 78.52 % of direct's molecules and 79.04 % of the tiled ones, against X6's 95 %. Near the seams the match
+  % is lower: 47.5 % of the molecules within 12 voxels of a seam are matched, against about 85 % at 64 to 256 voxels from one.
+  % Against the scene's truth both routes reach about 15 % recall (14.8 % direct and 15.0 % tiled of the decodable amplicons within
+  % 3 voxels; 8.0 % and 8.1 % of all amplicons within 1 voxel), so the run shows how stably the routes reproduce each other,
+  % not the accuracy of either. Not measured: tile size 256 (Jiahao, 2026-11-02: "256 不跑了") and halo 42, the proposed margin.
+  % OT1 stays open, and X6's thresholds do not change.
 * **OT2.** Each detector's ordering key and footprint as registry fields (`SPOT_FINDING_METHODS`);
   until they exist the plan accepts `local_maxima` (with `min_distance_voxels` 1 and no merge
   radius) and refuses the others in tiled mode with `exact: true`; each tile also checks

@@ -214,6 +214,9 @@ The {doc}`reference <reference>` lists every key with its default, and the
   thread per `fov` task).
 * With retries set, Snakemake retries a refused task (exit 2 or 3) or a held
   export (exit 4) like a failed one; Nextflow retries none of them.
+* Under Snakemake, an output whose size changed is not rerun. Its consumers
+  rerun on the changed file when its modification time is newer, and the run
+  exits 0. Only `workflow verify --final` reports it.
 * The MATLAB workflow is frozen: the plan refuses `backend: matlab`, and the
   Snakefile runs the legacy rules for it.
 

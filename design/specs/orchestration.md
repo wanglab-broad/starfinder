@@ -1637,7 +1637,7 @@ Recommendation: A.
 | `workflow-downstream.md:143-150` | "the figures only with `previews: true`, into `fovs/{fovID}/previews/`" (of the assembly block) | "with `assignment.previews: true`, into `fovs/{fovID}/previews/`; the export's with `export.previews: true`" | P5 |
 | `workflow-downstream.md:183-185` | "until it does, the workflow refuses it when the rules are parsed, naming both" | "until it does, the plan refuses it, naming both" | D2 |
 | `broad-uger.md:12-17` | "The repository's `config/environment-v9.yaml` describes a Snakemake 9 environment"; "install the package/dependencies into the actual compute environment when using the Python backend" | The locked environment and its image (the engine record proposes the wording) | D9 |
-| `broad-uger.md:46-48` | "conda deployment"; "three retries" | "the image of the lock; retries are the engine's, of exit status 1 only" | D8, D9 (O22) |
+| `broad-uger.md:46-48` | "conda deployment"; "three retries" | "the image of the lock; retries are the engine's: Snakemake retries every non-zero exit (`retries: 2`, `profile/broad-uger/config.yaml:14`), Nextflow every exit except 2, 3 and 4 (`errorStrategy` in `nextflow/nextflow.config:17`)" | D8, D9 (O22) |
 | `broad-uger.md:56-57` | "Logs use a rule log, `params.uger_log`, or `~/snakemake-logs/{rule}/`." | "Each task writes `workflow/logs/<task>.log`; the job's standard output and error stay the profile's" | D8 (O22) |
 | `checkpoints.md:524-526` | "Resuming is always an explicit call; there is no scheduler. Nothing verifies a resume against `run.json` today: verified resume, scheduling and job completion belong to workflow orchestration." | "In the package, resuming is an explicit call. The workflow's `fov` task verifies a resume against `run.json` version 2 when `execution.resume_from_checkpoint` is on, and refuses on a mismatch (exit 3)." | D8 |
 | `checkpoints.md:556-561` | "Two meanings, kept apart": "`status` is the outcome of `FOV.run`'s processing" and `outputs` the files written after it | Adds: "A workflow task succeeded only when its record says `succeeded` and lists every other declared output with its SHA-256 (the record never lists itself; the log is closed before the record is written)" | D8 |
@@ -1645,6 +1645,11 @@ Recommendation: A.
 | `checkpoints.md:585` | "The declared outputs of the Python processing rules are all recorded here" | "The declared outputs of the `fov` and `tile_merge` tasks are all recorded here" | D2, D5 |
 | `checkpoints.md:563-586` | The field table | Adds the row `workflow` ([logging and records](#logging-and-records)) | D8 |
 | `checkpoints.md:602-604` | "The workflow's processing rules write `run.json`" | "The workflow's `fov` and `tile_merge` tasks write `run.json`" | D2 |
+
+% Amended 2026-11-05 (W-815, D1 of the W-653 gate): the `broad-uger.md:46-48` row said retries are "of exit status 1 only". At the base,
+% Snakemake retries every non-zero exit, because it does not distinguish exit statuses (`retries: 2` in `profile/broad-uger/config.yaml`),
+% and Nextflow retries every exit except 2 and 3 (refusals) and 4 (an export held for review, W-814), which finish instead
+% (`nextflow/nextflow.config:17`; the engine record's "Exit status and retries").
 
 ## Choices in the commands
 

@@ -762,6 +762,10 @@ these records; a deleted log or a resized output can therefore leave a task inco
 ([additions to the contract](#additions-to-the-contract)).
 
 % Amended 2026-11-01 for W-760: Snakemake's scheduling is not the record-based completion rule.
+% Amended 2026-11-05 (W-815, D10 of the W-653 gate: a stated limit): the workflow guide's "Limits" now says it. Under Snakemake an
+% output whose size changed is not rerun; the tasks that read it rerun on the changed file when its modification time is newer, the
+% run exits 0, and only `workflow verify --final` reports it (W-739's operator probes,
+% `runs/W-739/20261101T185229Z-operator-probes/`).
 
 #### Choice: Nextflow's cache, deleted outputs and stale results
 
@@ -795,8 +799,18 @@ layer, in its own CI job with Java and Nextflow.
 | Profile | Settings |
 | --- | --- |
 | `local` | `executor 'local'`; `apptainer.enabled` or `docker.enabled` with the image, or neither (the locked environment on `PATH`); `executor.cpus` the host's allowance |
-| `sge` | `executor 'sge'`; `penv 'smp'` above one CPU; `clusterOptions` `-P broad -S /bin/bash -l h_vmem=<memory / cpus>M -l h_rt=<time>` (as W-641's run used: `-P broad -l h_vmem=1G -l h_rt=00:10:00 -S /bin/bash`, two tasks on UGER); the label `gpu` adds `-l gpu=TRUE,operating_system=RedHat8`; `apptainer.enabled`, `apptainer.cacheDir` and `NXF_HOME` on `/stanley`, `apptainer.runOptions '--bind /stanley,/local/scratch'`; `executor.queueSize 200`, `pollInterval '30 sec'`; `params.max_retries 2` |
+| `sge` | `executor 'sge'`; `penv 'smp'` above one CPU; `clusterOptions` `-P broad -S /bin/bash -l h_vmem=<memory / cpus>M -l h_rt=<time>` (as W-641's run used: `-P broad -l h_vmem=1G -l h_rt=00:10:00 -S /bin/bash`, two tasks on UGER); the label `gpu` adds `-l gpu=TRUE,operating_system=RedHat8` and `--nv`; `apptainer.enabled`, `apptainer.runOptions '--bind /stanley'`; `containerOptions` with the thread, cache and job-id variables; `params.require_container true`; `params.max_retries 2` is `nextflow.config`'s |
 | `google-batch` | [Google Batch readiness](#google-batch-readiness) |
+
+% Amended 2026-11-05 (W-815, D1 of the W-653 gate, with W-649's D4): the row listed five settings that `nextflow/conf/sge.config`
+% does not have, and a second bind. The profile binds `/stanley` only. Where each is set instead, at the base:
+% `apptainer.cacheDir` is set nowhere in the repository; the Nextflow tasks leave `APPTAINER_CACHEDIR` to Apptainer, and only the
+% Snakemake job script (`profile/broad-uger/broad-jobscript.sh`) defaults it to `/stanley/WangLab/<user>/.apptainer`.
+% `NXF_HOME` is set by the head, not the profile: W-649's head scripts (`nf-head.sh`, `u3-head.sh`) export it as `<run folder>/nxf-home`
+% beside `NXF_OPTS="-Xms256m -Xmx1g"`. `executor.queueSize` is not set in the `sge` profile (`local.config` sets 1); W-649's `nf-head.sh`
+% passes `-qs <queue size>` on the command line (U4: at most 40 jobs). `pollInterval` is set nowhere, so Nextflow's own default
+% applies. `/local/scratch` is bound by the Snakemake job script only (`--bind /stanley,/local/scratch`), not by the `sge` profile.
+% U3, U4 and U7 ran with the profile as it is.
 
 The Nextflow head on UGER is a job itself (W-641's `nextflow_head.sh`: `use UGER`, `use Java-17`,
 `NXF_HOME` on `/stanley`, `NXF_OPTS="-Xms256m -Xmx1g"`), requested with `h_vmem=8G` (the JVM, W-641).
