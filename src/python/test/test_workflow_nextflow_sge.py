@@ -1,7 +1,8 @@
 """W-787, W-805: the ``sge`` profile's container options for a CPU and a GPU task, and a task record's job id, rendered by
-Nextflow without UGER."""
+Nextflow without UGER; W-796: a fov task of a learned detector on cuda runs as a GPU job."""
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -56,8 +57,9 @@ for name in $(compgen -e APPTAINERENV_); do pairs+=("${name#APPTAINERENV_}=${!na
 # As the container starts: nothing of the job script's environment but PATH, the --env pairs and the APPTAINERENV_ ones.
 exec env -i PATH="$PATH" "${pairs[@]}" "$@"
 '''
-# The task commands of the render that does not stub: the plan and the verification are the package's own; a task's
-# command writes the record Nextflow copies, holding the execution context it was given.
+# The task commands of the render that does not stub: the plan and the verification are this checkout's package (the
+# job script clears the environment, PYTHONPATH with it); a task's command writes the record Nextflow copies, holding
+# the execution context it was given.
 STARFINDER = f'''#!{sys.executable}
 import json
 import os
@@ -68,7 +70,8 @@ argv = sys.argv[1:]
 if argv[1] in ("plan", "verify"):
     if "--final" in argv:
         sys.exit(0)
-    os.execv(sys.executable, [sys.executable, "-m", "starfinder", *argv])
+    os.execve(sys.executable, [sys.executable, "-m", "starfinder", *argv],
+              dict(os.environ, PYTHONPATH={str(X.ROOT / "src" / "python")!r}))
 option = lambda name: argv[argv.index(name) + 1]
 manifest = json.loads(Path(option("--manifest")).read_text())
 task = next(t for t in manifest["tasks"] if t["id"] == option("--task"))
@@ -215,3 +218,39 @@ def local_tasks(tmp_path_factory):
     assert {r["status"] for r in N.tasks(rows)} == {"COMPLETED"}
     manifest = N.manifest(path)
     return manifest, task_records(work / "work", manifest)
+
+
+def test_a_fov_task_of_a_learned_detector_on_cuda_runs_as_a_gpu_job(tmp_path_factory):
+    """W-796: main.nf routes a fov task whose ``execution.gpu`` is true (Spotiflow on cuda) to FOV_GPU, whose label
+    ``gpu`` gives its job script the GPU request and ``--nv``; with segmentation on the CPU, no other task does."""
+    N.executable()
+    work = tmp_path_factory.mktemp("sge-fov-gpu")
+    X.golden().write_fixture(work)
+    config = X.variants(work)["morphology-only"]
+    config["segmentation"]["device"] = "cpu"
+    processing = copy.deepcopy(X.PROCESSING)
+    processing["spot_finding"] = {"method": "spotiflow", "model": "smfish_3d", "device": "cuda"}
+    path = X.write_config(work, "sge-fov-gpu", N.small_resources(dict(config, processing=processing)))
+    tools = stand_ins(work / "tools")
+    done, rows = N.run(work, path, "--container", str(work / "image.sif"), "-work-dir", str(work / "work"),
+                       environment={"PATH": str(tools) + os.pathsep + os.environ["PATH"], "NXF_OFFLINE": "true",
+                                    "NXF_PLUGINS_DEFAULT": "false"}, profile="sge")
+    assert done.returncode == 0, done.stdout + done.stderr
+    processes = {r["tag"]: r["name"].split(" ")[0] for r in N.tasks(rows)}
+    tasks = N.manifest(path)["tasks"]
+    jobs = {}
+    for script in Path(work / "work").glob("*/*/.command.run"):
+        # The stub's command names the task as one quoted word (TaskCommands.quote); PLAN and VERIFY name none.
+        named = [t["id"] for t in tasks if f"'{t['id']}'" in (script.parent / ".command.sh").read_text()]
+        if not named:
+            continue
+        (task_id,) = named
+        text = script.read_text()
+        (line,) = [line for line in text.splitlines() if "apptainer exec" in line]
+        jobs[task_id] = ("-l gpu=TRUE,operating_system=RedHat8" in text, "--nv" in line.split())
+    assert {t["kind"] for t in tasks} >= {"fov", "morphology", "segment"} and set(jobs) == set(processes)
+    for task in tasks:
+        gpu = task["kind"] == "fov"
+        assert task["execution"]["gpu"] is gpu, task["id"]
+        assert processes[task["id"]] == ("FOV_GPU" if gpu else processes[task["id"]].removesuffix("_GPU")), task["id"]
+        assert jobs[task["id"]] == (gpu, gpu), task["id"]

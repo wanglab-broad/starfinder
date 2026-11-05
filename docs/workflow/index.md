@@ -206,14 +206,18 @@ The {doc}`reference <reference>` lists every key with its default, and the
 * Only Snakemake runs Fiji, so the BigStitcher placement's Fiji task needs
   Snakemake; Nextflow refuses it unless `stitching.dataset_xml` supplies
   BigStitcher's result.
-* A segmentation, or the export's segmentation, with `device: cuda` makes a GPU
-  task, which needs a GPU where it runs. The {doc}`UGER guide <broad-uger>`
+* A segmentation, the export's segmentation, or a Spotiflow or Piscis spot finding
+  (`processing.spot_finding.device`) with `device: cuda` makes a GPU task, which
+  needs a GPU where it runs. The {doc}`UGER guide <broad-uger>`
   describes how the cluster profiles place GPU jobs.
 * Nextflow's local executor refuses a task that asks for more CPUs than the
   machine has; lower `execution.tasks.<kind>.threads` (the examples set one
   thread per `fov` task).
 * With retries set, Snakemake retries a refused task (exit 2 or 3) or a held
   export (exit 4) like a failed one; Nextflow retries none of them.
+* Under Snakemake, an output whose size changed is not rerun. Its consumers
+  rerun on the changed file when its modification time is newer, and the run
+  exits 0. Only `workflow verify --final` reports it.
 * The MATLAB workflow is frozen: the plan refuses `backend: matlab`, and the
   Snakefile runs the legacy rules for it.
 

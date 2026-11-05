@@ -1,8 +1,9 @@
 """Spotiflow: native 3D with a 3D model, a YX plane with a 2D model (design/specs/spot-finding-algorithms.md, "Spotiflow").
 
 Spotiflow 0.6.5 is loaded with Spotiflow.from_folder(<verified folder>,
-map_location="cpu") from the Starfinder weights cache, never through
-from_pretrained or ~/.spotiflow.
+map_location=<device>) from the Starfinder weights cache, never through
+from_pretrained or ~/.spotiflow; the device ("cpu" or "cuda") is also
+predict's.
 """
 from dataclasses import replace
 
@@ -62,7 +63,7 @@ def spotiflow(image, config, context):
     from spotiflow.model.spotiflow import infer_n_tiles
     model = cached_model("spotiflow", config.model,
                          lambda: Spotiflow.from_folder(absolute(folder, "Spotiflow.from_folder"),
-                                                       map_location=context.device))
+                                                       map_location=context.device), context.device)
     plane = image.shape[0] == 1
     n_tiles = config.n_tiles or tuple(int(n) for n in infer_n_tiles(
         image.shape[1:3] if plane else image.shape[:3], None, device=torch.device(context.device)))

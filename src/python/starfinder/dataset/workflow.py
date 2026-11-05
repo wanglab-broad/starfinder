@@ -19,6 +19,8 @@ from starfinder.readout import (DECODING_METHODS, ENCODINGS, BarcodeLayout, Enco
     DeduplicationConfig)
 from starfinder.readout.decoding import READOUT_MODES, _mode_mismatch
 from starfinder.spot_finding import SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig, SpotFindingPlan
+from starfinder.spot_finding._methods import check_method_device
+from starfinder._execution import DEVICES
 
 _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
           'deep_create_subtile', 'deep_rsf_subtile')
@@ -166,10 +168,12 @@ def _detection(values, channels, aliases=None):
     scale and threshold settings) must be given, else ValueError.
     channel_overrides maps a channel label to config fields that replace the
     block's for that channel. rounds lists the round labels to detect in
-    (omitted: the reference round only); FOV.run checks them.
+    (omitted: the reference round only); FOV.run checks them. device is
+    execution's (_execution_device), not the config's.
     """
     values = dict(values)
     values.pop('ref_round', None)
+    values.pop('device', None)
     method = values.pop('method', 'local_maxima')
     overrides = values.pop('channel_overrides', None)
     rounds = values.pop('rounds', None)
@@ -537,8 +541,9 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     reference_image_view ({mode: max | channel, channel: index or label},
     default max) selects the reference image FOV.save_reference_image writes.
     A MATLAB-backend configuration (backend absent or matlab), which the
-    adapters of the shared rules read, is translated by _legacy_config. The rule-level Python-only device key sets
-    ExecutionConfig.device. The shared load_codebook.split_index is MATLAB's
+    adapters of the shared rules read, is translated by _legacy_config. The Python-only spot_finding.device key
+    (cpu, the default, or cuda for Spotiflow and Piscis) sets ExecutionConfig.device, the device FOV.run passes to
+    find_spots; the rule-level device key must be cpu (_execution_device). The shared load_codebook.split_index is MATLAB's
     one-based position and becomes the two-segment layout (zero-based
     EncodingConfig.split_index s - 1); reads_filtration.n_barcode_segments,
     reads_filtration.split_index and a list end_base are checked against and
@@ -599,8 +604,10 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         preprocessing, registration, reference_view, spot_aliases = legacy_processing(params, rule,
                                                                                       rounds.reference_round)
     spot_keys = {f.name for cls, spec in SPOT_FINDING_METHODS.items() if spec.pipeline for f in fields(cls) if f.init}
-    spot, do_spot = _operation(params, 'spot_finding', {'ref_round', 'method', 'channel_overrides', 'rounds',
+    spot, do_spot = _operation(params, 'spot_finding', {'ref_round', 'method', 'channel_overrides', 'rounds', 'device',
                                                         *_NATIVE_SPOT_FIELDS, *spot_keys})
+    if 'device' in spot:
+        _python_only(config, [f'rules.{rule}.parameters.spot_finding.device'])
     extract, do_extract = _operation(params, 'reads_extraction', ('voxel_size', 'background'))
     filt, do_filter = _operation(params, 'reads_filtration', ('end_base', 'start_base', 'exclude_invalid_endpoints', 'score_bounds', 'n_barcode_segments', 'split_index'))
     book, _ = _operation(params, 'load_codebook', ('split_index', 'encoding'))
@@ -623,10 +630,12 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     resident = rule in _RESIDENT_RULES
     # The adapter loads raw input unless this is a saved-subtile job or explicitly disabled.
     load_config = ImageLoadConfig(channel_labels=channels, **load) if channels and not resident and ('load_raw_images' not in params or do_load) else None
+    detection = _detection(spot, channels, spot_aliases) if do_spot else None
+    device = _execution_device(params.get('device', 'cpu'), spot.get('device', 'cpu'), detection)
     pipeline = PipelineConfig(load=load_config, rotation_degrees=None if resident else config.get('rotate_angle'),
         preprocessing=preprocessing,
         registration=registration,
-        spot_finding=_detection(spot, channels, spot_aliases) if do_spot else None,
+        spot_finding=detection,
         extraction=extraction,
         decoding=decoding if do_filter else None, scoring=scoring, deduplication=deduplication,
         filtering=ReadFilterConfig(end_bases=end_base, start_base=filt.get('start_base', 'C'), exclude_invalid_endpoints=filt.get('exclude_invalid_endpoints', False), score_bounds=filt.get('score_bounds', {})) if do_filter else None)
@@ -635,9 +644,29 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         raise ValueError('streaming must be Boolean')
     return WorkflowConfig(dataset, pipeline,
         ExecutionConfig('streaming' if streaming else 'batch', rule in ('gr_single_fov_subtile', 'deep_create_subtile'),
-                        params.get('device', 'cpu')),
+                        device),
         split_index, ProjectionConfig() if config.get('maximum_projection', False) else None, *reference_view,
         encoding=encoding, layout=layout)
+
+
+def _execution_device(rule_device, spot_device, detection):
+    """ExecutionConfig.device: spot_finding.device when the rule detects, else cpu (W-796).
+
+    The rule-level device must be cpu: registration and readout run on the
+    CPU. spot_finding.device is cpu or cuda, and cuda needs a method whose
+    spec lists it (Spotiflow, Piscis), else ValueError naming the methods
+    that accept it.
+    """
+    if rule_device != 'cpu':
+        raise ValueError(f"device must be 'cpu'; got {rule_device!r}: registration and readout run on the CPU, and "
+                         "spot_finding.device sets the device of a learned spot detector")
+    if not isinstance(spot_device, str) or spot_device not in DEVICES:
+        raise ValueError(f"spot_finding.device must be 'cpu' or 'cuda'; got {spot_device!r}")
+    if detection is None:
+        return 'cpu'
+    base = detection.config if isinstance(detection, SpotFindingPlan) else detection
+    check_method_device(SPOT_FINDING_METHODS[type(base)], spot_device, 'spot_finding.device')
+    return spot_device
 
 
 _MIGRATION = ' (docs/migration.md, "One Python configuration dialect")'

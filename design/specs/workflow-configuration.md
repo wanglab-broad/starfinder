@@ -514,11 +514,16 @@ is that config's own field and the other MATLAB keys are errors.
 replace the block's for that channel (a `SpotFindingPlan`), and `rounds` lists the
 round labels to detect in (omitted: the reference round only); a candidate set of several
 rounds is decoded only with `readout_mode: direct` ([readout mode](#readout-mode)). The rule-level
-Python-only key `device` sets `ExecutionConfig.device`; `cpu` is the only value.
+Python-only key `device` stays `cpu`, its only value: registration and readout run on the CPU. The
+block's Python-only key `device` sets `ExecutionConfig.device`, the device of spot finding: `cpu`
+(the default), or `cuda`, which `spotiflow` and `piscis` accept and `local_maxima` and
+`starfish_log` refuse; in the workflow's Python shape it is `processing.spot_finding.device`,
+and with `cuda` a learned detector makes each direct `fov` task a GPU task.
 The method-aware rules are in the
-[spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#workflow-configuration).
+[spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#workflow-configuration),
+and the decision's options and reasons under its "Execution device".
 
-% W-218
+% W-218; amended 2026-11-05 (W-796): the spot_finding block's device, Jiahao's decisions of 2026-11-04
 
 ```yaml
 rsf_single_fov:
@@ -528,6 +533,7 @@ rsf_single_fov:
       run: true
       ref_round: round1
       method: local_maxima
+      device: cpu           # cuda: spotiflow and piscis only
       threshold_mode: noise
       threshold_value: 5.0
       exclude_border: false

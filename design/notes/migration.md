@@ -825,6 +825,27 @@ its SHA-256; `resolve_model(..., extracted=...)` also checks the named files, an
 detection and `starfinder weights verify` re-hash all of them. The weights root is
 always an absolute path (`~` expanded, relative paths resolved).
 
+### The learned detectors on the GPU
+
+% Amended 2026-11-05 W-796: Jiahao's decisions of 2026-11-04 (design/specs/spot-finding.md, "Execution device").
+
+`ExecutionConfig(device="cuda")` and `find_spots(..., device="cuda")` no longer raise for
+Spotiflow and Piscis: the device reaches torch (`Spotiflow.from_folder(map_location=...)`,
+`infer_n_tiles` and `predict`; `Piscis(device=...)`), and a torch that sees no GPU stops
+the detection with `ValueError("device 'cuda' was requested, but torch sees no GPU")`.
+`local_maxima` and `starfish_log` refuse `"cuda"` with `ValueError("device 'cuda':
+spot-finding method '<method>' runs on cpu only; cuda is for piscis, spotiflow")`.
+A device other than `"cpu"` and `"cuda"` raises `ValueError("device must be 'cpu' or
+'cuda'; got <value>")` in place of "device must be 'cpu'; spot finding runs on CPU only";
+the prefix "device must be" still matches. `SpotFindingSpec` gains `devices` (default
+`cpu` only). On `"cuda"` the execution entry's `framework` adds `gpu` and `tf32`; a CPU
+run's entry and `run.json` are unchanged. In the workflow the spot-finding block's
+Python-only `device` key (`processing.spot_finding.device` in the Python shape) sets the
+device, and with `cuda` each direct `fov` task is a GPU task; the rule-level `device`
+(`processing.device`) stays `cpu`, and its refusal of another value now reads "device must
+be 'cpu'; got <value>: registration and readout run on the CPU, and spot_finding.device
+sets the device of a learned spot detector".
+
 ### Local-maxima duplicate merge
 
 % Amended 2026-11-03 W-790: regional maxima have one representative before the optional merge.

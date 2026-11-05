@@ -563,9 +563,11 @@ process FOV {
 }
 ```
 
-A process label is static, so the kinds that may request a GPU (`segment`, `export`) are included
-twice, as `SEGMENT` (label `cpu`) and `SEGMENT_GPU` (label `gpu`), and `main.nf` routes each task by
-its `execution.gpu` with the `branch` operator.
+A process label is static, so the kinds that may request a GPU (`segment`, `export`, and `fov`
+since W-796) are included twice, as `SEGMENT` (label `cpu`) and `SEGMENT_GPU` (label `gpu`), and
+`main.nf` routes each task by its `execution.gpu` with the `branch` operator.
+
+% Amended 2026-11-05 (W-796, Jiahao's decision of 2026-11-04, option (b) of design/specs/spot-finding.md, "Execution device"): `fov` joins the kinds that may request a GPU, as `FOV` and `FOV_GPU`; a direct `fov` task does when Spotiflow or Piscis runs with `processing.spot_finding.device: cuda`. The Snakemake rules and the `broad-uger` submit script read `execution.gpu` for every kind and are unchanged.
 
 The command writes the task's declared outputs in place under `roots.output`, as the contract
 chose ("Choice: how a task publishes its outputs"); the process copies the task record into its work
@@ -762,6 +764,10 @@ these records; a deleted log or a resized output can therefore leave a task inco
 ([additions to the contract](#additions-to-the-contract)).
 
 % Amended 2026-11-01 for W-760: Snakemake's scheduling is not the record-based completion rule.
+% Amended 2026-11-05 (W-815, D10 of the W-653 gate: a stated limit): the workflow guide's "Limits" now says it. Under Snakemake an
+% output whose size changed is not rerun; the tasks that read it rerun on the changed file when its modification time is newer, the
+% run exits 0, and only `workflow verify --final` reports it (W-739's operator probes,
+% `runs/W-739/20261101T185229Z-operator-probes/`).
 
 #### Choice: Nextflow's cache, deleted outputs and stale results
 
@@ -795,8 +801,18 @@ layer, in its own CI job with Java and Nextflow.
 | Profile | Settings |
 | --- | --- |
 | `local` | `executor 'local'`; `apptainer.enabled` or `docker.enabled` with the image, or neither (the locked environment on `PATH`); `executor.cpus` the host's allowance |
-| `sge` | `executor 'sge'`; `penv 'smp'` above one CPU; `clusterOptions` `-P broad -S /bin/bash -l h_vmem=<memory / cpus>M -l h_rt=<time>` (as W-641's run used: `-P broad -l h_vmem=1G -l h_rt=00:10:00 -S /bin/bash`, two tasks on UGER); the label `gpu` adds `-l gpu=TRUE,operating_system=RedHat8`; `apptainer.enabled`, `apptainer.cacheDir` and `NXF_HOME` on `/stanley`, `apptainer.runOptions '--bind /stanley,/local/scratch'`; `executor.queueSize 200`, `pollInterval '30 sec'`; `params.max_retries 2` |
+| `sge` | `executor 'sge'`; `penv 'smp'` above one CPU; `clusterOptions` `-P broad -S /bin/bash -l h_vmem=<memory / cpus>M -l h_rt=<time>` (as W-641's run used: `-P broad -l h_vmem=1G -l h_rt=00:10:00 -S /bin/bash`, two tasks on UGER); the label `gpu` adds `-l gpu=TRUE,operating_system=RedHat8` and `--nv`; `apptainer.enabled`, `apptainer.runOptions '--bind /stanley'`; `containerOptions` with the thread, cache and job-id variables; `params.require_container true`; `params.max_retries 2` is `nextflow.config`'s |
 | `google-batch` | [Google Batch readiness](#google-batch-readiness) |
+
+% Amended 2026-11-05 (W-815, D1 of the W-653 gate, with W-649's D4): the row listed five settings that `nextflow/conf/sge.config`
+% does not have, and a second bind. The profile binds `/stanley` only. Where each is set instead, at the base:
+% `apptainer.cacheDir` is set nowhere in the repository; the Nextflow tasks leave `APPTAINER_CACHEDIR` to Apptainer, and only the
+% Snakemake job script (`profile/broad-uger/broad-jobscript.sh`) defaults it to `/stanley/WangLab/<user>/.apptainer`.
+% `NXF_HOME` is set by the head, not the profile: W-649's head scripts (`nf-head.sh`, `u3-head.sh`) export it as `<run folder>/nxf-home`
+% beside `NXF_OPTS="-Xms256m -Xmx1g"`. `executor.queueSize` is not set in the `sge` profile (`local.config` sets 1); W-649's `nf-head.sh`
+% passes `-qs <queue size>` on the command line (U4: at most 40 jobs). `pollInterval` is set nowhere, so Nextflow's own default
+% applies. `/local/scratch` is bound by the Snakemake job script only (`--bind /stanley,/local/scratch`), not by the `sge` profile.
+% U3, U4 and U7 ran with the profile as it is.
 
 The Nextflow head on UGER is a job itself (W-641's `nextflow_head.sh`: `use UGER`, `use Java-17`,
 `NXF_HOME` on `/stanley`, `NXF_OPTS="-Xms256m -Xmx1g"`), requested with `h_vmem=8G` (the JVM, W-641).
@@ -1031,12 +1047,16 @@ variant" above is superseded:
   `--gpus`). Every target's runtime stage installs bookworm's `procps` 2:4.0.2-3, the only release in
   bookworm, bookworm-updates and bookworm-security on 2026-11-03. Nextflow's `-with-trace`,
   `-with-report` and `-with-timeline` need it (W-786, option A). Spot finding accepts only
-  `device: cpu`, so in `learned-cuda` Spotiflow and Piscis still run on the CPU.
+  `device: cpu`, so in `learned-cuda` Spotiflow and Piscis still run on the CPU. (Since W-796,
+  2026-11-05, `processing.spot_finding.device: cuda` runs them on the GPU in this image; W-809 compares
+  their spot tables with the CPU's.)
 * **The rebuild.** All three targets were built on 2026-11-03 at `92c723b` (version
   `0.1.dev719+g92c723b15`), with the W-648 procedure on CPU 6 of GP099-29C. The archives and their
   records are in `starfinder_benchmark/containers/`. The profile's default image
   (`profile/broad-uger/broad-submit.py`, `CPU_IMAGE`) moves to the new CPU digest. The SIFs of these
   digests are not built yet.
+
+% Amended 2026-11-05 (W-796): the learned spot detectors may run on the GPU in `learned-cuda`; the image item's sentence on spot finding is W-792's state on 2026-11-03.
 
 | Image | OCI archive bytes | Uncompressed bytes | OCI manifest digest |
 | --- | --- | --- | --- |

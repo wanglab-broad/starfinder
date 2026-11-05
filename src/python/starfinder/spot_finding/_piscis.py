@@ -49,7 +49,8 @@ def piscis(image, config, context):
     from piscis.models.spots import round_input_size
     path = folder / entry.files[0].path
     loaded = cached_model("piscis", config.model,
-                          lambda: Piscis(model_name=absolute(path.with_suffix(""), "Piscis"), device=context.device))
+                          lambda: Piscis(model_name=absolute(path.with_suffix(""), "Piscis"), device=context.device),
+                          context.device)
     detector = copy.copy(loaded)   # input_size is a per-call setting; the network is shared
     if config.input_size is not None:
         detector.input_size = round_input_size((config.input_size, config.input_size))

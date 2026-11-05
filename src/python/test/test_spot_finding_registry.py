@@ -1,6 +1,7 @@
 """SPOT_FINDING_METHODS (registry move 4), the dependency error, the execution device and the detection
 provenance entry in run.json (registry move 5) (W-270, design/specs/spot-finding.md)."""
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field, replace
@@ -246,14 +247,30 @@ def test_undeclared_columns_are_rejected(fixture_method, monkeypatch):
 
 # --- Execution device and the run.json provenance entry ---------------------------------------------
 
-def test_device_accepts_only_cpu():
-    assert ExecutionConfig().device == "cpu"
-    for device in ("cuda", "CPU", None):
-        with pytest.raises(ValueError,
-                           match="^device must be 'cpu'; spot finding runs on CPU only$"):
+def test_device_is_cpu_or_cuda():
+    assert ExecutionConfig().device == "cpu" and ExecutionConfig(device="cuda").device == "cuda"
+    for device in ("CPU", "gpu", None):
+        with pytest.raises(ValueError, match=re.escape(f"device must be 'cpu' or 'cuda'; got {device!r}") + "$"):
             ExecutionConfig(device=device)
-        with pytest.raises(ValueError, match="^device must be 'cpu'"):
+        with pytest.raises(ValueError, match="^device must be 'cpu' or 'cuda'"):
             find_spots(image(), config=LocalMaximaConfig(), metadata=META, spot_namespace=NAMESPACE, device=device)
+
+
+def test_only_the_learned_detectors_accept_cuda_and_the_classical_methods_refuse_it():
+    """W-796: Spotiflow and Piscis list cuda; local_maxima and starfish_log refuse it before detecting."""
+    assert {spec.name: spec.devices for spec in SPOT_FINDING_METHODS.values() if spec.pipeline} == {
+        "local_maxima": {"cpu"}, "starfish_log": {"cpu"}, "spotiflow": {"cpu", "cuda"}, "piscis": {"cpu", "cuda"}}
+    for config in (LocalMaximaConfig(), StarfishLogConfig(min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.01)):
+        message = (f"device 'cuda': spot-finding method {config.method!r} runs on cpu only; cuda is for piscis, "
+                   "spotiflow")
+        with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+            find_spots(image(), config=config, metadata=META, spot_namespace=NAMESPACE, device="cuda")
+
+
+@pytest.mark.parametrize("devices", [frozenset({"cuda"}), frozenset({"cpu", "gpu"}), ("cpu", "cuda")])
+def test_a_spec_lists_cpu_and_known_devices(devices):
+    with pytest.raises(ValueError, match="devices of 'fixture_detector' must be a frozenset of cpu, cuda with cpu"):
+        replace(FIXTURE_SPEC, devices=devices)
 
 
 def test_execution_entry_records_device_and_threads(monkeypatch):

@@ -11,9 +11,9 @@ import pandas as pd
 
 from ._weights import known_weights, listed_files, resolve_model, weights_artifacts
 
-# Loaded models of this process, keyed by (method, model, SHA-256 of the loaded weights file), so the
+# Loaded models of this process, keyed by (method, model, SHA-256 of the loaded weights file, device), so the
 # channels and rounds of a run load a model once. Verification still runs on every call, before the lookup.
-_MODELS: dict[tuple[str, str, str], object] = {}
+_MODELS: dict[tuple[str, str, str, str], object] = {}
 
 
 def verified_folder(method, model):
@@ -29,9 +29,9 @@ def absolute(path, library):
     return str(path)
 
 
-def cached_model(method, model, build):
-    """The loaded model of (method, model), built by build() on first use."""
-    key = (method, model, known_weights(method, model).files[0].sha256)
+def cached_model(method, model, build, device="cpu"):
+    """The loaded model of (method, model) on device, built by build() on first use."""
+    key = (method, model, known_weights(method, model).files[0].sha256, device)
     if key not in _MODELS:
         _MODELS[key] = build()
     return _MODELS[key]

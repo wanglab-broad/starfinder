@@ -91,7 +91,11 @@ is allowed. In the `smp` parallel environment the allowance includes one slot mo
 for the job's master task: a task of one thread is held to its memory, and a task of
 n threads to (n + 1)/n of it, under both engines.
 
-**GPU tasks.** A GPU task requests `gpu=TRUE,operating_system=RedHat8` under both
+**GPU tasks.** A `segment` task with `segmentation.device: cuda`, an `export` task with
+`export.segmentation.device: cuda`, and a `fov` task whose spot finding runs Spotiflow
+or Piscis with `processing.spot_finding.device: cuda` are GPU tasks; the `fov` task then
+holds the GPU node for its registration and readout too, which run on the CPU.
+A GPU task requests `gpu=TRUE,operating_system=RedHat8` under both
 engines and runs Apptainer with `--nv`. UGER assigns no device: the Snakemake job
 script picks the first GPU with no memory in use, sets `CUDA_VISIBLE_DEVICES`, and
 fails when there is none; under Nextflow the task sees every GPU of the node. A
@@ -107,7 +111,8 @@ TensorFlow without its CUDA libraries, so with them a task with
 built for CUDA 12.6 and TensorFlow with NVIDIA's CUDA libraries, besides the CPU
 extras and the `workflow` group, so it runs every task of a run. Give it to a run
 with GPU tasks as `STARFINDER_IMAGE` under Snakemake or `--container` under
-Nextflow. StarDist and Cellpose run on the GPU; spot finding runs on the CPU. The
+Nextflow. StarDist, Cellpose, Spotiflow and Piscis run on the GPU when so configured;
+local maxima, the Starfish LoG, registration and readout run on the CPU. The
 image is 4.4 GB as an OCI archive and 9.5 GB unpacked, against 1.5 and 4.8 GB for
 `learned`.
 

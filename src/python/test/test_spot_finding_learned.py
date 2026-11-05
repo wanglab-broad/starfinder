@@ -1,6 +1,6 @@
 """Spotiflow and Piscis without their extras: configs, dependency errors, the run order, the extracted weights
 files and the records plumbing (W-272; design/specs/spot-finding.md, "Registry entries", "Configs of the new
-methods", "Pretrained weights"; checks S9 and S14).
+methods", "Pretrained weights"; checks S9 and S14), and the device cuda reaching torch (W-796, "Execution device").
 
 Default tier: the extras are simulated missing by patching imports, or present as empty stand-ins, so no test
 here needs the libraries, torch or the weights. Bounds: the dependency, weights and model-name errors, their
@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import sys
 import types
+from types import SimpleNamespace
 
 import jsonschema
 import numpy as np
@@ -24,7 +25,7 @@ from starfinder.image import ImageMetadata
 from starfinder.spot_finding import (KNOWN_MODELS, SPOT_FINDING_METHODS, ChannelOverride, MissingModelError,
     PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingSpec, SpotiflowConfig, ModelFile,
     ModelHashMismatchError, find_spots, resolve_model)
-from starfinder.spot_finding import _learned, _methods
+from starfinder.spot_finding import _learned, _methods, _piscis
 from starfinder._weights import weights_directory
 from starfinder.spot_finding._weights import weights_artifacts
 
@@ -64,8 +65,8 @@ EXTRACTED = {
 }
 
 
-def detect(image, config):
-    return find_spots(image, config=config, metadata=META, spot_namespace=NAMESPACE)
+def detect(image, config, device="cpu"):
+    return find_spots(image, config=config, metadata=META, spot_namespace=NAMESPACE, device=device)
 
 
 @pytest.fixture
@@ -354,3 +355,116 @@ def test_the_workflow_block_selects_the_learned_methods():
     validator = jsonschema.Draft202012Validator(schema)
     assert not list(validator.iter_errors(dict(block, run=True)))
     assert list(validator.iter_errors({"run": True, "method": "piscis", "model": "20251212", "scale": 2}))
+
+
+# --- The execution device (W-796) ---------------------------------------------------------------------------
+
+def torch_stand_in(monkeypatch, gpu):
+    """A torch module that sees a GPU or none, with the attributes find_spots and the execution entry read."""
+    torch = types.ModuleType("torch")
+    torch.__version__ = "0.0+stand-in"
+    torch.version = SimpleNamespace(cuda="12.8")
+    torch.cuda = SimpleNamespace(is_available=lambda: gpu, current_device=lambda: 0,
+                                 get_device_name=lambda index: f"stand-in GPU {index}")
+    torch.backends = SimpleNamespace(mkl=SimpleNamespace(is_available=lambda: False),
+                                     mkldnn=SimpleNamespace(is_available=lambda: False),
+                                     cuda=SimpleNamespace(matmul=SimpleNamespace(allow_tf32=False)),
+                                     cudnn=SimpleNamespace(allow_tf32=True))
+    torch.device = lambda name: ("torch.device", name)
+    torch.get_num_threads = torch.get_num_interop_threads = lambda: 1
+    monkeypatch.setitem(sys.modules, "torch", torch)
+
+
+def library_stand_in(method, monkeypatch):
+    """Stand-ins of Spotiflow's or Piscis's classes that record the device each call receives; returns the calls."""
+    calls = []
+    if method == "spotiflow":
+        class Spotiflow:
+            _prob_thresh = (0.4,)
+            config = SimpleNamespace(compute_flow=False)
+
+            @classmethod
+            def from_folder(cls, folder, map_location):
+                calls.append(("from_folder", map_location))
+                return cls()
+
+            def predict(self, image, **settings):
+                calls.append(("predict", settings["device"]))
+                return np.array([[3.0, 4.0, 5.0]]), SimpleNamespace(prob=np.array([0.9]))
+
+        modules = {"spotiflow": {}, "spotiflow.model": {"Spotiflow": Spotiflow}, "spotiflow.model.spotiflow": {
+            "infer_n_tiles": lambda shape, n_tiles, device: calls.append(("infer_n_tiles", device)) or (1, 1, 1)}}
+    else:
+        class Piscis:
+            def __init__(self, model_name, device):
+                calls.append(("Piscis", device))
+                self.input_size = (256, 256)
+
+            def predict(self, image, **settings):
+                calls.append(("predict", None))
+                return np.array([[3.0, 4.0, 5.0]])
+
+        modules = {"piscis": {"Piscis": Piscis}, "piscis.models": {},
+                   "piscis.models.spots": {"round_input_size": lambda size: size}}
+        monkeypatch.setattr(_piscis, "tiling", lambda shape, tile_size: {"tile_size": list(tile_size)})
+    for name, attributes in modules.items():
+        module = types.ModuleType(name)
+        module.__dict__.update(attributes)
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(_learned, "_MODELS", {})
+    return calls
+
+
+@pytest.fixture
+def piscis_fixture(empty_cache, monkeypatch):
+    """A Piscis-shaped fixture model in the cache: fixture.pt."""
+    data = b"piscis\n"
+    folder = empty_cache / "piscis" / "fixture"
+    folder.mkdir(parents=True)
+    (folder / "fixture.pt").write_bytes(data)
+    item = ModelFile("fixture.pt", hashlib.sha256(data).hexdigest(), len(data))
+    monkeypatch.setitem(KNOWN_MODELS, ("piscis", "fixture"), replace(
+        KNOWN_MODELS[("piscis", "20251212")], model="fixture", revision="fixture", sha256=item.sha256, bytes=item.bytes,
+        files=(item,)))
+    return folder
+
+
+@pytest.mark.parametrize("method", ["spotiflow", "piscis"])
+def test_cuda_reaches_torch_and_each_device_builds_its_own_model(method, request, monkeypatch):
+    """The device of find_spots is the one Spotiflow (from_folder, infer_n_tiles, predict) and Piscis (its
+    constructor) receive; a model loaded on the CPU is not reused on cuda, and the execution entry records cuda with
+    the GPU and torch's TF32 settings."""
+    request.getfixturevalue("folder_fixture" if method == "spotiflow" else "piscis_fixture")
+    calls = library_stand_in(method, monkeypatch)
+    torch_stand_in(monkeypatch, gpu=True)
+    config = SpotiflowConfig("fixture") if method == "spotiflow" else PiscisConfig("fixture")
+    image = np.zeros((8, 16, 16), np.uint16)
+    image[3, 4, 5] = 100
+    results = {device: detect(image, config, device) for device in ("cpu", "cuda")}
+    detect(image, config, "cuda")
+    if method == "spotiflow":
+        assert calls == [("from_folder", "cpu"), ("infer_n_tiles", ("torch.device", "cpu")), ("predict", "cpu"),
+                         ("from_folder", "cuda"), ("infer_n_tiles", ("torch.device", "cuda")), ("predict", "cuda"),
+                         ("infer_n_tiles", ("torch.device", "cuda")), ("predict", "cuda")]
+    else:
+        assert calls == [("Piscis", "cpu"), ("predict", None), ("Piscis", "cuda"), ("predict", None),
+                         ("predict", None)]
+    assert len(_learned._MODELS) == 2
+    cpu, cuda = (results[d].diagnostics["execution"] for d in ("cpu", "cuda"))
+    assert cpu["device"] == "cpu" and set(cpu["framework"]) == {"name", "version", "cuda", "mkl", "mkldnn"}
+    assert cuda["device"] == "cuda"
+    assert (cuda["framework"]["gpu"], cuda["framework"]["tf32"]) == ("stand-in GPU 0", {"matmul": False, "cudnn": True})
+    assert results["cuda"].spots[["z", "y", "x"]].values.tolist() == [[3.0, 4.0, 5.0]]
+
+
+@pytest.mark.parametrize("config_type", [SpotiflowConfig, PiscisConfig])
+def test_cuda_stops_when_torch_sees_no_gpu_before_the_weights_are_read(config_type, monkeypatch, empty_cache):
+    """With cuda and no GPU, the learned methods stop with segmentation's message; on the CPU the same call reaches
+    the weights (missing here), so the GPU is checked first."""
+    extra, config, image = EXTRAS[config_type]
+    stand_ins(monkeypatch, extra)
+    torch_stand_in(monkeypatch, gpu=False)
+    with pytest.raises(ValueError, match="^device 'cuda' was requested, but torch sees no GPU$"):
+        detect(image, config, "cuda")
+    with pytest.raises(MissingModelError):
+        detect(image, config)

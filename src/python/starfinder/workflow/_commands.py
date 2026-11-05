@@ -92,10 +92,14 @@ def _codebook(run):
 
 
 def fov(run):
-    """FOV.run with checkpoints, FOV.save_reference_image and FOV.export_spots (as rsf_single_fov did)."""
+    """FOV.run with checkpoints, FOV.save_reference_image and FOV.export_spots (as rsf_single_fov did).
+
+    The device is processing.spot_finding.device, which find_spots receives; with cuda the task has its GPU
+    (``execution.gpu``)."""
     from starfinder.dataset.config import CheckpointConfig
     from starfinder.dataset.workflow import _load_reference
     adapted, pipeline, stages = _processing(run)
+    run.device = adapted.execution.device
     dataset = adapted.dataset
     if pipeline.decoding:
         _load_reference(adapted, _codebook(run))
