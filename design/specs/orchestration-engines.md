@@ -36,10 +36,12 @@ The decisions taken at the W-642 checkpoint (Jiahao, 2026-10-29) that this page 
 | --- | --- | --- |
 | OC1 | The Google Cloud backup rule file (the baseline's O1) leaves `workflow/`; W-740 removed it | [the MATLAB legacy separation](#the-matlab-legacy-separation) |
 | OC2 | `tests/minimal_config.yaml` stays unchanged, the schema fixture of the frozen MATLAB dialect | [the MATLAB legacy separation](#the-matlab-legacy-separation) |
-| OC6 | `cleanup_subtile.py`, `create_BigStitcher_macro.py`, `workflow/scripts/test/` and `workflow/notebook/` stay beside the frozen MATLAB workflow; `create_segmentation_preview.py` is retired | [the MATLAB legacy separation](#the-matlab-legacy-separation) |
+| OC6 | `cleanup_subtile.py`, `create_BigStitcher_macro.py`, `workflow/scripts/test/` and `workflow/notebook/create_rsf_qc_report.py.ipynb` stayed beside the frozen MATLAB workflow; W-812 removed them on Jiahao's decision (W-653, 2026-11-04, D5); `create_segmentation_preview.py` is retired | [the MATLAB legacy separation](#the-matlab-legacy-separation) |
 | P2 | The original-against-refactored golden comparison runs in the `slow` tier | the validation design |
 | P5 | Previews are options of the assign and export commands, off by default; every real-data check turns them on | the validation design |
 | D9 | No release of `snakemake-interface-common` accepts the lock's `packaging==26.0`; the plan resolves it explicitly | [the lock change](#the-lock-change) |
+
+% Amended 2026-11-04 for W-812: the OC6 row's four files are removed (Jiahao, W-653 gate, D5).
 
 The amendments and decisions of the specification gate (W-646, Jiahao, 2026-10-30) that this page
 carries. A2 and the map of A3 are in the [contract](orchestration.md):
@@ -1263,13 +1265,18 @@ and are otherwise unchanged; they pin the legacy outputs (`test_a18_the_legacy_o
 Recommendation: A.
 
 **The files beside the frozen workflow (OC6).** `cleanup_subtile.py`, `create_BigStitcher_macro.py`,
-`workflow/scripts/test/` and `workflow/notebook/` stay unchanged beside the MATLAB files; the
-legacy-module draft lists them for Jiahao's decision on their fate. `create_segmentation_preview.py`
+`workflow/scripts/test/` and `workflow/notebook/create_rsf_qc_report.py.ipynb` stayed beside the MATLAB
+files while the legacy-module draft listed them for Jiahao's decision on their fate. W-812 removed them
+on that decision (W-653, 2026-11-04, D5): no rule called `cleanup_subtile.py`, the rule
+`create_BigStitcher_macro` runs `create_BigStitcher_macro_1.py`, the scratch folder held seven files,
+and the notebook is superseded by the report; Git history keeps all of them and no MATLAB code read
+them. `create_segmentation_preview.py`
 is retired (no rule calls it, the baseline's O21). The Google Cloud backup rule file of
 `workflow/rules/` leaves `workflow/` (OC1): it belongs to neither workflow and opens a Google Cloud
 Storage client when parsed (the baseline's O1). W-740 removed it and kept it nowhere else, because
 Jiahao said on 2026-10-30 that the backup could be deleted.
 % Amended 2026-11-01 after W-740: its reason in Jiahao's words (the operator's decision on W-152).
+% Amended 2026-11-04 for W-812: the four files were removed on Jiahao's decision (W-653, D5), not left in place.
 
 ## Additions to the contract
 
