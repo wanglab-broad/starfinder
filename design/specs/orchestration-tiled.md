@@ -1,6 +1,6 @@
 # Native tiled execution: the global task, the tile grid, the tile task, the merge and the deep-tissue recipe
 
-% Status: Accepted (W-646, 2026-10-30, at 1ad3f7d)
+% Status: Accepted (W-653, 2026-11-05, at 8e5a716)
 
 This page specifies how one FOV that does not fit one job runs as tasks (decision D5): a global
 task per FOV that loads, preprocesses and registers the rounds and writes them once as a chunked

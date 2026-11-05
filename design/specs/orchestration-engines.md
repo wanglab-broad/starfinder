@@ -1,6 +1,6 @@
 # Workflow engines: Snakemake and Nextflow over the contract, the Fiji and GPU tasks, the environment, the profiles and the MATLAB legacy separation
 
-% Status: Accepted (W-646, 2026-10-30, at 1ad3f7d)
+% Status: Accepted (W-653, 2026-11-05, at 8e5a716)
 
 This page designs the two engines that run the engine-neutral contract of
 [orchestration](orchestration.md) (W-643) and the tiled task kinds of

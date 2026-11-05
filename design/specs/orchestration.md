@@ -1,6 +1,6 @@
 # Workflow orchestration contract: the CLI, the plan and manifest, the configuration, completion, resume and logging
 
-% Status: Accepted (W-646, 2026-10-30, at 1ad3f7d)
+% Status: Accepted (W-653, 2026-11-05, at 8e5a716)
 
 This page specifies the engine-neutral contract that replaces the code that talks to Snakemake
 today: a command group of the package, a plan command that writes a resolved configuration and a

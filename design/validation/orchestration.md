@@ -1,6 +1,6 @@
 # Validation design: workflow orchestration
 
-% Status: Accepted (W-646, 2026-10-30, at 1ad3f7d)
+% Status: Accepted (W-653, 2026-11-05, at 8e5a716)
 
 This page designs the validation of the §2.13 workflow by the layers of decision D10: contract
 tests in the quick selection Q; a Nextflow stub-run under its own marker, in a CI job that installs
