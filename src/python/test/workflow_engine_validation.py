@@ -241,21 +241,22 @@ REPORT_HASH_SEVERAL = "several; see each FOV's run.json"
 
 
 def report_hash_cell(run, path, text, tree):
-    """Validate the one Hash cell against this sample's FOV records, then replace only its value.
+    """Validate the one Hash cell against this sample's FOV records, then replace its whole value.
 
-    The cell shows the hash every FOV's record holds, or the short text when they differ."""
+    The cell holds ``<code>hash</code>`` when every FOV's record holds one hash, and exactly the short text when
+    they differ. The returned value is the hash or the short text; the page keeps the placeholder in either case."""
     sample = Path(path).parent.name
     hashes = {json.loads(tree[f"fovs/{fov}/run.json"])["workflow_config"]["sha256"]
               for fov in run.data["membership"]["samples"][sample]}
     value = hashes.pop() if len(hashes) == 1 else REPORT_HASH_SEVERAL
+    markup = REPORT_HASH_SEVERAL if value == REPORT_HASH_SEVERAL else f"<code>{value}</code>"
     blocks = list(re.finditer(r'(<div\b[^>]*\sid="b-files-configuration"[^>]*>)(.*?)(</table>)', text, re.S))
     assert len(blocks) == 1, (path, "expected one Configuration table", len(blocks))
     block = blocks[0]
-    cells = list(re.finditer(rf'(<tr><td>{re.escape(REPORT_HASH_LABEL)}</td><td>(?:<code>)?)([^<]*)((?:</code>)?</td></tr>)',
-                             block[2]))
+    cells = list(re.finditer(rf'(<tr><td>{re.escape(REPORT_HASH_LABEL)}</td><td>)(.*?)(</td></tr>)', block[2], re.S))
     assert len(cells) == 1, (path, "expected one Hash cell", len(cells))
     cell = cells[0]
-    assert cell[2] == value, (path, "Hash cell differs from the FOVs' workflow_config.sha256", cell[2], value)
+    assert cell[2] == markup, (path, "Hash cell differs from the FOVs' workflow_config.sha256", cell[2], markup)
     start, end = block.start(2) + cell.start(2), block.start(2) + cell.end(2)
     return value, text[:start] + "<workflow-config-sha256>" + text[end:]
 

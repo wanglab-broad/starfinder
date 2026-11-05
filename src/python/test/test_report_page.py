@@ -556,6 +556,7 @@ def _configuration_rows(text):
     return re.findall(r"<tr><td>(.*?)</td><td>(.*?)</td></tr>", block, re.S)
 
 
+@pytest.mark.contract
 @pytest.mark.parametrize("hashes,shown", [
     (["sha256:aa"] * 4, "<code>sha256:aa</code>"),
     (["sha256:aa", "sha256:aa", "sha256:bb", "sha256:aa"], "several; see each FOV's run.json")])
@@ -572,6 +573,7 @@ def test_files_hash_row_names_the_hash_the_fovs_ran_under(tmp_path, hashes, show
     assert dict(rows)["Hash (FOVs ran under)"] == shown
 
 
+@pytest.mark.contract
 def test_files_hash_row_is_empty_outside_the_workflow(tmp_path):
     folder, _ = report_records(tmp_path / "root").collect()
     rows = dict(_configuration_rows((folder / "report.html").read_text(encoding="utf-8")))

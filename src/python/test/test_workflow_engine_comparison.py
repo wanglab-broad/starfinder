@@ -106,8 +106,8 @@ def test_snapshot_includes_files_declared_through_the_native_report_record(tmp_p
     assert result["report/sample/tables/fovs.csv"] == b"fov_id,spots\nFOV_001,7\n"
 
 
-def _hash_page(value, extra="science"):
-    cell = value if value == E.REPORT_HASH_SEVERAL else f"<code>{value}</code>"
+def _hash_page(value, extra="science", cell=None):
+    cell = cell or (value if value == E.REPORT_HASH_SEVERAL else f"<code>{value}</code>")
     return ('<div class="blk" id="b-files-configuration"><h3>Configuration</h3>'
             '<div class="panel"><table><tbody><tr><td>Workflow</td><td>workflow/resolved.json</td></tr>'
             f'<tr><td>Hash (FOVs ran under)</td><td>{cell}</td></tr>'
@@ -153,8 +153,8 @@ def test_x11_report_hash_cell_shows_the_short_text_when_the_fovs_differ(tmp_path
             {"id": "fov/F1", "kind": "fov", "record": "task.json", "outputs": ["fovs/F1/run.json"]},
             {"id": "report/sample", "kind": "report", "record": "report-task.json", "outputs": ["report/sample/report.html"]}]})
     page = "report/sample/report.html"
-    def tree(first, second, shown):
-        return {page: _hash_page(shown), "fovs/F1/run.json": json.dumps({"workflow_config": {"sha256": first}}).encode(),
+    def tree(first, second, shown, cell=None):
+        return {page: _hash_page(shown, cell=cell), "fovs/F1/run.json": json.dumps({"workflow_config": {"sha256": first}}).encode(),
                 "fovs/F2/run.json": json.dumps({"workflow_config": {"sha256": second}}).encode()}
     def compare(a, b):
         return E.compare(run, b if reverse else a, a if reverse else b, enforce=False, rerun_tasks={"report/sample"})
@@ -164,6 +164,14 @@ def test_x11_report_hash_cell_shows_the_short_text_when_the_fovs_differ(tmp_path
         compare(tree("a", "b", several), tree("c", "c", several))
     with pytest.raises(AssertionError, match="Hash cell differs"):
         compare(tree("a", "b", several), tree("c", "d", "c"))
+    # A page with one common hash and a page with several hashes, each showing its own tree's form, are equal;
+    # the common hash without <code>, an unclosed <code> and the short text inside <code> are not.
+    common, differing = tree("a", "a", "a"), tree("c", "d", several)
+    assert compare(common, differing) == []
+    for wrong, good in ((tree("a", "a", "a", cell="a"), differing), (tree("a", "a", "a", cell="<code>a"), differing),
+                        (tree("c", "d", several, cell=f"<code>{several}</code>"), common)):
+        with pytest.raises(AssertionError, match="Hash cell differs"):
+            compare(wrong, good)
 
 
 @pytest.mark.parametrize("reverse", [False, True])
