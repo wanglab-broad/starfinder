@@ -116,7 +116,9 @@ class EngineRun:
     def records(self):
         return {t["id"]: json.loads((self.out / t["record"]).read_text()) for t in self.data["tasks"]}
 
-    def invoke(self, expected=None, *, environment=None):
+    def invoke(self, expected=None, *, environment=None, held=False):
+        """Run the engine on the plan; ``held``: an export held for review (exit 4) ends the run, which fails and is
+        not checked for completion."""
         tag = f"invocation-{self.invocations:02d}"
         self.invocations += 1
         before = {t["id"]: (self.out / t["record"]).read_bytes() for t in self.data["tasks"]
@@ -135,6 +137,12 @@ class EngineRun:
         evidence(self.work, tag + ".json", {"engine": self.engine, "returncode": done.returncode,
                  "stdout": done.stdout, "stderr": done.stderr, "trace": rows,
                  "expected": sorted(expected) if expected is not None else None, "actual": sorted(actual)})
+        if held:
+            assert done.returncode != 0, done.stdout[-6000:] + done.stderr[-6000:]
+            evidence(self.work, tag + "-records.json", {t["id"]: json.loads((self.out / t["record"]).read_text())
+                                                        for t in self.data["tasks"]
+                                                        if (self.out / t["record"]).is_file()})
+            return actual
         assert done.returncode == 0, done.stdout[-6000:] + done.stderr[-6000:]
         self.data = json.loads(self.manifest.read_text())
         if self.engine == "nextflow":
@@ -162,7 +170,9 @@ class EngineRun:
         assert result["passed"], result
         for task_id, record in self.records().items():
             assert record["status"] == "succeeded" and not record.get("stub", False), task_id
-            assert record["workflow"]["execution_context"]["engine"] == self.engine, task_id
+            # A task a person ran by its command (the placement task after an approval, under Snakemake) says manual.
+            assert record["workflow"]["execution_context"]["engine"] in (
+                self.engine, *(("manual",) if task_id in getattr(self, "manual", ()) else ())), task_id
         assert f'<a href="{X.SAMPLE}/report.html">{X.SAMPLE}</a>' in (self.out / "report/index.html").read_text()
 
     def replan(self, config):
@@ -236,18 +246,27 @@ def report_hash_exception(run, rerun_tasks):
         t.get("kind") == "fov" and t["id"] in rerun_tasks for t in run.data["tasks"])
 
 
+REPORT_HASH_LABEL = "Hash (FOVs ran under)"
+REPORT_HASH_SEVERAL = "several; see each FOV's run.json"
+
+
 def report_hash_cell(run, path, text, tree):
-    """Validate the one Hash cell against this sample's first FOV record, then replace only its value."""
+    """Validate the one Hash cell against this sample's FOV records, then replace its whole value.
+
+    The cell holds ``<code>hash</code>`` when every FOV's record holds one hash, and exactly the short text when
+    they differ. The returned value is the hash or the short text; the page keeps the placeholder in either case."""
     sample = Path(path).parent.name
-    first = run.data["membership"]["samples"][sample][0]
-    value = json.loads(tree[f"fovs/{first}/run.json"])["workflow_config"]["sha256"]
+    hashes = {json.loads(tree[f"fovs/{fov}/run.json"])["workflow_config"]["sha256"]
+              for fov in run.data["membership"]["samples"][sample]}
+    value = hashes.pop() if len(hashes) == 1 else REPORT_HASH_SEVERAL
+    markup = REPORT_HASH_SEVERAL if value == REPORT_HASH_SEVERAL else f"<code>{value}</code>"
     blocks = list(re.finditer(r'(<div\b[^>]*\sid="b-files-configuration"[^>]*>)(.*?)(</table>)', text, re.S))
     assert len(blocks) == 1, (path, "expected one Configuration table", len(blocks))
     block = blocks[0]
-    cells = list(re.finditer(r'(<tr><td>Hash</td><td><code>)([^<]*)(</code></td></tr>)', block[2]))
+    cells = list(re.finditer(rf'(<tr><td>{re.escape(REPORT_HASH_LABEL)}</td><td>)(.*?)(</td></tr>)', block[2], re.S))
     assert len(cells) == 1, (path, "expected one Hash cell", len(cells))
     cell = cells[0]
-    assert cell[2] == value, (path, "Hash cell differs from first FOV workflow_config.sha256", cell[2], value)
+    assert cell[2] == markup, (path, "Hash cell differs from the FOVs' workflow_config.sha256", cell[2], markup)
     start, end = block.start(2) + cell.start(2), block.start(2) + cell.end(2)
     return value, text[:start] + "<workflow-config-sha256>" + text[end:]
 
@@ -258,7 +277,7 @@ def compare(run, left, right, *, name="comparison.json", enforce=True, left_engi
     Tokens obey their engine's contract before removal. Only Snakemake's marker
     directly inside a declared directory is omitted. Cached records retain both
     global hashes when compared with the pre-rerun tree, checked by invoke.
-    X11's report Hash cell is validated against each tree's first FOV before
+    X11's report Hash cell is validated against each tree's FOV records before
     normalization, only if no FOV reran. Every other page value stays exact.
     Every binary file remains byte-equal, including H5AD and TIFF files.
     """

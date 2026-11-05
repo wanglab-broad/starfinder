@@ -25,7 +25,14 @@ def _problems(manifest, task, record, check_hash, temporary):
     """Why a task is not complete under the staleness rule ([] when it is)."""
     if record is None:
         failed = _layout.failed_record(manifest["roots"]["output"], task["id"])
-        return ["a failed record and no task record" if failed.is_file() else "no task record"]
+        if not failed.is_file():
+            return ["no task record"]
+        try:
+            held = json.loads(failed.read_text()).get("status") == "held"
+        except (OSError, ValueError, AttributeError):
+            held = False
+        return ["held for review (a failed record that says held) and no task record" if held
+                else "a failed record and no task record"]
     if record.get("status") != "succeeded":
         return [f"the record says {record.get('status')!r}"]
     problems = []

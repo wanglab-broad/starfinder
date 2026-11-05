@@ -2549,6 +2549,17 @@ scripts, rules and the JSON copy are unchanged, and `common.smk` selects the sam
   (`assembly.assignment` still wins when there is one), so a run with `assignment` and `report` blocks reports
   its cells instead of a sample without cells. The task now reads the `assignment` block (an absent block is written as null), so the
   cache token of every report task changes, and an engine that compares it runs the task again once.
+* **Amended 2026-11-04, W-811: the report page's Hash row.** The Files → Configuration row "Hash" is labelled
+  "Hash (FOVs ran under)". It shows the `workflow_config.sha256` that every FOV's `run.json` holds, or "several; see
+  each FOV's run.json" when two differ, instead of the first FOV's alone (Jiahao, W-653 gate, 2026-11-04, item D2). X11's
+  exception and its test follow the label and the value.
+* **Amended 2026-11-05, W-814: the report of an export held for review.** An export whose placement needs review
+  exits 4, not 1, after making the sample report from the FOVs' records and `placement.json` when every other task the
+  report needs has succeeded; its failed record says
+  `held`, and Nextflow's error strategy finishes on 4 as on 2 and 3, so it is not retried. The report's Placement section
+  shows a required review when there is no export record. A rerun of `stitch` or `bigstitcher_import` keeps the earlier
+  approvals whose table SHA-256 still match (Jiahao, W-653 gate, 2026-11-04, item D9). The plan and its manifests do not
+  change.
 * **`workflow/notebook/create_rsf_qc_report.py.ipynb` is superseded** by the report; it is
   left in place.
 

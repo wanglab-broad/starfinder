@@ -103,7 +103,7 @@ task record last.
 
 **Records.** Exit status 0 means the task succeeded; 1, that it failed, after it
 removed its declared outputs; 2, that it refused before any work; 3, that a
-verified resume was refused. A task is complete when its record says `succeeded`
+verified resume was refused; 4, that an export was held for review (below). A task is complete when its record says `succeeded`
 and lists its declared outputs and its log, each still there with its recorded
 size (a temporary output may since have been removed), and its fingerprint (its
 configuration, inputs and needs) has not changed. `starfinder workflow verify`
@@ -124,6 +124,44 @@ still exits 0; with its original modification time, no task reruns. So end a
 Snakemake run with `verify --final`, as the Quick start
 does. To rerun a task it names, remove the task's record,
 `workflow/tasks/<task>.json`, and run Snakemake again.
+
+(workflow-placement-review)=
+**A placement that needs review.** After `stitch`, the review criterion of the
+{doc}`stitching contract <../stitching-contract>` marks a placement `required`
+when a FOV is not `image_supported`, a correction exceeds half the nominal
+overlap width, a kept link's residual exceeds 1 µm (both bounds are
+`stitching.review`), the optimizer removed a link, or the placement is supplied.
+The `export` task then stops. Once every other task the report needs has
+succeeded, it makes the sample report from the FOVs' records and
+`placement.json`, and the report's Placement section shows the review's reasons,
+the flagged FOVs and any approvals. The task exits 4, the run fails, and
+`verify --final` names the export held. Nextflow does not retry it; Snakemake
+retries it only with `--retries`, and it holds again each time.
+
+With an `assignment` block and an `export.route` other than `per_fov`, the
+report also needs the `assign` tasks, which the export does not. If one of them
+has not succeeded when the export is held, no report is made, and the export's
+log names the tasks the report waits for. The review below does not need the
+report, and the run after the approval makes it.
+
+To review the placement, open it with
+`load_placement("<output root>/stitching/<sample>")`. Inspect each FOV's status
+and flags in `result.fovs`, the links in `result.links`, and
+`result.record["review"]`. Record the review with
+`approve_placement(result, reviewer=..., note=...)` and save it into the same
+folder with `save_placement`. Then run the workflow again.
+
+* **Nextflow** with `-resume` reruns `stitch`, because `placement.json` changed.
+  The rerun keeps the approval, because its tables are unchanged. Then it runs
+  the export, the report and the comparison.
+* **Snakemake** removes a task's outputs before it reruns it, which would remove
+  the approval. So first run the task by its command:
+  `starfinder workflow stitch --manifest <output root>/workflow/manifest.json --task stitch/<sample>`.
+  It keeps the approval and records the task again. Then run Snakemake.
+
+In both, `verify --final` then passes. An approval holds only for the tables it
+approved: if the rerun places the FOVs differently, the export is held again.
+The engine tests run this route with a `stitch` task.
 
 ## What you get
 
@@ -171,8 +209,8 @@ The {doc}`reference <reference>` lists every key with its default, and the
 * Nextflow's local executor refuses a task that asks for more CPUs than the
   machine has; lower `execution.tasks.<kind>.threads` (the examples set one
   thread per `fov` task).
-* With retries set, Snakemake retries a refused task (exit 2 or 3) like a failed
-  one; Nextflow retries neither.
+* With retries set, Snakemake retries a refused task (exit 2 or 3) or a held
+  export (exit 4) like a failed one; Nextflow retries none of them.
 * The MATLAB workflow is frozen: the plan refuses `backend: matlab`, and the
   Snakefile runs the legacy rules for it.
 

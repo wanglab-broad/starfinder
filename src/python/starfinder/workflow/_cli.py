@@ -3,7 +3,8 @@
 ``plan`` and ``verify``, and one command per API entry, each taking the common arguments ``--manifest`` and
 ``--task`` and the execution context ``--engine``, ``--engine-version``, ``--job-id``, ``--attempt``, ``--image`` and
 ``--cache-token``, which are recorded and never interpreted. Exit status 0 succeeded, 1 failed, 2 refused before any
-work, 3 a refused verified resume.
+work, 3 a refused verified resume, 4 held for review (an export whose placement needs review; the task made the
+sample report when every other task the report needs had succeeded).
 """
 from __future__ import annotations
 
@@ -82,7 +83,8 @@ def run(args, argv=None):
     function = FUNCTIONS[kind]
     context = Context(args.engine, args.engine_version, args.job_id, args.attempt,
                       None if args.image in (None, "none") else args.image, args.cache_token)
-    prepare = {"fov": _prepare_fov, "tile_global": _prepare_tile_global}.get(kind)
+    prepare = {"fov": _prepare_fov, "tile_global": _prepare_tile_global, "stitch": _prepare_placement,
+               "bigstitcher_import": _prepare_placement}.get(kind)
     return execute(args.command, args.manifest, args.task, function, context,
                    argv=["starfinder", "workflow", *(argv or [])], prepare=prepare)
 
@@ -106,3 +108,10 @@ def _prepare_tile_global(run):
         return ()
     run.resume = resume
     return [declared for declared, _ in run.outputs()]
+
+
+def _prepare_placement(run):
+    """A placement task's earlier approvals, read before its outputs are removed (_commands.earlier_approvals)."""
+    from starfinder.workflow._commands import earlier_approvals
+    run.approvals = earlier_approvals(run)
+    return ()

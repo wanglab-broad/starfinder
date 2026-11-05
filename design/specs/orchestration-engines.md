@@ -36,10 +36,12 @@ The decisions taken at the W-642 checkpoint (Jiahao, 2026-10-29) that this page 
 | --- | --- | --- |
 | OC1 | The Google Cloud backup rule file (the baseline's O1) leaves `workflow/`; W-740 removed it | [the MATLAB legacy separation](#the-matlab-legacy-separation) |
 | OC2 | `tests/minimal_config.yaml` stays unchanged, the schema fixture of the frozen MATLAB dialect | [the MATLAB legacy separation](#the-matlab-legacy-separation) |
-| OC6 | `cleanup_subtile.py`, `create_BigStitcher_macro.py`, `workflow/scripts/test/` and `workflow/notebook/` stay beside the frozen MATLAB workflow; `create_segmentation_preview.py` is retired | [the MATLAB legacy separation](#the-matlab-legacy-separation) |
+| OC6 | `cleanup_subtile.py`, `create_BigStitcher_macro.py`, `workflow/scripts/test/` and `workflow/notebook/create_rsf_qc_report.py.ipynb` stayed beside the frozen MATLAB workflow; W-812 removed them on Jiahao's decision (W-653, 2026-11-04, D5); `create_segmentation_preview.py` is retired | [the MATLAB legacy separation](#the-matlab-legacy-separation) |
 | P2 | The original-against-refactored golden comparison runs in the `slow` tier | the validation design |
 | P5 | Previews are options of the assign and export commands, off by default; every real-data check turns them on | the validation design |
 | D9 | No release of `snakemake-interface-common` accepts the lock's `packaging==26.0`; the plan resolves it explicitly | [the lock change](#the-lock-change) |
+
+% Amended 2026-11-04 for W-812: the OC6 row's four files are removed (Jiahao, W-653 gate, D5).
 
 The amendments and decisions of the specification gate (W-646, Jiahao, 2026-10-30) that this page
 carries. A2 and the map of A3 are in the [contract](orchestration.md):
@@ -83,7 +85,7 @@ Each engine does the same four things, in its own syntax:
 3. **It runs the task's command** with its execution context appended:
    `--engine <name> --engine-version <version> --job-id <id> --attempt <n> --image <digest or none>`.
 4. **It maps the exit status** ([below](#exit-status-and-retries)): 0 done; 1 retried from scratch
-   up to the profile's limit; 2 and 3 not retried.
+   up to the profile's limit; 2, 3 and 4 not retried.
 
 **The execution context per engine.** The contract records `engine`, `engine_version`, `job_id`,
 `attempt`, `image` and `host`; the command reads the host itself.
@@ -109,6 +111,7 @@ Each engine does the same four things, in its own syntax:
 | 1 | Failed; the attempt's declared outputs are removed | Retried up to the profile's `retries` | `errorStrategy` `retry` up to `maxRetries` |
 | 2 | Refused before any work | Retried like 1: Snakemake does not distinguish exit statuses (each retry refuses again in seconds) | `finish` (no retry; running tasks end) |
 | 3 | A resume refused | As 2 | `finish` |
+| 4 | An export held for review; it made the sample report when the report's other needs had succeeded | As 2: the job fails, and the run ends without `--keep-going`; with `retries` each retry holds again | `finish` |
 | 137, 140, other | Killed by the scheduler (memory or time) | Retried like 1, with the attempt's larger resources | `retry` |
 
 A retry may raise memory and runtime (an execution setting); it never changes a scientific
@@ -136,6 +139,33 @@ Recommendation: A.
 Recommendation: A. The plan refuses configuration errors before any job (exit 2 of the plan stops
 the engine before fan-out), so task refusals are rare: a changed resolved configuration under a
 running engine, or a missing input.
+
+### An export held for review and the rerun after the approval
+
+% Amended 2026-11-05 for W-814 (Jiahao's decision at W-653, 2026-11-04, D9).
+
+An export whose placement needs review exits 4, after making the sample report when every other task
+the report needs has succeeded (the contract, "The report of a held export"). Both engines end the run
+with a failure. Nextflow finishes without retrying it, and `VERIFY_AFTER` fails. Snakemake fails the
+job, and without `--keep-going` it starts no other job. The report is made inside the export's job when
+the report's other needs have succeeded. Neither engine starts a task after the held export, so a report
+that still waits for one of them (an `assign` task on the routes `after_fusion` and `molecules_only`)
+waits for the rerun after the approval.
+
+After `approve_placement` and `save_placement`, `placement.json` differs from the bytes the placement
+task's record lists, and the placement task must run again to record it. That rerun keeps the
+approval, because the command reads the earlier `placement.json`'s approvals before it removes its
+outputs. The engines reach that rerun differently, as `test_workflow_engines_review.py` runs them:
+
+* **Nextflow** with `-resume`: `VERIFY_BEFORE` finds the placement task not complete (its
+  `placement.json` has another size) and gives it a fresh token. The task reruns and keeps the
+  approval; then `export`, `report` and `compare` run.
+* **Snakemake** removes a job's existing outputs before it runs the job, so a rerun of the placement
+  task that Snakemake scheduled would delete the approved `placement.json` first. It also does not
+  rerun a task whose output changed. The person runs the placement task by its command
+  (`starfinder workflow stitch --manifest <manifest> --task stitch/<sample>`, recorded as `manual`),
+  which keeps the approval and records the task again. Then Snakemake runs `export`, `report` and
+  `compare`, which have no records.
 
 ### The task fingerprint
 
@@ -644,9 +674,11 @@ Per process, from the task's `execution`: `cpus`, `memory` and `time` × `task.a
 from `execution.container`. The error strategy maps the exit status:
 
 ```groovy
-errorStrategy { task.exitStatus in [2, 3] ? 'finish' : (task.attempt <= params.max_retries ? 'retry' : 'finish') }
+errorStrategy { task.exitStatus in [2, 3, 4] ? 'finish' : (task.attempt <= params.max_retries ? 'retry' : 'finish') }
 maxRetries params.max_retries
 ```
+
+% Amended 2026-11-05 for W-814: exit status 4 (an export held for review) finishes like 2 and 3, since a retry holds again.
 
 `params.max_retries` is the profile's (2 for `sge`, as Snakemake's `retries` below).
 
@@ -1263,13 +1295,18 @@ and are otherwise unchanged; they pin the legacy outputs (`test_a18_the_legacy_o
 Recommendation: A.
 
 **The files beside the frozen workflow (OC6).** `cleanup_subtile.py`, `create_BigStitcher_macro.py`,
-`workflow/scripts/test/` and `workflow/notebook/` stay unchanged beside the MATLAB files; the
-legacy-module draft lists them for Jiahao's decision on their fate. `create_segmentation_preview.py`
+`workflow/scripts/test/` and `workflow/notebook/create_rsf_qc_report.py.ipynb` stayed beside the MATLAB
+files while the legacy-module draft listed them for Jiahao's decision on their fate. W-812 removed them
+on that decision (W-653, 2026-11-04, D5): no rule called `cleanup_subtile.py`, the rule
+`create_BigStitcher_macro` runs `create_BigStitcher_macro_1.py`, the scratch folder held seven files,
+and the notebook is superseded by the report; Git history keeps all of them and no MATLAB code read
+them. `create_segmentation_preview.py`
 is retired (no rule calls it, the baseline's O21). The Google Cloud backup rule file of
 `workflow/rules/` leaves `workflow/` (OC1): it belongs to neither workflow and opens a Google Cloud
 Storage client when parsed (the baseline's O1). W-740 removed it and kept it nowhere else, because
 Jiahao said on 2026-10-30 that the backup could be deleted.
 % Amended 2026-11-01 after W-740: its reason in Jiahao's words (the operator's decision on W-152).
+% Amended 2026-11-04 for W-812: the four files were removed on Jiahao's decision (W-653, D5), not left in place.
 
 ## Additions to the contract
 
