@@ -236,18 +236,26 @@ def report_hash_exception(run, rerun_tasks):
         t.get("kind") == "fov" and t["id"] in rerun_tasks for t in run.data["tasks"])
 
 
+REPORT_HASH_LABEL = "Hash (FOVs ran under)"
+REPORT_HASH_SEVERAL = "several; see each FOV's run.json"
+
+
 def report_hash_cell(run, path, text, tree):
-    """Validate the one Hash cell against this sample's first FOV record, then replace only its value."""
+    """Validate the one Hash cell against this sample's FOV records, then replace only its value.
+
+    The cell shows the hash every FOV's record holds, or the short text when they differ."""
     sample = Path(path).parent.name
-    first = run.data["membership"]["samples"][sample][0]
-    value = json.loads(tree[f"fovs/{first}/run.json"])["workflow_config"]["sha256"]
+    hashes = {json.loads(tree[f"fovs/{fov}/run.json"])["workflow_config"]["sha256"]
+              for fov in run.data["membership"]["samples"][sample]}
+    value = hashes.pop() if len(hashes) == 1 else REPORT_HASH_SEVERAL
     blocks = list(re.finditer(r'(<div\b[^>]*\sid="b-files-configuration"[^>]*>)(.*?)(</table>)', text, re.S))
     assert len(blocks) == 1, (path, "expected one Configuration table", len(blocks))
     block = blocks[0]
-    cells = list(re.finditer(r'(<tr><td>Hash</td><td><code>)([^<]*)(</code></td></tr>)', block[2]))
+    cells = list(re.finditer(rf'(<tr><td>{re.escape(REPORT_HASH_LABEL)}</td><td>(?:<code>)?)([^<]*)((?:</code>)?</td></tr>)',
+                             block[2]))
     assert len(cells) == 1, (path, "expected one Hash cell", len(cells))
     cell = cells[0]
-    assert cell[2] == value, (path, "Hash cell differs from first FOV workflow_config.sha256", cell[2], value)
+    assert cell[2] == value, (path, "Hash cell differs from the FOVs' workflow_config.sha256", cell[2], value)
     start, end = block.start(2) + cell.start(2), block.start(2) + cell.end(2)
     return value, text[:start] + "<workflow-config-sha256>" + text[end:]
 
@@ -258,7 +266,7 @@ def compare(run, left, right, *, name="comparison.json", enforce=True, left_engi
     Tokens obey their engine's contract before removal. Only Snakemake's marker
     directly inside a declared directory is omitted. Cached records retain both
     global hashes when compared with the pre-rerun tree, checked by invoke.
-    X11's report Hash cell is validated against each tree's first FOV before
+    X11's report Hash cell is validated against each tree's FOV records before
     normalization, only if no FOV reran. Every other page value stays exact.
     Every binary file remains byte-equal, including H5AD and TIFF files.
     """

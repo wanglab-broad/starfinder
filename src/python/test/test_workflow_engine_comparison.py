@@ -107,9 +107,10 @@ def test_snapshot_includes_files_declared_through_the_native_report_record(tmp_p
 
 
 def _hash_page(value, extra="science"):
+    cell = value if value == E.REPORT_HASH_SEVERAL else f"<code>{value}</code>"
     return ('<div class="blk" id="b-files-configuration"><h3>Configuration</h3>'
             '<div class="panel"><table><tbody><tr><td>Workflow</td><td>workflow/resolved.json</td></tr>'
-            f'<tr><td>Hash</td><td><code>{value}</code></td></tr>'
+            f'<tr><td>Hash (FOVs ran under)</td><td>{cell}</td></tr>'
             f'</tbody></table></div></div><p>{extra}</p>').encode()
 
 
@@ -123,7 +124,7 @@ def test_x11_report_hash_cell_is_scoped_and_checked_against_each_tree(tmp_path, 
     page = "report/sample/report.html"
     def tree(value):
         return {page: _hash_page(value), "fovs/F1/run.json": json.dumps({"workflow_config": {"sha256": value}}).encode(),
-                "fovs/F2/run.json": b'{"workflow_config":{"sha256":"not-the-first-FOV"}}'}
+                "fovs/F2/run.json": json.dumps({"workflow_config": {"sha256": value}}).encode()}
     left, right = tree("sha256:old"), tree("sha256:new")
     def compare(a, b, rerun_tasks={"report/sample"}):
         return E.compare(run, b if reverse else a, a if reverse else b,
@@ -136,11 +137,33 @@ def test_x11_report_hash_cell_is_scoped_and_checked_against_each_tree(tmp_path, 
     assert compare(left, right, None) == [page]
     assert compare(left, dict(right, **{page: _hash_page("sha256:new", "changed science")})) == [page]
     for invalid_page in (_hash_page("sha256:new").replace(b'id="b-files-configuration"', b'data-id="b-files-configuration"'),
-                         _hash_page("sha256:new").replace(b"<td>Hash</td>", b"<td>Other</td>"),
+                         _hash_page("sha256:new").replace(b"<td>Hash (FOVs ran under)</td>", b"<td>Other</td>"),
+                         _hash_page("sha256:new").replace(b"<td>Hash (FOVs ran under)</td>", b"<td>Hash</td>"),
                          _hash_page("sha256:new") + _hash_page("sha256:new"),
-                         _hash_page("sha256:new").replace(b'</tbody>', b'<tr><td>Hash</td><td><code>sha256:new</code></td></tr></tbody>')):
+                         _hash_page("sha256:new").replace(b'</tbody>', b'<tr><td>Hash (FOVs ran under)</td><td><code>sha256:new</code></td></tr></tbody>')):
         with pytest.raises(AssertionError, match="expected one"):
             compare(left, dict(right, **{page: invalid_page}))
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_x11_report_hash_cell_shows_the_short_text_when_the_fovs_differ(tmp_path, reverse):
+    import json
+    run = SimpleNamespace(work=tmp_path, engine="snakemake", data={
+        "membership": {"samples": {"sample": ["F1", "F2"]}}, "tasks": [
+            {"id": "fov/F1", "kind": "fov", "record": "task.json", "outputs": ["fovs/F1/run.json"]},
+            {"id": "report/sample", "kind": "report", "record": "report-task.json", "outputs": ["report/sample/report.html"]}]})
+    page = "report/sample/report.html"
+    def tree(first, second, shown):
+        return {page: _hash_page(shown), "fovs/F1/run.json": json.dumps({"workflow_config": {"sha256": first}}).encode(),
+                "fovs/F2/run.json": json.dumps({"workflow_config": {"sha256": second}}).encode()}
+    def compare(a, b):
+        return E.compare(run, b if reverse else a, a if reverse else b, enforce=False, rerun_tasks={"report/sample"})
+    several = E.REPORT_HASH_SEVERAL
+    assert compare(tree("a", "b", several), tree("c", "d", several)) == []
+    with pytest.raises(AssertionError, match="Hash cell differs"):
+        compare(tree("a", "b", several), tree("c", "c", several))
+    with pytest.raises(AssertionError, match="Hash cell differs"):
+        compare(tree("a", "b", several), tree("c", "d", "c"))
 
 
 @pytest.mark.parametrize("reverse", [False, True])

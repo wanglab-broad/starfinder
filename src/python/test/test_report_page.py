@@ -551,6 +551,34 @@ def test_slots_are_filled_once_in_order(tmp_path, monkeypatch):
     assert [p.name for p in case.folder.parent.iterdir()] == [SAMPLE]
 
 
+def _configuration_rows(text):
+    block = re.search(r'id="b-files-configuration".*?</table>', text, re.S)[0]
+    return re.findall(r"<tr><td>(.*?)</td><td>(.*?)</td></tr>", block, re.S)
+
+
+@pytest.mark.parametrize("hashes,shown", [
+    (["sha256:aa"] * 4, "<code>sha256:aa</code>"),
+    (["sha256:aa", "sha256:aa", "sha256:bb", "sha256:aa"], "several; see each FOV's run.json")])
+def test_files_hash_row_names_the_hash_the_fovs_ran_under(tmp_path, hashes, shown):
+    case = report_records(tmp_path / "root")
+    for fov, digest in zip(FOVS, hashes):
+        record = case.run_record(fov)
+        record["workflow_config"] = {"path": "workflow/resolved.json", "sha256": digest}
+        case.write_run_record(fov, record)
+    folder, _ = case.collect()
+    rows = _configuration_rows((folder / "report.html").read_text(encoding="utf-8"))
+    assert [label for label, _ in rows] == ["Workflow", "Hash (FOVs ran under)", "Report settings"]
+    assert dict(rows)["Workflow"] == "<code>workflow/resolved.json</code>"
+    assert dict(rows)["Hash (FOVs ran under)"] == shown
+
+
+def test_files_hash_row_is_empty_outside_the_workflow(tmp_path):
+    folder, _ = report_records(tmp_path / "root").collect()
+    rows = dict(_configuration_rows((folder / "report.html").read_text(encoding="utf-8")))
+    assert rows["Workflow"] == '<span class="muted">not run from the workflow</span>'
+    assert rows["Hash (FOVs ran under)"] == ""
+
+
 def test_data_block_cannot_end_its_script(tmp_path):
     frames = {name: pd.DataFrame({"x": pd.Series(["</script><!--a", None], dtype="string")})
               for name in page_module.DATA_TABLES}

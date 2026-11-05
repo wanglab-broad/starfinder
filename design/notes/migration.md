@@ -2549,6 +2549,10 @@ scripts, rules and the JSON copy are unchanged, and `common.smk` selects the sam
   (`assembly.assignment` still wins when there is one), so a run with `assignment` and `report` blocks reports
   its cells instead of a sample without cells. The task now reads the `assignment` block (an absent block is written as null), so the
   cache token of every report task changes, and an engine that compares it runs the task again once.
+* **Amended 2026-11-04, W-811: the report page's Hash row.** The Files → Configuration row "Hash" is labelled
+  "Hash (FOVs ran under)". It shows the `workflow_config.sha256` that every FOV's `run.json` holds, or "several; see
+  each FOV's run.json" when two differ, instead of the first FOV's alone (Jiahao, W-653 gate, 2026-11-04, item D2). X11's
+  exception and its test follow the label and the value.
 * **`workflow/notebook/create_rsf_qc_report.py.ipynb` is superseded** by the report; it is
   left in place.
 

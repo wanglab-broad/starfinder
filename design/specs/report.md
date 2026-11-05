@@ -1225,7 +1225,7 @@ segment ends), else `not_recorded`.
 
 | Field | Type | Unit | Content |
 | --- | --- | --- | --- |
-| `workflow_config` | object or null | — | `{"path", "sha256"}` of the workflow configuration file a workflow rule ran with (the top-level `config_path` key, [workflow-configuration](../../docs/workflow-configuration.md)); null for a run outside the workflow. |
+| `workflow_config` | object or null | — | `{"path", "sha256"}` of the workflow configuration file a workflow rule ran with (the top-level `config_path` key, [workflow-configuration](../../docs/workflow-configuration.md)); null for a run outside the workflow. The `sha256` is the hash of that file when the FOV task ended; the page's Files table shows it under "Hash (FOVs ran under)" (the report's algorithms, "Files"). |
 
 `from_workflow_config` (`dataset/workflow.py`) keeps the path on the `Dataset` it builds,
 in a private attribute that `_RunRecord.__init__` reads. Options: **W1 (recommended)**, this

@@ -1155,8 +1155,15 @@ Three tables of two columns, as the mockup, without the marker row (settled deci
 * **Input.** Images: the common folder of `run.json` `inputs` paths and the number of
   files; Codebook: `codebook.path` (R2) with its SHA-256 (the first 12 characters, the whole
   in the tooltip); Tile positions: `placement.json` `table`.
-* **Configuration.** Workflow: `workflow_config.path` (R4); Hash: its SHA-256; Report
-  settings: `report.json` `config`, shown as its JSON in a collapsed element.
+* **Configuration.** Workflow: `workflow_config.path` (R4); "Hash (FOVs ran under)": the
+  `workflow_config.sha256` of the FOVs' `run.json`, which each FOV task wrote when it ended, so it is
+  the hash `resolved.json` had when the FOVs ran, not the hash of the file now beside it. When every FOV
+  that has the key holds the same hash, the row shows it; when two differ, it shows "several; see each
+  FOV's run.json". Report settings: `report.json` `config`, shown as its JSON in a collapsed element.
+
+% Amended 2026-11-04 (W-811, Jiahao's decision at the W-653 gate, item D2): the row was labelled "Hash" and showed the
+% first FOV's hash; a rerun with no `fov` task (a changed `export` key) changes `resolved.json` and leaves the FOVs'
+% hash, so the row read as the hash of the file beside it, and FOVs that ran under different hashes were not visible.
 * **Output.** FOV folders `<output_root>/fovs/<fov_id>/`; Placement
   `stitching/<sample>/`; Sample export `export/<sample>/`; Report
   `report/<sample>/report.html`; Report tables `report/<sample>/tables/`. Every place

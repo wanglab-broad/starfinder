@@ -727,6 +727,14 @@ class _Page:
             if workflow is None:
                 return '<span class="muted">not run from the workflow</span>'
             return f"<code>{_e(workflow.get('path'))}</code>"
+        hashes = list(dict.fromkeys(r["workflow_config"].get("sha256") for r in records
+                                    if isinstance(r.get("workflow_config"), dict)))
+
+        def workflow_hash():
+            # The hash each FOV's task wrote when it ended, not the hash of resolved.json as it is now.
+            if len(hashes) > 1:
+                return "several; see each FOV's run.json"
+            return f"<code>{_e(hashes[0])}</code>"
         settings = (f'<details><summary>report.json config</summary><pre>'
                     f'{_e(json.dumps(self.config_json, indent=2, ensure_ascii=False))}</pre></details>')
         root = c.root
@@ -748,8 +756,8 @@ class _Page:
                                             ("Tile positions", entry("entry=positions", positions))]),
                 "files_configuration": self._table([
                     ("Workflow", entry("entry=workflow", workflow_path)),
-                    ("Hash", "" if "entry=workflow" in entries or workflow is None else
-                     f"<code>{_e(workflow.get('sha256'))}</code>"),
+                    ("Hash (FOVs ran under)", "" if "entry=workflow" in entries or workflow is None else
+                     workflow_hash()),
                     ("Report settings", settings)]),
                 "files_output": self._table(output)}
 
