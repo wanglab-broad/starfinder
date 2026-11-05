@@ -563,9 +563,11 @@ process FOV {
 }
 ```
 
-A process label is static, so the kinds that may request a GPU (`segment`, `export`) are included
-twice, as `SEGMENT` (label `cpu`) and `SEGMENT_GPU` (label `gpu`), and `main.nf` routes each task by
-its `execution.gpu` with the `branch` operator.
+A process label is static, so the kinds that may request a GPU (`segment`, `export`, and `fov`
+since W-796) are included twice, as `SEGMENT` (label `cpu`) and `SEGMENT_GPU` (label `gpu`), and
+`main.nf` routes each task by its `execution.gpu` with the `branch` operator.
+
+% Amended 2026-11-05 (W-796, Jiahao's decision of 2026-11-04, option (b) of design/specs/spot-finding.md, "Execution device"): `fov` joins the kinds that may request a GPU, as `FOV` and `FOV_GPU`; a direct `fov` task does when Spotiflow or Piscis runs with `processing.spot_finding.device: cuda`. The Snakemake rules and the `broad-uger` submit script read `execution.gpu` for every kind and are unchanged.
 
 The command writes the task's declared outputs in place under `roots.output`, as the contract
 chose ("Choice: how a task publishes its outputs"); the process copies the task record into its work
@@ -1045,12 +1047,16 @@ variant" above is superseded:
   `--gpus`). Every target's runtime stage installs bookworm's `procps` 2:4.0.2-3, the only release in
   bookworm, bookworm-updates and bookworm-security on 2026-11-03. Nextflow's `-with-trace`,
   `-with-report` and `-with-timeline` need it (W-786, option A). Spot finding accepts only
-  `device: cpu`, so in `learned-cuda` Spotiflow and Piscis still run on the CPU.
+  `device: cpu`, so in `learned-cuda` Spotiflow and Piscis still run on the CPU. (Since W-796,
+  2026-11-05, `processing.spot_finding.device: cuda` runs them on the GPU in this image; W-809 compares
+  their spot tables with the CPU's.)
 * **The rebuild.** All three targets were built on 2026-11-03 at `92c723b` (version
   `0.1.dev719+g92c723b15`), with the W-648 procedure on CPU 6 of GP099-29C. The archives and their
   records are in `starfinder_benchmark/containers/`. The profile's default image
   (`profile/broad-uger/broad-submit.py`, `CPU_IMAGE`) moves to the new CPU digest. The SIFs of these
   digests are not built yet.
+
+% Amended 2026-11-05 (W-796): the learned spot detectors may run on the GPU in `learned-cuda`; the image item's sentence on spot finding is W-792's state on 2026-11-03.
 
 | Image | OCI archive bytes | Uncompressed bytes | OCI manifest digest |
 | --- | --- | --- | --- |

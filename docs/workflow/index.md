@@ -206,8 +206,9 @@ The {doc}`reference <reference>` lists every key with its default, and the
 * Only Snakemake runs Fiji, so the BigStitcher placement's Fiji task needs
   Snakemake; Nextflow refuses it unless `stitching.dataset_xml` supplies
   BigStitcher's result.
-* A segmentation, or the export's segmentation, with `device: cuda` makes a GPU
-  task, which needs a GPU where it runs. The {doc}`UGER guide <broad-uger>`
+* A segmentation, the export's segmentation, or a Spotiflow or Piscis spot finding
+  (`processing.spot_finding.device`) with `device: cuda` makes a GPU task, which
+  needs a GPU where it runs. The {doc}`UGER guide <broad-uger>`
   describes how the cluster profiles place GPU jobs.
 * Nextflow's local executor refuses a task that asks for more CPUs than the
   machine has; lower `execution.tasks.<kind>.threads` (the examples set one

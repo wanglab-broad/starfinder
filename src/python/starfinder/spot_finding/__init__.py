@@ -18,8 +18,8 @@ from ._config import (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroid
     StarfishLogConfig)
 from ._errors import MissingModelError, ModelHashMismatchError, SpotFindingBackendUnavailableError, SpotFindingWarning
 from ._methods import SPOT_FINDING_METHODS as _SPOT_FINDING_METHODS
-from ._methods import (MethodContext, SpotFindingConfig, SpotFindingSpec, check_columns, constant_details,
-    empty_table, per_channel, require_method, skips_constant)
+from ._methods import (MethodContext, SpotFindingConfig, SpotFindingSpec, check_columns, check_method_device,
+    constant_details, empty_table, per_channel, require_gpu, require_method, skips_constant)
 from ._plan import ChannelOverride, SpotFindingPlan
 from ._plot import plot_detections
 from ._weights import KNOWN_MODELS as _KNOWN_MODELS
@@ -146,7 +146,7 @@ def find_spots(
     spot_namespace : str
         Nonempty identity scope for the detected spots.
     device : str
-        Execution device: ``cpu``.
+        Execution device: ``cpu``, or ``cuda`` for Spotiflow and Piscis.
 
     Returns
     -------
@@ -158,7 +158,10 @@ def find_spots(
     -----
     The method is the SPOT_FINDING_METHODS entry of the config's exact type;
     a plan's overrides replace the whole config of their channels (a plan
-    with overrides needs config.channel_labels). device must be "cpu".
+    with overrides needs config.channel_labels). device is "cpu" or, for
+    a method whose spec lists it (Spotiflow and Piscis), "cuda", which is
+    passed to torch; another method refuses "cuda", and "cuda" raises
+    ValueError when torch sees no GPU.
     Returns a SpotFindingResult, including typed empty success. Does not match
     landmarks or evaluate registration. Calculation uses float64 for MAD and
     centroid weighting; input pixels are never modified. Global thresholds
@@ -253,6 +256,7 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
     if not isinstance(spot_namespace, str) or not spot_namespace.strip():
         raise ValueError("spot_namespace must be nonempty")
     check_device(device)
+    check_method_device(spec, device)
     plan = config if isinstance(config, SpotFindingPlan) else SpotFindingPlan(base)
     plan.__post_init__()
     if plan.rounds is not None:
@@ -267,6 +271,8 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
     if plan.channel_overrides and not per_channel(spec):
         raise ValueError(f"{_WHAT} {spec.name!r} combines channels and takes no channel overrides")
     require_method(spec)
+    if device == "cuda":
+        require_gpu()
     check_shape(spec, image.shape[:3])
     configs = _channel_configs(plan, n_channels)
     overridden = {labels.index(o.channel) for o in plan.channel_overrides}

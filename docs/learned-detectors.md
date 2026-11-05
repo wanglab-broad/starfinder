@@ -29,9 +29,11 @@ example `--extra local-registration`, on the same command and on every later
 
 * **Python versions.** Use Python 3.11 to 3.13: torch 2.7.1 has no wheel for
   Python 3.14, so there the extras install nothing.
-* **CPU-only torch.** On Linux, uv installs the CPU build, `torch 2.7.1+cpu`. Spot
-  finding runs on the CPU, also with the `cuda` extra, which installs the CUDA build
-  of torch in place of these extras ([installation](get-started/installation.md#learned-extras)).
+* **CPU-only torch.** On Linux, uv installs the CPU build, `torch 2.7.1+cpu`. To run
+  Spotiflow and Piscis on a GPU with `device="cuda"`, install the `cuda` extra, which
+  installs the CUDA build of torch in place of these extras
+  ([installation](get-started/installation.md#learned-extras),
+  [execution device](spot-finding-contract.md#execution-device)).
 * **Without the extras.** You can import `starfinder.spot_finding` and construct the
   configs without them; running a learned detector needs its extra.
 

@@ -182,18 +182,24 @@ single planes and volumes with the same weights.
 
 ## Execution device
 
-Spot finding runs on the CPU only. `ExecutionConfig.device`, the `device` keyword of
-`find_spots` and `FOV.find_spots`, and the workflow's `device` key accept only
-`"cpu"`, the default; any other value raises
-`ValueError("device must be 'cpu'; spot finding runs on CPU only")`. Starfinder does
-not change thread settings: set `OMP_NUM_THREADS` and the other thread variables
-before you start Python, and `diagnostics["execution"]` records what was in effect.
+`ExecutionConfig.device` and the `device` keyword of `find_spots` and `FOV.find_spots`
+take `"cpu"`, the default, or `"cuda"`; in the workflow the key is the `spot_finding`
+block's `device`. Spotiflow and Piscis run on the GPU with `"cuda"`; local maxima and
+the Starfish LoG run on the CPU only and refuse it. With `"cuda"` and no GPU that torch
+can see, a learned detection stops with
+`ValueError("device 'cuda' was requested, but torch sees no GPU")`. Registration and
+readout run on the CPU whatever the device. A GPU result is not assumed to equal the
+CPU's: TF32 and the GPU's kernels can change the networks' float32 outputs, so compare
+the two spot tables within the float32 tolerance rather than expect identical files.
+Starfinder does not change thread or TF32 settings: set `OMP_NUM_THREADS` and the other
+thread variables before you start Python, and `diagnostics["execution"]` records what
+was in effect, on `"cuda"` with the GPU's name and the TF32 settings.
 
 ## Workflow keys
 
 On the Python backend, the `spot_finding` block of a Python processing rule holds
 `run`, `ref_round`, `method` (default `local_maxima`) and the config's fields, plus
-`channel_overrides` and `rounds`:
+`channel_overrides`, `rounds` and `device`; the rule-level `device` stays `cpu`:
 
 ```yaml
 backend: python
@@ -205,6 +211,7 @@ rules:
         run: true
         ref_round: round1
         method: local_maxima
+        device: cpu            # cuda: spotiflow and piscis only
         threshold_mode: noise
         threshold_value: 5.0
         channel_overrides:
@@ -221,7 +228,7 @@ Under `backend: python`, local maxima takes the field names `threshold_mode`,
 * No deduplication across channels: a crosstalk copy of a spot in the next channel is
   a separate candidate.
 * No training or fine-tuning of the learned detectors, and no automatic resampling.
-* No GPU.
+* No GPU for local maxima or the Starfish LoG.
 * Coordinates are voxel indices, not physical units.
 
 ## How it is checked

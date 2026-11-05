@@ -195,8 +195,39 @@ def test_invalid_channel_overrides_raise(overrides, error):
 def test_the_rule_level_device():
     assert from_workflow_config(workflow({})).execution.device == "cpu"
     assert from_workflow_config(workflow({}, device="cpu")).execution.device == "cpu"
-    with pytest.raises(ValueError, match="device must be 'cpu'"):
+    with pytest.raises(ValueError, match="^device must be 'cpu'; got 'cuda': registration and readout run on the CPU"):
         from_workflow_config(workflow({}, device="cuda"))
+
+
+def python(spot_finding, **parameters):
+    return dict(workflow(spot_finding, **parameters), backend="python")
+
+
+@pytest.mark.parametrize("block", [{"method": "spotiflow", "model": "smfish_3d"},
+                                   {"method": "piscis", "model": "20251212", "channel_overrides": {
+                                       "ch02": {"threshold": 0.6}}}])
+def test_spot_finding_device_sets_the_execution_device_of_a_learned_detector(block):
+    """W-796: spot_finding.device (default cpu) is ExecutionConfig.device, not a config field."""
+    assert from_workflow_config(python(block)).execution.device == "cpu"
+    adapted = from_workflow_config(python(dict(block, device="cuda")))
+    assert adapted.execution.device == "cuda"
+    assert adapted.pipeline.spot_finding == from_workflow_config(python(block)).pipeline.spot_finding
+
+
+def test_spot_finding_device_cuda_is_refused_for_the_classical_methods_and_off_the_python_backend():
+    for method, extra in (("local_maxima", {}), ("starfish_log", {"min_sigma": 1, "max_sigma": 10, "num_sigma": 30,
+                                                                    "threshold": 0.01})):
+        assert from_workflow_config(python({"method": method, "device": "cpu", **extra})).execution.device == "cpu"
+        with pytest.raises(ValueError, match=f"^spot_finding.device 'cuda': spot-finding method '{method}' runs on "
+                                             "cpu only; cuda is for piscis, spotiflow$"):
+            from_workflow_config(python({"method": method, "device": "cuda", **extra}))
+    with pytest.raises(ValueError, match="^spot_finding.device must be 'cpu' or 'cuda'; got 'gpu'$"):
+        from_workflow_config(python({"method": "spotiflow", "model": "smfish_3d", "device": "gpu"}))
+    with pytest.raises(ValueError, match="spot_finding.channel_overrides.ch02"):
+        from_workflow_config(python({"method": "spotiflow", "model": "smfish_3d",
+                                     "channel_overrides": {"ch02": {"device": "cuda"}}}))
+    with pytest.raises(ValueError, match="spot_finding.device is Python-only"):
+        from_workflow_config(workflow({"method": "local_maxima", "device": "cpu"}))
 
 
 def test_the_shared_config_is_not_mutated():

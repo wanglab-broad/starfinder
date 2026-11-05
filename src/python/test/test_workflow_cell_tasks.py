@@ -2,7 +2,8 @@
 
 C1 and C3 of design/validation/orchestration.md for these kinds beyond the expected manifests: a segment task of a
 ``cuda`` run asks for a GPU (``execution.gpu`` from the run's ``device``), and the morphology-only variant plans its 8
-tasks with no processing block. The commands: a nuclear-stain run without a processing block lies on the reference
+tasks with no processing block; a direct fov task asks for one only when Spotiflow or Piscis runs on cuda
+(``processing.spot_finding.device``, W-796), which tiled mode refuses. The commands: a nuclear-stain run without a processing block lies on the reference
 stain's saved form (OP4); a seeded run reads its seeds from the earlier segment task and gives the labels of the
 whole plan; a given ``morphology.recipe`` and ``morphology.channel_images``; the previews of the assign and export
 commands, written only when ``assignment.previews`` or ``export.previews`` is on (P5). And the Python route of the
@@ -21,6 +22,7 @@ import tifffile
 
 from starfinder import _layout
 from starfinder.workflow import plan
+from starfinder.workflow._plan import PlanRefused
 
 from . import workflow_examples as X
 from .coordination_helpers import write_molecules_csv
@@ -43,6 +45,14 @@ def fixture_work(tmp_path_factory):
 def _plan(work, name, config):
     manifest = plan(X.write_config(work, name, config))
     return Path(manifest["roots"]["output"]) / "workflow" / "manifest.json", manifest
+
+
+def _gpu(manifest):
+    """{kind: the set of its tasks' execution.gpu}."""
+    found = {}
+    for task in manifest["tasks"]:
+        found.setdefault(task["kind"], set()).add(task["execution"]["gpu"])
+    return found
 
 
 def _run(manifest, *kinds):
@@ -157,6 +167,49 @@ def test_the_reference_stain_gives_the_grid_without_the_reference_round(fixture_
         assert grid.metadata == fov.metadata["reference_stain"]
     assert prepared.reference_grid() == restored.reference_grid()
 
+
+
+@pytest.mark.parametrize("method", ["spotiflow", "piscis"])
+@pytest.mark.parametrize("spot_device, segmentation_device", [("cuda", "cpu"), ("cpu", "cuda"), ("cuda", "cuda"),
+                                                               ("cpu", "cpu")])
+def test_a_direct_fov_task_asks_for_a_gpu_only_for_a_learned_detector_on_cuda(fixture_work, method, spot_device,
+                                                                               segmentation_device):
+    """W-796: processing.spot_finding.device makes each fov task a GPU task (processing.device stays cpu); the segment
+    tasks follow segmentation.device and the export task its own block, as before."""
+    config = X.variants(fixture_work)["morphology-only"]
+    config["segmentation"]["device"] = segmentation_device
+    processing = copy.deepcopy(X.PROCESSING)
+    processing["spot_finding"] = {"method": method, "model": "smfish_3d" if method == "spotiflow" else "20251212",
+                                  "device": spot_device}
+    config.update(processing=processing, stitching=X.multiview(fixture_work), assembly={"assignment": None},
+                  export={"images": ["reference_merged"]})
+    path, manifest = _plan(fixture_work, f"spot-{method}-{spot_device}-{segmentation_device}", config)
+    resolved = json.loads((path.parent / "resolved.json").read_text())["configuration"]
+    assert resolved["processing"]["device"] == "cpu"
+    assert resolved["api"]["processing"]["execution"]["device"] == spot_device
+    gpu = _gpu(manifest)
+    assert {"fov", "segment", "export"} <= set(gpu)
+    for kind, flags in gpu.items():
+        expected = {"fov": spot_device, "segment": segmentation_device}.get(kind) == "cuda"
+        assert flags == {expected}, kind
+
+
+def test_tiled_mode_plans_no_gpu_task_and_refuses_spot_finding_on_cuda(fixture_work):
+    """W-796: tiled mode detects with local_maxima, which refuses cuda; a learned detector is refused there as before,
+    so no tile_global or tile task asks for a GPU."""
+    config = X.variants(fixture_work)["after-fusion"]
+    _, manifest = _plan(fixture_work, "tiled-cpu", config)
+    gpu = _gpu(manifest)
+    assert {"tile_global", "tile", "tile_merge"} <= set(gpu) and "fov" not in gpu
+    assert all(flags == {False} for flags in gpu.values()), gpu
+    refused = copy.deepcopy(config)
+    refused["processing"]["spot_finding"]["device"] = "cuda"
+    with pytest.raises(PlanRefused, match="^spot_finding.device 'cuda': spot-finding method 'local_maxima' runs on "
+                                          "cpu only; cuda is for piscis, spotiflow$"):
+        _plan(fixture_work, "tiled-cuda", refused)
+    refused["processing"]["spot_finding"] = {"method": "spotiflow", "model": "smfish_3d", "device": "cuda"}
+    with pytest.raises(PlanRefused, match="tiled execution detects with local_maxima only"):
+        _plan(fixture_work, "tiled-spotiflow-cuda", refused)
 
 # --- the morphology block ----------------------------------------------------------------------------------------
 

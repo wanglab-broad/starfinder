@@ -761,7 +761,8 @@ guide's table (written when the implementation lands) is generated from this one
 | `matlab_launcher`, `matlab_single_thread` (MATLAB rules only) | MATLAB dialect only | Without `backend`, a configuration that holds them is refused, naming `backend: matlab` (D7) |
 | `rules.<processing rule>.parameters`: the keys it accepts | `processing` | The same keys, unknown keys raise; the five processing rules become one block with `mode` (D4, D5) |
 | `rules.<processing rule>.parameters.streaming` | `processing.streaming` |  |
-| `rules.<processing rule>.parameters.device` | `processing.device` |  |
+| `rules.<processing rule>.parameters.device` | `processing.device` | `cpu` only: registration and readout run on the CPU |
+| `rules.<processing rule>.parameters.spot_finding.device` (new) | `processing.spot_finding.device` | `cpu` (default) or `cuda` for Spotiflow and Piscis; `cuda` gives each direct `fov` task its GPU |
 | `rules.<processing rule>.parameters.<block>.run` (`spot_finding`, `reads_extraction`, `reads_filtration`, `load_codebook`, `load_raw_images`, `create_subtiles`) | Removed | A present sub-block enables its operation (`spot_finding`, `reads_extraction`, `reads_filtration`); the codebook is loaded whenever the block decodes and the raw images always; `create_subtiles` is retired (D4, D5) |
 | `rules.<processing rule>.parameters.load_codebook`, `.load_codebook.run` | `processing.load_codebook` | Without `run` (D4) |
 | `rules.<processing rule>.parameters.load_codebook.split_index` | `processing.load_codebook.split_index` |  |
@@ -856,6 +857,8 @@ guide's table (written when the implementation lands) is generated from this one
 | `export.segmentation.runs[].inputs[].role`, `.image` | Unchanged |  |
 | `report` | Unchanged | Its assignment is `assembly.assignment`, else the `assignment` block's `name`, else none: a run with `assignment` and `report` blocks and no `assembly` block reports its cells (W-807) |
 | `report.markers[]`, `report.limits`, `report.limits.spots_near_zero` | Unchanged |  |
+
+% Amended 2026-11-05 (W-796, Jiahao's decision of 2026-11-04, option (b) of design/specs/spot-finding.md, "Execution device"): the rows `processing.device` (`cpu` only) and the new `processing.spot_finding.device`, which gives a direct `fov` task its GPU.
 
 (orchestration-migration-fields)=
 
@@ -1288,7 +1291,7 @@ package. The engine reads, for every task: `id`, `kind`, `needs`, `inputs`, `out
 | --- | --- | --- | --- |
 | `summarize` | the FOV's raw images, the earlier supplied file, the step and its recipe | `inputs`; the resolved configuration through the manifest | nothing |
 | `merge` | the histogram files of the sample, the earlier supplied file | `inputs` | nothing |
-| `fov` | the raw images, the codebook, the supplied file, the processing block, the stages | `inputs`; the resolved configuration | nothing |
+| `fov` | the raw images, the codebook, the supplied file, the processing block, the stages | `inputs`; the resolved configuration | a GPU when `execution.gpu` says so (Spotiflow or Piscis on `cuda`) |
 | `tile_global`, `tile`, `tile_merge` | the raw images, the chunked checkpoint, the tile's window and halo, the tiles' outputs | `inputs`, `identity.tile`; the window and halo by W-644 | nothing: the tiles are tasks of the manifest |
 | `morphology` | the stain and other rounds' files, the morphology block, `rotate_angle` | `inputs`; the resolved configuration | nothing |
 | `segment` | the reference image or saved forms, the seeds' run, the import file, the run | `inputs`, `identity.run`; the resolved configuration | a GPU when `execution.gpu` says so |
@@ -1300,13 +1303,15 @@ package. The engine reads, for every task: `id`, `kind`, `needs`, `inputs`, `out
 | `report` | the run records and stages, the placement, `export.json`, the assignments, the block | `inputs`; the resolved configuration | nothing |
 | `compare` | every `report.json` | `inputs` | nothing |
 
+% Amended 2026-11-05 (W-796, Jiahao's decision of 2026-11-04): the `fov` task gets a GPU when `processing.spot_finding.device` is `cuda`; it said "nothing".
+
 The checklist per task kind. Each column is a question an engine design answers "from the
 manifest" for every kind; a cell that is not "manifest" names the exception:
 
 | Task kind | Identity | Paths | Parameters | Resources | Command line | Package import in the engine file |
 | --- | --- | --- | --- | --- | --- | --- |
 | `summarize`, `merge` | manifest | manifest | resolved configuration | manifest | manifest | none |
-| `fov` | manifest | manifest | resolved configuration | manifest | manifest | none |
+| `fov` | manifest | manifest | resolved configuration | manifest (`gpu` from `processing.spot_finding.device`) | manifest | none |
 | `tile_global`, `tile`, `tile_merge` | manifest (the tile list is the plan's, W-644) | manifest | resolved configuration | manifest | manifest | none |
 | `morphology` | manifest | manifest | resolved configuration | manifest | manifest | none |
 | `segment` | manifest | manifest | resolved configuration | manifest (`gpu` from the run's `device`) | manifest | none |
@@ -1314,6 +1319,8 @@ manifest" for every kind; a cell that is not "manifest" names the exception:
 | `bigstitcher_macro`, `bigstitcher_import`, `stitch` | manifest (on the supplied route the view map is an input of the manifest) | manifest | resolved configuration | manifest | manifest | none |
 | `bigstitcher_engine` | manifest | manifest | the macro the `bigstitcher_macro` task wrote | manifest | manifest: `tool_command` (with `{fiji}` from `execution.tool.path`), then `command` (`bigstitcher-check`, which writes the record) | none |
 | `export`, `report`, `compare` | manifest | manifest | resolved configuration | manifest | manifest | none |
+
+% Amended 2026-11-05 (W-796): the `fov` row's resources, `gpu` from `processing.spot_finding.device`.
 
 The engine's context is passed as four arguments and only recorded. The prototype manifests of the
 worked example hold every one of these for every task.

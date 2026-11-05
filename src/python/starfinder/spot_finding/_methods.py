@@ -13,6 +13,7 @@ from skimage._shared.coord import ensure_spacing
 from skimage.feature import peak_local_max
 from skimage.morphology import local_maxima
 
+from starfinder._execution import DEVICES
 from starfinder._registry import Dependency, check_shared, require
 from ._config import (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, PiscisConfig, SpotiflowConfig,
     StarfishLogConfig)
@@ -66,6 +67,8 @@ class SpotFindingSpec:
         dependencies.
     min_shape_zyx : tuple of int
         Minimum Y and X sizes, and the minimum Z size of 3D input, as positive integers in ZYX voxel counts. Defaults to (1, 1, 1).
+    devices : frozenset of str
+        Execution devices the method runs on, from ``cpu`` and ``cuda``. Defaults to ``cpu`` only.
 
     Notes
     -----
@@ -91,7 +94,8 @@ class SpotFindingSpec:
     names pretrained weights from KNOWN_MODELS. requires lists optional
     dependencies, imported when the method runs; min_shape_zyx is the
     smallest accepted size of each axis (a Z=1 input is checked against its
-    last two entries).
+    last two entries). devices lists the execution devices find_spots accepts
+    for the method (check_method_device); Spotiflow and Piscis add ``cuda``.
     """
 
     name: str
@@ -104,11 +108,15 @@ class SpotFindingSpec:
     weights: bool = False
     requires: tuple[Dependency, ...] = ()
     min_shape_zyx: tuple[int, int, int] = (1, 1, 1)
+    devices: frozenset[str] = frozenset({"cpu"})
 
     def __post_init__(self):
         check_shared(self, "spot-finding method")
         if not isinstance(self.pipeline, bool) or not isinstance(self.weights, bool):
             raise TypeError(f"pipeline and weights of {self.name!r} must be Boolean")
+        if (not isinstance(self.devices, frozenset) or "cpu" not in self.devices
+                or not self.devices <= set(DEVICES)):
+            raise ValueError(f"devices of {self.name!r} must be a frozenset of {', '.join(DEVICES)} with cpu")
         if (not isinstance(self.dimensions, frozenset) or not self.dimensions
                 or not self.dimensions <= {2, 3}):
             raise ValueError(f"dimensions of {self.name!r} must be a nonempty frozenset of 2 and/or 3")
@@ -327,12 +335,12 @@ SPOT_FINDING_METHODS: dict[type, SpotFindingSpec] = {
         "spotiflow", spotiflow, pipeline=True, dimensions=frozenset({2, 3}),
         output_columns=("z", "y", "x", "channel", "peak_intensity", "probability"), weights=True,
         requires=(Dependency("spotiflow", "spotiflow", "spotiflow"), Dependency("torch", "torch", "spotiflow")),
-        min_shape_zyx=(7, 6, 6)),
+        min_shape_zyx=(7, 6, 6), devices=frozenset({"cpu", "cuda"})),
     PiscisConfig: SpotFindingSpec(
         "piscis", piscis, pipeline=True, dimensions=frozenset({2, 3}),
         output_columns=("z", "y", "x", "channel", "peak_intensity"), weights=True,
         requires=(Dependency("piscis", "piscis", "piscis"), Dependency("torch", "torch", "piscis")),
-        min_shape_zyx=(2, 1, 1)),
+        min_shape_zyx=(2, 1, 1), devices=frozenset({"cpu", "cuda"})),
 }
 
 # Annotation alias for a registered config; a test keeps its members equal to the registry keys.
@@ -436,6 +444,22 @@ def require_method(spec) -> None:
             raise SpotFindingBackendUnavailableError(
                 f"{error} (the extra is not available on Python 3.14 and later)") from error.__cause__
         raise
+
+
+def check_method_device(spec, device, context="device") -> None:
+    """Raise ValueError unless the method runs on device (spec.devices), naming the methods that accept it."""
+    if device not in spec.devices:
+        accepting = sorted(other.name for other in SPOT_FINDING_METHODS.values()
+                           if other.pipeline and device in other.devices)
+        raise ValueError(f"{context} {device!r}: spot-finding method {spec.name!r} runs on "
+                         f"{', '.join(sorted(spec.devices))} only; {device} is for {', '.join(accepting)}")
+
+
+def require_gpu() -> None:
+    """Raise ValueError when torch sees no GPU, as segmentation does for device 'cuda'."""
+    import torch
+    if not torch.cuda.is_available():
+        raise ValueError("device 'cuda' was requested, but torch sees no GPU")
 
 
 def check_columns(spec, table):

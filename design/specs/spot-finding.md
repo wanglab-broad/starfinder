@@ -28,8 +28,9 @@ This page is the maintained guide to the spot-finding stage and its contract:
   [Diagnostics](#diagnostics), [checkpoints](../../docs/checkpoints.md)).
 * **Where the configuration goes.** In Python, `PipelineConfig.spot_finding` holds the
   config or plan, and `ExecutionConfig.device` the device. In the workflow, the Python
-  backend reads the `spot_finding` block of a Python rule and the rule-level `device`
-  key ([Workflow configuration](#workflow-configuration), [Execution device](#execution-device),
+  backend reads the `spot_finding` block of a Python rule, whose `device` key (since
+  2026-11-05, W-796) sets the device, and the rule-level `device` key, which stays `cpu`
+  ([Workflow configuration](#workflow-configuration), [Execution device](#execution-device),
   [workflow-configuration](../../docs/workflow-configuration.md)).
 
 % W-218, w-218
@@ -63,7 +64,9 @@ Decided by Jiahao in the spot-finding planning session (the planning comment of
    `BlobDetector` (`is_volume=True`, no reference image, one round and channel at
    a time), with parity against starfish `1fb00cbc` saved as test data.
 2. Spot finding is CPU-only; the `device` setting accepts only `"cpu"` and is a
-   cross-stage execution setting.
+   cross-stage execution setting. Amended on 2026-11-05 (W-796, Jiahao's decisions
+   of 2026-11-04): Spotiflow and Piscis also accept `"cuda"`, and the setting is
+   spot finding's own in the workflow ([Execution device](#execution-device)).
 3. Starfinder manages the weights: an explicit fetch command, a known-weights
    table with SHA-256 that lists known weights and sets no default, loading from
    explicit paths that bypass the libraries' caches; `FOV.run` never downloads.
@@ -119,6 +122,7 @@ Each config's `method` discriminator equals its spec name. `SpotFindingSpec` add
 | `dimensions` | `frozenset` of `2` and/or `3`: `2` means a Z=1 input is detected as a YX plane; `3` means Z>1 is detected in 3D. |
 | `output_columns` | The spot-table columns besides `spot_id`, in order; a trailing `?` marks an optional column. |
 | `weights` | `True` when the config names pretrained weights from the known-weights table. |
+| `devices` | `frozenset` of the execution devices the method runs on, from `cpu` and `cuda`, with `cpu`; default `cpu` only. Spotiflow and Piscis list `cuda` too (W-796, [Execution device](#execution-device)). |
 
 `run(image, config, context)` is the private method function. It returns the
 method's table (the declared columns, without `spot_id`) and its per-channel
@@ -239,30 +243,45 @@ class SpotFindingPlan:
 
 ## Execution device
 
-`ExecutionConfig` has `device: str = "cpu"`. In spot finding any other value raises
-`ValueError("device must be 'cpu'; spot finding runs on CPU only")`. Direct `find_spots`
-takes the same keyword (`device="cpu"`). The setting belongs to execution, not to
-a method; it is recorded in `run.json` with the rest of `ExecutionConfig`.
-Segmentation does not reuse it: the segment entry takes its own `device` keyword
-([segmentation-contract](segmentation.md), option V1, approved at the segmentation acceptance review
-on 2026-10-05), and
-`ExecutionConfig.device` stays CPU-only.
+% Amended 2026-11-05 (W-796): `"cuda"` for Spotiflow and Piscis, set in the workflow by `processing.spot_finding.device`; Jiahao's decisions of 2026-11-04, below.
 
-% §2.7, §2.9, W-309
+`ExecutionConfig` has `device: str = "cpu"`, which `FOV.run` passes to `find_spots`;
+direct `find_spots` takes the same keyword (`device="cpu"`). The value is `"cpu"` or
+`"cuda"`; any other raises `ValueError("device must be 'cpu' or 'cuda'; got …")`. Each
+method's spec lists the devices it runs on (`devices`): Spotiflow and Piscis list
+`cpu` and `cuda`, and `local_maxima` and `starfish_log` refuse `"cuda"` before they
+detect, with `ValueError("device 'cuda': spot-finding method 'local_maxima' runs on cpu
+only; cuda is for piscis, spotiflow")`. With `"cuda"`, `find_spots` checks that torch
+sees a GPU before it reads the weights, and otherwise stops with
+`ValueError("device 'cuda' was requested, but torch sees no GPU")`, the message of
+segmentation's torch methods. Spotiflow receives the device in
+`Spotiflow.from_folder(..., map_location=device)`, `infer_n_tiles` and `predict`, and
+Piscis in `Piscis(..., device=device)`. The process's model cache is keyed by the
+device as well, so a model loaded on the CPU is never reused on the GPU.
+
+The setting belongs to execution, not to a method; it is recorded in `run.json` with
+the rest of `ExecutionConfig`. Registration and readout run on the CPU whatever its
+value. Segmentation does not reuse it: the segment entry takes its own `device` keyword
+([segmentation-contract](segmentation.md), option V1, approved at the segmentation acceptance review
+on 2026-10-05).
+
+% §2.7, §2.9, W-309, W-796
 
 Each detection records an execution entry in its diagnostics and in its provenance
 entry (`"execution"`):
 
-* `device`: `"cpu"`;
+* `device`: `"cpu"` or `"cuda"`;
 * `framework`: for torch methods, `torch.__version__` (for example `2.7.1+cpu`),
   `torch.version.cuda` (`None` for CPU builds), and whether MKL and MKL-DNN are
-  available; `None` for methods without a framework;
+  available; on `"cuda"` also `gpu`, the name torch gives the GPU in use, and `tf32`,
+  torch's `allow_tf32` settings for matrix products (`matmul`) and cuDNN (`cudnn`);
+  `None` for methods without a framework;
 * `threads`: `torch.get_num_threads()` and `torch.get_num_interop_threads()` when
   torch is loaded, and the values of `OMP_NUM_THREADS`, `MKL_NUM_THREADS`,
   `OPENBLAS_NUM_THREADS`, `NUMEXPR_NUM_THREADS` and `NUMBA_NUM_THREADS` (`None`
   when unset).
 
-Starfinder does not change thread settings. The dependency study found that `OMP_NUM_THREADS=1`
+Starfinder does not change thread settings, nor torch's TF32 settings. The dependency study found that `OMP_NUM_THREADS=1`
 holds a whole Spotiflow process to one thread, while `torch.set_num_threads(1)`
 alone leaves 15 OS threads and a CPU/wall ratio of 1.9, and that no MKL
 workaround is needed. The documentation therefore tells users to set the thread
@@ -270,8 +289,8 @@ variables, and the record shows what was in effect.
 
 % W-266
 
-Enabling `"cuda"` later is a separate decision, for the segmentation and assignment
-work or a later stage. The GPU study showed
+Enabling `"cuda"` was left as a separate decision, for the segmentation and assignment
+work or a later stage; W-796 made it, below. The GPU study showed
 that torch 2.7.1+cu118 uses the RTX A5000 on GP099's driver 470 without changing
 the lock (the constraint pins the version, and a GPU user swaps in the `+cu118`
 build). Before a CUDA run can be accepted, three points need a decision: TF32
@@ -280,6 +299,56 @@ learned methods need TF32 off or tolerances instead of digests; a CUDA process
 used 4.7 GB of host RSS, above the 4 GiB target; and the GPU is shared.
 
 % §2.9, W-265
+
+### The learned detectors on the GPU (W-796)
+
+W-792's `learned-cuda` image ran StarDist and Cellpose on a GPU, while spot finding
+stayed on the CPU. Jiahao chose on 2026-11-04 ("按推荐排 batch") the recommended option
+of each point below.
+
+1. **Where the device is set.** The options: (a) `processing.device: cuda` makes the
+   whole `fov` task, or in tiled mode every `tile` task, a GPU task; (b) a device on
+   the spot-finding block only, and a task is a GPU task when a learned detector runs
+   on it. Registration and readout stay on the CPU under either. **Chosen: (b).** The
+   workflow key is `processing.spot_finding.device`, default `cpu`; the translator
+   (`from_workflow_config`) makes it `ExecutionConfig.device`, and `FOV.run` passes that
+   to `find_spots`. `processing.device` stays `cpu`. A direct `fov` task is a GPU task
+   (`execution.gpu`) only when its spot finding runs Spotiflow or Piscis on `cuda`;
+   tiled mode refuses learned detectors ([orchestration-tiled](orchestration-tiled.md), OT2)
+   and `local_maxima` refuses `cuda`, so no
+   `tile_global` or `tile` task becomes one. The reason: a UGER GPU node runs one job
+   at a time (W-649's U5), so a GPU `fov` task holds a whole node for the rest of its
+   processing. Under (a) every `fov` task, and in tiled mode every `tile` task, would
+   hold one even where no method uses the GPU; under (b) a task asks for a GPU only
+   when a method can use it.
+2. **Which methods accept `cuda`.** The options for the classical methods: refuse
+   `cuda` with a clear message, or ignore it. **Chosen:** Spotiflow and Piscis accept
+   it; `local_maxima` and `starfish_log` refuse it with the message above. The reason:
+   a refusal is preferred, as segmentation refuses a device its framework cannot use;
+   an ignored `cuda` would ask for a GPU for a method that runs on the CPU. With `cuda`
+   and a torch that sees no GPU, the learned methods stop, as segmentation stops with
+   "TensorFlow sees no GPU".
+3. **Equality.** The options: assume that a CUDA run equals the CPU run, or measure
+   it. W-792 found StarDist exact on the GPU and Cellpose differing under bfloat16,
+   and the GPU study found that TF32 changed a conv3d layer by 8.0e-4, so equality
+   cannot be assumed. **Chosen: measured, not assumed.** The rule: the spot tables of
+   one image on `cuda` and on `cpu` are compared under the tolerances of
+   [contributing](../../docs/contributing.md) ("Expected values and tolerances"), each
+   column by the quantity it holds: spot counts, `channel` and the integer-valued
+   coordinates of Piscis's stack mode exact, and the coordinates and `probability`
+   that the networks compute in float32 with the float32 tolerance. W-809 measures it
+   for Spotiflow and Piscis on GP099-29C's A5000, after this change, as W-792's GPU
+   check was measured; until then no CUDA spot table is claimed equal to the CPU's. A
+   difference beyond the tolerances is recorded as found, as W-792 recorded
+   Cellpose's, and is not met by widening a tolerance. Starfinder does not turn TF32
+   off: the execution entry records the GPU and the TF32 settings, so that a
+   difference can be traced to them. The CPU stays the device of the golden and
+   validation tests.
+
+The GPU study's other two points: a GPU `fov` task's memory is its
+`execution.tasks.fov.memory_mb`, which the user sets for a CUDA process's host
+memory; and on UGER a GPU job has its node to itself and uses one of its GPUs
+([broad-uger](broad-uger.md)).
 
 ## Pretrained weights
 
@@ -611,9 +680,10 @@ explicit = true
   raise `SpotFindingBackendUnavailableError` with the note above.
 * **GPU users** on GP099 replace torch with the same version's `+cu118` build in
   their own environment (the GPU study). The constraint keeps the version aligned. The
-  lock stays CPU.
+  lock stays CPU. (Since W-792 the lock's `cuda` extra and the `learned-cuda` image hold
+  a CUDA build of torch, with which W-796's `device="cuda"` runs.)
 
-% W-266, §2.10, W-265
+% W-266, §2.10, W-265; amended 2026-11-05 (W-796): the CUDA build that `device="cuda"` uses
 
 The full commit text, with the verification commands, is the draft
 `drafts/batch-prep-dependency-commit.md` in the run directory of the spot-finding
@@ -651,8 +721,12 @@ and this table is the only rule:
 | `min_distance` | Python backend: `ValueError` naming `min_distance_voxels`. MATLAB backend: alias of `min_distance_voxels`; `ValueError` together with `min_distance_voxels` | The native field `min_distance` of `SpotiflowConfig` and `PiscisConfig`, passed unchanged | `ValueError` (not a field) |
 | `min_distance_voxels` | The field | `ValueError` (not a field) | `ValueError` (not a field) |
 
-`channel_overrides` entries follow the same rule for the selected method. A
-rule-level Python-only key `device` sets `ExecutionConfig.device`.
+`channel_overrides` entries follow the same rule for the selected method. The
+block's Python-only key `device` (since 2026-11-05, W-796; [Execution device](#execution-device))
+sets `ExecutionConfig.device`: `cpu` (the default), or `cuda`, which Spotiflow and Piscis
+accept and `local_maxima` and `starfish_log` refuse; a `channel_overrides` entry has no
+`device`. The rule-level Python-only key `device` must be `cpu`: registration and
+readout run on the CPU.
 
 ```yaml
 rsf_single_fov:
@@ -662,6 +736,7 @@ rsf_single_fov:
       run: true
       ref_round: round1
       method: spotiflow
+      device: cpu                     # or cuda (spotiflow, piscis)
       model: smfish_3d                # required: every run names its weights
       prob_thresh: null               # null: the threshold stored with the weights
       channel_overrides:
@@ -681,8 +756,10 @@ Python nor MATLAB accepts. MATLAB rules, shared keys and filenames do not change
 No training or fine-tuning, no fifth detector family, no shared DoG or PSF filters,
 no generic spot fitting or spot masks, and no cross-channel deduplication (readout).
 No readout-mode configuration, gene mapping or direct-mode wiring in `FOV.run`
-(readout). No GPU execution, and no default method or model chosen from comparative
-data; method comparisons belong to separate evidence work on spot-finding methods.
+(readout). No GPU execution for local maxima or the Starfish LoG (the learned detectors run
+on `cuda` since W-796, [Execution device](#execution-device)), and no default method or model
+chosen from comparative data; method comparisons belong to separate evidence work on
+spot-finding methods.
 
-% §2.8, E02
+% §2.8, E02; amended 2026-11-05 (W-796): GPU execution of Spotiflow and Piscis
 

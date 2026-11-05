@@ -5,7 +5,7 @@ include { SUMMARIZE as SUMMARIZE_2 } from './modules/summarize'
 include { MERGE as MERGE_0 } from './modules/merge'
 include { MERGE as MERGE_1 } from './modules/merge'
 include { MERGE as MERGE_2 } from './modules/merge'
-include { FOV } from './modules/fov'
+include { FOV ; FOV_GPU } from './modules/fov'
 include { TILE_GLOBAL } from './modules/tile_global'
 include { TILE } from './modules/tile'
 include { TILE_MERGE } from './modules/tile_merge'
@@ -148,8 +148,14 @@ workflow {
     done = done.mix(SUMMARIZE_2.out.done)
     MERGE_2(ready(tasks.filter { id, t -> t.kind == 'merge' && t.depth == 2 }, done))
     done = done.mix(MERGE_2.out.done)
-    FOV(ready(tasks.filter { id, t -> t.kind == 'fov' }, done))
+    route_FOV = tasks.filter { id, t -> t.kind == 'fov' }.branch { id, t ->
+        gpu: t.execution.gpu
+        cpu: true
+    }
+    FOV(ready(route_FOV.cpu, done))
     done = done.mix(FOV.out.done)
+    FOV_GPU(ready(route_FOV.gpu, done))
+    done = done.mix(FOV_GPU.out.done)
     TILE_GLOBAL(ready(tasks.filter { id, t -> t.kind == 'tile_global' }, done))
     done = done.mix(TILE_GLOBAL.out.done)
     TILE(ready(tasks.filter { id, t -> t.kind == 'tile' }, done))

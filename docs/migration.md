@@ -238,6 +238,7 @@ For changed composition and resampling behavior, consult the
 | Subclassing a detector config to select a method | Use a registered config type; see [adding a method](method-registry.md) |
 | One detection per voxel of a tied local maximum | One representative per regional maximum; plateau and shoulder rows are removed and spot identities renumber ([rule](spot-finding-algorithms.md#local-maxima)) |
 | `PipelineConfig(detection=LocalMaximaConfig(...))` | `PipelineConfig(spot_finding=LocalMaximaConfig(...))` |
+| Spotiflow and Piscis on the CPU only; `device="cuda"` raised | `device="cuda"` (`ExecutionConfig`, `find_spots`, or `processing.spot_finding.device` in the workflow) runs them on the GPU; `local_maxima` and `starfish_log` refuse it ([execution device](spot-finding-contract.md#execution-device)) |
 | Several detection rounds decoded as multiplexed reads | Detect in the reference round for multiplexed readout; use `readout_mode="direct"` for a direct assay |
 | `voxel_size=(...)` extraction arguments | `NeighborhoodSumConfig(neighborhood_radius_zyx=(...))` |
 | Combined extraction and barcode calls | `extract_intensities`, then `decode_reads`, then `filter_reads` |

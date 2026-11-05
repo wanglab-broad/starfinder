@@ -607,6 +607,9 @@ class Graph:
             supplied_input = self.inputs.add_file("supplied_statistics", supplied_path(r, supplied),
                                                   "processing.preprocessing.supplied_statistics")
         if "processing" in r:
+            # A learned detector on cuda (processing.spot_finding.device, which the translation refuses for another
+            # method) makes each direct fov task a GPU task; tiled mode detects with local_maxima only (W-796).
+            gpu = r["api"]["processing"]["execution"]["device"] == "cuda"
             for sample, members in samples.items():
                 merges = [t["id"] for t in self.tasks if t["kind"] == "merge" and t["identity"]["sample"] == sample]
                 for fov in members:
@@ -626,7 +629,8 @@ class Graph:
                                 for name in sorted({n for _, n in sequencing_inputs(r)})]
                     outputs += self.stage_records(fov)
                     fov_task[fov] = reference_task[fov] = self.add("fov", {"sample": sample, "fov": fov},
-                                                                   merges[-1:], [i for i in inputs if i], outputs)
+                                                                   merges[-1:], [i for i in inputs if i], outputs,
+                                                                   gpu=gpu)
         morph = {}
         if "morphology" in r:
             m = r["morphology"]

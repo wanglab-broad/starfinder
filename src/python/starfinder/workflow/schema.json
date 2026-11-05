@@ -292,7 +292,16 @@
      "type": [
       "object",
       "null"
-     ]
+     ],
+     "properties": {
+      "device": {
+       "enum": [
+        "cpu",
+        "cuda"
+       ],
+       "description": "The spot-finding device (default cpu); cuda for spotiflow and piscis, whose direct fov task then asks for a GPU. Registration and readout stay on the CPU (processing.device)."
+      }
+     }
     },
     "reads_extraction": {
      "type": [

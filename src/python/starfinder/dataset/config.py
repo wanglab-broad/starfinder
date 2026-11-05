@@ -26,14 +26,16 @@ class ExecutionConfig:
     retain_images : bool
         Keep processed round images in memory after streaming.
     device : str
-        Cross-stage execution device, ``cpu``.
+        Execution device of the methods that take one: ``cpu``, or ``cuda`` for the learned spot detectors.
 
     Notes
     -----
     retain_images keeps processed rounds (required for subtile creation).
     Otherwise only the reference image remains after streaming. device is
-    the cross-stage execution device of the methods; the spot-finding
-    contract accepts only "cpu" (any other value raises ValueError).
+    the execution device FOV.run passes to find_spots: "cpu", or "cuda",
+    which Spotiflow and Piscis accept and the other spot-finding methods
+    refuse (any other value raises ValueError). Registration and readout run
+    on the CPU whatever its value; segmentation takes its own device.
     """
     # §2.7
     mode: str = 'batch'

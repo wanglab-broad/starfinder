@@ -112,13 +112,13 @@ mode: direct runs one fov task per FOV; tiled runs a FOV in tiles (processing.ti
 tiled: The tiled settings below, read in mode tiled only.
 checkpoints: The checkpoint stages the fov task writes; the plan adds registered when a segmentation input reads a sequencing round.
 streaming: true runs FOV.run in streaming execution, false in batch.
-device: The processing device; only cpu.
+device: cpu, the device of registration and readout; spot_finding.device sets the device of spot finding.
 load_codebook: The codebook settings: split_index and encoding.
 load_raw_images: The image-loading settings: subdir.
 preprocessing: The preprocessing recipe: steps, post_registration, extraction_source, registration_source and supplied_statistics.
 registration: The registration recipe: steps, signal, warp, qc and reference_round.
 reference_image_view: The saved reference image: mode max (the channel maximum) or channel with channel, and projection.
-spot_finding: Present, spots are found: method and its config's fields, channel_overrides and rounds.
+spot_finding: Present, spots are found: method and its config's fields, channel_overrides, rounds and device, cpu (default) or cuda, which spotiflow and piscis accept and which makes each direct fov task a GPU task.
 reads_extraction: Present, reads are extracted: voxel_size, the Z, Y and X half-widths in voxels, and background.
 reads_filtration: Present, reads are filtered and decoded: end_base, start_base, n_barcode_segments and split_index.
 decoding: The decoder: method wta, codebook_aware or direct, and its config's fields.

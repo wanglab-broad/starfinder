@@ -77,8 +77,9 @@ The `cuda` extra holds the same four backends with CUDA builds: on Linux, torch
 with NVIDIA's CUDA libraries (`tensorflow[and-cuda]`). One environment cannot hold
 both builds of torch, so uv refuses `cuda` together with `spotiflow`, `piscis` or
 `cellpose`: install it in their place, `uv sync --locked --extra cuda`. The driver
-comes from the host. With it, `device="cuda"` runs StarDist and Cellpose on the GPU;
-spot finding runs on the CPU. The workflow's `learned-cuda` image holds this extra.
+comes from the host. With it, `device="cuda"` runs StarDist, Cellpose, Spotiflow and
+Piscis on the GPU; the other spot-finding methods run on the CPU. The workflow's
+`learned-cuda` image holds this extra.
 
 Importing `starfinder.spot_finding` or `starfinder.segmentation` and constructing a config
 never need the extras; running a learned method without its extra raises an
