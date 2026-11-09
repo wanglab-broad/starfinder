@@ -215,6 +215,12 @@ The {doc}`reference <reference>` lists every key with its default, and the
   thread per `fov` task).
 * With retries set, Snakemake retries a refused task (exit 2 or 3) or a held
   export (exit 4) like a failed one; Nextflow retries none of them.
+* Under Snakemake, `--cores N` limits the threads the running tasks declare
+  (`execution.tasks.<kind>.threads`), not their number. From Snakemake 9.27.1,
+  `--cores 1` runs one single-thread task at a time and `--cores 2` runs two; Snakemake
+  9.15.0 and earlier could start two tasks together under `--cores 1` after a lone
+  ready job finished. Memory is not limited: give `--resources mem_mb=<n>` where a
+  task's memory needs a bound.
 * Under Snakemake, an output whose size changed is not rerun. Its consumers
   rerun on the changed file when its modification time is newer, and the run
   exits 0. Only `workflow verify --final` reports it.
