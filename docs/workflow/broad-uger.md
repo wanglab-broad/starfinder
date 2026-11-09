@@ -132,7 +132,8 @@ folder.
   minutes, two retries, keep-going, rerun-incomplete, 1000 jobs, a 60-second
   latency wait and `rerun-triggers: [mtime, params, input]`. Give `--jobs` for
   the account's submission limit.
-* Nextflow's `--max_retries` (default 2), `--container` and `--weights_dir`.
+* Nextflow's `--max_retries` (default 2; 0 runs a failed task once, with no retry at a larger
+  request), `--container` and `--weights_dir`.
 * `execution.defaults` and `execution.tasks.<kind>` of the configuration: each
   task's threads, memory, runtime and GPU. A retry multiplies memory and runtime
   by the attempt.
