@@ -50,12 +50,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src/python/ ./
 ARG STARFINDER_VERSION
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=$STARFINDER_VERSION
-# piscis locks opencv-python and cellpose opencv-python-headless, and both write cv2/: the copy that remains depends on
-# the order of installation. The GUI copy needs X11, OpenGL and GLib libraries the slim base lacks, so the headless
-# copy, the same locked wheel, is installed again last; no learned package uses OpenCV's GUI.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-default-groups --group workflow --no-editable \
-      --reinstall-package opencv-python-headless $CPU_EXTRAS $LEARNED_EXTRAS
+    uv sync --locked --no-default-groups --group workflow --no-editable $CPU_EXTRAS $LEARNED_EXTRAS
+# The lock holds only opencv-python-headless; the slim base has no X11 or OpenGL libraries, so this import stops the build
+# if a GUI OpenCV ever returns.
+RUN /opt/starfinder/bin/python -c "import cv2, cellpose, piscis"
 
 FROM build AS build-learned-cuda
 ARG CPU_EXTRAS
@@ -65,10 +64,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src/python/ ./
 ARG STARFINDER_VERSION
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=$STARFINDER_VERSION
-# The headless OpenCV last, as in build-learned.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-default-groups --group workflow --no-editable \
-      --reinstall-package opencv-python-headless $CPU_EXTRAS $CUDA_EXTRAS
+    uv sync --locked --no-default-groups --group workflow --no-editable $CPU_EXTRAS $CUDA_EXTRAS
+# As in build-learned.
+RUN /opt/starfinder/bin/python -c "import cv2, cellpose, piscis"
 
 FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS runtime
 # bookworm's only procps release (main, updates and security on 2026-11-03).

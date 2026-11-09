@@ -96,7 +96,7 @@ are in
 
 ## Snakemake and Nextflow
 
-The {doc}`workflow <../workflow/index>` runs under Snakemake 9.15.0 and the
+The {doc}`workflow <../workflow/index>` runs under Snakemake 9.27.1 and the
 cluster-generic executor of the locked `workflow` dependency group: from
 `src/python`, `uv run --group workflow snakemake ...` installs the group into the
 project's environment and runs Snakemake there. Nextflow is not a Python package:
