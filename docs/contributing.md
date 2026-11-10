@@ -18,6 +18,17 @@ authored autosummary lists and implementation docstrings instead.
 For a preview, serve the HTML directory with Python's `http.server` and open
 its localhost URL. Check navigation, search and API source links.
 
+## Test environment
+
+Set `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
+`NUMEXPR_NUM_THREADS`, `NUMBA_NUM_THREADS` and
+`ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS` to 1 before you run the tests. The first five
+are `starfinder._execution.THREAD_VARIABLES`, the source of the list, and each task
+records them in its execution entry; a test that compares bytes across runs or
+engines needs the same values in every run. Keep `TMPDIR` on local disk, and keep
+library caches off `HOME` by setting `MPLCONFIGDIR` and `NUMBA_CACHE_DIR` on local
+scratch.
+
 ## Documentation pages
 
 A guide is about 1,500 words at most. Where applicable, use these sections in
