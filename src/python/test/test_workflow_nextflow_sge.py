@@ -78,7 +78,8 @@ task = next(t for t in manifest["tasks"] if t["id"] == option("--task"))
 record = Path(manifest["roots"]["output"]) / task["record"]
 record.parent.mkdir(parents=True, exist_ok=True)
 record.write_text(json.dumps({{"status": "succeeded", "workflow": {{"execution_context": {{
-    "engine": option("--engine"), "job_id": option("--job-id"), "attempt": int(option("--attempt"))}}}}}}) + "\\n")
+    "engine": option("--engine"), "job_id": option("--job-id"), "attempt": int(option("--attempt")),
+    "image": option("--image")}}}}}}) + "\\n")
 '''
 
 
@@ -189,6 +190,19 @@ def test_under_sge_each_record_holds_the_schedulers_job_id(sge_tasks):
     for task_id, (record, script) in records.items():
         assert record["workflow"]["execution_context"]["job_id"] == JOB_ID, task_id
         assert '--job-id "${JOB_ID:-$task_hash}"' in script.read_text(), task_id
+
+
+def test_under_sge_each_task_is_given_the_image(sge_tasks):
+    """W-831: the image the engine gives a task reaches its command as ``--image`` (the record's ``image``)."""
+    manifest, records = sge_tasks
+    images = {r["workflow"]["execution_context"]["image"] for r, _ in records.values()}
+    assert len(images) == 1 and images.pop().endswith("/image.sif")
+
+
+def test_on_the_host_each_task_is_given_no_image(local_tasks):
+    """W-831: with no container engine, the command's ``--image`` is ``none``, which the record stores as null."""
+    manifest, records = local_tasks
+    assert {r["workflow"]["execution_context"]["image"] for r, _ in records.values()} == {"none"}
 
 
 def test_the_fallback_is_the_task_hash_from_its_work_folder(local_tasks):

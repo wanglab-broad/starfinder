@@ -214,3 +214,12 @@ def test_a_failure_of_a_kind_that_keeps_its_folder_leaves_no_declared_output(fix
     failed = json.loads(_layout.failed_record(out, "compare").read_text())
     assert sorted(failed["removed"]) == ["report/index.html", "report/samples.csv"]
     assert _layout.task_log(out, "compare").is_file() and not _layout.task_record(out, "compare").exists()
+
+
+@pytest.mark.parametrize("given, recorded", [("none", None), ("sha256:" + "0" * 64, "sha256:" + "0" * 64)])
+def test_the_record_names_the_image_the_task_ran_in_and_none_on_the_host(manifest, given, recorded):
+    """W-831: Nextflow gives ``--image none`` to a task it runs on the host and the container's image otherwise; the
+    record's ``execution_context.image`` is then null or that image."""
+    assert X.run_task(manifest, FOV_TASK, "--image", given) == 0
+    record = json.loads(_layout.task_record(manifest.parents[1], FOV_TASK).read_text())
+    assert record["workflow"]["execution_context"]["image"] == recorded

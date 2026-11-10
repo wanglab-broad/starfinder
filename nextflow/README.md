@@ -24,6 +24,10 @@ its work directory. Moving the manifest path still changes the cache inputs. Con
 CPU/GPU process aliases are intrinsic Nextflow cache keys, so changing either
 reruns affected tasks.
 
+With `docker.enabled`, `apptainer.enabled` or `singularity.enabled` true, supply `--container <image>` or set
+`execution.container` in the configuration: the head stops before PLAN otherwise (W-831). A `process.container` in a
+`-c` file does not reach the workflow's processes, because the labelled selector of `nextflow.config` outranks it.
+
 For `sge`, supply `--container` with the shared-drive CPU SIF for planning,
 verification and default task execution, and put `-work-dir` under `/stanley`.
 A task's `execution.container` can override that image. The profile uses Apptainer,
