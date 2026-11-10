@@ -252,7 +252,7 @@ def pinned_record(stages):
         "format_version": 2, "dataset_id": "golden", "sample_id": "sample", "fov_id": "FOV_001", "subtile_id": None,
         "input_root": f"{ROOT}/in", "output_root": f"{ROOT}/out",
         "status": "succeeded", "started_at": TIME, "ended_at": TIME, "error": None,
-        "code": keys("version", "git_commit", "git_dirty"),
+        "code": keys("version", "version_source", "git_commit", "git_dirty"),
         "environment": {"python": ANY, "platform": ANY,
                         "packages": keys("starfinder", "numpy", "pandas", "scipy", "scikit-image", "tifffile",
                                          "pyarrow", "SimpleITK")},

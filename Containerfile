@@ -5,11 +5,15 @@
 # `learned-cuda`, which adds the lock's `cuda` extra instead: the same learned backends with torch and torchvision
 # from the PyTorch cu126 index and TensorFlow with its CUDA libraries (W-792). The CUDA runtime comes from NVIDIA's
 # wheels and the driver from the host (`apptainer exec --nv`, `docker run --gpus`).
-# The build context has no .git: the version is `git describe`'s on the build host, passed in, and the
-# revision and the lock's SHA-256 are passed in for the labels; the build stops if the lock differs.
+# The build context has no .git: the version is `git describe`'s on the build host, passed in, and the full commit, the
+# dirty flag and the lock's SHA-256 are passed in too; the build stops if the lock differs or the commit is not 40
+# hexadecimal digits. The commit and the flag go into the labels and into `starfinder/_build_info.py`, which
+# `starfinder._records.code()` reads, so that the image reports the same `version` and `git_commit` as a clean checkout
+# of that commit (W-827).
 #
 #   docker buildx build --builder <docker-container builder> --target cpu \
-#     --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<commit> \
+#     --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<full commit> \
+#     --build-arg STARFINDER_DIRTY=<true|false> \
 #     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
 #     --output type=oci,dest=starfinder-cpu-<version>.oci.tar .
 #
@@ -39,6 +43,11 @@ COPY src/python/ ./
 # hatch-vcs honours SETUPTOOLS_SCM_PRETEND_VERSION, not the _FOR_STARFINDER form (W-734).
 ARG STARFINDER_VERSION
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=$STARFINDER_VERSION
+ARG STARFINDER_REVISION
+ARG STARFINDER_DIRTY
+RUN echo "$STARFINDER_REVISION" | grep -Eq '^[0-9a-f]{40}$' && { [ "$STARFINDER_DIRTY" = true ] || [ "$STARFINDER_DIRTY" = false ]; } \
+    && printf 'COMMIT = "%s"\nDIRTY = %s\n' "$STARFINDER_REVISION" "$([ "$STARFINDER_DIRTY" = true ] && echo True || echo False)" \
+       > starfinder/_build_info.py
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-default-groups --group workflow --no-editable $CPU_EXTRAS
 
@@ -50,6 +59,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src/python/ ./
 ARG STARFINDER_VERSION
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=$STARFINDER_VERSION
+ARG STARFINDER_REVISION
+ARG STARFINDER_DIRTY
+RUN echo "$STARFINDER_REVISION" | grep -Eq '^[0-9a-f]{40}$' && { [ "$STARFINDER_DIRTY" = true ] || [ "$STARFINDER_DIRTY" = false ]; } \
+    && printf 'COMMIT = "%s"\nDIRTY = %s\n' "$STARFINDER_REVISION" "$([ "$STARFINDER_DIRTY" = true ] && echo True || echo False)" \
+       > starfinder/_build_info.py
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-default-groups --group workflow --no-editable $CPU_EXTRAS $LEARNED_EXTRAS
 # The lock holds only opencv-python-headless; the slim base has no X11 or OpenGL libraries, so this import stops the build
@@ -64,6 +78,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src/python/ ./
 ARG STARFINDER_VERSION
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=$STARFINDER_VERSION
+ARG STARFINDER_REVISION
+ARG STARFINDER_DIRTY
+RUN echo "$STARFINDER_REVISION" | grep -Eq '^[0-9a-f]{40}$' && { [ "$STARFINDER_DIRTY" = true ] || [ "$STARFINDER_DIRTY" = false ]; } \
+    && printf 'COMMIT = "%s"\nDIRTY = %s\n' "$STARFINDER_REVISION" "$([ "$STARFINDER_DIRTY" = true ] && echo True || echo False)" \
+       > starfinder/_build_info.py
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-default-groups --group workflow --no-editable $CPU_EXTRAS $CUDA_EXTRAS
 # As in build-learned.
@@ -75,10 +94,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends procps=2:4.0.2-
 ENV PATH=/opt/starfinder/bin:$PATH OMP_NUM_THREADS=1 MPLBACKEND=Agg
 ARG STARFINDER_VERSION
 ARG STARFINDER_REVISION
+ARG STARFINDER_DIRTY
 ARG UV_LOCK_SHA256
 LABEL org.opencontainers.image.title=starfinder \
       org.opencontainers.image.version=$STARFINDER_VERSION \
       org.opencontainers.image.revision=$STARFINDER_REVISION \
+      org.starfinder.dirty=$STARFINDER_DIRTY \
       org.starfinder.uv-lock-sha256=$UV_LOCK_SHA256
 
 FROM runtime AS learned

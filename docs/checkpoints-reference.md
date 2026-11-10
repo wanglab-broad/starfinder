@@ -98,7 +98,7 @@ The run record's format version is 2. Fields are grouped below for lookup.
 | `status` | Processing outcome: `running`, `succeeded`, `failed` or `interrupted` |
 | `started_at`, `ended_at` | UTC timestamps |
 | `error` | Failure information, or null |
-| `code` | Package and checkout identity |
+| `code` | Code identity: `version`, `version_source` (`checkout`, `build` or `dist`), `git_commit` and `git_dirty` ({ref}`how each is found <checkpoints-code-identity>`) |
 | `environment` | Python, platform and package versions |
 | `config` | Pipeline, execution, checkpoints, readout mode and encoding |
 | `workflow_config` | Workflow configuration path and hash, or null |
@@ -117,3 +117,21 @@ The run record's format version is 2. Fields are grouped below for lookup.
 
 The [run-record specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/checkpoints.md#runjson)
 gives nested fields, path resolution and version compatibility.
+
+(checkpoints-code-identity)=
+### The code identity
+
+`code` names the running code the same way on every install route, so two records with the same `version` and
+`git_commit` came from the same commit. The same four keys are in a workflow task record, the plan's `package` and the
+report's Version cell (which shows `version @ commit`, and "modified" for `git_dirty`).
+
+| Key | Contents |
+| --- | --- |
+| `version` | From a checkout, the version the build would give that checkout (`<base>.dev<N>+g<short commit>`, with `.d<date>` when `git_dirty`; `0.1.dev<N>` without a `v*` tag); never the installed metadata's, which an editable install takes from the checkout it was installed from. Otherwise the installed metadata's |
+| `version_source` | `checkout` when the imported package lies in a starfinder checkout (`src/python/starfinder` at the root of a Git repository), `build` when it was installed by the image build, `dist` when only the installed metadata is known |
+| `git_commit` | The full commit: `HEAD` of the checkout, or the one the image was built from; `null` for `dist` |
+| `git_dirty` | `true` when tracked files differ from that commit (untracked files do not count); `null` for `dist` |
+
+A clean checkout and an image built from the same commit give the same `version` and `git_commit`. A workflow resume
+compares `version` and `git_commit`, not `version_source`, and refuses a dirty one. The image gets the commit and the flag
+as build arguments ({ref}`the image build <broad-uger-image-build>`).

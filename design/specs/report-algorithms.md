@@ -532,7 +532,7 @@ other column n/a.
   (`C` the largest number of channels of a round, "C1–C2 channels" when they differ), and
   "3D" when the Z size is greater than 1, else "2D (Z = 1)"; the Z size is the fused grid's
   (`fusion.fovs[*].grid.shape_zyx[0]`), else the reference image's.
-* **Software** (Summary). `R_f.code.version` and `R_f.code.git_commit` (with `R_f.code.git_dirty`); several
+* **Software** (Summary). `R_f.code.version` and `R_f.code.git_commit` (with `R_f.code.git_dirty`; `R_f.code.version_source` is not shown); several
   distinct values are listed with their FOV counts. Without a run record, the export's
   `assembly.software`.
 * **Run time** (Summary). From the earliest `started_at` to the latest `ended_at` of the run

@@ -955,10 +955,11 @@ def fingerprint_components(task, manifest, fingerprints, code=None):
 
 
 def package_identity():
-    """The code identity of the running package: version, git_commit, git_dirty (_records.code)."""
+    """The code identity of the running package: version, version_source, git_commit, git_dirty (_records.code)."""
     from starfinder import _records
     code = _records.code()
-    return {"version": code["version"], "git_commit": code["git_commit"], "git_dirty": code["git_dirty"]}
+    return {"version": code["version"], "version_source": code["version_source"], "git_commit": code["git_commit"],
+            "git_dirty": code["git_dirty"]}
 
 
 def plan(config_path, output_root=None) -> dict:
@@ -1043,7 +1044,9 @@ def plan(config_path, output_root=None) -> dict:
         "export_route": export_route(r),
         "groups": list(graph.groups.values()),
         "tasks": tasks}
-    code = manifest["package"] if r["execution"]["code_version"] == "rerun" else None
+    # The route that supplied the identity (version_source) is not part of what ran: one commit has one fingerprint.
+    code = ({k: v for k, v in manifest["package"].items() if k != "version_source"}
+            if r["execution"]["code_version"] == "rerun" else None)
     fingerprints = {}
     for task in tasks:
         fingerprints[task["id"]] = sha256(canonical(fingerprint_components(task, manifest, fingerprints, code)))

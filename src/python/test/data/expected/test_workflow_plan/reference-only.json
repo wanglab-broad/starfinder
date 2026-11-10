@@ -8,6 +8,7 @@
  },
  "package": {
   "version": "0.0.0+test",
+  "version_source": "dist",
   "git_commit": null,
   "git_dirty": false
  },
