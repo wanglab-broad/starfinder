@@ -27,7 +27,7 @@ changes what a task does.
 | Status | Meaning | Snakemake | Nextflow |
 | --- | --- | --- | --- |
 | 0 | The task succeeded; its record was written last | Done | Done |
-| 1 | The task failed; its declared outputs were removed and `<task>.failed.json` written | Retried up to `--retries` | Retried up to `--max_retries` (default 2) |
+| 1 | The task failed; its declared outputs were removed and `<task>.failed.json` written | Retried up to `--retries` | Retried up to `--max_retries` (default 2); `--max_retries 0` runs the task once and finishes the run |
 | 2 | Refused before any work; nothing was written | Retried like 1 | Not retried; the run finishes |
 | 3 | A verified resume was refused | Retried like 1 | Not retried; the run finishes |
 | 4 | The export was held for review: its placement needs review and holds no approval of its tables; it failed as 1 does, its failed record says `held`, and it made the sample report when every other task the report needs had succeeded ({ref}`the route <workflow-placement-review>`) | Retried like 1 | Not retried; the run finishes |
@@ -253,7 +253,7 @@ flags of the processing sub-blocks (a present block enables its step),
 
 Every Nextflow profile takes `--config` (the configuration file), `--container`
 (the default image) and `--max_retries` (default 2); exit statuses 2, 3 and 4 finish
-the run without a retry. `--weights_dir` (unset by default) is read by the `sge`
+the run without a retry, and so does every failure under `--max_retries 0`. `--weights_dir` (unset by default) is read by the `sge`
 profile only: when given, it adds `--env STARFINDER_WEIGHTS_DIR=<folder>` to the
 `apptainer` command of every task, CPU and GPU, and the folder must be on `/stanley`.
 

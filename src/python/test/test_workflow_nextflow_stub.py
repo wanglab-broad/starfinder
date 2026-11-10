@@ -95,6 +95,25 @@ def test_n3_only_failures_are_retried(tiny, tmp_path, status):
     assert (done.returncode == 0) == (status == 1), done.stdout + done.stderr
 
 
+@pytest.mark.parametrize("max_retries, attempts", [(0, 1), (1, 2)])
+def test_n3_max_retries_bounds_the_attempts(tiny, tmp_path, max_retries, attempts):
+    """`--max_retries 0` runs a failing task once (Nextflow reads 0 as unset); 1 allows one retry, never more."""
+    config = configuration(tiny, "reference-only")
+    config["output_id"] = f"max-retries-{max_retries}"
+    config["selected_fovs"] = ["FOV_001"]
+    config = X.write_config(tmp_path, "max-retries", config)
+    stub = tmp_path / "fault.sh"
+    stub.write_text('#!/usr/bin/env bash\nset -eu\n'
+                    'if [[ "$2" == "fov/sample/FOV_001" ]]; then exit 1; fi\n'
+                    f'exec "{X.ROOT / "nextflow/bin/stub_task.sh"}" "$@"\n')
+    stub.chmod(0o755)
+    done, rows = N.run(tmp_path, config, "--stub_runner", str(stub), "--max_retries", str(max_retries))
+    tries = [r for r in N.tasks(rows) if r["tag"] == "fov/sample/FOV_001"]
+    assert sorted(int(r["attempt"]) for r in tries) == list(range(1, attempts + 1)), done.stdout + done.stderr
+    assert {int(r["exit"]) for r in tries} == {1}, done.stdout + done.stderr
+    assert done.returncode != 0, done.stdout + done.stderr
+
+
 @pytest.mark.parametrize("case, message", [
     ("fiji", "D3: Nextflow runs no Fiji"),
     ("seed-chain", "seed chain deeper than three at segment/sample/FOV_001/seed_3"),

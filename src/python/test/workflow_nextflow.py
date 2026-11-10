@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from starfinder._execution import THREAD_VARIABLES
+
 from . import workflow_examples as X
 
 
@@ -33,6 +35,9 @@ def run(work, config, *arguments, stub=True, environment=None, profile="local"):
     trace = prefix.with_suffix(".tsv")
     env = dict(os.environ)
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
+    # The Snakemake helper of the engine tests sets one thread everywhere; tasks record these variables in their
+    # execution entry, so the Nextflow tasks need the same values whatever the caller's shell sets (W-828).
+    env.update(dict.fromkeys(THREAD_VARIABLES, "1"), ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS="1")
     env.update(environment or {})
     command = [executable_path, "-log", str(prefix.with_suffix(".nextflow.log")), "run",
                str(X.ROOT / "nextflow" / "main.nf"), "-ansi-log", "false", "-profile", profile,

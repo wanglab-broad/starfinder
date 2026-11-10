@@ -32,7 +32,7 @@ more than one CPU. `--weights_dir <folder under /stanley>`, when given, passes
 `--env STARFINDER_WEIGHTS_DIR=<folder>` to every task. The GPU aliases
 request RedHat8 GPU nodes and add `--nv`. Exit statuses 2 and 3 finish without retry;
 other failures retry up to `--max_retries` (default 2), scaling task memory and time
-by the attempt. GPU execution and UGER submission require their separate checks.
+by the attempt; `--max_retries 0` retries nothing and finishes the run after the failure. GPU execution and UGER submission require their separate checks.
 
 The dedicated CI job uses Java 17 and Nextflow 26.10.4 and selects `-m nextflow`.
 The tests skip with `Nextflow not installed` when the executable is absent. Set

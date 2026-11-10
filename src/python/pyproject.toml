@@ -116,7 +116,7 @@ dev = [
     "pytest-xdist>=3.8,<4",
 ]
 workflow = [
-    "snakemake==9.15.0",
+    "snakemake==9.27.1",
     "snakemake-executor-plugin-cluster-generic==1.0.9",
 ]
 
@@ -126,6 +126,11 @@ workflow = [
 # are held at the versions W-305 and W-306 measured with TensorFlow 2.20.0.
 constraint-dependencies = ["torch==2.7.1", "torchvision==0.22.1", "huggingface-hub==1.16.1",
                            "keras==3.15.1", "tensorboard==2.20.0"]
+# piscis requires opencv-python (the GUI build) and cellpose opencv-python-headless; both write cv2/, so the copy that
+# remained depended on the order of installation, and the GUI copy needs X11 and OpenGL libraries a slim image lacks.
+# piscis calls only getRotationMatrix2D, warpAffine and INTER_LINEAR, so the headless build alone provides cv2: the
+# exclusion drops opencv-python from the lock.
+exclude-dependencies = ["opencv-python"]
 conflicts = [
     [{ extra = "cuda" }, { extra = "spotiflow" }],
     [{ extra = "cuda" }, { extra = "piscis" }],
