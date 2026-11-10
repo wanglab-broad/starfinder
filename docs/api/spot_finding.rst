@@ -55,4 +55,5 @@ Errors and warnings
    MissingModelError
    ModelHashMismatchError
    SpotFindingBackendUnavailableError
+   SpotFindingError
    SpotFindingWarning

@@ -49,28 +49,40 @@ def test_noise_record_equals_a_direct_numpy_computation(dims, mode):
     assert list(noise) == list(CHANNELS)
     for c, label in enumerate(CHANNELS):
         values = image[..., c].astype(np.float64)
-        median = np.median(values)
-        mad = np.median(np.abs(values - median))
+        # W-789: in noise mode a channel with more than half its voxels at its minimum (ch02) takes its median and
+        # MAD over the voxels above the minimum; every other channel and mode uses every voxel.
+        above = values[values > values.min()]
+        truncated = mode == "noise" and 2 * above.size < values.size
+        sample = above if truncated else values
+        median = np.median(sample)
+        mad = np.median(np.abs(sample - median))
         expected = {"zero_fraction": np.mean(values == 0), "median": median, "mad": mad,
                     "threshold": result.diagnostics["thresholds"][c]}
-        assert set(noise[label]) == set(expected)
+        assert set(noise[label]) == set(expected) | {"estimation", "n_estimation"}
+        assert (noise[label]["estimation"], noise[label]["n_estimation"]) == (
+            "above_minimum" if truncated else "all", sample.size)
         for key, value_ in expected.items():
             assert abs(noise[label][key] - value_) <= 1e-12, (label, key)
         if mode == "noise":
             assert abs(noise[label]["threshold"] - (median + 5.0 * 1.4826 * mad)) <= 1e-12
-    assert noise["ch02"]["mad"] == 0 and noise["ch02"]["zero_fraction"] > 0.5
+    assert noise["ch02"]["zero_fraction"] > 0.5
+    assert noise["ch02"]["mad"] > 0 if mode == "noise" else noise["ch02"]["mad"] == 0
     assert all(noise[label]["mad"] > 0 and noise[label]["zero_fraction"] < 0.5 for label in ("ch00", "ch01", "ch03"))
 
 
 @pytest.mark.parametrize("dims", ["3d", "z1"])
-def test_the_mad_zero_channel_warns_once_and_names_it(dims):
+def test_the_truncated_channel_is_noted_once_and_named(dims):
+    # W-789 replaced the MAD-0 warning: ch02, more than half zeros, takes its noise above its minimum, and one
+    # SpotFindingWarning notes it.
     with pytest.warns(SpotFindingWarning) as caught:
         result = find_spots(fixture_image(dims), config=BASE, metadata=META, spot_namespace=NAMESPACE)
     assert len(caught) == 1
     message = str(caught[0].message)
-    assert "channel 'ch02'" in message and "MAD is 0" in message and "unchanged" in message
+    assert "channel 'ch02'" in message and "'above_minimum'" in message
     assert result.diagnostics["warnings"] == (message,)
-    assert result.diagnostics["thresholds"][2] == 0.0
+    record = result.diagnostics["noise"]["ch02"]
+    assert result.diagnostics["thresholds"][2] == record["median"] + 5.0 * record["mad"] * 1.4826
+    assert record["threshold"] > 0
 
 
 def zero_channels(seed=270):
@@ -95,10 +107,13 @@ def test_sixty_percent_zeros_warn_and_forty_percent_do_not():
         warnings.simplefilter("always")
         result = find_spots(image, config=config, metadata=META, spot_namespace=NAMESPACE)
     noise = result.diagnostics["noise"]
-    assert (noise["sixty"]["zero_fraction"], noise["sixty"]["mad"]) == (0.6, 0.0)
+    # W-789: the 60 %-zero channel takes its median and MAD over its 4096 voxels above the minimum.
+    assert noise["sixty"]["zero_fraction"] == 0.6 and noise["sixty"]["mad"] > 0
+    assert (noise["sixty"]["estimation"], noise["sixty"]["n_estimation"]) == ("above_minimum", 4096)
     assert noise["forty"]["zero_fraction"] == 0.4 and noise["forty"]["mad"] > 0
+    assert noise["forty"]["estimation"] == "all"
     assert [w.category for w in caught] == [SpotFindingWarning]
-    assert "channel 'sixty'" in str(caught[0].message)
+    assert "channel 'sixty'" in str(caught[0].message) and "'above_minimum'" in str(caught[0].message)
     assert len(result.diagnostics["warnings"]) == 1
 
 

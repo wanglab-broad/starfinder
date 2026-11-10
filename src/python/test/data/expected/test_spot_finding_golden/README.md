@@ -1,5 +1,12 @@
 # Expected values of `test_spot_finding_golden.py`
 
+W-789 (2026-11-10) regenerated the four `noise-*.csv` tables: channel ch02, more than half its voxels
+zero, now takes its noise median and MAD over the voxels above its minimum (threshold 18.826 instead of
+0), so its rows fall to its six puncta (612 to 6, 945 to 6, 181 to 6 and 211 to 6) and the spot
+identities after them renumber. Every other row, the other twelve tables, `dtypes.json` and the
+tolerances are unchanged. The generator and its per-channel audit are kept with W-789's run records
+(`starfinder_benchmark/runs/W-789/20261110T090101Z-89c971ab/scripts/golden_regen.py`).
+
 W-790 (2026-11-03) regenerated these tables with the generator below after
 regional-maximum collapse: only non-representative plateau and shoulder rows
 are removed, and spot identities renumber. Fixture pixels, thresholds, dtypes

@@ -12,6 +12,9 @@ from starfinder.image import ImageMetadata
 pytestmark = pytest.mark.spot_finding
 
 SPOT_COLUMNS = ["spot_id", "z", "y", "x", "channel", "peak_intensity"]
+# Single bright voxels on zeros, which noise mode refuses (W-789); absolute 0 is the threshold that noise mode gave
+# them before (median 0 and MAD 0), so every expected value is unchanged.
+ZERO = LocalMaximaConfig(threshold_mode="absolute", threshold_value=0.0, min_distance_voxels=1)
 
 
 class TestFindSpots3D:
@@ -36,7 +39,7 @@ class TestFindSpots3D:
         """DataFrame columns = [z, y, x, intensity, channel]."""
         image = np.zeros((5, 32, 32, 2), dtype=np.uint8)
         image[2, 16, 16, 0] = 200  # one bright spot
-        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
+        spots = find_spots(image, config=ZERO, metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert list(spots.columns) == SPOT_COLUMNS
 
     def test_empty_image(self):
@@ -82,7 +85,7 @@ class TestFindSpots3D:
         image[2, 20, 20, 2] = 200  # channel 2
         image[3, 15, 15, 3] = 200  # channel 3
 
-        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
+        spots = find_spots(image, config=ZERO, metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots) == 3
 
         # Check each channel has exactly one spot
@@ -94,7 +97,7 @@ class TestFindSpots3D:
         image = np.zeros((10, 64, 64, 1), dtype=np.uint8)
         image[3, 25, 40, 0] = 255
 
-        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
+        spots = find_spots(image, config=ZERO, metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots) == 1
         assert spots.iloc[0]["z"] == 3
         assert spots.iloc[0]["y"] == 25

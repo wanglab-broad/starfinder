@@ -14,7 +14,7 @@ from starfinder.io import ImageLoadConfig, load_round, load_volume, save_volume
 from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
 from starfinder.registration import (RegistrationRecipe, RegistrationStep, TranslationConfig, apply_transform,
                                      estimate_transform)
-from starfinder.spot_finding import LocalMaximaConfig, find_spots
+from starfinder.spot_finding import LocalMaximaConfig, SpotFindingError, find_spots
 
 
 def image_io(output: Path) -> np.ndarray:
@@ -46,13 +46,22 @@ def register_volumes(fixed: np.ndarray) -> None:
 
 
 def detect_spots(volume: np.ndarray) -> None:
-    # Add a channel axis to this known single-channel ZYX volume.
-    image = volume[..., np.newaxis]
+    metadata = ImageMetadata("example/sample/FOV/round1")
+    # One bright voxel on zeros has no noise for noise mode to measure, so detection refuses it.
+    try:
+        find_spots(volume[..., np.newaxis], config=LocalMaximaConfig(), metadata=metadata,
+                   spot_namespace="example/sample/FOV")
+        raise AssertionError("noise mode should refuse a channel without noise")
+    except SpotFindingError as error:
+        print("Refused:", error)
+    # Add a seeded Poisson background (mean 100) and a channel axis to the known volume.
+    background = np.random.default_rng(0).poisson(100, volume.shape).astype(volume.dtype)
+    image = (volume + background)[..., np.newaxis]
     for mode, threshold in [("noise", 5.0), ("adaptive", 0.2)]:
         spots = find_spots(
             image,
             config=LocalMaximaConfig(threshold_mode=mode, threshold_value=threshold),
-            metadata=ImageMetadata("example/sample/FOV/round1"),
+            metadata=metadata,
             spot_namespace="example/sample/FOV",
         ).spots
         assert spots[["z", "y", "x", "channel"]].values.tolist() == [[5, 10, 10, 0]]

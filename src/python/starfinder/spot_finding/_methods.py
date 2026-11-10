@@ -17,7 +17,7 @@ from starfinder._execution import DEVICES
 from starfinder._registry import Dependency, check_shared, require
 from ._config import (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, PiscisConfig, SpotiflowConfig,
     StarfishLogConfig)
-from ._errors import SpotFindingBackendUnavailableError
+from ._errors import SpotFindingBackendUnavailableError, SpotFindingError
 from ._piscis import piscis
 from ._spotiflow import spotiflow
 from ._starfish_log import starfish_log
@@ -33,10 +33,13 @@ class MethodContext:
 
     channels are the indices of the channel axis to detect (all channels
     unless a plan overrides some of them; methods that combine channels
-    receive every channel); device is the checked execution device.
+    receive every channel); device is the checked execution device;
+    round_name is the round FOV.find_spots detects (None for find_spots),
+    which a refusal names.
     """
     channels: tuple[int, ...]
     device: str = "cpu"
+    round_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -211,11 +214,23 @@ def _peaks(channel, distance, threshold, border=True):
     return coords, plateaus
 
 
-def _noise_record(image, channel, mode, value):
-    """One channel's noise record: zero fraction, median, MAD (unscaled) and threshold, in float64."""
+def _noise_record(image, channel, mode, value, *, landmark=False):
+    """One channel's noise record: zero fraction, median, MAD (unscaled) and threshold in float64, and the
+    estimation set of the median and MAD with its voxel count.
+
+    The estimation set is every voxel ('all') except in local-maxima noise mode on a channel with signal of which
+    more than half the voxels equal its minimum: then it is the voxels above the minimum, which a truncation did
+    not clip ('above_minimum', W-789). Noise landmarks (landmark) keep every voxel.
+    """
     values = channel.astype(np.float64)
-    median = np.median(values)
-    mad = np.median(np.abs(values - median))
+    estimation, sample = 'all', values
+    if mode == 'noise' and not landmark:
+        above = values > values.min()
+        count = int(np.count_nonzero(above))
+        if count and 2 * count < values.size:
+            estimation, sample = 'above_minimum', values[above]
+    median = np.median(sample)
+    mad = np.median(np.abs(sample - median))
     if mode == 'noise':
         threshold = median + value * mad * 1.4826
     elif mode == 'global':
@@ -227,21 +242,42 @@ def _noise_record(image, channel, mode, value):
     else:
         threshold = float(channel.max()) * value
     return {'zero_fraction': float(np.mean(values == 0)), 'median': float(median), 'mad': float(mad),
-            'threshold': float(threshold)}
+            'threshold': float(threshold), 'estimation': estimation, 'n_estimation': int(sample.size)}
 
 
-def _maxima(image, config, context, mode, value, border):
+def check_noise(record, channel, label, round_name):
+    """Raise SpotFindingError for a noise-mode channel with signal whose MAD over its estimation set is 0.
+
+    Its threshold would be the median, and every regional maximum above it a spot (W-789); there is no fallback.
+    """
+    minimum = channel.min()
+    if record['mad'] != 0 or channel.max() == minimum:
+        return
+    where = f"round {round_name!r}, " if round_name is not None else ""
+    at_minimum = int(np.count_nonzero(channel == minimum))
+    raise SpotFindingError(
+        f"spot finding: {where}channel {label!r}: the noise MAD is 0 over its estimation set "
+        f"{record['estimation']!r} ({record['n_estimation']} voxels); {at_minimum} of its {channel.size} voxels "
+        f"({at_minimum / channel.size:.1%}) are at its minimum {float(minimum)!r}, so threshold_mode 'noise' has no "
+        "noise to scale; use threshold_mode 'adaptive' or 'absolute'")
+
+
+def _maxima(image, config, context, mode, value, border, landmark=False):
     """Per-channel maxima above each channel's threshold; rows ordered by channel, then intensity.
 
     Returns the rows, thresholds and per-channel noise and plateau records.
-    Noise holds zero fraction, median, MAD (unscaled) and threshold in float64.
+    Noise holds zero fraction, median, MAD (unscaled) and threshold in float64, and the estimation set; local
+    maxima (not landmark) in noise mode refuse a channel with signal and a MAD of 0 (check_noise).
     """
     if mode == 'global' and image.dtype not in (np.dtype('uint8'), np.dtype('uint16')):
         raise ValueError("global thresholds require uint8/uint16")
     rows, thresholds, noise, plateaus = [], [], [], []
+    labels = config.channel_labels
     for c in context.channels:
         channel = image[..., c] if image.ndim == 4 else image
-        record = _noise_record(image, channel, mode, value)
+        record = _noise_record(image, channel, mode, value, landmark=landmark)
+        if mode == 'noise' and not landmark:
+            check_noise(record, channel, labels[c] if labels is not None else str(c), context.round_name)
         thresholds.append(record['threshold'])
         noise.append(record)
         if channel.max() == 0:
@@ -299,7 +335,7 @@ def _local_maxima(image, config, context):
 
 def _noise_landmark(image, config, context):
     """Registration landmarks: noise-mode peaks with the border excluded, deduplicated across channels."""
-    table, thresholds, _, plateaus = _maxima(image, config, context, 'noise', config.noise_sigma, True)
+    table, thresholds, _, plateaus = _maxima(image, config, context, 'noise', config.noise_sigma, True, landmark=True)
     if len(table) > 1 and image.ndim == 4:
         pairs = cKDTree(table[['z', 'y', 'x']]).query_pairs(r=config.min_distance_voxels)
         table = table.drop(index={max(i, j) for i, j in pairs}).reset_index(drop=True)

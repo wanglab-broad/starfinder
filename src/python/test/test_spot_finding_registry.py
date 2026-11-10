@@ -171,7 +171,9 @@ def test_a_subclass_of_a_detection_config_is_rejected(tmp_path):
     config = SubLocalMaxima()
     with pytest.raises(TypeError, match="^unsupported detection config$"):
         find_spots(image(), config=config, metadata=META, spot_namespace=NAMESPACE)
-    table = find_spots(image(), config=LocalMaximaConfig(), metadata=META, spot_namespace=NAMESPACE).spots
+    # image() is mostly zeros, which noise mode refuses (W-789); absolute 0 is the threshold noise mode gave it.
+    zero = LocalMaximaConfig(threshold_mode="absolute", threshold_value=0.0)
+    table = find_spots(image(), config=zero, metadata=META, spot_namespace=NAMESPACE).spots
     with pytest.raises(TypeError, match="^unsupported detection config$"):
         SpotFindingResult(table, META, NAMESPACE, config, {})
     with pytest.raises(TypeError, match="^unsupported detection config$"):
@@ -276,8 +278,9 @@ def test_a_spec_lists_cpu_and_known_devices(devices):
 def test_execution_entry_records_device_and_threads(monkeypatch):
     monkeypatch.setenv("OMP_NUM_THREADS", "1")
     monkeypatch.delenv("NUMBA_NUM_THREADS", raising=False)
-    execution = find_spots(image(), config=LocalMaximaConfig(), metadata=META,
-                           spot_namespace=NAMESPACE).diagnostics["execution"]
+    # image() is mostly zeros, which noise mode refuses (W-789); absolute 0 is the threshold noise mode gave it.
+    config = LocalMaximaConfig(threshold_mode="absolute", threshold_value=0.0)
+    execution = find_spots(image(), config=config, metadata=META, spot_namespace=NAMESPACE).diagnostics["execution"]
     assert execution["device"] == "cpu" and execution["framework"] is None
     threads = execution["threads"]
     assert set(threads) == {"torch_num_threads", "torch_num_interop_threads", "OMP_NUM_THREADS", "MKL_NUM_THREADS",

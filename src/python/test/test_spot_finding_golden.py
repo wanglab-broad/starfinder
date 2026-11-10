@@ -21,7 +21,8 @@ tolerances"). The fixture inputs stay pinned by digest (integer data).
 
 The fixture holds a saturated multi-voxel amplicon whose plateau gives one representative
 (W-790), a two-lobe amplicon whose lobes give split maxima, spots on and next to the
-volume faces, a channel with more than half its voxels zero (noise-mode MAD 0), and a
+volume faces, a channel with more than half its voxels zero (noise mode estimates its noise above
+the minimum, W-789), and a
 dim channel whose maximum is below the image maximum (adaptive differs from
 adaptive_round). The first digests were produced with the locked project environment
 (NumPy 2.2.6, SciPy 1.17.0, scikit-image 0.26.0, pandas 3.0.0) and are bit-identical
@@ -119,7 +120,7 @@ def fixture_volume():
     ch01: offset 150; eight random puncta; a two-lobe amplicon with lobes 2.4 voxels
           apart in X (split maxima); a spot on the y=0 face at z=6.
     ch02: noise of mean -2 and sd 5 clipped at 0, so about two thirds of the voxels
-          are zero and the noise-mode MAD is 0; six random puncta.
+          are zero (the all-voxel MAD is 0; noise mode estimates above 0, W-789); six random puncta.
     ch03: offset 120; eight dim random puncta; spots on the x=47 face and at x=1, z=6.
     """
     rng = np.random.RandomState(SEED)
@@ -206,11 +207,11 @@ PINNED_INPUT = {
 EXPECTED = Path(__file__).parent / "data" / "expected" / "test_spot_finding_golden"
 # (mode, dims) -> the per-channel thresholds of find_spots, the same with exclude_border true and false
 EXPECTED_THRESHOLDS = {
-    ("noise", "3d"): (145.478, 195.478, 0.0, 165.478),
+    ("noise", "3d"): (145.478, 195.478, 18.826, 165.478),
     ("adaptive", "3d"): (600.0, 332.20000000000005, 195.0, 124.60000000000001),
     ("adaptive_round", "3d"): (600.0, 600.0, 600.0, 600.0),
     ("global", "3d"): (655.35, 655.35, 655.35, 655.35),
-    ("noise", "z1"): (145.478, 196.478, 0.0, 165.478),
+    ("noise", "z1"): (145.478, 196.478, 18.826, 165.478),
     ("adaptive", "z1"): (600.0, 332.20000000000005, 160.60000000000002, 124.60000000000001),
     ("adaptive_round", "z1"): (600.0, 600.0, 600.0, 600.0),
     ("global", "z1"): (655.35, 655.35, 655.35, 655.35),
@@ -249,16 +250,19 @@ def test_find_spots_tables_and_diagnostics_are_pinned(case):
 
 
 @pytest.mark.parametrize("dims", ["3d", "z1"])
-def test_noise_mode_mad_zero_keeps_threshold_and_warns(dims):
-    # The §2.7 diagnostics change (W-270): channel 2 has MAD 0, so its noise threshold still
-    # equals its median, 0, and every positive local maximum is kept; one SpotFindingWarning
-    # now reports the channel.
+def test_noise_mode_estimates_a_truncated_channel_above_its_minimum(dims):
+    # W-789 (replacing W-270's MAD-0 warning): channel 2 has more than half its voxels at its minimum, 0, so its
+    # median and MAD are taken over the voxels above 0 (median 4, MAD 2: threshold 4 + 5 x 1.4826 x 2), which keeps
+    # its six puncta and none of its clipped noise; one SpotFindingWarning notes the estimation set.
     from starfinder.spot_finding import SpotFindingWarning
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = detect("noise", dims)
-    assert result.diagnostics["thresholds"][2] == 0.0
+    record = result.diagnostics["noise"]["2"]
+    assert (record["median"], record["mad"], record["estimation"]) == (4.0, 2.0, "above_minimum")
+    np.testing.assert_allclose(result.diagnostics["thresholds"][2], 4.0 + 5.0 * 1.4826 * 2.0, **FLOAT64)
+    assert (result.spots.channel == 2).sum() == 6
     assert [w.category for w in caught] == [SpotFindingWarning]
 
 

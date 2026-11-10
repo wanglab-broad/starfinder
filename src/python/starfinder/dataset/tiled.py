@@ -276,9 +276,10 @@ def _plan_configs(fov, spot_finding):
 
 def _detection_statistics(fov, spot_finding, image) -> dict:
     """The FOV-level detection statistics of the reference round's detection image: per channel the noise record
-    (zero fraction, median, MAD, threshold) of its configured mode, and whether the channel is constant."""
+    (zero fraction, median, MAD, threshold, estimation set) of its configured mode, and whether the channel is
+    constant. A noise-mode channel with signal and a MAD of 0 raises SpotFindingError, as direct detection does."""
     from starfinder.spot_finding import LocalMaximaConfig
-    from starfinder.spot_finding._methods import _noise_record
+    from starfinder.spot_finding._methods import _noise_record, check_noise
     _, _, configs = _plan_configs(fov, spot_finding)
     labels = list(fov.dataset.channel_order)
     records = []
@@ -288,6 +289,8 @@ def _detection_statistics(fov, spot_finding, image) -> dict:
                              f"{config.method!r}")
         channel = image[..., c]
         record = _noise_record(image, channel, config.threshold_mode, config.threshold_value)
+        if config.threshold_mode == 'noise':
+            check_noise(record, channel, labels[c], fov.dataset.rounds.reference_round)
         records.append(dict(record, channel=labels[c], constant=bool(channel.min() == channel.max())))
     return {"channels": records}
 
@@ -576,7 +579,7 @@ def _namespace(fov):
 def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
     """The FOV's SpotFindingResult of the merged candidates, with direct's diagnostics from the FOV-level statistics."""
     from starfinder.spot_finding import SpotFindingResult
-    from starfinder.spot_finding import _noise_warning
+    from starfinder.spot_finding import _noise_note
     base, plan, configs = _plan_configs(fov, pipeline.spot_finding)
     labels = tuple(fov.dataset.channel_order)
     channels = statistics["detection"]["channels"]
@@ -595,12 +598,13 @@ def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
     diagnostics["counts"] = {labels[c]: int(counts.get(c, 0)) for c in range(len(labels))}
     diagnostics["outcomes"] = {labels[c]: "constant" if channels[c]["constant"] else
                                "ok" if diagnostics["counts"][labels[c]] else "empty" for c in range(len(labels))}
-    noise = {labels[c]: {k: channels[c][k] for k in ("zero_fraction", "median", "mad", "threshold")}
+    noise = {labels[c]: {k: channels[c][k] for k in ("zero_fraction", "median", "mad", "threshold", "estimation",
+                                                     "n_estimation")}
              for c in range(len(labels))}
     diagnostics["noise"] = noise
     diagnostics["effective_settings"] = {labels[c]: tuples(jsonable(configs[c])) for c in range(len(labels))}
-    diagnostics["warnings"] = tuple(_noise_warning(noise[label], label, None) for label in labels
-                                    if noise[label]["mad"] == 0 or noise[label]["zero_fraction"] > 0.5)
+    diagnostics["warnings"] = tuple(_noise_note(noise[label], label, None) for label in labels
+                                    if noise[label]["estimation"] == "above_minimum")
     from starfinder.image import ImageMetadata
     metadata = ImageMetadata(**tuples(statistics["reference_metadata"]))
     return SpotFindingResult(spots, metadata, _namespace(fov), base, diagnostics, plan)

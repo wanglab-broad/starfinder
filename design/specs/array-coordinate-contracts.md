@@ -215,9 +215,12 @@ Its `spots` table has `spot_id` (pandas string) and `z/y/x` (float64), including
 empty results. Coordinates are zero-based voxel indices; physical conversion
 requires complete `ImageMetadata`. Detection never performs landmark matching.
 
+% Amended 2026-11-10 W-789: the noise median and MAD of a channel more than half at its minimum are taken above the minimum, a MAD of 0 with signal raises, and the noise record gains its estimation set.
+
 {class}`starfinder.spot_finding.LocalMaximaConfig` preserves the pipeline's
 per-channel peaks: noise uses `median + threshold_value * MAD * 1.4826` (sigma
-units); adaptive uses channel maximum, adaptive_round the image maximum, and
+units), the median and MAD over all voxels, or over the voxels above the minimum
+when more than half of a channel's voxels equal its minimum; adaptive uses channel maximum, adaptive_round the image maximum, and
 global the uint8/uint16 maximum (fractions in [0,1]). `min_distance_voxels` is a
 positive integer, with `exclude_border=True` by default. Singleton Z is processed
 as a YX plane with Z=0 and only the YX border excluded. Other volumes retain the
@@ -233,10 +236,11 @@ config")`. `config` may also be a {class}`starfinder.spot_finding.SpotFindingPla
 channel overrides replace the whole config of named channels (it then needs
 `channel_labels`); every channel's effective config is in
 `diagnostics["effective_settings"]`. Local maxima records `diagnostics["noise"]` (per
-channel the zero fraction, median, MAD and threshold, in every threshold mode) and
-emits a {class}`starfinder.spot_finding.SpotFindingWarning`, listed in
-`diagnostics["warnings"]`, when a channel's MAD is 0 or more than half of its voxels are
-zero; the threshold and the detections are unchanged. `device` must be `"cpu"`, and
+channel the zero fraction, median, MAD, threshold, `estimation` and `n_estimation`, in
+every threshold mode) and emits a {class}`starfinder.spot_finding.SpotFindingWarning`,
+listed in `diagnostics["warnings"]`, when `noise` mode estimated a channel's noise above
+its minimum; in `noise` mode a channel with signal whose MAD over its estimation set is
+0 raises `SpotFindingError`. `device` must be `"cpu"`, and
 `diagnostics["execution"]` records it with the thread settings in effect. Per-channel
 methods record `counts`, `outcomes` (`ok`, `empty` or `constant`; a constant channel is
 never passed to the method), `native` and `software`, and a method that finds nothing

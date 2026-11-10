@@ -77,6 +77,8 @@ Equal-valued shoulders next to higher voxels give no row. Before exclusions,
 `plateaus` reports per-channel `maxima` and `removed_voxels`; omit it when all
 counts are zero, preserving untied results including diagnostics.
 
+% Amended 2026-11-10 W-789: in `noise` mode a channel with more than half its voxels at its minimum takes its median and MAD over the voxels above the minimum, and a channel with signal whose MAD over that set is 0 raises `SpotFindingError`; the other modes, the fields and the historical baselines are unchanged.
+
 | Field | Specification |
 | --- | --- |
 | Library and version | scikit-image 0.26.0 regional `local_maxima` and `ensure_spacing`, SciPy connected components and maximum window (locked). No weights. |
@@ -88,8 +90,8 @@ counts are zero, preserving untied results including diagnostics.
 | Default | `merge_radius_zyx=None`; no default radius is introduced. Golden tests pin regional-maximum representatives without the optional merge. |
 | Z handling | Z=1 is a YX plane (z=0). For 1 < Z ≤ 2 × `min_distance_voxels` with border exclusion the result is empty, as today, and a `SpotFindingWarning` says so. |
 | Tiling | Planned minimum `min_distance_voxels`; each tile checks maxima meeting its core for contact with an internal window edge. Fail under `exact: true`, naming a conservative containing halo covering the FOV, or count per-channel `truncated_maxima` under `exact: false`. Sum `plateaus` over representative owners. |
-| Thresholds and density | The noise threshold uses the whole channel, so at high spot density it rises above the peaks. The dependency study found an empty result on the 1×64×64 isolated-spot plane (0.024 spots per voxel); recall was 1.0 at the 3D density (7.6e-4). This is flagged, not changed (the dependency study's choice 8); the `noise` diagnostics make it visible. |
-| Failure | Invalid configs raise at construction; `global` mode on non-integer data raises `ValueError`. There is no iteration and nothing to converge. |
+| Thresholds and density | The noise threshold's median and MAD are taken over the whole channel when at most half of its voxels equal its minimum, and otherwise over the voxels above the minimum, which a truncation did not clip (W-789: the `deep` recipe's `uint8` truncation leaves 93.6–97.3 % of a real channel at 0, where the whole-channel MAD is 0 and the threshold was 0). On the whole channel the threshold rises above the peaks at high spot density. The dependency study found an empty result on the 1×64×64 isolated-spot plane (0.024 spots per voxel); recall was 1.0 at the 3D density (7.6e-4). This is flagged, not changed (the dependency study's choice 8); the `noise` diagnostics make it visible. |
+| Failure | Invalid configs raise at construction; `global` mode on non-integer data raises `ValueError`. In `noise` mode a channel with signal (maximum above minimum) whose MAD over its estimation set is 0 raises `SpotFindingError` (a `ValueError`) naming the round and channel, the fraction of voxels at the minimum and the set, and pointing to `adaptive` or `absolute`; there is no fallback threshold (W-789). A constant channel gives no spots and no error. There is no iteration and nothing to converge. |
 | Resources (dependency study, one thread) | Inference 0.6 s and 0.37 GB peak RSS on `medium` (32×512×512), 0.01 s and 0.16 GB on 1×512×512, 6.1 s and 0.95 GB on `large` (30×1024×1024). The merge adds a KD-tree query per channel. |
 
 % W-218, §2.8, W-268, §2.12, W-266
@@ -188,6 +190,7 @@ Rules:
   with each other.
 
 % §2.12, W-266, W-218
+% Amended 2026-11-10 W-789: the `empty` 60 %-zero channel and S6 expect the above-minimum noise estimate and its note instead of a MAD of 0 and the warning.
 
 Fixtures:
 
@@ -199,7 +202,7 @@ Fixtures:
 | `pairs` | 32×64×64, `iso3d` appearance: 12 lateral pairs 6 px apart in the same plane, and 8 axial pairs 8 planes apart in the same column, all pairs at least 12 voxels from each other | 3.1e-4 |
 | `channels` | 16×64×64 × 4 channels: 25 spots (`iso3d` appearance) in channel 0; channels 1 and 2 equal channel 0 plus constant offsets 300 and 1500 (the same noise realization); channel 3 is an independent noise draw with the same spots | 3.8e-4 per channel |
 | `coincident` | 16×64×64 × 2 channels: 20 spots at the same positions and amplitude in both channels | 3.1e-4 per channel |
-| `empty` | All zeros (8×32×32×2); a constant 100 (8×32×32); a channel zero in 60 % of its voxels (MAD 0) and one zero in 40 % (MAD > 0), with 10 spots each | — |
+| `empty` | All zeros (8×32×32×2); a constant 100 (8×32×32); a channel zero in 60 % of its voxels (MAD 0 over all voxels; `noise` mode estimates over the 40 % above 0) and one zero in 40 % (MAD > 0), with 10 spots each | — |
 | `borders` | 16×64×64 and 1×64×64: spots with integer centres at 0, 1, 2 and 3 voxels from each face (Y and X faces only for Z=1), brightness 1500 | 24 spots |
 | `seams` | The dependency study's seam scenes `seam_z1` (1×64×64) and `seam3d` (32×64×64, spots at Z 16 ± 0.5), keeping only the spots 0.5, 1 and 2 px from the keep-boundaries 30.5 and 59.5 of 32-pixel tiles and the controls (`w266_common.seam_layout`) | 18 spots |
 | `multiround` | 3 rounds × 16×64×64 × 2 channels on one grid: 15 spots per round and channel, 5 of them at the same positions in every round | 2.3e-4 per round and channel |
@@ -207,6 +210,7 @@ Fixtures:
 | `formed16` | The synthetic generator's `amplicon_scene_preset("small")` appearance and codebook at 16×64×64 with 24 amplicons, four rounds; once as generated and once after the legacy recipe-1 uint8 min–max normalization | 3.7e-4 |
 
 % W-266, §2.12
+% Amended 2026-11-10 W-789: S6 expects the above-minimum noise estimate of the 60 %-zero channel and its note.
 
 Checks:
 
@@ -217,7 +221,7 @@ Checks:
 | S3 | Resolvable pairs (no near-limit gates) | `pairs`: LM, LoG, SF3, PI (lateral pairs only for PI); `pairs` plane z of the lateral pairs as 1×64×64: SF2, PI | `evaluate_spots`; each pair member matched to its own detection | Every pair member matched (pair recall 1.0). Z=1 lateral pairs for SF2 and PI derive from the dependency study's `iso_z1` (all 100 spots at 6-px spacing resolved); axial pairs for SF3 from the dependency study's aligned probe (`smfish_3d` found all 147 spots stacked 8 planes apart). The other 3D cases are **provisional**: the dependency study has no pair rows for LM, LoG or PI in 3D, nor for lateral pairs in 3D. PI axial pairs are not gated: stack mode merges them by specification (dependency study recall 0.35 to 0.38). |
 | S4 | Per-channel backgrounds and overrides | `channels`: every method; one plan with an override for channel 3 (LM `threshold_value` 6.0, LoG `threshold` 0.02, SF `prob_thresh` 0.5, PI `threshold` 0.6) | Table equality; `diagnostics["effective_settings"]`; thresholds | Channels 1 and 2 give the detections of channel 0. For LM the coordinates are identical (`peak_intensity` differs by the offset), and its noise thresholds exceed channel 0's by the offset within 1e-9. For LoG, SF and PI the count is the same and the coordinates agree within 1e-5 voxels. The effective settings equal the override config for channel 3 and the plan config elsewhere, and channel 3's table equals a single-channel run with the override config. All **provisional**: the dependency study did not measure background offsets. The LM bound is the expected cancellation of an offset in the median, the MAD and the maximum filter. The 1e-5 bound for the scaled or normalized methods is set at about twice the size of the dependency study's one- against four-thread differences (at most 4.2e-6), which are a different perturbation and do not establish it. The override checks are new bookkeeping. |
 | S5 | Coincident cross-channel candidates | `coincident`: every method | Rows per channel | Each channel's table equals its single-channel run: every coincident spot keeps one row per channel, and nothing is merged across channels. **Provisional**: the dependency study measured no coincident channels; the bound is the contract rule that channels are detected independently (the contract's settled decision 6). |
-| S6 | Empty input and zero channels, with the MAD diagnostics | `empty`: every method | Rows, columns and dtypes; `outcomes`; `noise`; warnings | Zero rows with exactly the declared `output_columns` and dtypes; outcome `constant` for the zero and constant channels without calling the backend; for the 60 %-zero channel (constructed with exactly 60 % zeros) `zero_fraction` 0.6 and `mad` 0 recorded and one `SpotFindingWarning`; for the 40 %-zero channel no warning. **Provisional**: these are new diagnostics and outcomes without a dependency-study reference; the dependency study's empty parity case supports only LoG's typed empty table, and the golden test of this issue pins today's MAD-0 threshold of 0. |
+| S6 | Empty input and zero channels, with the MAD diagnostics | `empty`: every method | Rows, columns and dtypes; `outcomes`; `noise`; warnings | Zero rows with exactly the declared `output_columns` and dtypes; outcome `constant` for the zero and constant channels without calling the backend; for the 60 %-zero channel (constructed with exactly 60 % zeros) `zero_fraction` 0.6, `estimation` `above_minimum` over its 4096 nonzero voxels with `mad` > 0 recorded and one `SpotFindingWarning` noting it; for the 40 %-zero channel `estimation` `all` and no warning. **Provisional**: these are new diagnostics and outcomes without a dependency-study reference; the dependency study's empty parity case supports only LoG's typed empty table. The golden test pinned a MAD-0 threshold of 0 until W-789 replaced it with the above-minimum estimate. |
 | S7 | Borders | `borders`: LM with `exclude_border` True and False; LoG, SF, PI | Presence of each planted spot | LM True: exactly the spots at distance 0 are absent (`min_distance_voxels=1`); LM False: all present. LoG, SF, PI: every spot at 2 or more voxels from every face detected; spots on a face are reported, not gated. All **provisional**: the dependency study placed no truth spot near a face. The LM bound follows the documented border rule, which the golden test pins on its own fixture; the bound for the other methods is an expectation. |
 | S8 | Tiling seams | `seams`: PI with `input_size=32` (keep-boundaries 30.5 and 59.5) against the untiled run; `iso_z1` and `iso3d`: SF with forced `n_tiles` (2, 2) and (1, 2, 2) | Candidates within 3 voxels of each truth spot; lateral shift against the untiled run | PI: exactly one candidate per spot and lateral shift ≤ 0.2 px (dependency study `piscis-seams.csv`: all 84 off-boundary and 24 control spots single; maximum shift 0.147 px). SF: same detections as the untiled run within 0.05 px (dependency study, `medium` and 1×512×512: at most 0.018 px). This only shows that `n_tiles` is passed and recorded, since 64-pixel images form no seam; Spotiflow's seam evidence is the dependency study's realistic-tier runs. LM and LoG do not tile. |
 | S9 | Explicit scaling | SF and PI configs; LoG anisotropic σ | Raised error; effective settings | `scale` ≠ 1 raises `ValueError` at construction, and `scale` 1 appears in the effective settings: **provisional**, a contract rule that the dependency study's `scale` probes motivate (offsets and losses at 0.5 and 2) but do not measure. LoG per-axis σ is honored: exact equality in S12's anisotropic case, derived from the dependency study's parity tables. |
@@ -269,6 +273,7 @@ tolerances are module constants equal to the table above, unchanged; matching is
 `greedy`, 3.0 voxels, `inclusive`, except S16.
 
 % W-266, W-273
+% Amended 2026-11-10 W-789: S6 expects the above-minimum noise estimate of the 60 %-zero channel and its note.
 
 | # | Test | Route and fixture | Metric | Tolerance |
 | --- | --- | --- | --- | --- |
@@ -277,7 +282,7 @@ tolerances are module constants equal to the table above, unchanged; matching is
 | S3 | `test_s3_every_member_of_a_resolvable_pair_is_matched` | `pairs` (lateral pairs in plane z=26, axial pairs at z=4 and 12; each pair jittered as a whole) for LM, LoG, SF3, PI; its lateral pairs on 1×64×64 for SF2, PI | matched truth indices of `evaluate_spots` | pair recall 1.0 (PI lateral pairs only) |
 | S4 | `test_s4_offset_channels_and_a_channel_override` | `channels` with a `SpotFindingPlan` overriding `ch03`, and a single-channel run with the override | rows per channel; `thresholds`; `effective_settings` | LM coordinates identical, `peak_intensity` + offset, thresholds + offset within 1e-9; others same count and coordinates within 1e-5; `ch03` table equal to the single run |
 | S5 | `test_s5_coincident_spots_keep_one_row_per_channel` | `coincident`, every method | each channel's rows against its single-channel run | equal with `check_exact=True`; every spot matched in both channels |
-| S6 | `test_s6_empty_input_zero_channels_and_the_mad_diagnostics` | zeros 8×32×32×2 and a constant 8×32×32 with a spy on the registry entry; 10×32×32×2 with exactly 60 % and 40 % zeros | rows, columns, dtypes; `outcomes`; `noise`; warnings | typed empty table, outcome `constant`, backend not called; LM `zero_fraction` 0.6 and `mad` 0 with one `SpotFindingWarning`, none for 40 % |
+| S6 | `test_s6_empty_input_zero_channels_and_the_mad_diagnostics` | zeros 8×32×32×2 and a constant 8×32×32 with a spy on the registry entry; 10×32×32×2 with exactly 60 % and 40 % zeros | rows, columns, dtypes; `outcomes`; `noise`; warnings | typed empty table, outcome `constant`, backend not called; LM `zero_fraction` 0.6, `estimation` `above_minimum` (4096 voxels) and `mad` > 0 with one `SpotFindingWarning`, none for 40 % (W-789) |
 | S7 | `test_s7_spots_near_the_faces` | `borders` (16×64×64, 24 spots; 1×64×64, 16 spots) | matched truth indices | LM `exclude_border` True: exactly the spots at distance 0 absent; False: all present; LoG, SF, PI: every spot at ≥ 2 voxels present |
 | S8 | `test_s8_tiling_seams` | PI with `input_size=32` against the native run on `seam_z1` and `seam3d`; SF2 on `iso_z1` with `n_tiles` (2, 2) and SF3 on `iso3d` with (1, 2, 2) against the S1 run | candidates within 3 voxels; lateral shift; one-to-one nearest shift | PI exactly one candidate per spot, shift ≤ 0.2 px; SF same count, shift ≤ 0.05 |
 | S9 | `test_s9_explicit_scaling` | SF and PI configs; the S1 runs; the anisotropic parity case | `ValueError`; `effective_settings` | `scale` ≠ 1 raises, `scale` 1 recorded; LoG per-axis σ equal to starfish exactly |
@@ -375,6 +380,7 @@ test module: no dependency-study measurement stands behind them. Each bound is t
 named, or the test's own assertion where the module has no constant.
 
 % W-266
+% Amended 2026-11-10 W-789: S6 expects the above-minimum noise estimate of the 60 %-zero channel and its note.
 
 | Check | Cases | Provisional bound | Why there is no dependency-study reference | Evidence |
 | --- | --- | --- | --- | --- |
@@ -384,7 +390,7 @@ named, or the test's own assertion where the module has no constant.
 | S3 | LM, LoG and PI on `pairs`, and the lateral pairs of SF3 in 3D | `S3_PAIR_RECALL` = 1.0 | The dependency study has no pair rows for LM, LoG or PI in 3D, nor for lateral pairs in 3D (the Z=1 lateral pairs of SF2 and PI and the axial pairs of SF3 are derived). | Design table, S3; module constant |
 | S4 | Every method on `channels` | `S4_LM_THRESHOLD_OFFSET` = 1e-9 (LM thresholds); `S4_COORDINATES` = 1e-5 voxels (the other methods) | The dependency study did not measure background offsets; the 1e-5 bound is about twice the dependency study's one- against four-thread differences (at most 4.2e-6), a different perturbation. | Design table, S4; module constants |
 | S5 | Every method on `coincident` | Each channel's table equals its single-channel run, and recall 1.0 in each channel | The dependency study measured no coincident channels; the bound is the contract rule that channels are detected independently (the contract's settled decision 6). | Design table, S5; `test_s5_coincident_spots_keep_one_row_per_channel` |
-| S6 | Every method on `empty` | Typed empty tables, outcome `constant`, and for local maxima `zero_fraction` 0.6, `mad` 0 and one warning | These diagnostics and outcomes are new; the dependency study's empty parity case supports only LoG's typed empty table. | Design table, S6; `test_s6_empty_input_zero_channels_and_the_mad_diagnostics` |
+| S6 | Every method on `empty` | Typed empty tables, outcome `constant`, and for local maxima `zero_fraction` 0.6, the above-minimum estimate (W-789) and one warning | These diagnostics and outcomes are new; the dependency study's empty parity case supports only LoG's typed empty table. | Design table, S6; `test_s6_empty_input_zero_channels_and_the_mad_diagnostics` |
 | S7 | LM, LoG, SF and PI on `borders` | `S7_GATED_DISTANCE` = 2 voxels; LM: exactly the spots at distance 0 absent with border exclusion | The dependency study placed no truth spot near a face. | Design table, S7; module constant |
 | S9 | SF and PI configs | `scale` other than 1 raises `ValueError`, and `scale` 1 is recorded | A contract rule that the dependency study's `scale` probes motivate but do not measure. | Design table, S9; `test_s9_explicit_scaling` |
 | S10 | Every method on `multiround` | `S10_RADIUS` = 3.0 voxels, and the identity and join rules | A new interface (option A of the contract) without a dependency-study reference. | Design table, S10; module constant |

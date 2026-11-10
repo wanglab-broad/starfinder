@@ -82,7 +82,13 @@ class LocalMaximaConfig:
     -----
     Per-channel pipeline peaks; no spatial deduplication across channels.
 
-    noise uses median + value * MAD * 1.4826 (sigma units); adaptive uses
+    noise uses median + value * MAD * 1.4826 (sigma units), the median and MAD
+    taken over all the channel's voxels when at most half of them equal its
+    minimum and otherwise over the voxels above the minimum (those a
+    truncation did not clip; diagnostics['noise'] records the set as
+    estimation and n_estimation); a channel with signal whose MAD over that
+    set is 0 raises SpotFindingError, so use adaptive or absolute for it
+    (W-789). adaptive uses
     channel maximum, adaptive_round the image maximum, global the uint8/uint16
     maximum (fraction units [0,1]); absolute is threshold_value itself, in the
     image's grey levels (the tiled tile task's FOV-level thresholds, one per
