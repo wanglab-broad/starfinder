@@ -977,17 +977,21 @@ class FOV:
         application = dict(record='application', outcome='applying', application_config=asdict(warp), failure=None,
                            qc=None)
         attempts.append(application)
+        # The application's QC reads only the signals, so it is computed before the round is resampled and the
+        # moving signals are released then: they are not resident together with the resampled images (W-742).
+        after = current[recipe.signal]
+        if after is None:
+            after = resample([originals[recipe.signal]], chain, _signal_warp(chain, recipe.warp))[0]
+        qc = _qc_record(registration_qc(references[recipe.signal], originals[recipe.signal], after, chain,
+                                        config=recipe.qc))
+        del originals, current, before, after
         keys = list(self.snapshots.get(name, {}))
         try:
             outputs = resample([self.images[name], *(self.snapshots[name][key] for key in keys)], chain, warp)
         except Exception as error:
             application.update(outcome='application_failed', failure={'type': type(error).__name__, 'message': str(error)})
             raise
-        after = current[recipe.signal]
-        if after is None:
-            after = resample([originals[recipe.signal]], chain, _signal_warp(chain, recipe.warp))[0]
-        application.update(outcome='succeeded', qc=_qc_record(registration_qc(
-            references[recipe.signal], originals[recipe.signal], after, chain, config=recipe.qc)))
+        application.update(outcome='succeeded', qc=qc)
         self.images[name] = outputs[0]
         if keys:
             self.snapshots[name] = dict(zip(keys, outputs[1:]))

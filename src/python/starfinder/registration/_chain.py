@@ -193,14 +193,14 @@ def resample(images, chain, config):
         channels = image[..., None] if image.ndim == 3 else image
         stacks.append((channels, np.empty(channels.shape, dtype=_output_dtype(image.dtype, config.output_dtype))))
     if config.backend == "translation":
-        from ._translation import apply_shift
+        from ._translation import _shift_into
 
-        # apply_shift moves content by its shift: the negated pull displacement.
+        # apply_shift moves content by its shift: the negated pull displacement. Each channel is written into its
+        # output directly (apply_shift's values, without a volume-sized intermediate per channel).
         shift = tuple(-v for v in translation.displacement_zyx)
         for channels, output in stacks:
             for c in range(channels.shape[-1]):
-                output[..., c] = apply_shift(channels[..., c], shift,
-                                             workers=config.fft_workers, output_dtype=config.output_dtype)
+                _shift_into(channels[..., c], shift, output[..., c], workers=config.fft_workers)
     elif config.backend == "scipy":
         for z in range(chain.reference_shape_zyx[0]):
             points = chain.pull_points(z)

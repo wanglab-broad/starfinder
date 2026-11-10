@@ -18,7 +18,9 @@ def _validate_image(image, *, ndim=(3, 4)):
     image = np.asarray(image)
     if image.ndim not in ndim or any(n == 0 for n in image.shape):
         raise InvalidImageError("image must be nonempty ZYX or ZYXC")
-    if image.dtype.kind not in "uif" or not np.isfinite(image).all():
+    # Integers are always finite; a float image is checked one plane at a time, so that the check does not
+    # allocate a Boolean array of the whole image (W-742).
+    if image.dtype.kind not in "uif" or (image.dtype.kind == "f" and not all(np.isfinite(p).all() for p in image)):
         raise InvalidImageError("image must contain finite real numeric values")
     return image
 

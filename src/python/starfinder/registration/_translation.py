@@ -36,22 +36,24 @@ def phase_correlate(
     if fixed.shape != moving.shape:
         raise ValueError("fixed and moving must have equal shapes")
 
-    # Cast to float32 for faster FFT (complex64 vs complex128)
-    fixed = np.asarray(fixed, dtype=np.float32)
-    moving = np.asarray(moving, dtype=np.float32)
-
     nz, ny, nx = moving.shape
 
-    # Cross-correlation in frequency domain using real FFT
-    # rfftn exploits conjugate symmetry of real input → ~50% less memory
-    fixed_fft = rfftn(fixed, workers=workers)
-    moving_fft = rfftn(moving, workers=workers)
-    cc = irfftn(
-        fixed_fft * np.conj(moving_fft), s=(nz, ny, nx), workers=workers
-    )
+    # Cross-correlation in frequency domain using real FFT (float32 → complex64;
+    # rfftn keeps half the spectrum). Each float32 copy is released after its
+    # transform, and the cross-power spectrum fixed_fft * conj(moving_fft) is
+    # formed in place in fixed_fft (the same ufunc on the same operands in the
+    # same order), so at most three volume-sized float32/complex64 arrays are
+    # alive at once (W-742).
+    fixed_fft = rfftn(np.asarray(fixed, dtype=np.float32), workers=workers)
+    moving_fft = rfftn(np.asarray(moving, dtype=np.float32), workers=workers)
+    np.conjugate(moving_fft, out=moving_fft)
+    np.multiply(fixed_fft, moving_fft, out=fixed_fft)
+    del moving_fft
+    cc = irfftn(fixed_fft, s=(nz, ny, nx), workers=workers)
+    del fixed_fft
 
     # Find peak (cc is real-valued from irfftn, abs handles numerical noise)
-    peak_idx = np.argmax(np.abs(cc))
+    peak_idx = np.argmax(np.abs(cc, out=cc))
     iz, iy, ix = np.unravel_index(peak_idx, cc.shape)
 
     # Convert to signed shifts (handle wrap-around)
@@ -97,13 +99,34 @@ def apply_shift(
     volume = _validate_image(volume, ndim=(3,))
     shift = _triple(shift, "shift")
     dtype = _output_dtype(volume.dtype, output_dtype)
+    int_shift = _integer_shift(shift)
+    if int_shift is None:
+        return _fourier_shift(volume, shift, dtype, workers)
+    output = np.empty(volume.shape, dtype=dtype)
+    _integer_shift_into(volume, int_shift, output)
+    return output
 
-    # Fast path: integer shifts via np.roll (no FFT overhead)
+
+def _shift_into(volume, shift, output, workers=None):
+    """apply_shift(volume, shift, workers, output_dtype) written into ``output``, a ZYX array (or view) of the
+    output dtype: the same validation and values, without a volume-sized intermediate on the integer path."""
+    volume = _validate_image(volume, ndim=(3,))
+    shift = _triple(shift, "shift")
+    int_shift = _integer_shift(shift)
+    if int_shift is None:
+        output[...] = _fourier_shift(volume, shift, output.dtype, workers)
+    else:
+        _integer_shift_into(volume, int_shift, output)
+
+
+def _integer_shift(shift):
+    """The integer shift that shift rounds to when every component is within 1e-6 of it; None otherwise."""
     int_shift = tuple(int(round(s)) for s in shift)
-    if all(abs(s - i) < 1e-6 for s, i in zip(shift, int_shift)):
-        return _apply_integer_shift(volume, int_shift).astype(dtype, copy=False)
+    return int_shift if all(abs(s - i) < 1e-6 for s, i in zip(shift, int_shift)) else None
 
-    # Sub-pixel path: FFT-based shift
+
+def _fourier_shift(volume, shift, dtype, workers):
+    """Sub-pixel path: FFT-based shift, wrapped regions zeroed, cast once to dtype."""
     from scipy.fft import fftn, ifftn
     from scipy.ndimage import fourier_shift
 
@@ -118,15 +141,19 @@ def apply_shift(
     return _cast_warp_output(result, dtype)
 
 
-def _apply_integer_shift(volume: np.ndarray, shift: tuple[int, int, int]) -> np.ndarray:
-    """Apply integer-pixel shift using np.roll + zero-fill. No FFT overhead."""
-    dz, dy, dx = shift
-    if dz == 0 and dy == 0 and dx == 0:
-        return volume.copy()
+def _integer_shift_into(volume: np.ndarray, shift: tuple[int, int, int], output: np.ndarray) -> None:
+    """Integer-pixel shift with zero fill, written into output (no FFT, no intermediate copy).
 
-    result = np.roll(volume, shift=(dz, dy, dx), axis=(0, 1, 2))
-    _zero_wrapped_edges(result, shift)
-    return result
+    The values of a circular shift (np.roll) with the wrapped regions zeroed: the overlapping block is copied
+    (cast to output's dtype as astype casts) and the rest of output is zero.
+    """
+    if any(abs(s) >= n for s, n in zip(shift, volume.shape)):
+        output.fill(0)
+        return
+    target = tuple(slice(s, n) if s >= 0 else slice(0, n + s) for s, n in zip(shift, volume.shape))
+    source = tuple(slice(0, n - s) if s >= 0 else slice(-s, n) for s, n in zip(shift, volume.shape))
+    output[target] = volume[source]
+    _zero_wrapped_edges(output, shift)
 
 
 def _zero_wrapped_edges(

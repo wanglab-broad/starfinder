@@ -162,15 +162,11 @@ def apply_transform(
     for c in range(channels.shape[-1]):
         volume = channels[..., c]
         if config.backend == "translation":
-            from ._translation import apply_shift
+            from ._translation import _shift_into
 
-            # apply_shift moves content by its shift: the negated pull displacement.
-            output[..., c] = apply_shift(
-                volume,
-                tuple(-v for v in transform.displacement_zyx),
-                workers=config.fft_workers,
-                output_dtype=config.output_dtype,
-            )
+            # apply_shift moves content by its shift: the negated pull displacement; written into the output.
+            _shift_into(volume, tuple(-v for v in transform.displacement_zyx), output[..., c],
+                        workers=config.fft_workers)
         elif config.backend == "scipy":
             output[..., c] = apply_tps_deformation(
                 volume,
