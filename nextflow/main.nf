@@ -120,13 +120,17 @@ workflow {
     if (params.require_container && !params.container) error 'The sge profile requires --container <shared-drive CPU SIF> for PLAN and VERIFY as well as tasks'
     PLAN(file(params.config).toAbsolutePath().toString())
     manifest_path = PLAN.out.map { p ->
-        def summary = new groovy.json.JsonSlurper().parse(p.toFile())
+        // plan.json is a work-directory output: read it through Path, which also works when the work directory is gs:// (W-834).
+        def summary = new groovy.json.JsonSlurper().parseText(p.text)
+        // java.io.File is right here: the manifest lies under roots.output, a path every host mounts, not in the work directory.
         checkedTasks(new groovy.json.JsonSlurper().parse(new File(summary.manifest)))
         summary.manifest
     }
     VERIFY_BEFORE(manifest_path)
     tasks = VERIFY_BEFORE.out.flatMap { mpath, tokens ->
+        // java.io.File is right here: the manifest lies under roots.output, a path every host mounts, not in the work directory.
         def manifest = new groovy.json.JsonSlurper().parse(new File(mpath))
+        // tokens.tsv is a work-directory output: Path.readLines(), never toFile().
         def by_id = tokens.readLines().collectEntries { line ->
             def columns = line.split('\t'); [(columns[0]): columns[1]]
         }

@@ -66,12 +66,35 @@ tree from concurrent workers or propagate deletions from one worker to the mirro
 
 This is the storage route decision, not an implemented transfer adapter. Today's
 `PLAN`, `VERIFY_BEFORE`, `VERIFY_AFTER`, manifest resource lookups and `TaskCommands`
-read local absolute paths, and the verify processes explicitly run on the head host.
+read local absolute paths, and the verify processes run on the head host, apart from
+the `google-batch` profile (see the amendment below).
 Before a first cloud run, provision the disk/mount route, stage inputs and manifests
 at the paths recorded in the manifest, make outputs visible to the head verifier,
 and implement and test the per-task restore/copy/completion ordering above. The
 profile alone does none of these steps. Its real `script:` path remains untested
 until an authorized cloud run, including preemption, HDF5 and transfer recovery.
+
+% Amended 2026-11-10 W-834: the head reads work-directory outputs through the Path API, and the VERIFY processes run on Batch under `google-batch`.
+
+W-832's route-B spike (2026-11-09, at `0231258`) found that on `gs://` the head failed at its first read of a
+work-directory output: `new JsonSlurper().parse(p.toFile())` on PLAN's `plan.json`, a `CloudStoragePath`, throws
+"GCS objects aren't available locally". The head now reads a process output only through Nextflow's `Path` API:
+`plan.json` with `p.text` and `tokens.tsv` with `readLines()`. A static test
+(`test_workflow_nextflow_head_reads.py`) fails on `toFile()` or `java.io` in `nextflow/main.nf`, `modules/*.nf` and
+`lib/*.groovy`, and names the only `new File(...)` sites: the manifest reads of `main.nf` and `TaskCommands.groovy`
+(and the manifest lookup in `nextflow.config`), whose paths lie under `roots.output`, which every host mounts.
+
+`VERIFY_BEFORE` and `VERIFY_AFTER` declare `executor 'local'`, which Nextflow 26.10.4 refuses on a non-POSIX work
+directory, and the Batch head has no `starfinder`. `google_batch.config` therefore sets
+`withName: 'VERIFY_BEFORE|VERIFY_AFTER' { executor = 'google-batch' }`, which outranks the process body's directive;
+they run in the profile's image on the share, like `PLAN`. The `local` and `sge` profiles keep the local executor for
+them. `local.config` carries the same selector with `local`, so that `-profile google-batch,local` (N1) still runs
+everything on the head.
+
+Both changes are checked offline only (`nextflow config`, the local stub and real runs, the static scan). Still
+unverified on a `gs://` work directory, until the rerun of W-832's spike: the Path-API reads at the head, the `VERIFY`
+processes under `google-batch`, and the tasks' `path` outputs. If the `VERIFY` processes still fail on Batch, the fix
+is a later issue.
 
 ## Owner checklist before the first cloud run
 

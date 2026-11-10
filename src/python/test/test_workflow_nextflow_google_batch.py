@@ -12,20 +12,39 @@ from . import workflow_nextflow as N
 pytestmark = [pytest.mark.workflow, pytest.mark.contract, pytest.mark.nextflow, pytest.mark.slow]
 
 
-@pytest.mark.parametrize("profile, executor", [
-    ("google-batch", "google-batch"),
-    ("google-batch,local", "local"),
-])
-def test_google_batch_profile_resolves_offline(tmp_path, profile, executor):
+VERIFY = "process.withName:VERIFY_BEFORE|VERIFY_AFTER.executor"
+
+
+def resolve(tmp_path, profile):
     done = subprocess.run(
         [N.executable(), "config", "-flat", "-profile", profile, str(X.ROOT / "nextflow/main.nf")],
         cwd=tmp_path, capture_output=True, text=True, timeout=60,
         env=dict(os.environ, NXF_OFFLINE="true", NXF_PLUGINS_DEFAULT="false"),
     )
     assert done.returncode == 0, done.stdout + done.stderr
-    values = {key.replace("'", ""): value for key, value in (
+    return {key.replace("'", ""): value for key, value in (
         line.split(" = ", 1) for line in done.stdout.splitlines() if " = " in line)}
+
+
+@pytest.mark.parametrize("profile, executor", [("local", "local"), ("sge", "sge")])
+def test_verify_processes_keep_the_local_executor_outside_google_batch(tmp_path, profile, executor):
+    values = resolve(tmp_path, profile)
     assert values["process.executor"] == repr(executor)
+    # The processes declare executor 'local' themselves; no profile but google-batch moves them (W-834).
+    assert "google-batch" not in values.get(VERIFY, "")
+    assert values.get(VERIFY, "'local'") == "'local'"
+
+
+@pytest.mark.parametrize("profile, executor, verify", [
+    ("google-batch", "google-batch", "google-batch"),
+    ("google-batch,local", "local", "local"),
+])
+def test_google_batch_profile_resolves_offline(tmp_path, profile, executor, verify):
+    values = resolve(tmp_path, profile)
+    assert values["process.executor"] == repr(executor)
+    # A local executor refuses a gs:// work directory and the Batch head has no starfinder, so under google-batch the
+    # VERIFY processes run in the image on Batch; the local profile still brings everything back to the head (W-834).
+    assert values[VERIFY] == repr(verify)
     assert values["google.project"] == "'<project>'"
     assert values["google.location"] == "'us-central1'"
     assert values["google.batch.spot"] == "true"
