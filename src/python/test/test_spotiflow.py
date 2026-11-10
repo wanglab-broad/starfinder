@@ -193,7 +193,9 @@ def test_s14_a_relative_weights_root_reaches_spotiflow_as_an_absolute_path(tmp_p
 def test_s14_no_library_cache_is_read_or_written_with_an_empty_home(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
-    env = one_thread_environment(HOME=str(home), STARFINDER_WEIGHTS_DIR=str(weights_directory()))
+    # matplotlib's font cache and config go to a directory beside HOME, not to the caller's MPLCONFIGDIR or to HOME
+    env = one_thread_environment(HOME=str(home), STARFINDER_WEIGHTS_DIR=str(weights_directory()),
+                                 MPLCONFIGDIR=str(tmp_path / "matplotlib"))
     for name in ("XDG_CACHE_HOME", "HF_HOME", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE", "SPOTIFLOW_CACHE_DIR",
                  "TORCH_HOME"):
         env.pop(name, None)
