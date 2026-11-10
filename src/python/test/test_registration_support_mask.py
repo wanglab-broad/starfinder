@@ -116,6 +116,20 @@ def test_an_empty_support_mask_raises_with_its_voxel_count():
                            earlier_steps=chain)
 
 
+def test_a_round_shifted_wholly_out_of_the_grid_raises_the_empty_mask_error():
+    """A Y shift of 48 leaves no support at all, and the resampled moving signal is all zeros.
+
+    The empty mask is refused before the constant-signal check, so the error names the mask and its voxel count;
+    at the base (aa3bcae) and at f7eb3a9 this raised "constant registration signal" instead.
+    """
+    reference, moving = texture_pair()
+    signal, chain = translated(moving, (0.0, 48.0, 0.0))
+    assert np.ptp(signal) == 0
+    with pytest.raises(RegistrationEstimationError, match=r"support mask is empty: 0 of 18432 voxels"):
+        estimate_transform(reference, signal, config=BSPLINE, reference_metadata=META, moving_metadata=META,
+                           earlier_steps=chain)
+
+
 def test_a_mask_too_small_for_elastix_raises_with_its_voxel_count():
     """Shifts of 45 in Y and X leave a 3x3 support per plane, its corner voxel on each of 8 planes after erosion.
 

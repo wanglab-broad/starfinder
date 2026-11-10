@@ -189,21 +189,10 @@ def _estimate(reference, moving, config, geometry, earlier_steps=None):
     from ._config import WarpConfig
     from ._types import AffineTransform, BSplineTransform
 
-    if np.ptp(reference) == 0 or np.ptp(moving) == 0:
-        raise RegistrationEstimationError("constant registration signal")
-    itk = _import_itk()
-    spacing = geometry["reference_metadata"].spacing_zyx
-    source, warnings = "metadata", ()
-    if spacing is None:
-        spacing, source, warnings = (1.0, 1.0, 1.0), "unknown_unit", (_UNKNOWN_SPACING,)
     shape = reference.shape
     dim = 2 if shape[0] == 1 else 3
-
-    def image(array, dtype=np.float32):
-        result = itk.GetImageFromArray(np.ascontiguousarray(array[0] if dim == 2 else array, dtype=dtype))
-        result.SetSpacing([float(v) for v in spacing[::-1][:dim]])
-        return result
-
+    # The support mask comes first: a moving round shifted wholly out of the grid resamples to zeros, and its
+    # refusal names the empty mask rather than the constant signal.
     mask, extra = None, {}
     if config.method == "bspline":
         masked = earlier_steps is not None and config.mask_support
@@ -217,6 +206,19 @@ def _estimate(reference, moving, config, geometry, earlier_steps=None):
                     f"bspline support mask is empty: 0 of {mask.size} voxels remain after the support of the "
                     f"earlier steps is eroded by {_SUPPORT_EROSION} voxels")
         extra = dict(support_mask=record)
+    if np.ptp(reference) == 0 or np.ptp(moving) == 0:
+        raise RegistrationEstimationError("constant registration signal")
+    itk = _import_itk()
+    spacing = geometry["reference_metadata"].spacing_zyx
+    source, warnings = "metadata", ()
+    if spacing is None:
+        spacing, source, warnings = (1.0, 1.0, 1.0), "unknown_unit", (_UNKNOWN_SPACING,)
+
+    def image(array, dtype=np.float32):
+        result = itk.GetImageFromArray(np.ascontiguousarray(array[0] if dim == 2 else array, dtype=dtype))
+        result.SetSpacing([float(v) for v in spacing[::-1][:dim]])
+        return result
+
     parameter_object, parameters = _parameter_object(itk, config, shape, spacing, dim, masked=mask is not None)
     with tempfile.TemporaryDirectory(prefix="starfinder-elastix-") as directory:
         arguments = (itk, image(reference), image(moving), parameter_object, directory)
