@@ -62,11 +62,17 @@ From `src/python`, run Python with `uv run python`. On GP099-29C use
 `/home/unix/jiahao/.local/bin/uv` and
 `UV_PYTHON=/home/unix/jiahao/miniforge3/bin/python3.12`; system Python 3.8 is unsuitable.
 Use `PYTHONDONTWRITEBYTECODE=1 UV_LOCKED=true UV_NO_SYNC=true` with the prepared
-locked environment. Set `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`,
-`ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS` and `NUMEXPR_NUM_THREADS` to 1,
-and `CUDA_VISIBLE_DEVICES=""`. Keep TMPDIR on local disk, never on
-the SMB artifact mount, because tests create symlinks. Use a writable uv cache
-when the default cache is sandboxed. Do not silently alter dependencies or lock.
+locked environment. Set `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
+`NUMEXPR_NUM_THREADS`, `NUMBA_NUM_THREADS` and `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS`
+to 1, and `CUDA_VISIBLE_DEVICES=""`. The first five are
+`starfinder._execution.THREAD_VARIABLES`, which is the source of the list and which
+task records name; when it changes, change this list and
+[contributing](docs/contributing.md) with it. A session that followed a shorter
+list left `NUMBA_NUM_THREADS` unset and X3 engine byte-equality failed (W-830,
+2026-11-09). Keep TMPDIR on local disk, never on the SMB artifact mount, because tests
+create symlinks, and keep library caches off HOME by setting `MPLCONFIGDIR` and
+`NUMBA_CACHE_DIR` on local scratch next to it. Use a writable uv cache when the
+default cache is sandboxed. Do not silently alter dependencies or lock.
 If editable metadata requires reinstalling, record
 `uv sync --locked --group docs --extra local-registration` and verify extras.
 
