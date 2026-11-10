@@ -224,6 +224,7 @@ image with the selected ZYX detection view; the current default file is
 | `fov.register(RegistrationStep(...))` | `fov.register(RegistrationRecipe((RegistrationStep(...),)))` |
 | Per-step image selection and warp | Recipe `signal` and `warp`; step-specific `signal` where needed |
 | Earlier merged-channel sum | `RegistrationSignalConfig(mode="sum")`; the default selection is maximum |
+| A `BSplineConfig` step after earlier steps fitted the zero-filled border of the shifted signal | elastix samples only the support of the shifted signal, eroded by 2 voxels, so such chains give different B-spline estimates; `BSplineConfig(mask_support=False)` reproduces the earlier estimate, and a B-spline first step is unchanged. A record saved before the change has no `support_mask` in its diagnostics, and its reloaded `effective_config` reads the default `mask_support=True` although no mask was used |
 
 ### Translation displacement
 
@@ -240,6 +241,7 @@ For changed composition and resampling behavior, consult the
 | --- | --- |
 | Subclassing a detector config to select a method | Use a registered config type; see [adding a method](method-registry.md) |
 | One detection per voxel of a tied local maximum | One representative per regional maximum; plateau and shoulder rows are removed and spot identities renumber ([rule](spot-finding-algorithms.md#local-maxima)) |
+| `threshold_mode="noise"` took the median and MAD of all voxels; on a channel with more than half its voxels at its minimum (the `uint8` output of `recipe: deep`) the threshold was the minimum, with a `SpotFindingWarning`, and every regional maximum was a spot | Such a channel takes its median and MAD over the voxels above its minimum, and `diagnostics["noise"]` records `estimation` and `n_estimation`; a channel with signal whose MAD is 0 raises `SpotFindingError`: use `threshold_mode` `adaptive` or `absolute` for it, or `absolute` at the minimum to repeat the old threshold ([truncated channels](spot-finding-contract.md#truncated-channels)) |
 | `PipelineConfig(detection=LocalMaximaConfig(...))` | `PipelineConfig(spot_finding=LocalMaximaConfig(...))` |
 | Spotiflow and Piscis on the CPU only; `device="cuda"` raised | `device="cuda"` (`ExecutionConfig`, `find_spots`, or `processing.spot_finding.device` in the workflow) runs them on the GPU; `local_maxima` and `starfish_log` refuse it ([execution device](spot-finding-contract.md#execution-device)) |
 | Several detection rounds decoded as multiplexed reads | Detect in the reference round for multiplexed readout; use `readout_mode="direct"` for a direct assay |
@@ -311,6 +313,15 @@ Replace manual parsing of old checkpoint headers with
 are version 3; current `run.json` is version 2. The
 [checkpoint guide](checkpoints.md) shows reload calls, and its
 [reference](checkpoints-reference.md) lists saved files.
+
+| Before | After |
+| --- | --- |
+| A version-3 checkpoint header (`transforms.json`, `candidates.json`, `pre_qc.json`) with a missing, `null` or empty `files` list loaded, and `load_checkpoint` did not check the payload against it. `starfinder experiment evaluate` read such a checkpoint the same way | `load_checkpoint` and `FOV.load_checkpoint` raise `ValueError` for a version-3 header whose `files` is not a nonempty list of `{path, sha256}` entries naming every payload file the stage reads (the table, or the round images, snapshots and field files). Each `path` is a string relative to the header's folder, not absolute and with no `..` part. Each `sha256` is 64 lowercase hexadecimal characters, bare or prefixed `sha256:`. A listed file that is missing or changed also raises `ValueError`. A `checkpoint` source of `starfinder experiment evaluate` applies the same rule through the same check and fails the source (`SourceFailure`) with the same message after the source name; it also requires `files` to name every stage file besides the header. Headers of versions 1 and 2 are unchanged |
+
+To use such a checkpoint again, rewrite it with the current writer, which
+records `files` for every payload file. The rule is in the
+[payload hashes](checkpoints-reference.md#payload-hashes) section of the
+reference.
 
 ### One Python configuration dialect
 

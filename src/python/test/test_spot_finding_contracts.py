@@ -14,12 +14,17 @@ from starfinder.spot_finding import (
 pytestmark = [pytest.mark.spot_finding, pytest.mark.contract]
 
 
+# These fixtures are mostly zeros, which noise mode refuses (W-789); absolute 0 is the threshold that noise mode
+# gave them before (median 0 and MAD 0), so every expected value is unchanged.
+ZERO = LocalMaximaConfig(threshold_mode='absolute', threshold_value=0.0)
+
+
 def detect(image, config, namespace='dataset/sample/FOV'):
     return find_spots(image, config=config, metadata=ImageMetadata('frame'),
                       spot_namespace=namespace)
 
 
-@pytest.mark.parametrize('config', [LocalMaximaConfig(), NoiseLandmarkConfig(), PercentileCentroidConfig()])
+@pytest.mark.parametrize('config', [ZERO, NoiseLandmarkConfig(), PercentileCentroidConfig()])
 def test_empty_schema_and_singleton_z(config):
     image = np.zeros((1, 9, 9, 2), dtype=np.uint16)
     empty = detect(image, config)
@@ -40,7 +45,7 @@ def test_distinct_channel_and_centroid_policies():
     image = np.zeros((5, 9, 9, 2))
     image[2, 4, 4, :] = [10, 20]
     image[2, 4, 5, 0] = 10
-    pipeline = detect(image, LocalMaximaConfig(channel_labels=('green', 'red')))
+    pipeline = detect(image, replace(ZERO, channel_labels=('green', 'red')))
     noise = detect(image, NoiseLandmarkConfig())
     centroid = detect(image, PercentileCentroidConfig(90))
     assert set(pipeline.spots.channel) == {0, 1}
@@ -50,7 +55,7 @@ def test_distinct_channel_and_centroid_policies():
     assert pipeline.diagnostics['channel_labels'] == ('green', 'red')
     assert pipeline.spots.channel.dtype == np.int64
     assert pipeline.spots.peak_intensity.dtype == np.float64
-    optional = detect(image, LocalMaximaConfig(measure_peak_intensity=False))
+    optional = detect(image, replace(ZERO, measure_peak_intensity=False))
     assert 'peak_intensity' not in optional.spots
     assert optional.diagnostics['measurements'] == {}
 
@@ -101,8 +106,8 @@ def test_labels_global_dtype_namespace_validation():
 def test_ids_survive_subset_join_and_reject_collision():
     image = np.zeros((5, 9, 9))
     image[2, 3, 3], image[2, 6, 6] = 10, 20
-    result = detect(image, LocalMaximaConfig())
-    other = detect(image, LocalMaximaConfig(), 'dataset/sample/FOV/subtile:1')
+    result = detect(image, ZERO)
+    other = detect(image, ZERO, 'dataset/sample/FOV/subtile:1')
     left = result.spots.assign(spot_namespace=result.spot_namespace)
     right = other.spots.assign(spot_namespace=other.spot_namespace)
     combined = pd.concat([left, right], ignore_index=True)
@@ -126,7 +131,7 @@ def test_fov_namespace_and_downstream_identity(tmp_path):
     image = np.zeros((5, 9, 9, 4), dtype=np.uint8)
     image[2, 4, 4, 0] = 100
     fov.images['round1'] = image
-    fov.find_spots()
+    fov.find_spots(config=ZERO)
     ids = spot_table(fov).spot_id.copy()
     namespace = fov.spot_result.spot_namespace
     fov.extract_intensities()
@@ -140,7 +145,7 @@ def test_fov_namespace_and_downstream_identity(tmp_path):
     pd.testing.assert_series_equal(ids, accepted.spot_id)
     assert accepted.spot_namespace.tolist() == [namespace]
     fov.tile = 'r0c1'  # W-735: FOV.tile replaces FOV.subtile_id in the namespace
-    fov.find_spots()
+    fov.find_spots(config=ZERO)
     assert fov.spot_result.spot_namespace != namespace
 
 

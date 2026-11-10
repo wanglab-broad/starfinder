@@ -5,8 +5,13 @@ class SpotFindingBackendUnavailableError(ImportError):
     """An optional dependency of a spot-finding method (its extra) is not installed."""
 
 
+class SpotFindingError(ValueError):
+    """A detection refuses its input: a ``noise``-mode channel with signal whose noise MAD is 0 (W-789)."""
+
+
 class SpotFindingWarning(UserWarning):
-    """A detection ran but something about its input deserves attention (for example a noise MAD of 0)."""
+    """A detection ran but something about its input deserves attention (for example a noise estimated above the
+    channel's minimum)."""
 
 
 class MissingModelError(FileNotFoundError):

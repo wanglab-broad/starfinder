@@ -933,6 +933,8 @@ class FOV:
             signal = step.signal or recipe.signal
             reference, before = references[signal], current[signal]
             moving_metadata = self.metadata[name] if not results else results[-1].transform.reference_metadata
+            # The steps the moving signal was resampled through: a B-spline step masks their support (W-824).
+            earlier = TransformChain(tuple(r.transform for r in results)) if results else None
             configs = (step.config,) + (tuple(step.recovery.alternatives) if step.recovery else ())
             for number, config in enumerate(configs):
                 spec = registration.REGISTRATION_METHODS[type(config)]
@@ -943,9 +945,14 @@ class FOV:
                                outcome='estimating', failure=None, qc=None)
                 attempts.append(attempt)
                 try:
+                    # Only a B-spline step takes them; every other estimation call is unchanged.
+                    extra = ({'earlier_steps': earlier} if earlier is not None
+                             and isinstance(config, registration.BSplineConfig) else {})
                     result = registration.estimate_transform(reference, before, config=config,
-                        reference_metadata=ref_metadata, moving_metadata=moving_metadata)
+                        reference_metadata=ref_metadata, moving_metadata=moving_metadata, **extra)
                     attempt.update(backend=result.diagnostics.backend)
+                    if result.diagnostics.support_mask is not None:
+                        attempt.update(support_mask=dict(result.diagnostics.support_mask))
                     if result.diagnostics.backend_versions is not None:
                         attempt.update(backend_versions=dict(result.diagnostics.backend_versions))
                     chain = TransformChain(tuple(r.transform for r in results) + (result.transform,))

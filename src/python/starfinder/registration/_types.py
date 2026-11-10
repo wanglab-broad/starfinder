@@ -1,6 +1,6 @@
 """Explicit index-space transform and result contracts."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -376,6 +376,8 @@ class RegistrationDiagnostics:
         Recorded effective backend parameter map; ``None`` means unreported.
     spacing_source : str or None
         Recorded spacing provenance, ``metadata`` or ``unknown_unit``; ``None`` means unreported.
+    support_mask : dict or None
+        B-spline fixed-image support mask record with keys ``used``, ``reason``, ``voxels`` and ``fraction``; ``None`` for the other methods.
 
     Notes
     -----
@@ -386,6 +388,14 @@ class RegistrationDiagnostics:
     spacing_source ("metadata", or "unknown_unit" with a warning when unit
     spacing replaced unknown spacing). Demons records elapsed_iterations and
     final_rms_change per level.
+
+    B-spline also records support_mask (W-824): ``used`` (bool); ``reason``,
+    ``None`` when used, else ``"no earlier step"`` or ``"mask_support=False"``;
+    ``voxels``, the eroded mask's voxel count, and ``fraction``, that count
+    over the grid's voxel count, both ``None`` when unused
+    (BSplineConfig's notes give the mask). The other methods leave it
+    ``None``, and a record leaves the key out while it is ``None``, so their
+    saved diagnostics keep the keys they had before.
     """
 
     method: str
@@ -404,6 +414,7 @@ class RegistrationDiagnostics:
     backend_versions: dict[str, str | None] | None = None
     backend_parameters: dict[str, str] | None = None
     spacing_source: str | None = None
+    support_mask: dict | None = field(default=None, metadata={"record": "omit_none"})
 
 
 @dataclass(frozen=True)

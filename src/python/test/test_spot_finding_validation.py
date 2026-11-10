@@ -487,7 +487,7 @@ def test_s6_empty_input_zero_channels_and_the_mad_diagnostics(method, seed, spy,
     config = METHODS[method]
     calls = spy(type(config))
     for image in (np.zeros((8, 32, 32, 2), dtype=np.uint16), np.full((8, 32, 32), 100, dtype=np.uint16)):
-        # Local maxima still records the noise of a constant channel, whose MAD 0 warns (W-270).
+        # Local maxima still records the noise of a constant channel (W-270), which has no signal to refuse (W-789).
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", SpotFindingWarning)
             result = detect(image, config)
@@ -505,9 +505,12 @@ def test_s6_empty_input_zero_channels_and_the_mad_diagnostics(method, seed, spy,
     assert list(result.spots.columns) == ["spot_id", *[c.rstrip("?") for c in
                                                        SPOT_FINDING_METHODS[type(config)].output_columns]]
     if method == "local_maxima":
-        assert (noise["0"]["zero_fraction"], noise["0"]["mad"]) == (0.6, 0.0)
-        assert noise["1"]["zero_fraction"] == 0.4 and noise["1"]["mad"] > 0
-        assert len(found) == 1 and "channel '0'" in found[0]
+        # W-789: the 60 %-zero channel takes its median and MAD over its 4096 voxels above the minimum, and one
+        # SpotFindingWarning notes it; the 40 %-zero channel keeps every voxel.
+        assert noise["0"]["zero_fraction"] == 0.6 and noise["0"]["mad"] > 0
+        assert (noise["0"]["estimation"], noise["0"]["n_estimation"]) == ("above_minimum", 4096)
+        assert noise["1"]["zero_fraction"] == 0.4 and noise["1"]["mad"] > 0 and noise["1"]["estimation"] == "all"
+        assert len(found) == 1 and "channel '0'" in found[0] and "'above_minimum'" in found[0]
         assert result.diagnostics["warnings"] == tuple(found)
     else:
         # The noise record and its warning are the local-maxima §2.5 record (design/specs/spot-finding.md).

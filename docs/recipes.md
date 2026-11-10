@@ -55,16 +55,26 @@ for image data; the transform's sign is already suitable for application.
 
 ## Detect spots in a volume
 
-Add a channel axis to a known ZYX volume and compare two threshold modes:
+Detect a known ZYX volume, then compare two threshold modes after adding a
+background:
 
 ```{literalinclude} examples/recipes.py
 :language: python
 :pyobject: detect_spots
 ```
 
-Both calls find the spot at `(z, y, x) = (5, 10, 10)` in channel 0.
+The default `noise` mode refuses the bare volume with `SpotFindingError`: one bright
+voxel on zeros has a noise MAD of 0, so there is no noise to scale. With the background,
+both calls find the spot at `(z, y, x) = (5, 10, 10)` in channel 0.
 The {doc}`spot-finding reference <spot-finding-algorithms>` links the config
 classes. Choose a threshold for its mode rather than copying a value between modes.
+
+The workflow's `recipe: deep` normalizes each channel to `uint8` with truncation, which
+leaves most voxels at 0. On such a channel, `noise` mode takes the median and MAD over the
+voxels above the minimum and notes this in a `SpotFindingWarning`; a channel whose MAD
+there is still 0 raises `SpotFindingError`, and `threshold_mode` `adaptive` or `absolute`
+detects it. The guide's
+[truncated channels](spot-finding-contract.md#truncated-channels) give the rule.
 
 ## Choose the 3D background radius
 

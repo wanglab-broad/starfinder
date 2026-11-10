@@ -54,9 +54,13 @@ def json_sha256(value) -> str:
 # --- JSON records -----------------------------------------------------------------
 
 def jsonable(value):
-    """Plain JSON values; tuples become lists, types qualified names, NaN/inf null."""
+    """Plain JSON values; tuples become lists, types qualified names, NaN/inf null.
+
+    A dataclass field with metadata ``{"record": "omit_none"}`` is left out while its value is None.
+    """
     if is_dataclass(value) and not isinstance(value, type):
-        return {f.name: jsonable(getattr(value, f.name)) for f in fields(value)}
+        return {f.name: jsonable(getattr(value, f.name)) for f in fields(value)
+                if not (f.metadata.get("record") == "omit_none" and getattr(value, f.name) is None)}
     if isinstance(value, dict):
         return {str(k): jsonable(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):

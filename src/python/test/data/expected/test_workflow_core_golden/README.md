@@ -1,5 +1,10 @@
 # Expected values of the per-FOV core on the session dataset
 
+W-789 (2026-11-10) adds the two new keys of the noise record, `estimation` (`all`) and
+`n_estimation` (1048576, the voxels of a 16 × 256 × 256 channel), to the eight channel records of
+the two `candidates` stage records. No channel of this fixture has more than half its voxels at its
+minimum (zero fractions 0.17 to 0.30), so every other value, table and digest is unchanged.
+
 W-790 (2026-11-03) updates detection-dependent tables and record fields after
 regional-maximum collapse, using the maintained extractor below. Only the
 base-to-result differences are applied; existing migration exceptions and

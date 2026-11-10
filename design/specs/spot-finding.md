@@ -513,11 +513,13 @@ Starfinder-side deduplication, which is left as an open choice ([spot-finding-al
 
 % W-266
 
+% Amended 2026-11-10 W-789: the `noise` estimation set of local maxima; units and defaults are unchanged.
+
 **Native thresholds** (units and defaults; details in [spot-finding-algorithms](spot-finding-algorithms.md)):
 
 | Method | Threshold | Units | Native default |
 | --- | --- | --- | --- |
-| `local_maxima` | `threshold_mode`, `threshold_value` | robust σ (`noise`) or fraction of a maximum | `noise`, 5.0 |
+| `local_maxima` | `threshold_mode`, `threshold_value` | robust σ (`noise`, over all voxels or, on a channel more than half at its minimum, the voxels above it) or fraction of a maximum | `noise`, 5.0 |
 | `starfish_log` | `threshold` | absolute scale-normalized LoG response of the dtype-scaled [0, 1] image (about 0.5 × spot amplitude in 2D and 0.53 × in 3D at matched σ) | none (required) |
 | `spotiflow` | `prob_thresh` | probability on the sigmoid heatmap, [0, 1] | stored per model: 0.3, 0.4, 0.5, 0.532 |
 | `piscis` | `threshold` | value of the max-pooled sigmoid label map, [0, 1], kept when strictly above | 0.5 |
@@ -627,13 +629,14 @@ holds the `methods` list of provenance entries (registry move 5).
 `singleton_z_policy`, `measurements`) and these:
 
 % Amended 2026-11-03 for W-790: declare plateau counts and their per-round placement.
+% Amended 2026-11-10 W-789: the noise record's estimation set (`estimation`, `n_estimation`); the MAD-0 warning is replaced by the above-minimum note and the refusal.
 
 | Key | Content |
 | --- | --- |
 | `counts` | Candidates per channel (per round under `rounds` in a multi-round result). |
 | `outcomes` | Per channel: `ok` (at least one candidate), `empty` (the method ran and found nothing) or `constant` (a constant channel, which yields no candidates without running the method). A failure is never an outcome: it raises (dependency, weights, geometry, invalid input or a library exception wrapped with its message). |
 | `effective_settings` | Per channel, the effective config with resolved native defaults. |
-| `noise` | Local maxima, every threshold mode: per channel `zero_fraction`, `median`, `mad`, `threshold` (the noise-mode record of preprocessing). A `SpotFindingWarning` (a `UserWarning`) naming round and channel is emitted, and its message added to `warnings`, when MAD is 0 or more than half of the voxels are zero; the threshold does not change. |
+| `noise` | Local maxima, every threshold mode: per channel `zero_fraction`, `median`, `mad`, `threshold` (the noise-mode record of preprocessing), `estimation` and `n_estimation`. The median and MAD are taken over all voxels (`estimation` `all`) except in `noise` mode on a channel with signal of which more than half the voxels equal its minimum, where they are taken over the voxels above the minimum (`above_minimum`); `n_estimation` counts the voxels used. A `SpotFindingWarning` (a `UserWarning`) naming round and channel notes `above_minimum`, and its message is added to `warnings`. In `noise` mode a channel with signal whose MAD over that set is 0 raises `SpotFindingError` naming the round and channel, the fraction of voxels at the minimum and the set, and pointing to `adaptive` or `absolute`. A tiled FOV records the keys per tile and in its FOV-level statistics. |
 | `plateaus` | Local maxima and noise landmarks: per channel, `maxima` counts multi-voxel maxima collapsed and `removed_voxels` counts their removed voxels, before border and spacing exclusions; omitted when all counts are zero |
 | `warnings` | The warning messages of this call. |
 | `software` | Versions of starfinder, NumPy, SciPy and scikit-image, and of the method's library and torch. |

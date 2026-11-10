@@ -3,6 +3,8 @@
 itk-elastix is imported only when one of these methods runs. Z=1 inputs are
 estimated as 2D images. The shared numerical rules (pyramid, sampling, seed,
 diagnostics and failures) are those of design/specs/registration-algorithms.md.
+A B-spline after earlier steps samples the reference only inside the eroded
+support of the resampled moving signal (W-824; BSplineConfig's notes).
 """
 
 import re
@@ -18,6 +20,10 @@ from ._errors import RegistrationBackendUnavailableError, RegistrationEstimation
 _EXTRA = "registration-elastix"
 _METRICS = {"mattes": "AdvancedMattesMutualInformation", "ncc": "AdvancedNormalizedCorrelation"}
 _UNKNOWN_SPACING = "spacing_zyx is unknown; estimated with unit spacing (spacing_source='unknown_unit')"
+# The B-spline support mask: pull points within this many voxels of the moving grid's index range count as
+# inside it, and the mask is eroded by this many voxels from its edges inside the grid (W-824).
+_SUPPORT_TOLERANCE = 1e-6
+_SUPPORT_EROSION = 2
 
 
 def _import_itk():
@@ -50,8 +56,11 @@ def _schedule(levels, shape_zyx, dim):
     return schedule
 
 
-def _parameter_object(itk, config, shape_zyx, spacing_zyx, dim):
-    """elastix's default parameter map of the method, with the settings of design/specs/registration-algorithms.md."""
+def _parameter_object(itk, config, shape_zyx, spacing_zyx, dim, masked=False):
+    """elastix's default parameter map of the method, with the settings of design/specs/registration-algorithms.md.
+
+    masked adds ErodeMask false: a fixed mask is used as given at every pyramid level.
+    """
     levels = config.levels or _levels(shape_zyx)
     schedule = [str(f) for f in _schedule(levels, shape_zyx, dim)]
     settings = dict(
@@ -67,6 +76,8 @@ def _parameter_object(itk, config, shape_zyx, spacing_zyx, dim):
         if grid is None:
             grid = shape_zyx[2] * spacing_zyx[2] / 8
         settings.update(FinalGridSpacingInPhysicalUnits=[repr(float(grid))], GridSpacingSchedule=["1"] * levels)
+        if masked:
+            settings.update(ErodeMask=["false"])
     else:
         settings.update(AutomaticTransformInitialization=["true"],
                         AutomaticTransformInitializationMethod=["GeometricalCenter"])
@@ -81,10 +92,15 @@ def _parameter_object(itk, config, shape_zyx, spacing_zyx, dim):
     return parameter_object, {key: " ".join(value) for key, value in sorted(parameter_map.items())}
 
 
-def _register(itk, fixed, moving, parameter_object, directory):
-    """Run elastix once, logging to directory; returns the finished ElastixRegistrationMethod."""
+def _register(itk, fixed, moving, parameter_object, directory, mask=None):
+    """Run elastix once, logging to directory; returns the finished ElastixRegistrationMethod.
+
+    mask, when given, is the fixed-image mask, an itk image on the fixed image's grid.
+    """
     registration = itk.ElastixRegistrationMethod.New(fixed, moving)
     registration.SetParameterObject(parameter_object)
+    if mask is not None:
+        registration.SetFixedMask(mask)
     registration.SetLogToConsole(False)
     registration.SetLogToFile(True)
     registration.SetOutputDirectory(str(directory))
@@ -108,6 +124,32 @@ def _parse_log(text):
         if match:
             stops.append(match.group(1).strip())
     return tuple(iterations), tuple(metrics), tuple(stops)
+
+
+def _support_mask(earlier_steps, shape_zyx, dim):
+    """The eroded support of the moving signal resampled through earlier_steps, a bool ZYX array.
+
+    A reference voxel is in the support when its pull through the earlier steps lies within the moving grid's
+    index range [0, n - 1] on every axis (within _SUPPORT_TOLERANCE). The support is eroded by _SUPPORT_EROSION
+    voxels with the face-connected structuring element, in Y and X only for a 2D estimate. Beyond the grid counts
+    as support (border_value=1), so the grid's own faces, which hold data, are not eroded: the P6 pilot's zero
+    border also removed them, which left 3 of 8 planes after a 1-plane Z shift, too few for elastix's samplers.
+    """
+    from scipy.ndimage import binary_erosion
+
+    upper = np.asarray(earlier_steps.moving_shape_zyx, dtype=np.float64)[:, None, None] - 1
+    support = np.empty(shape_zyx, dtype=bool)
+    for z in range(shape_zyx[0]):
+        q = earlier_steps.pull_points(z)
+        support[z] = np.all((q >= -_SUPPORT_TOLERANCE) & (q <= upper + _SUPPORT_TOLERANCE), axis=0)
+    if dim == 2:
+        return binary_erosion(support[0], iterations=_SUPPORT_EROSION, border_value=1)[None]
+    return binary_erosion(support, iterations=_SUPPORT_EROSION, border_value=1)
+
+
+def _log_failure(text):
+    """The Description lines of an elastix log's exceptions, joined."""
+    return "; ".join(line.split(":", 1)[1].strip() for line in text.splitlines() if line.startswith("Description:"))
 
 
 def _values(parameters):
@@ -139,11 +181,31 @@ def _parameter_names(method, dim):
     return tuple(f"matrix_{r}{c}" for r in axes for c in axes) + translations
 
 
-def _estimate(reference, moving, config, geometry):
-    """Registered estimator of RigidConfig, AffineConfig and BSplineConfig."""
+def _estimate(reference, moving, config, geometry, earlier_steps=None):
+    """Registered estimator of RigidConfig, AffineConfig and BSplineConfig.
+
+    earlier_steps (B-spline only) is the chain moving was resampled through, or None.
+    """
     from ._config import WarpConfig
     from ._types import AffineTransform, BSplineTransform
 
+    shape = reference.shape
+    dim = 2 if shape[0] == 1 else 3
+    # The support mask comes first: a moving round shifted wholly out of the grid resamples to zeros, and its
+    # refusal names the empty mask rather than the constant signal.
+    mask, extra = None, {}
+    if config.method == "bspline":
+        masked = earlier_steps is not None and config.mask_support
+        record = dict(used=masked, reason=None if masked else
+                      ("no earlier step" if earlier_steps is None else "mask_support=False"), voxels=None, fraction=None)
+        if masked:
+            mask = _support_mask(earlier_steps, shape, dim)
+            record.update(voxels=int(mask.sum()), fraction=float(mask.sum() / mask.size))
+            if record["voxels"] == 0:
+                raise RegistrationEstimationError(
+                    f"bspline support mask is empty: 0 of {mask.size} voxels remain after the support of the "
+                    f"earlier steps is eroded by {_SUPPORT_EROSION} voxels")
+        extra = dict(support_mask=record)
     if np.ptp(reference) == 0 or np.ptp(moving) == 0:
         raise RegistrationEstimationError("constant registration signal")
     itk = _import_itk()
@@ -151,17 +213,24 @@ def _estimate(reference, moving, config, geometry):
     source, warnings = "metadata", ()
     if spacing is None:
         spacing, source, warnings = (1.0, 1.0, 1.0), "unknown_unit", (_UNKNOWN_SPACING,)
-    shape = reference.shape
-    dim = 2 if shape[0] == 1 else 3
 
-    def image(array):
-        result = itk.GetImageFromArray(np.ascontiguousarray(array[0] if dim == 2 else array, dtype=np.float32))
+    def image(array, dtype=np.float32):
+        result = itk.GetImageFromArray(np.ascontiguousarray(array[0] if dim == 2 else array, dtype=dtype))
         result.SetSpacing([float(v) for v in spacing[::-1][:dim]])
         return result
 
-    parameter_object, parameters = _parameter_object(itk, config, shape, spacing, dim)
+    parameter_object, parameters = _parameter_object(itk, config, shape, spacing, dim, masked=mask is not None)
     with tempfile.TemporaryDirectory(prefix="starfinder-elastix-") as directory:
-        registration = _register(itk, image(reference), image(moving), parameter_object, directory)
+        arguments = (itk, image(reference), image(moving), parameter_object, directory)
+        try:
+            registration = _register(*arguments) if mask is None else _register(*arguments, mask=image(mask, np.uint8))
+        except RuntimeError as exc:
+            if mask is None:
+                raise
+            text = "".join(path.read_text(errors="replace") for path in sorted(Path(directory).glob("*.log")))
+            raise RegistrationEstimationError(
+                f"bspline estimation with a support mask of {record['voxels']} voxels "
+                f"({record['fraction']:.4g} of the grid) failed: {_log_failure(text) or exc}") from exc
         text = "".join(path.read_text(errors="replace") for path in sorted(Path(directory).glob("*.log")))
     iterations, metrics, stops = _parse_log(text)
     transform = itk.down_cast(registration.ConvertToItkTransform(registration.GetNthTransform(0)))
@@ -184,7 +253,7 @@ def _estimate(reference, moving, config, geometry):
         result = AffineTransform(_index_matrix(matrix, center, translation, spacing), physical=physical, **geometry)
     details = dict(converged=None, iterations_completed=iterations, final_metric_value=metrics,
                    stop_condition=stops, warnings=warnings, spacing_source=source, backend_parameters=parameters,
-                   backend_versions={name: _version(name) for name in ("itk-elastix", "itk")})
+                   backend_versions={name: _version(name) for name in ("itk-elastix", "itk")}, **extra)
     return result, "elastix", WarpConfig(backend="scipy"), details
 
 
@@ -198,6 +267,9 @@ def estimate_affine(reference, moving, config, geometry):
     return _estimate(reference, moving, config, geometry)
 
 
-def estimate_bspline(reference, moving, config, geometry):
-    """Registered estimator of BSplineConfig: a cubic B-spline stored as BSplineTransform."""
-    return _estimate(reference, moving, config, geometry)
+def estimate_bspline(reference, moving, config, geometry, earlier_steps=None):
+    """Registered estimator of BSplineConfig: a cubic B-spline stored as BSplineTransform.
+
+    earlier_steps is the chain moving was resampled through (estimate_transform's), or None.
+    """
+    return _estimate(reference, moving, config, geometry, earlier_steps)

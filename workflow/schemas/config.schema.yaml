@@ -928,6 +928,7 @@ $defs:
       samples: {type: integer, minimum: 1}
       levels: {$ref: "#/$defs/registration_elastix_levels"}
       random_seed: {type: integer, minimum: 0}
+      mask_support: {type: boolean}
 
   registration_step_demons:
     type: object

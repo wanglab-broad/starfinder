@@ -46,6 +46,17 @@ See {py:class}`~starfinder.registration.AffineConfig` for the precise rules.
 
 Estimate a smooth deformation on a control grid.
 
+After earlier steps, elastix gets a fixed-image mask by default: the reference voxels
+whose pull through the earlier steps lands inside the moving grid, eroded by 2 voxels
+from its edges inside the grid, with elastix's own mask erosion off. The step's
+diagnostics record it as `support_mask`. An empty mask, or one too small for elastix,
+raises `RegistrationEstimationError` with its voxel count.
+
+The erosion does not remove the reference grid's own faces. They hold data; the
+zero-filled border lies only where the pull leaves the moving grid. Eroding the faces
+too, as the 2026-11-06 talk pilot's mask did, leaves 3 of 8 planes after a 1-plane Z
+shift, too few for elastix's samplers on a small stack.
+
 See {py:class}`~starfinder.registration.BSplineConfig` for the precise rules.
 
 ```{config-options} starfinder.registration.BSplineConfig
@@ -151,6 +162,7 @@ The following keys describe completed attempts.
 | `backend`, `backend_versions` | Backend identity and package versions | — |
 | `reference`, `reference_sha256` | The reference round's name, or the external reference's label and image hash | — |
 | `config` | The method config that ran | — |
+| `support_mask` | B-spline only: `used`, `reason` when unused, the mask's `voxels` and its `fraction` of the grid, as in the step's diagnostics | — |
 | `application_config` | — | The `WarpConfig` of the final resampling |
 | `outcome` | `"succeeded"`, `"failed"` or `"rejected"` | `"succeeded"` or `"application_failed"` |
 | `failure` | Error type and message, and the criterion of a rejection | Error type and message |

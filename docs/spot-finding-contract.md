@@ -125,7 +125,10 @@ threshold:
 
 * `noise`, the default: `median + threshold_value × 1.4826 × MAD` of the channel,
   where MAD is the median absolute deviation, so the value counts robust standard
-  deviations above the median;
+  deviations above the median. The median and MAD are taken over all the channel's
+  voxels when at most half of them equal its minimum, and otherwise over the voxels
+  above its minimum, the ones a truncation did not clip; see
+  [Truncated channels](#truncated-channels);
 * `adaptive`: `threshold_value` times the channel's maximum;
 * `adaptive_round`: `threshold_value` times the maximum of the whole image, all
   channels together;
@@ -133,11 +136,30 @@ threshold:
 * `absolute`: `threshold_value` itself, in the image's grey levels; the tile task of
   tiled execution detects with the FOV-level threshold of each channel this way.
 
-Local maxima records each channel's median, MAD and zero fraction in
-`diagnostics["noise"]`, in every mode, and a `SpotFindingWarning` names a channel
-whose median and MAD do not measure its noise; its threshold is unchanged. The other
-pipeline methods have their own thresholds: `threshold` for `starfish_log` and `piscis`,
-`prob_thresh` for `spotiflow`.
+Local maxima records each channel's median, MAD, zero fraction and threshold in
+`diagnostics["noise"]`, in every mode, with the set the median and MAD were taken over:
+`estimation` is `"all"` or `"above_minimum"` and `n_estimation` counts its voxels. Only
+`noise` mode uses `"above_minimum"`. The other pipeline methods have their own
+thresholds: `threshold` for `starfish_log` and `piscis`, `prob_thresh` for `spotiflow`.
+
+### Truncated channels
+
+A channel whose low values were clipped to one value, such as the `uint8` output of the
+workflow's `recipe: deep` (min-max normalization with truncation), can have most of its
+voxels at its minimum. Their median is the minimum and their MAD is 0, so the median and
+MAD of all voxels would make the threshold the minimum and every regional maximum a
+spot. In `noise` mode, a channel with more than half its voxels at its minimum therefore
+takes its median and MAD over the voxels above the minimum, and a `SpotFindingWarning`,
+listed in `diagnostics["warnings"]`, notes it. The rule applies per channel, to the image
+detection receives, after any preprocessing.
+
+A channel with signal (its maximum above its minimum) whose MAD over that set is still 0
+has no noise for `noise` mode to scale: detection raises `SpotFindingError`, naming the
+round and channel, the fraction of voxels at the minimum and the set used. Detect such a
+channel with `threshold_mode` `adaptive` or `absolute`. A constant channel, an all-zero
+one among them, gives no spots and no error. Tiled execution applies the same rule to the
+FOV-level statistics of its global task. The registration landmarks of
+`NoiseLandmarkConfig` keep the median and MAD of all voxels.
 
 ## Detection plan
 

@@ -185,25 +185,33 @@
     "zero_fraction": 0.24458026885986328,
     "median": 1.0,
     "mad": 1.0,
-    "threshold": 8.413
+    "threshold": 8.413,
+    "estimation": "all",
+    "n_estimation": 1048576
    },
    "ch01": {
     "zero_fraction": 0.29561519622802734,
     "median": 1.0,
     "mad": 1.0,
-    "threshold": 8.413
+    "threshold": 8.413,
+    "estimation": "all",
+    "n_estimation": 1048576
    },
    "ch02": {
     "zero_fraction": 0.19617938995361328,
     "median": 2.0,
     "mad": 1.0,
-    "threshold": 9.413
+    "threshold": 9.413,
+    "estimation": "all",
+    "n_estimation": 1048576
    },
    "ch03": {
     "zero_fraction": 0.22630882263183594,
     "median": 1.0,
     "mad": 1.0,
-    "threshold": 8.413
+    "threshold": 8.413,
+    "estimation": "all",
+    "n_estimation": 1048576
    }
   },
   "effective_settings": {

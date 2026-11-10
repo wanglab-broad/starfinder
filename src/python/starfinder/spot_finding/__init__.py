@@ -16,7 +16,8 @@ from starfinder.image import ImageMetadata, _validate_image
 
 from ._config import (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, PiscisConfig, SpotiflowConfig,
     StarfishLogConfig)
-from ._errors import MissingModelError, ModelHashMismatchError, SpotFindingBackendUnavailableError, SpotFindingWarning
+from ._errors import (MissingModelError, ModelHashMismatchError, SpotFindingBackendUnavailableError, SpotFindingError,
+    SpotFindingWarning)
 from ._methods import SPOT_FINDING_METHODS as _SPOT_FINDING_METHODS
 from ._methods import (MethodContext, SpotFindingConfig, SpotFindingSpec, check_columns, check_method_device,
     constant_details, empty_table, per_channel, require_gpu, require_method, skips_constant)
@@ -37,7 +38,8 @@ KNOWN_MODELS = _KNOWN_MODELS
 __all__ = ["LocalMaximaConfig", "NoiseLandmarkConfig", "PercentileCentroidConfig", "StarfishLogConfig",
            "SpotiflowConfig", "PiscisConfig",
            "SpotFindingResult", "find_spots", "plot_detections", "SPOT_FINDING_METHODS", "SpotFindingSpec",
-           "SpotFindingPlan", "ChannelOverride", "SpotFindingBackendUnavailableError", "SpotFindingWarning",
+           "SpotFindingPlan", "ChannelOverride", "SpotFindingBackendUnavailableError", "SpotFindingError",
+           "SpotFindingWarning",
            "KNOWN_MODELS", "KnownModel", "ModelFile", "resolve_model", "fetch_model",
            "MissingModelError", "ModelHashMismatchError"]
 
@@ -168,10 +170,15 @@ def find_spots(
     require uint8/uint16. Unknown physical geometry remains unknown.
 
     Local maxima records, per channel and in every threshold mode, the noise
-    record diagnostics['noise'] (zero fraction, median, MAD and threshold)
-    and emits a SpotFindingWarning, also listed in diagnostics['warnings'],
-    when a channel's MAD is 0 or more than half of its voxels are zero; the
-    threshold is unchanged. With merge_radius_zyx set, diagnostics['merged']
+    record diagnostics['noise'] (zero fraction, median, MAD, threshold, and
+    the estimation set of the median and MAD, 'all' or 'above_minimum', with
+    its voxel count n_estimation). In noise mode a channel with signal of
+    which more than half the voxels equal its minimum (a truncated channel)
+    takes its median and MAD over the voxels above the minimum, and a
+    SpotFindingWarning, also listed in diagnostics['warnings'], notes it;
+    a channel with signal whose MAD over its estimation set is 0 raises
+    SpotFindingError, naming the round and channel, instead of detecting
+    with the median as threshold. With merge_radius_zyx set, diagnostics['merged']
     holds the number of maxima the within-channel merge removed per channel.
     Local maxima and noise landmarks report diagnostics['plateaus'] per
     channel (maxima, removed_voxels): tied regional maxima collapsed and
@@ -214,16 +221,13 @@ def _channel_configs(plan, n_channels):
     return configs
 
 
-def _noise_warning(record, label, round_name):
-    reasons = []
-    if record['mad'] == 0:
-        reasons.append("its noise MAD is 0")
-    if record['zero_fraction'] > 0.5:
-        reasons.append(f"{record['zero_fraction']:.1%} of its voxels are zero")
+def _noise_note(record, label, round_name):
+    """The note of a noise record estimated on the voxels above the channel's minimum (W-789)."""
     where = f"round {round_name!r}, " if round_name is not None else ""
-    return (f"spot finding: {where}channel {label!r}: {' and '.join(reasons)}, so its median "
-            f"({record['median']!r}) and MAD do not measure its noise; the threshold {record['threshold']!r} "
-            "is unchanged")
+    return (f"spot finding: {where}channel {label!r}: more than half of its voxels are at its minimum, so its noise "
+            f"median ({record['median']!r}) and MAD ({record['mad']!r}) were estimated on the "
+            f"{record['n_estimation']} voxels above the minimum (estimation 'above_minimum'); the threshold is "
+            f"{record['threshold']!r}")
 
 
 def _model_record(models, keys):
@@ -246,7 +250,7 @@ def _model_artifacts(record):
 
 
 def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=None):
-    """find_spots; round_name (from FOV.find_spots) is named in the warnings."""
+    """find_spots; round_name (from FOV.find_spots) is named in the warnings and the refusal."""
     from starfinder._records import jsonable, tuples
     image = _validate_image(image)
     base = config.config if isinstance(config, SpotFindingPlan) else config
@@ -287,7 +291,7 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
         ran = tuple(c for c in channels if c not in constant)
         details = {}
         if ran:
-            table, details = spec.run(image, group_config, MethodContext(ran, device))
+            table, details = spec.run(image, group_config, MethodContext(ran, device, round_name))
             check_columns(spec, table)
             tables.append(table)
             if per_channel(spec):
@@ -348,8 +352,8 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
     if noise:
         diagnostics['noise'] = {keys[c]: noise[c] for c in sorted(noise)}
         for c in sorted(noise):
-            if noise[c]['mad'] == 0 or noise[c]['zero_fraction'] > 0.5:
-                messages.append(_noise_warning(noise[c], keys[c], round_name))
+            if noise[c]['estimation'] == 'above_minimum':
+                messages.append(_noise_note(noise[c], keys[c], round_name))
                 warnings.warn(messages[-1], SpotFindingWarning, stacklevel=3)
     if models:
         diagnostics['model'] = _model_record(models, keys)
