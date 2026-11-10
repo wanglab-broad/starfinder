@@ -160,12 +160,18 @@ class RegistrationSignalConfig:
 * **Moving signal of step k.** It is built once from the moving round's source
   and resampled in float64 through the composition of steps 1 to k−1 with the
   recipe's interpolation and boundary policy, without integer rounding. The
-  reference signal is not resampled.
+  reference signal is not resampled. A B-spline step k > 1 also receives steps
+  1 to k−1 (`estimate_transform(..., earlier_steps=...)`) and, unless
+  `mask_support=False`, restricts elastix's fixed-image samples to the support
+  of that resampled signal, eroded by 2 voxels
+  ([algorithms](registration-algorithms.md), "B-spline").
 * **Default.** `mode="max"`. This is an intentional change for Python callers
   that relied on the sum; `sum` remains selectable.
 * **Per-step override.** `RegistrationStep.signal` replaces the recipe's signal
   for that step only; it exists for the legacy mapping, in which the global and
   local blocks may name different representations.
+
+% Amended 2026-11-10 for W-824: the moving signal's support masks a B-spline step after earlier steps; before, elastix sampled the zero-filled border too.
 
 % §2.5
 

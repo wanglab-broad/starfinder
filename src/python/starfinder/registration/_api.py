@@ -5,7 +5,7 @@ import numpy as np
 from starfinder._registry import check_shape, require, spec_for
 from starfinder.image import ImageMetadata, IncompatibleGeometryError, _validate_image
 
-from ._config import WarpConfig
+from ._config import BSplineConfig, WarpConfig
 from ._errors import (
     InvalidRegistrationConfigError,
     RegistrationBackendUnavailableError,
@@ -33,6 +33,7 @@ def estimate_transform(
     config: RegistrationConfig,
     reference_metadata: ImageMetadata,
     moving_metadata: ImageMetadata,
+    earlier_steps: TransformChain | None = None,
 ) -> RegistrationResult:
     """Estimate from finite ZYX arrays on equal grids without mutating inputs.
 
@@ -48,6 +49,8 @@ def estimate_transform(
         Spatial geometry of the reference image.
     moving_metadata : ImageMetadata
         Spatial geometry of the moving image.
+    earlier_steps : TransformChain or None
+        Chain of the earlier steps the moving image was resampled through, ending on the moving image's grid; ``None`` when it was not resampled.
 
     Returns
     -------
@@ -66,6 +69,12 @@ def estimate_transform(
     unknown in both metadata values; the physical-space methods then use unit
     spacing and record spacing_source="unknown_unit". No algorithm
     substitution occurs, including on insufficient landmarks.
+
+    earlier_steps is used only by BSplineConfig: with mask_support=True,
+    elastix samples the reference only where the pull through those steps
+    lands inside the moving grid, eroded by 2 voxels (BSplineConfig's notes).
+    FOV registration passes the recipe's earlier steps; the other methods
+    ignore it. Its reference grid must be the moving image's.
     """
     spec = spec_for(REGISTRATION_METHODS, config, "registration method", InvalidRegistrationConfigError,
                     "expected a typed registration config")
@@ -78,10 +87,18 @@ def estimate_transform(
         reference_metadata=reference_metadata,
         moving_metadata=moving_metadata,
     )
+    if earlier_steps is not None:
+        if not isinstance(earlier_steps, TransformChain):
+            raise InvalidRegistrationConfigError("earlier_steps must be a TransformChain or None")
+        if earlier_steps.reference_shape_zyx != moving_image.shape:
+            raise IncompatibleGeometryError("earlier_steps do not end on the moving image's grid")
     check_shape(spec, reference_image.shape)
     require(spec, "registration method", RegistrationBackendUnavailableError)
+    # Only the B-spline estimator takes the earlier steps, for its support mask (W-824).
+    extra = dict(earlier_steps=earlier_steps) if type(config) is BSplineConfig else {}
     try:
-        transform, backend, application, *details = spec.run(reference_image, moving_image, config, geometry)
+        transform, backend, application, *details = spec.run(reference_image, moving_image, config, geometry,
+                                                             **extra)
     except ImportError as exc:
         raise RegistrationBackendUnavailableError(str(exc)) from exc
     except (np.linalg.LinAlgError, RuntimeError, ValueError) as exc:

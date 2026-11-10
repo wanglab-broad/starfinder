@@ -46,7 +46,9 @@ class RegistrationSpec:
     run(reference, moving, config, geometry) returns the transform, the
     backend that ran and its application WarpConfig, optionally followed by a
     dict of further RegistrationDiagnostics fields; estimate_transform calls
-    it after the checks below and callers never call it directly.
+    it after the checks below and callers never call it directly. The
+    B-spline estimator alone also receives estimate_transform's
+    earlier_steps as a keyword (its support mask).
     step_kind is "global" or "local" (the allowed recipe sequences).
     dimensions holds 2 when a Z=1 input is estimated as 2D and 3 when Z>1 is
     estimated in 3D. transform_kind is the kind of the returned transform

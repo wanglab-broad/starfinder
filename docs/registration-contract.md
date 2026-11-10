@@ -78,6 +78,14 @@ The generated table lists dimensions and optional extras; the
 
 * `fov.images[round]` holds the registered image.
 * `fov.registration_results[round]` holds step results with transforms and diagnostics.
+  A step's {py:class}`~starfinder.registration.RegistrationDiagnostics` record:
+  * `method`, `backend`, `effective_config` and `warnings`;
+  * the optimizer's progress: `converged`, `iterations_completed`, `final_metric_value`
+    and `stop_condition`, and for demons `elapsed_iterations` and `final_rms_change`;
+  * the landmark counts of TPS and CPD;
+  * `backend_versions`, `backend_parameters` and `spacing_source`;
+  * for a B-spline step, `support_mask`: whether the support mask was used, why not
+    when it was not, its voxel count and its fraction of the grid.
 * `fov.registration_chains[round]` holds the composed transform.
 * `fov.registration_attempts[round]` records estimation and application attempts.
 * `fov.registration_record` summarizes the recipe and application settings.
@@ -94,6 +102,12 @@ lists the files, and {doc}`checkpoints` shows how to reload them.
 * `warp`: the final image resampling.
 * `qc`: rejection criteria for alignment quality.
 * A step's `recovery`: alternatives after an estimation failure.
+
+A B-spline step after a global step is estimated on the moving signal resampled
+through that step, which is zero-filled where the shift moved it off the grid.
+By default elastix samples the reference only where that signal has data, eroded
+by 2 voxels; `BSplineConfig(mask_support=False)` turns the mask off. A B-spline that
+is the first step uses no mask.
 
 {py:class}`~starfinder.registration.RegistrationRecipe` documents the recipe.
 For other rounds, external references and morphology preparation, see
@@ -117,6 +131,7 @@ for geometry requirements and method limitations, and
 | `RegistrationBackendUnavailableError` | An optional backend is missing | Install the extra shown in the methods table |
 | `InsufficientLandmarksError` | Landmark estimation lacks usable matches | Inspect the registration signal and consider another method |
 | `RegistrationRejectedError` | Alignment fails a configured quality criterion | Inspect the QC record before adjusting the recipe |
+| `RegistrationEstimationError` naming a B-spline support mask | The earlier steps leave too few voxels with data, after erosion, for elastix | Check the earlier steps' transforms; `BSplineConfig(mask_support=False)` estimates without the mask |
 
 ## How it is checked
 

@@ -224,6 +224,7 @@ image with the selected ZYX detection view; the current default file is
 | `fov.register(RegistrationStep(...))` | `fov.register(RegistrationRecipe((RegistrationStep(...),)))` |
 | Per-step image selection and warp | Recipe `signal` and `warp`; step-specific `signal` where needed |
 | Earlier merged-channel sum | `RegistrationSignalConfig(mode="sum")`; the default selection is maximum |
+| A `BSplineConfig` step after earlier steps fitted the zero-filled border of the shifted signal | elastix samples only the support of the shifted signal, eroded by 2 voxels, so such chains give different B-spline estimates; `BSplineConfig(mask_support=False)` reproduces the earlier estimate, and a B-spline first step is unchanged. A record saved before the change has no `support_mask` in its diagnostics, and its reloaded `effective_config` reads the default `mask_support=True` although no mask was used |
 
 ### Translation displacement
 

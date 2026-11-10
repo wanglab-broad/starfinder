@@ -157,12 +157,15 @@ ideal registration pull map of round r is `F_r`, and the truth pull field is
 | Metric | `AdvancedNormalizedCorrelation` (the backend comparison's candidate k1), with no bending-energy penalty, as in the backend comparison's matched setting. |
 | Optimizer | Adaptive stochastic gradient descent, 200 iterations per level, 4096 samples. |
 | Pyramid | Shared rule above; `GridSpacingSchedule` 1 at every level, so the control spacing is constant over levels. |
-| Initialization | Zero coefficients (identity). A preceding global step provides the global alignment. |
-| Parameters (units) | `BSplineConfig(metric="ncc", grid_spacing_physical=None, iterations=200, samples=4096, levels=None, random_seed=1)`. `grid_spacing_physical` is the final control-point spacing in the spatial unit of `spacing_zyx`, the same on every axis; `None` means the physical YX extent `X · spacing_x` divided by 8 (the backend comparison's matched rule: 64 units on `medium`, 128 on `large`). |
+| Initialization | Zero coefficients (identity). A preceding global step provides the global alignment; the B-spline is then estimated on the moving signal resampled through it, whose zero-filled border is masked out (next row). |
+| Fixed-image mask | After earlier steps, with `mask_support=True` (the default): the reference-grid voxels whose pull through the earlier steps lands inside the moving grid's index range (within 1e-6 voxel), eroded by 2 voxels from its edges inside the grid (face-connected structuring element; in Y and X only for Z=1; the grid's own faces hold data and are not eroded, unlike the pilot's zero-border erosion, which left too few planes for elastix on 8-plane stacks), passed to elastix with `ErodeMask false`. An empty mask, or one elastix's samplers cannot use, raises `RegistrationEstimationError` with the mask's voxel count, without an unmasked fallback. A first step, or `mask_support=False`, uses no mask. The diagnostics record `support_mask` (`used`, `reason`, `voxels`, `fraction`). The P6 talk pilot (2026-11-05, poly-5333) measured round-2 p95 errors at the amplicons of 8.05 voxels without the mask and 0.40 with it. |
+| Parameters (units) | `BSplineConfig(metric="ncc", grid_spacing_physical=None, iterations=200, samples=4096, levels=None, random_seed=1, mask_support=True)`. `grid_spacing_physical` is the final control-point spacing in the spatial unit of `spacing_zyx`, the same on every axis; `None` means the physical YX extent `X · spacing_x` divided by 8 (the backend comparison's matched rule: 64 units on `medium`, 128 on `large`). |
 | Defaults | As listed; not operating points. |
 | Convergence | As for rigid. |
 | Failure | Shared rules above. |
 | Resources (the backend comparison) | 1.1 s (1×32×32), 4.0 s (9×32×32), 1.7 s (1×512×512), 8.8 s (32×512×512), 11.6 s (30×1024×1024); peak RSS up to 1598 MiB on `large`. Converting the grid to a dense float64 field adds 24 bytes per voxel if a caller requests the whole field; the final resampling evaluates it plane by plane. |
+
+% Amended 2026-11-10 for W-824: a B-spline after earlier steps gets a fixed-image mask on the support of the resampled moving signal (rows Initialization, Fixed-image mask and Parameters); before, it fitted the zero-filled border.
 
 % W-244
 

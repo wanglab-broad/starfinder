@@ -139,8 +139,32 @@ class BSplineConfig:
         Pyramid level count; ``None`` requests an image-size-derived count.
     random_seed : int
         Nonnegative random sampling seed.
+    mask_support : bool
+        Whether a step after earlier steps restricts elastix's fixed-image samples to the eroded support of the resampled moving signal.
     method : str
         Method identifier, ``bspline``.
+
+    Notes
+    -----
+    A B-spline step after earlier steps is estimated on the moving signal
+    resampled through them, which is zero-filled where their pull leaves the
+    moving grid. With ``mask_support=True`` (the default) elastix gets a
+    fixed-image mask: the reference-grid voxels whose pull through the earlier
+    steps lands inside the moving grid (index range ``[0, n - 1]`` on every
+    axis, within 1e-6 voxel), eroded by 2 voxels from its edges inside the
+    grid with the face-connected structuring element (in Y and X only for a
+    Z=1 input, which is estimated in 2D), with elastix's own per-level mask
+    erosion off (``ErodeMask false``). Voxels beyond the reference grid count
+    as support, so the grid's own faces are not eroded: they hold data, and
+    the zero-filled border lies only where the pull leaves the moving grid.
+    Eroding the faces too, as the P6 talk pilot's mask did, would leave 3 of
+    8 planes after a 1-plane Z shift, too few for elastix's samplers on a
+    small stack. An empty mask, or one too small for elastix's
+    samplers, raises ``RegistrationEstimationError`` with the mask's voxel
+    count; nothing falls back to an unmasked estimate. A B-spline that is the
+    first step, or ``mask_support=False``, uses no mask and estimates exactly
+    as before W-824. The diagnostics' ``support_mask`` records whether the
+    mask was used, why not, its voxel count and its fraction of the grid.
     """
 
     metric: str = "ncc"
@@ -149,12 +173,15 @@ class BSplineConfig:
     samples: int = 4096
     levels: int | None = None
     random_seed: int = 1
+    mask_support: bool = True
     method: str = field(default="bspline", init=False)
 
     def __post_init__(self):
         _elastix_config(self, ("ncc", "mattes"))
         if self.grid_spacing_physical is not None:
             _number(self.grid_spacing_physical, "grid_spacing_physical", strict=True)
+        if type(self.mask_support) is not bool:
+            raise InvalidRegistrationConfigError("mask_support must be bool")
 
 
 @dataclass(frozen=True)
