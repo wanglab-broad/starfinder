@@ -312,6 +312,15 @@ are version 3; current `run.json` is version 2. The
 [checkpoint guide](checkpoints.md) shows reload calls, and its
 [reference](checkpoints-reference.md) lists saved files.
 
+| Before | After |
+| --- | --- |
+| A version-3 checkpoint header (`transforms.json`, `candidates.json`, `pre_qc.json`) with a missing, `null` or empty `files` list loaded, and `load_checkpoint` did not check the payload against it. `starfinder experiment evaluate` read such a checkpoint the same way | `load_checkpoint` and `FOV.load_checkpoint` raise `ValueError` for a version-3 header whose `files` is not a nonempty list of `{path, sha256}` entries naming every payload file the stage reads (the table, or the round images, snapshots and field files). Each `path` is a string relative to the header's folder, not absolute and with no `..` part. Each `sha256` is 64 lowercase hexadecimal characters, bare or prefixed `sha256:`. A listed file that is missing or changed also raises `ValueError`. A `checkpoint` source of `starfinder experiment evaluate` applies the same rule through the same check and fails the source (`SourceFailure`) with the same message after the source name; it also requires `files` to name every stage file besides the header. Headers of versions 1 and 2 are unchanged |
+
+To use such a checkpoint again, rewrite it with the current writer, which
+records `files` for every payload file. The rule is in the
+[payload hashes](checkpoints-reference.md#payload-hashes) section of the
+reference.
+
 ### One Python configuration dialect
 
 For `backend: python`, replace MATLAB-style blocks with native stage settings:
