@@ -195,7 +195,7 @@ def single_fov(work, output_id="single", *, downstream=False, **execution):
 
 
 #: A clean code identity of the package, for the tests of verified resume (a dirty tree refuses a resume).
-CLEAN_CODE = {"version": "0.2.0", "git_commit": "0123456789abcdef0123456789abcdef01234567", "git_dirty": False}
+CLEAN_CODE = {"version": "0.2.0", "version_source": "checkout", "git_commit": "0123456789abcdef0123456789abcdef01234567", "git_dirty": False}
 
 
 def fix_code(monkeypatch, **code):

@@ -28,7 +28,7 @@ pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
 #: The package that plans in these tests: the expected manifests pin it (the environments' editable metadata and a
 #: fresh sync give different versions, design/specs/orchestration.md, "The code identity").
-CODE = {"version": "0.0.0+test", "git_commit": None, "git_dirty": False}
+CODE = {"version": "0.0.0+test", "version_source": "dist", "git_commit": None, "git_dirty": False}
 
 
 @pytest.fixture(autouse=True)
@@ -242,7 +242,8 @@ def _changed(before, after):
 def test_each_fingerprint_equals_an_independent_hash_of_its_components(work, code_version):
     config = dict(X.variants(work)["per-fov"], execution={"code_version": code_version})
     manifest = _plan(work, "per-fov", config)
-    expected = _fingerprints(manifest, CODE if code_version == "rerun" else None)
+    expected = _fingerprints(manifest, {k: v for k, v in CODE.items() if k != "version_source"}
+                             if code_version == "rerun" else None)
     assert {t["id"]: t["fingerprint"] for t in manifest["tasks"]} == expected
     resolved = json.loads((X.output_root(work, "example-per-fov") / "workflow" / "resolved.json").read_text())
     c = resolved["configuration"]
@@ -324,6 +325,17 @@ def test_a_new_package_version_changes_none_under_keep_and_every_one_under_rerun
     assert after["package"]["version"] == "0.0.1+test"
     expected = set() if code_version == "keep" else {t["id"] for t in before["tasks"]}
     assert _changed(before, after) == expected
+
+
+def test_the_install_route_of_the_same_commit_changes_no_fingerprint(work, monkeypatch):
+    # One commit is one identity (W-827): the route that supplied it (version_source) is recorded but not fingerprinted.
+    import starfinder.workflow._plan as P
+    config = dict(X.variants(work)["molecules-only"], execution={"code_version": "rerun"})
+    before = _plan(work, "molecules-only", config)
+    monkeypatch.setattr(P, "package_identity", lambda: dict(CODE, version_source="build"))
+    after = _plan(work, "molecules-only", config)
+    assert (before["package"]["version_source"], after["package"]["version_source"]) == ("dist", "build")
+    assert _changed(before, after) == set()
 
 
 def test_a_command_reads_its_configuration_through_the_restricted_view():

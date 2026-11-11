@@ -475,7 +475,7 @@ Recommendation: A.
 | `format` | `starfinder.workflow.manifest/1` |
 | `backend` | `python` |
 | `configuration` | `path` (`workflow/resolved.json`), `sha256` (of the file's bytes as written, the final newline included), `configuration_sha256` (the resolved-configuration hash) |
-| `package` | `version`, `git_commit`, `git_dirty` of the package that planned ([the code identity](#the-code-identity)) |
+| `package` | `version`, `version_source`, `git_commit`, `git_dirty` of the package that planned ([the code identity](#the-code-identity)) |
 | `roots` | `input` and `output`, absolute |
 | `membership` | `fovs` (in the order of `fovs.csv`), `samples` (each sample's FOVs), `selected_fovs` |
 | `inputs` | `files` (`fovs.csv`, the codebook, the supplied files) and `images` (per FOV, round and channel label), each with `path`, `bytes`, `mtime_ns` |
@@ -1142,6 +1142,17 @@ and pushing a tag is a publication and keeps its own authorization.
   when installed.
 * The image gets its version as a build argument, from `git describe` on the build host, because its
   build context has no `.git` (the engine record, "The image").
+* **Amendment (W-827, 2026-11-10): one identity for one commit.** The first two bullets named the same commit
+  differently by route: a clean worktree first on `PYTHONPATH` whose environment held an editable install of another
+  checkout recorded that checkout's `0.1.0` with its own commit, and the image recorded `0.1.dev763+g023125826` with
+  no commit. `code()` now returns `version_source` as well: `checkout` when the imported package lies in a starfinder
+  checkout, with the version computed from that checkout by the build's rule (`<base>.dev<N>+g<short>`, `.d<date>` when
+  dirty, from `git describe --tags --long --match v*`, equal to hatch-vcs's string for the same commit) and the live
+  `git_commit` and `git_dirty`; `build` when `starfinder/_build_info.py` exists, written by the Containerfile from the
+  build arguments `STARFINDER_REVISION` (the full commit) and `STARFINDER_DIRTY`, with the metadata's version; `dist`
+  when only the metadata is known (`git_commit` and `git_dirty` `null`). `version_source` is recorded but not part of
+  the task fingerprint, the resume comparison or the report's Version cell values: two routes of one commit resume
+  each other.
 * CI's checkout needs `fetch-depth: 0` to see the tags.
 * `uv lock` on a scratch copy changes only the project's own entry: its `version` line goes (uv writes
   dynamic versions so) and `provides-extras` is sorted (`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-646/20261030T1610Z-amendments/results/hatch_vcs/uv-lock.diff`). No
@@ -1181,7 +1192,7 @@ written into every task record:
 | `blocks_sha256` | The hash of the common part and the blocks this task's kind reads |
 | `manifest_sha256` | The manifest's hash |
 | `fingerprint`, `token` | The fingerprint the task ran with, and for Nextflow its cache token (the engine record, "The task fingerprint" and "`-resume` and the completion rule") |
-| `code` | `version`, `git_commit`, `git_dirty` of the package that ran the task; a tree with more than one is flagged by the report |
+| `code` | `version`, `version_source`, `git_commit`, `git_dirty` of the package that ran the task; a tree with more than one is flagged by the report |
 | `execution_context` | `engine`, `engine_version`, `job_id`, `attempt`, `image` (a digest under Snakemake UGER, a reference by digest on Google Batch, a SIF path under Nextflow `sge`, or `none`), `host` |
 | `wall_s`, `cpu_s`, `peak_rss_kib` | The task's wall time, user and system CPU time of the process and its children, and peak resident memory (`resource.getrusage`), as `export.json` records them for its parts |
 

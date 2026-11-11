@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import csv
+import functools
 import hashlib
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -18,10 +20,58 @@ from starfinder._execution import THREAD_VARIABLES
 from . import workflow_examples as X
 
 
+#: The engine tests need Nextflow 26.10.4 or newer, which needs Java 17 or newer (``manifest.nextflowVersion`` of
+#: ``nextflow/nextflow.config``).
+NEXTFLOW_MINIMUM = (26, 10, 4)
+JAVA_MINIMUM = 17
+
+
+def versions(report):
+    """(Nextflow version tuple, Java major version) from the text of ``nextflow info``; None for what it does not give.
+
+    Java is the one Nextflow runs on (``Runtime: Groovy 4.0.33 on OpenJDK 64-Bit Server VM 23.0.2-...``), which is not
+    always the ``java`` of ``PATH``: the install may bring its own.
+    """
+    found = re.search(r"Version:\s*(\d+(?:\.\d+)*)", report)
+    runtime = re.search(r"Runtime:.*?\bVM\s+(\d+(?:\.\d+)*)", report)
+    nextflow = tuple(int(n) for n in found.group(1).split(".")) if found else None
+    java = None
+    if runtime:
+        parts = [int(n) for n in runtime.group(1).split(".")]
+        java = parts[1] if parts[0] == 1 and len(parts) > 1 else parts[0]  # Java 8 reports 1.8.0
+    return nextflow, java
+
+
+def unavailable(path, report):
+    """Why the engine tests cannot run, or None: no Nextflow, or a Nextflow or a Java older than the minimum."""
+    if path is None:
+        return "Nextflow not installed"
+    nextflow, java = versions(report or "")
+    if nextflow is None or java is None:
+        return "the version of Nextflow or of its Java could not be read from `nextflow info`"
+    if nextflow < NEXTFLOW_MINIMUM:
+        return f"Nextflow {'.'.join(map(str, nextflow))} is older than {'.'.join(map(str, NEXTFLOW_MINIMUM))}"
+    if java < JAVA_MINIMUM:
+        return f"Nextflow runs on Java {java}, older than {JAVA_MINIMUM}"
+    return None
+
+
+@functools.cache
+def _report(path):
+    """The text of ``nextflow info``, taken once per session (a selection starts Nextflow once, not once per test)."""
+    try:
+        done = subprocess.run([path, "info"], capture_output=True, text=True, timeout=120,
+                              env=dict(os.environ, NXF_OFFLINE="true", NXF_PLUGINS_DEFAULT="false"))
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout
+
+
 def executable():
     path = shutil.which("nextflow")
-    if path is None:
-        pytest.skip("Nextflow not installed")
+    reason = unavailable(path, _report(path) if path else "")
+    if reason:
+        pytest.skip(reason)
     return path
 
 
@@ -39,6 +89,11 @@ def run(work, config, *arguments, stub=True, environment=None, profile="local"):
     # execution entry, so the Nextflow tasks need the same values whatever the caller's shell sets (W-828).
     env.update(dict.fromkeys(THREAD_VARIABLES, "1"), ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS="1")
     env.update(environment or {})
+    # A caller's PATH (stand-in tools first) replaces the one above, and the interpreter's folder, which has `starfinder`
+    # when the suite runs from an environment that is not activated, goes after the caller's entries (W-831).
+    interpreter = str(Path(sys.executable).parent)
+    if interpreter not in env["PATH"].split(os.pathsep):
+        env["PATH"] += os.pathsep + interpreter
     command = [executable_path, "-log", str(prefix.with_suffix(".nextflow.log")), "run",
                str(X.ROOT / "nextflow" / "main.nf"), "-ansi-log", "false", "-profile", profile,
                "-with-trace", str(trace), "--config", str(config), *(["-stub-run"] if stub else []), *arguments]

@@ -333,8 +333,8 @@ def test_the_snakemake_runs_have_one_numerical_thread_whatever_the_caller_sets(t
 @pytest.mark.contract
 def test_the_code_identity_reads_the_package_metadata(tmp_path, monkeypatch):
     # The golden runs leave `code` out of every record; what it holds is the contract's code identity
-    # (design/specs/orchestration.md, "The code identity"): the metadata's version in a checkout and outside one,
-    # the live commit only in a checkout.
+    # (design/specs/orchestration.md, "The code identity"): in a checkout the version the build rule gives it and the
+    # live commit (version_source "checkout"), outside one the metadata's version and no commit ("dist").
     import starfinder
     import starfinder._records as records
     try:
@@ -347,7 +347,11 @@ def test_the_code_identity_reads_the_package_metadata(tmp_path, monkeypatch):
         checkout = records.code()
     finally:
         records.code.cache_clear()
-    assert checkout["version"] == expected
+    if checkout["version_source"] == "checkout":
+        # An editable install's metadata can belong to another checkout; the identity is the running tree's.
+        assert checkout["git_commit"] and checkout["version"].split("+")[0].count(".") >= 2
+    else:
+        assert checkout["version"] == expected
     # An installed wheel: the package outside any checkout.
     monkeypatch.setattr(records, "__file__", str(tmp_path / "site-packages" / "starfinder" / "_records.py"))
     (tmp_path / "site-packages" / "starfinder").mkdir(parents=True)
@@ -355,4 +359,4 @@ def test_the_code_identity_reads_the_package_metadata(tmp_path, monkeypatch):
         installed = records.code()
     finally:
         records.code.cache_clear()
-    assert installed == {"version": expected, "git_commit": None, "git_dirty": None}
+    assert installed == {"version": expected, "version_source": "dist", "git_commit": None, "git_dirty": None}

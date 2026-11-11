@@ -209,7 +209,7 @@ The task reads the `report`, `assembly` and `assignment` blocks.
 ```{workflow-keys} execution
 defaults: The resources of every task, below.
 tasks: Resources per task kind, over the defaults and each kind's threads.
-container: The image of every task, where the engine runs tasks in an image (one value for the run, none per task kind): under Snakemake's UGER profile an OCI manifest digest, under Nextflow the value of its container directive (on sge the SIF's path); null uses the engine's default.
+container: The image of every task, where the engine runs tasks in an image (one value for the run, none per task kind): under Snakemake's UGER profile an OCI manifest digest, under Nextflow the value of its container directive (on sge the SIF's path),; with `--container` it is the only way to set the tasks' image under Nextflow, which refuses to start with a container engine enabled and neither set; null uses the engine's default.
 fiji: The Fiji executable of the bigstitcher_engine task.
 resume_from_checkpoint: true lets a fov task resume from its checkpoints after it checks run.json; a mismatch exits 3.
 code_version: keep, or rerun to rerun finished tasks after the package version changes.
@@ -252,7 +252,8 @@ flags of the processing sub-blocks (a present block enables its step),
 | `google-batch` | Google Batch with spot machines and a work folder in a bucket; the project, region, bucket, run and image digests are placeholders to fill in |
 
 Every Nextflow profile takes `--config` (the configuration file), `--container`
-(the default image) and `--max_retries` (default 2); exit statuses 2, 3 and 4 finish
+(the image of every task and of the plan and verification processes; with `execution.container`, the only way to set an image, see
+{ref}`the Nextflow guide <workflow-nextflow-images>`) and `--max_retries` (default 2); exit statuses 2, 3 and 4 finish
 the run without a retry, and so does every failure under `--max_retries 0`. `--weights_dir` (unset by default) is read by the `sge`
 profile only: when given, it adds `--env STARFINDER_WEIGHTS_DIR=<folder>` to the
 `apptainer` command of every task, CPU and GPU, and the folder must be on `/stanley`.

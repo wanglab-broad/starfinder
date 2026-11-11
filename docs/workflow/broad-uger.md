@@ -17,6 +17,7 @@ November 2026; where a run found a limit, the page states it.
    the CPU extras and the `workflow` group; a second image, `learned`, adds the
    learned extras on CPU, and a third, `learned-cuda`, the same backends built for
    CUDA, for GPU tasks (below).
+   The build takes the code identity as arguments ({ref}`below <broad-uger-image-build>`).
 2. **Snakemake.** Run the head as a UGER job with 8 GiB of memory, in the same
    image, with the checkout and the data under `/stanley`. Set `STARFINDER_IMAGE`
    to the image's OCI manifest digest and `STARFINDER_SIF` to its SIF in the
@@ -115,6 +116,22 @@ Nextflow. StarDist, Cellpose, Spotiflow and Piscis run on the GPU when so config
 local maxima, the Starfish LoG, registration and readout run on the CPU. The
 image is 4.4 GB as an OCI archive and 9.5 GB unpacked, against 1.5 and 4.8 GB for
 `learned`.
+
+(broad-uger-image-build)=
+The `Containerfile`'s build context has no `.git`, so the build takes the code identity as build arguments, and the image
+records it ({ref}`checkpoints-code-identity`):
+
+| Build argument | Value |
+| --- | --- |
+| `STARFINDER_VERSION` | `git describe`'s version on the build host (`SETUPTOOLS_SCM_PRETEND_VERSION` for the install) |
+| `STARFINDER_REVISION` | The full 40-digit commit; the build stops on anything else |
+| `STARFINDER_DIRTY` | `true` or `false`: whether the build host's tracked files differ from that commit; the build stops on anything else |
+| `UV_LOCK_SHA256` | The SHA-256 of `src/python/uv.lock`; the build stops if the file differs |
+
+The build writes the commit and the flag into `starfinder/_build_info.py` and the image's labels
+(`org.opencontainers.image.revision`, `org.starfinder.dirty`). In the image, `starfinder._records.code()` returns that
+commit and flag with `version_source` `build`, so a run in the image and a run from a clean checkout of the same commit
+record the same `version` and `git_commit`.
 
 ## What you get
 

@@ -22,6 +22,8 @@ workflow/snakemake-logs
 # Local worktrees, environments, and agent permissions
 /.worktrees/
 /src/python/.conda/
+# Written by the image build (Containerfile), never by hand: the commit and dirty flag of the image.
+/src/python/starfinder/_build_info.py
 /.claude/settings.local.json
 
 # Disposable agent plans; canonical plans and run reports belong in Linear.

@@ -8,14 +8,17 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import fields, is_dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 import hashlib
 import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
+import time
 import uuid
 
 import numpy as np
@@ -222,28 +225,91 @@ def _read_table(path, dtypes):
 _PACKAGES = ("starfinder", "numpy", "pandas", "scipy", "scikit-image", "tifffile", "pyarrow", "SimpleITK")
 
 
-@lru_cache(maxsize=1)
-def code():
-    from importlib.metadata import PackageNotFoundError, version
+def _git(root, *args, timeout=10):
+    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=timeout,
+                          check=True).stdout.strip()
+
+
+_RELEASE_TAG = re.compile(r"^v(?P<version>[0-9.]+)$")
+
+
+def _checkout_version(root, commit, dirty):
+    """The version hatch-vcs computes for this checkout (``[tool.hatch.version]`` of pyproject.toml): setuptools-scm's
+    ``guess-next-dev`` scheme with ``node-and-date`` local parts over ``git describe --tags --long --match v*``;
+    ``<next>.dev<N>+g<node>``, with ``.d<YYYYMMDD>`` when the tree has uncommitted changes (on a tag, a clean tree is
+    just the tag, a modified one ``<next>.dev0+g<node>.d<YYYYMMDD>``). The node is the first nine
+    hexadecimal digits of the commit (setuptools-scm cuts the ``g`` and the digits to ten characters). Computed from git,
+    so it does not need setuptools-scm at run time; the tests compare it with the build's string."""
     try:
-        package_version = version("starfinder")
-    except PackageNotFoundError:
-        package_version = None
-    root = Path(__file__).resolve().parent
+        described = _git(root, "describe", "--tags", "--long", "--match", "v*")
+    except subprocess.CalledProcessError:
+        # No v* tag is reachable: setuptools-scm counts all commits from the tag 0.0.
+        tag, distance, node = "0.0", int(_git(root, "rev-list", "--count", "HEAD")), commit[:9]
+    else:
+        name, count, node = described.rsplit("-", 2)
+        matched = _RELEASE_TAG.match(name)
+        if matched is None:
+            return None
+        tag, distance, node = matched["version"], int(count), node.removeprefix("g")[:9]
+    stamp = datetime.fromtimestamp(int(os.environ.get("SOURCE_DATE_EPOCH", time.time())), timezone.utc)
+    if distance == 0 and not dirty:
+        return tag
+    parts = tag.split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    return f"{'.'.join(parts)}.dev{distance}+g{node}" + (f".d{stamp:%Y%m%d}" if dirty else "")
+
+
+def _checkout_identity(root):
+    """``(commit, dirty, version)`` when ``root`` is ``src/python/starfinder`` of a starfinder checkout, else None."""
     try:
-        top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True,
-                             text=True, timeout=10, check=True).stdout.strip()
+        top = _git(root, "rev-parse", "--show-toplevel")
         # An installed package can sit inside another project's repository; only
         # a starfinder checkout (src/python/starfinder at its root) is recorded.
         if not (Path(top) / "src" / "python" / "starfinder").resolve() == root:
             raise subprocess.SubprocessError("package is not inside a starfinder checkout")
-        commit = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True,
-                                text=True, timeout=10, check=True).stdout.strip()
-        dirty = bool(subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"],
-                                    capture_output=True, text=True, timeout=30, check=True).stdout.strip())
+        commit = _git(root, "rev-parse", "HEAD")
+        dirty = bool(_git(root, "status", "--porcelain", "--untracked-files=no", timeout=30))
+        try:
+            version = _checkout_version(root, commit, dirty)
+        except (ValueError, subprocess.SubprocessError):
+            version = None
     except (OSError, subprocess.SubprocessError):
-        commit = dirty = None
-    return {"version": package_version, "git_commit": commit or None, "git_dirty": dirty}
+        return None
+    return commit or None, dirty, version
+
+
+def _build_identity():
+    """``(commit, dirty)`` from the generated ``starfinder/_build_info.py`` of an image build (Containerfile), else None."""
+    try:
+        from starfinder import _build_info
+    except ImportError:
+        return None
+    return _build_info.COMMIT or None, _build_info.DIRTY
+
+
+@lru_cache(maxsize=1)
+def code():
+    """The identity of the running code: ``version``, ``version_source``, ``git_commit`` and ``git_dirty``.
+
+    From a starfinder checkout (``version_source`` ``"checkout"``): the version hatch-vcs computes for it and the live
+    commit and state, whatever an editable install's metadata says. From a package installed by the image build
+    (``"build"``): the metadata's version and the commit and state written into ``starfinder/_build_info.py``.
+    Otherwise (``"dist"``): the metadata's version, and no commit. Each is ``None`` when unknown.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+    root = Path(__file__).resolve().parent
+    checkout = _checkout_identity(root)
+    if checkout is not None:
+        commit, dirty, package_version = checkout
+        return {"version": package_version, "version_source": "checkout", "git_commit": commit, "git_dirty": dirty}
+    try:
+        package_version = version("starfinder")
+    except PackageNotFoundError:
+        package_version = None
+    build = _build_identity()
+    if build is not None:
+        return {"version": package_version, "version_source": "build", "git_commit": build[0], "git_dirty": build[1]}
+    return {"version": package_version, "version_source": "dist", "git_commit": None, "git_dirty": None}
 
 
 @lru_cache(maxsize=1)

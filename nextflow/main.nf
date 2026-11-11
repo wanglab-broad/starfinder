@@ -115,18 +115,38 @@ def ready(tasks, done) {
         .map { id, t, records -> tuple(id, t.fingerprint, t.token, t.manifest_path, records) }
 }
 
+// The image of every task, as the workflow's own configuration states it (execution.container); null when it is unset or
+// the file does not parse, in which case PLAN refuses the file with its own message.
+def configuredContainer(config) {
+    try {
+        def document = new org.yaml.snakeyaml.Yaml().load(file(config).text)
+        return document instanceof Map ? (document.execution instanceof Map ? document.execution.container : null) : null
+    } catch (Exception e) {
+        return null
+    }
+}
+
 workflow {
     if (!params.config) error 'Give --config <workflow.yaml>'
     if (params.require_container && !params.container) error 'The sge profile requires --container <shared-drive CPU SIF> for PLAN and VERIFY as well as tasks'
+    // A process.container in a -c file never reaches the workflow's processes: the withLabel selector in nextflow.config
+    // outranks it with execution.container ?: params.container. With an engine on and neither set, every
+    // labelled task would run on the host, outside the engine (W-831).
+    if (workflow.containerEngine && !params.container && !configuredContainer(params.config))
+        error "The ${workflow.containerEngine} engine is enabled but no container image is set: give --container <image> or set execution.container in ${params.config}; a process.container in a -c file has no effect on this workflow's processes"
     PLAN(file(params.config).toAbsolutePath().toString())
     manifest_path = PLAN.out.map { p ->
-        def summary = new groovy.json.JsonSlurper().parse(p.toFile())
+        // plan.json is a work-directory output: read it through Path, which also works when the work directory is gs:// (W-834).
+        def summary = new groovy.json.JsonSlurper().parseText(p.text)
+        // java.io.File is right here: the manifest lies under roots.output, a path every host mounts, not in the work directory.
         checkedTasks(new groovy.json.JsonSlurper().parse(new File(summary.manifest)))
         summary.manifest
     }
     VERIFY_BEFORE(manifest_path)
     tasks = VERIFY_BEFORE.out.flatMap { mpath, tokens ->
+        // java.io.File is right here: the manifest lies under roots.output, a path every host mounts, not in the work directory.
         def manifest = new groovy.json.JsonSlurper().parse(new File(mpath))
+        // tokens.tsv is a work-directory output: Path.readLines(), never toFile().
         def by_id = tokens.readLines().collectEntries { line ->
             def columns = line.split('\t'); [(columns[0]): columns[1]]
         }

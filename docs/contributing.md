@@ -88,8 +88,9 @@ Markers are registered in `src/python/pyproject.toml`.
   `contract`. Unmarked kinds are ordinary unit tests.
 * Use `learned` for tests loading detector models or needing
   `STARFINDER_WEIGHTS_DIR`.
-* Use `nextflow` for tests that run the Nextflow workflow. They skip without
-  Nextflow on `PATH`, and also carry `slow`, so that each stays in the slow or
+* Use `nextflow` for tests that run the Nextflow workflow. They skip, naming the
+  reason, without Nextflow 26.10.4 or newer on `PATH` or without the Java 17 or newer
+  that it runs on (`test/workflow_nextflow.py`), and also carry `slow`, so that each stays in the slow or
   extended selection.
 * Mark a test `slow` when it takes at least 5 seconds on one CPU and one
   numerical thread in the locked environment, excluding one-time imports.
@@ -156,7 +157,8 @@ registration; spot_finding; and other excluding those four.
 cover collected tests once. `scripts/marker_drift.py` reads a durations log to
 review cost markers. Review new and changed test markers before merging.
 
-`-m nextflow` needs Nextflow 26.10.4 or newer and Java 17 or newer on `PATH`. CI
+`-m nextflow` needs Nextflow 26.10.4 or newer on `PATH` and Java 17 or newer, the Java that
+`nextflow info` reports it runs on. CI
 runs it in its own job with the minimal extras, where the tests of the real
 per-FOV route skip for want of `anndata` and `multiview-stitcher`.
 
