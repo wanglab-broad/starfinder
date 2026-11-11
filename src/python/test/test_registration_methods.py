@@ -311,16 +311,16 @@ def test_demons_runs_on_z1_as_2d():
 
 
 def test_demons_z1_uses_a_yx_only_pyramid(monkeypatch):
-    """The SimpleITK demons filter receives 2D images at every level."""
-    import SimpleITK as sitk
+    """The demons update loop receives 2D images at every level."""
+    from starfinder.registration._demons import _MatlabOrderDemons
     sizes = []
-    original = sitk.DemonsRegistrationFilter.Execute
+    original = _MatlabOrderDemons.Execute
 
     def execute(self, fixed, *args):
         sizes.append(fixed.GetSize())
         return original(self, fixed, *args)
 
-    monkeypatch.setattr(sitk.DemonsRegistrationFilter, "Execute", execute)
+    monkeypatch.setattr(_MatlabOrderDemons, "Execute", execute)
     source = np.random.default_rng(3).random((1, 32, 32))
     for mode in ("antialias", "sitk"):
         sizes.clear()

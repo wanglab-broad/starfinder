@@ -239,6 +239,78 @@ class TestAntialiasedDemonsRegister:
         )
 
 
+def _one_iteration(fixed, moving, smoothing_sigma=1.0):
+    """The demons field after one iteration from a zero field, through DemonsConfig."""
+    registration = estimate_transform(
+        fixed, moving, config=DemonsConfig(iterations=(1,), smoothing_sigma=smoothing_sigma),
+        reference_metadata=ImageMetadata("test/reference"), moving_metadata=ImageMetadata("test/moving"))
+    return registration.transform.displacement_zyx
+
+
+# MATLAB's fspecial('gaussian', [1 7], 1): the sampled Gaussian exp(-x^2 / 2), x = -3..3, divided by its sum.
+MATLAB_KERNEL_SIGMA_1 = np.array([0.004433048175243745, 0.054005582622414484, 0.2420362293761143,
+                                  0.3990502796524549, 0.2420362293761143, 0.054005582622414484,
+                                  0.004433048175243745])
+FLOAT64 = {"rtol": 1e-9, "atol": 1e-12}
+
+
+class TestMatlabOrderUpdate:
+    """W-835: the classic variant smooths after each update, with MATLAB's kernel and face gradients."""
+
+    def test_one_iteration_returns_the_smoothed_update(self):
+        """From a zero field, one iteration returns S(u), not the raw Thirion update u."""
+        from scipy.ndimage import correlate1d
+
+        rng = np.random.default_rng(835)
+        fixed = (100 + 20 * rng.standard_normal((12, 24, 24))).astype(np.float32)
+        moving = (100 + 20 * rng.standard_normal((12, 24, 24))).astype(np.float32)
+        field = _one_iteration(fixed, moving)
+
+        f, m = fixed.astype(np.float64), moving.astype(np.float64)
+        gradient = np.gradient(f)  # central inside, one-sided on the faces, as MATLAB's gradient()
+        diff = f - m
+        denominator = sum(g * g for g in gradient) + diff ** 2
+        scale = np.where((np.abs(diff) < 0.001) | (denominator < 1e-9), 0.0, diff / denominator)
+        raw = np.stack([scale * g for g in gradient], axis=-1)
+        smoothed = raw.copy()
+        for axis in range(3):
+            smoothed = correlate1d(smoothed, MATLAB_KERNEL_SIGMA_1, axis=axis, mode="nearest")
+
+        assert field.shape == (12, 24, 24, 3) and field.dtype == np.float64
+        np.testing.assert_allclose(field, smoothed, **FLOAT64)
+        assert np.abs(field - raw).max() > 0.1
+
+    def test_kernel_is_matlabs_sampled_gaussian(self):
+        """A one-voxel update spreads as the outer product of MATLAB's 7-tap kernel for sigma = 1."""
+        z, y, x = np.indices((15, 15, 15), dtype=np.float64)
+        fixed = (100 + 2 * x).astype(np.float32)  # dF/dx = 2 everywhere, faces included
+        moving = fixed.copy()
+        moving[7, 7, 7] -= 1  # F - M = 1 at the centre only
+        field = _one_iteration(fixed, moving)
+
+        update = 1 * 2 / (2 ** 2 + 1 ** 2)  # (F - M) g / (g^2 + (F - M)^2) along X
+        expected = np.zeros_like(field)
+        expected[4:11, 4:11, 4:11, 2] = update * np.einsum(
+            "i,j,k->ijk", MATLAB_KERNEL_SIGMA_1, MATLAB_KERNEL_SIGMA_1, MATLAB_KERNEL_SIGMA_1)
+        np.testing.assert_allclose(field, expected, **FLOAT64)
+
+    def test_face_gradient_is_one_sided(self):
+        """On a face, the gradient is the one-sided difference (SimpleITK's is 0 there)."""
+        z = np.indices((8, 16, 16), dtype=np.float64)[0]
+        fixed = (100 + 10 * z ** 2).astype(np.float32)
+        moving = fixed.copy()
+        moving[0, 8, 8] -= 1  # F - M = 1 on the Z = 0 face
+        moving[7, 4, 4] -= 1  # and on the Z = 7 face
+        field = _one_iteration(fixed, moving, smoothing_sigma=0.0)
+
+        expected = np.zeros_like(field)
+        low = 10 * (1 - 0)  # F[1] - F[0]
+        high = 10 * (49 - 36)  # F[7] - F[6]
+        expected[0, 8, 8, 0] = 1 * low / (low ** 2 + 1)
+        expected[7, 4, 4, 0] = 1 * high / (high ** 2 + 1)
+        np.testing.assert_allclose(field, expected, **FLOAT64)
+
+
 class TestMatlabCompatibleConfig:
     """Tests for matlab_compatible_config function."""
 
