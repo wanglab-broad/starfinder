@@ -135,7 +135,7 @@ PINNED_RUNS = {
                    # confirmed by Jiahao on 2026-09-30. Re-pinned by W-835 (demons smooths after each update, as
                    # MATLAB does): the digest of the base revision's run with an independent implementation of
                    # the new field (data/expected/test_registration_golden/README.md).
-                   "round2": "80e6a16e57cdeb9b1108c10a56ceec1ff218b22e22653ec1d45ea98606d1ec53"},
+                   "round2": "93725f3b2f07f59505d8e221d1c2d0d39eee3557b7d0a90ba30cfc126699613e"},
         # The demons field: the array of demons.npz (expected_demons_field), at the float64 tolerance.
         "transforms": [
             ("translation", (1.0, 4.0, -2.0)),

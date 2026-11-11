@@ -255,7 +255,7 @@ FLOAT64 = {"rtol": 1e-9, "atol": 1e-12}
 
 
 class TestMatlabOrderUpdate:
-    """W-835: the classic variant smooths after each update, with MATLAB's kernel and face gradients."""
+    """W-835: the classic variant smooths after each update with MATLAB's kernel, keeping SimpleITK's boundary rules."""
 
     def test_one_iteration_returns_the_smoothed_update(self):
         """From a zero field, one iteration returns S(u), not the raw Thirion update u."""
@@ -267,7 +267,11 @@ class TestMatlabOrderUpdate:
         field = _one_iteration(fixed, moving)
 
         f, m = fixed.astype(np.float64), moving.astype(np.float64)
-        gradient = np.gradient(f)  # central inside, one-sided on the faces, as MATLAB's gradient()
+        gradient = np.gradient(f)  # central inside; 0 on the two faces normal to each axis, as SimpleITK's
+        for axis, component in enumerate(gradient):
+            faces = [slice(None)] * 3
+            faces[axis] = [0, -1]
+            component[tuple(faces)] = 0.0
         diff = f - m
         denominator = sum(g * g for g in gradient) + diff ** 2
         scale = np.where((np.abs(diff) < 0.001) | (denominator < 1e-9), 0.0, diff / denominator)
@@ -283,7 +287,7 @@ class TestMatlabOrderUpdate:
     def test_kernel_is_matlabs_sampled_gaussian(self):
         """A one-voxel update spreads as the outer product of MATLAB's 7-tap kernel for sigma = 1."""
         z, y, x = np.indices((15, 15, 15), dtype=np.float64)
-        fixed = (100 + 2 * x).astype(np.float32)  # dF/dx = 2 everywhere, faces included
+        fixed = (100 + 2 * x).astype(np.float32)  # dF/dx = 2 inside, 0 on the X faces
         moving = fixed.copy()
         moving[7, 7, 7] -= 1  # F - M = 1 at the centre only
         field = _one_iteration(fixed, moving)
@@ -294,20 +298,40 @@ class TestMatlabOrderUpdate:
             "i,j,k->ijk", MATLAB_KERNEL_SIGMA_1, MATLAB_KERNEL_SIGMA_1, MATLAB_KERNEL_SIGMA_1)
         np.testing.assert_allclose(field, expected, **FLOAT64)
 
-    def test_face_gradient_is_one_sided(self):
-        """On a face, the gradient is the one-sided difference (SimpleITK's is 0 there)."""
-        z = np.indices((8, 16, 16), dtype=np.float64)[0]
-        fixed = (100 + 10 * z ** 2).astype(np.float32)
+    def test_face_gradient_is_zero(self):
+        """On a face, the gradient component normal to it is 0, as SimpleITK's (MATLAB's is one-sided)."""
+        z, _, x = np.indices((8, 16, 16), dtype=np.float64)
+        fixed = (100 + 10 * z ** 2 + 2 * x).astype(np.float32)
         moving = fixed.copy()
-        moving[0, 8, 8] -= 1  # F - M = 1 on the Z = 0 face
-        moving[7, 4, 4] -= 1  # and on the Z = 7 face
+        moving[0, 8, 8] -= 1  # F - M = 1 on the Z = 0 face (one-sided dF/dz there: 10)
+        moving[7, 4, 4] -= 1  # and on the Z = 7 face (one-sided dF/dz there: 130)
         field = _one_iteration(fixed, moving, smoothing_sigma=0.0)
 
         expected = np.zeros_like(field)
-        low = 10 * (1 - 0)  # F[1] - F[0]
-        high = 10 * (49 - 36)  # F[7] - F[6]
-        expected[0, 8, 8, 0] = 1 * low / (low ** 2 + 1)
-        expected[7, 4, 4, 0] = 1 * high / (high ** 2 + 1)
+        expected[0, 8, 8, 2] = expected[7, 4, 4, 2] = 1 * 2 / (0 ** 2 + 2 ** 2 + 1 ** 2)  # gradient (0, 0, 2)
+        np.testing.assert_allclose(field, expected, **FLOAT64)
+
+    def test_a_sample_half_a_voxel_outside_takes_the_edge_value(self):
+        """A sample within half a voxel outside the grid counts as inside and takes the edge voxel's value."""
+        from starfinder.registration._demons import _create_demons_filter
+
+        x = np.indices((8, 16, 16), dtype=np.float64)[2]
+        fixed = (100 + 2 * x).astype(np.float32)
+        moving = fixed.copy()
+        moving[0, 8, 8] -= 1
+        moving[0, 4, 4] -= 1
+        initial = np.zeros((8, 16, 16, 3))  # SimpleITK components (x, y, z)
+        initial[0, 8, 8, 2] = -0.3  # samples Z = -0.3: inside, the edge voxel's value M[0, 8, 8] = F - 1
+        initial[0, 4, 4, 2] = -0.7  # samples Z = -0.7: outside, no update
+        fixed_image, moving_image = sitk.GetImageFromArray(fixed), sitk.GetImageFromArray(moving)
+        initial_image = sitk.GetImageFromArray(initial, isVector=True)
+        initial_image.CopyInformation(fixed_image)
+        demons = _create_demons_filter(sitk, "demons", 0.0)
+        demons.SetNumberOfIterations(1)
+        field = sitk.GetArrayFromImage(demons.Execute(fixed_image, moving_image, initial_image))
+
+        expected = initial.copy()
+        expected[0, 8, 8, 0] = 1 * 2 / (2 ** 2 + 1 ** 2)  # F - M = 1 (not 1.3, as extrapolation would give)
         np.testing.assert_allclose(field, expected, **FLOAT64)
 
 

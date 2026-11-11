@@ -68,14 +68,16 @@ See {py:class}`~starfinder.registration.BSplineConfig` for the precise rules.
 Estimate a dense deformation with image intensities.
 
 The default variant, `demons`, is classic Thirion demons with the reference image's
-gradient, run level by level on the package's pyramid. Each iteration, as MATLAB's
-`imregdemons` does:
+gradient, run level by level on the package's pyramid. Each iteration, in the order
+of MATLAB's `imregdemons` and with SimpleITK's boundary rules:
 
-1. samples the moving image at each voxel plus the field, by linear interpolation;
+1. samples the moving image at each voxel plus the field, by linear interpolation. A
+   sample counts as inside the moving grid up to half a voxel beyond its first and
+   last voxels, and there takes the edge voxel's value;
 2. computes the update `(F − M) ∇F / (|∇F|² + (F − M)²)`, with `∇F` from central
-   differences inside the grid and one-sided differences on its faces. The update is
-   0 where `|F − M| < 0.001`, where the denominator is below 1e-9, or where the
-   sampled point lies outside the moving grid;
+   differences inside the grid and 0 along each axis on the two faces normal to it.
+   The update is 0 where `|F − M| < 0.001`, where the denominator is below 1e-9, or
+   where the sample lies outside the moving grid;
 3. adds the update to the field, then smooths the field with a sampled Gaussian of
    standard deviation `smoothing_sigma` voxels and radius ⌈3σ⌉ (7 taps for σ = 1),
    normalised to sum 1, on each axis with replicated edges.

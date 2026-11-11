@@ -40,17 +40,32 @@ def _sampled_gaussian(sigma):
 
 
 def _face_gradient(image):
-    """MATLAB's gradient(): central differences inside, one-sided differences on the faces, per axis.
+    """SimpleITK's demons gradient: central differences inside, 0 on the two faces normal to each axis.
 
-    An axis of one voxel has gradient 0. SimpleITK's demons gradient is 0 on
-    the two faces normal to each axis instead.
+    As itk::CentralDifferenceImageFunction at the buffer boundary. An axis of
+    one or two voxels has gradient 0 along it.
     """
-    return [np.gradient(image, axis=axis) if n > 1 else np.zeros_like(image) for axis, n in enumerate(image.shape)]
+    gradient = []
+    for axis, n in enumerate(image.shape):
+        component = np.zeros_like(image)
+        if n > 2:
+            inner = [slice(None)] * image.ndim
+            inner[axis] = slice(1, -1)
+            ahead, behind = list(inner), list(inner)
+            ahead[axis], behind[axis] = slice(2, None), slice(None, -2)
+            component[tuple(inner)] = (image[tuple(ahead)] - image[tuple(behind)]) / 2
+        gradient.append(component)
+    return gradient
 
 
 def _sampled_inside(coordinate, size):
-    """Whether a sampled coordinate lies inside an axis of size voxels: [0, size - 1], as MATLAB's interpolation."""
-    return (coordinate >= 0) & (coordinate <= size - 1)
+    """Whether a sampled coordinate counts as inside an axis of size voxels: [-0.5, size - 0.5), as SimpleITK's.
+
+    itk::ImageFunction::IsInsideBuffer accepts half a voxel beyond the first
+    and last voxel centres; the linear interpolation there takes the edge
+    voxel's value (map_coordinates with mode="nearest").
+    """
+    return (coordinate >= -0.5) & (coordinate < size - 0.5)
 
 
 def _thirion_iterations(fixed, moving, field, iterations, kernel):
@@ -58,13 +73,15 @@ def _thirion_iterations(fixed, moving, field, iterations, kernel):
 
     fixed and moving are float64 arrays of one level (ZYX or YX); field is
     float64 with shape (ndim, *fixed.shape), one component per axis in voxels,
-    pulling: moving is sampled at p + field[:, p]. Each iteration, as MATLAB's
-    Demons3D:
+    pulling: moving is sampled at p + field[:, p]. Each iteration, in MATLAB's
+    Demons3D order and with SimpleITK's boundary rules:
 
-    * warped = moving(p + field(p)), linear interpolation;
+    * warped = moving(p + field(p)), linear interpolation, clamped to the edge
+      voxel within half a voxel outside the grid;
     * update = (fixed - warped) * grad / (|grad|^2 + (fixed - warped)^2), with
-      grad the fixed image's _face_gradient, and 0 where |fixed - warped| < 0.001,
-      the denominator < 1e-9 or p + field(p) lies outside the grid on any axis;
+      grad the fixed image's _face_gradient (0 on the faces), and 0 where
+      |fixed - warped| < 0.001, the denominator < 1e-9 or p + field(p) lies
+      outside the grid on any axis (_sampled_inside);
     * field = S(field + update), S the separable kernel on every spatial axis,
       edges replicated.
 
@@ -111,10 +128,12 @@ class _MatlabOrderDemons:
     loops, with the same Execute, SetNumberOfIterations, GetElapsedIterations
     and GetRMSChange. That filter smooths the field before each update and so
     returns S(f) + u, the last update unsmoothed; this one returns S(f + u),
-    with MATLAB's sampled Gaussian (_sampled_gaussian) and one-sided face
-    gradients (_face_gradient). Every iteration runs: MATLAB has no early stop,
-    and SimpleITK's never triggered on the W-825 scenes. Fields are float64
-    SimpleITK vector images on the fixed image's grid, in voxels.
+    with MATLAB's sampled Gaussian (_sampled_gaussian) and SimpleITK's two
+    boundary rules: a zero gradient on the faces (_face_gradient) and the
+    half-voxel inside rule (_sampled_inside), as W-825's c7 route. Every
+    iteration runs: MATLAB has no early stop, and SimpleITK's never triggered
+    on the W-825 scenes. Fields are float64 SimpleITK vector images on the
+    fixed image's grid, in voxels.
     """
 
     def __init__(self, sitk, smoothing_sigma):
@@ -422,9 +441,10 @@ def demons_register(
 
         - "demons" (default): Classic Thirion demons with the fixed image's
           gradient. As MATLAB's imregdemons, it smooths the field after each
-          update, with a sampled Gaussian of radius ceil(3 sigma), and takes
-          one-sided gradients on the faces; it keeps this package's pyramid,
-          which differs from MATLAB's.
+          update, with a sampled Gaussian of radius ceil(3 sigma). It keeps
+          SimpleITK's boundary rules (a zero gradient on the faces; a sample
+          within half a voxel outside the grid takes the edge voxel's value)
+          and this package's pyramid, which differs from MATLAB's.
 
         - "diffeomorphic": Topology-preserving. Better quality on large
           deformations but ~37% more memory.
