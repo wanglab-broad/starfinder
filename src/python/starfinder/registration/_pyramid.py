@@ -24,9 +24,11 @@ def butterworth_3d(
 ) -> np.ndarray:
     """3D Butterworth low-pass filter in frequency domain.
 
-    Matches MATLAB's ``butterwth(shape, cutoff, order)`` used inside
-    ``antialiasResize``. The filter is centered at DC (zero-frequency)
-    using ``fftfreq`` convention.
+    A separable product of 1-D Butterworth filters, one per axis, with the
+    cutoff and order of MATLAB's ``butterwth(shape, cutoff, order)`` inside
+    ``antialiasResize``. MATLAB's filter is radial instead, a function of the
+    distance from DC over all axes, so the two differ off the axes. The filter
+    is centered at DC (zero-frequency) using ``fftfreq`` convention.
 
     Parameters
     ----------
@@ -60,9 +62,8 @@ def butterworth_3d(
     if cutoff <= 0:
         return np.zeros(out_shape, dtype=dtype)
 
-    # Separable Butterworth: product of per-dimension 1D filters.
-    # This matches MATLAB's butterwth which filters each axis independently,
-    # avoiding the over-attenuation of an isotropic L2-distance filter.
+    # Separable Butterworth: product of per-dimension 1D filters. MATLAB's
+    # butterwth is radial (W-825); this package keeps the separable filter.
     result = np.ones(out_shape, dtype=dtype)
     for dim, s in enumerate(shape):
         if rfft and dim == len(shape) - 1:

@@ -227,6 +227,7 @@ image with the selected ZYX detection view; the current default file is
 | Per-step image selection and warp | Recipe `signal` and `warp`; step-specific `signal` where needed |
 | Earlier merged-channel sum | `RegistrationSignalConfig(mode="sum")`; the default selection is maximum |
 | A `BSplineConfig` step after earlier steps fitted the zero-filled border of the shifted signal | elastix samples only the support of the shifted signal, eroded by 2 voxels, so such chains give different B-spline estimates; `BSplineConfig(mask_support=False)` reproduces the earlier estimate, and a B-spline first step is unchanged. A record saved before the change has no `support_mask` in its diagnostics, and its reloaded `effective_config` reads the default `mask_support=True` although no mask was used |
+| `DemonsConfig()` (variant `demons`) ran SimpleITK's `DemonsRegistrationFilter`, which smooths the field before each update and returned the last update unsmoothed, with SimpleITK's 5-tap discrete Gaussian and a zero gradient on the grid's faces | The package's own loop smooths after each update, as MATLAB's `imregdemons`, with a sampled Gaussian of radius ⌈3σ⌉ (7 taps for σ = 1); it keeps SimpleITK's zero gradient on the faces and its half-voxel rule for samples beyond the grid's edge; every level runs all its iterations. Demons fields, the images warped with them and saved demons results differ from earlier runs. There is no setting for the earlier field. The other variants are unchanged |
 
 ### Translation displacement
 

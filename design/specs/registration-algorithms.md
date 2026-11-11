@@ -173,17 +173,20 @@ ideal registration pull map of round r is `F_r`, and the truth pull field is
 
 | Field | Specification |
 | --- | --- |
-| Backend and version | SimpleITK 2.5.3, the existing demons filters (`DemonsRegistrationFilter` and the three variants), run on 2D images. |
+| Backend and version | SimpleITK 2.5.3, the existing demons filters (the three variants other than `demons`), run on 2D images; the classic `demons` variant runs the package's own update loop (`_MatlabOrderDemons`, NumPy and SciPy), which is dimension-generic. |
 | Transform | A 2D displacement field, embedded as `DenseDisplacementTransform` of shape (1, Y, X, 3) with the Z component exactly 0. |
 | Metric | The demons force of each variant (intensity difference driven), as in 3D. |
-| Optimizer | Demons iterations per level, with the variant-specific settings of `registration/_demons.py` unchanged. Every variant sets the displacement-field standard deviation to `smoothing_sigma` (voxels), and SimpleITK smooths the displacement field by default. `diffeomorphic` also sets the update-field standard deviation to `smoothing_sigma / 2` and `fast_symmetric` to `smoothing_sigma`, but the code never enables `SmoothUpdateField`, whose SimpleITK 2.5.3 default is off for all four filters (queried for this page). So only the displacement field is smoothed, in 2D as in 3D. |
+| Optimizer | Demons iterations per level. The classic `demons` variant follows MATLAB's `Demons3D` order: each iteration adds the Thirion update, computed with SimpleITK's two boundary rules (a central-difference gradient that is 0 on the two faces normal to each axis, and a sample counted inside the moving grid on [-0.5, N − 0.5) per axis, clamped to the edge voxel), and then smooths the field with a sampled Gaussian of standard deviation `smoothing_sigma` voxels and radius ⌈3σ⌉, normalised; the returned field is smoothed after its last update. The other variants keep the settings of `registration/_demons.py`: the displacement-field standard deviation is `smoothing_sigma`, and SimpleITK smooths the displacement field before each update. `diffeomorphic` also sets the update-field standard deviation to `smoothing_sigma / 2` and `fast_symmetric` to `smoothing_sigma`, but the code never enables `SmoothUpdateField`, whose SimpleITK 2.5.3 default is off for all four filters (queried for this page). So only the displacement field is smoothed, in 2D as in 3D. |
 | Pyramid | The existing `antialias` pyramid applied in YX only (Butterworth low-pass and downsampling by 2 per level of Y and X; Z untouched), or `sitk` shrinking of Y and X only. The number of levels is `len(iterations)`. |
 | Initialization | Zero field at the coarsest level; each finer level starts from the upsampled, doubled field, as in 3D. |
 | Parameters (units) | The existing `DemonsConfig` fields and defaults: `variant="demons"`, `iterations=(100, 50, 25)` per level, `smoothing_sigma=1` (voxels), `pyramid_mode="antialias"`. No field is added. |
 | Defaults | Unchanged from 3D. |
-| Convergence | A level ends after its iterations or when the RMS change of the field falls below SimpleITK's `MaximumRMSError` (0.02); the elapsed iterations and the final RMS change per level are recorded (today they are not). |
+| Convergence | The classic `demons` variant runs every iteration of a level, as MATLAB does; the other variants end a level after its iterations or when the RMS change of the field falls below SimpleITK's `MaximumRMSError` (0.02). The elapsed iterations and the final RMS change per level are recorded. |
 | Failure | Y or X below 4 raises `IncompatibleGeometryError`; 1 < Z < 4 stays rejected. SimpleITK errors become `RegistrationEstimationError`; a missing SimpleITK raises `RegistrationBackendUnavailableError`. |
 | Resources | Measured for this page with SimpleITK 2.5.3 at one thread and iterations (100, 50, 25): 0.04 s for 1×64×64 and 0.78 s for 32×64×64, about 10 and 6 µs per voxel. That projects to about 3 s for 1×512×512 and 40 to 45 s for 1×2048×2048, with the images (float32) and field (two float64 components) at about 25 bytes per pixel, or roughly 0.1 GB at 2048×2048. |
+
+% Amended 2026-11-10 for W-835: the classic demons variant smooths the field after each update, with MATLAB's sampled Gaussian, and runs every iteration (rows Backend and version, Optimizer and Convergence); before, SimpleITK's filter smoothed before each update and returned the last update unsmoothed (W-825).
+% Amended 2026-11-11 for W-835 (Jiahao, "改回 c7"): the route is W-825's c7 exactly. The first version's one-sided face gradients and MATLAB's [0, N − 1] inside rule are reversed; the loop keeps SimpleITK's two boundary rules (row Optimizer).
 
 ## Engineering validation design (task group 6)
 

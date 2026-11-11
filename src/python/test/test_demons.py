@@ -239,6 +239,102 @@ class TestAntialiasedDemonsRegister:
         )
 
 
+def _one_iteration(fixed, moving, smoothing_sigma=1.0):
+    """The demons field after one iteration from a zero field, through DemonsConfig."""
+    registration = estimate_transform(
+        fixed, moving, config=DemonsConfig(iterations=(1,), smoothing_sigma=smoothing_sigma),
+        reference_metadata=ImageMetadata("test/reference"), moving_metadata=ImageMetadata("test/moving"))
+    return registration.transform.displacement_zyx
+
+
+# MATLAB's fspecial('gaussian', [1 7], 1): the sampled Gaussian exp(-x^2 / 2), x = -3..3, divided by its sum.
+MATLAB_KERNEL_SIGMA_1 = np.array([0.004433048175243745, 0.054005582622414484, 0.2420362293761143,
+                                  0.3990502796524549, 0.2420362293761143, 0.054005582622414484,
+                                  0.004433048175243745])
+FLOAT64 = {"rtol": 1e-9, "atol": 1e-12}
+
+
+class TestMatlabOrderUpdate:
+    """W-835: the classic variant smooths after each update with MATLAB's kernel, keeping SimpleITK's boundary rules."""
+
+    def test_one_iteration_returns_the_smoothed_update(self):
+        """From a zero field, one iteration returns S(u), not the raw Thirion update u."""
+        from scipy.ndimage import correlate1d
+
+        rng = np.random.default_rng(835)
+        fixed = (100 + 20 * rng.standard_normal((12, 24, 24))).astype(np.float32)
+        moving = (100 + 20 * rng.standard_normal((12, 24, 24))).astype(np.float32)
+        field = _one_iteration(fixed, moving)
+
+        f, m = fixed.astype(np.float64), moving.astype(np.float64)
+        gradient = np.gradient(f)  # central inside; 0 on the two faces normal to each axis, as SimpleITK's
+        for axis, component in enumerate(gradient):
+            faces = [slice(None)] * 3
+            faces[axis] = [0, -1]
+            component[tuple(faces)] = 0.0
+        diff = f - m
+        denominator = sum(g * g for g in gradient) + diff ** 2
+        scale = np.where((np.abs(diff) < 0.001) | (denominator < 1e-9), 0.0, diff / denominator)
+        raw = np.stack([scale * g for g in gradient], axis=-1)
+        smoothed = raw.copy()
+        for axis in range(3):
+            smoothed = correlate1d(smoothed, MATLAB_KERNEL_SIGMA_1, axis=axis, mode="nearest")
+
+        assert field.shape == (12, 24, 24, 3) and field.dtype == np.float64
+        np.testing.assert_allclose(field, smoothed, **FLOAT64)
+        assert np.abs(field - raw).max() > 0.1
+
+    def test_kernel_is_matlabs_sampled_gaussian(self):
+        """A one-voxel update spreads as the outer product of MATLAB's 7-tap kernel for sigma = 1."""
+        z, y, x = np.indices((15, 15, 15), dtype=np.float64)
+        fixed = (100 + 2 * x).astype(np.float32)  # dF/dx = 2 inside, 0 on the X faces
+        moving = fixed.copy()
+        moving[7, 7, 7] -= 1  # F - M = 1 at the centre only
+        field = _one_iteration(fixed, moving)
+
+        update = 1 * 2 / (2 ** 2 + 1 ** 2)  # (F - M) g / (g^2 + (F - M)^2) along X
+        expected = np.zeros_like(field)
+        expected[4:11, 4:11, 4:11, 2] = update * np.einsum(
+            "i,j,k->ijk", MATLAB_KERNEL_SIGMA_1, MATLAB_KERNEL_SIGMA_1, MATLAB_KERNEL_SIGMA_1)
+        np.testing.assert_allclose(field, expected, **FLOAT64)
+
+    def test_face_gradient_is_zero(self):
+        """On a face, the gradient component normal to it is 0, as SimpleITK's (MATLAB's is one-sided)."""
+        z, _, x = np.indices((8, 16, 16), dtype=np.float64)
+        fixed = (100 + 10 * z ** 2 + 2 * x).astype(np.float32)
+        moving = fixed.copy()
+        moving[0, 8, 8] -= 1  # F - M = 1 on the Z = 0 face (one-sided dF/dz there: 10)
+        moving[7, 4, 4] -= 1  # and on the Z = 7 face (one-sided dF/dz there: 130)
+        field = _one_iteration(fixed, moving, smoothing_sigma=0.0)
+
+        expected = np.zeros_like(field)
+        expected[0, 8, 8, 2] = expected[7, 4, 4, 2] = 1 * 2 / (0 ** 2 + 2 ** 2 + 1 ** 2)  # gradient (0, 0, 2)
+        np.testing.assert_allclose(field, expected, **FLOAT64)
+
+    def test_a_sample_half_a_voxel_outside_takes_the_edge_value(self):
+        """A sample within half a voxel outside the grid counts as inside and takes the edge voxel's value."""
+        from starfinder.registration._demons import _create_demons_filter
+
+        x = np.indices((8, 16, 16), dtype=np.float64)[2]
+        fixed = (100 + 2 * x).astype(np.float32)
+        moving = fixed.copy()
+        moving[0, 8, 8] -= 1
+        moving[0, 4, 4] -= 1
+        initial = np.zeros((8, 16, 16, 3))  # SimpleITK components (x, y, z)
+        initial[0, 8, 8, 2] = -0.3  # samples Z = -0.3: inside, the edge voxel's value M[0, 8, 8] = F - 1
+        initial[0, 4, 4, 2] = -0.7  # samples Z = -0.7: outside, no update
+        fixed_image, moving_image = sitk.GetImageFromArray(fixed), sitk.GetImageFromArray(moving)
+        initial_image = sitk.GetImageFromArray(initial, isVector=True)
+        initial_image.CopyInformation(fixed_image)
+        demons = _create_demons_filter(sitk, "demons", 0.0)
+        demons.SetNumberOfIterations(1)
+        field = sitk.GetArrayFromImage(demons.Execute(fixed_image, moving_image, initial_image))
+
+        expected = initial.copy()
+        expected[0, 8, 8, 0] = 1 * 2 / (2 ** 2 + 1 ** 2)  # F - M = 1 (not 1.3, as extrapolation would give)
+        np.testing.assert_allclose(field, expected, **FLOAT64)
+
+
 class TestMatlabCompatibleConfig:
     """Tests for matlab_compatible_config function."""
 

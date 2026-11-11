@@ -1,4 +1,9 @@
-"""Non-rigid registration using demons algorithm (SimpleITK)."""
+"""Non-rigid registration using the demons algorithm.
+
+The classic variant runs its own update loop (_MatlabOrderDemons), which smooths
+the field after each update as MATLAB's imregdemons does; the other variants run
+SimpleITK's filters.
+"""
 
 from __future__ import annotations
 
@@ -19,8 +24,154 @@ def _import_sitk():
         )
 
 
+def _sampled_gaussian(sigma):
+    """MATLAB's field-smoothing kernel: a sampled Gaussian of radius ceil(3 sigma), normalised to sum 1.
+
+    The kernel of imregdemons' AccumulatedFieldSmoothing (fspecial('gaussian',
+    [1 2r+1], sigma)): 7 taps of variance 0.996 for sigma = 1. sigma = 0 gives
+    the single tap 1, no smoothing.
+    """
+    if sigma == 0:
+        return np.ones(1)
+    radius = int(np.ceil(3 * sigma))
+    x = np.arange(-radius, radius + 1, dtype=np.float64)
+    kernel = np.exp(-x ** 2 / (2 * sigma ** 2))
+    return kernel / kernel.sum()
+
+
+def _face_gradient(image):
+    """SimpleITK's demons gradient: central differences inside, 0 on the two faces normal to each axis.
+
+    As itk::CentralDifferenceImageFunction at the buffer boundary. An axis of
+    one or two voxels has gradient 0 along it.
+    """
+    gradient = []
+    for axis, n in enumerate(image.shape):
+        component = np.zeros_like(image)
+        if n > 2:
+            inner = [slice(None)] * image.ndim
+            inner[axis] = slice(1, -1)
+            ahead, behind = list(inner), list(inner)
+            ahead[axis], behind[axis] = slice(2, None), slice(None, -2)
+            component[tuple(inner)] = (image[tuple(ahead)] - image[tuple(behind)]) / 2
+        gradient.append(component)
+    return gradient
+
+
+def _sampled_inside(coordinate, size):
+    """Whether a sampled coordinate counts as inside an axis of size voxels: [-0.5, size - 0.5), as SimpleITK's.
+
+    itk::ImageFunction::IsInsideBuffer accepts half a voxel beyond the first
+    and last voxel centres; the linear interpolation there takes the edge
+    voxel's value (map_coordinates with mode="nearest").
+    """
+    return (coordinate >= -0.5) & (coordinate < size - 0.5)
+
+
+def _thirion_iterations(fixed, moving, field, iterations, kernel):
+    """Run classic Thirion demons iterations on field; return the field (a reused buffer) and the last update's RMS.
+
+    fixed and moving are float64 arrays of one level (ZYX or YX); field is
+    float64 with shape (ndim, *fixed.shape), one component per axis in voxels,
+    pulling: moving is sampled at p + field[:, p]. Each iteration, in MATLAB's
+    Demons3D order and with SimpleITK's boundary rules:
+
+    * warped = moving(p + field(p)), linear interpolation, clamped to the edge
+      voxel within half a voxel outside the grid;
+    * update = (fixed - warped) * grad / (|grad|^2 + (fixed - warped)^2), with
+      grad the fixed image's _face_gradient (0 on the faces), and 0 where
+      |fixed - warped| < 0.001, the denominator < 1e-9 or p + field(p) lies
+      outside the grid on any axis (_sampled_inside);
+    * field = S(field + update), S the separable kernel on every spatial axis,
+      edges replicated.
+
+    The RMS of the update is taken over the voxels sampled inside the grid, as
+    SimpleITK's RMS change.
+    """
+    from scipy import ndimage
+
+    ndim = fixed.ndim
+    grad = _face_gradient(fixed)
+    grad_sq = sum(g * g for g in grad)
+    axes = [np.arange(n, dtype=np.float64).reshape([-1 if a == axis else 1 for a in range(ndim)])
+            for axis, n in enumerate(fixed.shape)]
+    coords = np.empty_like(field)
+    inside = np.empty(fixed.shape, dtype=bool)
+    smoothed = np.empty_like(field)
+    rms = 0.0
+    for _ in range(iterations):
+        inside[...] = True
+        for axis in range(ndim):
+            np.add(field[axis], axes[axis], out=coords[axis])
+            inside &= _sampled_inside(coords[axis], fixed.shape[axis])
+        warped = ndimage.map_coordinates(moving, coords, order=1, mode="nearest", prefilter=False)
+        diff = fixed - warped
+        denominator = grad_sq + diff * diff
+        scale = np.zeros_like(diff)
+        np.divide(diff, denominator, out=scale,
+                  where=inside & (np.abs(diff) >= 0.001) & (denominator >= 1e-9))
+        for axis in range(ndim):
+            field[axis] += scale * grad[axis]
+        count = np.count_nonzero(inside)
+        rms = float(np.sqrt((scale * scale * grad_sq)[inside].sum() / count)) if count else 0.0
+        if len(kernel) > 1:
+            for axis in range(1, ndim + 1):
+                ndimage.correlate1d(field, kernel, axis=axis, mode="nearest", output=smoothed)
+                field, smoothed = smoothed, field
+    return field, rms
+
+
+class _MatlabOrderDemons:
+    """Classic Thirion demons that smooths the field after each update, as MATLAB's imregdemons does.
+
+    It takes the place of SimpleITK's DemonsRegistrationFilter in the pyramid
+    loops, with the same Execute, SetNumberOfIterations, GetElapsedIterations
+    and GetRMSChange. That filter smooths the field before each update and so
+    returns S(f) + u, the last update unsmoothed; this one returns S(f + u),
+    with MATLAB's sampled Gaussian (_sampled_gaussian) and SimpleITK's two
+    boundary rules: a zero gradient on the faces (_face_gradient) and the
+    half-voxel inside rule (_sampled_inside), as W-825's c7 route. Every
+    iteration runs: MATLAB has no early stop, and SimpleITK's never triggered
+    on the W-825 scenes. Fields are float64 SimpleITK vector images on the
+    fixed image's grid, in voxels.
+    """
+
+    def __init__(self, sitk, smoothing_sigma):
+        self._sitk = sitk
+        self._kernel = _sampled_gaussian(smoothing_sigma)
+        self._iterations = 0
+        self._elapsed = 0
+        self._rms = 0.0
+
+    # SimpleITK's filter interface, as the pyramid loops call it.
+    def SetNumberOfIterations(self, iterations):
+        self._iterations = int(iterations)
+
+    def GetElapsedIterations(self):
+        return self._elapsed
+
+    def GetRMSChange(self):
+        return self._rms
+
+    def Execute(self, fixed, moving, initial_field=None):
+        sitk = self._sitk
+        fixed_array = np.asarray(sitk.GetArrayViewFromImage(fixed), dtype=np.float64)
+        moving_array = np.asarray(sitk.GetArrayViewFromImage(moving), dtype=np.float64)
+        ndim = fixed_array.ndim
+        if initial_field is None:
+            field = np.zeros((ndim, *fixed_array.shape))
+        else:  # SimpleITK components are (x, y, z); the loop's are ZYX
+            field = np.ascontiguousarray(np.moveaxis(sitk.GetArrayFromImage(initial_field)[..., ::-1], -1, 0),
+                                         dtype=np.float64)
+        field, self._rms = _thirion_iterations(fixed_array, moving_array, field, self._iterations, self._kernel)
+        self._elapsed = self._iterations
+        out = sitk.GetImageFromArray(np.ascontiguousarray(np.moveaxis(field, 0, -1)[..., ::-1]), isVector=True)
+        out.CopyInformation(fixed)
+        return out
+
+
 def _create_demons_filter(sitk, method: str, smoothing_sigma: float):
-    """Create a SimpleITK demons registration filter.
+    """Create the demons filter of a variant.
 
     Parameters
     ----------
@@ -33,12 +184,12 @@ def _create_demons_filter(sitk, method: str, smoothing_sigma: float):
 
     Returns
     -------
-    SimpleITK filter
-        Configured demons registration filter.
+    _MatlabOrderDemons or SimpleITK filter
+        The update loop of the classic variant, or the variant's configured
+        SimpleITK filter.
     """
     if method == "demons":
-        demons = sitk.DemonsRegistrationFilter()
-        demons.SetStandardDeviations(smoothing_sigma)
+        demons = _MatlabOrderDemons(sitk, smoothing_sigma)
     elif method == "diffeomorphic":
         demons = sitk.DiffeomorphicDemonsRegistrationFilter()
         demons.SetStandardDeviations(smoothing_sigma)
@@ -268,8 +419,9 @@ def demons_register(
 ) -> np.ndarray:
     """Register moving image to fixed using demons algorithm.
 
-    Performs non-rigid registration using SimpleITK's demons filters
-    with anti-aliased multi-resolution pyramid for robustness.
+    Performs non-rigid registration with an anti-aliased multi-resolution
+    pyramid for robustness. The classic variant runs its own update loop;
+    the other variants run SimpleITK's demons filters.
 
     Parameters
     ----------
@@ -281,13 +433,18 @@ def demons_register(
         Number of iterations at each pyramid level (coarse to fine).
         Default is [100, 50, 25] (3-level anti-aliased pyramid).
     smoothing_sigma : float, optional
-        Standard deviation for Gaussian smoothing of the displacement field.
-        Default is 1.0 (matches MATLAB's AccumulatedFieldSmoothing).
+        Standard deviation, in voxels, of the Gaussian smoothing of the
+        displacement field. Default is 1.0, MATLAB's default
+        AccumulatedFieldSmoothing.
     method : str, optional
         Demons variant to use. Options:
 
-        - "demons" (default): Classic Thirion demons. Best speed/memory,
-          matches MATLAB's imregdemons algorithm.
+        - "demons" (default): Classic Thirion demons with the fixed image's
+          gradient. As MATLAB's imregdemons, it smooths the field after each
+          update, with a sampled Gaussian of radius ceil(3 sigma). It keeps
+          SimpleITK's boundary rules (a zero gradient on the faces; a sample
+          within half a voxel outside the grid takes the edge voxel's value)
+          and this package's pyramid, which differs from MATLAB's.
 
         - "diffeomorphic": Topology-preserving. Better quality on large
           deformations but ~37% more memory.
