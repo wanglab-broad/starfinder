@@ -187,7 +187,8 @@
     "mad": 1.0,
     "threshold": 8.413,
     "estimation": "all",
-    "n_estimation": 1048576
+    "n_estimation": 1048576,
+    "mad_floored": false
    },
    "ch01": {
     "zero_fraction": 0.29561519622802734,
@@ -195,7 +196,8 @@
     "mad": 1.0,
     "threshold": 8.413,
     "estimation": "all",
-    "n_estimation": 1048576
+    "n_estimation": 1048576,
+    "mad_floored": false
    },
    "ch02": {
     "zero_fraction": 0.19617938995361328,
@@ -203,7 +205,8 @@
     "mad": 1.0,
     "threshold": 9.413,
     "estimation": "all",
-    "n_estimation": 1048576
+    "n_estimation": 1048576,
+    "mad_floored": false
    },
    "ch03": {
     "zero_fraction": 0.22630882263183594,
@@ -211,7 +214,8 @@
     "mad": 1.0,
     "threshold": 8.413,
     "estimation": "all",
-    "n_estimation": 1048576
+    "n_estimation": 1048576,
+    "mad_floored": false
    }
   },
   "effective_settings": {

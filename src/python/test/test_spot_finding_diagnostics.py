@@ -141,7 +141,7 @@ def test_a_constant_channel_keeps_its_noise_record_and_threshold():
     record = result.diagnostics["noise"]["constant"]
     # Every voxel is at the minimum, but a channel without signal keeps the all-voxel record (W-789).
     assert record == {"zero_fraction": 0.0, "median": 100.0, "mad": 0.0, "threshold": 100.0, "estimation": "all",
-                      "n_estimation": 16 * 64 * 64}
+                      "n_estimation": 16 * 64 * 64, "mad_floored": False}
     assert result.diagnostics["thresholds"][1] == 100.0
     log = detect(image, replace(DEFAULT_METHODS["starfish_log"], channel_labels=kinds))
     assert log.diagnostics["thresholds"] == (0.01, 0.01)

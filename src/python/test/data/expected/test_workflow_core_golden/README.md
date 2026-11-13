@@ -1,5 +1,9 @@
 # Expected values of the per-FOV core on the session dataset
 
+W-848 (2026-11-13) adds the new key of the noise record, `mad_floored` (`false`: the MAD of every channel is
+1.0, at least one grey level, so the integer floor does not apply), to the same eight channel records. Every
+other value, table and digest is unchanged.
+
 W-789 (2026-11-10) adds the two new keys of the noise record, `estimation` (`all`) and
 `n_estimation` (1048576, the voxels of a 16 × 256 × 256 channel), to the eight channel records of
 the two `candidates` stage records. No channel of this fixture has more than half its voxels at its

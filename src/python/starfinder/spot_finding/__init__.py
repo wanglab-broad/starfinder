@@ -172,13 +172,18 @@ def find_spots(
     Local maxima records, per channel and in every threshold mode, the noise
     record diagnostics['noise'] (zero fraction, median, MAD, threshold, and
     the estimation set of the median and MAD, 'all' or 'above_minimum', with
-    its voxel count n_estimation). In noise mode a channel with signal of
-    which more than half the voxels equal its minimum (a truncated channel)
-    takes its median and MAD over the voxels above the minimum, and a
-    SpotFindingWarning, also listed in diagnostics['warnings'], notes it;
-    a channel with signal whose MAD over its estimation set is 0 raises
-    SpotFindingError, naming the round and channel, instead of detecting
-    with the median as threshold. With merge_radius_zyx set, diagnostics['merged']
+    its voxel count n_estimation, and mad_floored). In noise mode a channel
+    with signal of which more than half the voxels equal its minimum (a
+    truncated channel) takes its median and MAD over the voxels above the
+    minimum, and a SpotFindingWarning, also listed in diagnostics['warnings'],
+    notes it. On an integer image the MAD of a channel with signal has a floor
+    of one grey level: the threshold is median + value * 1.4826 * max(MAD, 1),
+    mad stays the measured MAD, mad_floored is True and a SpotFindingWarning,
+    also listed in diagnostics['warnings'], names the round, channel, measured
+    MAD, estimation set and threshold. A floating-point channel with signal
+    whose MAD over its estimation set is 0 raises SpotFindingError, naming
+    the round and channel, instead of detecting with the median as threshold,
+    because one grey level is not defined there (W-848). With merge_radius_zyx set, diagnostics['merged']
     holds the number of maxima the within-channel merge removed per channel.
     Local maxima and noise landmarks report diagnostics['plateaus'] per
     channel (maxima, removed_voxels): tied regional maxima collapsed and
@@ -219,6 +224,14 @@ def _channel_configs(plan, n_channels):
     for override in plan.channel_overrides:
         configs[labels.index(override.channel)] = replace(override.config, channel_labels=labels)
     return configs
+
+
+def _floor_note(record, label, round_name):
+    """The note of a noise record whose MAD the one-grey-level floor of an integer image replaced (W-848)."""
+    where = f"round {round_name!r}, " if round_name is not None else ""
+    return (f"spot finding: {where}channel {label!r}: the measured noise MAD ({record['mad']!r}) over its estimation "
+            f"set {record['estimation']!r} ({record['n_estimation']} voxels) is below one grey level, so the integer "
+            f"image's MAD floor of 1 was used; the threshold is {record['threshold']!r}")
 
 
 def _noise_note(record, label, round_name):
@@ -354,6 +367,9 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
         for c in sorted(noise):
             if noise[c]['estimation'] == 'above_minimum':
                 messages.append(_noise_note(noise[c], keys[c], round_name))
+                warnings.warn(messages[-1], SpotFindingWarning, stacklevel=3)
+            if noise[c]['mad_floored']:
+                messages.append(_floor_note(noise[c], keys[c], round_name))
                 warnings.warn(messages[-1], SpotFindingWarning, stacklevel=3)
     if models:
         diagnostics['model'] = _model_record(models, keys)

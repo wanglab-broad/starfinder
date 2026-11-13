@@ -86,7 +86,11 @@ class LocalMaximaConfig:
     taken over all the channel's voxels when at most half of them equal its
     minimum and otherwise over the voxels above the minimum (those a
     truncation did not clip; diagnostics['noise'] records the set as
-    estimation and n_estimation); a channel with signal whose MAD over that
+    estimation and n_estimation). On an integer image the MAD has a floor of
+    one grey level, since noise below it cannot be resolved: the threshold is
+    median + value * 1.4826 * max(MAD, 1), diagnostics['noise'] keeps the
+    measured MAD and sets mad_floored, and a SpotFindingWarning notes the
+    floor (W-848). A floating-point channel with signal whose MAD over that
     set is 0 raises SpotFindingError, so use adaptive or absolute for it
     (W-789). adaptive uses
     channel maximum, adaptive_round the image maximum, global the uint8/uint16

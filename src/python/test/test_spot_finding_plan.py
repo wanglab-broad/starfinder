@@ -58,7 +58,7 @@ def test_noise_record_equals_a_direct_numpy_computation(dims, mode):
         mad = np.median(np.abs(sample - median))
         expected = {"zero_fraction": np.mean(values == 0), "median": median, "mad": mad,
                     "threshold": result.diagnostics["thresholds"][c]}
-        assert set(noise[label]) == set(expected) | {"estimation", "n_estimation"}
+        assert set(noise[label]) == set(expected) | {"estimation", "n_estimation", "mad_floored"}
         assert (noise[label]["estimation"], noise[label]["n_estimation"]) == (
             "above_minimum" if truncated else "all", sample.size)
         for key, value_ in expected.items():

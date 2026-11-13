@@ -31,8 +31,10 @@ next to a higher voxel gives no row. `noise_landmark` shares this path.
 The guide's
 [threshold modes](spot-finding-contract.md#threshold-modes) say how the threshold is
 computed; in `noise` mode a channel with more than half its voxels at its minimum takes
-its median and MAD over the voxels above the minimum, and a channel with signal whose MAD
-is still 0 raises `SpotFindingError`
+its median and MAD over the voxels above the minimum, and on an integer image the MAD has
+a floor of one grey level (the threshold is `median + threshold_value × 1.4826 ×
+max(MAD, 1)`); a floating-point channel with signal whose MAD is still 0 raises
+`SpotFindingError`
 ([truncated channels](spot-finding-contract.md#truncated-channels)). See {py:class}`~starfinder.spot_finding.LocalMaximaConfig`.
 
 ```{config-options} starfinder.spot_finding.LocalMaximaConfig
@@ -116,10 +118,10 @@ See {py:class}`~starfinder.spot_finding.SpotFindingPlan` and
 | `counts` | Pipeline methods: the candidates per channel |
 | `outcomes` | Pipeline methods: per channel, `ok`, `empty` (the method ran and found nothing) or `constant` (a constant channel) |
 | `effective_settings` | Per channel, the channel's config |
-| `noise` | `local_maxima`: per channel, `zero_fraction`, `median`, `mad`, `threshold`, `estimation` (`all`, or `above_minimum` when `noise` mode took the median and MAD over the voxels above the minimum of a channel with more than half its voxels there) and `n_estimation` (the voxels in that set) |
+| `noise` | `local_maxima`: per channel, `zero_fraction`, `median`, `mad`, `threshold`, `estimation` (`all`, or `above_minimum` when `noise` mode took the median and MAD over the voxels above the minimum of a channel with more than half its voxels there), `n_estimation` (the voxels in that set) and `mad_floored` (`True` when the one-grey-level floor of an integer image replaced the measured `mad`) |
 | `merged` | `local_maxima` with `merge_radius_zyx`: the maxima removed per channel |
 | `plateaus` | Local maxima and noise landmarks: per channel, `maxima` counts multi-voxel maxima collapsed and `removed_voxels` counts their removed voxels, before border and spacing exclusions; omitted when all counts are zero |
-| `warnings` | The messages of the `SpotFindingWarning`s emitted, such as the note of a channel whose noise was estimated above its minimum |
+| `warnings` | The messages of the `SpotFindingWarning`s emitted, such as the note of a channel whose noise was estimated above its minimum or whose MAD the integer floor replaced |
 | `native` | `starfish_log` and `spotiflow`: per channel, the minimum, median and maximum of `radius` or `probability`, or `None` without candidates |
 | `geometry` | `starfish_log`: the scale-space memory estimate; `spotiflow`: the tiling; `piscis`: the mode, tile size, overlap and tile boundaries |
 | `model` | `spotiflow` and `piscis`: the model, the loaded files with their SHA-256, and the training pixel size |
