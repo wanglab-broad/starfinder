@@ -80,7 +80,17 @@ def test_at_most_half_at_the_minimum_keeps_the_all_voxel_threshold(zeros):
     assert (record["median"], record["mad"]) == expected
     np.testing.assert_allclose(record["threshold"], expected[0] + 5.0 * 1.4826 * expected[1], **FLOAT64)
     assert notes == [] and result.diagnostics["warnings"] == ()
-    assert record["mad_floored"] is False  # MAD 4.0 or 16.5, at least one grey level (W-848)
+
+
+@pytest.mark.parametrize("zeros", [0, VOXELS // 2])
+def test_a_mad_of_at_least_one_grey_level_is_not_floored(zeros):
+    # The fixtures of the test above: MAD 4.0 and 16.5; the threshold is unchanged and there is no floor warning (W-848).
+    levels = np.repeat(np.arange(33, 49), (VOXELS - zeros) // 16)
+    result, notes = detect(channel(levels), LocalMaximaConfig())
+    record = result.diagnostics["noise"]["0"]
+    assert record["mad"] in (4.0, 16.5) and record["mad_floored"] is False
+    assert record["threshold"] == record["median"] + 5.0 * record["mad"] * 1.4826
+    assert not [n for n in notes if "MAD floor" in n]
 
 
 def flat_signal(kind):
@@ -251,17 +261,50 @@ def test_tiled_statistics_carry_the_estimation_set_and_the_floor(tmp_path):
         _detection_statistics(fov, LocalMaximaConfig(), image.astype(np.float32))
 
 
+def floor_warnings(caught):
+    return [str(w.message) for w in caught if issubclass(w.category, spot_finding.SpotFindingWarning)
+            and "MAD floor" in str(w.message)]
+
+
+def test_tiled_statistics_warn_for_a_floored_channel_naming_the_reference_round(tmp_path):
+    # W-848: the global task's FOV-level statistics emit the floor warning, naming the reference round and the channel.
+    from starfinder.dataset.tiled import _detection_statistics
+    fov = golden_dataset(tmp_path).fov("FOV_001")
+    image = np.stack([channel(NOISE), mad_zero(), channel(NOISE), FULL], axis=-1)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        records = _detection_statistics(fov, LocalMaximaConfig(), image)["channels"]
+    emitted = floor_warnings(caught)
+    assert len(emitted) == 1 and [r["mad_floored"] for r in records] == [False, True, False, False]
+    message = emitted[0]
+    assert message.startswith("spot finding: round 'round1', channel 'ch01': the measured noise MAD (0.0) over its "
+                              "estimation set 'above_minimum' (1024 voxels) is below one grey level")
+    assert f"the threshold is {records[1]['threshold']!r}" in message and "FOV-level statistics of round 'round1'" in message
+    # No channel is floored: no floor warning.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _detection_statistics(fov, LocalMaximaConfig(), np.stack([channel(NOISE), FULL, FULL, FULL], axis=-1))
+    assert floor_warnings(caught) == []
+
+
 def test_the_tiled_merge_records_the_floor_and_lists_its_note(tmp_path):
-    from starfinder.dataset.tiled import _detection_statistics, _merged_detection
     from starfinder.dataset import PipelineConfig
+    from starfinder.dataset.tiled import _detection_statistics, _merged_detection
     fov = golden_dataset(tmp_path).fov("FOV_001")
     image = np.stack([channel(NOISE), mad_zero(), channel(NOISE), FULL], axis=-1)
     pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
-    statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
-                  "reference_metadata": {"frame_id": "noise-estimation"}}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
+                      "reference_metadata": {"frame_id": "noise-estimation"}}
+    emitted = floor_warnings(caught)
     direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
     merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
     assert merged.diagnostics["noise"] == direct.diagnostics["noise"]
     assert merged.diagnostics["noise"]["ch01"]["mad_floored"] is True
-    assert merged.diagnostics["warnings"] == tuple(  # the tiled notes name no round
-        n.replace("round 'round1', ", "") for n in direct.diagnostics["warnings"])
+    # The listed floor note is the string the global task emitted (it names the reference round); W-789's above-minimum
+    # notes are as at the base: listed without a round and not emitted.
+    assert len(emitted) == 1 and merged.diagnostics["warnings"].count(emitted[0]) == 1
+    expected = tuple(emitted[0] if "MAD floor" in n else n.replace("round 'round1', ", "")
+                     for n in direct.diagnostics["warnings"])
+    assert merged.diagnostics["warnings"] == expected

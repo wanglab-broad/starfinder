@@ -172,9 +172,12 @@ level is not defined, so a channel with signal whose MAD over that set is 0 rais
 `SpotFindingError`, naming the round and channel, the fraction of voxels at the minimum
 and the set used; detect it with `threshold_mode` `adaptive` or `absolute`. A constant
 channel, an all-zero one among them, gives no spots and no error, and is not floored.
-Tiled execution applies the same rule to the FOV-level statistics of its global task.
-The registration landmarks of `NoiseLandmarkConfig` keep the median and MAD of all
-voxels.
+Tiled execution applies the same rule to the FOV-level statistics of its global task:
+the task emits the floor warning, naming the reference round (the round those statistics
+come from, applied to every round), and the merged FOV lists the same message in
+`diagnostics["warnings"]`. W-789's above-minimum note is only listed there, without a
+round and without a runtime warning. The registration landmarks of
+`NoiseLandmarkConfig` keep the median and MAD of all voxels.
 
 ## Detection plan
 

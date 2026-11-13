@@ -226,12 +226,18 @@ def _channel_configs(plan, n_channels):
     return configs
 
 
-def _floor_note(record, label, round_name):
-    """The note of a noise record whose MAD the one-grey-level floor of an integer image replaced (W-848)."""
+def _floor_note(record, label, round_name, fov_level=False):
+    """The note of a noise record whose MAD the one-grey-level floor of an integer image replaced (W-848).
+
+    fov_level (tiled execution) adds that the record is the FOV-level statistic of round_name, applied to every round.
+    """
     where = f"round {round_name!r}, " if round_name is not None else ""
-    return (f"spot finding: {where}channel {label!r}: the measured noise MAD ({record['mad']!r}) over its estimation "
+    note = (f"spot finding: {where}channel {label!r}: the measured noise MAD ({record['mad']!r}) over its estimation "
             f"set {record['estimation']!r} ({record['n_estimation']} voxels) is below one grey level, so the integer "
             f"image's MAD floor of 1 was used; the threshold is {record['threshold']!r}")
+    if fov_level:
+        note += f" (the FOV-level statistics of round {round_name!r}, applied to every round)"
+    return note
 
 
 def _noise_note(record, label, round_name):
