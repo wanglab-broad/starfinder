@@ -78,7 +78,9 @@ def test_merge_visits_the_representatives():
 
 
 def test_noise_landmarks_share_regional_maxima():
-    image = np.zeros((8, 12, 12), dtype=np.uint16)
+    # A 0/1 checkerboard keeps fewer than half of the voxels at the minimum, so the landmarks' noise is the all-voxel
+    # median 1 and MAD 1 (W-836): threshold 1 + 5 x 1.4826 = 8.413, below the plateau of 10.
+    image = (np.indices((8, 12, 12)).sum(axis=0) % 2).astype(np.uint16)
     image[2:4, 3:5, 3:5] = 10
     result = find_spots(image, config=NoiseLandmarkConfig(), metadata=ImageMetadata("landmarks"),
                         spot_namespace="landmarks")

@@ -215,6 +215,7 @@ Its `spots` table has `spot_id` (pandas string) and `z/y/x` (float64), including
 empty results. Coordinates are zero-based voxel indices; physical conversion
 requires complete `ImageMetadata`. Detection never performs landmark matching.
 
+% Amended 2026-11-13 W-848: on an integer image the MAD has a floor of one grey level, so the MAD-0 refusal applies to floating-point images only, and the noise record gains `mad_floored`.
 % Amended 2026-11-10 W-789: the noise median and MAD of a channel more than half at its minimum are taken above the minimum, a MAD of 0 with signal raises, and the noise record gains its estimation set.
 
 {class}`starfinder.spot_finding.LocalMaximaConfig` preserves the pipeline's
@@ -236,10 +237,10 @@ config")`. `config` may also be a {class}`starfinder.spot_finding.SpotFindingPla
 channel overrides replace the whole config of named channels (it then needs
 `channel_labels`); every channel's effective config is in
 `diagnostics["effective_settings"]`. Local maxima records `diagnostics["noise"]` (per
-channel the zero fraction, median, MAD, threshold, `estimation` and `n_estimation`, in
+channel the zero fraction, median, MAD, threshold, `estimation`, `n_estimation` and `mad_floored`, in
 every threshold mode) and emits a {class}`starfinder.spot_finding.SpotFindingWarning`,
 listed in `diagnostics["warnings"]`, when `noise` mode estimated a channel's noise above
-its minimum; in `noise` mode a channel with signal whose MAD over its estimation set is
+its minimum or the integer MAD floor replaced the measured MAD; in `noise` mode a floating-point channel with signal whose MAD over its estimation set is
 0 raises `SpotFindingError`. `device` must be `"cpu"`, and
 `diagnostics["execution"]` records it with the thread settings in effect. Per-channel
 methods record `counts`, `outcomes` (`ok`, `empty` or `constant`; a constant channel is
@@ -251,8 +252,11 @@ per-round diagnostics under `diagnostics["rounds"]`; such a set is never decoded
 barcodes: in readout mode `multiplexed` decoding it raises, and readout mode `direct`
 assigns it with `decode_direct` (below).
 
+% Amended 2026-11-13 W-836: noise landmarks take the noise threshold of local maxima in `noise` mode (its estimation set, MAD floor and refusal) instead of the median and MAD of all voxels.
+
 {class}`starfinder.spot_finding.NoiseLandmarkConfig` retains registration's
-per-channel MAD peaks followed by its original radius deduplication: for each
+per-channel MAD peaks, with the `noise` threshold of `LocalMaximaConfig` above,
+followed by its original radius deduplication: for each
 pair within `min_distance_voxels`, drop the higher concatenated index.
 {class}`starfinder.spot_finding.PercentileCentroidConfig` instead sums channels,
 thresholds strictly above `threshold_percentile` in [0,100], labels face-connected

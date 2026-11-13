@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -14,7 +15,7 @@ from starfinder.io import ImageLoadConfig, load_round, load_volume, save_volume
 from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
 from starfinder.registration import (RegistrationRecipe, RegistrationStep, TranslationConfig, apply_transform,
                                      estimate_transform)
-from starfinder.spot_finding import LocalMaximaConfig, SpotFindingError, find_spots
+from starfinder.spot_finding import LocalMaximaConfig, SpotFindingWarning, find_spots
 
 
 def image_io(output: Path) -> np.ndarray:
@@ -47,13 +48,15 @@ def register_volumes(fixed: np.ndarray) -> None:
 
 def detect_spots(volume: np.ndarray) -> None:
     metadata = ImageMetadata("example/sample/FOV/round1")
-    # One bright voxel on zeros has no noise for noise mode to measure, so detection refuses it.
-    try:
-        find_spots(volume[..., np.newaxis], config=LocalMaximaConfig(), metadata=metadata,
-                   spot_namespace="example/sample/FOV")
-        raise AssertionError("noise mode should refuse a channel without noise")
-    except SpotFindingError as error:
-        print("Refused:", error)
+    # One bright voxel on zeros has no noise for noise mode to measure: its MAD of 0 is floored at one grey level
+    # (a warning), and the voxel is its own median, so nothing exceeds the threshold.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        bare = find_spots(volume[..., np.newaxis], config=LocalMaximaConfig(), metadata=metadata,
+                          spot_namespace="example/sample/FOV")
+    assert len(bare.spots) == 0 and bare.diagnostics["noise"]["0"]["mad_floored"]
+    assert any(issubclass(w.category, SpotFindingWarning) for w in caught)
+    print("Floored:", bare.diagnostics["warnings"][-1])
     # Add a seeded Poisson background (mean 100) and a channel axis to the known volume.
     background = np.random.default_rng(0).poisson(100, volume.shape).astype(volume.dtype)
     image = (volume + background)[..., np.newaxis]

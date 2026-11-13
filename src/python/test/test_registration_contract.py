@@ -99,8 +99,10 @@ def test_demons_identity_and_identity_metadata(variant):
     "config", [TpsConfig(min_matches=4, max_control_points=20), CpdConfig(max_control_points=20)]
 )
 def test_landmark_identity_and_insufficiency(config):
-    # Separated impulses span 3D, avoiding a rank-deficient TPS fit.
-    source = np.zeros((16, 32, 32), dtype=np.float32)
+    # Separated impulses span 3D, avoiding a rank-deficient TPS fit. Landmarks take the noise of local maxima (W-836):
+    # a 0..3 background keeps fewer than half of the voxels at the minimum, and every background voxel below the
+    # threshold, so the 27 impulses stay the landmarks.
+    source = (np.indices((16, 32, 32)).sum(axis=0) % 4).astype(np.float32)
     source[np.ix_([4, 8, 12], [6, 14, 22], [6, 14, 22])] = 100
     result = estimate(source, source, config)
     assert result.diagnostics.method == config.method

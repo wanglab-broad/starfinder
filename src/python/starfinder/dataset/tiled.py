@@ -276,9 +276,14 @@ def _plan_configs(fov, spot_finding):
 
 def _detection_statistics(fov, spot_finding, image) -> dict:
     """The FOV-level detection statistics of the reference round's detection image: per channel the noise record
-    (zero fraction, median, MAD, threshold, estimation set) of its configured mode, and whether the channel is
-    constant. A noise-mode channel with signal and a MAD of 0 raises SpotFindingError, as direct detection does."""
-    from starfinder.spot_finding import LocalMaximaConfig
+    (zero fraction, median, MAD, threshold, estimation set, whether the MAD was floored) of its configured mode,
+    and whether the channel is constant. An integer channel's MAD has the floor of one grey level, and each floored
+    channel emits a SpotFindingWarning that names the reference round (these are its statistics, applied to every
+    round); a noise-mode float channel with signal and a MAD of 0 raises SpotFindingError, as direct detection does
+    (W-848)."""
+    import warnings
+
+    from starfinder.spot_finding import LocalMaximaConfig, SpotFindingWarning, _floor_note
     from starfinder.spot_finding._methods import _noise_record, check_noise
     _, _, configs = _plan_configs(fov, spot_finding)
     labels = list(fov.dataset.channel_order)
@@ -292,6 +297,9 @@ def _detection_statistics(fov, spot_finding, image) -> dict:
         if config.threshold_mode == 'noise':
             check_noise(record, channel, labels[c], fov.dataset.rounds.reference_round)
         records.append(dict(record, channel=labels[c], constant=bool(channel.min() == channel.max())))
+        if record["mad_floored"]:
+            warnings.warn(_floor_note(record, labels[c], fov.dataset.rounds.reference_round, fov_level=True),
+                          SpotFindingWarning, stacklevel=2)
     return {"channels": records}
 
 
@@ -579,7 +587,7 @@ def _namespace(fov):
 def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
     """The FOV's SpotFindingResult of the merged candidates, with direct's diagnostics from the FOV-level statistics."""
     from starfinder.spot_finding import SpotFindingResult
-    from starfinder.spot_finding import _noise_note
+    from starfinder.spot_finding import _floor_note, _noise_note
     base, plan, configs = _plan_configs(fov, pipeline.spot_finding)
     labels = tuple(fov.dataset.channel_order)
     channels = statistics["detection"]["channels"]
@@ -599,12 +607,17 @@ def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
     diagnostics["outcomes"] = {labels[c]: "constant" if channels[c]["constant"] else
                                "ok" if diagnostics["counts"][labels[c]] else "empty" for c in range(len(labels))}
     noise = {labels[c]: {k: channels[c][k] for k in ("zero_fraction", "median", "mad", "threshold", "estimation",
-                                                     "n_estimation")}
+                                                     "n_estimation", "mad_floored")}
              for c in range(len(labels))}
     diagnostics["noise"] = noise
     diagnostics["effective_settings"] = {labels[c]: tuples(jsonable(configs[c])) for c in range(len(labels))}
-    diagnostics["warnings"] = tuple(_noise_note(noise[label], label, None) for label in labels
-                                    if noise[label]["estimation"] == "above_minimum")
+    # The floor note names the reference round, as the global task's warning does (the above-minimum note stays as at the
+    # base: no round, no runtime warning).
+    reference = fov.dataset.rounds.reference_round
+    diagnostics["warnings"] = tuple(
+        note for label in labels
+        for note in ([_noise_note(noise[label], label, None)] if noise[label]["estimation"] == "above_minimum" else [])
+        + ([_floor_note(noise[label], label, reference, fov_level=True)] if noise[label]["mad_floored"] else []))
     from starfinder.image import ImageMetadata
     metadata = ImageMetadata(**tuples(statistics["reference_metadata"]))
     return SpotFindingResult(spots, metadata, _namespace(fov), base, diagnostics, plan)

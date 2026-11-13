@@ -6,12 +6,13 @@ class SpotFindingBackendUnavailableError(ImportError):
 
 
 class SpotFindingError(ValueError):
-    """A detection refuses its input: a ``noise``-mode channel with signal whose noise MAD is 0 (W-789)."""
+    """A detection refuses its input: a ``noise``-mode floating-point channel with signal whose noise MAD is 0 (W-789;
+    an integer channel has its MAD floored at one grey level instead, W-848)."""
 
 
 class SpotFindingWarning(UserWarning):
     """A detection ran but something about its input deserves attention (for example a noise estimated above the
-    channel's minimum)."""
+    channel's minimum, or a noise MAD that the one-grey-level floor of an integer image replaced)."""
 
 
 class MissingModelError(FileNotFoundError):

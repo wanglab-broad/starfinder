@@ -58,7 +58,7 @@ def test_noise_record_equals_a_direct_numpy_computation(dims, mode):
         mad = np.median(np.abs(sample - median))
         expected = {"zero_fraction": np.mean(values == 0), "median": median, "mad": mad,
                     "threshold": result.diagnostics["thresholds"][c]}
-        assert set(noise[label]) == set(expected) | {"estimation", "n_estimation"}
+        assert set(noise[label]) == set(expected) | {"estimation", "n_estimation", "mad_floored"}
         assert (noise[label]["estimation"], noise[label]["n_estimation"]) == (
             "above_minimum" if truncated else "all", sample.size)
         for key, value_ in expected.items():
@@ -123,13 +123,22 @@ def test_fov_detection_names_the_round_in_the_warning(tmp_path):
         fov.find_spots(config=LocalMaximaConfig())
 
 
-def test_registration_landmarks_and_centroids_record_no_noise_and_do_not_warn():
+def test_registration_landmarks_record_the_local_maxima_noise_and_centroids_none():
+    # Landmarks share local maxima's noise records and notes (W-836): channel 2 of the fixture has more than half of
+    # its voxels at its minimum. Centroids record no noise and do not warn.
     image = fixture_image("3d")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        for config in (NoiseLandmarkConfig(), PercentileCentroidConfig()):
-            result = find_spots(image, config=config, metadata=META, spot_namespace=NAMESPACE)
-            assert "noise" not in result.diagnostics and result.diagnostics["warnings"] == ()
+        landmarks = find_spots(image, config=NoiseLandmarkConfig(), metadata=META, spot_namespace=NAMESPACE)
+        pipeline = find_spots(image, config=LocalMaximaConfig(), metadata=META, spot_namespace=NAMESPACE)
+    assert landmarks.diagnostics["noise"] == pipeline.diagnostics["noise"]
+    assert landmarks.diagnostics["noise"]["2"]["estimation"] == "above_minimum"
+    assert landmarks.diagnostics["warnings"] == pipeline.diagnostics["warnings"]
+    assert len(landmarks.diagnostics["warnings"]) == 1 and len(caught) == 2
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = find_spots(image, config=PercentileCentroidConfig(), metadata=META, spot_namespace=NAMESPACE)
+        assert "noise" not in result.diagnostics and result.diagnostics["warnings"] == ()
     assert caught == []
 
 

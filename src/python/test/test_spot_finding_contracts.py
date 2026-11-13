@@ -34,7 +34,10 @@ def test_empty_schema_and_singleton_z(config):
     image[0, 4, 5, 0] = 100
     before = image.copy()
     result = detect(image, config)
-    assert result.spots[['z', 'y', 'x']].values.tolist() == [[0, 4, 5]]
+    # The lone voxel is the landmarks' whole estimation set above the minimum (W-836): median 100 and MAD 0, floored at
+    # one grey level, so their threshold 100 + 5 x 1.4826 lies above it.
+    expected = [] if isinstance(config, NoiseLandmarkConfig) else [[0, 4, 5]]
+    assert result.spots[['z', 'y', 'x']].values.tolist() == expected
     assert result.metadata.frame_id == 'frame'
     assert result.metadata.spacing_zyx is None
     assert result.config == config
@@ -46,7 +49,11 @@ def test_distinct_channel_and_centroid_policies():
     image[2, 4, 4, :] = [10, 20]
     image[2, 4, 5, 0] = 10
     pipeline = detect(image, replace(ZERO, channel_labels=('green', 'red')))
-    noise = detect(image, NoiseLandmarkConfig())
+    # Landmarks take the noise of local maxima (W-836), which this mostly-zero float image does not have: a 0..3
+    # background keeps fewer than half of its voxels at the minimum, and below the threshold 1 + 5 x 1.4826 (median 1,
+    # MAD 1).
+    background = (np.indices(image.shape[:3]).sum(axis=0) % 4)[..., None]
+    noise = detect(image + background, NoiseLandmarkConfig())
     centroid = detect(image, PercentileCentroidConfig(90))
     assert set(pipeline.spots.channel) == {0, 1}
     assert len(noise.spots) == 1  # original pairwise channel deduplication
