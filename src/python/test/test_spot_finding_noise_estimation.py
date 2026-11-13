@@ -1,4 +1,5 @@
-"""Known answers of the local-maxima noise threshold on truncated channels (W-789) and its MAD floor (W-848).
+"""Known answers of the local-maxima noise threshold on truncated channels (W-789) and its MAD floor (W-848), which the
+registration noise landmarks share (W-836).
 
 In ``threshold_mode`` ``noise`` a channel's median and MAD are taken over all its voxels when at most half of them
 equal its minimum, and otherwise over the voxels above the minimum, which a truncation did not clip. On an integer
@@ -231,10 +232,82 @@ def test_the_noise_record_carries_the_estimation_set(tmp_path, mode, value):
     assert rounds["ch00"]["estimation"] == ("above_minimum" if mode == "noise" else "all")
 
 
-def test_noise_landmarks_keep_the_all_voxel_threshold():
-    # Registration landmarks are not pipeline detection: their noise threshold stays the all-voxel one.
-    result, notes = detect(channel(NOISE), NoiseLandmarkConfig())
-    assert result.diagnostics["thresholds"] == (0.0,) and len(result.spots) > 0 and notes == []
+# W-836: eight isolated landmark voxels inside the border, on voxels that channel() leaves at 0 for both fixtures below.
+PEAKS = [(z, y, x) for z in (3, 6) for y in (8, 20) for x in (8, 20)]
+
+
+def with_peaks(image, value=200):
+    image = image.copy()
+    for peak in PEAKS:
+        assert image[peak] == 0
+        image[peak] = value
+    return image
+
+
+def regional_maxima_above(image, threshold):
+    """The number of full-connectivity regional maxima above threshold, counted with scikit-image and SciPy alone."""
+    from scipy.ndimage import label
+    from skimage.morphology import local_maxima
+    mask = local_maxima(image, connectivity=image.ndim, allow_borders=True) & (image > threshold)
+    return label(mask, structure=np.ones((3,) * image.ndim, dtype=bool))[1]
+
+
+@pytest.mark.parametrize("sigma", [3.0, 5.0])
+@pytest.mark.parametrize("dims", ["3d", "z1"])
+def test_noise_landmarks_take_the_local_maxima_noise_threshold_on_a_truncated_channel(sigma, dims):
+    # 90 % zeros; above 0 the 1024 noise voxels (33..48) and the eight peaks: median 41 and MAD 4 over those 1032.
+    image = with_peaks(channel(NOISE))
+    if dims == "z1":  # one plane of 32x32: z=6 holds four of the peaks; its own noise record follows from the plane.
+        image = image[6:7].copy()
+    result, notes = detect(image, NoiseLandmarkConfig(noise_sigma=sigma))
+    pipeline, _ = detect(image, LocalMaximaConfig(threshold_value=sigma))
+    record = result.diagnostics["noise"]["0"]
+    assert record == pipeline.diagnostics["noise"]["0"]
+    assert result.diagnostics["thresholds"] == pipeline.diagnostics["thresholds"]
+    assert record["estimation"] == "above_minimum" and record["mad_floored"] is False
+    if dims == "3d":
+        assert (record["median"], record["mad"], record["n_estimation"]) == (41.0, 4.0, 1032)
+        np.testing.assert_allclose(record["threshold"], 41.0 + sigma * 1.4826 * 4.0, **FLOAT64)
+    assert record["threshold"] > 48  # above every noise voxel, not 0
+    assert len(result.spots) == regional_maxima_above(image, record["threshold"]) == (8 if dims == "3d" else 4)
+    assert sorted(map(tuple, result.spots[["z", "y", "x"]].to_numpy().astype(int))) == sorted(
+        p if dims == "3d" else (0, p[1], p[2]) for p in PEAKS if dims == "3d" or p[0] == 6)
+    assert len(notes) == 1 and "'above_minimum'" in notes[0] and result.diagnostics["warnings"] == tuple(notes)
+
+
+def test_noise_landmarks_floor_the_mad_of_an_integer_channel_as_local_maxima_does():
+    # mad_zero: above 0, 700 voxels of 2 hold the median and MAD (2 and 0); the MAD is floored at one grey level.
+    image = with_peaks(mad_zero())
+    result, notes = detect(image, NoiseLandmarkConfig())
+    pipeline, _ = detect(image, LocalMaximaConfig())
+    record = result.diagnostics["noise"]["0"]
+    assert record == pipeline.diagnostics["noise"]["0"]
+    assert (record["median"], record["mad"], record["mad_floored"]) == (2.0, 0.0, True)
+    np.testing.assert_allclose(record["threshold"], 2.0 + SIGMA * 1.0, **FLOAT64)
+    # The eight peaks and mad_zero's two isolated spots of 50, all inside the border.
+    assert len(result.spots) == regional_maxima_above(image, record["threshold"]) == 10
+    assert len(notes) == 2 and "MAD floor of 1" in notes[1] and result.diagnostics["warnings"] == tuple(notes)
+
+
+def test_noise_landmarks_refuse_a_float_channel_with_signal_and_a_mad_of_zero():
+    with pytest.raises(spot_finding.SpotFindingError, match=r"^spot finding: channel '0': the noise MAD is 0 "):
+        detect(with_peaks(mad_zero(np.float32)), NoiseLandmarkConfig())
+
+
+def test_noise_landmarks_keep_the_all_voxel_threshold_when_at_most_half_sit_at_the_minimum():
+    # FULL: 6.25 % of the voxels at its minimum 133. The threshold is the base's all-voxel expression, bit for bit.
+    image = FULL.copy()
+    for peak in PEAKS:
+        image[peak] = 250
+    result, notes = detect(image, NoiseLandmarkConfig())
+    values = image.astype(np.float64)
+    median = np.median(values)
+    mad = np.median(np.abs(values - median))
+    record = result.diagnostics["noise"]["0"]
+    assert (record["estimation"], record["n_estimation"], record["mad_floored"]) == ("all", VOXELS, False)
+    assert result.diagnostics["thresholds"] == (median + 5.0 * mad * 1.4826,)
+    assert len(result.spots) == regional_maxima_above(image, record["threshold"]) == 8
+    assert notes == [] and result.diagnostics["warnings"] == ()
 
 
 def test_tiled_statistics_carry_the_estimation_set_and_the_floor(tmp_path):

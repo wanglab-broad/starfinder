@@ -39,10 +39,11 @@ class TestTPSKnownDeformation:
     """TPS should recover a known smooth deformation."""
 
     def test_known_local_deformation(self):
-        # Create a synthetic volume with bright spots on a dark background
+        # Create a synthetic volume with bright spots on a dark background; landmarks take the noise of local maxima
+        # (W-836), so a 0..3 background keeps fewer than half of the voxels at the minimum and below the threshold
         rng = np.random.default_rng(42)
         shape = (16, 128, 128)
-        vol = np.zeros(shape, dtype=np.float32)
+        vol = (np.indices(shape).sum(axis=0) % 4).astype(np.float32)
 
         # Place ~200 bright spots (enough for matching)
         n_spots = 200
@@ -221,7 +222,8 @@ class TestCPDRegistration:
 
         rng = np.random.default_rng(42)
         shape = (16, 128, 128)
-        vol = np.zeros(shape, dtype=np.float32)
+        # A 0..3 background: landmarks take the noise of local maxima (W-836), as in the TPS test above
+        vol = (np.indices(shape).sum(axis=0) % 4).astype(np.float32)
 
         # Place bright spots
         n_spots = 200

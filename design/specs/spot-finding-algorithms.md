@@ -77,6 +77,7 @@ Equal-valued shoulders next to higher voxels give no row. Before exclusions,
 `plateaus` reports per-channel `maxima` and `removed_voxels`; omit it when all
 counts are zero, preserving untied results including diagnostics.
 
+% Amended 2026-11-13 W-836: noise landmarks share this noise threshold (estimation set, floor and refusal) and its record; they no longer keep the median and MAD of all voxels.
 % Amended 2026-11-13 W-848: on an integer image the MAD of the threshold has a floor of one grey level, so a channel with signal whose MAD over its estimation set is below 1 no longer raises (the threshold is median + `threshold_value` × 1.4826 × max(MAD, 1)); the refusal stays for floating-point images; the noise record gains `mad_floored`.
 % Amended 2026-11-10 W-789: in `noise` mode a channel with more than half its voxels at its minimum takes its median and MAD over the voxels above the minimum, and a channel with signal whose MAD over that set is 0 raises `SpotFindingError`; the other modes, the fields and the historical baselines are unchanged.
 

@@ -4,7 +4,7 @@ import numpy as np
 from scipy.interpolate import RBFInterpolator
 from scipy.ndimage import zoom
 from ._fields import sanitize_displacement_field
-from ._landmarks import detect_and_match_spots, subsample_control_points
+from ._landmarks import _match_landmarks, landmark_details, subsample_control_points
 def tps_displacement_field(
     positions: np.ndarray,
     displacements: np.ndarray,
@@ -109,7 +109,8 @@ def tps_register(
     moving : np.ndarray
         Moving volume, shape (Z, Y, X).
     detection_threshold : float
-        Spot detection sensitivity (lower = more spots).
+        Spot detection sensitivity (lower = more spots); the noise
+        multiplier of the landmarks (see _landmarks.detect_landmarks).
     match_distance : float
         Maximum pixel distance for spot matching.
     min_matches : int
@@ -135,32 +136,45 @@ def tps_register(
     ValueError
         If insufficient spot matches for reliable TPS fitting.
     """
-    positions, displacements = detect_and_match_spots(
-        fixed, moving,
-        detection_threshold=detection_threshold,
-        match_distance=match_distance,
-        min_matches=min_matches,
+    return _tps_register(
+        fixed, moving, detection_threshold=detection_threshold, match_distance=match_distance,
+        min_matches=min_matches, max_control_points=max_control_points, smoothing=smoothing,
+        grid_spacing=grid_spacing, zoom_order=zoom_order, field_smooth_sigma=field_smooth_sigma,
+        clamp_sampling_coordinates=clamp_sampling_coordinates,
+    )[0]
+
+
+def _tps_register(fixed, moving, *, detection_threshold, match_distance, min_matches, max_control_points, smoothing,
+                  grid_spacing, zoom_order, field_smooth_sigma, clamp_sampling_coordinates):
+    """tps_register, also returning its landmark diagnostics (landmark_details)."""
+    positions, displacements, record, notes = _match_landmarks(
+        fixed, moving, detection_threshold, match_distance, min_matches,
     )
 
     positions, displacements = subsample_control_points(
         positions, displacements, max_points=max_control_points
     )
 
-    return tps_displacement_field(
+    field = tps_displacement_field(
         positions, displacements, fixed.shape,
         smoothing=smoothing, grid_spacing=grid_spacing,
         zoom_order=zoom_order, field_smooth_sigma=field_smooth_sigma,
         clamp_sampling_coordinates=clamp_sampling_coordinates,
     )
+    return field, landmark_details(record, len(positions), notes)
 
 
 def estimate_tps(reference, moving, config, geometry):
-    """Registered estimator of TpsConfig: transform, backend and application policy."""
+    """Registered estimator of TpsConfig: transform, backend, application policy and landmark diagnostics.
+
+    The diagnostics record the reference and moving landmark counts, the
+    matched pairs and the landmarks record (W-836; landmark_details).
+    """
     from ._config import WarpConfig
     from ._landmarks import _landmark_settings
     from ._types import DenseDisplacementTransform
 
-    field = tps_register(
+    field, details = _tps_register(
         reference,
         moving,
         match_distance=config.match_distance_voxels,
@@ -168,4 +182,4 @@ def estimate_tps(reference, moving, config, geometry):
         smoothing=config.smoothing,
         **_landmark_settings(config),
     )
-    return DenseDisplacementTransform(field, **geometry), "scipy", WarpConfig(backend="scipy")
+    return DenseDisplacementTransform(field, **geometry), "scipy", WarpConfig(backend="scipy"), details

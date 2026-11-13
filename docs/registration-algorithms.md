@@ -103,6 +103,25 @@ See {py:class}`~starfinder.registration.DemonsConfig` for the precise rules.
 
 Match landmarks with a thin-plate spline.
 
+The landmarks of each signal are its regional maxima above the `noise` threshold of
+`local_maxima` with `threshold_value` set to `detection_noise_sigma`, the border excluded
+(see {py:class}`~starfinder.spot_finding.NoiseLandmarkConfig`). The median and MAD are
+taken over the voxels above the minimum when more than half of the signal's voxels sit at
+it, and over every voxel otherwise; on an integer signal the MAD has a floor of one grey
+level, and a floating-point signal with a MAD of 0 raises `RegistrationEstimationError`
+naming the image (reference or moving) and the channel
+([truncated channels](spot-finding-contract.md#truncated-channels)). Each reference
+landmark is matched to the nearest moving landmark within `match_distance_voxels`; at
+least `min_matches` pairs are needed, and farthest-point sampling keeps at most
+`max_control_points` of them for the fit.
+
+The step's diagnostics record the reference and moving landmark counts, the matched
+pairs (`matched_landmark_count`) and `landmarks`: for `reference` and `moving`, each
+channel's noise record (`threshold`, `median`, `mad`, `mad_floored`, `estimation`,
+`n_estimation`) and the image's `candidates`, and `control_points`, the pairs the fit
+uses. The landmarks' notes (an estimate above the minimum, a floored MAD) are listed in
+`warnings`, prefixed with the image.
+
 See {py:class}`~starfinder.registration.TpsConfig` for the precise rules.
 
 ```{config-options} starfinder.registration.TpsConfig
@@ -112,6 +131,15 @@ See {py:class}`~starfinder.registration.TpsConfig` for the precise rules.
 ### CPD
 
 Align landmark sets with coherent point drift.
+
+The landmarks are TPS's, with `detection_noise_sigma` as the multiplier. CPD has soft
+correspondences, not pairs: it subsamples the reference landmarks by farthest-point
+anchors and their neighbours, gathers the moving landmarks within
+`candidate_radius_voxels` of them and drops the reference points without one. The
+diagnostics record the same `landmarks`, where `control_points` is the number of
+reference points CPD fits, and `matched_landmark_count` is the number of moving
+landmarks it gathered. The other methods leave the landmark counts and `landmarks`
+`None`, and a saved record leaves `landmarks` out.
 
 See {py:class}`~starfinder.registration.CpdConfig` for the precise rules.
 

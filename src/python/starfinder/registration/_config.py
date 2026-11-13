@@ -245,6 +245,18 @@ class TpsConfig:
         Whether to clamp the estimated field's source coordinates to the image grid.
     method : str
         Method identifier, ``tps``.
+
+    Notes
+    -----
+    Landmarks are noise-mode regional maxima of each signal with
+    detection_noise_sigma as the multiplier (NoiseLandmarkConfig, W-836): the
+    threshold of LocalMaximaConfig in threshold_mode 'noise', so a signal with
+    more than half its voxels at its minimum takes its median and MAD over the
+    voxels above it, an integer signal's MAD has a floor of one grey level,
+    and a floating-point channel with signal and a MAD of 0 raises
+    RegistrationEstimationError naming the image and the channel. The
+    diagnostics record the landmark counts, the matched pairs and
+    ``landmarks`` (RegistrationDiagnostics).
     """
 
     detection_noise_sigma: float = 3
@@ -297,6 +309,14 @@ class CpdConfig:
         Whether to clamp the estimated field's source coordinates to the image grid.
     method : str
         Method identifier, ``cpd``.
+
+    Notes
+    -----
+    Landmarks follow TpsConfig's rule with detection_noise_sigma as the
+    multiplier (W-836). The diagnostics record the landmark counts,
+    ``landmarks`` and, as matched_landmark_count, the moving landmarks within
+    candidate_radius_voxels of the subsampled reference points
+    (RegistrationDiagnostics).
     """
 
     detection_noise_sigma: float = 5

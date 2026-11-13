@@ -183,7 +183,8 @@ def find_spots(
     MAD, estimation set and threshold. A floating-point channel with signal
     whose MAD over its estimation set is 0 raises SpotFindingError, naming
     the round and channel, instead of detecting with the median as threshold,
-    because one grey level is not defined there (W-848). With merge_radius_zyx set, diagnostics['merged']
+    because one grey level is not defined there (W-848). Noise landmarks
+    follow the same noise rule, record and notes (W-836). With merge_radius_zyx set, diagnostics['merged']
     holds the number of maxima the within-channel merge removed per channel.
     Local maxima and noise landmarks report diagnostics['plateaus'] per
     channel (maxima, removed_voxels): tied regional maxima collapsed and

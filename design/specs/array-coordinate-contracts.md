@@ -252,8 +252,11 @@ per-round diagnostics under `diagnostics["rounds"]`; such a set is never decoded
 barcodes: in readout mode `multiplexed` decoding it raises, and readout mode `direct`
 assigns it with `decode_direct` (below).
 
+% Amended 2026-11-13 W-836: noise landmarks take the noise threshold of local maxima in `noise` mode (its estimation set, MAD floor and refusal) instead of the median and MAD of all voxels.
+
 {class}`starfinder.spot_finding.NoiseLandmarkConfig` retains registration's
-per-channel MAD peaks followed by its original radius deduplication: for each
+per-channel MAD peaks, with the `noise` threshold of `LocalMaximaConfig` above,
+followed by its original radius deduplication: for each
 pair within `min_distance_voxels`, drop the higher concatenated index.
 {class}`starfinder.spot_finding.PercentileCentroidConfig` instead sums channels,
 thresholds strictly above `threshold_percentile` in [0,100], labels face-connected

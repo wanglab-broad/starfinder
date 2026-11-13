@@ -177,7 +177,10 @@ the task emits the floor warning, naming the reference round (the round those st
 come from, applied to every round), and the merged FOV lists the same message in
 `diagnostics["warnings"]`. W-789's above-minimum note is only listed there, without a
 round and without a runtime warning. The registration landmarks of
-`NoiseLandmarkConfig` keep the median and MAD of all voxels.
+`NoiseLandmarkConfig` follow the same rule in `noise` mode, with the same noise record
+in `diagnostics["noise"]` and the same notes; during TPS or CPD estimation the refusal
+of a floating-point channel raises `RegistrationEstimationError`, naming the image
+(reference or moving) and the channel.
 
 ## Detection plan
 

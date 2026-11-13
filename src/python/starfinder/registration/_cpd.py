@@ -6,6 +6,7 @@ from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 from ._fields import sanitize_displacement_field
 from ._errors import InsufficientLandmarksError
+from ._landmarks import detect_landmarks, landmark_details
 def _gaussian_kernel(moving_points: np.ndarray, beta: float) -> np.ndarray:
     """Compute N×N Gaussian kernel matrix.
 
@@ -443,7 +444,8 @@ def cpd_register(
     moving : np.ndarray
         Moving volume, shape (Z, moving_points, reference_points).
     detection_threshold : float
-        Spot detection sensitivity (lower = more spots).
+        Spot detection sensitivity (lower = more spots); the noise
+        multiplier of the landmarks (see _landmarks.detect_landmarks).
     max_control_points : int
         Target total fixed point count. FPS anchors are computed as
         ``max_control_points // (1 + k_neighbors)`` so that after
@@ -483,17 +485,27 @@ def cpd_register(
         If fewer than 10 spots detected in either volume, or too few
         moving candidates within the search radius.
     """
-    from starfinder.spot_finding import find_spots, NoiseLandmarkConfig
-    from starfinder.image import ImageMetadata
+    return _cpd_register(
+        fixed, moving, detection_threshold=detection_threshold, max_control_points=max_control_points, beta=beta,
+        lmbda=lmbda, w=w, affine_first=affine_first, grid_spacing=grid_spacing, candidate_radius=candidate_radius,
+        k_neighbors=k_neighbors, zoom_order=zoom_order, field_smooth_sigma=field_smooth_sigma,
+        clamp_sampling_coordinates=clamp_sampling_coordinates,
+    )[0]
 
-    fixed_spots = find_spots(
-        fixed, config=NoiseLandmarkConfig(noise_sigma=detection_threshold),
-        metadata=ImageMetadata("registration/fixed"), spot_namespace="registration/fixed",
-    ).spots[["z", "y", "x"]].to_numpy()
-    moving_spots = find_spots(
-        moving, config=NoiseLandmarkConfig(noise_sigma=detection_threshold),
-        metadata=ImageMetadata("registration/moving"), spot_namespace="registration/moving",
-    ).spots[["z", "y", "x"]].to_numpy()
+
+def _cpd_register(fixed, moving, *, detection_threshold, max_control_points, beta, lmbda, w, affine_first,
+                  grid_spacing, candidate_radius, k_neighbors, zoom_order, field_smooth_sigma,
+                  clamp_sampling_coordinates):
+    """cpd_register, also returning its landmark diagnostics (landmark_details).
+
+    CPD has soft correspondences, not pairs: its matched count is the number of
+    moving landmarks within candidate_radius of the subsampled reference
+    points (the moving points it fits), and its control points are the
+    reference points it fits, after the subsampling and the trimming of those
+    without such a moving landmark.
+    """
+    fixed_spots, fixed_record, fixed_notes = detect_landmarks(fixed, detection_threshold, "reference")
+    moving_spots, moving_record, moving_notes = detect_landmarks(moving, detection_threshold, "moving")
 
     if len(fixed_spots) < 10 or len(moving_spots) < 10:
         raise InsufficientLandmarksError(
@@ -524,6 +536,8 @@ def cpd_register(
             f"Too few moving candidates within {candidate_radius}px "
             f"radius: {len(moving_points)} (need >= 10)."
         )
+    record = dict(reference=fixed_record, moving=moving_record, matched=len(moving_points))
+    details = landmark_details(record, len(reference_points), fixed_notes + moving_notes)
 
     # Stage 1: Affine alignment
     affine_matrix, affine_translation = None, None
@@ -544,22 +558,27 @@ def cpd_register(
     _, weights, _ = cpd_nonrigid(reference_points, moving_points, beta=beta, lmbda=lmbda, w=w)
 
     # Stage 3: Dense field
-    return cpd_displacement_field(
+    field = cpd_displacement_field(
         moving_points, weights, beta, fixed.shape,
         grid_spacing=grid_spacing,
         affine_matrix=affine_matrix, translation=affine_translation,
         zoom_order=zoom_order, field_smooth_sigma=field_smooth_sigma,
         clamp_sampling_coordinates=clamp_sampling_coordinates,
     )
+    return field, details
 
 
 def estimate_cpd(reference, moving, config, geometry):
-    """Registered estimator of CpdConfig: transform, backend and application policy."""
+    """Registered estimator of CpdConfig: transform, backend, application policy and landmark diagnostics.
+
+    The diagnostics record the reference and moving landmark counts, the
+    matched count and the landmarks record (W-836; see _cpd_register).
+    """
     from ._config import WarpConfig
     from ._landmarks import _landmark_settings
     from ._types import DenseDisplacementTransform
 
-    field = cpd_register(
+    field, details = _cpd_register(
         reference,
         moving,
         beta=config.kernel_width_voxels,
@@ -570,4 +589,4 @@ def estimate_cpd(reference, moving, config, geometry):
         k_neighbors=config.neighbors_per_anchor,
         **_landmark_settings(config),
     )
-    return DenseDisplacementTransform(field, **geometry), "scipy", WarpConfig(backend="scipy")
+    return DenseDisplacementTransform(field, **geometry), "scipy", WarpConfig(backend="scipy"), details

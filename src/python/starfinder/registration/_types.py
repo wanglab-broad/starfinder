@@ -355,11 +355,11 @@ class RegistrationDiagnostics:
     iterations_completed : int or tuple[int, ...] or None
         Recorded iteration count as a scalar or per-level tuple; ``None`` means unreported.
     reference_landmark_count : int or None
-        Recorded number of reference landmarks; ``None`` means unreported.
+        Recorded number of reference landmarks after the cross-channel deduplication; ``None`` for the methods without landmarks.
     moving_landmark_count : int or None
-        Recorded number of moving landmarks; ``None`` means unreported.
+        Recorded number of moving landmarks after the cross-channel deduplication; ``None`` for the methods without landmarks.
     matched_landmark_count : int or None
-        Recorded number of matched landmarks; ``None`` means unreported.
+        Recorded number of matched landmarks (TPS's matched pairs, CPD's moving candidates); ``None`` for the methods without landmarks.
     warnings : tuple[str, ...]
         Estimator warning messages; an empty tuple records no warnings.
     final_metric_value : tuple[float, ...] or None
@@ -378,6 +378,8 @@ class RegistrationDiagnostics:
         Recorded spacing provenance, ``metadata`` or ``unknown_unit``; ``None`` means unreported.
     support_mask : dict or None
         B-spline fixed-image support mask record with keys ``used``, ``reason``, ``voxels`` and ``fraction``; ``None`` for the other methods.
+    landmarks : dict or None
+        TPS and CPD landmark record with keys ``reference``, ``moving`` and ``control_points``; ``None`` for the other methods.
 
     Notes
     -----
@@ -396,6 +398,26 @@ class RegistrationDiagnostics:
     (BSplineConfig's notes give the mask). The other methods leave it
     ``None``, and a record leaves the key out while it is ``None``, so their
     saved diagnostics keep the keys they had before.
+
+    TPS and CPD record their landmarks (W-836). reference_landmark_count and
+    moving_landmark_count are the candidates of each image after the
+    cross-channel deduplication. matched_landmark_count is, for TPS, the
+    reference landmarks matched to a moving landmark within
+    match_distance_voxels (before the subsampling to max_control_points);
+    for CPD, which has soft correspondences and no pairs, the moving
+    landmarks within candidate_radius_voxels of its subsampled reference
+    points (the moving points it fits). ``landmarks`` holds, per image
+    (``reference``, ``moving``), ``noise``, each channel's noise record
+    (``threshold``, ``median``, ``mad``, ``mad_floored``, ``estimation``,
+    ``n_estimation``; NoiseLandmarkConfig's notes give the rule), and
+    ``candidates``, the image's landmark count; and ``control_points``, the
+    number of points the fit uses after the subsampling (for TPS the
+    subsampled pairs, for CPD the subsampled reference points that keep a
+    moving landmark within candidate_radius_voxels). The spot-finding notes
+    of the landmarks (an estimation above the minimum, a floored MAD) are
+    listed in warnings, each prefixed with its image. The other methods
+    leave the counts and ``landmarks`` ``None``, and a record leaves
+    ``landmarks`` out while it is ``None``.
     """
 
     method: str
@@ -415,6 +437,7 @@ class RegistrationDiagnostics:
     backend_parameters: dict[str, str] | None = None
     spacing_source: str | None = None
     support_mask: dict | None = field(default=None, metadata={"record": "omit_none"})
+    landmarks: dict | None = field(default=None, metadata={"record": "omit_none"})
 
 
 @dataclass(frozen=True)
