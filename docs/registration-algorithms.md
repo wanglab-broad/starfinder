@@ -50,7 +50,11 @@ After earlier steps, elastix gets a fixed-image mask by default: the reference v
 whose pull through the earlier steps lands inside the moving grid, eroded by 2 voxels
 from its edges inside the grid, with elastix's own mask erosion off. The step's
 diagnostics record it as `support_mask`. An empty mask, or one too small for elastix,
-raises `RegistrationEstimationError` with its voxel count.
+raises `RegistrationEstimationError` with its voxel count. A failure of elastix with
+or without the mask raises `RegistrationEstimationError` with the Description lines of
+elastix's log, as in "affine estimation failed: ITK ERROR: ... Too many samples map
+outside moving image buffer"; a failure whose log has no Description line keeps elastix's
+own message.
 
 The erosion does not remove the reference grid's own faces. They hold data; the
 zero-filled border lies only where the pull leaves the moving grid. Eroding the faces
@@ -107,9 +111,11 @@ The landmarks of each signal are its regional maxima above the `noise` threshold
 `local_maxima` with `threshold_value` set to `detection_noise_sigma`, the border excluded
 (see {py:class}`~starfinder.spot_finding.NoiseLandmarkConfig`). The median and MAD are
 taken over the voxels above the minimum when more than half of the signal's voxels sit at
-it, and over every voxel otherwise; on an integer signal the MAD has a floor of one grey
-level, and a floating-point signal with a MAD of 0 raises `RegistrationEstimationError`
-naming the image (reference or moving) and the channel
+it, over the voxels above one value when more than half of the signal's voxels sit at that
+value above the minimum (`above_plateau`, with `plateau_value` and `plateau_fraction` in
+the record), and over every voxel otherwise; on an integer signal the MAD has a floor of
+one grey level, and a floating-point signal whose MAD over the set it used is 0 still
+raises `RegistrationEstimationError` naming the image (reference or moving) and the channel
 ([truncated channels](spot-finding-contract.md#truncated-channels)). Each reference
 landmark is matched to the nearest moving landmark within `match_distance_voxels`; at
 least `min_matches` pairs are needed, and farthest-point sampling keeps at most
@@ -118,8 +124,8 @@ least `min_matches` pairs are needed, and farthest-point sampling keeps at most
 The step's diagnostics record the reference and moving landmark counts, the matched
 pairs (`matched_landmark_count`) and `landmarks`: for `reference` and `moving`, each
 channel's noise record (`threshold`, `median`, `mad`, `mad_floored`, `estimation`,
-`n_estimation`) and the image's `candidates`, and `control_points`, the pairs the fit
-uses. The landmarks' notes (an estimate above the minimum, a floored MAD) are listed in
+`n_estimation`, and for `above_plateau` `plateau_value` and `plateau_fraction`) and the image's `candidates`, and `control_points`, the pairs the fit
+uses. The landmarks' notes (an estimate above the minimum or above a plateau, a floored MAD) are listed in
 `warnings`, prefixed with the image.
 
 See {py:class}`~starfinder.registration.TpsConfig` for the precise rules.
@@ -217,6 +223,7 @@ The following keys describe completed attempts.
 | `reference`, `reference_sha256` | The reference round's name, or the external reference's label and image hash | — |
 | `config` | The method config that ran | — |
 | `support_mask` | B-spline only: `used`, `reason` when unused, the mask's `voxels` and its `fraction` of the grid, as in the step's diagnostics | — |
+| `landmarks` | TPS and CPD only: the step's diagnostics `landmarks` (`reference` and `moving` noise records and candidate counts, and `control_points`), kept in the saved and reloaded record | — |
 | `application_config` | — | The `WarpConfig` of the final resampling |
 | `outcome` | `"succeeded"`, `"failed"` or `"rejected"` | `"succeeded"` or `"application_failed"` |
 | `failure` | Error type and message, and the criterion of a rejection | Error type and message |

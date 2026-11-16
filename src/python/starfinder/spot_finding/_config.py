@@ -83,15 +83,20 @@ class LocalMaximaConfig:
     Per-channel pipeline peaks; no spatial deduplication across channels.
 
     noise uses median + value * MAD * 1.4826 (sigma units), the median and MAD
-    taken over all the channel's voxels when at most half of them equal its
-    minimum and otherwise over the voxels above the minimum (those a
-    truncation did not clip; diagnostics['noise'] records the set as
-    estimation and n_estimation). On an integer image the MAD has a floor of
+    taken over all the channel's voxels, except over the voxels above the
+    minimum when more than half of them equal it (those a truncation did not
+    clip), and over the voxels above v when more than half equal one value v
+    above the minimum and some voxels lie above v (a plateau, W-863; the
+    cut-off stays at half). diagnostics['noise'] records the set as
+    estimation ('all', 'above_minimum' or 'above_plateau') and n_estimation,
+    and an 'above_plateau' record adds plateau_value (v) and plateau_fraction.
+    On an integer image the MAD has a floor of
     one grey level, since noise below it cannot be resolved: the threshold is
     median + value * 1.4826 * max(MAD, 1), diagnostics['noise'] keeps the
     measured MAD and sets mad_floored, and a SpotFindingWarning notes the
-    floor (W-848). A floating-point channel with signal whose MAD over that
-    set is 0 raises SpotFindingError, so use adaptive or absolute for it
+    floor (W-848), applied to the MAD of the set chosen. A floating-point
+    channel with signal whose MAD over that set is 0 raises SpotFindingError,
+    so use adaptive or absolute for it
     (W-789). adaptive uses
     channel maximum, adaptive_round the image maximum, global the uint8/uint16
     maximum (fraction units [0,1]); absolute is threshold_value itself, in the
@@ -344,11 +349,14 @@ class NoiseLandmarkConfig:
     Each channel's threshold follows the noise rule of LocalMaximaConfig in
     threshold_mode 'noise' (W-836): median + noise_sigma x 1.4826 x MAD, with
     the median and MAD over the voxels above the channel's minimum when more
-    than half of its voxels sit at it (W-789), and otherwise over every voxel.
-    On an integer image the MAD has a floor of one grey level (mad_floored,
-    W-848); a floating-point channel with signal and a MAD of 0 raises
+    than half of its voxels sit at it (W-789), over the voxels above v when
+    more than half sit at one value v above the minimum (the estimation set
+    'above_plateau', with plateau_value and plateau_fraction in the record,
+    W-863), and otherwise over every voxel. On an integer image the MAD has a
+    floor of one grey level (mad_floored, W-848); a floating-point channel
+    with signal whose MAD over the set it used is 0 still raises
     SpotFindingError. find_spots records each channel's noise record in
-    diagnostics['noise'] and lists the above-minimum and floor notes in
+    diagnostics['noise'] and lists the above-minimum, above-plateau and floor notes in
     diagnostics['warnings'], as for local maxima.
     """
     noise_sigma: float = 5.0

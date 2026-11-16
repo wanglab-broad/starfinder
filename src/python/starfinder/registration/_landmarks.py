@@ -3,7 +3,9 @@ from __future__ import annotations
 import numpy as np
 from ._errors import InsufficientLandmarksError, RegistrationEstimationError
 # The keys of a channel's noise record that a registration's landmarks record keeps (W-836).
+# plateau_value and plateau_fraction exist only on an 'above_plateau' record (W-863).
 _NOISE_KEYS = ("threshold", "median", "mad", "mad_floored", "estimation", "n_estimation")
+_PLATEAU_KEYS = ("plateau_value", "plateau_fraction")
 
 
 def detect_landmarks(
@@ -25,9 +27,10 @@ def detect_landmarks(
     tuple[np.ndarray, dict, tuple[str, ...]]
         ``(points, record, notes)``: the (N, 3) ZYX landmarks after the
         cross-channel deduplication; the record ``noise`` (per channel label:
-        threshold, median, mad, mad_floored, estimation, n_estimation) and
-        ``candidates`` (N); the spot-finding notes (above-minimum estimation,
-        MAD floor), each prefixed with the image.
+        threshold, median, mad, mad_floored, estimation, n_estimation, and
+        plateau_value and plateau_fraction for an above_plateau set) and
+        ``candidates`` (N); the spot-finding notes (above-minimum or
+        above-plateau estimation, MAD floor), each prefixed with the image.
 
     Raises
     ------
@@ -38,8 +41,9 @@ def detect_landmarks(
     Notes
     -----
     The threshold is local maxima's noise threshold (W-836): the median and
-    MAD over the voxels above the minimum when more than half sit at it,
-    and the one-grey-level MAD floor of an integer image. Each note is also
+    MAD over the voxels above the minimum when more than half sit at it, over
+    the voxels above one value when more than half sit at it above the
+    minimum (W-863), and the one-grey-level MAD floor of an integer image. Each note is also
     emitted as a SpotFindingWarning.
     """
     import warnings
@@ -58,7 +62,7 @@ def detect_landmarks(
         except SpotFindingError as exc:
             raise RegistrationEstimationError(f"{which} image landmarks: {exc}") from exc
     points = result.spots[["z", "y", "x"]].to_numpy()
-    record = dict(noise={label: {key: noise[key] for key in _NOISE_KEYS}
+    record = dict(noise={label: {key: noise[key] for key in _NOISE_KEYS + _PLATEAU_KEYS if key in noise}
                          for label, noise in result.diagnostics["noise"].items()},
                   candidates=len(points))
     notes = tuple(f"{which} image landmarks: {note}" for note in result.diagnostics["warnings"])

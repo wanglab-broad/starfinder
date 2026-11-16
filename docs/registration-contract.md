@@ -87,7 +87,9 @@ The generated table lists dimensions and optional extras; the
   * for a B-spline step, `support_mask`: whether the support mask was used, why not
     when it was not, its voxel count and its fraction of the grid.
 * `fov.registration_chains[round]` holds the composed transform.
-* `fov.registration_attempts[round]` records estimation and application attempts.
+* `fov.registration_attempts[round]` records estimation and application attempts;
+  an estimation attempt keeps the step's `support_mask` and `landmarks` when its
+  diagnostics have them.
 * `fov.registration_record` summarizes the recipe and application settings.
 
 The `registered` checkpoint stage of `FOV.run` saves images and transform records;

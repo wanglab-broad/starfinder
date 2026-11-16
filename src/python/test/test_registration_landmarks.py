@@ -1,7 +1,7 @@
 """The noise landmarks of TPS and CPD and their record in RegistrationDiagnostics (W-836).
 
 Landmarks take local maxima's noise threshold: the median and MAD over the voxels above the minimum when more than half
-sit at it (W-789), the one-grey-level MAD floor on an integer image (W-848), and the refusal of a floating-point channel
+sit at it (W-789), over the voxels above one plateau value when more than half sit at it above the minimum (W-863), the one-grey-level MAD floor on an integer image (W-848), and the refusal of a floating-point channel
 with signal and a MAD of 0. The fixtures are 16x32x32 (16384 voxels) with 27 isolated peaks on a 3x3x3 grid, which spans
 3D for the TPS fit. Each registration below estimates an image against itself, so every landmark matches itself.
 """
@@ -148,3 +148,58 @@ def test_the_landmarks_record_is_saved_only_for_tps_and_cpd():
     other = json_record(translation.diagnostics)
     assert list(other) == BASE_KEYS
     assert translation.diagnostics.landmarks is None and [other[key] for key in BASE_KEYS[5:8]] == [None] * 3
+
+
+def plateau_image(dtype, above=NOISE, plateau=4, zeros=250):
+    """A plateau of 4 on most voxels (a float64 TPS signal's background of W-863), `zeros` voxels of 0, the values
+    `above` at seeded random voxels off the grid, and a peak of 200 on each of the 27 grid voxels."""
+    flat = np.full(VOXELS, plateau, dtype=np.float64)
+    grid = np.ravel_multi_index(np.array(GRID).T, SHAPE)
+    free = np.random.default_rng(863).permutation(np.setdiff1d(np.arange(VOXELS), grid))
+    flat[free[:zeros]] = 0
+    flat[free[zeros:zeros + len(above)]] = above
+    flat[grid] = 200
+    return flat.reshape(SHAPE).astype(dtype)
+
+
+@pytest.mark.parametrize("config", [TPS, CPD], ids=lambda c: c.method)
+@pytest.mark.parametrize("dtype", [np.float64, np.uint8])
+def test_a_plateau_above_the_minimum_takes_the_local_maxima_threshold_and_is_recorded(config, dtype):
+    # 15909 of the 16384 voxels (97.1 %) are at 4, 250 at 0, and above 4 lie the 1024 noise voxels and 27 peaks: the
+    # 526th of those 1051 values is 41, and so the median; MAD 4. Without W-863 a float64 image's median is 4, its
+    # MAD 0, and it is refused.
+    image = plateau_image(dtype)
+    assert np.count_nonzero(image == 4) == VOXELS - 250 - 1024 - 27
+    result, emitted = estimate(image, image, config)
+    sigma = config.detection_noise_sigma
+    diagnostics, landmarks = result.diagnostics, result.diagnostics.landmarks
+    expected = local_maxima_record(image, sigma)
+    assert (expected["estimation"], expected["median"], expected["mad"], expected["n_estimation"]) == (
+        "above_plateau", 41.0, 4.0, 1051)
+    np.testing.assert_allclose(expected["threshold"], 41.0 + sigma * 1.4826 * 4.0, **FLOAT64)
+    for which in ("reference", "moving"):
+        record = landmarks[which]["noise"]["0"]
+        assert list(record) == NOISE_KEYS + ["plateau_value", "plateau_fraction"]
+        assert record["plateau_value"] == 4.0 and record["plateau_fraction"] == (VOXELS - 250 - 1051) / VOXELS
+        assert {k: record[k] for k in NOISE_KEYS} == expected
+        assert landmarks[which]["candidates"] == 27
+    assert (diagnostics.reference_landmark_count, diagnostics.moving_landmark_count) == (27, 27)
+    matched, control_points = (27, 20) if config.method == "tps" else cpd_counts(np.array(GRID, dtype=float), config)
+    assert (diagnostics.matched_landmark_count, landmarks["control_points"]) == (matched, control_points)
+    assert len(diagnostics.warnings) == 2 and diagnostics.warnings == tuple(emitted)
+    for note, which in zip(diagnostics.warnings, ("reference", "moving")):
+        assert note.startswith(f"{which} image landmarks: spot finding: channel '0': more than half of its voxels "
+                               "(92.1%) are at the value 4.0, above its minimum, ")
+        assert "(estimation 'above_plateau')" in note
+    saved = json_record(diagnostics)
+    assert saved["landmarks"]["reference"]["noise"]["0"]["plateau_value"] == 4.0
+
+
+def test_a_float_landmark_plateau_with_a_mad_of_zero_above_it_raises_naming_v_and_its_fraction():
+    # Above the plateau of 4 lie the 27 peaks alone (MAD 0), on 250 zeros.
+    image = plateau_image(np.float64, above=())
+    with pytest.raises(RegistrationEstimationError,
+                       match=r"^reference image landmarks: spot finding: channel '0': the noise MAD is 0 over its "
+                             r"estimation set 'above_plateau' \(27 voxels\); 98.3% of its 16384 voxels are at the "
+                             r"plateau value 4.0 above its minimum 0.0"):
+        estimate(image, plateau_image(np.float64), TPS)

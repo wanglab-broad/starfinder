@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
+import copy
 import hashlib
 import json
 import os
@@ -953,6 +954,8 @@ class FOV:
                     attempt.update(backend=result.diagnostics.backend)
                     if result.diagnostics.support_mask is not None:
                         attempt.update(support_mask=dict(result.diagnostics.support_mask))
+                    if result.diagnostics.landmarks is not None:
+                        attempt.update(landmarks=copy.deepcopy(result.diagnostics.landmarks))
                     if result.diagnostics.backend_versions is not None:
                         attempt.update(backend_versions=dict(result.diagnostics.backend_versions))
                     chain = TransformChain(tuple(r.transform for r in results) + (result.transform,))
