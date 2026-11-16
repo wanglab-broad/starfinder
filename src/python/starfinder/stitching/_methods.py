@@ -47,9 +47,11 @@ class StitchingSpec:
 
     Notes
     -----
-    ``run(tiles, grids, nominal_zyx, pairs, *, config)`` receives the tiles (ZYX
-    arrays in table order, ``None`` for an absent image, which the method must
-    leave unplaced), their reference grids, the ``(n, 3)`` nominal origins in µm
+    ``run(tiles, grids, nominal_zyx, pairs, *, config)`` receives the tiles (in
+    table order: a ZYX array, a :class:`~starfinder.stitching.TileLoader` that
+    returns the checked ZYX array when called and whose errors name the FOV, or
+    ``None`` for an absent image, which the method must leave unplaced), their
+    reference grids, the ``(n, 3)`` nominal origins in µm
     and the :class:`NeighborPair` list, and returns a :class:`MethodPlacement`.
     ``stitch`` calls it once after its checks; callers never call it directly.
     ``requires`` lists optional dependencies, imported when the method runs;

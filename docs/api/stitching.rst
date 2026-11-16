@@ -38,6 +38,7 @@ Stitching and supplied placements
    StitchingBackendUnavailableError
    StitchingInput
    StitchingSpec
+   TileLoader
 
 BigStitcher boundary
 --------------------

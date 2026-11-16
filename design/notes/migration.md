@@ -1699,6 +1699,24 @@ neighbour pair the library does not register is `pruned`; a link its optimizer r
 saved. The specification is [stitching specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md) ("Method registry") and
 [stitching algorithm specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching-algorithms.md) ("`multiview_stitcher`").
 
+### Stitching: deferred tile inputs (W-857)
+
+`StitchingInput.image` takes a third form besides an array and `None`: a
+`stitching.TileLoader(read, dtype)`, a function that returns the tile, with its dtype
+declared (the grid declares the shape). `StitchingInput.read()` returns the checked
+array of any form; a loader that raises gives `RuntimeError` naming the FOV, with the
+loader's error as the cause. Code that read `item.image` as an array calls
+`item.read()`. A registered method receives the loader and calls it.
+
+| Before | After |
+| --- | --- |
+| `Dataset.stitch`, the workflow's stitching task and its BigStitcher export loaded every FOV's stitching image before placement (the eager loading policy: about 0.23 GiB plus the tiles, 6.99 GiB on LN sample1's 64 FOVs) | They read headers only and pass loaders; a stored-metadata reference image is hashed one plane at a time. `multiview_stitcher` reads each tile of a registered pair once, keeps it binned by `binning_zyx` and releases it, so it holds at most one full-resolution tile; `export_bigstitcher` reads one tile at a time |
+| `multiview_stitcher` gave the library full-resolution images, which it binned for each pair | The library registers the tiles binned once with its own binning (`binning 1`); each link's `bbox` is recomputed at full resolution with the library's private `registration._get_overlap_bboxes`, pinned by a test. Links and translations are bit-identical |
+
+A `file:` input of floating-point pixels is now checked for finite values when the
+method reads it (a `RuntimeError` naming the FOV) rather than when `Dataset.stitch`
+builds its inputs.
+
 ### Sample outputs: the export entry and the fused image
 
 New names in a new module, `starfinder.export`, one new method, `Dataset.export`,

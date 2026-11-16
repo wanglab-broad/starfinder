@@ -7,6 +7,7 @@ before the call.
 """
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass, field
 from numbers import Integral, Real
@@ -17,6 +18,7 @@ import pandas as pd
 from starfinder._registry import Dependency
 
 from ._methods import LINEAR_TOLERANCE, METHOD_LINK_COLUMNS, STITCHING_METHODS, MethodPlacement, StitchingSpec
+from ._stitch import TileLoader
 
 PAIRWISE = ("phase_correlation",)
 PRUNING = ("alternating_pattern", None)
@@ -86,6 +88,15 @@ class MultiviewStitcherConfig:
     ``max_iter`` are the library's defaults when ``None`` (``abs_tol`` is then
     the voxel diagonal in µm). ``overlap_tolerance_um`` grows the boxes of the
     neighbour derivation and of the library's overlap regions. CPU only.
+
+    Memory: each tile of a registered pair is read once (a ``TileLoader``
+    input is called then), binned by ``binning_zyx`` and released, so a run
+    from loaders, as ``Dataset.stitch`` passes them, holds at most one
+    full-resolution tile and the binned tiles (1/64 of the pixels at the
+    default binning). An array input stays held by its caller. With
+    ``binning_zyx`` (1, 1, 1) nothing is binned and every tile is kept at full
+    resolution. The links and translations equal those of the library binning
+    each pair itself, bit for bit.
 
     Raises
     ------
@@ -180,20 +191,123 @@ def _labels(n, present, edges):
     return out
 
 
+def _dtype(tile):
+    return tile.dtype if isinstance(tile, TileLoader) else np.asarray(tile).dtype
+
+
+def _msim(sim):
+    """The one-level multiscale image of ``sim``, its channel axis selected as register() does before the graph."""
+    from multiview_stitcher import msi_utils
+    msim = msi_utils.get_msim_from_sim(sim, scale_factors=[])
+    if "c" in msi_utils.get_dims(msim):
+        msim = msi_utils.multiscale_sel_coords(msim, {"c": sim.coords["c"].values[0]})
+    return msim
+
+
+def _integer_means(array, factors):
+    """The window means of an integer array, trimmed to whole windows, cast back to its dtype; None for another dtype.
+
+    Each window's sum is exact in an integer accumulator and in float64 (below 2**53), so the float64 mean,
+    sum / window size, and its cast are those of the library's float64 mean, bit for bit. Sums are taken one axis at
+    a time by adding strided slices, which is several times faster than the library's reduction.
+    """
+    dtype, count = array.dtype, math.prod(factors)
+    if dtype.kind not in "ui":
+        return None
+    info = np.iinfo(dtype)
+    bound = max(abs(int(info.min)), int(info.max)) * count
+    if bound >= 2 ** 53:
+        return None
+    candidates = (np.uint16, np.uint32, np.uint64) if dtype.kind == "u" else (np.int16, np.int32, np.int64)
+    accumulator = next(t for t in candidates if np.iinfo(t).max >= bound)
+    out = array[tuple(slice(0, n - n % f) for n, f in zip(array.shape, factors))]
+    for axis in reversed(range(array.ndim)):
+        window = [slice(None)] * array.ndim
+        window[axis] = slice(0, None, factors[axis])
+        total = out[tuple(window)].astype(accumulator)
+        for k in range(1, factors[axis]):
+            window[axis] = slice(k, None, factors[axis])
+            total += out[tuple(window)]
+        out = total
+    return (out.astype(np.float64) / count).astype(dtype)
+
+
+def _binned_msim(tile, plane, binning, geometry):
+    """The tile's image binned once, as the library bins it for each of its pairs; the full-resolution pixels are
+    read once (a TileLoader is called here) and released before the next tile is read.
+
+    The binning is register_pair_of_msims's own, ``coarsen(binning, boundary="trim").mean().astype(dtype)`` on the
+    library's image of the tile: its coordinates and attributes, and, for an integer tile, values computed by
+    :func:`_integer_means`, which equal the library's; a floating-point tile is computed by the library's own
+    reduction. With every factor 1 there is nothing to bin, and the image keeps the full-resolution tile, as the
+    library would.
+    """
+    from multiview_stitcher import spatial_image_utils as si_utils
+    array = tile() if isinstance(tile, TileLoader) else np.asarray(tile)
+    image = array[0] if plane else array
+    sim = si_utils.get_sim_from_array(image, **geometry)
+    if max(binning.values()) > 1:
+        full = sim
+        sim = full.coarsen(binning, boundary="trim").mean().astype(full.dtype)
+        sim.attrs.update(copy.deepcopy(full.attrs))
+        means = _integer_means(image, [binning[d] for d in geometry["dims"]])
+        sim = sim.compute() if means is None else sim.copy(data=means.reshape(sim.shape))
+        del full
+    del array, image
+    return _msim(sim)
+
+
+def _pairwise_registrations(msims, binned, graph, config):
+    """The library's pairwise registrations of ``graph``'s edges on the binned images (binning 1), each link's
+    ``bbox`` taken from the full-resolution geometry.
+
+    The library takes a link's ``bbox`` (the overlap box whose corners the global optimization uses as virtual
+    beads) from the images it registers: from the binned images it would be off by up to half a bin. It is
+    recomputed with the function the library calls for it, ``registration._get_overlap_bboxes``, on the
+    full-resolution images ``msims`` (geometry only), with the library's arguments, so that the links, and so the
+    placement, are those of the library binning each pair itself. The private function is pinned by a test.
+    """
+    from multiview_stitcher import msi_utils, registration
+    dims = msi_utils.get_spatial_dims(msims[0])
+    kwargs = {} if config.upsample_factor is None else {"upsample_factor": config.upsample_factor}
+    computed = registration.compute_pairwise_registrations(
+        binned, graph, transform_key=_NOMINAL, registration_binning={d: 1 for d in dims},
+        overlap_tolerance=config.overlap_tolerance_um, pairwise_reg_func=registration.phase_correlation_registration,
+        pairwise_reg_func_kwargs=kwargs)
+    # register_pair_of_msims turns a number into one tolerance per spatial axis.
+    tolerance = {d: float(config.overlap_tolerance_um) for d in dims}
+    for edge in computed.edges:
+        sims = [msi_utils.get_sim_from_msim(msims[k], scale="scale0") for k in sorted(edge)]
+        box = registration._get_overlap_bboxes(*sims, input_transform_key=_NOMINAL, output_transform_key=_NOMINAL,
+                                               overlap_tolerance=tolerance)
+        old = computed.edges[edge]["bbox"]
+        computed.edges[edge]["bbox"] = old.copy(data=np.array([box["lowers"][0], box["uppers"][0]]).reshape(old.shape))
+    return computed
+
+
 def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewStitcherConfig) -> MethodPlacement:
     """Place the tiles with multiview-stitcher in one call (design/specs/stitching-algorithms.md, steps 1 to 7).
 
-    1. Each present tile becomes a one-level image with its grid's spacing and
-       its nominal origin (µm) as the array translation; Z=1 tiles are passed
-       as 2D (y, x), so their z translation is exactly 0.
+    1. Each present tile becomes a one-level image of its grid's shape (no
+       pixels: a zero-stride array) with its grid's spacing and its nominal
+       origin (µm) as the array translation; Z=1 tiles are passed as 2D
+       (y, x), so their z translation is exactly 0.
     2. The library's overlap graph (``overlap_tolerance_um``) is restricted to
        the contract's neighbour pairs, so the registered pairs are a subset of
        them, and pruned by ``pruning``; every other neighbour pair is left
        unregistered, which ``stitch`` records as ``pruned``.
-    3. and 4. Phase correlation per registered pair at ``binning_zyx`` and
-       ``upsample_factor``; the link's shift (µm, of ``fov_b`` against
-       ``fov_a``, view to common frame) is the negated translation of the
-       library's fixed-to-moving transform, and its quality the library's.
+    3. and 4. Each tile of a registered pair is read once, in table order (a
+       :class:`TileLoader` is called then), binned by ``binning_zyx`` as the
+       library bins it for a pair, and released, so that at most one
+       full-resolution tile read from a loader is held at a time. Phase
+       correlation per registered pair on the binned images (binning 1) at
+       ``upsample_factor``; each link's overlap box (the global optimization's
+       virtual beads) is recomputed from the full-resolution geometry with
+       the library's ``registration._get_overlap_bboxes``, so the links equal
+       the library's own binning of each pair bit for bit. The link's shift
+       (µm, of ``fov_b`` against ``fov_a``, view to common frame) is the
+       negated translation of the library's fixed-to-moving transform, and its
+       quality the library's.
     5. Link rule L1: quality below ``quality_threshold`` gives ``kept`` false
        with ``quality_below_threshold``; NaN quality with ``drop_nan_quality``
        gives ``nan_quality``.
@@ -210,7 +324,7 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
     pairs, which are dropped), the pruned and the optimizer-removed pairs, and
     the edge residuals (µm).
     """
-    from multiview_stitcher import msi_utils, mv_graph, param_resolution, registration
+    from multiview_stitcher import mv_graph, param_resolution
     from multiview_stitcher import spatial_image_utils as si_utils
 
     n = len(tiles)
@@ -238,19 +352,16 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
         return MethodPlacement(translations, np.full(n, -1, dtype=np.int64),
                                pd.DataFrame([], columns=list(METHOD_LINK_COLUMNS)), diagnostics)
 
-    msims = []
+    # Each tile's full-resolution geometry, without pixels (a zero-stride array): the overlap graph and each
+    # link's bbox come from these images, and the binned images from the pixels.
+    msims, geometries = [], []
     for i in present:
-        spacing = grids[i].metadata.spacing_zyx
-        image = np.asarray(tiles[i])[0] if plane else np.asarray(tiles[i])
-        sim = si_utils.get_sim_from_array(image, dims=dims, scale={dims[j]: float(spacing[k]) for j, k in
-                                                                    enumerate(axes)},
-                                          translation={dims[j]: float(nominal_zyx[i, k]) for j, k in enumerate(axes)},
-                                          transform_key=_NOMINAL)
-        msim = msi_utils.get_msim_from_sim(sim, scale_factors=[])
-        if "c" in msi_utils.get_dims(msim):
-            # The library adds a channel axis; register() selects it (reg_channel_index 0) before the graph.
-            msim = msi_utils.multiscale_sel_coords(msim, {"c": sim.coords["c"].values[0]})
-        msims.append(msim)
+        geometries.append({"dims": dims, "transform_key": _NOMINAL,
+                           "scale": {dims[j]: float(grids[i].metadata.spacing_zyx[k]) for j, k in enumerate(axes)},
+                           "translation": {dims[j]: float(nominal_zyx[i, k]) for j, k in enumerate(axes)}})
+        shape = grids[i].shape_zyx[1:] if plane else grids[i].shape_zyx
+        msims.append(_msim(si_utils.get_sim_from_array(np.broadcast_to(np.zeros((), _dtype(tiles[i])), shape),
+                                                       **geometries[-1])))
 
     graph = mv_graph.build_view_adjacency_graph_from_msims(msims, transform_key=_NOMINAL,
                                                            overlap_tolerance=config.overlap_tolerance_um)
@@ -267,12 +378,12 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
     registered = sorted(tuple(sorted(e)) for e in pruned_graph.edges)
     diagnostics["pruned_pairs"] = fov_pairs(sorted(set(tuple(sorted(e)) for e in graph.edges) - set(registered)))
 
-    kwargs = {} if config.upsample_factor is None else {"upsample_factor": config.upsample_factor}
-    computed = registration.compute_pairwise_registrations(
-        msims, pruned_graph, transform_key=_NOMINAL,
-        registration_binning={dims[j]: config.binning_zyx[k] for j, k in enumerate(axes)},
-        overlap_tolerance=config.overlap_tolerance_um, pairwise_reg_func=registration.phase_correlation_registration,
-        pairwise_reg_func_kwargs=kwargs)
+    # The pixels: each tile of a registered pair is read once, in table order, and only its binned image is kept.
+    binning = {dims[j]: config.binning_zyx[k] for j, k in enumerate(axes)}
+    needed = {k for e in registered for k in e}
+    binned = [_binned_msim(tiles[i], plane, binning, geometries[k]) if k in needed else msims[k]
+              for k, i in enumerate(present)]
+    computed = _pairwise_registrations(msims, binned, pruned_graph, config)
 
     quality, shift, reasons = {}, {}, {}
     for e in registered:

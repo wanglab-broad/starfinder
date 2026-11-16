@@ -17,6 +17,18 @@ The method registry supplies this table at build time.
 translations by global optimization. See
 {py:class}`~starfinder.stitching.MultiviewStitcherConfig`.
 
+The method builds the overlap graph from the tiles' grids, without pixels. It then
+reads each tile of a registered pair once, in table order, bins it by `binning_zyx`
+into the window means the library's binning gives, keeps the binned tile and
+releases the full-resolution one. For an integer tile the means come from exact
+integer sums, which is faster and gives the same values. A `TileLoader` input, which `Dataset.stitch` passes, is called
+at that point, so at most one full-resolution tile is held at a time; an array input
+stays held by its caller. The pairs are registered on the binned tiles. Each link's
+overlap box, whose corners the global optimization uses, is recomputed from the
+full-resolution geometry with the library's private `registration._get_overlap_bboxes`.
+A test pins that function. The links and translations are therefore those of the
+library binning each pair itself, bit for bit.
+
 ```{config-options} starfinder.stitching.MultiviewStitcherConfig
 ```
 

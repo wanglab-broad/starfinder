@@ -216,7 +216,7 @@ def test_dataset_stitch_reads_plain_pages_on_the_declared_grid(scene_layouts, mo
                                                     config=MULTIVIEW) == "placed"
     spacing = tuple(scene_layouts["scene"].fov_metadata[fov_ids(scene_layouts)[0]].spacing_zyx)
     for stored, plain in zip(*calls):
-        assert plain.fov_id == stored.fov_id and np.array_equal(plain.image, stored.image)
+        assert plain.fov_id == stored.fov_id and np.array_equal(plain.read(), stored.read())
         assert plain.grid.shape_zyx == stored.grid.shape_zyx and plain.grid.source == "declared"
         assert plain.grid.metadata == declared(plain.fov_id, spacing)
         assert plain.grid.metadata.spacing_zyx == stored.grid.metadata.spacing_zyx

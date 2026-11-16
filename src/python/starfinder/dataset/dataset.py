@@ -564,11 +564,16 @@ class Dataset:
         ``FOV.save_reference_image`` writes) or ``reference_image_import``: its
         stored metadata, or for a
         file that stores none the grid ``voxel_size_xy`` and ``voxel_size_z``
-        declare. It reads that grid and the stitching image named by
-        ``input``, one FOV at a time, builds the
-        :class:`~starfinder.stitching.StitchingInput` list in table order, calls
-        :func:`~starfinder.stitching.stitch` and, with ``output_dir``, saves the
-        result there with :func:`~starfinder.stitching.save_placement`.
+        declare (a file that stores its metadata is hashed one plane at a
+        time). It checks the stitching image named by ``input`` against that
+        grid from the file's header, one FOV at a time, and builds the
+        :class:`~starfinder.stitching.StitchingInput` list in table order, each
+        image a :class:`~starfinder.stitching.TileLoader` of its file: no pixel
+        is held before the method runs. It calls
+        :func:`~starfinder.stitching.stitch`, whose ``multiview_stitcher``
+        method reads each tile once and holds at most one full-resolution tile
+        at a time, and, with ``output_dir``, saves the result there with
+        :func:`~starfinder.stitching.save_placement`.
 
         Parameters
         ----------
@@ -631,6 +636,10 @@ class Dataset:
             Tile sizes or spacings taken from the grids differ between FOVs, an
             input image of another shape or metadata than its grid, or the
             errors of ``stitch``.
+        RuntimeError
+            A stitching image could not be read when the method read it (a file
+            removed or changed since its header was read, or a floating-point
+            file with a non-finite value); the message names the FOV.
         """
         from starfinder.stitching import ReviewPolicy, TilePositionTable, save_placement, stitch
         from starfinder.dataset._stitching import read_inputs, table_from_positions

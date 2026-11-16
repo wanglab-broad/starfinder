@@ -29,6 +29,7 @@ from starfinder.dataset._declared import reference_grid, reference_volume
 from starfinder.image import ImageMetadata, InvalidImageError
 from starfinder.io import load_volume, save_volume
 from starfinder.segmentation import ReferenceGrid
+from starfinder.stitching import TileLoader
 
 pytestmark = [pytest.mark.dataset, pytest.mark.io, pytest.mark.contract]
 DATASET_ID, OUTPUT_ID, FOV = "data", "output", "FOV_001"
@@ -325,12 +326,12 @@ def test_a_floating_point_file_without_calibration_is_read_as_before(tmp_path, m
 
 @pytest.mark.parametrize("voxels", ["given", "missing"])
 @pytest.mark.parametrize("kind", WITH_CALIBRATION)
-def test_a_file_with_stored_calibration_is_read_as_before(tmp_path, monkeypatch, kind, voxels):
-    """A file with stored calibration is read whole, as before: its grid holds the SHA-256 of its pixels. Every page,
-    in one whole read."""
+def test_a_file_with_stored_calibration_is_hashed_plane_by_plane(tmp_path, monkeypatch, kind, voxels):
+    """A file with stored calibration has its pixels hashed, since its grid holds their SHA-256, one page at a time
+    (W-857): every page is decoded once and the file is never read whole. The grid equals reference_volume's
+    (test_the_grid_equals_the_base_revisions)."""
     path = write_layout(tmp_path, kind)
-    assert page_reads(monkeypatch, tmp_path, voxels) == expected_reads(kind, path) == (n_pages(path),
-                                                                                       [path.resolve()])
+    assert page_reads(monkeypatch, tmp_path, voxels) == (EXPECTED_GRIDS[kind][1], []) == (n_pages(path), [])
 
 
 @pytest.mark.parametrize("kind", REFUSED)
@@ -508,10 +509,10 @@ def test_a_float_reference_image_is_still_read_whole(monkeypatch, tmp_path):
 @pytest.mark.parametrize("input_name", ["reference_merged", "reference_stain", "file:images/other/{fovID}.tif",
                                         "file:images/missing/{fovID}.tif"])
 def test_read_inputs_reads_the_reference_image_whole_only_for_its_pixels(tmp_path, monkeypatch, input_name):
-    """read_inputs on W-390's workflow sample (uint8 reference images as pages without metadata): only
-    reference_merged, whose image it is, reads the reference image whole, and reference_stain, a file: input and a
-    missing file: input read only its grid (no page of it decoded). Every StitchingInput holds the declared grid
-    (golden_grid), its source, the pixels of the file it names and that file's SHA-256 (none for a missing file)."""
+    """read_inputs on W-390's workflow sample (uint8 reference images as pages without metadata) reads headers only
+    (W-857): no page of any file is decoded, whatever the input. Every StitchingInput holds the declared grid
+    (golden_grid), its source, a TileLoader of the file it names, which reads that file's pixels, and that file's
+    SHA-256 (none for a missing file)."""
     import hashlib
 
     from starfinder.dataset._declared import reference_settings
@@ -533,9 +534,6 @@ def test_read_inputs_reads_the_reference_image_whole_only_for_its_pixels(tmp_pat
                       "file:images/other/{fovID}.tif": (other, tifffile.imread(other)),
                       "file:images/missing/{fovID}.tif": (out / "images" / "missing" / f"{fov}.tif", None)}
 
-    def whole_reads_of_references(reads):
-        return {fov: reads.whole.count(path) for fov, path in images.items()}
-
     with counted(monkeypatch) as reads:
         result = read_inputs(out, list(images), input_name, reference=reference)
     assert list(result) == list(images)
@@ -545,6 +543,9 @@ def test_read_inputs_reads_the_reference_image_whole_only_for_its_pixels(tmp_pat
         file_sha256 = None if pixels_of_file is None else hashlib.sha256(path.read_bytes()).hexdigest()
         assert (a.fov_id, a.grid, a.source, a.file_sha256) == (fov, golden_grid(fov), source, file_sha256)
         assert (a.image is None) == (pixels_of_file is None) == input_name.startswith("file:images/missing")
-        assert a.image is None or (a.image.dtype == pixels_of_file.dtype and np.array_equal(a.image, pixels_of_file))
         assert a.grid.source == "declared"
-    assert whole_reads_of_references(reads) == {fov: 1 if input_name == "reference_merged" else 0 for fov in images}
+    assert reads.pages == 0 and reads.whole == []
+    for fov in images:
+        a, (path, pixels_of_file) = result[fov], files[fov][input_name]
+        assert a.image is None or (isinstance(a.image, TileLoader) and a.image.dtype == pixels_of_file.dtype)
+        assert a.image is None or np.array_equal(a.read(), pixels_of_file)
