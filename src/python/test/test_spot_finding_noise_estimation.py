@@ -379,12 +379,85 @@ def test_the_tiled_merge_records_the_floor_and_lists_its_note(tmp_path):
     merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
     assert merged.diagnostics["noise"] == direct.diagnostics["noise"]
     assert merged.diagnostics["noise"]["ch01"]["mad_floored"] is True
-    # The listed floor note is the string the global task emitted (it names the reference round); W-789's above-minimum
-    # notes are as at the base: listed without a round and not emitted.
+    # The listed floor note is the string the global task emitted (it names the reference round).
     assert len(emitted) == 1 and merged.diagnostics["warnings"].count(emitted[0]) == 1
-    expected = tuple(emitted[0] if "MAD floor" in n else n.replace("round 'round1', ", "")
-                     for n in direct.diagnostics["warnings"])
+    # W-861: the above-minimum notes name the reference round too, as direct detection's do (the floor note adds
+    # that its record is the FOV-level statistic).
+    expected = tuple(emitted[0] if "MAD floor" in n else with_round(n) for n in direct.diagnostics["warnings"])
     assert merged.diagnostics["warnings"] == expected
+
+
+def with_round(note):
+    """A direct note of find_spots on an array (no round) as the tiled route words it: naming the reference round."""
+    return note.replace("spot finding: ", "spot finding: round 'round1', ", 1)
+
+
+def noise_warnings(caught):
+    return [str(w.message) for w in caught if issubclass(w.category, spot_finding.SpotFindingWarning)]
+
+
+def test_the_tiled_route_emits_and_lists_the_above_minimum_note_naming_the_reference_round(tmp_path):
+    # W-861: the global task warns for a channel with more than half its voxels at its minimum, and the merged
+    # diagnostics list the string it emitted (before: listed without a round, never emitted).
+    from starfinder.dataset import PipelineConfig
+    from starfinder.dataset.tiled import _detection_statistics, _merged_detection
+    fov = golden_dataset(tmp_path).fov("FOV_001")
+    image = np.stack([channel(NOISE), FULL, channel(NOISE), FULL], axis=-1)
+    pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
+                      "reference_metadata": {"frame_id": "noise-estimation"}}
+    emitted = noise_warnings(caught)
+    assert [m.split(":")[1].strip() for m in emitted] == ["round 'round1', channel 'ch00'",
+                                                          "round 'round1', channel 'ch02'"]
+    assert all("estimation 'above_minimum'" in m and "more than half of its voxels are at its minimum" in m
+               for m in emitted)
+    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
+    assert tuple(emitted) == tuple(with_round(n) for n in direct.diagnostics["warnings"])
+    merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
+    assert merged.diagnostics["warnings"] == tuple(emitted)
+
+
+def test_the_tiled_route_emits_and_lists_the_above_plateau_note_naming_the_reference_round(tmp_path):
+    # W-861 with W-863: a plateau above the minimum (89.0 % of the voxels at 4, 1024 noise voxels above it).
+    from starfinder.dataset import PipelineConfig
+    from starfinder.dataset.tiled import _detection_statistics, _merged_detection
+    fov = golden_dataset(tmp_path).fov("FOV_001")
+    image = np.stack([plateau_spots(np.float64), FULL.astype(np.float64), FULL.astype(np.float64),
+                      FULL.astype(np.float64)], axis=-1)
+    pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
+                      "reference_metadata": {"frame_id": "noise-estimation"}}
+    emitted = noise_warnings(caught)
+    assert len(emitted) == 1
+    assert emitted[0].startswith("spot finding: round 'round1', channel 'ch00': more than half of its voxels "
+                                 "(89.0%) are at the value 4.0, above its minimum, ")
+    assert "(estimation 'above_plateau')" in emitted[0]
+    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
+    assert tuple(emitted) == tuple(with_round(n) for n in direct.diagnostics["warnings"])
+    merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
+    assert merged.diagnostics["warnings"] == tuple(emitted)
+
+
+def test_the_tiled_route_orders_the_plateau_note_before_the_floor_note_of_an_integer_channel(tmp_path):
+    from starfinder.dataset import PipelineConfig
+    from starfinder.dataset.tiled import _detection_statistics, _merged_detection
+    fov = golden_dataset(tmp_path).fov("FOV_001")
+    image = np.stack([plateau_mad_zero(np.uint8), FULL, FULL, FULL], axis=-1)
+    pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
+                      "reference_metadata": {"frame_id": "noise-estimation"}}
+    emitted = noise_warnings(caught)
+    assert len(emitted) == 2 and "'above_plateau'" in emitted[0] and "MAD floor" in emitted[1]
+    assert all(m.startswith("spot finding: round 'round1', channel 'ch00': ") for m in emitted)
+    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
+    merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
+    assert merged.diagnostics["warnings"] == tuple(emitted)
 
 
 # W-863: a plateau above the minimum.
@@ -507,10 +580,11 @@ def test_a_plateau_channel_in_the_tiled_statistics_and_the_merge(tmp_path):
     assert merged.diagnostics["noise"]["ch00"]["plateau_value"] == PLATEAU
     notes = merged.diagnostics["warnings"]
     plateau = [n for n in notes if "'above_plateau'" in n]
-    # As above-minimum's note: listed without a round. It names the channel, the value and its fraction.
-    assert len(plateau) == 1 and plateau[0].startswith("spot finding: channel 'ch00': more than half of its voxels "
-                                                       "(89.0%) are at the value 4.0, above its minimum, ")
-    assert notes == tuple(n.replace("round 'round1', ", "") for n in direct.diagnostics["warnings"])
+    # W-861: it names the reference round, the channel, the value and its fraction, as direct detection's does.
+    assert len(plateau) == 1 and plateau[0].startswith("spot finding: round 'round1', channel 'ch00': more than half "
+                                                       "of its voxels (89.0%) are at the value 4.0, above its "
+                                                       "minimum, ")
+    assert notes == tuple(with_round(n) for n in direct.diagnostics["warnings"])
     # The float refusal covers the plateau set in the global task's statistics.
     with pytest.raises(spot_finding.SpotFindingError, match=r"^spot finding: round 'round1', channel 'ch00': .*"
                                                            r"'above_plateau'"):

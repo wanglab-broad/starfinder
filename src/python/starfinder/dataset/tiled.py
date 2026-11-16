@@ -274,16 +274,31 @@ def _plan_configs(fov, spot_finding):
     return plan.config, plan, _channel_configs(plan, len(fov.dataset.channel_order))
 
 
+def _noise_notes(record, label, reference):
+    """The notes of one channel's noise record, in direct detection's order: the above-minimum note (W-789) or the
+    above-plateau note (W-863), then the floor note (W-848). Each names the reference round, whose statistics the
+    record holds and applies to every round."""
+    from starfinder.spot_finding import _floor_note, _noise_note, _plateau_note
+    notes = []
+    if record["estimation"] == "above_minimum":
+        notes.append(_noise_note(record, label, reference))
+    if record["estimation"] == "above_plateau":
+        notes.append(_plateau_note(record, label, reference))
+    if record["mad_floored"]:
+        notes.append(_floor_note(record, label, reference, fov_level=True))
+    return notes
+
+
 def _detection_statistics(fov, spot_finding, image) -> dict:
     """The FOV-level detection statistics of the reference round's detection image: per channel the noise record
     (zero fraction, median, MAD, threshold, estimation set, whether the MAD was floored) of its configured mode,
-    and whether the channel is constant. An integer channel's MAD has the floor of one grey level, and each floored
-    channel emits a SpotFindingWarning that names the reference round (these are its statistics, applied to every
-    round); a noise-mode float channel with signal and a MAD of 0 raises SpotFindingError, as direct detection does
-    (W-848)."""
+    and whether the channel is constant. A channel whose estimation set is the voxels above its minimum or above its
+    plateau value (W-789, W-863), and each floored channel of an integer image (the one-grey-level floor of the MAD),
+    emits a SpotFindingWarning that names the reference round (these are its statistics, applied to every round); a
+    noise-mode float channel with signal and a MAD of 0 raises SpotFindingError, as direct detection does (W-848)."""
     import warnings
 
-    from starfinder.spot_finding import LocalMaximaConfig, SpotFindingWarning, _floor_note
+    from starfinder.spot_finding import LocalMaximaConfig, SpotFindingWarning
     from starfinder.spot_finding._methods import _noise_record, check_noise
     _, _, configs = _plan_configs(fov, spot_finding)
     labels = list(fov.dataset.channel_order)
@@ -297,9 +312,8 @@ def _detection_statistics(fov, spot_finding, image) -> dict:
         if config.threshold_mode == 'noise':
             check_noise(record, channel, labels[c], fov.dataset.rounds.reference_round)
         records.append(dict(record, channel=labels[c], constant=bool(channel.min() == channel.max())))
-        if record["mad_floored"]:
-            warnings.warn(_floor_note(record, labels[c], fov.dataset.rounds.reference_round, fov_level=True),
-                          SpotFindingWarning, stacklevel=2)
+        for note in _noise_notes(record, labels[c], fov.dataset.rounds.reference_round):
+            warnings.warn(note, SpotFindingWarning, stacklevel=2)
     return {"channels": records}
 
 
@@ -587,7 +601,6 @@ def _namespace(fov):
 def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
     """The FOV's SpotFindingResult of the merged candidates, with direct's diagnostics from the FOV-level statistics."""
     from starfinder.spot_finding import SpotFindingResult
-    from starfinder.spot_finding import _floor_note, _noise_note, _plateau_note
     base, plan, configs = _plan_configs(fov, pipeline.spot_finding)
     labels = tuple(fov.dataset.channel_order)
     channels = statistics["detection"]["channels"]
@@ -612,14 +625,9 @@ def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
              for c in range(len(labels))}
     diagnostics["noise"] = noise
     diagnostics["effective_settings"] = {labels[c]: tuples(jsonable(configs[c])) for c in range(len(labels))}
-    # The floor note names the reference round, as the global task's warning does (the above-minimum and above-plateau
-    # notes stay as at the base: no round, no runtime warning).
+    # The notes name the reference round, as the global task's warnings do (W-861).
     reference = fov.dataset.rounds.reference_round
-    diagnostics["warnings"] = tuple(
-        note for label in labels
-        for note in ([_noise_note(noise[label], label, None)] if noise[label]["estimation"] == "above_minimum" else [])
-        + ([_plateau_note(noise[label], label, None)] if noise[label]["estimation"] == "above_plateau" else [])
-        + ([_floor_note(noise[label], label, reference, fov_level=True)] if noise[label]["mad_floored"] else []))
+    diagnostics["warnings"] = tuple(note for label in labels for note in _noise_notes(noise[label], label, reference))
     from starfinder.image import ImageMetadata
     metadata = ImageMetadata(**tuples(statistics["reference_metadata"]))
     return SpotFindingResult(spots, metadata, _namespace(fov), base, diagnostics, plan)

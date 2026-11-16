@@ -50,7 +50,11 @@ After earlier steps, elastix gets a fixed-image mask by default: the reference v
 whose pull through the earlier steps lands inside the moving grid, eroded by 2 voxels
 from its edges inside the grid, with elastix's own mask erosion off. The step's
 diagnostics record it as `support_mask`. An empty mask, or one too small for elastix,
-raises `RegistrationEstimationError` with its voxel count.
+raises `RegistrationEstimationError` with its voxel count. A failure of elastix with
+or without the mask raises `RegistrationEstimationError` with the Description lines of
+elastix's log, as in "affine estimation failed: ITK ERROR: ... Too many samples map
+outside moving image buffer"; a failure whose log has no Description line keeps elastix's
+own message.
 
 The erosion does not remove the reference grid's own faces. They hold data; the
 zero-filled border lies only where the pull leaves the moving grid. Eroding the faces
@@ -219,6 +223,7 @@ The following keys describe completed attempts.
 | `reference`, `reference_sha256` | The reference round's name, or the external reference's label and image hash | — |
 | `config` | The method config that ran | — |
 | `support_mask` | B-spline only: `used`, `reason` when unused, the mask's `voxels` and its `fraction` of the grid, as in the step's diagnostics | — |
+| `landmarks` | TPS and CPD only: the step's diagnostics `landmarks` (`reference` and `moving` noise records and candidate counts, and `control_points`), kept in the saved and reloaded record | — |
 | `application_config` | — | The `WarpConfig` of the final resampling |
 | `outcome` | `"succeeded"`, `"failed"` or `"rejected"` | `"succeeded"` or `"application_failed"` |
 | `failure` | Error type and message, and the criterion of a rejection | Error type and message |

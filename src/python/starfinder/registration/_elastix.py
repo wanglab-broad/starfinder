@@ -225,9 +225,13 @@ def _estimate(reference, moving, config, geometry, earlier_steps=None):
         try:
             registration = _register(*arguments) if mask is None else _register(*arguments, mask=image(mask, np.uint8))
         except RuntimeError as exc:
-            if mask is None:
-                raise
+            # The log goes with the folder: read it before it closes (W-861).
             text = "".join(path.read_text(errors="replace") for path in sorted(Path(directory).glob("*.log")))
+            if mask is None:
+                if not _log_failure(text):
+                    raise
+                raise RegistrationEstimationError(
+                    f"{config.method} estimation failed: {_log_failure(text)}") from exc
             raise RegistrationEstimationError(
                 f"bspline estimation with a support mask of {record['voxels']} voxels "
                 f"({record['fraction']:.4g} of the grid) failed: {_log_failure(text) or exc}") from exc

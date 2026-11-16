@@ -187,10 +187,9 @@ level is not defined, so a channel with signal whose MAD over that set is 0 rais
 (or, for `above_plateau`, at v) and the set used; this still holds for `above_plateau`; detect it with `threshold_mode` `adaptive` or `absolute`. A constant
 channel, an all-zero one among them, gives no spots and no error, and is not floored.
 Tiled execution applies the same rule to the FOV-level statistics of its global task:
-the task emits the floor warning, naming the reference round (the round those statistics
-come from, applied to every round), and the merged FOV lists the same message in
-`diagnostics["warnings"]`. The above-minimum and above-plateau notes are only listed there, without a
-round and without a runtime warning. The registration landmarks of
+the task emits the above-minimum, above-plateau and floor notes as `SpotFindingWarning`s,
+each naming the reference round (the round those statistics come from, applied to every
+round), and the merged FOV lists the same messages in `diagnostics["warnings"]`. The registration landmarks of
 `NoiseLandmarkConfig` follow the same rule in `noise` mode, with the same noise record
 in `diagnostics["noise"]` and the same notes; during TPS or CPD estimation the refusal
 of a floating-point channel raises `RegistrationEstimationError`, naming the image
