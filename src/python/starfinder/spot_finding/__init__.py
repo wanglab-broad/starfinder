@@ -171,17 +171,21 @@ def find_spots(
 
     Local maxima records, per channel and in every threshold mode, the noise
     record diagnostics['noise'] (zero fraction, median, MAD, threshold, and
-    the estimation set of the median and MAD, 'all' or 'above_minimum', with
-    its voxel count n_estimation, and mad_floored). In noise mode a channel
-    with signal of which more than half the voxels equal its minimum (a
-    truncated channel) takes its median and MAD over the voxels above the
-    minimum, and a SpotFindingWarning, also listed in diagnostics['warnings'],
-    notes it. On an integer image the MAD of a channel with signal has a floor
+    the estimation set of the median and MAD, 'all', 'above_minimum' or
+    'above_plateau', with its voxel count n_estimation, and mad_floored). In
+    noise mode a channel with signal of which more than half the voxels equal
+    its minimum (a truncated channel) takes its median and MAD over the voxels
+    above the minimum, and a SpotFindingWarning, also listed in
+    diagnostics['warnings'], notes it. A channel of which more than half the
+    voxels equal one value v above its minimum, with voxels above v, takes
+    them over the voxels above v ('above_plateau', W-863): the record adds
+    plateau_value and plateau_fraction, and a SpotFindingWarning names the
+    channel, v and its fraction. On an integer image the MAD of a channel with signal has a floor
     of one grey level: the threshold is median + value * 1.4826 * max(MAD, 1),
     mad stays the measured MAD, mad_floored is True and a SpotFindingWarning,
     also listed in diagnostics['warnings'], names the round, channel, measured
     MAD, estimation set and threshold. A floating-point channel with signal
-    whose MAD over its estimation set is 0 raises SpotFindingError, naming
+    whose MAD over its estimation set (above_plateau included) is 0 raises SpotFindingError, naming
     the round and channel, instead of detecting with the median as threshold,
     because one grey level is not defined there (W-848). Noise landmarks
     follow the same noise rule, record and notes (W-836). With merge_radius_zyx set, diagnostics['merged']
@@ -248,6 +252,15 @@ def _noise_note(record, label, round_name):
             f"median ({record['median']!r}) and MAD ({record['mad']!r}) were estimated on the "
             f"{record['n_estimation']} voxels above the minimum (estimation 'above_minimum'); the threshold is "
             f"{record['threshold']!r}")
+
+
+def _plateau_note(record, label, round_name):
+    """The note of a noise record estimated on the voxels above the channel's plateau value (W-863)."""
+    where = f"round {round_name!r}, " if round_name is not None else ""
+    return (f"spot finding: {where}channel {label!r}: more than half of its voxels ({record['plateau_fraction']:.1%}) "
+            f"are at the value {record['plateau_value']!r}, above its minimum, so its noise median "
+            f"({record['median']!r}) and MAD ({record['mad']!r}) were estimated on the {record['n_estimation']} voxels "
+            f"above that value (estimation 'above_plateau'); the threshold is {record['threshold']!r}")
 
 
 def _model_record(models, keys):
@@ -374,6 +387,9 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
         for c in sorted(noise):
             if noise[c]['estimation'] == 'above_minimum':
                 messages.append(_noise_note(noise[c], keys[c], round_name))
+                warnings.warn(messages[-1], SpotFindingWarning, stacklevel=3)
+            if noise[c]['estimation'] == 'above_plateau':
+                messages.append(_plateau_note(noise[c], keys[c], round_name))
                 warnings.warn(messages[-1], SpotFindingWarning, stacklevel=3)
             if noise[c]['mad_floored']:
                 messages.append(_floor_note(noise[c], keys[c], round_name))

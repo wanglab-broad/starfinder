@@ -409,12 +409,13 @@ class RegistrationDiagnostics:
     points (the moving points it fits). ``landmarks`` holds, per image
     (``reference``, ``moving``), ``noise``, each channel's noise record
     (``threshold``, ``median``, ``mad``, ``mad_floored``, ``estimation``,
-    ``n_estimation``; NoiseLandmarkConfig's notes give the rule), and
+    ``n_estimation``, and for an ``above_plateau`` set ``plateau_value`` and
+    ``plateau_fraction``; NoiseLandmarkConfig's notes give the rule), and
     ``candidates``, the image's landmark count; and ``control_points``, the
     number of points the fit uses after the subsampling (for TPS the
     subsampled pairs, for CPD the subsampled reference points that keep a
     moving landmark within candidate_radius_voxels). The spot-finding notes
-    of the landmarks (an estimation above the minimum, a floored MAD) are
+    of the landmarks (an estimation above the minimum or above a plateau, a floored MAD) are
     listed in warnings, each prefixed with its image. The other methods
     leave the counts and ``landmarks`` ``None``, and a record leaves
     ``landmarks`` out while it is ``None``.

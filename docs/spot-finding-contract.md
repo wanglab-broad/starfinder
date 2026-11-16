@@ -126,8 +126,9 @@ threshold:
 * `noise`, the default: `median + threshold_value × 1.4826 × MAD` of the channel,
   where MAD is the median absolute deviation, so the value counts robust standard
   deviations above the median. The median and MAD are taken over all the channel's
-  voxels when at most half of them equal its minimum, and otherwise over the voxels
-  above its minimum, the ones a truncation did not clip; see
+  voxels, except over the voxels above its minimum when more than half equal its minimum
+  (the ones a truncation did not clip), and over the voxels above one value when more than
+  half equal that value, above the minimum; see
   [Truncated channels](#truncated-channels). On an image of an integer dtype the MAD
   has a floor of one grey level, because noise below one grey level cannot be resolved
   in integer data: the threshold is `median + threshold_value × 1.4826 × max(MAD, 1)`.
@@ -144,8 +145,9 @@ threshold:
 
 Local maxima records each channel's median, MAD, zero fraction and threshold in
 `diagnostics["noise"]`, in every mode, with the set the median and MAD were taken over:
-`estimation` is `"all"` or `"above_minimum"` and `n_estimation` counts its voxels. Only
-`noise` mode uses `"above_minimum"`. `mad` is the measured MAD, and `mad_floored` is
+`estimation` is `"all"`, `"above_minimum"` or `"above_plateau"` and `n_estimation` counts its voxels. Only
+`noise` mode uses the last two; `"above_plateau"` adds `plateau_value` (the value, as a float) and
+`plateau_fraction` (the share of the channel's voxels at it). `mad` is the measured MAD, and `mad_floored` is
 `True` when the floor of one grey level replaced it in the threshold. The other pipeline methods have their own
 thresholds: `threshold` for `starfish_log` and `piscis`, `prob_thresh` for `spotiflow`.
 
@@ -160,6 +162,18 @@ takes its median and MAD over the voxels above the minimum, and a `SpotFindingWa
 listed in `diagnostics["warnings"]`, notes it. The rule applies per channel, to the image
 detection receives, after any preprocessing.
 
+A channel can also hold its background on a plateau above its minimum: a few voxels at
+the minimum, more than half at one value v above it, and the signal above v. Its median
+is v and its MAD 0, so the threshold would again be the median of a background.
+In `noise` mode such a channel (more than half its voxels at one value v greater than its
+minimum, with voxels above v) takes its median and MAD over the voxels above v, the
+estimation set `above_plateau`, and the same `SpotFindingWarning` notes it, naming the
+channel, v and the fraction of voxels at v. The cut-off stays at half: a channel with
+exactly half its voxels at v keeps every voxel, so the threshold changes
+discontinuously near that share (W-863). A plateau at the channel's maximum has no voxel
+above it and keeps every voxel. The rule applies to an integer image too, and the floor
+below applies to the MAD of the set chosen.
+
 Even over that set the MAD of a channel with signal (its maximum above its minimum) can
 be below one grey level: a `uint8` channel whose above-minimum voxels mostly equal one
 value has a MAD of 0, and one whose median lies between two grey levels has a MAD of
@@ -170,12 +184,12 @@ estimation set and the threshold. Whether such a channel passes or is refused wo
 otherwise depend on quantization and not on signal. On a floating-point image one grey
 level is not defined, so a channel with signal whose MAD over that set is 0 raises
 `SpotFindingError`, naming the round and channel, the fraction of voxels at the minimum
-and the set used; detect it with `threshold_mode` `adaptive` or `absolute`. A constant
+(or, for `above_plateau`, at v) and the set used; this still holds for `above_plateau`; detect it with `threshold_mode` `adaptive` or `absolute`. A constant
 channel, an all-zero one among them, gives no spots and no error, and is not floored.
 Tiled execution applies the same rule to the FOV-level statistics of its global task:
 the task emits the floor warning, naming the reference round (the round those statistics
 come from, applied to every round), and the merged FOV lists the same message in
-`diagnostics["warnings"]`. W-789's above-minimum note is only listed there, without a
+`diagnostics["warnings"]`. The above-minimum and above-plateau notes are only listed there, without a
 round and without a runtime warning. The registration landmarks of
 `NoiseLandmarkConfig` follow the same rule in `noise` mode, with the same noise record
 in `diagnostics["noise"]` and the same notes; during TPS or CPD estimation the refusal

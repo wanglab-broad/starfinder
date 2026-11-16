@@ -1,8 +1,9 @@
-"""Known answers of the local-maxima noise threshold on truncated channels (W-789) and its MAD floor (W-848), which the
-registration noise landmarks share (W-836).
+"""Known answers of the local-maxima noise threshold on truncated channels (W-789), on a plateau above the minimum
+(W-863) and its MAD floor (W-848), which the registration noise landmarks share (W-836).
 
 In ``threshold_mode`` ``noise`` a channel's median and MAD are taken over all its voxels when at most half of them
-equal its minimum, and otherwise over the voxels above the minimum, which a truncation did not clip. On an integer
+equal its minimum, and otherwise over the voxels above the minimum, which a truncation did not clip. When more than
+half of them equal one value above the minimum, they are taken over the voxels above that value ('above_plateau'). On an integer
 image the MAD has a floor of one grey level; a floating-point channel with signal whose MAD over that set is 0 raises
 ``SpotFindingError``. The fixtures are uint8 10×32×32 (10240 voxels), built from repeated values so that every
 median, MAD and threshold is known in closed form.
@@ -15,6 +16,7 @@ import pytest
 from starfinder import spot_finding
 from starfinder.image import ImageMetadata
 from starfinder.spot_finding import LocalMaximaConfig, NoiseLandmarkConfig, SpotFindingPlan, find_spots
+from starfinder.spot_finding._methods import _noise_record
 
 from .expected_values import FLOAT64
 from .test_spot_finding_golden import CHANNELS, golden_dataset
@@ -95,11 +97,13 @@ def test_a_mad_of_at_least_one_grey_level_is_not_floored(zeros):
 
 
 def flat_signal(kind):
-    """'above_minimum': 1024 voxels of 7 on zeros (90 % at the minimum); 'all': 10 % zeros, 7168 voxels of 5 and
-    2048 noise voxels, so at most half are at the minimum and the MAD over every voxel is 0."""
+    """'above_minimum': 1024 voxels of 7 on zeros (90 % at the minimum); 'all': 10 % zeros, 7168 voxels of 60 and
+    2048 noise voxels (33..48), so at most half are at the minimum and the MAD over every voxel is 0. The plateau of
+    60 is the channel's maximum, so no voxel lies above it and the set stays 'all' (W-863: a plateau of 5 below the
+    noise voxels would now be estimated above it)."""
     if kind == "above_minimum":
         return channel(np.full(1024, 7, dtype=np.uint8))
-    return channel(np.concatenate([np.full(7168, 5), NOISE, NOISE]).astype(np.uint8))
+    return channel(np.concatenate([np.full(7168, 60), NOISE, NOISE]).astype(np.uint8))
 
 
 def mad_zero(dtype=np.uint8):
@@ -381,3 +385,200 @@ def test_the_tiled_merge_records_the_floor_and_lists_its_note(tmp_path):
     expected = tuple(emitted[0] if "MAD floor" in n else n.replace("round 'round1', ", "")
                      for n in direct.diagnostics["warnings"])
     assert merged.diagnostics["warnings"] == expected
+
+
+# W-863: a plateau above the minimum.
+PLATEAU = 4.0
+PLATEAU_ZEROS = 100
+
+
+def plateau_channel(above, dtype=np.float64, plateau=int(PLATEAU), zeros=PLATEAU_ZEROS, seed=863):
+    """zeros voxels of 0, the values `above` (all above plateau) and plateau elsewhere, at seeded random voxels."""
+    flat = np.full(VOXELS, plateau, dtype=np.float64)
+    order = np.random.default_rng(seed).permutation(VOXELS)
+    flat[order[:zeros]] = 0
+    flat[order[zeros:zeros + len(above)]] = above
+    return flat.reshape(SHAPE).astype(dtype)
+
+
+def plateau_spots(dtype):
+    """The 1024 noise voxels NOISE (median 40.5, MAD 4.0) above a plateau of 4: 100 voxels of 0 and 9116 of 4."""
+    return plateau_channel(NOISE, dtype)
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32])
+def test_a_float_plateau_above_the_minimum_takes_its_noise_from_the_voxels_above_it(dtype):
+    image = plateau_spots(dtype)
+    at_plateau = VOXELS - PLATEAU_ZEROS - 1024
+    assert np.count_nonzero(image == PLATEAU) == at_plateau and np.count_nonzero(image == 0) == PLATEAU_ZEROS
+    result, notes = detect(image, LocalMaximaConfig())  # the base refuses this channel: median 4, MAD 0
+    record = result.diagnostics["noise"]["0"]
+    threshold = NOISE_MEDIAN + 5.0 * 1.4826 * NOISE_MAD  # 70.152, from the voxels above 4 alone
+    assert record["estimation"] == "above_plateau" and record["n_estimation"] == 1024
+    assert (record["plateau_value"], record["plateau_fraction"]) == (PLATEAU, at_plateau / VOXELS)
+    assert isinstance(record["plateau_value"], float)
+    assert (record["median"], record["mad"], record["mad_floored"]) == (NOISE_MEDIAN, NOISE_MAD, False)
+    np.testing.assert_allclose(record["threshold"], threshold, **FLOAT64)
+    np.testing.assert_allclose(result.diagnostics["thresholds"], [threshold], **FLOAT64)
+    assert record["zero_fraction"] == PLATEAU_ZEROS / VOXELS
+    assert list(record) == RECORD_KEYS + ["plateau_value", "plateau_fraction"]
+    assert len(result.spots) == 0
+    assert len(notes) == 1 and result.diagnostics["warnings"] == tuple(notes)
+    assert notes[0].startswith("spot finding: channel '0': more than half of its voxels (89.0%) are at the value 4.0, "
+                               "above its minimum, ")
+    assert "1024 voxels above that value (estimation 'above_plateau')" in notes[0]
+    assert f"the threshold is {record['threshold']!r}" in notes[0]
+
+
+def test_a_plateau_channel_detects_the_spots_above_the_threshold_from_the_voxels_above_the_plateau():
+    # Two isolated spots of 200 join the 1024 noise voxels above the plateau: 1026 voxels, median 41, MAD 4.
+    image = plateau_channel(NOISE)
+    for peak in ((3, 8, 8), (6, 20, 20)):
+        assert image[peak] == PLATEAU
+        image[peak] = 200
+    result, _ = detect(image, LocalMaximaConfig())
+    record = result.diagnostics["noise"]["0"]
+    assert (record["median"], record["mad"], record["n_estimation"]) == (41.0, 4.0, 1026)
+    sample = image[image > PLATEAU].astype(np.float64)
+    assert record["threshold"] == np.median(sample) + 5.0 * np.median(np.abs(sample - np.median(sample))) * 1.4826
+    assert set(result.spots["peak_intensity"]) == {200.0} and len(result.spots) == 2
+
+
+def plateau_mad_zero(dtype):
+    """A plateau of 4 above 100 zeros; above it 700 voxels of 6, 322 of 7..12 and two spots of 50: median 6, MAD 0."""
+    return plateau_channel(np.concatenate([np.full(700, 6), np.resize(np.arange(7, 13), 322), [50, 50]]), dtype)
+
+
+def test_an_integer_plateau_keeps_the_mad_floor_and_gains_above_plateau():
+    # Base: median 4 and MAD 0 over every voxel, floored. Now the voxels above 4 (median 6, MAD 0), also floored.
+    image = plateau_mad_zero(np.uint8)
+    result, notes = detect(image, LocalMaximaConfig())
+    record = result.diagnostics["noise"]["0"]
+    assert (record["estimation"], record["n_estimation"]) == ("above_plateau", 1024)
+    assert (record["plateau_value"], record["median"], record["mad"], record["mad_floored"]) == (4.0, 6.0, 0.0, True)
+    np.testing.assert_allclose(record["threshold"], 6.0 + SIGMA * 1.0, **FLOAT64)
+    assert len(result.spots) == 2 and set(result.spots["peak_intensity"]) == {50.0}
+    assert len(notes) == 2 and "'above_plateau'" in notes[0] and "MAD floor" in notes[1]
+    assert "estimation set 'above_plateau' (1024 voxels)" in notes[1]
+    assert result.diagnostics["warnings"] == tuple(notes)
+
+
+def test_a_float_plateau_with_a_mad_of_zero_above_it_is_refused_naming_v_and_its_fraction(tmp_path):
+    image = np.stack([plateau_mad_zero(np.float32) if c == 1 else FULL.astype(np.float32) for c in range(4)], axis=-1)
+    fov = golden_dataset(tmp_path).fov("FOV_001")
+    fov.images["round1"] = image
+    fov.metadata["round1"] = ImageMetadata("FOV_001/round1")
+    with pytest.raises(spot_finding.SpotFindingError, match=r"^spot finding: round 'round1', channel 'ch01': ") as caught:
+        fov.find_spots(config=LocalMaximaConfig())
+    message = str(caught.value)
+    assert "estimation set 'above_plateau' (1024 voxels); 89.0% of its 10240 voxels are at the plateau value 4.0 " \
+           "above its minimum 0.0, so threshold_mode 'noise' has no noise to scale" in message
+    assert "threshold_mode 'adaptive' or 'absolute'" in message
+    for mode, value in (("adaptive", 0.2), ("absolute", 50.0)):
+        assert detect(image, LocalMaximaConfig(threshold_mode=mode, threshold_value=value))[0].diagnostics
+
+
+def test_a_plateau_at_the_maximum_has_no_voxels_above_it_and_keeps_every_voxel():
+    # 60 % of the voxels at the maximum 7 and a few at 0: nothing lies above the plateau, so the set stays 'all'.
+    image = plateau_channel(np.full(1000, 3), plateau=7)
+    assert np.count_nonzero(image == 7) > VOXELS // 2
+    image[image == 3] = 7
+    result, notes = detect(image.astype(np.uint8), LocalMaximaConfig())
+    record = result.diagnostics["noise"]["0"]
+    assert (record["estimation"], record["n_estimation"], record["median"], record["mad"]) == ("all", VOXELS, 7.0, 0.0)
+    assert "plateau_value" not in record and not [n for n in notes if "above_plateau" in n]
+
+
+def test_a_plateau_channel_in_the_tiled_statistics_and_the_merge(tmp_path):
+    from starfinder.dataset import PipelineConfig
+    from starfinder.dataset.tiled import _detection_statistics, _merged_detection
+    fov = golden_dataset(tmp_path).fov("FOV_001")
+    image = np.stack([plateau_spots(np.float64), FULL.astype(np.float64), channel(NOISE).astype(np.float64),
+                      FULL.astype(np.float64)], axis=-1)
+    pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
+    statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
+                  "reference_metadata": {"frame_id": "noise-estimation"}}
+    records = statistics["detection"]["channels"]
+    assert [r["estimation"] for r in records] == ["above_plateau", "all", "above_minimum", "all"]
+    assert [("plateau_value" in r, "plateau_fraction" in r) for r in records] == [(True, True)] + [(False, False)] * 3
+    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
+    merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
+    assert merged.diagnostics["noise"] == direct.diagnostics["noise"]
+    assert merged.diagnostics["noise"]["ch00"]["plateau_value"] == PLATEAU
+    notes = merged.diagnostics["warnings"]
+    plateau = [n for n in notes if "'above_plateau'" in n]
+    # As above-minimum's note: listed without a round. It names the channel, the value and its fraction.
+    assert len(plateau) == 1 and plateau[0].startswith("spot finding: channel 'ch00': more than half of its voxels "
+                                                       "(89.0%) are at the value 4.0, above its minimum, ")
+    assert notes == tuple(n.replace("round 'round1', ", "") for n in direct.diagnostics["warnings"])
+    # The float refusal covers the plateau set in the global task's statistics.
+    with pytest.raises(spot_finding.SpotFindingError, match=r"^spot finding: round 'round1', channel 'ch00': .*"
+                                                           r"'above_plateau'"):
+        _detection_statistics(fov, pipeline.spot_finding, np.stack([plateau_mad_zero(np.float32)] * 4, axis=-1))
+
+
+# W-863: byte identity of every record the plateau rule does not change.
+
+def base_noise_record(image, channel, mode, value):
+    """_noise_record of 27dfc07 (W-848's floor, W-789's above_minimum), verbatim for noise mode."""
+    values = channel.astype(np.float64)
+    estimation, sample = 'all', values
+    above = values > values.min()
+    count = int(np.count_nonzero(above))
+    if count and 2 * count < values.size:
+        estimation, sample = 'above_minimum', values[above]
+    median = np.median(sample)
+    mad = np.median(np.abs(sample - median))
+    scale, floored = mad, False
+    if np.issubdtype(image.dtype, np.integer) and mad < 1 and channel.max() != channel.min():
+        scale, floored = 1.0, True
+    threshold = median + value * scale * 1.4826
+    return {'zero_fraction': float(np.mean(values == 0)), 'median': float(median), 'mad': float(mad),
+            'threshold': float(threshold), 'estimation': estimation, 'n_estimation': int(sample.size),
+            'mad_floored': floored}
+
+
+IDENTICAL = {
+    "w789-90-percent-zero": lambda: channel(NOISE),
+    "w789-no-zeros": lambda: FULL,
+    "w789-half-zero-exactly-50-percent-at-the-minimum": lambda: channel(np.repeat(np.arange(33, 49), (VOXELS // 2) // 16)),
+    "w848-mad-zero-uint8": lambda: mad_zero(np.uint8),
+    "w848-mad-zero-uint16": lambda: mad_zero(np.uint16),
+    "w848-mad-half": lambda: np.concatenate([np.full(5120, 4), np.full(5117, 5), np.full(3, 40)]).astype(
+        np.uint8).reshape(SHAPE),
+    "w848-mad-one": lambda: np.concatenate([np.full(5120, 3), np.full(5120, 5)]).astype(np.uint8).reshape(SHAPE),
+    "w848-flat-above-minimum": lambda: flat_signal("above_minimum"),
+    "w848-flat-all": lambda: flat_signal("all"),
+    "constant": lambda: np.full(SHAPE, 9, dtype=np.uint8),
+    "all-zero": lambda: np.zeros(SHAPE, dtype=np.uint8),
+    # Exactly half at a plateau of 4 above the minimum 0 (one voxel): not more than half, so every voxel is used.
+    "exactly-half-at-a-plateau": lambda: np.concatenate([np.full(VOXELS // 2, 4), [0], np.tile(
+        np.arange(33, 49), 320)[:VOXELS // 2 - 1]]).astype(np.uint8).reshape(SHAPE),
+    "float-mad-positive": lambda: channel(NOISE).astype(np.float64),
+    "float-half-zero": lambda: channel(np.repeat(np.arange(33, 49), (VOXELS // 2) // 16)).astype(np.float32),
+}
+
+
+@pytest.mark.parametrize("name", IDENTICAL)
+@pytest.mark.parametrize("value", [3.0, 5.0])
+def test_the_all_and_above_minimum_records_equal_those_of_the_base(name, value):
+    image = IDENTICAL[name]()
+    assert image.size == VOXELS
+    record = _noise_record(image, image, "noise", value)
+    expected = base_noise_record(image, image, "noise", value)
+    assert record == expected and list(record) == list(expected)
+    assert record["estimation"] in ("all", "above_minimum") and record["threshold"] == expected["threshold"]
+    # The other modes are untouched.
+    for mode, v in (("adaptive", 0.2), ("adaptive_round", 0.2), ("absolute", 50.0)):
+        assert "plateau_value" not in _noise_record(image, image, mode, v)
+
+
+def test_an_integer_channel_with_a_plateau_above_its_minimum_changes_and_keeps_its_floor():
+    image = plateau_mad_zero(np.uint8)
+    record = _noise_record(image, image, "noise", 5.0)
+    base = base_noise_record(image, image, "noise", 5.0)
+    assert (base["estimation"], base["median"], base["mad"], base["mad_floored"]) == ("all", 4.0, 0.0, True)
+    assert (record["estimation"], record["median"], record["mad"], record["mad_floored"]) == (
+        "above_plateau", 6.0, 0.0, True)
+    assert record["threshold"] != base["threshold"]
+    np.testing.assert_allclose([base["threshold"], record["threshold"]], [4.0 + SIGMA, 6.0 + SIGMA], **FLOAT64)

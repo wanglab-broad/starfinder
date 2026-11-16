@@ -218,22 +218,33 @@ def _noise_record(image, channel, mode, value):
     """One channel's noise record: zero fraction, median, MAD (unscaled) and threshold in float64, and the
     estimation set of the median and MAD with its voxel count.
 
-    The estimation set is every voxel ('all') except in noise mode on a channel with signal of which more than half
-    the voxels equal its minimum: then it is the voxels above the minimum, which a truncation did not clip
-    ('above_minimum', W-789). Local maxima and noise landmarks share it (W-836).
+    The estimation set is every voxel ('all') except in noise mode, in two cases. On a channel with signal of which
+    more than half the voxels equal its minimum it is the voxels above the minimum, which a truncation did not clip
+    ('above_minimum', W-789). Otherwise, on a channel of which more than half the voxels equal one value v above its
+    minimum, with voxels above v, it is the voxels above v ('above_plateau', W-863): the record then also holds
+    plateau_value (v) and plateau_fraction (the share of voxels at v). Local maxima and noise landmarks share it
+    (W-836).
 
     On an integer image the MAD of a noise-mode channel with signal has a floor of one grey level (W-848): the
     threshold is median + value x 1.4826 x max(MAD, 1), 'mad' stays the measured MAD and 'mad_floored' says
     whether the floor replaced it. A constant channel has no spot, so its record is not floored.
     """
     values = channel.astype(np.float64)
-    estimation, sample = 'all', values
+    estimation, sample, plateau, median = 'all', values, None, None
     if mode == 'noise':
         above = values > values.min()
         count = int(np.count_nonzero(above))
         if count and 2 * count < values.size:
             estimation, sample = 'above_minimum', values[above]
-    median = np.median(sample)
+        elif count:
+            # More than half the voxels at one value v makes v the median of all voxels (kept when the set stays 'all').
+            median = np.median(values)
+            at_v = int(np.count_nonzero(values == median))
+            if median > values.min() and 2 * at_v > values.size and median < values.max():
+                estimation, sample = 'above_plateau', values[values > median]
+                plateau, median = (float(median), at_v / values.size), None
+    if median is None:
+        median = np.median(sample)
     mad = np.median(np.abs(sample - median))
     floored = False
     if mode == 'noise':
@@ -249,27 +260,36 @@ def _noise_record(image, channel, mode, value):
         threshold = float(image.max()) * value
     else:
         threshold = float(channel.max()) * value
-    return {'zero_fraction': float(np.mean(values == 0)), 'median': float(median), 'mad': float(mad),
-            'threshold': float(threshold), 'estimation': estimation, 'n_estimation': int(sample.size),
-            'mad_floored': floored}
+    record = {'zero_fraction': float(np.mean(values == 0)), 'median': float(median), 'mad': float(mad),
+              'threshold': float(threshold), 'estimation': estimation, 'n_estimation': int(sample.size),
+              'mad_floored': floored}
+    if plateau is not None:
+        record['plateau_value'], record['plateau_fraction'] = plateau
+    return record
 
 
 def check_noise(record, channel, label, round_name):
     """Raise SpotFindingError for a noise-mode float channel with signal whose MAD over its estimation set is 0.
 
     Its threshold would be the median, and every regional maximum above it a spot (W-789); there is no fallback.
-    One grey level is not defined for floating point, so the floor of an integer image (W-848) does not apply.
+    One grey level is not defined for floating point, so the floor of an integer image (W-848) does not apply, and
+    the 'above_plateau' set (W-863) does not change that.
     An integer channel never raises: its MAD is floored at one grey level.
     """
     minimum = channel.min()
     if record['mad'] != 0 or channel.max() == minimum or np.issubdtype(channel.dtype, np.integer):
         return
     where = f"round {round_name!r}, " if round_name is not None else ""
-    at_minimum = int(np.count_nonzero(channel == minimum))
+    if record['estimation'] == 'above_plateau':
+        at_value = (f"{record['plateau_fraction']:.1%} of its {channel.size} voxels are at the plateau value "
+                    f"{record['plateau_value']!r} above its minimum {float(minimum)!r}")
+    else:
+        at_minimum = int(np.count_nonzero(channel == minimum))
+        at_value = (f"{at_minimum} of its {channel.size} voxels ({at_minimum / channel.size:.1%}) are at its minimum "
+                    f"{float(minimum)!r}")
     raise SpotFindingError(
         f"spot finding: {where}channel {label!r}: the noise MAD is 0 over its estimation set "
-        f"{record['estimation']!r} ({record['n_estimation']} voxels); {at_minimum} of its {channel.size} voxels "
-        f"({at_minimum / channel.size:.1%}) are at its minimum {float(minimum)!r}, so threshold_mode 'noise' has no "
+        f"{record['estimation']!r} ({record['n_estimation']} voxels); {at_value}, so threshold_mode 'noise' has no "
         "noise to scale; use threshold_mode 'adaptive' or 'absolute'")
 
 

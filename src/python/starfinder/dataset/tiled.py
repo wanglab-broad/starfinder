@@ -587,7 +587,7 @@ def _namespace(fov):
 def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
     """The FOV's SpotFindingResult of the merged candidates, with direct's diagnostics from the FOV-level statistics."""
     from starfinder.spot_finding import SpotFindingResult
-    from starfinder.spot_finding import _floor_note, _noise_note
+    from starfinder.spot_finding import _floor_note, _noise_note, _plateau_note
     base, plan, configs = _plan_configs(fov, pipeline.spot_finding)
     labels = tuple(fov.dataset.channel_order)
     channels = statistics["detection"]["channels"]
@@ -607,16 +607,18 @@ def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
     diagnostics["outcomes"] = {labels[c]: "constant" if channels[c]["constant"] else
                                "ok" if diagnostics["counts"][labels[c]] else "empty" for c in range(len(labels))}
     noise = {labels[c]: {k: channels[c][k] for k in ("zero_fraction", "median", "mad", "threshold", "estimation",
-                                                     "n_estimation", "mad_floored")}
+                                                     "n_estimation", "mad_floored", "plateau_value",
+                                                     "plateau_fraction") if k in channels[c]}
              for c in range(len(labels))}
     diagnostics["noise"] = noise
     diagnostics["effective_settings"] = {labels[c]: tuples(jsonable(configs[c])) for c in range(len(labels))}
-    # The floor note names the reference round, as the global task's warning does (the above-minimum note stays as at the
-    # base: no round, no runtime warning).
+    # The floor note names the reference round, as the global task's warning does (the above-minimum and above-plateau
+    # notes stay as at the base: no round, no runtime warning).
     reference = fov.dataset.rounds.reference_round
     diagnostics["warnings"] = tuple(
         note for label in labels
         for note in ([_noise_note(noise[label], label, None)] if noise[label]["estimation"] == "above_minimum" else [])
+        + ([_plateau_note(noise[label], label, None)] if noise[label]["estimation"] == "above_plateau" else [])
         + ([_floor_note(noise[label], label, reference, fov_level=True)] if noise[label]["mad_floored"] else []))
     from starfinder.image import ImageMetadata
     metadata = ImageMetadata(**tuples(statistics["reference_metadata"]))

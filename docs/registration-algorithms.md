@@ -107,9 +107,11 @@ The landmarks of each signal are its regional maxima above the `noise` threshold
 `local_maxima` with `threshold_value` set to `detection_noise_sigma`, the border excluded
 (see {py:class}`~starfinder.spot_finding.NoiseLandmarkConfig`). The median and MAD are
 taken over the voxels above the minimum when more than half of the signal's voxels sit at
-it, and over every voxel otherwise; on an integer signal the MAD has a floor of one grey
-level, and a floating-point signal with a MAD of 0 raises `RegistrationEstimationError`
-naming the image (reference or moving) and the channel
+it, over the voxels above one value when more than half of the signal's voxels sit at that
+value above the minimum (`above_plateau`, with `plateau_value` and `plateau_fraction` in
+the record), and over every voxel otherwise; on an integer signal the MAD has a floor of
+one grey level, and a floating-point signal whose MAD over the set it used is 0 still
+raises `RegistrationEstimationError` naming the image (reference or moving) and the channel
 ([truncated channels](spot-finding-contract.md#truncated-channels)). Each reference
 landmark is matched to the nearest moving landmark within `match_distance_voxels`; at
 least `min_matches` pairs are needed, and farthest-point sampling keeps at most
@@ -118,8 +120,8 @@ least `min_matches` pairs are needed, and farthest-point sampling keeps at most
 The step's diagnostics record the reference and moving landmark counts, the matched
 pairs (`matched_landmark_count`) and `landmarks`: for `reference` and `moving`, each
 channel's noise record (`threshold`, `median`, `mad`, `mad_floored`, `estimation`,
-`n_estimation`) and the image's `candidates`, and `control_points`, the pairs the fit
-uses. The landmarks' notes (an estimate above the minimum, a floored MAD) are listed in
+`n_estimation`, and for `above_plateau` `plateau_value` and `plateau_fraction`) and the image's `candidates`, and `control_points`, the pairs the fit
+uses. The landmarks' notes (an estimate above the minimum or above a plateau, a floored MAD) are listed in
 `warnings`, prefixed with the image.
 
 See {py:class}`~starfinder.registration.TpsConfig` for the precise rules.
