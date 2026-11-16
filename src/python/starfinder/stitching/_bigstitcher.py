@@ -32,7 +32,7 @@ from ._placement import (AXES, FORMAT_VERSION, FOV_COLUMNS, LINK_COLUMNS, STAGE,
                          check_grids, empty_links, frame_record, input_record)
 from ._positions import TilePositionTable, _names
 from ._review import ReviewPolicy, review_placement
-from ._stitch import FALLBACKS, StitchingInput, _check_inputs, _components
+from ._stitch import FALLBACKS, StitchingInput, _check_inputs, _components, _image_dtype
 
 VIEW_MAP_COLUMNS = ("view", "grid_column", "grid_row", "fov_id", "kind")
 VIEW_MAP_DTYPES = {"view": "int64", "grid_column": "int64", "grid_row": "int64", "fov_id": "str", "kind": "str"}
@@ -309,7 +309,8 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
     inputs : Sequence[StitchingInput]
         One per row of ``table``, in table order; ``image`` None for an absent
         image. All grids share one shape, spacing, unit µm and identity
-        direction.
+        direction. A :class:`TileLoader` image is read when its tile is written,
+        one tile at a time.
     config : BigStitcherConfig
         Settings for the BigStitcher macro and handling FOVs with absent images.
     tile_dir : str or Path
@@ -356,7 +357,7 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
         described = "; ".join(f"{_names(fovs)}: {shape}" for shape, fovs in shapes.items())
         raise IncompatibleGeometryError(f"the BigStitcher grid needs one tile shape; {described}")
     shape = next(iter(shapes))
-    dtypes = {np.asarray(item.image).dtype for item in inputs if item.image is not None}
+    dtypes = {_image_dtype(item) for item in inputs if item.image is not None}
     if len(dtypes) > 1:
         raise ValueError(f"the tiles must share one dtype; got {sorted(str(d) for d in dtypes)}")
     dtype = dtypes.pop() if dtypes else np.dtype(np.uint8)
@@ -390,7 +391,7 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
     blank = None
     for j, cell, kind in zip(view_map["view"], zip(view_map["grid_column"], view_map["grid_row"]), view_map["kind"]):
         if kind == "fov":
-            image = np.asarray(by_cell[cell].image)
+            image = by_cell[cell].read()
         else:
             blank = np.zeros(shape, dtype) if blank is None else blank
             image = blank

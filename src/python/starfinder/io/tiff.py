@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import uuid
 import warnings
 from xml.etree import ElementTree
@@ -311,6 +312,83 @@ def _volume_header(path: Path | str, *, floating: bool = False) -> tuple[tuple[i
                 np.dtype(series.dtype).kind not in ("uif" if floating else "ui"):
             shape = None
         return shape, "starfinder_metadata" in stored
+
+
+def _volume_dtype(path: Path | str) -> np.dtype:
+    """The dtype of the one series of a TIFF, from its header alone, in native byte order.
+
+    For a file whose shape :func:`_volume_header` settles, it is the dtype of
+    the array load_volume with the default config gives (up to byte order).
+    """
+    with open(path, "rb", buffering=0) as handle, tifffile.TiffFile(handle) as tif:
+        return np.dtype(tif.series[0].dtype).newbyteorder("=")
+
+
+def _volume_planes(path: Path | str):
+    """(ZYX shape, stored description, planes) of a file read one YX plane at a time, or None.
+
+    ``planes`` yields the planes of the array load_volume with the default
+    config gives, in Z order, one at a time, so that their C-order bytes, read
+    in turn, are the array's. It is None where that cannot be settled from the
+    header: a shape :func:`_volume_header` does not settle (a floating-point
+    file, a file load_volume refuses), a series whose pages are not its Z
+    planes (one page per plane, each of the YX shape), or a file in the
+    non-native byte order. ``stored`` is the saved description
+    (``starfinder_metadata`` when the file stores it). No pixel is read before
+    ``planes`` is iterated.
+    """
+    header = _volume_header(path)
+    if header is None or header[0] is None:
+        return None
+    shape = header[0]
+    with open(path, "rb", buffering=0) as handle, tifffile.TiffFile(handle) as tif:
+        series, stored = tif.series[0], _stored(tif, 0)
+        pages = series.pages
+        native = np.dtype(series.dtype).itemsize == 1 or tif.byteorder == ("<" if sys.byteorder == "little" else ">")
+        if not native or len(pages) != shape[0] or any(p is None or tuple(p.shape) != shape[1:] for p in pages):
+            return None
+
+    def planes():
+        with tifffile.TiffFile(path) as tif:
+            for page in tif.series[0].pages:
+                yield page.asarray()
+
+    return shape, stored, planes()
+
+
+def _zyxc_header(path: Path | str) -> tuple[tuple[int, int, int, int], np.dtype, ImageMetadata] | None:
+    """(ZYXC shape, dtype, metadata) that load_volume_zyxc gives, from the header alone, or None.
+
+    No pixel is read. It is None for a file load_volume_zyxc refuses (several
+    OME images, other axes longer than one, no declared ZYXC axes) or whose
+    dtype is not a real number; the caller reads such a file with
+    load_volume_zyxc for its error.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"TIFF file not found: {path}")
+    with open(path, "rb", buffering=0) as handle, tifffile.TiffFile(handle) as tif:
+        stored = _stored(tif, 0)
+        if tif.is_ome:
+            if len(tif.series) != 1:
+                return None
+            series = tif.series[0]
+            axes, shape = series.get_axes(False), series.get_shape(False)
+            if any(a not in "ZCYX" and n != 1 for a, n in zip(axes, shape)) or "Y" not in axes or "X" not in axes:
+                return None
+            sizes = {a: int(n) for a, n in zip(axes, shape) if a in "ZCYX"}
+            shape = (sizes.get("Z", 1), sizes["Y"], sizes["X"], sizes.get("C", 1))
+        elif stored.get("axes") != "ZYXC" or len(tif.series[0].shape) != 4:
+            return None
+        else:
+            series = tif.series[0]
+            shape = tuple(int(n) for n in series.shape)
+        dtype = np.dtype(series.dtype)
+    if dtype.kind not in "uif" or 0 in shape:
+        return None
+    metadata = (ImageMetadata(**stored["starfinder_metadata"]) if "starfinder_metadata" in stored
+                else ImageMetadata(str(path.resolve())))
+    return shape, dtype.newbyteorder("="), metadata
 
 
 def load_round(round_dir: Path | str, *, config: ImageLoadConfig) -> ImageLoadResult:

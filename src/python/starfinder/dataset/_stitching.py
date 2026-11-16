@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 
 from starfinder.image import IncompatibleGeometryError
@@ -50,35 +51,52 @@ def _check_input(name):
         raise ValueError(f"input must be 'reference_merged', 'reference_stain' or 'file:<pattern>'; got {name!r}")
 
 
+def _volume(path):
+    from starfinder.io import load_volume
+    return load_volume(path).image
+
+
+def _stain(path):
+    from starfinder.io import load_volume_zyxc
+    return load_volume_zyxc(path).image[..., 0]
+
+
 def read_inputs(output_root, fov_ids, input_name, *, reference) -> dict[str, StitchingInput]:
-    """One StitchingInput per FOV, read one FOV at a time, keyed in fov_ids order.
+    """One StitchingInput per FOV, keyed in fov_ids order, whose image is a TileLoader: no pixel is held.
 
     The grid is that of the FOV's reference image, as
     :func:`starfinder.dataset._declared.reference_grid` decides it with the
     keyword arguments ``reference`` (``reference_settings`` of the Dataset or
     the workflow configuration): the file ``reference_image_import`` or
     ``reference_image`` names (default ``fovs/{fovID}/reference.tif``), its
-    stored metadata, or the grid the
-    voxel sizes declare for a file that stores none. With ``reference_merged``
-    that file is read once and is also the image; with another input only its
-    grid is read (:func:`~starfinder.dataset._declared.reference_grid`: the
-    header of a file that stores none).
+    stored metadata, or the grid the voxel sizes declare for a file that
+    stores none. Each image is a :class:`~starfinder.stitching.TileLoader` of
+    its file (with ``reference_merged``, the reference image itself), whose
+    dtype, shape, channels and metadata are checked against the grid from
+    the header, so that the errors of a file of another shape or metadata
+    come here, before any pixel is read. A file whose header does not settle
+    them is read whole here, for load_volume's error or as an array. The
+    files are read again, one at a time, when the stitching method calls
+    the loaders.
     """
-    from starfinder.dataset._declared import reference_grid, reference_volume
+    from starfinder.dataset._declared import _existing_reference, reference_grid
     from starfinder.dataset._export import reference_stain_path
-    from starfinder.io import load_volume, load_volume_zyxc
+    from starfinder.io import load_volume_zyxc
+    from starfinder.io.tiff import _volume_dtype, _volume_header, _zyxc_header
+    from starfinder.stitching import TileLoader
     from starfinder._records import file_sha256
     _check_input(input_name)
     output_root = Path(output_root)
     loaded = {}
     for fov in fov_ids:
-        if input_name == "reference_merged":
-            grid, volume, reference_path = reference_volume(output_root, fov, **reference)
-            _require_spacing(grid, fov)
-            loaded[fov] = StitchingInput(fov, volume.image, grid, input_name, file_sha256(reference_path))
-            continue
         grid = reference_grid(output_root, fov, **reference)
         _require_spacing(grid, fov)
+        if input_name == "reference_merged":
+            path = _existing_reference(output_root, fov, reference["reference_image"],
+                                       reference["reference_image_import"])
+            loaded[fov] = StitchingInput(fov, TileLoader(partial(_volume, path), _volume_dtype(path)), grid,
+                                         input_name, file_sha256(path))
+            continue
         if input_name == "reference_stain":
             path, source = reference_stain_path(output_root, fov), input_name
         else:
@@ -89,20 +107,29 @@ def read_inputs(output_root, fov_ids, input_name, *, reference) -> dict[str, Sti
             loaded[fov] = StitchingInput(fov, None, grid, source)
             continue
         if input_name == "reference_stain":
-            stain = load_volume_zyxc(path)
-            if stain.image.shape[3] != 1:
-                raise ValueError(f"the saved reference_stain of FOV {fov!r} has {stain.image.shape[3]} channels; "
+            header = _zyxc_header(path)
+            if header is None:
+                stain = load_volume_zyxc(path)
+                header = (stain.image.shape, stain.image.dtype, stain.metadata)
+            shape, dtype, metadata = header
+            if shape[3] != 1:
+                raise ValueError(f"the saved reference_stain of FOV {fov!r} has {shape[3]} channels; "
                                  "stitching reads a one-channel stain")
-            if stain.image.shape[:3] != grid.shape_zyx or stain.metadata != grid.metadata:
+            if shape[:3] != grid.shape_zyx or metadata != grid.metadata:
                 raise IncompatibleGeometryError(
                     f"the reference_stain of FOV {fov!r} ({path}) is not on its reference grid: shape "
-                    f"{stain.image.shape[:3]} and metadata {stain.metadata!r}, the grid {grid.shape_zyx} and "
+                    f"{shape[:3]} and metadata {metadata!r}, the grid {grid.shape_zyx} and "
                     f"{grid.metadata!r}")
-            image = stain.image[..., 0]
+            image = TileLoader(partial(_stain, path), dtype)
         else:
-            image = load_volume(path).image
-            if image.shape != grid.shape_zyx:
-                raise IncompatibleGeometryError(f"the stitching file of FOV {fov!r} ({path}) has shape {image.shape}; "
+            header = _volume_header(path, floating=True)
+            if header is None or header[0] is None:
+                image = _volume(path)   # load_volume's error, or the array of a file the header does not settle
+                shape = image.shape
+            else:
+                shape, image = header[0], TileLoader(partial(_volume, path), _volume_dtype(path))
+            if shape != grid.shape_zyx:
+                raise IncompatibleGeometryError(f"the stitching file of FOV {fov!r} ({path}) has shape {shape}; "
                                                 f"its reference grid {grid.shape_zyx}")
         loaded[fov] = StitchingInput(fov, image, grid, source, file_sha256(path))
     return loaded

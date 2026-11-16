@@ -49,8 +49,11 @@ placement and continuing through assembly and export.
    file with `positions_from_leica`, a regular grid with `positions_from_grid`, or
    a CSV or DataFrame with `positions_from_table`.
 2. **Prepare images.** `StitchingInput` pairs a ZYX image with its `ReferenceGrid`.
-   `Dataset.stitch` reads saved images: `reference_merged`, `reference_stain`, or
-   a `file:<pattern>` path with `{fovID}` substitution.
+   The image is an array or a `TileLoader`, a function that reads the tile when
+   the method needs it, with its dtype declared. `Dataset.stitch` reads saved
+   images: `reference_merged`, `reference_stain`, or a `file:<pattern>` path with
+   `{fovID}` substitution. It checks each file against its grid from the file's
+   header and passes loaders, so no tile is held before placement starts.
 3. **Place FOVs.** `neighbor_pairs` describes overlaps of the nominal FOV boxes.
    `stitch` runs the configured placement method and records its links and FOV
    positions.
@@ -98,7 +101,9 @@ saves `view_map.csv`. `load_placement` reads the folder. The
 * `stage_axes` on `positions_from_leica`: map the acquisition axes to image axes;
   `snap_to_grid` requests a regular layout.
 * `binning_zyx` on `MultiviewStitcherConfig`: choose the image scale used to register
-  overlaps; `quality_threshold` controls link filtering.
+  overlaps; `quality_threshold` controls link filtering. From loaders, the method
+  keeps only the binned tiles and holds at most one full-resolution tile at a time;
+  with `binning_zyx=(1, 1, 1)` it keeps every tile at full resolution.
 * `review`: choose the `ReviewPolicy` used to flag a placement for inspection.
 * `fallback`: request nominal positions when image placement cannot connect a FOV.
 

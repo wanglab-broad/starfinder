@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -27,6 +27,51 @@ FALLBACKS = (None, "nominal")
 
 
 @dataclass(frozen=True, eq=False)
+class TileLoader:
+    """A deferred stitching image: a callable that reads one FOV's tile when a method needs its pixels.
+
+    Parameters
+    ----------
+    read : Callable
+        Called with no argument; returns the tile as a ZYX array of the grid's
+        shape (YX for a one-plane grid) and of ``dtype``.
+    dtype : numpy.dtype
+        The tile's real numeric dtype, declared before any pixel is read.
+
+    Notes
+    -----
+    A ``StitchingInput`` whose ``image`` is a loader holds no pixels; its grid
+    declares the shape. Calling the loader returns what ``read`` returns,
+    unchecked; :meth:`StitchingInput.read` checks the result. The
+    ``multiview_stitcher`` method calls each loader once and keeps only the
+    binned tile (``MultiviewStitcherConfig``), and ``export_bigstitcher`` reads
+    one tile at a time. ``dtype`` is kept in native byte order.
+
+    Raises
+    ------
+    TypeError
+        ``read`` is not callable, or ``dtype`` is not a real numeric dtype.
+    """
+
+    read: Callable[[], np.ndarray]
+    dtype: np.dtype
+
+    def __post_init__(self):
+        if not callable(self.read):
+            raise TypeError("read must be callable")
+        try:
+            dtype = np.dtype(self.dtype)
+        except TypeError as exc:
+            raise TypeError(f"dtype must be a real numeric dtype; got {self.dtype!r}") from exc
+        if dtype.kind not in "uif":
+            raise TypeError(f"dtype must be a real numeric dtype; got {dtype}")
+        object.__setattr__(self, "dtype", dtype.newbyteorder("="))
+
+    def __call__(self) -> np.ndarray:
+        return self.read()
+
+
+@dataclass(frozen=True, eq=False)
 class StitchingInput:
     """One FOV's stitching image on its reference grid.
 
@@ -34,9 +79,10 @@ class StitchingInput:
     ----------
     fov_id : str
         Nonempty identifier of the input FOV.
-    image : numpy.ndarray or None
-        ZYX stitching image, with YX accepted for a one-plane grid; ``None`` represents an
-        absent image.
+    image : numpy.ndarray, TileLoader or None
+        ZYX stitching image, with YX accepted for a one-plane grid; a
+        :class:`TileLoader` that reads it when a method needs it; ``None``
+        represents an absent image.
     grid : ReferenceGrid
         Reference grid of the stitching image.
     source : str
@@ -48,15 +94,21 @@ class StitchingInput:
     Notes
     -----
     ``image`` is a ZYX array with ``image.shape == grid.shape_zyx`` (a YX array is
-    read as one plane, Z=1), or ``None`` for a FOV whose image is absent (status
-    ``missing``). ``source`` is ``"reference_merged"``, ``"reference_stain"`` or
+    read as one plane, Z=1), a :class:`TileLoader` (the deferred form: the grid
+    declares the shape and the loader the dtype, and no pixel is read until
+    :meth:`read` is called), or ``None`` for a FOV whose image is absent (status
+    ``missing``). ``Dataset.stitch`` passes loaders, so that the
+    ``multiview_stitcher`` method holds at most one full-resolution tile at a
+    time; an array and a loader of the same pixels give the same placement.
+    ``source`` is ``"reference_merged"``, ``"reference_stain"`` or
     ``"file:<path>"``; ``file_sha256`` the SHA-256 of the file it was read from,
     when there is one.
 
     Raises
     ------
     TypeError
-        grid is not a ReferenceGrid, or the image is not a real numeric array.
+        grid is not a ReferenceGrid, or the image is not a real numeric array or a
+        TileLoader (a bare callable is refused: wrap it in a TileLoader with its dtype).
     ValueError
         An empty fov_id, another source form, or a malformed SHA-256.
     IncompatibleGeometryError
@@ -64,7 +116,7 @@ class StitchingInput:
     """
 
     fov_id: str
-    image: np.ndarray | None
+    image: np.ndarray | TileLoader | None
     grid: ReferenceGrid
     source: str
     file_sha256: str | None = None
@@ -80,9 +132,14 @@ class StitchingInput:
         if self.file_sha256 is not None and (not isinstance(self.file_sha256, str)
                                              or not _SHA256.fullmatch(self.file_sha256)):
             raise ValueError("file_sha256 must be None or 64 lowercase hexadecimal digits")
-        if self.image is None:
+        if self.image is None or isinstance(self.image, TileLoader):
             return
-        image = np.asarray(self.image)
+        if callable(self.image):
+            raise TypeError(f"the image of FOV {self.fov_id!r} is a callable; pass it as TileLoader(read, dtype)")
+        object.__setattr__(self, "image", self._checked(self.image))
+
+    def _checked(self, image):
+        image = np.asarray(image)
         if image.dtype.kind not in "uif":
             raise TypeError(f"the image of FOV {self.fov_id!r} must be a real numeric array; got {image.dtype}")
         if image.ndim == 2:
@@ -90,7 +147,54 @@ class StitchingInput:
         if image.shape != self.grid.shape_zyx:
             raise IncompatibleGeometryError(f"the image of FOV {self.fov_id!r} has shape {image.shape}; its grid "
                                             f"{self.grid.shape_zyx}")
-        object.__setattr__(self, "image", image)
+        return image
+
+    def read(self) -> np.ndarray | None:
+        """The ZYX image: the array, the loader's tile after the checks, or None for an absent image.
+
+        A loader is called on each call; nothing is kept.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            The ZYX image of the grid's shape (a YX tile gains Z=1), or None.
+
+        Raises
+        ------
+        RuntimeError
+            The loader raised; the message names the FOV, and the loader's error is the cause.
+        TypeError
+            The loader returned an array that is not of its declared dtype.
+        IncompatibleGeometryError
+            The loader returned an array that is not ZYX (or YX) of the grid's shape.
+        """
+        if not isinstance(self.image, TileLoader):
+            return self.image
+        try:
+            image = self.image()
+        except Exception as exc:
+            raise RuntimeError(f"reading the stitching image of FOV {self.fov_id!r} failed: "
+                               f"{type(exc).__name__}: {exc}") from exc
+        image = self._checked(image)
+        if image.dtype.newbyteorder("=") != self.image.dtype:
+            raise TypeError(f"the loader of FOV {self.fov_id!r} returned {image.dtype}; it declares "
+                            f"{self.image.dtype}")
+        return image
+
+
+def _image_dtype(item):
+    """The dtype of an input's image, without reading a loader's pixels; None for an absent image."""
+    if item.image is None:
+        return None
+    return item.image.dtype if isinstance(item.image, TileLoader) else np.asarray(item.image).dtype
+
+
+def _method_tile(item):
+    """What a method receives for an input: None, the array, or a TileLoader whose read is the checked
+    :meth:`StitchingInput.read`, so that its errors name the FOV."""
+    if isinstance(item.image, TileLoader):
+        return TileLoader(item.read, item.image.dtype)
+    return item.image
 
 
 def _check_inputs(inputs, table):
@@ -212,8 +316,10 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
       translation (µm) and the mean over the ``image_supported`` FOVs;
     * :func:`review_placement` applies ``review``.
 
-    It never reads or writes a file and never raises for a placement that fails
-    or needs review: those are statuses, flags and the review state.
+    It never writes a file and reads one only through a :class:`TileLoader`
+    input, which the method calls (:meth:`StitchingInput.read`) when it needs
+    that tile's pixels. It never raises for a placement that fails or needs
+    review: those are statuses, flags and the review state.
 
     Parameters
     ----------
@@ -243,15 +349,18 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
     ------
     TypeError
         An unregistered config type, inputs that are not StitchingInput, a table
-        that is not a TilePositionTable or a review that is not a ReviewPolicy.
+        that is not a TilePositionTable or a review that is not a ReviewPolicy;
+        a loader's tile of another dtype than it declares.
     ValueError
         An unknown fallback, an empty sample, inputs that do not match the table,
         or a method result of another form.
     IncompatibleGeometryError
-        Grids outside the sample-frame geometry, or tiles the method does not
-        accept.
+        Grids outside the sample-frame geometry, tiles the method does not
+        accept, or a loader's tile of another shape than its grid.
     StitchingBackendUnavailableError
         A dependency of the method is not installed.
+    RuntimeError
+        A :class:`TileLoader` raised; the message names the FOV.
     """
     spec = spec_for(STITCHING_METHODS, config, WHAT, TypeError)
     if not isinstance(review, ReviewPolicy):
@@ -273,7 +382,7 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
     ids, n = table.fov_ids, len(inputs)
     pairs = neighbor_pairs(table, grids, tolerance_um=getattr(config, "overlap_tolerance_um", 0.0))
     nominal = table.nominal_zyx()
-    output = spec.run([item.image for item in inputs], [item.grid for item in inputs], nominal.copy(), pairs,
+    output = spec.run([_method_tile(item) for item in inputs], [item.grid for item in inputs], nominal.copy(), pairs,
                       config=config)
     if not isinstance(output, MethodPlacement):
         raise ValueError(f"{WHAT} {spec.name!r} must return a MethodPlacement")

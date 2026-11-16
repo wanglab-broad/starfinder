@@ -27,7 +27,7 @@ from starfinder.io import save_volume
 from starfinder.segmentation import reference_grid_from_file
 from starfinder.stitching import (STITCHING_METHODS, StitchingBackendUnavailableError, StitchingSpec,
                                   approve_placement, load_placement, placement_from_table, positions_from_grid,
-                                  positions_from_table, save_placement, stitch)
+                                  positions_from_table, save_placement, stitch, TileLoader)
 from starfinder.stitching import _persist
 from starfinder.stitching import stitch as real_stitch
 
@@ -329,7 +329,8 @@ def test_dataset_stitch_builds_the_table_from_the_grids(stub, no_fov_stage, spy,
     out = tmp_path / "output" / "stitching" / "sample1"
     result = dataset.stitch("sample1", IDS, table=POSITIONS, config=StubConfig(FRACTIONAL[:4]), output_dir=out)
     ((inputs, table, kwargs),) = spy
-    assert reads == {"load_volume": 4, "load_volume_zyxc": 0}
+    # Headers and a plane-by-plane hash only: the stub method reads no pixel, so no file is loaded (W-857).
+    assert reads == {"load_volume": 0, "load_volume_zyxc": 0}
     expected = positions_from_grid(columns=2, rows=2, order="column_major_down_right", tile_shape_yx=(16, 24),
                                    spacing_yx=(0.25, 0.25), overlap=0.25, fov_ids=IDS)
     pd.testing.assert_frame_equal(table.positions, expected.positions, check_exact=True)
@@ -338,7 +339,10 @@ def test_dataset_stitch_builds_the_table_from_the_grids(stub, no_fov_stage, spy,
     assert [item.fov_id for item in inputs] == IDS and kwargs["sample"] == "sample1"
     for item in inputs:
         path = tmp_path / "output" / "fovs" / item.fov_id / "reference.tif"
-        assert np.array_equal(item.image, images[item.fov_id]) and item.source == "reference_merged"
+        assert isinstance(item.image, TileLoader) and item.image.dtype == np.uint8
+        before = reads["load_volume"]
+        assert np.array_equal(item.read(), images[item.fov_id]) and item.source == "reference_merged"
+        assert reads["load_volume"] == before + 1   # the loader reads its file once per call
         assert item.file_sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
         reference = reference_grid_from_file(path)
         assert item.grid == reference
@@ -382,9 +386,10 @@ def test_dataset_stitch_reads_the_saved_reference_stain(stub, no_fov_stage, spy,
                     "image.ome.tif", metadata=REFERENCE)
     result = dataset.stitch("sample1", IDS, table=POSITIONS, config=StubConfig(zero(4)), input="reference_stain")
     ((inputs, _, _),) = spy
+    assert reads == {"load_volume": 0, "load_volume_zyxc": 0}
     for item in inputs:
-        assert item.source == "reference_stain" and np.array_equal(item.image, images[item.fov_id] // 2)
-    assert reads == {"load_volume": 4, "load_volume_zyxc": 4}
+        assert item.source == "reference_stain" and np.array_equal(item.read(), images[item.fov_id] // 2)
+    assert reads == {"load_volume": 0, "load_volume_zyxc": 4}
     assert result.record["inputs"][IDS[0]]["source"] == "reference_stain"
 
 
@@ -400,7 +405,7 @@ def test_dataset_stitch_reads_a_file_pattern(stub, no_fov_stage, spy, tmp_path):
     ((inputs, _, _),) = spy
     for item in inputs[:3]:
         expected = (tmp_path / "output" / "images" / "DAPI" / f"{item.fov_id}.tif").resolve()
-        assert item.source == f"file:{expected}" and np.array_equal(item.image, images[item.fov_id][::-1])
+        assert item.source == f"file:{expected}" and np.array_equal(item.read(), images[item.fov_id][::-1])
     assert inputs[3].image is None and result.fovs.status[3] == "missing"
     tifffile.imwrite(tmp_path / "output" / "images" / "DAPI" / f"{IDS[3]}.tif", np.zeros((4, 16, 20), np.uint8),
                      photometric="minisblack")

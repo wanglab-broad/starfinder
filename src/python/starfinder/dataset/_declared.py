@@ -17,10 +17,13 @@ as saved. The file is the one ``_layout.reference_image_path`` resolves: the set
 # Before §2.10
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Mapping
 from numbers import Real
 from pathlib import Path
+
+import numpy as np
 
 from starfinder._layout import (REFERENCE_IMAGE, REFERENCE_IMAGE_IMPORT_KEY, REFERENCE_IMAGE_KEY,
                                 check_reference_import, reference_image_path)
@@ -92,22 +95,34 @@ def reference_grid(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=
     raises ``FileNotFoundError`` naming the setting and the path.
 
     The shape of a file without stored metadata is taken from its TIFF header,
-    and no pixel is read; a file with stored metadata (whose grid holds the
-    SHA-256 of its pixels) and a file whose header does not settle the shape
-    ``load_volume`` gives (a floating-point file, or one it refuses) are read
-    whole, as :func:`reference_volume` reads them.
+    and no pixel is read. A file with stored metadata, whose grid holds the
+    SHA-256 of its pixels, is hashed one plane at a time, so that no more than
+    one plane is held. A file whose header does not settle the shape
+    ``load_volume`` gives (a floating-point file, or one it refuses), or whose
+    pages are not its Z planes, is read whole, as :func:`reference_volume`
+    reads it. Each way gives the grid :func:`reference_volume` gives.
     """
-    from starfinder.io.tiff import _volume_header
+    from starfinder.image import ImageMetadata
+    from starfinder.io.tiff import _volume_header, _volume_planes
     from starfinder.segmentation import ReferenceGrid
 
     settings = {"dataset_id": dataset_id, "output_id": output_id, "voxel_size_xy": voxel_size_xy,
                 "voxel_size_z": voxel_size_z}
     path = _existing_reference(output_root, fov_id, reference_image, reference_image_import)
     header = _volume_header(path)
-    if header is None or header[1] or header[0] is None:
+    if header is not None and header[0] is not None and not header[1]:
+        return ReferenceGrid(header[0], _declared_grid_metadata(path, fov_id, **settings), "declared")
+    read = _volume_planes(path) if header is not None and header[0] is not None else None
+    if read is None:
         return reference_volume(output_root, fov_id, reference_image=reference_image,
                                 reference_image_import=reference_image_import, **settings)[0]
-    return ReferenceGrid(header[0], _declared_grid_metadata(path, fov_id, **settings), "declared")
+    shape, stored, planes = read
+    # The SHA-256 of the C-order bytes, grid_sha256's convention, fed one plane at a time.
+    digest = hashlib.sha256()
+    for plane in planes:
+        digest.update(np.ascontiguousarray(plane).tobytes())
+    return ReferenceGrid(shape, ImageMetadata(**stored["starfinder_metadata"]), f"file:{Path(path).resolve()}",
+                         digest.hexdigest())
 
 
 def _existing_reference(output_root, fov_id, reference_image, reference_image_import=None):
