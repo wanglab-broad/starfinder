@@ -13,7 +13,7 @@ import math
 import os
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from numbers import Integral, Real
 from pathlib import Path
 from xml.etree import ElementTree
@@ -81,8 +81,12 @@ class BigStitcherConfig:
         Nonnegative Bioformats loader exclusion setting in the dataset-definition macro.
     subsampling_factors : tuple
         Positive integer XYZ subsampling factors for the HDF5 resolution levels.
+        The default ``((2, 2, 2), (4, 4, 4))`` becomes ``((1, 1, 1), (2, 2, 1), (4, 4, 1))``
+        for single-plane tiles when ``hdf5_chunk_sizes`` is also at its default.
     hdf5_chunk_sizes : tuple
         Positive integer XYZ chunk dimensions, in voxels, for the HDF5 resolution levels.
+        The default becomes ``((16, 16, 1),) * 3`` for single-plane tiles together with
+        the levels.
     timepoints_per_partition : int
         Nonnegative timepoint count per HDF5 partition in the macro.
     setups_per_partition : int
@@ -91,6 +95,7 @@ class BigStitcherConfig:
         Enable deflate compression for the HDF5 export.
     downsample_xyz : tuple
         Positive integer XYZ downsampling factors for pairwise phase correlation.
+        The default ``(4, 4, 4)`` becomes ``(1, 1, 1)`` for single-plane tiles.
     min_r : float
         Lower link-quality threshold for the BigStitcher pairwise-shift filter.
     max_r : float
@@ -125,6 +130,19 @@ class BigStitcherConfig:
     ``relative`` 2.5 and ``absolute`` 3.5 px, the two-round strategy with
     metadata for unconnected tiles and iterative dropping of bad links
     (``global_optimization_strategy``, fixed), the first tile fixed.
+    Single-plane tiles (Z = 1; W-871): BigStitcher treats such a dataset as 2D and forces
+    the z downsample to 1, and its pairwise step cannot use a level whose z factor is above
+    1. :func:`export_bigstitcher` therefore replaces, only for tiles of one plane, the
+    defaults of ``subsampling_factors`` and ``hdf5_chunk_sizes`` (together) by the levels
+    ``[{1,1,1}, {2,2,1}, {4,4,1}]`` with chunks 16×16×1, and a ``downsample_xyz`` left at
+    ``(4, 4, 4)`` by ``(1, 1, 1)``: phase correlation at full resolution, which recovered
+    tissue-2D cut tiles to 0.007 px. A field set to any other value is kept, and the
+    config itself is never changed; for tiles of more than one plane the macro is the
+    defaults' text above. Before any file is written, export refuses (``ValueError``) a
+    downsample that no resaved level serves, because Fiji would otherwise fail with
+    ``Matrix is singular`` and still exit 0: per axis a level serves it when its factor is
+    at most the downsample and divides it (the z downsample of a single plane counts as 1),
+    and a downsample of ``(1, 1, 1)`` needs a ``(1, 1, 1)`` level.
     ``pad_missing`` (default False) replaces an acquired FOV whose image is
     absent by a blank, a ``placeholder`` view, instead of a padding view; it is
     the caller's opt-in to that FOV's regular-grid position. The voxel size is
@@ -179,6 +197,56 @@ class BigStitcherConfig:
             _check_number(name, getattr(self, name), low=0)
         if not self.min_r <= self.max_r <= 1:
             raise ValueError(f"BigStitcherConfig needs 0 ≤ min_r ≤ max_r ≤ 1; got {self.min_r!r}, {self.max_r!r}")
+
+
+_DEFAULT_LEVELS = ((2, 2, 2), (4, 4, 4))
+_DEFAULT_CHUNKS = ((16, 16, 16), (16, 16, 16))
+_DEFAULT_DOWNSAMPLE = (4, 4, 4)
+_PLANE_LEVELS = ((1, 1, 1), (2, 2, 1), (4, 4, 1))
+_PLANE_CHUNKS = ((16, 16, 1),) * 3
+_PLANE_DOWNSAMPLE = (1, 1, 1)
+
+
+def _for_tile_shape(config, shape_zyx):
+    """The config the macro uses: single-plane defaults for Z = 1 tiles (W-871), the guard for every shape."""
+    plane = shape_zyx[0] == 1
+    if plane:
+        changes = {}
+        if config.subsampling_factors == _DEFAULT_LEVELS and config.hdf5_chunk_sizes == _DEFAULT_CHUNKS:
+            changes.update(subsampling_factors=_PLANE_LEVELS, hdf5_chunk_sizes=_PLANE_CHUNKS)
+        if config.downsample_xyz == _DEFAULT_DOWNSAMPLE:
+            changes["downsample_xyz"] = _PLANE_DOWNSAMPLE
+        if changes:
+            config = replace(config, **changes)
+    _check_downsample_served(config, plane)
+    return config
+
+
+def _check_downsample_served(config, plane):
+    """Raise when no resaved level serves the pairwise downsample, as BigStitcher's level choice would fail later.
+
+    Mirrors multiview-reconstruction's ``DownsampleTools.openAndDownsample``: the last level whose factors
+    are all at most the downsample, which must divide it (integer division otherwise gives a zero z scale
+    and Fiji exits 0 after ``Matrix is singular``). The z downsample of a single plane is forced to 1.
+    """
+    dx, dy, dz = config.downsample_xyz
+    down = (dx, dy, 1 if plane else dz)
+    levels = config.subsampling_factors
+    fix = ("set subsampling_factors and hdf5_chunk_sizes to levels the downsample can use (for single-plane tiles "
+           "z = 1 levels, such as ((1, 1, 1), (2, 2, 1), (4, 4, 1))), or change downsample_xyz")
+    if down == (1, 1, 1):
+        if (1, 1, 1) not in levels:
+            raise ValueError(f"downsample_xyz {config.downsample_xyz} needs a (1, 1, 1) entry in subsampling_factors; "
+                             f"got {levels}; {fix}")
+        return
+    best = None
+    for level in levels:
+        if all(f <= d for f, d in zip(level, down)):
+            best = level
+    if best is None or any(d % f for d, f in zip(down, best)):
+        raise ValueError(f"no resaved level serves the pairwise downsample {down}{' (z forced to 1 for single-plane tiles)' if plane else ''}"
+                         f" of subsampling_factors {levels}: BigStitcher would fail with 'Matrix is singular' and "
+                         f"Fiji would still exit 0; {fix}")
 
 
 def _macro_path(value, name):
@@ -313,6 +381,9 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
         one tile at a time.
     config : BigStitcherConfig
         Settings for the BigStitcher macro and handling FOVs with absent images.
+        For single-plane tiles (Z = 1) the default levels, chunk sizes and
+        downsample are replaced by z = 1 levels and ``(1, 1, 1)``, as the
+        ``BigStitcherConfig`` notes describe.
     tile_dir : str or Path
         The folder of ``tile_{j}.tif``; created if absent, and it may hold no
         other TIFF file.
@@ -333,7 +404,8 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
         BigStitcherConfig or inputs that are not StitchingInput.
     ValueError
         A table without cells, two FOVs in one cell, inputs that do not match
-        the table, or images of more than one dtype.
+        the table, images of more than one dtype, or a ``downsample_xyz`` that
+        no resaved level serves (raised before any file is written).
     IncompatibleGeometryError
         Grids outside the sample-frame geometry or of more than one shape.
     FileExistsError
@@ -357,6 +429,7 @@ def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput
         described = "; ".join(f"{_names(fovs)}: {shape}" for shape, fovs in shapes.items())
         raise IncompatibleGeometryError(f"the BigStitcher grid needs one tile shape; {described}")
     shape = next(iter(shapes))
+    config = _for_tile_shape(config, shape)
     dtypes = {_image_dtype(item) for item in inputs if item.image is not None}
     if len(dtypes) > 1:
         raise ValueError(f"the tiles must share one dtype; got {sorted(str(d) for d in dtypes)}")
