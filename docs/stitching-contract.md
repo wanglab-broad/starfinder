@@ -84,6 +84,13 @@ export, Fiji engine task and import with `method: bigstitcher`;
 `bigstitcher_save_dir` names the local working folder and `execution.fiji` the Fiji
 executable; only Snakemake runs the Fiji task. See the {doc}`workflow reference <workflow/reference>`.
 
+BigStitcher treats tiles of one plane (Z = 1) as 2D. For them the export replaces the default
+HDF5 levels and pairwise downsample by levels `(1, 1, 1)`, `(2, 2, 1)`, `(4, 4, 1)` (chunks
+16 × 16 × 1) and a downsample of `(1, 1, 1)`; fields you set yourself are kept, and tiles of
+more than one plane keep today's macro. Before writing any file the export raises
+`ValueError` when no resaved level serves the requested downsample, naming the fix, since Fiji
+would otherwise fail with `Matrix is singular` and still exit 0.
+
 ## What you get
 
 `PlacementResult.fovs` holds FOV positions, statuses and flags. `links` holds

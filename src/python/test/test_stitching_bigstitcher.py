@@ -522,16 +522,20 @@ PINNED = (  # test_bigstitcher_macro of test_workflow_stitching_golden.py, the f
 WITHOUT_IMAGE = "Position5"   # grid row 5: column 1, row 2
 
 
-def golden_inputs(table, spacing=GOLDEN_SPACING):
-    return [StitchingInput(fov, None if fov == WITHOUT_IMAGE else np.full(GOLDEN_SHAPE, k + 1, np.uint8),
-                           grid(GOLDEN_SHAPE, spacing), "reference_merged") for k, fov in enumerate(table.fov_ids)]
+TWO_PLANES = (2, TILE_ROW, TILE_COL)   # the legacy text is the 3D text: one-plane tiles get W-871's levels
+
+
+def golden_inputs(table, spacing=GOLDEN_SPACING, shape=GOLDEN_SHAPE):
+    return [StitchingInput(fov, None if fov == WITHOUT_IMAGE else np.full(shape, k + 1, np.uint8),
+                           grid(shape, spacing), "reference_merged") for k, fov in enumerate(table.fov_ids)]
 
 
 @pytest.mark.parametrize("pad_missing", [False, True])
 def test_macro_text_view_map_and_tiles(tmp_path, pad_missing):
     table = golden_table(tmp_path)
     folder = tmp_path / "DAPI"
-    text, view_map = export_bigstitcher(table, golden_inputs(table), config=BigStitcherConfig(pad_missing=pad_missing),
+    text, view_map = export_bigstitcher(table, golden_inputs(table, shape=TWO_PLANES),
+                                        config=BigStitcherConfig(pad_missing=pad_missing),
                                         tile_dir=folder, save_dir=folder)
     for parameter in PINNED:
         assert parameter.format(folder=folder) in text
@@ -545,10 +549,10 @@ def test_macro_text_view_map_and_tiles(tmp_path, pad_missing):
                                                               "grid_row": "int64", "fov_id": "str", "kind": "str"}))
     assert list(view_map.loc[view_map["kind"] == "padding", "fov_id"]) == [""] * (1 if pad_missing else 2)
     # Tiles in column-major tile_{j}.tif order: each FOV's image, a blank of the tile shape elsewhere.
-    images = {item.fov_id: item.image for item in golden_inputs(table)}
+    images = {item.fov_id: item.image for item in golden_inputs(table, shape=TWO_PLANES)}
     assert sorted(p.name for p in folder.iterdir()) == sorted(f"tile_{j}.tif" for j in range(9))
     for row in view_map.itertuples(index=False):
-        tile = tifffile.imread(folder / f"tile_{row.view}.tif").reshape(GOLDEN_SHAPE)
+        tile = tifffile.imread(folder / f"tile_{row.view}.tif").reshape(TWO_PLANES)
         if row.kind == "fov":
             assert np.array_equal(tile, images[row.fov_id])
         else:
@@ -586,7 +590,7 @@ def test_macro_voxel_size_is_the_grids_spacing_and_paths_are_arguments(tmp_path)
     """The only differences from the legacy text: the two folders and the voxel size (LN calibration)."""
     table = golden_table(tmp_path)
     tiles, save = tmp_path / "tiles", tmp_path / "local save"
-    text, _ = export_bigstitcher(table, golden_inputs(table, LN_SPACING), config=BigStitcherConfig(),
+    text, _ = export_bigstitcher(table, golden_inputs(table, LN_SPACING, TWO_PLANES), config=BigStitcherConfig(),
                                  tile_dir=tiles, save_dir=save)
     legacy = render_macro(tmp_path)
     differing = [(a, b) for a, b in zip(legacy.splitlines(), text.splitlines()) if a != b]
@@ -619,7 +623,8 @@ def test_macro_refuses_a_table_without_cells_and_foreign_tiles(tmp_path):
 @pytest.mark.parametrize("pad_missing", [False, True])
 def test_macro_view_map_imports_the_padded_case(tmp_path, golden_stitching_setups, pad_missing):
     setups, _, _, table, _, grids = golden_stitching_setups
-    _, view_map = export_bigstitcher(table, golden_inputs(table), config=BigStitcherConfig(pad_missing=pad_missing),
+    _, view_map = export_bigstitcher(table, golden_inputs(table, shape=TWO_PLANES),
+                                        config=BigStitcherConfig(pad_missing=pad_missing),
                                      tile_dir=tmp_path / "DAPI", save_dir=tmp_path / "DAPI")
     result = import_bigstitcher(setups, table=table, view_map=view_map, grids=grids,
                                 config=BigStitcherConfig(pad_missing=pad_missing))
@@ -669,3 +674,78 @@ def test_pl14_import_persistence(tmp_path, hand_records_setups):
     (folder / "view_map.csv").write_text((folder / "view_map.csv").read_text().replace("padding", "fov"))
     with pytest.raises(ValueError, match="view_map"):
         load_placement(folder)
+
+
+# ---------------------------------------------------------------------------------------
+# W-871: single-plane tiles (Z = 1) and the downsample guard.
+PLANE = (1, 32, 32)
+V020_3D_LEVELS = "subsampling_factors=[{2,2,2}, {4,4,4}] hdf5_chunk_sizes=[{16,16,16}, {16,16,16}]"
+
+
+def plane_export(tmp_path, config, shape=PLANE):
+    table = positions_from_grid(columns=2, rows=1, order="column_major_down_right", tile_shape_yx=shape[1:],
+                                spacing_yx=(0.5, 0.5), overlap=0.1, fov_ids=["a", "b"])
+    inputs = [StitchingInput(fov, np.full(shape, k + 1, np.uint8), grid(shape, (1.0, 0.5, 0.5)), "reference_merged")
+              for k, fov in enumerate(table.fov_ids)]
+    return export_bigstitcher(table, inputs, config=config, tile_dir=tmp_path / "t", save_dir=tmp_path / "s")
+
+
+def test_w871_single_plane_defaults_use_z1_levels_and_downsample(tmp_path):
+    text, _ = plane_export(tmp_path, BigStitcherConfig())
+    assert "subsampling_factors=[{1,1,1}, {2,2,1}, {4,4,1}] hdf5_chunk_sizes=[{16,16,1}, {16,16,1}, {16,16,1}]" in text
+    assert "downsample_in_x=1 downsample_in_y=1 downsample_in_z=1" in text
+    assert V020_3D_LEVELS not in text
+    assert BigStitcherConfig().subsampling_factors == ((2, 2, 2), (4, 4, 4))   # the config itself is unchanged
+
+
+def test_w871_explicit_values_are_kept_on_a_plane(tmp_path):
+    config = BigStitcherConfig(subsampling_factors=((2, 2, 1), (4, 4, 1)), hdf5_chunk_sizes=((16, 16, 1),) * 2,
+                               downsample_xyz=(2, 2, 1))
+    text, _ = plane_export(tmp_path, config)
+    assert "subsampling_factors=[{2,2,1}, {4,4,1}]" in text and "downsample_in_x=2 downsample_in_y=2" in text
+
+
+def test_w871_three_dimensional_macro_is_the_v020_text(tmp_path):
+    shape = (4, 16, 24)
+    text, _ = plane_export(tmp_path, BigStitcherConfig(), shape)
+    assert V020_3D_LEVELS in text and "downsample_in_x=4 downsample_in_y=4 downsample_in_z=4" in text
+    table = golden_table(tmp_path)
+    folder = tmp_path / "DAPI"
+    golden, _ = export_bigstitcher(table, golden_inputs(table, shape=TWO_PLANES), config=BigStitcherConfig(),
+                                   tile_dir=folder, save_dir=folder)
+    assert golden == render_macro(tmp_path).replace(LEGACY_DIR, str(folder))
+
+
+def test_w871_guard_refuses_default_levels_with_a_plane_downsample():
+    """Default 3D levels cannot serve (4, 4, 1): the z factor of every level is above the forced z downsample of 1."""
+    from starfinder.stitching._bigstitcher import _check_downsample_served
+    with pytest.raises(ValueError, match="no resaved level"):
+        _check_downsample_served(BigStitcherConfig(downsample_xyz=(4, 4, 1)), plane=True)
+    with pytest.raises(ValueError, match=r"needs a \(1, 1, 1\) entry"):
+        _check_downsample_served(BigStitcherConfig(downsample_xyz=(1, 1, 1)), plane=True)
+
+
+def test_w871_plane_with_default_levels_and_a_chosen_downsample_gets_the_plane_levels(tmp_path):
+    text, _ = plane_export(tmp_path, BigStitcherConfig(downsample_xyz=(4, 4, 1)))
+    assert "subsampling_factors=[{1,1,1}, {2,2,1}, {4,4,1}]" in text and "downsample_in_x=4 downsample_in_y=4" in text
+
+
+@pytest.mark.parametrize("config, message", [
+    (BigStitcherConfig(downsample_xyz=(4, 4, 1), subsampling_factors=((2, 2, 2), (4, 4, 4)),
+                       hdf5_chunk_sizes=((16, 16, 16), (8, 8, 8))), "no resaved level"),
+    (BigStitcherConfig(downsample_xyz=(1, 1, 1), subsampling_factors=((2, 2, 1), (4, 4, 1)),
+                       hdf5_chunk_sizes=((16, 16, 1),) * 2), r"needs a \(1, 1, 1\) entry"),
+    (BigStitcherConfig(downsample_xyz=(3, 3, 1), subsampling_factors=((2, 2, 1), (4, 4, 1)),
+                       hdf5_chunk_sizes=((16, 16, 1),) * 2), "no resaved level"),
+])
+def test_w871_guard_raises_on_a_plane_before_writing(tmp_path, config, message):
+    with pytest.raises(ValueError, match=message):
+        plane_export(tmp_path, config)
+    assert not (tmp_path / "t").exists()
+
+
+def test_w871_guard_passes_the_defaults_in_3d(tmp_path):
+    from starfinder.stitching._bigstitcher import _check_downsample_served
+    _check_downsample_served(BigStitcherConfig(), plane=False)
+    with pytest.raises(ValueError, match="no resaved level"):
+        _check_downsample_served(BigStitcherConfig(downsample_xyz=(2, 2, 1)), plane=False)
