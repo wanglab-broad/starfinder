@@ -7764,6 +7764,8 @@ dev = [
     { name = "ruff" },
 ]
 local-registration = [
+    { name = "numba", version = "0.62.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.14' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version >= '3.14' and platform_machine != 'arm64' and extra == 'extra-10-starfinder-cellpose' and extra == 'extra-10-starfinder-cuda') or (python_full_version >= '3.14' and platform_machine != 'arm64' and extra == 'extra-10-starfinder-cuda' and extra == 'extra-10-starfinder-piscis') or (python_full_version >= '3.14' and platform_machine != 'arm64' and extra == 'extra-10-starfinder-cuda' and extra == 'extra-10-starfinder-spotiflow') or (platform_machine == 'arm64' and extra == 'extra-10-starfinder-cellpose' and extra == 'extra-10-starfinder-cuda') or (platform_machine == 'arm64' and extra == 'extra-10-starfinder-cuda' and extra == 'extra-10-starfinder-piscis') or (platform_machine == 'arm64' and extra == 'extra-10-starfinder-cuda' and extra == 'extra-10-starfinder-spotiflow') or (sys_platform != 'darwin' and extra == 'extra-10-starfinder-cellpose' and extra == 'extra-10-starfinder-cuda') or (sys_platform != 'darwin' and extra == 'extra-10-starfinder-cuda' and extra == 'extra-10-starfinder-piscis') or (sys_platform != 'darwin' and extra == 'extra-10-starfinder-cuda' and extra == 'extra-10-starfinder-spotiflow')" },
+    { name = "numba", version = "0.63.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.14' and platform_machine != 'arm64') or (python_full_version < '3.14' and platform_machine != 'arm64' and extra == 'extra-10-starfinder-cellpose' and extra == 'extra-10-starfinder-cuda') or (python_full_version < '3.14' and platform_machine != 'arm64' and extra == 'extra-10-starfinder-cuda' and extra == 'extra-10-starfinder-piscis') or (python_full_version < '3.14' and platform_machine != 'arm64' and extra == 'extra-10-starfinder-cuda' and extra == 'extra-10-starfinder-spotiflow') or platform_machine == 'arm64' or sys_platform != 'darwin'" },
     { name = "simpleitk" },
 ]
 multiview-stitcher = [
@@ -7845,6 +7847,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.7" },
     { name = "multiview-stitcher", marker = "python_full_version < '3.14' and extra == 'multiview-stitcher'", specifier = "==0.1.62" },
     { name = "napari", marker = "extra == 'visualization'", specifier = ">=0.4" },
+    { name = "numba", marker = "extra == 'local-registration'", specifier = ">=0.62" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "piscis", marker = "python_full_version < '3.14' and extra == 'cuda'", specifier = "==1.1.0" },

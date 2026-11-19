@@ -335,6 +335,143 @@ class TestMatlabOrderUpdate:
         np.testing.assert_allclose(field, expected, **FLOAT64)
 
 
+def _numpy_thirion_iterations(fixed, moving, field, iterations, kernel):
+    """The NumPy and SciPy loop the fused kernels replaced (_demons._thirion_iterations at 76cd058), as a reference."""
+    from scipy import ndimage
+
+    ndim = fixed.ndim
+    grad = []
+    for axis, n in enumerate(fixed.shape):  # central inside, 0 on the two faces normal to each axis
+        component = np.zeros_like(fixed)
+        if n > 2:
+            inner = [slice(None)] * ndim
+            inner[axis] = slice(1, -1)
+            ahead, behind = list(inner), list(inner)
+            ahead[axis], behind[axis] = slice(2, None), slice(None, -2)
+            component[tuple(inner)] = (fixed[tuple(ahead)] - fixed[tuple(behind)]) / 2
+        grad.append(component)
+    grad_sq = sum(g * g for g in grad)
+    axes = [np.arange(n, dtype=np.float64).reshape([-1 if a == axis else 1 for a in range(ndim)])
+            for axis, n in enumerate(fixed.shape)]
+    field = field.copy()
+    rms = 0.0
+    for _ in range(iterations):
+        coords = np.stack([field[axis] + axes[axis] for axis in range(ndim)])
+        inside = np.all([(coords[axis] >= -0.5) & (coords[axis] < n - 0.5) for axis, n in enumerate(fixed.shape)],
+                        axis=0)
+        warped = ndimage.map_coordinates(moving, coords, order=1, mode="nearest", prefilter=False)
+        diff = fixed - warped
+        denominator = grad_sq + diff * diff
+        scale = np.zeros_like(diff)
+        np.divide(diff, denominator, out=scale, where=inside & (np.abs(diff) >= 0.001) & (denominator >= 1e-9))
+        for axis in range(ndim):
+            field[axis] += scale * grad[axis]
+        count = np.count_nonzero(inside)
+        rms = float(np.sqrt((scale * scale * grad_sq)[inside].sum() / count)) if count else 0.0
+        for axis in range(1, ndim + 1):
+            field = ndimage.correlate1d(field, kernel, axis=axis, mode="nearest")
+    return field, rms
+
+
+def _warped_pair(shape, seed):
+    """A smooth random fixed image, the moving image shifted by a smooth field, and a start field of up to 1.5 voxels.
+
+    The start field puts samples beyond the half-voxel band of the faces, inside it and inside the grid.
+    """
+    from scipy.ndimage import gaussian_filter, map_coordinates
+
+    rng = np.random.default_rng(seed)
+    fixed = 100 + 400 * gaussian_filter(rng.random(shape), 1.5)
+    shift = np.stack([gaussian_filter(rng.standard_normal(shape), 3) * 8 for _ in shape])
+    grid = np.indices(shape, dtype=np.float64)
+    moving = map_coordinates(fixed, grid - shift, order=1, mode="nearest")
+    start = np.stack([gaussian_filter(rng.standard_normal(shape), 2) * 3 for _ in shape]).clip(-1.5, 1.5)
+    return fixed, moving, start
+
+
+class TestFusedKernels:
+    """W-882: the fused numba update gives the NumPy and SciPy loop's field and RMS change."""
+
+    @pytest.mark.parametrize("shape, sigma", [((10, 20, 24), 1.0), ((10, 20, 24), 0.0), ((20, 24), 1.0)])
+    def test_field_and_rms_equal_the_numpy_loop(self, shape, sigma):
+        """Five iterations from a start field that samples outside the grid, inside the half-voxel band and inside."""
+        from starfinder.registration._demons import _sampled_gaussian, _thirion_iterations
+
+        fixed, moving, start = _warped_pair(shape, 882)
+        kernel = _sampled_gaussian(sigma)
+        expected, expected_rms = _numpy_thirion_iterations(fixed, moving, start, 5, kernel)
+        fixed.setflags(write=False)  # read-only inputs, as SimpleITK's array views of float64 images
+        moving.setflags(write=False)
+        field, rms = _thirion_iterations(fixed, moving, start.copy(), 5, kernel)
+
+        coords = start + np.indices(shape)
+        outside = np.any([(c < -0.5) | (c >= n - 0.5) for c, n in zip(coords, shape)], axis=0)
+        band = ~outside & np.any([(c < 0) | (c > n - 1) for c, n in zip(coords, shape)], axis=0)
+        assert outside.any() and band.any()
+        assert field.shape == (len(shape), *shape) and field.dtype == np.float64
+        np.testing.assert_allclose(field, expected, **FLOAT64)
+        assert rms == pytest.approx(expected_rms, rel=1e-9, abs=1e-12)
+        assert np.abs(expected - start).max() > 0.1 and expected_rms > 0.01
+
+    def test_no_voxel_inside_gives_rms_0_and_leaves_the_field(self):
+        """Every sample outside the grid: no update, RMS 0, the field only smoothed (here not at all: sigma 0)."""
+        from starfinder.registration._demons import _thirion_iterations
+
+        fixed, moving, _ = _warped_pair((6, 8, 8), 1)
+        start = np.full((3, 6, 8, 8), 20.0)
+        field, rms = _thirion_iterations(fixed, moving, start.copy(), 2, np.ones(1))
+        assert rms == 0.0
+        np.testing.assert_array_equal(field, start)
+
+    def test_without_numba_the_classic_variant_names_the_extra(self, monkeypatch):
+        """numba missing: RegistrationBackendUnavailableError naming the local-registration extra."""
+        import sys
+
+        import starfinder.registration as registration
+        from starfinder.registration._demons import _thirion_iterations
+        from starfinder.registration._errors import RegistrationBackendUnavailableError
+
+        monkeypatch.setitem(sys.modules, "numba", None)
+        monkeypatch.delitem(sys.modules, "starfinder.registration._demons_kernels", raising=False)
+        monkeypatch.delattr(registration, "_demons_kernels", raising=False)
+        fixed, moving, start = _warped_pair((4, 8, 8), 2)
+        with pytest.raises(RegistrationBackendUnavailableError, match=r"numba.*local-registration"):
+            _thirion_iterations(fixed, moving, start, 1, np.ones(1))
+
+    def test_kernels_compile_without_a_writable_cache(self, tmp_path):
+        """A read-only install with no writable cache location (the container image): no cache, no error."""
+        import os
+        import shutil
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        import starfinder.registration._demons_kernels as kernels
+
+        package = tmp_path / "readonly"
+        package.mkdir()
+        shutil.copy(Path(kernels.__file__), package / "_demons_kernels.py")
+        home = tmp_path / "home"
+        home.mkdir()
+        for folder in (package, home):
+            folder.chmod(0o555)
+        code = ("import numpy as np, _demons_kernels as k; "
+                "f = np.zeros((3, 4, 5, 6)); i = np.arange(120.0).reshape(4, 5, 6); "
+                "print(k.thirion_update_3d(i, i + 1, np.ones((3, 4, 5, 6)), np.full((4, 5, 6), 3.0), f), "
+                "k.thirion_update_3d._cache.__class__.__name__)")
+        env = {key: value for key, value in os.environ.items() if key not in ("NUMBA_CACHE_DIR", "XDG_CACHE_HOME")}
+        env.update(HOME=str(home), PYTHONPATH=str(package), PYTHONDONTWRITEBYTECODE="1")
+        try:
+            done = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True,
+                                  cwd=package, timeout=600)
+        finally:
+            for folder in (package, home):
+                folder.chmod(0o755)
+        assert done.returncode == 0, done.stderr
+        assert done.stdout.split() == ["(120,", "22.5)", "NullCache"]
+        assert list(package.iterdir()) == [package / "_demons_kernels.py"]
+
+
 class TestMatlabCompatibleConfig:
     """Tests for matlab_compatible_config function."""
 
