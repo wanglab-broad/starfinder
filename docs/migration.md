@@ -351,6 +351,7 @@ For `backend: python`, replace MATLAB-style blocks with native stage settings:
 | Subset switches for Python membership | `input_root/fovs.csv` and `selected_fovs` |
 | A percent-style FOV pattern | A `{i}` pattern |
 | Hand-built round-first copies | Set `image_dir_template="{fov}/{round}"` for FOV-first inputs |
+| A link tree of the raw images with `fovs.csv` inside it | `fov_list`, the path of a `fovs.csv` outside the input folder; the raw folder is read in place ([Preparing a dataset](workflow/preparing-a-dataset.md)) |
 
 The [workflow guide](workflow/index.md) and
 [reference](workflow/reference.md) show complete native configurations.

@@ -167,7 +167,7 @@ The `positions` mapping exposes the following keys.
 | --- | --- |
 | `source` | Position source |
 | `stage_file`, `stage_axes`, `snap_to_grid` | Stage file, axis mapping and optional grid snapping |
-| `regular_grid` | Grid layout |
+| `regular_grid` | Grid layout; the workflow fills its cells in the FOV list's row order |
 | `tile_shape_yx`, `spacing_yx` | Geometry for grid construction |
 | `table`, `unit` | Supplied position table and its unit |
 

@@ -80,7 +80,8 @@ dataset_id: The dataset's folder under both roots.
 sample_id: The input folder's name under <root_input_path>/<dataset_id>/.
 root_output_path: The folder that holds <dataset_id>/<output_id>/, the output root.
 output_id: The output root's name under <root_output_path>/<dataset_id>/.
-selected_fovs: The FOV ids of the input folder's fovs.csv to run; null runs every FOV.
+fov_list: The FOV list, a fovs.csv (sample,fov_id and optionally position_id), absolute or relative to the input folder; null is the input folder's fovs.csv. A file outside the input folder lets a raw dataset folder be read in place.
+selected_fovs: The FOV ids of the FOV list to run; null runs every FOV.
 n_rounds: The number of sequencing rounds, named round1 to round<n_rounds>.
 ref_round: The sequencing round the others are registered to.
 ref_channel: The shared stain's name in the other rounds, and with several reference_stains the one of the reference round, for the morphology task.
@@ -175,6 +176,15 @@ view_map: The view map of the supplied dataset.xml, a pattern with {sample}.
 
 The {doc}`stitching reference <../stitching-algorithms>` lists the methods and
 their config fields.
+
+With `positions.source: regular_grid`, the grid places a sample's FOVs in the
+row order of the FOV list: the first row takes the grid's first cell in
+`regular_grid.order`, the second row the next cell, and so on. `selected_fovs`
+does not change the cells; each selected FOV keeps the cell of its row. Write
+the rows in scan order. A list in lexical order (`tile_1`, `tile_10`,
+`tile_11`, ...) places numbered FOVs in the wrong cells without an error, so the
+plan warns when a sample's rows are in lexical order and the numbers in the FOV
+ids give another order.
 
 (workflow-keys-assembly)=
 ### `assembly`
