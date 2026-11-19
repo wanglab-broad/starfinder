@@ -280,13 +280,30 @@ output_roles)`. A new composite is a new method here.
 * `ProjectionConfig` gains the method `mean`. `ImageMetadata.projected` and
   `ReferenceGrid.projected` accept `mean` too, recorded in the frame as
   `/projection:mean`.
-* In a recipe, `max` keeps the dtype. `sum` and `mean` accumulate in float64 and return
-  float32. This can never overflow. For an integer input the record states `exact: true`
-  when every accumulated value is below 2²⁴, so that float32 holds it exactly, and `exact:
-  false` otherwise. For a float input `exact` is null. For a uint16
-  stack of 50 planes, the largest sum is 3,276,750, below 16,777,216.
-* `output_dtype` may be given as `float64` to keep more digits. `conversion` is refused in
-  a recipe, because a display rescale is not a projection.
+* In a recipe, `max` keeps the dtype. `sum` and `mean` accumulate in float64 and convert
+  the result once to the output dtype: float32 by default, or `output_dtype: float64`.
+  `conversion` is refused in a recipe, because a display rescale is not a projection.
+* **The overflow check.** After accumulating in float64 and before converting, the stage
+  checks that every value lies in the finite range of the output dtype (float32: magnitude
+  at most 3.4028235 × 10³⁸). A value outside it raises `ValueError`, naming the run, the
+  recipe's projection, the largest magnitude reached and `output_dtype: float64` as the
+  remedy. Nothing is clipped or converted silently. The record keeps the largest magnitude
+  as `max_abs`.
+  * Only a `sum` of float input can reach the limit. Two float32 planes near 3 × 10³⁸,
+    for example, sum beyond it. A `mean` lies between the smallest and largest input value,
+    and float64 holds the sum of any float32 stack the package can load.
+  * Integer inputs of the sizes this package allows cannot reach it. Integer inputs are
+    at most 32 bits, since `ProjectionConfig` refuses 64-bit integer sums. Even 2³² − 1 in
+    every one of 10⁹ planes sums to about 4.3 × 10¹⁸. For a uint16 stack of 50 planes, the
+    largest sum is 3,276,750.
+* **The `exact` flag** applies to a `sum` of an integer input only. It is `true` when
+  every sum is at most 2²⁴ = 16,777,216, the largest bound up to which float32 holds every
+  integer (the uint16 example above is), and `false` otherwise. With `output_dtype:
+  float64` the bound is 2⁵³. For `max` it is null, because the input dtype is kept. For `mean`,
+  and for any float input, it is null: the mean of integers need not be representable (the
+  mean of 0, 1 and 1 is 2/3). For every `sum` and `mean`, the record states `rounding:
+  "float64 result rounded once to <output dtype>"`, so a reader knows that a null `exact`
+  means a value rounded once, not an error.
 * A run whose operations include `extend_labels_through_z` needs a recipe with a projection
   and one model channel. The stain it extends through is that model channel before the
   projection (after `channels` and `combine`). This is the channel used today, the prepared
@@ -313,8 +330,12 @@ output_roles)`. A new composite is a new method here.
   tuple[float, float, float] | None`. A spec gains `scales: bool`, which is true for
   `stardist` and `cellpose`. For a method that scales, the stage wrapper requires
   `model_scale_zyx` (`ValueError` naming `model_input`). A method that does not scale
-  refuses it. StarDist passes it as `predict_instances(scale=…)` (a 2D model needs Z
-  factor 1, as today). Cellpose passes `diameter = 30 / f_yx`, since its image is rescaled
+  refuses it. StarDist passes it to `predict_instances(scale=…)` as `_learned.py` passes
+  `scale` today (`library_scale`, `src/python/starfinder/segmentation/_learned.py:429`). A
+  3D model receives the ZYX factor, such as `(1, 0.25, 0.25)`. A 2D model receives only Y
+  and X, such as `(0.25, 0.25)`, because StarDist refuses a scale whose length differs from
+  the image's axes, and a Z factor other than 1 is refused for it as today. A factor of 1
+  on every axis is passed as None. Cellpose passes `diameter = 30 / f_yx`, since its image is rescaled
   by 30 / `diameter`. `f_yx = 1` therefore gives diameter 30, which is the old
   `diameter: None` (no rescale). Cellpose needs equal Y and X factors. The method's
   `effective` entry still records `scale_zyx` and `diameter` as used.
@@ -427,7 +448,8 @@ of `channels` is a source channel and loses `prepare` and `prepare_channel`:
       {"stage": "combine", "method": "single", "config": null, "record": null,
        "roles_in": ["nuclear"], "roles_out": ["nuclear"]},
       {"stage": "projection", "method": "sum", "config": {"method": "sum"}, "applied": true, "exact": null,
-       "dtype": "float32", "grid": {"shape_zyx": [1, 3072, 3072], "frame_id": "..."}},
+       "rounding": "float64 result rounded once to float32", "max_abs": 1.0, "dtype": "float32",
+       "grid": {"shape_zyx": [1, 3072, 3072], "frame_id": "..."}},
       {"stage": "after_projection", "index": 0, "role": "nuclear", "method": "clahe",
        "config": {"kernel_um": 6.0, "clip_limit": 0.01, "nbins": 256}, "used": {"kernel_px_zyx": [1, 63, 63]},
        "fitted": {"in_range": [0.0, 0.83]}, "diagnostics": {}, "input": "<sha256>", "output": "<sha256>",
@@ -435,7 +457,7 @@ of `channels` is a source channel and loses `prepare` and `prepare_channel`:
     ],
     "model_input": {"pixel_size_um": 0.37854, "factor": null, "spacing_yx": [0.094635, 0.094635],
                     "factor_zyx_exact": [1.0, 0.25, 0.25], "factor_zyx": [1.0, 0.25, 0.25],
-                    "method_value": {"scale": [1.0, 0.25, 0.25]}}
+                    "method_value": {"scale_zyx": [1.0, 0.25, 0.25], "library_scale": [0.25, 0.25]}}
   }
 }
 ```
