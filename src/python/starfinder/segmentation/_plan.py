@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -415,6 +416,8 @@ def segment_fov(fov, plan, *, device="cpu", inputs=None, only=None):
     (the saved format writes it); an import has none. ``only`` names the one run to
     compute (None: every run); the seeds of a run that this call does not compute are
     the FOV's ``segmentation_results`` (a saved run restored by FOV.load_segmentation).
+    Each run's record holds ``wall_s``, the wall time of the run in seconds: its input,
+    method (or import) and label operations.
     """
     if not isinstance(plan, SegmentationPlan):
         raise TypeError("plan must be a SegmentationPlan")
@@ -433,6 +436,7 @@ def segment_fov(fov, plan, *, device="cpu", inputs=None, only=None):
                 "registration_record_sha256": _record_sha256(fov.registration_record)}
     results = {}
     for run in runs:
+        started = time.perf_counter()
         namespace = json.dumps([fov.dataset.dataset_id, fov.dataset.sample_id, fov.fov_id, fov.tile,
                                 run.name], separators=(",", ":"))
         if isinstance(run.method, LabelImportConfig):
@@ -460,6 +464,7 @@ def segment_fov(fov, plan, *, device="cpu", inputs=None, only=None):
             record = dict(result.record)
             if run.projection is not None:
                 record["input"] = dict(record["input"], projection=_json(asdict(run.projection)))
-        results[run.name] = replace(result, record=dict(record, upstream=upstream))
+        results[run.name] = replace(result, record=dict(record, upstream=upstream,
+                                                        wall_s=time.perf_counter() - started))
     return results
 

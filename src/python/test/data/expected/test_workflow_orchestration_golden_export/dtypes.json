@@ -244,8 +244,8 @@
  },
  "after_fusion-report-sample-tables-unavailable.csv": {
   "part": "string",
-  "table": "string",
-  "column": "string",
+  "table": "float64",
+  "column": "float64",
   "row_key": "string",
   "reason": "string",
   "detail": "string"
@@ -833,8 +833,8 @@
  },
  "per_fov-report-sample-tables-unavailable.csv": {
   "part": "string",
-  "table": "string",
-  "column": "string",
+  "table": "float64",
+  "column": "float64",
   "row_key": "string",
   "reason": "string",
   "detail": "string"

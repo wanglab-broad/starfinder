@@ -291,7 +291,7 @@ Rows and key, as [report-contract](report.md) states them: one row per step; key
 | --- | --- | --- | --- |
 | `scope`, `fov_id`, `index`, `name`, `round`, `status` | As [report-contract](report.md) lists them: per FOV, `R_f.steps[i]` in record order (`index = i`), then, on the route per FOV, one row `segment` (method of the cell run: `segmentation.json` `methods`, or `imported` for an import, baseline G13) and one row `assign_molecules`; then the sample rows `stitch` (`placement.json` `method.method`) and one per export part in the order of `export.json` `parts`. | — | as the contract states |
 | `method` | `preprocess:<step>` → `<step>`; `register` → `registration.csv` `methods` of the round; `find_spots` → the distinct `method` values of `R_f.steps[i].methods` (the step's provenance entries, one per method that ran, written by `_RunRecord.add_methods`), `;`-joined in record order; `decode_reads` → `R_f.config.pipeline.decoding.method` with `R_f.config.readout_mode`; `filter_reads` → `filter`; `segment`, `assign_molecules`, `stitch` and the export parts as above; every other step n/a. | — | n/a for a step without a method |
-| `seconds` | `R_f.steps[i].seconds`; an export part's `wall_s` (`fusion`, `labels`, `spatialdata`, `segmentation` sections). | s | `not_recorded` for stitching, assembly and the per-FOV segmentation and assignment; n/a for a part `off` or `not_run` |
+| `seconds` | `R_f.steps[i].seconds`; the `wall_s` of `segmentation.json` (`segment`), `assignment.json` (`assign_molecules`) and `placement.json` (`stitch`); an export part's `wall_s` (`assembly`, `fusion`, `labels`, `spatialdata`, `segmentation` sections). | s | `not_recorded` for a record without `wall_s` (written before W-879, or a placement imported from `dataset.xml`); n/a for a part `off` or `not_run` |
 
 ### `readout_totals.csv`
 
@@ -529,7 +529,10 @@ other column n/a.
   "differs: n groups", with the top-level keys of `config` that differ between the groups
   and, in the tooltip, the FOVs of each group. No run record: unavailable (`no_run_record`).
 * **Acquisition** (Summary). `R` rounds × `C` channels from the union of `R_f.channels`
-  (`C` the largest number of channels of a round, "C1–C2 channels" when they differ), and
+  (`C` the largest number of channels of a round, "C1–C2 channels" when they differ; a reference stain
+  taken in the reference round's acquisition, `reference_stain` with no `R_f.registration.reference_stain`
+  entry, counts with `R_f.rounds.reference_round`: its channels add to that round's and it is no round; a
+  stain with a registration entry is a round of its own), and
   "3D" when the Z size is greater than 1, else "2D (Z = 1)"; the Z size is the fused grid's
   (`fusion.fovs[*].grid.shape_zyx[0]`), else the reference image's.
 * **Software** (Summary). `R_f.code.version` and `R_f.code.git_commit` (with `R_f.code.git_dirty`; `R_f.code.version_source` is not shown); several
@@ -790,7 +793,7 @@ same columns on both routes; only these elements differ:
 | Cells attributed to a FOV (`n_cells`, `n_cells_retained`) | The FOV's own cells, and those it retains | The sample's cells whose ownership centroid the FOV owns (both columns equal) |
 | Population accounting | Every reason of the route per FOV, with `duplicate_observation` when the rule is on | No duplicate rows (n/a); the cells' input are the run's labels |
 | Workflow lanes | Segmentation and assignment in the per-FOV lane | `segment` in the per-sample lane |
-| Time of the segmentation | `not_recorded` | `export.json` `segmentation.wall_s` |
+| Time of the segmentation | `segmentation.json` `wall_s` | `export.json` `segmentation.wall_s` |
 
 Cell density, reads assigned to cells and the rule "reads but no cell" are the same formulas
 on both routes (amendment 1).

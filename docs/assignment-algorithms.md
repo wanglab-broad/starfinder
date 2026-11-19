@@ -187,6 +187,7 @@ The label images are ZYX `uint32` with the grid's metadata.
 | `counts` | The totals; after `FOV.assign_molecules`, those of `summarize_assignment` |
 | `outcome` | `ok`, or `empty` without cells |
 | `files` | Saved tables and local label files with their SHA-256 |
+| `wall_s` | The wall time of `assign_molecules` in seconds; the report's time of the step `assign_molecules` |
 | `software` | The software versions |
 
 ## Workflow keys

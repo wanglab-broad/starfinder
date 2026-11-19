@@ -2381,7 +2381,8 @@ class FOV:
         design/specs/segmentation.md, "Saved format"): ``labels.tif`` (ZYX
         ``uint32``, zlib, with the grid's ImageMetadata), ``input.ome.tif`` (the
         segmentation input, ZYXC OME-TIFF; not for an import) and
-        ``segmentation.json`` (the run record, with each file's path and SHA-256).
+        ``segmentation.json`` (the run record, with each file's path and SHA-256,
+        and ``wall_s``, the run's wall time in seconds).
         The stored results carry that saved record. ``run.json`` and the ``FOV.run``
         stages are not touched; ``stages`` and ``hash_inputs`` are not used.
 

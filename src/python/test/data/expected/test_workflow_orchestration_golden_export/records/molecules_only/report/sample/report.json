@@ -364,8 +364,8 @@
   },
   {
    "path": "tables/unavailable.csv",
-   "sha256": "f559f301902d31c4c9bb6f5308682d57d1481585f01964693e3ce5ce4a2b3e32",
-   "bytes": 4356,
+   "sha256": "d03e9bd1828c01c3ea2175c5b482318f9e6aebe6f8308d5696e2ba86d6eeb370",
+   "bytes": 4142,
    "dtypes": {
     "part": "string",
     "table": "string",
@@ -448,22 +448,6 @@
    "row_key": "",
    "reason": "no_segmentation",
    "detail": "no assignment"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=sample;fov_id=;index=0",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of stitch"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=sample;fov_id=;index=1",
-   "reason": "not_recorded",
-   "detail": "export.json assembly records no wall_s"
   },
   {
    "part": "readout.totals",

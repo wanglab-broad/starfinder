@@ -82,6 +82,11 @@ def test_the_refactored_workflow_reproduces_the_golden_values_of_the_export(tmp_
     G.run_migrated(work, snakemake, ROOT, names=("D-per-fov", "D-molecules-only", "D-after-fusion"))
     G.extract_export(work, tmp_path / "actual")
     _explained(*G.compare_migrated(EXPECTED_EXPORT, tmp_path / "actual", tmp_path / "expected"))
+    # W-879: the segment, assign_molecules, stitch and assembly records hold their wall time on every route, so the
+    # report of the 4-FOV run names no unavailable step time (the expected tables hold no such row either).
+    for route in ("per_fov", "molecules_only", "after_fusion"):
+        table = tmp_path / "actual" / f"{route}-report-sample-tables-unavailable.csv"
+        assert "workflow.time" not in table.read_text(), route
 
 
 def _set_json(path, change):

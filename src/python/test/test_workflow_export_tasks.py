@@ -444,14 +444,14 @@ def build_route(root, dimensions, *, assignment="default", previews=False, outpu
 
 def snapshot(folder):
     """The export folder's files but the ownership previews (previews/, which export.json does not list), its record
-    without its code version and the SHA-256 of its tables."""
+    without its code version and its measured times, and the SHA-256 of its tables."""
     from starfinder._records import file_sha256
     files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*")
                    if p.is_file() and not p.relative_to(folder).as_posix().startswith("previews/"))
 
     def stable(value):
         if isinstance(value, dict):
-            return {k: stable(v) for k, v in value.items() if k != "software"}
+            return {k: stable(v) for k, v in value.items() if k not in ("software", "wall_s", "cpu_s", "peak_rss_kib")}
         return [stable(v) for v in value] if isinstance(value, list) else value
     record = stable(json.loads((folder / "export.json").read_text()))
     return files, record, {f: file_sha256(folder / f) for f in files if f.startswith("tables/")}

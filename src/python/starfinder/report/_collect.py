@@ -97,6 +97,14 @@ _SECTIONS = {"assemble": "assembly", "fuse": "fusion", "segment": "segmentation"
 _ADDED_KEYS = ("transforms", "codebook", "workflow_config")
 
 
+def _wall_seconds(record, reason):
+    """The ``wall_s`` of a step's record, or ``not_recorded`` (a record of an older version, an import) with reason."""
+    value = (record or {}).get("wall_s")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return Unavailable("not_recorded", reason)
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -769,16 +777,17 @@ class _Collection:
                 methods_of = [m.get("method") for m in (segmentation or {}).get("methods") or []
                               if isinstance(m, dict) and m.get("method")]
                 method = ";".join(methods_of) if methods_of else "imported"
-                for offset, (name, step_method) in enumerate((("segment", method),
-                                                              ("assign_molecules", cells.get("run") or NA))):
+                for offset, (name, step_method, source, where) in enumerate((
+                        ("segment", method, segmentation, "segmentation.json"),
+                        ("assign_molecules", cells.get("run") or NA, saved, "assignment.json"))):
                     rows.append({"scope": "fov", "fov_id": fov, "index": len(steps) + offset, "name": name,
                                  "round": NA, "method": step_method, "status": "succeeded",
-                                 "seconds": Unavailable("not_recorded", f"no record holds the time of {name}")})
+                                 "seconds": _wall_seconds(source, f"{where} of {fov} records no wall_s")})
         index = 0
         if self.placement is not None:
             rows.append({"scope": "sample", "fov_id": NA, "index": index, "name": "stitch", "round": NA,
                          "method": _get(self.placement, "method", "method") or NA, "status": "succeeded",
-                         "seconds": Unavailable("not_recorded", "no record holds the time of stitch")})
+                         "seconds": _wall_seconds(self.placement, "placement.json records no wall_s")})
             index += 1
         for part, status in ((self.export or {}).get("parts") or {}).items():
             section = (self.export or {}).get(_SECTIONS.get(part)) or {}

@@ -48,6 +48,11 @@ The sample page groups its displays into these sections.
 | Sample measurements | Reads, genes and size per cell, marker patterns, MECR and reads along Z |
 | Files | Input, configuration and output records |
 
+The Summary's acquisition counts the rounds of the run records' `channels`. A reference stain taken in the reference
+round's acquisition (`reference_stain` with no registration entry in the run record, as `prepare_morphology` records it)
+counts with that round and adds its channels to the round's; a stain registered as an image of its own stays a round.
+Time per step shows every step the records hold, `segment`, `assign_molecules`, `stitch` and `assemble` included.
+
 The comparison page has a sample table and box plots of spots per FOV, fraction
 matched to the codebook, and cells per FOV.
 
@@ -60,7 +65,7 @@ beside the comparison page in `report/`.
 | --- | --- |
 | `fovs.csv` | FOV identity, run status, placement, read counts and fractions, cells and density |
 | `registration.csv` | Registration outcome, fallback, methods, shifts, residuals and alignment score |
-| `steps.csv` | Per-FOV and sample steps, methods, status and duration |
+| `steps.csv` | Per-FOV and sample steps, methods, status and duration; the durations of `segment`, `assign_molecules`, `stitch` and the export parts are the `wall_s` of their records |
 | `readout_totals.csv` | Counts and fractions at the readout levels |
 | `population.csv` | Input, retained, excluded and counted cells and molecules |
 | `problematic_fovs.csv` | FOVs to inspect, with rule, measurement, limit and reason |

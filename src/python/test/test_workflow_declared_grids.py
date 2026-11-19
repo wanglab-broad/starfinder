@@ -203,13 +203,13 @@ def command_run(root, dimensions, *, stored):
 def saved_folder(out, fov):
     """The saved assignment folder of a FOV: its file names, its tables' bytes, and its record without what the grid
     decides or where the copy lies: the grid (stored metadata, or declared), the unit's spelling it gives size_unit
-    (µm^3 or micrometer^3), the saved cell run's record and file (its labels.tif stores the grid) and the molecule
-    table's path."""
+    (µm^3 or micrometer^3), the saved cell run's record and file (its labels.tif stores the grid), the molecule
+    table's path and the measured ``wall_s``."""
     folder = out / "fovs" / fov / "assignment" / "default"
     names = sorted(p.name for p in folder.iterdir())
     tables = {name: (folder / name).read_bytes() for name in names if name.endswith(".csv")}
     record = json.loads((folder / "assignment.json").read_text())
-    record = {k: v for k, v in record.items() if k not in ("grid", "size_unit")}
+    record = {k: v for k, v in record.items() if k not in ("grid", "size_unit", "wall_s")}
     record["inputs"] = dict(record["inputs"], cells={k: v for k, v in record["inputs"]["cells"].items()
                                                      if k not in ("record", "record_sha256", "file")},
                             molecules=dict(record["inputs"]["molecules"], source={

@@ -377,13 +377,32 @@ def _get_list(mapping, *keys):
     return mapping if isinstance(mapping, list) else []
 
 
+def _acquired_channels(record):
+    """Round → channel count of one run record, the reference stain counted with the reference round it was taken in.
+
+    A stain with no registration entry is the reference round's own file (``prepare_morphology`` records it as the same
+    acquisition, with no transform and no attempt); a stain with an entry was registered as an image of its own and
+    stays a round of its own, as does a stain of a record that names no reference round.
+    """
+    from ._replay import reference_round
+    record = record or {}
+    counts = {name: len(entries or []) for name, entries in (record.get("channels") or {}).items()}
+    stain, reference = counts.get("reference_stain"), None
+    if stain is not None and not (record.get("registration") or {}).get("reference_stain"):
+        reference = (record.get("rounds") or {}).get("reference_round") or reference_round(record)
+    if reference in counts and reference != "reference_stain":
+        counts[reference] += counts.pop("reference_stain")
+    return counts
+
+
 def acquisition(records, planes):
     """The Summary's acquisition: rounds × channels from the union of the run records' ``channels`` and
-    "3D" or "2D (Z = 1)" from the Z size ``planes`` (None when no record holds it)."""
+    "3D" or "2D (Z = 1)" from the Z size ``planes`` (None when no record holds it). A reference stain taken in
+    the reference round's acquisition counts with that round (:func:`_acquired_channels`)."""
     channels = {}
     for record in records.values():
-        for name, entries in ((record or {}).get("channels") or {}).items():
-            channels[name] = max(channels.get(name, 0), len(entries or []))
+        for name, count in _acquired_channels(record).items():
+            channels[name] = max(channels.get(name, 0), count)
     if not channels:
         return Unavailable("no_run_record", "no run record holds channels")
     low, high = min(channels.values()), max(channels.values())

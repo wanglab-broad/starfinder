@@ -272,6 +272,38 @@ def report_hash_cell(run, path, text, tree):
     return value, text[:start] + "<workflow-config-sha256>" + text[end:]
 
 
+def h5ad_content(payload, work, varying, digests):
+    """The content of a ``sample.h5ad`` as bytes: ``X``, every layer and every obsm, varm, obsp and varp entry with
+    its dtype and shape, ``obs`` and ``var`` as CSV, and ``uns`` as a JSON record, its JSON strings parsed and
+    normalized as the export's records are. The file's own bytes hold the SHA-256 of each FOV's ``assignment.json``
+    (``uns.assembly``), and so its ``wall_s`` (W-879); the content leaves out what the records leave out."""
+    import tempfile
+
+    import anndata
+    import numpy as np
+    import scipy.sparse as sparse
+    golden = X.golden()
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "sample.h5ad"
+        path.write_bytes(payload)
+        data = anndata.read_h5ad(path)
+    digest = hashlib.sha256()
+
+    def add(label, value):
+        array = np.ascontiguousarray(value.toarray() if sparse.issparse(value) else np.asarray(value))
+        digest.update(f"{label}|{array.dtype}|{array.shape}|".encode())
+        digest.update(array.tobytes() if array.dtype != object else repr(array.tolist()).encode())
+    add("X", data.X)
+    for group in ("layers", "obsm", "varm", "obsp", "varp"):
+        mapping = getattr(data, group)
+        for key in sorted(mapping.keys()):
+            value = mapping[key]
+            add(f"{group}/{key}", value if not hasattr(value, "to_numpy") else value.to_numpy())
+    digest.update(data.obs.to_csv().encode() + data.var.to_csv().encode())
+    uns = golden._normalized(golden._uns_value(dict(data.uns)), str(work), varying, digests)
+    return digest.hexdigest().encode() + json.dumps(uns, sort_keys=True).encode()
+
+
 def compare(run, left, right, *, name="comparison.json", enforce=True, left_engine=None, right_engine=None, rerun_tasks=None):
     """Compare declared bytes outside X3's named fields and X11's scoped global hashes.
 
@@ -280,7 +312,8 @@ def compare(run, left, right, *, name="comparison.json", enforce=True, left_engi
     global hashes when compared with the pre-rerun tree, checked by invoke.
     X11's report Hash cell is validated against each tree's FOV records before
     normalization, only if no FOV reran. Every other page value stays exact.
-    Every binary file remains byte-equal, including H5AD and TIFF files.
+    Every binary file remains byte-equal, including TIFF files; an H5AD file is equal in content (``h5ad_content``),
+    because its ``uns`` holds the SHA-256 of each FOV's ``assignment.json``, which holds its ``wall_s``.
     """
     original_left, original_right = left, right
     left_engine = left_engine or getattr(run, "engine", "snakemake")
@@ -333,6 +366,8 @@ def compare(run, left, right, *, name="comparison.json", enforce=True, left_engi
                 return payload.replace(str(run.work).encode(), b"<work>")
             indices = [i for i, key in enumerate(rows[0]) if key not in golden.VARYING_COLUMNS]
             return json.dumps([[row[i].replace(str(run.work), "<work>") for i in indices] for row in rows]).encode()
+        if path.endswith(".h5ad"):
+            return h5ad_content(payload, run.work, varying, golden.VARYING_EXPORT_DIGESTS)
         if path.endswith(".html"):
             text = payload.decode()
             if mask_report_hash and Path(path).name == "report.html":

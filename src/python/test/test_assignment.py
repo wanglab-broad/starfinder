@@ -547,6 +547,7 @@ def test_a12_supplied_correspondence_equal_to_the_derived_one():
     record_s, record_d = (json.loads(json.dumps(r.record)) for r in (supplied, derived))
     assert record_s["inputs"].pop("correspondence")["source"] == "supplied"
     assert record_d["inputs"].pop("correspondence") == {"source": "overlap", "sha256": None}
+    assert 0 < record_s.pop("wall_s") < 3600 and 0 < record_d.pop("wall_s") < 3600   # measured, so never equal
     assert record_s == record_d
     bad = [(pd.DataFrame({"nucleus_id": [99], "cell_id": [1]}), "absent from the nucleus image: \\[99\\]"),
            (pd.DataFrame({"nucleus_id": [11], "cell_id": [42]}), "absent from the cell image: \\[42\\]"),

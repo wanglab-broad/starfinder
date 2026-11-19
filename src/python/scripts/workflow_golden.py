@@ -397,10 +397,11 @@ def run_migrated(work, snakemake, starfinder_path=REPO, cores=1, names=MIGRATED)
 # Output files whose bytes hold a time, a measured duration or an absolute path of the run (the run records, the
 # report's pages and its time columns, a saved assignment's record, the Snakemake benchmark logs, and the channel
 # images of nuclei_registration, whose stored frame_id is the absolute path of the reference stain file, and the
-# BigStitcher macro, which names the tiles' absolute folder): their
-# SHA-256 and byte count are left out wherever a record lists them, and they have no file digest.
-VARYING = ("run.json", "report.json", "report.html", "index.html", "assignment.json", "samples.csv",
-           "tables/fovs.csv", "tables/steps.csv", "log/benchmark/", "images/flamingo/ch", "BigStitcher_macro.ijm")
+# BigStitcher macro, which names the tiles' absolute folder), and, since W-879, a saved segmentation's record, which
+# holds its ``wall_s``: their SHA-256 and byte count are left out wherever a record lists them, and they have no file
+# digest.
+VARYING = ("run.json", "report.json", "report.html", "index.html", "assignment.json", "segmentation.json",
+           "samples.csv", "tables/fovs.csv", "tables/steps.csv", "log/benchmark/", "images/flamingo/ch", "BigStitcher_macro.ijm")
 # The table columns that hold times, durations and the digests of varying files (the report's tables).
 VARYING_COLUMNS = frozenset({"started_at", "ended_at", "run_seconds", "seconds", "generated_at", "report_sha256"})
 # The JSON keys of digests of records that hold an absolute path (an assignment's input records).

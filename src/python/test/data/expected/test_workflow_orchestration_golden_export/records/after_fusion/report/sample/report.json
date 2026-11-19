@@ -383,8 +383,8 @@
   },
   {
    "path": "tables/unavailable.csv",
-   "sha256": "ca6821a95433c1ad028f5b60da7aff3843a0f62c71f90d875bae68d6f3007152",
-   "bytes": 804,
+   "sha256": "e8a02bc83dbe9a60f44276777c4dabcbbd3bf47ca61652ad65b9cd2156a4e744",
+   "bytes": 590,
    "dtypes": {
     "part": "string",
     "table": "string",
@@ -403,22 +403,6 @@
    "row_key": "",
    "reason": "not_configured",
    "detail": "config.limits.alignment_score sets no limit"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=sample;fov_id=;index=0",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of stitch"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=sample;fov_id=;index=1",
-   "reason": "not_recorded",
-   "detail": "export.json assembly records no wall_s"
   },
   {
    "part": "sample.marker_zoom",

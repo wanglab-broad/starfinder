@@ -1,5 +1,12 @@
 # Expected values of the golden baseline's stitching, export and report
 
+W-879 (2026-11-19) removes from each route's report the rows of `unavailable.csv` and the `unavailable` entries of
+`report.json` that said no record holds the time of `segment`, `assign_molecules`, `stitch` or the assembly: the
+records now hold `wall_s`, so the report shows those times (`steps.csv` keeps its time column out of the comparison, as
+before). The size and SHA-256 of `unavailable.csv` in `report.json` and the dtypes of its empty `table` and `column`
+columns of the per-FOV and after-fusion routes follow. Nothing else changes: a run of the migrated invocation D at
+this change, extracted with the script, equals the other expected values as before.
+
 W-790 (2026-11-03) updates detection-dependent molecule identities, summaries
 and record fields after regional-maximum collapse, using the maintained
 migrated task commands and extractor. Only differences between the same

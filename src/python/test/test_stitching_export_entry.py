@@ -173,7 +173,9 @@ def test_assemble_part(folder, monkeypatch):
     for name in ("fovs", "cells", "molecules", "counts"):
         assert_frame_equal(getattr(saved, name), getattr(direct, name), check_exact=True)
     section = record.record["assembly"]
-    unsaved = ("files", "table_format")                       # what save_assembly adds; no timing field differs
+    # What save_assembly adds, and the part's measured times Dataset.export adds (W-879).
+    unsaved = ("files", "table_format", "wall_s", "cpu_s", "peak_rss_kib")
+    assert section["wall_s"] > 0 and section["peak_rss_kib"] > 0
     # The export records whether the route was set or taken from the default (design/specs/sample-segmentation.md,
     # "The route setting"); assemble alone records the route per FOV with route_source null.
     assert (section["route"], section["route_source"]) == ("per_fov", "set")
