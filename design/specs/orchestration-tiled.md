@@ -407,6 +407,17 @@ know it loads the record as direct's.
 
 ## The deep-tissue recipe
 
+**Removed by W-887 (2026-11-19).** The named recipe is gone: `RECIPES`, the plan's expansion and the
+schema key `processing.recipe`. The plan refuses a configuration that sets the key and names the
+explicit steps below. The issue gives these reasons: every run used it only because configurations
+were copied from one template; it filled only preprocessing and registration; its name did not
+describe its content; an override replaced a whole list; and the resolved configuration wrote the
+name as null. Four example configurations of global processing replace it,
+each with explicit steps (`docs/examples/workflow-global*.yaml`): translation; translation then
+B-spline; translation then demons; and, in tiled mode, a translation of the whole FOV then demons per
+tile. None of them reconstructs after registration. The migration guide gives the expansion below as
+YAML to paste. The map and the expansion below remain the record of what D5 decided.
+
 D5 makes `deep` a recipe usable with direct or tiled. Today's Python deep route is the operations
 below; each is mapped to a step of the recipe or of tiled execution, or listed as dropped with the
 reason.
@@ -652,7 +663,7 @@ The contract's open point OP1 (`orchestration.md`, "Open points"), with `<fov fo
 | `tile_merge` | Every tile's three files, `global.json`, `tiled/run.json` | `run_record` (`<fov folder>/run.json`), `spot_table` (`<fov folder>/molecules.csv`), the `candidates` and `pre_qc` stages of `processing.checkpoints`; it removes `tiled/registered.h5` after success unless `registered` is kept |
 
 Every kind also declares its task record and log (D8). The configuration keys are
-`processing.mode` (`direct` or `tiled`), `processing.recipe` (null or `deep`) and
+`processing.mode` (`direct` or `tiled`), `processing.recipe` (null or `deep`; removed by W-887) and
 `processing.tiled`: `tile_size_yx`, `halo` (null: the plan's minimum), `local_registration` (null
 or a registration recipe), `post_local_registration` (null or preprocessing steps run in the tile
 after its local registration), `exact` (true: refuse operations without a finite footprint and truncated core-intersecting regional maxima).
@@ -669,7 +680,7 @@ after its local registration), `exact` (true: refuse operations without a finite
 | The halo | Computed by the plan from the footprints; a larger configured value accepted |
 | What a tile writes | The core's candidates and reads; the merge deduplicates, filters and writes |
 | The threshold of a tile | A new `threshold_mode: absolute`, filled from the global task |
-| How the deep recipe is expressed | A named recipe expanded by the plan |
+| How the deep recipe is expressed | A named recipe expanded by the plan (removed by W-887: explicit steps and four example configurations) |
 | The package's subtile API | Removed with the legacy route; the tiled entries replace it |
 
 ## Open points

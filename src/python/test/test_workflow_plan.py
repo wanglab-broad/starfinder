@@ -15,12 +15,15 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 
 import pytest
+import yaml
 
 from starfinder.workflow import TASK_BLOCKS, plan
 
+from . import docs_pages
 from . import workflow_examples as X
 from . import workflow_tasks as W
 
@@ -351,50 +354,57 @@ def test_a_command_reads_its_configuration_through_the_restricted_view():
     assert "report" not in ConfigurationView(configuration, "compare")
 
 
-# --- the deep recipe and the tiled settings (W-735) -----------------------------------------------------------------
+# --- the steps of the removed named recipe and the tiled settings (W-735, W-887) -----------------------------------
+
+#: What processing.recipe deep expanded to before W-887 removed it (the former _shape.RECIPES["deep"]), written out
+#: here as the expected value: the YAML of docs/migration.md reproduces it; ``tiled`` applied in mode tiled only.
+DEEP_STEPS = {
+    "preprocessing": {"steps": [
+        {"method": "min_max_normalization", "output_dtype": "uint8", "output_range": [0, 255], "rounding": "truncate"},
+        {"method": "histogram_matching", "reference_channel": 0}],
+        "post_registration": [{"method": "reconstruction", "radius_yx": 3}]},
+    "registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}}
+DEEP_LOCAL_REGISTRATION = {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}
+
 
 def _resolved(work, name, config):
     plan(X.write_config(work, name, config))
     return json.loads((X.output_root(work, config["output_id"]) / "workflow" / "resolved.json").read_text())
 
 
-def test_the_deep_recipe_is_expanded_into_the_resolved_configuration(work):
-    """processing.recipe deep (design/specs/orchestration-tiled.md, "The deep-tissue recipe"): the plan writes the
-    recipe's steps (its name null), a key the block also sets wins, and the hash covers the steps, not the name."""
-    config = X.variants(work)["molecules-only"]
-    deep = dict(config, output_id="deep", processing={k: v for k, v in config["processing"].items()
-                                                       if k not in ("preprocessing", "registration")})
-    deep["processing"]["recipe"] = "deep"
-    p = _resolved(work, "deep", deep)["configuration"]["processing"]
-    assert p["recipe"] is None and "tiled" not in p
-    assert [s["method"] for s in p["preprocessing"]["steps"]] == ["min_max_normalization", "histogram_matching"]
-    assert p["preprocessing"]["post_registration"] == [{"method": "reconstruction", "radius_yx": 3}]
-    assert p["registration"] == {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}
-    # The same run (output_id is part of the hash) with the recipe's steps spelled out and no recipe.
-    spelled = dict(deep, processing=dict(deep["processing"], recipe=None,
-                                                                preprocessing=p["preprocessing"],
-                                                                registration=p["registration"]))
-    hashes = [plan(X.write_config(work, name, c))["configuration"]["configuration_sha256"]
-              for name, c in (("deep", deep), ("spelled", spelled))]
-    assert hashes[0] == hashes[1]
-    # A key the block sets wins over the recipe's.
-    own = dict(deep, output_id="own", processing=dict(deep["processing"], registration={
-        "steps": [{"method": "translation"}], "signal": {"mode": "channel", "reference_channel": 0}}))
-    assert _resolved(work, "own", own)["configuration"]["processing"]["registration"]["signal"] == {
-        "mode": "channel", "reference_channel": 0}
+def _migration_steps():
+    """The processing block the migration guide gives to paste in place of recipe: deep (its one YAML block)."""
+    text = docs_pages.section(docs_pages.read("migration.md"), "migration-named-recipe")
+    blocks = re.findall(r"^```yaml\n(.*?)^```$", text, flags=re.MULTILINE | re.DOTALL)
+    assert len(blocks) == 1, blocks
+    return yaml.safe_load(blocks[0])["processing"]
 
 
-def test_tiled_mode_writes_its_defaults_and_the_deep_recipe_s_local_registration(work):
+def test_the_migration_guide_s_steps_reproduce_the_removed_recipe_in_direct_mode(work):
+    """processing.recipe deep is gone (W-887): the steps the migration guide gives in its place, pasted into a
+    configuration without its tiled settings, resolve to what the recipe expanded to, and the plan adds nothing."""
     config = X.variants(work)["molecules-only"]
-    tiled = dict(config, output_id="tiled-deep", processing=dict(
-        {k: v for k, v in config["processing"].items() if k not in ("preprocessing", "registration")},
-        recipe="deep", mode="tiled", tiled={"tile_size_yx": 18}))
+    given = {k: v for k, v in _migration_steps().items() if k != "tiled"}
+    spelled = dict(config, output_id="spelled", processing={
+        **{k: v for k, v in config["processing"].items() if k not in ("preprocessing", "registration")}, **given})
+    p = _resolved(work, "spelled", spelled)["configuration"]["processing"]
+    assert {k: p[k] for k in DEEP_STEPS} == DEEP_STEPS
+    assert "recipe" not in p and "tiled" not in p
+
+
+def test_tiled_mode_writes_its_defaults_and_the_removed_recipe_s_local_registration(work):
+    config = X.variants(work)["molecules-only"]
+    given = _migration_steps()
+    tiled = dict(config, output_id="tiled-deep", processing={
+        **{k: v for k, v in config["processing"].items() if k not in ("preprocessing", "registration")},
+        **given, "mode": "tiled", "tiled": dict(given["tiled"], tile_size_yx=18)})
     resolved = _resolved(work, "tiled-deep", tiled)["configuration"]
+    assert {k: resolved["processing"][k] for k in DEEP_STEPS} == DEEP_STEPS
     t = resolved["processing"]["tiled"]
     # The halo is the plan's minimum: the local registration's margin (30 voxels for a translation step) exceeds
     # the extraction ring (6) and the detection's distance (1).
     assert t == {"tile_size_yx": 18, "halo": 30, "exact": True, "post_local_registration": None,
-                 "local_registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}}
+                 "local_registration": DEEP_LOCAL_REGISTRATION}
     assert resolved["api"]["processing"]["tiled"]["local_registration"]["type"] == "RegistrationRecipe"
 
 

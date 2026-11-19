@@ -20,7 +20,7 @@ import numpy as np
 from starfinder import _layout
 from starfinder.workflow import _translate
 from starfinder.workflow._shape import (CHECKPOINT_STAGES, COMMANDS, EXECUTION_DEFAULTS, ID_FIELDS, KIND_THREADS,
-    LEFT_KEYS, MANIFEST_FORMAT, MATLAB_KEYS, PROCESSING_LEFT, RECIPES, RESOLVED_FORMAT, TASK_BLOCKS, TILED_DEFAULTS,
+    LEFT_KEYS, MANIFEST_FORMAT, MATLAB_KEYS, PROCESSING_LEFT, RESOLVED_FORMAT, TASK_BLOCKS, TILED_DEFAULTS,
     blocks_sha256, canonical, configuration_sha256, sha256)
 
 #: The message of D7: a configuration without backend that holds MATLAB-dialect keys.
@@ -133,26 +133,6 @@ def sequencing_inputs(r):
             for item in run.get("inputs") or [] if item.get("round") in sequencing]
 
 
-def _merged(base, given):
-    """``given`` over ``base``: mappings merged key by key, any other value of ``given`` replacing ``base``'s."""
-    if isinstance(base, dict) and isinstance(given, dict):
-        return {**base, **{k: _merged(base[k], v) if k in base else v for k, v in given.items()}}
-    return given
-
-
-def expand_recipe(processing):
-    """processing.recipe expanded (design/specs/orchestration-tiled.md, "The deep-tissue recipe"): the recipe's keys
-    with the block's own keys over them (a key the user also sets wins), ``tiled`` only in mode tiled; the name is
-    written null, so that the hash covers the steps, not the name."""
-    name = processing.get("recipe")
-    if name is None:
-        return dict(processing, recipe=None)
-    expansion = copy.deepcopy(RECIPES[name])
-    if processing.get("mode", "direct") != "tiled":
-        expansion.pop("tiled", None)
-    return dict(_merged(expansion, {k: v for k, v in processing.items() if k != "recipe"}), recipe=None)
-
-
 def resolve(config, source, output_root=None):
     """The resolved configuration: the given keys with the contract's defaults written out, and ``api``."""
     r = copy.deepcopy(config)
@@ -166,7 +146,7 @@ def resolve(config, source, output_root=None):
     # is not written, so that every task's dataset reads the imported file.
     r.setdefault("reference_image", None if r["reference_image_import"] is not None else _layout.REFERENCE_IMAGE)
     if "processing" in r:
-        p = r["processing"] = expand_recipe(dict(r["processing"] or {}))
+        p = r["processing"] = dict(r["processing"] or {})
         p.setdefault("mode", "direct")
         if p["mode"] == "tiled":
             p["tiled"] = {**TILED_DEFAULTS, **(p.get("tiled") or {})}

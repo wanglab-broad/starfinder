@@ -77,7 +77,9 @@ to the input folder. tissue-2D's `genes.csv` is in its raw folder.
 This is the configuration W-870 ran tissue-2D with, end to end, with three
 changes: `fov_list` and the raw folder replace the link tree it built, and the
 package defaults replace its previews, its stitching quality threshold and most
-of its resources. The FOV list is the file of the Quick start.
+of its resources. Its `recipe: deep` is written out as the steps that recipe
+expanded to ({ref}`migration guide <migration-named-recipe>`). The FOV list is
+the file of the Quick start.
 
 ```yaml
 backend: python
@@ -104,7 +106,16 @@ additional_round:
       - {channel: ch03, name: Gfap}
 processing:
   mode: direct
-  recipe: deep
+  preprocessing:
+    steps:
+      - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
+      - {method: histogram_matching, reference_channel: 0}
+    post_registration:
+      - {method: reconstruction, radius_yx: 3}
+  registration:
+    steps:
+      - {method: translation}
+    signal: {mode: max}
   streaming: true
   spot_finding: {}
   reads_extraction: {}

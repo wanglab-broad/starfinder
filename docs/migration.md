@@ -233,7 +233,7 @@ image with the selected ZYX detection view; the current default file is
 | A `BSplineConfig` step after earlier steps fitted the zero-filled border of the shifted signal | elastix samples only the support of the shifted signal, eroded by 2 voxels, so such chains give different B-spline estimates; `BSplineConfig(mask_support=False)` reproduces the earlier estimate, and a B-spline first step is unchanged. A record saved before the change has no `support_mask` in its diagnostics, and its reloaded `effective_config` reads the default `mask_support=True` although no mask was used |
 | `DemonsConfig()` (variant `demons`) ran SimpleITK's `DemonsRegistrationFilter`, which smooths the field before each update and returned the last update unsmoothed, with SimpleITK's 5-tap discrete Gaussian and a zero gradient on the grid's faces | The package's own loop smooths after each update, as MATLAB's `imregdemons`, with a sampled Gaussian of radius ⌈3σ⌉ (7 taps for σ = 1); it keeps SimpleITK's zero gradient on the faces and its half-voxel rule for samples beyond the grid's edge; every level runs all its iterations. Demons fields, the images warped with them and saved demons results differ from earlier runs. There is no setting for the earlier field. The other variants are unchanged |
 | The `local-registration` extra installed SimpleITK alone, and the classic demons variant ran its update in NumPy and SciPy, allocating about ten image-sized temporaries per iteration | The extra also installs numba ≥0.62 (the lock's numba version does not change; re-run `uv sync --locked` with your extras), and the variant runs each update as a compiled numba kernel on one thread. Demons fields are unchanged; `final_rms_change` can differ in its last digits (the sum is compensated rather than pairwise). Without numba, the classic variant raises `RegistrationBackendUnavailableError` naming the extra. The first demons estimate in a process compiles the kernel or loads it from numba's cache (`NUMBA_CACHE_DIR`) |
-| `TpsConfig` and `CpdConfig` found their landmarks above the median and MAD of all voxels, so on a registration signal with more than half its voxels at its minimum (the `uint8` output of `recipe: deep`) the threshold was the minimum and every regional maximum was a landmark; their diagnostics left the landmark counts `None` | Landmarks take the `noise` threshold of `local_maxima`: the median and MAD over the voxels above the minimum of such a channel, the one-grey-level MAD floor of an integer image, and the refusal of a floating-point channel with signal and a MAD of 0, which raises `RegistrationEstimationError` naming the image (reference or moving) and the channel; a signal with at most half its voxels at the minimum and a MAD of at least one grey level keeps its landmarks and its estimate. The diagnostics fill `reference_landmark_count`, `moving_landmark_count` and `matched_landmark_count` and add `landmarks` (each image's noise records and candidate count, and the control points used); the landmarks' notes are listed in `warnings`. A record saved before the change has no `landmarks`, and another method's record keeps its keys ([TPS](registration-algorithms.md#tps), [CPD](registration-algorithms.md#cpd)) |
+| `TpsConfig` and `CpdConfig` found their landmarks above the median and MAD of all voxels, so on a registration signal with more than half its voxels at its minimum (the `uint8` output of min-max normalization with truncation, which the removed `recipe: deep` began with) the threshold was the minimum and every regional maximum was a landmark; their diagnostics left the landmark counts `None` | Landmarks take the `noise` threshold of `local_maxima`: the median and MAD over the voxels above the minimum of such a channel, the one-grey-level MAD floor of an integer image, and the refusal of a floating-point channel with signal and a MAD of 0, which raises `RegistrationEstimationError` naming the image (reference or moving) and the channel; a signal with at most half its voxels at the minimum and a MAD of at least one grey level keeps its landmarks and its estimate. The diagnostics fill `reference_landmark_count`, `moving_landmark_count` and `matched_landmark_count` and add `landmarks` (each image's noise records and candidate count, and the control points used); the landmarks' notes are listed in `warnings`. A record saved before the change has no `landmarks`, and another method's record keeps its keys ([TPS](registration-algorithms.md#tps), [CPD](registration-algorithms.md#cpd)) |
 
 ### Translation displacement
 
@@ -251,7 +251,7 @@ For changed composition and resampling behavior, consult the
 | Subclassing a detector config to select a method | Use a registered config type; see [adding a method](method-registry.md) |
 | One detection per voxel of a tied local maximum | One representative per regional maximum; plateau and shoulder rows are removed and spot identities renumber ([rule](spot-finding-algorithms.md#local-maxima)) |
 | `LocalMaximaConfig()` and a `spot_finding` block without `threshold_mode` and `threshold_value` detected with `threshold_mode="noise"`, `threshold_value=5.0`; on the tissue-2D sample of the workflow run, 56 FOVs, that called 2.14 times the molecules of the MATLAB pipeline | The default is `threshold_mode="adaptive"`, `threshold_value=0.2` (0.2 times the channel maximum, MATLAB's rule). Name `threshold_mode="noise"` and `threshold_value=5.0` to keep the old detection. A `threshold_value` above 1 now needs `threshold_mode="noise"` or `"absolute"` in the same call. An adaptive channel that is empty (its maximum does not exceed its noise threshold) or has a bright artifact (its maximum lies far above its signal) gets a `SpotFindingWarning`, the flags `empty_channel` and `bright_artifact` in `diagnostics["noise"]` and a message in `diagnostics["warnings"]` ([weak points](spot-finding-contract.md#weak-points-of-adaptive-mode)). `NoiseLandmarkConfig` keeps the noise rule |
-| `threshold_mode="noise"` took the median and MAD of all voxels; on a channel with more than half its voxels at its minimum (the `uint8` output of `recipe: deep`) the threshold was the minimum, with a `SpotFindingWarning`, and every regional maximum was a spot | Such a channel takes its median and MAD over the voxels above its minimum, and `diagnostics["noise"]` records `estimation` and `n_estimation`; a floating-point channel with signal whose MAD is 0 raises `SpotFindingError` (an integer one is floored; next row): use `threshold_mode` `adaptive` or `absolute` for it, or `absolute` at the minimum to repeat the old threshold ([truncated channels](spot-finding-contract.md#truncated-channels)) |
+| `threshold_mode="noise"` took the median and MAD of all voxels; on a channel with more than half its voxels at its minimum (the `uint8` output of min-max normalization with truncation, which the removed `recipe: deep` began with) the threshold was the minimum, with a `SpotFindingWarning`, and every regional maximum was a spot | Such a channel takes its median and MAD over the voxels above its minimum, and `diagnostics["noise"]` records `estimation` and `n_estimation`; a floating-point channel with signal whose MAD is 0 raises `SpotFindingError` (an integer one is floored; next row): use `threshold_mode` `adaptive` or `absolute` for it, or `absolute` at the minimum to repeat the old threshold ([truncated channels](spot-finding-contract.md#truncated-channels)) |
 | `threshold_mode="noise"` on an integer image raised `SpotFindingError` for a channel with signal whose MAD (over its estimation set) was 0, and whether a `uint8` channel passed depended on quantization | The MAD used for the threshold has a floor of one grey level: the threshold is `median + threshold_value × 1.4826 × max(MAD, 1)`, `diagnostics["noise"][channel]["mad"]` stays the measured MAD, the new `mad_floored` is `True` when the floor applied, and a `SpotFindingWarning` (also in `diagnostics["warnings"]`) names the round, channel, measured MAD, estimation set and threshold; a floating-point image still raises, and a constant channel is not floored. For a fixed threshold use `threshold_mode` `absolute` ([truncated channels](spot-finding-contract.md#truncated-channels)) |
 | `threshold_mode="noise"` (and the registration noise landmarks) on a channel with more than half its voxels at one value v above its minimum (for example a float64 signal at 4 with 1.5 % of its voxels at 0) took the median and MAD of all voxels, which were v and 0, so a floating-point channel was refused and an integer channel was floored around v | Such a channel takes its median and MAD over the voxels above v: `diagnostics["noise"][channel]["estimation"]` is `above_plateau`, with `plateau_value` (v) and `plateau_fraction`, and a `SpotFindingWarning` (also in `diagnostics["warnings"]`) names the channel, v and its fraction; the registration landmarks record carries the same keys. The changed cases are a float channel that was refused and an integer channel whose estimation set and threshold changed (its floor still applies to the new MAD); a channel with at most half its voxels at one value, or whose plateau is its minimum or its maximum, is unchanged, and a floating-point channel whose MAD over its set is still 0 still raises `SpotFindingError` ([truncated channels](spot-finding-contract.md#truncated-channels)) |
 | In tiled execution, the above-minimum note was only listed in the merged `diagnostics["warnings"]`, without a round and without a runtime warning; a TPS or CPD estimation attempt in `fov.registration_attempts` had no `landmarks`; an elastix failure without a support mask said only "Internal elastix error: See elastix log" | The global task emits the above-minimum, above-plateau and floor notes as `SpotFindingWarning`s, each naming the reference round, and the merged diagnostics list the same strings; an attempt keeps the step's `landmarks`, also in the saved and reloaded record; an unmasked elastix failure raises `RegistrationEstimationError` with the Description lines of elastix's log (without one, the original message). Thresholds, counts and registration results are unchanged ([truncated channels](spot-finding-contract.md#truncated-channels), [registration attempts](registration-algorithms.md)) |
@@ -375,6 +375,57 @@ no shim. The table below is generated from the contract's migration table:
 
 ```{workflow-migration}
 ```
+
+(migration-named-recipe)=
+
+### The named processing recipe
+
+`processing.recipe` and its one value `deep` are gone (W-887). `starfinder
+workflow plan` refuses a configuration that sets the key, whatever its value, and
+its message gives the steps the recipe expanded to. There is no alias.
+
+| Before | After |
+| --- | --- |
+| `processing.recipe: deep` | `preprocessing.steps`: `min_max_normalization` (`output_dtype: uint8`, `output_range: [0, 255]`, `rounding: truncate`), then `histogram_matching` (`reference_channel: 0`); `preprocessing.post_registration`: `reconstruction` (`radius_yx: 3`); `registration.steps`: `translation`, with `registration.signal` `mode: max`; in `mode: tiled`, `tiled.local_registration`: a translation per tile, with `signal` `mode: max` |
+
+To reproduce a run that set `recipe: deep`, such as the configurations of W-860
+and W-870, replace that line with these keys of the processing block. The
+recipe applied its `tiled` part in `mode: tiled` only: leave `tiled` out in
+`mode: direct`, where the plan refuses it. A key the configuration set beside
+the recipe replaced the recipe's: a mapping key by key, a list whole. Keep such a
+key as it was set.
+
+```yaml
+processing:
+  preprocessing:
+    steps:
+      - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
+      - {method: histogram_matching, reference_channel: 0}
+    post_registration:
+      - {method: reconstruction, radius_yx: 3}
+  registration:
+    steps:
+      - {method: translation}
+    signal: {mode: max}
+  tiled:                          # mode: tiled only
+    local_registration:
+      steps:
+        - {method: translation}
+      signal: {mode: max}
+```
+
+The resolved configuration of an earlier plan wrote `recipe: null` in its
+processing block, and the new one leaves the key out. The processing block's
+hash therefore changes, and a plan over an earlier output root reruns the tasks
+that read the processing block.
+
+For a new configuration, start from one of the four examples of global
+processing instead. Each one normalizes to `uint8` and matches histograms as
+above, with no reconstruction after registration:
+{download}`translation <examples/workflow-global.yaml>`,
+{download}`translation then B-spline <examples/workflow-global-bspline.yaml>`,
+{download}`translation then demons <examples/workflow-global-demons.yaml>` and
+{download}`translation per FOV, then demons per tile <examples/workflow-global-demons-tiled.yaml>`.
 
 ## Runtime error messages
 

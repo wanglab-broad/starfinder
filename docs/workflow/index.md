@@ -75,7 +75,23 @@ copy of the full configuration or of the
 {download}`minimal configuration <../examples/workflow-minimal.yaml>`, which runs
 the per-FOV processing alone; the
 {download}`recipe 2 example <../examples/workflow-recipe-2.yaml>` shows an explicit
-preprocessing recipe.
+preprocessing recipe. Four examples of global processing run the per-FOV
+processing with explicit steps: each channel min-max normalized to `uint8` with
+truncation, then histogram-matched to channel 0, and no reconstruction after
+registration. Their registration differs:
+
+* {download}`global <../examples/workflow-global.yaml>`: one translation on the
+  channels' maximum;
+* {download}`global with B-spline <../examples/workflow-global-bspline.yaml>`: a
+  translation, then `bspline` with its defaults;
+* {download}`global with demons <../examples/workflow-global-demons.yaml>`: a
+  translation, then `demons` with its defaults, on the whole FOV;
+* {download}`global with demons in tiles <../examples/workflow-global-demons-tiled.yaml>`:
+  `mode: tiled`, a translation of the whole FOV, then `demons` with its defaults
+  in each tile (`processing.tiled.local_registration`).
+
+`prepare_workflow.py` takes each example's name without `workflow-` and `.yaml`,
+for example `global-demons`.
 
 ## What it does
 
@@ -192,7 +208,8 @@ Under the output root, each task writes the files the
   `ref_round`, `seq_channel_order`, `reference_stains`, `additional_round`,
   the FOV list (`fov_list`), `selected_fovs`, the codebook and the image layout.
 * `processing`: the per-FOV pipeline, with `mode` `direct` (one task per FOV) or
-  `tiled` (tiles of a FOV), `recipe: deep` and the checkpoint stages.
+  `tiled` (tiles of a FOV), the preprocessing and registration steps and the
+  checkpoint stages.
 * `morphology`, `segmentation` and `assignment`: the images for segmentation,
   the segmentation runs and the assignment of molecules to cells.
 * `stitching`, `assembly`, `export` and `report`: the sample outputs.

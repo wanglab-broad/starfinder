@@ -154,6 +154,21 @@ def test_each_nested_key_that_left_the_python_dialect(work, capsys, key):
     _refused(work, config, capsys, named)
 
 
+@pytest.mark.parametrize("value", ["deep", None])
+def test_the_named_recipe_is_refused_with_its_explicit_steps(work, capsys, value):
+    """processing.recipe left with W-887, whatever its value: the refusal names the key and gives the steps that
+    recipe: deep expanded to, to paste in its place (docs/migration.md, "The named processing recipe")."""
+    config = copy.deepcopy(X.variants(work)["molecules-only"])
+    config["processing"]["recipe"] = value
+    _refused(work, config, capsys, "processing.recipe left the Python configuration: use the explicit steps",
+             "{method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}",
+             "{method: histogram_matching, reference_channel: 0}",
+             "post_registration: [{method: reconstruction, radius_yx: 3}]",
+             "registration: {steps: [{method: translation}], signal: {mode: max}}",
+             "in processing.mode tiled also tiled: {local_registration: {steps: [{method: translation}], "
+             "signal: {mode: max}}}", "docs/examples/workflow-global")
+
+
 def test_an_unknown_key_is_named(work, capsys):
     _refused(work, dict(X.variants(work)["molecules-only"], spot_size=3), capsys, "'spot_size'")
 

@@ -194,13 +194,6 @@
       "tiled"
      ]
     },
-    "recipe": {
-     "enum": [
-      null,
-      "deep"
-     ],
-     "description": "A named recipe the plan expands into the resolved configuration (deep: the deep-tissue recipe); a key the block also sets wins."
-    },
     "tiled": {
      "type": [
       "object",
