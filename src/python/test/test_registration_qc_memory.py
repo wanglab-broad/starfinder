@@ -404,8 +404,6 @@ def differences(pinned, actual, where):
 @pytest.mark.golden
 @pytest.mark.parametrize("name", list(PINNED))
 def test_qc_values_equal_those_of_the_starting_revision(name):
-    if name.startswith("bspline"):
-        pytest.importorskip("SimpleITK")
     transform = cases()[name]
     reference, moving = images()
     chain = transform if isinstance(transform, TransformChain) else TransformChain((transform,))

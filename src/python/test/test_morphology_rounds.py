@@ -53,7 +53,7 @@ REGISTRATION = RegistrationRecipe((RegistrationStep(TranslationConfig()),))
 @pytest.fixture(autouse=True, scope="module")
 def one_thread():
     """SimpleITK at one thread, as the project contract requires."""
-    sitk = pytest.importorskip("SimpleITK")
+    import SimpleITK as sitk
     sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(1)
 
 

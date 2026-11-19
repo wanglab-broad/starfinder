@@ -9,7 +9,8 @@ shows the complete molecule-output route.
 
 | Symptom | What to do |
 | --- | --- |
-| `ImportError` naming SimpleITK | Install the `local-registration` extra in the environment used to run the call; see the [backend reference](api/backends.md). |
+| `ImportError` or `RegistrationBackendUnavailableError` naming SimpleITK | SimpleITK is a core dependency: the environment used to run the call is incomplete. Re-run `uv sync --locked` with your extras; see the [installation guide](get-started/installation.md). |
+| `RegistrationBackendUnavailableError` naming numba | Install the `local-registration` extra for the classic demons variant; see the [backend reference](api/backends.md). |
 | `InsufficientLandmarksError` or `RegistrationEstimationError` | Inspect the registration inputs and landmark matches; use the [registration guide](registration-contract.md) to choose a method. |
 | Installing SpatialData does not create a store | Request the SpatialData export through the [sample-output guide](sample-output-contract.md); installing an extra alone does not run an export. |
 | MATLAB fails before processing | Inspect the printed launcher command, executable path, license and toolboxes on the execution host; see the [launcher settings](workflow/matlab-legacy.md#matlab-launcher). |

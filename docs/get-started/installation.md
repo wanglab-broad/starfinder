@@ -11,8 +11,9 @@ only the package itself; the [multi-FOV / sample demo](multi-fov-demo.md) also n
 Use a STARfinder checkout, `uv`, and Python 3.12 for the validated route below.
 The package requires Python 3.11 or newer; other interpreters have not been
 validated for the demo. A first installation needs package-registry access
-or an existing uv cache. No downloaded microscopy data, MATLAB, Snakemake, GPU,
-SimpleITK, or SpatialData is needed.
+or an existing uv cache. No downloaded microscopy data, MATLAB, Snakemake, GPU
+or SpatialData is needed. SimpleITK, which the background step `reconstruction` and
+the demons registration use, is installed with the package.
 
 From the repository root:
 
@@ -44,7 +45,7 @@ uv sync --locked --no-default-groups --extra local-registration --extra checkpoi
 | Extra | Installs | Needed for |
 | --- | --- | --- |
 | `ome` | bioio-ome-tiff ≥1.0 | Installed on request; no current public function switches to it ({doc}`../api/backends`) |
-| `local-registration` | SimpleITK ≥2.3, numba ≥0.62 | Demons estimation and application; the B-spline grid of the elastix route ({doc}`../api/backends`) |
+| `local-registration` | numba ≥0.62 | The classic variant of demons estimation ({doc}`../api/backends`) |
 | `registration-elastix` | itk-elastix 0.25.4, itk 5.4.7 | Rigid, affine and B-spline registration through elastix ({doc}`../api/backends`) |
 | `spotiflow` | spotiflow 0.6.5, torch 2.7.1, torchvision 0.22.1 | The learned spot detector Spotiflow (below) |
 | `piscis` | piscis 1.1.0, torch 2.7.1, torchvision 0.22.1 | The learned spot detector Piscis (below) |

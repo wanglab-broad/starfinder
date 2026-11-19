@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 import hashlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -37,8 +36,6 @@ from .test_report_run_record_additions import write_codebook
 
 pytestmark = [pytest.mark.dataset, pytest.mark.contract]
 
-SITK = pytest.mark.skipif(importlib.util.find_spec("SimpleITK") is None,
-                          reason="the demons step (a dense field file) requires the local-registration extra")
 MINMAX = PreprocessingStep(MinMaxNormalizationConfig("uint8", (0, 255)))
 
 
@@ -183,7 +180,7 @@ def test_a_copied_output_and_input_tree_reports_at_its_new_place(scene, tmp_path
 
 @pytest.mark.parametrize("stage, name", [
     ("candidates", "candidates.csv"), ("pre_qc", "pre_qc.csv"), ("registered", "registered/round1.ome.tif"),
-    pytest.param("registered", "registered/round2_field.npz", marks=SITK)])
+    ("registered", "registered/round2_field.npz")])
 def test_one_changed_byte_of_a_stage_payload_makes_load_checkpoint_raise(scene, stage, name):
     dataset = new_dataset(scene)
     registration = RegistrationRecipe((RegistrationStep(TranslationConfig()),

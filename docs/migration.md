@@ -211,6 +211,7 @@ Replace fixed `PipelineConfig` preprocessing slots with a
 | `PipelineConfig.projection` | Use an output projection view instead |
 | `FOV.match_histogram(reference_channel=...)` | `FOV.match_histogram(config=HistogramMatchingConfig(reference_channel=...))` |
 | `STEPS`, `StepSpec`, `RecipeStep` | `PREPROCESSING_METHODS`, `PreprocessingSpec`, `PreprocessingStep` |
+| SimpleITK came with the `local-registration` extra, and the `reconstruction` step reconstructed the background with scikit-image's `reconstruction`, which sorts every value of the slice first | SimpleITK ≥2.3 is a dependency of the package itself, and the extra now installs numba alone; re-run `uv sync --locked` with your extras (no resolved version changes). The step runs SimpleITK's `ReconstructionByDilationImageFilter` (the downhill filter, no sort) and its outputs are unchanged, bit for bit. The registry's SimpleITK entry names no extra, and a broken install raises `RegistrationBackendUnavailableError` asking for a re-sync instead of the extra |
 
 The [preprocessing guide](preprocessing-contract.md) shows recipe construction.
 For `save_reference_image`, replace assumptions about the earlier full ZYXC

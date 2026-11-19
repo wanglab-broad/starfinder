@@ -21,8 +21,7 @@ from starfinder.registration import (BSplineConfig, InvalidRegistrationConfigErr
 
 pytestmark = [
     pytest.mark.registration,
-    pytest.mark.skipif(importlib.util.find_spec("itk") is None or importlib.util.find_spec("SimpleITK") is None,
-                       reason="requires the registration-elastix and local-registration extras"),
+    pytest.mark.skipif(importlib.util.find_spec("itk") is None, reason="requires the registration-elastix extra"),
     # SWIG wrappers of itk warn when pytest inspects their builtin types.
     pytest.mark.filterwarnings("ignore:builtin type .* has no __module__ attribute:DeprecationWarning"),
 ]

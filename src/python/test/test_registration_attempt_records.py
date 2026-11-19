@@ -24,9 +24,8 @@ META = ImageMetadata("attempt-records")
 GRID = [(z, y, x) for z in (4, 8, 12) for y in (6, 14, 22) for x in (6, 14, 22)]
 NOISE = np.repeat(np.arange(33, 49), 64)
 TPS = TpsConfig(min_matches=4, max_control_points=20)
-needs_elastix = pytest.mark.skipif(
-    importlib.util.find_spec("itk") is None or importlib.util.find_spec("SimpleITK") is None,
-    reason="requires the registration-elastix and local-registration extras")
+needs_elastix = pytest.mark.skipif(importlib.util.find_spec("itk") is None,
+                                   reason="requires the registration-elastix extra")
 # SWIG wrappers of itk warn when pytest inspects their builtin types.
 itk_warning = pytest.mark.filterwarnings("ignore:builtin type .* has no __module__ attribute:DeprecationWarning")
 

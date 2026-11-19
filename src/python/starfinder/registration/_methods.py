@@ -15,7 +15,7 @@ _STEP_KINDS = ("global", "local")
 _TRANSFORM_KINDS = ("translation", "affine", "bspline", "dense")
 _SPACES = ("index", "physical")
 _ELASTIX = Dependency("itk", "itk-elastix", "registration-elastix")
-_SIMPLEITK = Dependency("SimpleITK", "SimpleITK", "local-registration")
+_SIMPLEITK = Dependency("SimpleITK", "SimpleITK")  # a core dependency: no extra
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class RegistrationSpec:
     space : str
         Estimation coordinate space: ``index`` or ``physical``.
     requires : tuple[Dependency, ...]
-        Declared optional dependencies; an empty tuple declares none.
+        Declared dependencies, imported when the method runs and recorded with their versions; () declares none.
     min_shape_zyx : tuple[int, int, int]
         Minimum Y and X sizes, and the minimum Z size of 3D input, as positive integers in ZYX voxel counts.
 
@@ -53,8 +53,9 @@ class RegistrationSpec:
     dimensions holds 2 when a Z=1 input is estimated as 2D and 3 when Z>1 is
     estimated in 3D. transform_kind is the kind of the returned transform
     ("translation", "affine", "bspline" or "dense"); space is "index" or
-    "physical" estimation coordinates. requires lists optional dependencies,
-    imported when the method runs; min_shape_zyx is the smallest accepted size
+    "physical" estimation coordinates. requires lists the dependencies
+    imported when the method runs (SimpleITK, a core dependency, has no
+    extra); min_shape_zyx is the smallest accepted size
     of each axis (a Z=1 input is checked against its last two entries).
     """
 

@@ -29,8 +29,6 @@ from .test_registration_golden import fixture_rounds
 
 pytestmark = pytest.mark.registration
 
-pytest.importorskip("SimpleITK")
-
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
 TRANSLATION = RegistrationStep(TranslationConfig())
 

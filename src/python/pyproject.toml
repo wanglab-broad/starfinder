@@ -20,11 +20,12 @@ dependencies = [
     "bioio-tifffile>=1.0",
     "jsonschema>=4.18",
     "pyyaml>=6.0",
+    "SimpleITK>=2.3",
 ]
 
 [project.optional-dependencies]
 ome = ["bioio-ome-tiff>=1.0"]
-local-registration = ["SimpleITK>=2.3", "numba>=0.62"]
+local-registration = ["numba>=0.62"]
 registration-elastix = ["itk-elastix==0.25.4", "itk==5.4.7"]
 # Learned spot detectors (§2.7). torch has no cp314 wheel at 2.7.1, so the extras
 # are empty on Python 3.14 and later.
