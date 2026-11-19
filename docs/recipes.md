@@ -55,15 +55,17 @@ for image data; the transform's sign is already suitable for application.
 
 ## Detect spots in a volume
 
-Detect a known ZYX volume, then compare two threshold modes after adding a
-background:
+Detect a known ZYX volume with the default threshold and with the `noise` mode, then
+compare two threshold modes after adding a background:
 
 ```{literalinclude} examples/recipes.py
 :language: python
 :pyobject: detect_spots
 ```
 
-The `noise` mode finds nothing in the bare volume: one bright voxel on zeros has
+The default, `adaptive` with `threshold_value` 0.2, keeps local maxima that reach 0.2
+times the channel maximum, so it finds the one bright voxel at `(z, y, x) = (5, 10, 10)`.
+The `noise` mode finds nothing in the same bare volume: one bright voxel on zeros has
 a noise MAD of 0, which the integer floor of one grey level replaces (a
 `SpotFindingWarning` says so), and the voxel is its own median, so it does not exceed the
 threshold. With the background, both calls find the spot at `(z, y, x) = (5, 10, 10)` in

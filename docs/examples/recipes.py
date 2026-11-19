@@ -48,15 +48,22 @@ def register_volumes(fixed: np.ndarray) -> None:
 
 def detect_spots(volume: np.ndarray) -> None:
     metadata = ImageMetadata("example/sample/FOV/round1")
-    # One bright voxel on zeros has no noise for noise mode to measure: its MAD of 0 is floored at one grey level
-    # (a warning), and the voxel is its own median, so nothing exceeds the threshold.
+    # The default, adaptive with threshold_value 0.2, keeps local maxima that reach 0.2 times the channel maximum,
+    # so it finds the one bright voxel on zeros.
+    found = find_spots(volume[..., np.newaxis], config=LocalMaximaConfig(), metadata=metadata,
+                       spot_namespace="example/sample/FOV")
+    assert found.spots[["z", "y", "x", "channel"]].values.tolist() == [[5, 10, 10, 0]]
+    print("Default (adaptive 0.2): one spot at internal (z,y,x)=(5,10,10)")
+    # Noise mode has no noise to measure in the same volume: its MAD of 0 is floored at one grey level (a warning),
+    # and the voxel is its own median, so nothing exceeds the threshold.
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        bare = find_spots(volume[..., np.newaxis], config=LocalMaximaConfig(), metadata=metadata,
-                          spot_namespace="example/sample/FOV")
+        bare = find_spots(volume[..., np.newaxis],
+                          config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0),
+                          metadata=metadata, spot_namespace="example/sample/FOV")
     assert len(bare.spots) == 0 and bare.diagnostics["noise"]["0"]["mad_floored"]
     assert any(issubclass(w.category, SpotFindingWarning) for w in caught)
-    print("Floored:", bare.diagnostics["warnings"][-1])
+    print("Noise mode floored:", bare.diagnostics["warnings"][-1])
     # Add a seeded Poisson background (mean 100) and a channel axis to the known volume.
     background = np.random.default_rng(0).poisson(100, volume.shape).astype(volume.dtype)
     image = (volume + background)[..., np.newaxis]
