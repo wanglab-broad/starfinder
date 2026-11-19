@@ -120,7 +120,7 @@ channel. The other methods record none.
 | --- | --- |
 | `zero_fraction` | Fraction of voxels equal to 0 |
 | `median`, `mad` | Median and median absolute deviation |
-| `noise_threshold` | `median + 5 × 1.4826 × mad`, the local-maxima `noise` threshold at its default `threshold_value` |
+| `noise_threshold` | `median + 5 × 1.4826 × mad`, the local-maxima `noise` threshold at `threshold_value` 5 (its default before W-880) |
 | `mad_zero` | Whether `mad` is 0 |
 | `constant_channel` | Whether the input channel was constant |
 | `degenerate_range` | `percentile_normalization` only: whether `low` equals `high` or the channel was constant |

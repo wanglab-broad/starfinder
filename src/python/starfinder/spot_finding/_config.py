@@ -62,9 +62,9 @@ class LocalMaximaConfig:
     Parameters
     ----------
     threshold_mode : str
-        Threshold mode: ``noise``, ``adaptive``, ``adaptive_round``, ``global`` or ``absolute``.
+        Threshold mode: ``adaptive`` (the default), ``noise``, ``adaptive_round``, ``global`` or ``absolute``.
     threshold_value : float
-        Nonnegative noise multiplier in sigma units for ``noise``, maximum-intensity fraction for ``adaptive``, ``adaptive_round`` and ``global``, or the threshold in grey levels of the image for ``absolute``.
+        Maximum-intensity fraction in [0, 1] for ``adaptive`` (default 0.2), ``adaptive_round`` and ``global``, nonnegative noise multiplier in sigma units for ``noise``, or the threshold in grey levels of the image for ``absolute``. The default 0.2 goes with the default mode: a value above 1 needs ``threshold_mode="noise"`` or ``"absolute"``.
     min_distance_voxels : int
         Minimum peak separation in voxels, as a positive integer.
     exclude_border : bool
@@ -81,6 +81,21 @@ class LocalMaximaConfig:
     Notes
     -----
     Per-channel pipeline peaks; no spatial deduplication across channels.
+
+    The default is adaptive with threshold_value 0.2: 0.2 times the channel
+    maximum, which is MATLAB's rule (W-880). It replaces the noise rule with
+    value 5.0 that was the default before; noise stays available and keeps the
+    rules below. The threshold follows each channel's maximum, so two cases
+    are noted, each with a SpotFindingWarning, a flag in the channel's
+    diagnostics['noise'] record and a message in diagnostics['warnings']:
+    a bright artifact, when the maximum minus the channel median exceeds
+    3 times the 99th percentile of the voxels above the noise threshold minus
+    that median (the threshold then lies above most of the signal), and an
+    empty channel, when the maximum does not exceed the noise threshold of the
+    channel (median + 5 * 1.4826 * MAD, estimated as in noise mode), so that
+    0.2 times the maximum calls noise. A constant channel is neither.
+    The record keeps maximum, noise_threshold, bright_artifact and
+    empty_channel for this mode only.
 
     noise uses median + value * MAD * 1.4826 (sigma units), the median and MAD
     taken over all the channel's voxels, except over the voxels above the
@@ -126,8 +141,8 @@ class LocalMaximaConfig:
     diagnostics['merged'] holds the number removed per channel.
     """
     # W-218
-    threshold_mode: str = "noise"
-    threshold_value: float = 5.0
+    threshold_mode: str = "adaptive"
+    threshold_value: float = 0.2
     min_distance_voxels: int = 1
     exclude_border: bool = True
     channel_labels: tuple[str, ...] | None = None

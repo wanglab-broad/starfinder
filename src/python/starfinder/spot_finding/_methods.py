@@ -23,6 +23,11 @@ from ._spotiflow import spotiflow
 from ._starfish_log import starfish_log
 
 _COLUMN = r"[a-z][a-z0-9_]*\??"
+# The two weak points of adaptive mode (W-880): the noise multiplier of the reference threshold that a channel's
+# maximum must exceed, and the factor by which the maximum, above the median, may exceed the 99th percentile of
+# the voxels above that threshold, above the median.
+_REFERENCE_SIGMA = 5.0
+_ARTIFACT_FACTOR = 3.0
 # The learned-detector extras install nothing on Python 3.14 and later (torch 2.7.1 has no cp314 wheel).
 _PY314 = sys.version_info >= (3, 14)
 
@@ -228,6 +233,12 @@ def _noise_record(image, channel, mode, value):
     On an integer image the MAD of a noise-mode channel with signal has a floor of one grey level (W-848): the
     threshold is median + value x 1.4826 x max(MAD, 1), 'mad' stays the measured MAD and 'mad_floored' says
     whether the floor replaced it. A constant channel has no spot, so its record is not floored.
+
+    In adaptive mode the record adds 'maximum', 'noise_threshold' (the channel's noise-mode threshold at 5 sigma,
+    estimated as above) and two flags for the weak points of a threshold that follows the maximum (W-880):
+    'empty_channel' (the maximum does not exceed noise_threshold, so 0.2 x maximum calls noise) and
+    'bright_artifact' (the maximum minus the median exceeds 3 times the 99th percentile of the voxels above
+    noise_threshold minus the median, so the threshold lies above most of the signal). A constant channel has neither.
     """
     values = channel.astype(np.float64)
     estimation, sample, plateau, median = 'all', values, None, None
@@ -265,7 +276,24 @@ def _noise_record(image, channel, mode, value):
               'mad_floored': floored}
     if plateau is not None:
         record['plateau_value'], record['plateau_fraction'] = plateau
+    if mode == 'adaptive':
+        record.update(_adaptive_checks(image, channel, record['median']))
     return record
+
+
+def _adaptive_checks(image, channel, median):
+    """The adaptive-mode additions to a noise record: maximum, noise_threshold, empty_channel, bright_artifact."""
+    maximum = float(channel.max())
+    reference = _noise_record(image, channel, 'noise', _REFERENCE_SIGMA)['threshold']
+    checks = {'maximum': maximum, 'noise_threshold': reference, 'empty_channel': False, 'bright_artifact': False}
+    if maximum == float(channel.min()):
+        return checks
+    if maximum <= reference:
+        checks['empty_channel'] = True
+        return checks
+    signal = channel[channel > reference].astype(np.float64)
+    checks['bright_artifact'] = bool(maximum - median > _ARTIFACT_FACTOR * (np.percentile(signal, 99) - median))
+    return checks
 
 
 def check_noise(record, channel, label, round_name):

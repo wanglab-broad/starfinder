@@ -276,9 +276,9 @@ def _plan_configs(fov, spot_finding):
 
 def _noise_notes(record, label, reference):
     """The notes of one channel's noise record, in direct detection's order: the above-minimum note (W-789) or the
-    above-plateau note (W-863), then the floor note (W-848). Each names the reference round, whose statistics the
-    record holds and applies to every round."""
-    from starfinder.spot_finding import _floor_note, _noise_note, _plateau_note
+    above-plateau note (W-863), then the floor note (W-848), then the adaptive-mode notes (W-880). Each names the
+    reference round, whose statistics the record holds and applies to every round."""
+    from starfinder.spot_finding import _adaptive_notes, _floor_note, _noise_note, _plateau_note
     notes = []
     if record["estimation"] == "above_minimum":
         notes.append(_noise_note(record, label, reference))
@@ -286,6 +286,7 @@ def _noise_notes(record, label, reference):
         notes.append(_plateau_note(record, label, reference))
     if record["mad_floored"]:
         notes.append(_floor_note(record, label, reference, fov_level=True))
+    notes.extend(_adaptive_notes(record, label, reference, fov_level=True))
     return notes
 
 
@@ -621,7 +622,8 @@ def _merged_detection(fov, pipeline, statistics, first, spots, *, records):
                                "ok" if diagnostics["counts"][labels[c]] else "empty" for c in range(len(labels))}
     noise = {labels[c]: {k: channels[c][k] for k in ("zero_fraction", "median", "mad", "threshold", "estimation",
                                                      "n_estimation", "mad_floored", "plateau_value",
-                                                     "plateau_fraction") if k in channels[c]}
+                                                     "plateau_fraction", "maximum", "noise_threshold",
+                                                     "empty_channel", "bright_artifact") if k in channels[c]}
              for c in range(len(labels))}
     diagnostics["noise"] = noise
     diagnostics["effective_settings"] = {labels[c]: tuples(jsonable(configs[c])) for c in range(len(labels))}

@@ -3,7 +3,7 @@
 The scenes, conditions, pipeline and matching follow W-278 (run directory
 /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-278/20261002T011718Z-0cfc7de7,
 scripts/w278_lib.py): calibrated_scene_preset (8x64x64, four rounds and channels, uint8,
-80 amplicons; dense: 160) under nine conditions, LocalMaximaConfig() on round 1,
+80 amplicons; dense: 160) under nine conditions, LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0) on round 1 (the default before W-880, pinned by the expected values),
 NeighborhoodSumConfig((1, 2, 2)), both decoders at their defaults, and match_points
 (greedy, 3 voxels, inclusive) against the amplicon centres with center_in_bounds in the
 detection round. The duplicate population (R14) follows W-278 attribute and
@@ -23,6 +23,9 @@ from starfinder.readout import extract_intensities, score_reads
 from starfinder.evaluation.matching import match_points
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult, find_spots
+
+# W-880 made adaptive 0.2 the default; the W-278 pipeline and its expected values keep the noise rule they were pinned with.
+NOISE = LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0)
 from starfinder.synthetic import NoiseConfig, ScalarDistribution, calibrated_scene_preset, generate_amplicon_scene
 
 HELDOUT_SEEDS = (103, 104, 105)
@@ -104,7 +107,7 @@ def pipeline(condition, seed):
     channels = book.channel_labels
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        spots = find_spots(the_scene.rounds[labels[0]], config=LocalMaximaConfig(), metadata=the_scene.metadata,
+        spots = find_spots(the_scene.rounds[labels[0]], config=NOISE, metadata=the_scene.metadata,
                            spot_namespace=f"w294/{condition}/{seed}")
     rounds = {label: loaded(the_scene.rounds[label], the_scene.metadata, channels) for label in labels}
     intensities = extract_intensities(rounds, spots, config=EXTRACTION)

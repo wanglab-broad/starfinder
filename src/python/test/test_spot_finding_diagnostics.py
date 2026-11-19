@@ -137,12 +137,21 @@ def test_the_typed_empty_table_follows_the_optional_columns():
 def test_a_constant_channel_keeps_its_noise_record_and_threshold():
     kinds = ("ok", "constant")
     image = constructed(kinds)
-    result = detect(image, replace(DEFAULT_METHODS["local_maxima"], channel_labels=kinds))
-    record = result.diagnostics["noise"]["constant"]
+    noise = detect(image, replace(DEFAULT_METHODS["local_maxima"], threshold_mode="noise", threshold_value=5.0,
+                                  channel_labels=kinds))
+    record = noise.diagnostics["noise"]["constant"]
     # Every voxel is at the minimum, but a channel without signal keeps the all-voxel record (W-789).
     assert record == {"zero_fraction": 0.0, "median": 100.0, "mad": 0.0, "threshold": 100.0, "estimation": "all",
                       "n_estimation": 16 * 64 * 64, "mad_floored": False}
-    assert result.diagnostics["thresholds"][1] == 100.0
+    assert noise.diagnostics["thresholds"][1] == 100.0
+    # The default is adaptive 0.2 (W-880): the threshold is 0.2 x the maximum, and the record adds the adaptive checks,
+    # neither of which a constant channel triggers.
+    result = detect(image, replace(DEFAULT_METHODS["local_maxima"], channel_labels=kinds))
+    assert result.diagnostics["noise"]["constant"] == {
+        "zero_fraction": 0.0, "median": 100.0, "mad": 0.0, "threshold": 20.0, "estimation": "all",
+        "n_estimation": 16 * 64 * 64, "mad_floored": False, "maximum": 100.0, "noise_threshold": 100.0,
+        "empty_channel": False, "bright_artifact": False}
+    assert result.diagnostics["thresholds"][1] == 20.0
     log = detect(image, replace(DEFAULT_METHODS["starfish_log"], channel_labels=kinds))
     assert log.diagnostics["thresholds"] == (0.01, 0.01)
     assert log.diagnostics["geometry"]["scale_space_bytes_estimate"] == 10.4 * 30 * 16 * 64 * 64
