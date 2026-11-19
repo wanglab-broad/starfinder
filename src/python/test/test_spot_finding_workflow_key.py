@@ -79,7 +79,7 @@ def test_legacy_keys_are_local_maxima_aliases(method):
 
 @pytest.mark.parametrize("alias, name", list(ALIASES.items()))
 def test_a_legacy_key_together_with_its_field_raises(alias, name):
-    values = {"threshold_mode": "noise", "threshold_value": 4.0, "min_distance_voxels": 2}
+    values = {"threshold_mode": "noise", "threshold_value": 0.4, "min_distance_voxels": 2}
     with pytest.raises(ValueError, match=f"{alias} and {name}"):
         detection({alias: values[name], name: values[name]})
 
@@ -88,7 +88,7 @@ def test_a_legacy_key_together_with_its_field_raises(alias, name):
 def test_a_legacy_key_raises_on_the_python_backend_naming_its_field(alias, name):
     """Under backend python the MATLAB keys of local_maxima raise naming their LocalMaximaConfig fields, in the block
     and in channel_overrides; the configurations above (no backend) are MATLAB ones, which keep the aliases."""
-    values = {"threshold_mode": "noise", "threshold_value": 4.0, "min_distance_voxels": 2}
+    values = {"threshold_mode": "noise", "threshold_value": 0.4, "min_distance_voxels": 2}
     for block in ({alias: values[name]}, {"method": "local_maxima", alias: values[name]},
                   {"channel_overrides": {"ch02": {alias: values[name]}}}):
         with pytest.raises(ValueError, match=f"{alias} is a MATLAB key of local_maxima.*{name}"):
@@ -111,7 +111,7 @@ def test_a_legacy_key_of_a_disabled_block_or_override_raises_on_the_python_backe
     override of such a block, or in a block of a rule that does not run raises naming its field; the package refuses
     the block and the override entry too, and a rule that does not run has no place in a Python configuration (D4:
     the package refuses the rules; W-750)."""
-    values = {"threshold_mode": "noise", "threshold_value": 4.0, "min_distance_voxels": 2}
+    values = {"threshold_mode": "noise", "threshold_value": 0.4, "min_distance_voxels": 2}
     for spot, rule, run in (({"run": False, alias: values[name]}, "rsf_single_fov", True),
                             ({"run": False, "channel_overrides": {"ch02": {alias: values[name]}}}, "rsf_single_fov",
                              True),
@@ -175,12 +175,13 @@ def test_local_maxima_keys_raise_for_another_method(native_distance, key, value)
 # --- channel_overrides and device ---------------------------------------------------------------------
 
 def test_channel_overrides_build_a_plan():
-    block = {"threshold_value": 4.0, "channel_overrides": {
-        "ch02": {"threshold_mode": "adaptive", "threshold_value": 0.2}, "ch03": {"intensity_threshold": 6.0}}}
-    base = LocalMaximaConfig(threshold_value=4.0)
+    block = {"threshold_mode": "noise", "threshold_value": 4.0, "channel_overrides": {
+        "ch02": {"threshold_mode": "adaptive", "threshold_value": 0.3},
+        "ch03": {"intensity_estimation": "noise", "intensity_threshold": 6.0}}}
+    base = LocalMaximaConfig(threshold_mode="noise", threshold_value=4.0)
     assert detection(block) == SpotFindingPlan(base, (
-        ChannelOverride("ch02", LocalMaximaConfig(threshold_mode="adaptive", threshold_value=0.2)),
-        ChannelOverride("ch03", LocalMaximaConfig(threshold_value=6.0))))
+        ChannelOverride("ch02", LocalMaximaConfig(threshold_mode="adaptive", threshold_value=0.3)),
+        ChannelOverride("ch03", LocalMaximaConfig(threshold_mode="noise", threshold_value=6.0))))
 
 
 @pytest.mark.parametrize("overrides, error", [
@@ -231,7 +232,7 @@ def test_spot_finding_device_cuda_is_refused_for_the_classical_methods_and_off_t
 
 
 def test_the_shared_config_is_not_mutated():
-    config = workflow({"method": "local_maxima", "channel_overrides": {"ch02": {"threshold_value": 4.0}}})
+    config = workflow({"method": "local_maxima", "channel_overrides": {"ch02": {"threshold_value": 0.4}}})
     original = copy.deepcopy(config)
     from_workflow_config(config)
     assert config == original
@@ -262,7 +263,7 @@ def test_schema_declares_the_python_only_keys_and_drops_local():
 
 @pytest.mark.parametrize("block, valid", [
     ({"run": True, "method": "local_maxima", "exclude_border": False, "channel_overrides": {"ch02": {
-        "threshold_value": 4.0}}}, True),
+        "threshold_value": 0.4}}}, True),
     ({"run": True, "intensity_estimation": "adaptive", "intensity_threshold": 0.2}, True),
     ({"run": True, "intensity_estimation": "local"}, False),
     ({"run": True, "method": "noise_landmark"}, False),
@@ -282,7 +283,7 @@ MATLAB_FOVS = {"fov_id_pattern": "tile_{i}", "n_fovs": 1, "subset_list": [], "su
 
 @pytest.mark.parametrize("parameters", [
     {"spot_finding": {"run": True, "method": "local_maxima"}},
-    {"spot_finding": {"run": True, "channel_overrides": {"ch02": {"threshold_value": 4.0}}}},
+    {"spot_finding": {"run": True, "channel_overrides": {"ch02": {"threshold_value": 0.4}}}},
     {"device": "cpu"}])
 def test_python_only_keys_validate_on_the_python_backend_only(parameters):
     """The MATLAB schema: the shared keys validate with backend matlab, and local_maxima's MATLAB keys too; the

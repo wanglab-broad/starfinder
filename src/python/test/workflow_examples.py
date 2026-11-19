@@ -44,7 +44,8 @@ PROCESSING = {
          "rounding": "truncate"},
         {"method": "white_tophat", "radius_yx": 3}]},
     "registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}},
-    "spot_finding": {"method": "local_maxima", "exclude_border": False},
+    # The noise rule, named: the default before W-880 (adaptive 0.2 since), which the fixture's expected records pin.
+    "spot_finding": {"method": "local_maxima", "threshold_mode": "noise", "threshold_value": 5.0, "exclude_border": False},
     "reads_extraction": {"voxel_size": [1, 2, 2]},
     "reads_filtration": {"end_base": "CC", "start_base": "C"},
     "decoding": {"method": "wta", "negative_policy": "clip_negative"},

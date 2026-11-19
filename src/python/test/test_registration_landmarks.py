@@ -57,8 +57,8 @@ def estimate(reference, moving, config):
 def local_maxima_record(image, sigma):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SpotFindingWarning)
-        result = find_spots(image, config=LocalMaximaConfig(threshold_value=sigma), metadata=META,
-                            spot_namespace="landmarks")
+        result = find_spots(image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=sigma),
+                            metadata=META, spot_namespace="landmarks")
     return {key: result.diagnostics["noise"]["0"][key] for key in NOISE_KEYS}
 
 

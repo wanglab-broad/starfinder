@@ -35,8 +35,8 @@ def cal_103():
         warnings.simplefilter("ignore")
         scene = generate_amplicon_scene(book, config=config)
         labels = list(scene.round_labels)
-        spots = find_spots(scene.rounds[labels[0]], config=LocalMaximaConfig(), metadata=scene.metadata,
-                           spot_namespace="cal-103")
+        spots = find_spots(scene.rounds[labels[0]], config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0),
+                           metadata=scene.metadata, spot_namespace="cal-103")
     rounds = {label: ImageLoadResult(scene.rounds[label], scene.metadata, book.channel_labels, ())
               for label in labels}
     return book, extract_intensities(rounds, spots, config=NeighborhoodSumConfig((1, 2, 2)))

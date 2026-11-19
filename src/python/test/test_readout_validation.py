@@ -56,7 +56,7 @@ from starfinder.evaluation.matching import match_points
 from starfinder.dataset import load_checkpoint
 from starfinder.io import ImageLoadResult
 from starfinder._checkpoint import candidates_frame
-from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult, find_spots
+from starfinder.spot_finding import SpotFindingResult, find_spots
 
 from . import readout_fixtures as fx
 from . import readout_scenes as scenes
@@ -264,7 +264,7 @@ def test_r5_required_rounds_and_acquisition_local_failures(tmp_path, seed, decod
 # --- R6: multiplexed regression ------------------------------------------------------------------------
 
 #: R6 on ``cal`` seed 103: the explicit expected values of the W-278 cal pipeline
-#: (readout_scenes.pipeline: LocalMaximaConfig() on round 1, NeighborhoodSumConfig((1, 2, 2)), both decoders
+#: (readout_scenes.pipeline: the noise rule at 5.0 on round 1, the default before W-880, NeighborhoodSumConfig((1, 2, 2)), both decoders
 #: at their defaults), equal to the 141c093 values at kept coordinates after W-790's plateau removals
 #: and identity renumbering (data/expected/test_readout_validation/README.md):
 #: cal-<condition>-spots.csv, cal-<condition>-<decoder>.csv (without the §2.8 columns) and the sums and
@@ -327,7 +327,7 @@ def direct_calls(condition, seed):
     for r, label in enumerate(the_scene.round_labels):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            found = find_spots(the_scene.rounds[label], config=LocalMaximaConfig(), metadata=the_scene.metadata,
+            found = find_spots(the_scene.rounds[label], config=scenes.NOISE, metadata=the_scene.metadata,
                                spot_namespace=f"w296/{condition}/{seed}/{label}")
         frame = found.spots.assign(round=pd.array([label] * len(found.spots), dtype="string"))
         spots = SpotFindingResult(frame, found.metadata, found.spot_namespace, found.config, found.diagnostics)

@@ -63,7 +63,7 @@ background:
 :pyobject: detect_spots
 ```
 
-The default `noise` mode finds nothing in the bare volume: one bright voxel on zeros has
+The `noise` mode finds nothing in the bare volume: one bright voxel on zeros has
 a noise MAD of 0, which the integer floor of one grey level replaces (a
 `SpotFindingWarning` says so), and the voxel is its own median, so it does not exceed the
 threshold. With the background, both calls find the spot at `(z, y, x) = (5, 10, 10)` in

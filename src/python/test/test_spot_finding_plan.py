@@ -23,7 +23,9 @@ pytestmark = pytest.mark.spot_finding
 
 META = ImageMetadata("golden/round1")
 NAMESPACE = "golden/sample/FOV_001"
-BASE = LocalMaximaConfig(channel_labels=CHANNELS)
+# The tests below are about the noise rule, the default before W-880 (the default is adaptive 0.2 since): they name it.
+NOISE = LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0)
+BASE = replace(NOISE, channel_labels=CHANNELS)
 OVERRIDE = LocalMaximaConfig(threshold_mode="adaptive", threshold_value=0.2)
 
 
@@ -58,7 +60,12 @@ def test_noise_record_equals_a_direct_numpy_computation(dims, mode):
         mad = np.median(np.abs(sample - median))
         expected = {"zero_fraction": np.mean(values == 0), "median": median, "mad": mad,
                     "threshold": result.diagnostics["thresholds"][c]}
-        assert set(noise[label]) == set(expected) | {"estimation", "n_estimation", "mad_floored"}
+        extra = {"maximum", "noise_threshold", "empty_channel", "bright_artifact"} if mode == "adaptive" else set()
+        assert set(noise[label]) == set(expected) | {"estimation", "n_estimation", "mad_floored"} | extra
+        if mode == "adaptive":
+            # W-880: the maximum, and no flag on the fixture, whose every channel holds spots well above its noise.
+            assert noise[label]["maximum"] == values.max()
+            assert not noise[label]["empty_channel"] and not noise[label]["bright_artifact"]
         assert (noise[label]["estimation"], noise[label]["n_estimation"]) == (
             "above_minimum" if truncated else "all", sample.size)
         for key, value_ in expected.items():
@@ -102,7 +109,7 @@ def zero_channels(seed=270):
 def test_sixty_percent_zeros_warn_and_forty_percent_do_not():
     image = zero_channels()
     assert (np.mean(image[..., 0] == 0), np.mean(image[..., 1] == 0)) == (0.6, 0.4)
-    config = LocalMaximaConfig(channel_labels=("sixty", "forty"))
+    config = replace(NOISE, channel_labels=("sixty", "forty"))
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = find_spots(image, config=config, metadata=META, spot_namespace=NAMESPACE)
@@ -120,7 +127,7 @@ def test_sixty_percent_zeros_warn_and_forty_percent_do_not():
 def test_fov_detection_names_the_round_in_the_warning(tmp_path):
     fov = fov_with_fixture(golden_dataset(tmp_path), "3d")
     with pytest.warns(SpotFindingWarning, match="round 'round1', channel 'ch02'"):
-        fov.find_spots(config=LocalMaximaConfig())
+        fov.find_spots(config=NOISE)
 
 
 def test_registration_landmarks_record_the_local_maxima_noise_and_centroids_none():
@@ -130,7 +137,7 @@ def test_registration_landmarks_record_the_local_maxima_noise_and_centroids_none
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         landmarks = find_spots(image, config=NoiseLandmarkConfig(), metadata=META, spot_namespace=NAMESPACE)
-        pipeline = find_spots(image, config=LocalMaximaConfig(), metadata=META, spot_namespace=NAMESPACE)
+        pipeline = find_spots(image, config=NOISE, metadata=META, spot_namespace=NAMESPACE)
     assert landmarks.diagnostics["noise"] == pipeline.diagnostics["noise"]
     assert landmarks.diagnostics["noise"]["2"]["estimation"] == "above_minimum"
     assert landmarks.diagnostics["warnings"] == pipeline.diagnostics["warnings"]
@@ -199,14 +206,14 @@ def test_an_override_keeps_the_output_columns(dims, plan_measures, override_meas
 def test_without_overrides_every_channel_has_the_config():
     result = detect(fixture_image("3d"), BASE)
     assert result.diagnostics["effective_settings"] == {label: settings(BASE) for label in CHANNELS}
-    unlabeled = detect(fixture_image("3d"), LocalMaximaConfig())
+    unlabeled = detect(fixture_image("3d"), NOISE)
     assert list(unlabeled.diagnostics["effective_settings"]) == ["0", "1", "2", "3"]
     pd.testing.assert_frame_equal(detect(fixture_image("3d"), SpotFindingPlan(BASE)).spots, result.spots,
                                   check_exact=True)
 
 
 def test_a_plan_runs_through_the_pipeline_and_the_fov(tmp_path):
-    plan = SpotFindingPlan(LocalMaximaConfig(), (ChannelOverride("ch02", OVERRIDE),))
+    plan = SpotFindingPlan(NOISE, (ChannelOverride("ch02", OVERRIDE),))
     assert PipelineConfig(spot_finding=plan).spot_finding == plan
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SpotFindingWarning)
@@ -236,10 +243,10 @@ def test_invalid_overrides_are_rejected(make, error):
 def test_invalid_overrides_are_rejected_at_detection(tmp_path):
     image = fixture_image("3d")
     with pytest.raises(ValueError, match="channel_labels"):
-        detect(image, SpotFindingPlan(LocalMaximaConfig(), (ChannelOverride("ch02", OVERRIDE),)))
+        detect(image, SpotFindingPlan(NOISE, (ChannelOverride("ch02", OVERRIDE),)))
     with pytest.raises(ValueError, match="combines channels"):
         detect(image, SpotFindingPlan(PercentileCentroidConfig(channel_labels=CHANNELS),
                                       (ChannelOverride("ch02", PercentileCentroidConfig()),)))
     fov = fov_with_fixture(golden_dataset(tmp_path), "3d")
     with pytest.raises(ValueError, match="ch09"):
-        fov.find_spots(config=SpotFindingPlan(LocalMaximaConfig(), (ChannelOverride("ch09", OVERRIDE),)))
+        fov.find_spots(config=SpotFindingPlan(NOISE, (ChannelOverride("ch09", OVERRIDE),)))

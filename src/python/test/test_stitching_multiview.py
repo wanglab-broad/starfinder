@@ -66,13 +66,16 @@ def test_config_defaults_are_the_starting_configuration():
     assert (config.binning_zyx, config.pairwise, config.upsample_factor, config.quality_threshold,
             config.drop_nan_quality, config.pruning, config.overlap_tolerance_um, config.groupwise,
             config.abs_tol_um, config.rel_tol, config.max_iter) == (
-        (4, 4, 4), "phase_correlation", None, 0.7, True, "alternating_pattern", 0.0, "global_optimization",
+        (4, 4, 4), "phase_correlation", None, None, True, "alternating_pattern", 0.0, "global_optimization",
         None, None, None)
+    assert MultiviewStitcherConfig(quality_threshold=0.3).quality_threshold == 0.3
+    assert MultiviewStitcherConfig(quality_threshold="auto").quality_threshold == "auto"
     assert MultiviewStitcherConfig(binning_zyx=[2, 2, 2], pruning=None).binning_zyx == (2, 2, 2)
 
 
 @pytest.mark.parametrize("fields", [
     dict(binning_zyx=(0, 4, 4)), dict(binning_zyx=(4, 4, 0)), dict(quality_threshold=1.5),
+    dict(quality_threshold="Auto"), dict(quality_threshold=math.nan),
     dict(upsample_factor=0), dict(overlap_tolerance_um=-0.1), dict(pairwise="ants"),
     dict(pruning="keep_axis_aligned"), dict(groupwise="shortest_paths")])
 def test_config_refuses_each_invalid_field_at_construction(fields):
@@ -144,6 +147,171 @@ def test_known_answer_cut_fixture(binning, bound):
     assert list(result.fovs.status) == ["image_supported"] * 9
     assert set(result.fovs.component) == {0}
     assert np.abs(errors).max() <= bound
+
+
+# --- The link-quality threshold estimated from the data (W-874) ------------------------------
+# A synthetic pair with a known offset: the fixed overlap is a window of an i.i.d. texture, and the moving
+# overlap the window that the shift ``t`` maps onto it (``moving[o + t] = fixed[o]``), as in the library's pixel
+# space. Rank correlation is unchanged by the [0, 1] rescaling, so the expected qualities come from the slices.
+
+KNOWN_SHIFT = (3.0, -2.0)
+
+
+def _known_pair(shape=(48, 16), shift=KNOWN_SHIFT):
+    texture = np.random.default_rng(874).random((64, 64))
+    (h, w), (ty, tx), (y0, x0) = shape, map(int, shift), (8, 24)
+    return texture[y0:y0 + h, x0:x0 + w], texture[y0 - ty:y0 - ty + h, x0 - tx:x0 - tx + w]
+
+
+def _sliced_quality(fixed, moving, offset):
+    """Spearman correlation of ``fixed[o]`` and ``moving[o + offset]`` over the o where both exist (integers)."""
+    from scipy import stats
+    region = tuple(slice(max(0, -int(u)), min(n, n - int(u))) for n, u in zip(fixed.shape, offset))
+    moved = tuple(slice(r.start + int(u), r.stop + int(u)) for r, u in zip(region, offset))
+    return float(stats.spearmanr(fixed[region].ravel(), moving[moved].ravel()).correlation), fixed[region].size
+
+
+@pytest.mark.contract
+def test_the_default_threshold_resolves_per_tile_set():
+    # Decision B (W-874, Jiahao, 2026-11-19): the default is "auto" for single-plane tiles and 0.7 for Z > 1; an
+    # explicit number or an explicit "auto" applies to either kind.
+    from starfinder.stitching._multiview import FIXED_DEFAULT, FIXED_DEFAULT_RULE, _resolved_threshold
+    assert (FIXED_DEFAULT, FIXED_DEFAULT_RULE) == (0.7, "fixed_default_z_above_1")
+    assert _resolved_threshold(None, True) == ("auto", None)
+    assert _resolved_threshold(None, False) == ("fixed_default_z_above_1", 0.7)
+    assert _resolved_threshold("auto", True) == ("auto", None)
+    assert _resolved_threshold("auto", False) == ("auto", None)
+    assert _resolved_threshold(0.3, True) == ("given", 0.3)
+    assert _resolved_threshold(-1.0, False) == ("given", -1.0)
+
+
+@pytest.mark.contract
+def test_null_offsets_move_the_shift_half_the_overlap_width_along_the_narrow_axis():
+    from starfinder.stitching._multiview import _null_offsets
+    assert [list(o) for o in _null_offsets((48, 16), KNOWN_SHIFT)] == [[3.0, -10.0], [3.0, 6.0]]
+    assert [list(o) for o in _null_offsets((15, 40), (0.5, 0.0))] == [[-6.5, 0.0], [7.5, 0.0]]
+    # 3D: the narrower of Y and X, never Z.
+    assert [list(o) for o in _null_offsets((4, 30, 20), (0.0, 0.0, 0.0))] == [[0.0, 0.0, -10.0], [0.0, 0.0, 10.0]]
+    assert [list(o) for o in _null_offsets((4, 1, 20), (0.0, 0.0, 0.0))] == [[0.0, -1.0, 0.0], [0.0, 1.0, 0.0]]
+
+
+@pytest.mark.contract
+def test_null_qualities_of_a_pair_with_a_known_offset():
+    from starfinder.stitching._multiview import _null_offsets, _null_qualities, _quality_at
+    fixed, moving = _known_pair()
+    # At the known offset the moved overlap is the fixed one: quality 1.
+    assert _quality_at(fixed, moving, KNOWN_SHIFT) == pytest.approx(1.0, abs=1e-12)
+    null = _null_qualities(fixed, moving, KNOWN_SHIFT)
+    for value, offset in zip(null, _null_offsets(fixed.shape, KNOWN_SHIFT)):
+        expected, n = _sliced_quality(fixed, moving, offset)
+        assert value == pytest.approx(expected, abs=1e-12)
+        # No texture lines up: within 5 standard deviations (1/sqrt(n - 1)) of 0.
+        assert abs(value) <= 5 / math.sqrt(n - 1)
+    # A shift that leaves less than a tenth of the moving overlap has no value.
+    assert math.isnan(_quality_at(fixed, moving, (0.0, 15.0)))
+
+
+@pytest.mark.contract
+def test_auto_threshold_is_the_larger_of_the_floor_and_the_null_quantile():
+    from starfinder.stitching._multiview import NULL_QUANTILE, QUALITY_FLOOR, _auto_threshold
+
+    def pairs(edges):
+        return [[f"FOV{a}", f"FOV{b}"] for a, b in edges]
+
+    assert (QUALITY_FLOOR, NULL_QUANTILE) == (0.2, 0.99)
+    # 101 values 0, 0.01, ..., 1: the 99th percentile (linear) is 0.99.
+    values = np.linspace(0.0, 1.0, 101)
+    nulls = {(0, 1): list(values[:50]), (1, 2): list(values[50:]) + [math.nan]}
+    threshold, record = _auto_threshold(nulls, [(0, 1), (1, 2)], pairs)
+    assert record["rule"] == "auto"
+    assert threshold == pytest.approx(0.99, abs=1e-12) and record["threshold"] == threshold
+    assert record["null"]["values"] == 101 and record["null"]["pairs"] == 2
+    assert record["null"]["quantile"] == pytest.approx(0.99, abs=1e-12)
+    assert record["null"]["min"] == 0.0 and record["null"]["max"] == 1.0
+    assert record["null_pairs"][1][:2] == ["FOV1", "FOV2"] and record["null_pairs"][1][-1] is None
+    # A null below the floor gives the floor; no null value at all gives the floor too.
+    low, record = _auto_threshold({(0, 1): [0.05, -0.1]}, [(0, 1)], pairs)
+    assert low == 0.2 and record["null"]["quantile"] < 0.2
+    empty, record = _auto_threshold({(0, 1): [math.nan, math.nan]}, [(0, 1), (1, 2)], pairs)
+    assert empty == 0.2 and record["null"] == {"pairs": 0, "values": 0}
+
+
+@pytest.mark.slow
+@needs_library
+def test_the_recording_registration_is_the_library_s_and_measures_its_quality():
+    import xarray as xr
+    from multiview_stitcher import registration
+
+    from starfinder.stitching._multiview import _null_qualities, _quality_at, _recording
+    fixed, moving = _known_pair()
+    null = []
+    data = {"fixed_data": xr.DataArray(fixed, dims=("y", "x")), "moving_data": xr.DataArray(moving, dims=("y", "x"))}
+    result = _recording(null)(**data)
+    library = registration.phase_correlation_registration(**data)
+    assert np.array_equal(result["affine_matrix"], library["affine_matrix"]) and result["quality"] == library["quality"]
+    shift = np.asarray(result["affine_matrix"])[:2, 2]
+    assert list(shift) == list(KNOWN_SHIFT)
+    # The null's measure is the library's: at the library's shift it gives the library's quality.
+    assert _quality_at(fixed, moving, shift) == pytest.approx(library["quality"], abs=1e-12)
+    assert null == _null_qualities(fixed, moving, shift)
+
+
+@pytest.mark.slow
+@needs_library
+def test_auto_threshold_against_an_explicit_number_on_the_cut_fixture():
+    fixture = case("cut_synthetic")   # 3D tiles: an explicit "auto" applies to them too
+    auto = run(fixture, quality_threshold="auto")
+    quality = auto.record["method_diagnostics"]["link_quality"]
+    assert quality["rule"] == "auto"
+    values = [q for pair in quality["null_pairs"] for q in pair[2:] if q is not None]
+    registered = auto.links[auto.links.reason != "pruned"]
+    assert len(quality["null_pairs"]) == len(registered) and quality["null"]["values"] == len(values)
+    assert quality["threshold"] == max(0.2, float(np.quantile(values, 0.99)))
+    below = registered.quality < quality["threshold"]
+    assert (registered.reason[below] == "quality_below_threshold").all()
+    assert registered.reason[~below].isin(["", "optimizer_removed"]).all()
+    # The same number given explicitly: the same placement, bit for bit, and no null measured.
+    explicit = run(fixture, quality_threshold=quality["threshold"])
+    pd.testing.assert_frame_equal(explicit.fovs, auto.fovs, check_exact=True)
+    pd.testing.assert_frame_equal(explicit.links, auto.links, check_exact=True)
+    assert "link_quality" not in explicit.record["method_diagnostics"]
+    assert explicit.record["method"]["config"]["quality_threshold"] == quality["threshold"]
+    assert auto.record["method"]["config"]["quality_threshold"] == "auto"
+    # The default for these 3D tiles is 0.7, higher: the link tile4–tile5 (0.46) is then dropped by rule L1.
+    default = run(fixture)
+    assert default.record["method"]["config"]["quality_threshold"] is None
+    assert default.record["method_diagnostics"]["link_quality"] == {"rule": "fixed_default_z_above_1",
+                                                                     "threshold": 0.7}
+    strict = default.links.set_index(["fov_a", "fov_b"])
+    loose = auto.links.set_index(["fov_a", "fov_b"])
+    assert strict.loc[("tile4", "tile5"), "reason"] == "quality_below_threshold"
+    assert loose.loc[("tile4", "tile5"), "reason"] != "quality_below_threshold"
+
+
+@pytest.mark.slow
+@needs_library
+@pytest.mark.parametrize("name, given, rule", [
+    ("plane_2d", None, "auto"), ("two_tiles", None, "fixed_default_z_above_1"), ("plane_2d", 0.5, "given"),
+    ("two_tiles", 0.5, "given"), ("two_tiles", "auto", "auto")],
+    ids=["single_plane_default", "z_above_1_default", "single_plane_given", "z_above_1_given", "z_above_1_auto"])
+def test_the_record_names_the_rule_that_set_the_threshold(name, given, rule):
+    fixture = case(name)
+    assert (fixture.inputs()[0].grid.shape_zyx[0] == 1) == (name == "plane_2d")
+    result = run(fixture, **({} if given is None else {"quality_threshold": given}))
+    quality = result.record["method_diagnostics"].get("link_quality")
+    assert result.record["method"]["config"]["quality_threshold"] == given
+    if rule == "given":
+        assert quality is None   # the method config names the given value
+        threshold = given
+    elif rule == "auto":
+        assert quality["rule"] == "auto" and quality["null"]["values"] > 0
+        threshold = quality["threshold"]
+    else:
+        assert quality == {"rule": "fixed_default_z_above_1", "threshold": 0.7}
+        threshold = 0.7
+    registered = result.links[(result.links.reason != "pruned") & result.links.quality.notna()]
+    assert (registered.reason[registered.quality < threshold] == "quality_below_threshold").all()
+    assert (registered.reason[registered.quality >= threshold] != "quality_below_threshold").all()
 
 
 # --- MV3: fractional jitter on the synthetic scene -------------------------------------------

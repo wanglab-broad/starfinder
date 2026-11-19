@@ -9,6 +9,7 @@ image the MAD has a floor of one grey level; a floating-point channel with signa
 median, MAD and threshold is known in closed form.
 """
 import warnings
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -30,8 +31,10 @@ NAMESPACE = "noise-estimation/test"
 # 64 copies of each grey level 33..48: median 40.5; absolute deviations 0.5..7.5, 128 voxels each, so MAD 4.0.
 NOISE = np.repeat(np.arange(33, 49), 64)
 NOISE_MEDIAN, NOISE_MAD = 40.5, 4.0
+# The tests of this file are about the noise rule, which was the default before W-880 (adaptive 0.2 since): they name it.
+NOISE_CONFIG = LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0)
 RECORD_KEYS = ["zero_fraction", "median", "mad", "threshold", "estimation", "n_estimation", "mad_floored"]
-SIGMA = 5.0 * 1.4826  # the default threshold_value times the MAD scale
+SIGMA = 5.0 * 1.4826  # the noise-mode threshold_value of the tests times the MAD scale
 # A channel without zeros: 640 copies of each level 133..148, so 6.25 % of its voxels are at its minimum.
 FULL = np.resize(NOISE + 100, VOXELS).astype(np.uint8).reshape(SHAPE)
 
@@ -53,7 +56,7 @@ def detect(image, config):
 def test_a_ninety_percent_zero_channel_takes_its_noise_from_the_nonzero_voxels():
     image = channel(NOISE)
     assert np.mean(image == 0) == 0.9
-    result, notes = detect(image, LocalMaximaConfig())
+    result, notes = detect(image, NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     threshold = NOISE_MEDIAN + 5.0 * 1.4826 * NOISE_MAD  # 70.152, above every noise voxel
     np.testing.assert_allclose(result.diagnostics["thresholds"], [threshold], **FLOAT64)
@@ -72,7 +75,7 @@ def test_at_most_half_at_the_minimum_keeps_the_all_voxel_threshold(zeros):
     # (0 + 33) / 2 = 16.5 and so is the MAD; without zeros the minimum 33 holds 640 voxels and the median is 40.5.
     levels = np.repeat(np.arange(33, 49), (VOXELS - zeros) // 16)
     image = channel(levels)
-    result, notes = detect(image, LocalMaximaConfig())
+    result, notes = detect(image, NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     values = image.astype(np.float64)
     median = np.median(values)
@@ -89,7 +92,7 @@ def test_at_most_half_at_the_minimum_keeps_the_all_voxel_threshold(zeros):
 def test_a_mad_of_at_least_one_grey_level_is_not_floored(zeros):
     # The fixtures of the test above: MAD 4.0 and 16.5; the threshold is unchanged and there is no floor warning (W-848).
     levels = np.repeat(np.arange(33, 49), (VOXELS - zeros) // 16)
-    result, notes = detect(channel(levels), LocalMaximaConfig())
+    result, notes = detect(channel(levels), NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     assert record["mad"] in (4.0, 16.5) and record["mad_floored"] is False
     assert record["threshold"] == record["median"] + 5.0 * record["mad"] * 1.4826
@@ -116,7 +119,7 @@ def mad_zero(dtype=np.uint8):
 
 def test_a_mad_of_zero_on_an_integer_channel_is_floored_at_one_grey_level():
     image = mad_zero()
-    result, notes = detect(image, LocalMaximaConfig())
+    result, notes = detect(image, NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     threshold = 2.0 + SIGMA * 1.0
     assert (record["median"], record["mad"], record["mad_floored"]) == (2.0, 0.0, True)
@@ -136,7 +139,7 @@ def test_a_mad_of_one_half_is_floored_to_one():
     # (median 4.5, every deviation but the spots' 0.5, MAD 0.5).
     flat = np.concatenate([np.full(5120, 4), np.full(5117, 5), np.full(3, 40)]).astype(np.uint8)
     image = flat[np.random.default_rng(848).permutation(VOXELS)].reshape(SHAPE)
-    result, notes = detect(image, LocalMaximaConfig())
+    result, notes = detect(image, NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     assert (record["estimation"], record["median"], record["mad"], record["mad_floored"]) == ("all", 4.5, 0.5, True)
     np.testing.assert_allclose(record["threshold"], 4.5 + SIGMA * 1.0, **FLOAT64)  # not 4.5 + SIGMA * 0.5
@@ -147,7 +150,7 @@ def test_a_mad_of_exactly_one_grey_level_is_not_floored():
     # 5120 voxels of 3 and 5120 of 5: median 4, MAD 1, and the minimum holds exactly half of the voxels.
     flat = np.concatenate([np.full(5120, 3), np.full(5120, 5)]).astype(np.uint8)
     image = flat[np.random.default_rng(848).permutation(VOXELS)].reshape(SHAPE)
-    result, notes = detect(image, LocalMaximaConfig())
+    result, notes = detect(image, NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     assert (record["median"], record["mad"], record["mad_floored"]) == (4.0, 1.0, False)
     assert record["threshold"] == 4.0 + 5.0 * 1.0 * 1.4826  # the unfloored expression, bit for bit
@@ -160,7 +163,7 @@ def test_the_floor_names_the_round_and_channel_in_a_fov_detection(tmp_path):
     fov.images["round1"] = image
     fov.metadata["round1"] = ImageMetadata("FOV_001/round1")
     with pytest.warns(spot_finding.SpotFindingWarning, match=r"round 'round1', channel 'ch01': ") as caught:
-        fov.find_spots(config=LocalMaximaConfig())
+        fov.find_spots(config=NOISE_CONFIG)
     floor = [str(w.message) for w in caught if "MAD floor" in str(w.message)]
     assert len(floor) == 1 and "round 'round1', channel 'ch01': the measured noise MAD (0.0)" in floor[0]
     noise = fov.spot_result.diagnostics["noise"]
@@ -176,14 +179,14 @@ def test_a_float_channel_with_signal_and_mad_zero_is_refused_naming_round_and_ch
     fov.images["round1"] = image
     fov.metadata["round1"] = ImageMetadata("FOV_001/round1")
     with pytest.raises(ValueError, match=r"^spot finding: round 'round1', channel 'ch01': ") as caught:
-        fov.find_spots(config=LocalMaximaConfig())
+        fov.find_spots(config=NOISE_CONFIG)
     assert isinstance(caught.value, spot_finding.SpotFindingError)
     message = str(caught.value)
     at_minimum = "9216 of its 10240 voxels (90.0%)" if kind == "above_minimum" else "1024 of its 10240 voxels (10.0%)"
     assert f"estimation set '{kind}'" in message and f"{at_minimum} are at its minimum 0.0" in message
     assert "threshold_mode 'adaptive' or 'absolute'" in message
     with pytest.raises(spot_finding.SpotFindingError, match=r"^spot finding: channel '1': "):
-        find_spots(image, config=LocalMaximaConfig(), metadata=META, spot_namespace=NAMESPACE)
+        find_spots(image, config=NOISE_CONFIG, metadata=META, spot_namespace=NAMESPACE)
     for mode, value in (("adaptive", 0.2), ("absolute", 50.0)):
         assert detect(image, LocalMaximaConfig(threshold_mode=mode, threshold_value=value))[0].diagnostics
 
@@ -193,14 +196,14 @@ def test_a_float_channel_with_a_mad_of_zero_over_signal_raises_where_the_integer
         image = mad_zero(dtype)
         if raises:
             with pytest.raises(spot_finding.SpotFindingError):
-                find_spots(image, config=LocalMaximaConfig(), metadata=META, spot_namespace=NAMESPACE)
+                find_spots(image, config=NOISE_CONFIG, metadata=META, spot_namespace=NAMESPACE)
         else:
-            assert detect(image, LocalMaximaConfig())[0].diagnostics["noise"]["0"]["mad_floored"] is True
+            assert detect(image, NOISE_CONFIG)[0].diagnostics["noise"]["0"]["mad_floored"] is True
 
 
 def test_an_all_zero_channel_gives_no_spots_and_no_error():
     image = np.stack([np.zeros(SHAPE, dtype=np.uint8), channel(NOISE)], axis=-1)
-    result, notes = detect(image, LocalMaximaConfig(channel_labels=("empty", "noise")))
+    result, notes = detect(image, replace(NOISE_CONFIG, channel_labels=("empty", "noise")))
     assert not any("channel 'empty'" in note for note in notes)
     assert result.diagnostics["counts"]["empty"] == 0
     assert result.diagnostics["outcomes"]["empty"] == "constant"
@@ -216,7 +219,9 @@ def test_the_noise_record_carries_the_estimation_set(tmp_path, mode, value):
     image = np.stack([channel(NOISE), FULL], axis=-1)
     config = LocalMaximaConfig(threshold_mode=mode, threshold_value=value, channel_labels=("truncated", "full"))
     noise = detect(image, config)[0].diagnostics["noise"]
-    assert [list(noise[label]) for label in noise] == [RECORD_KEYS, RECORD_KEYS]
+    # W-880: in adaptive mode the record adds the maximum, the noise threshold and the two weak-point flags.
+    keys = RECORD_KEYS + (["maximum", "noise_threshold", "empty_channel", "bright_artifact"] if mode == "adaptive" else [])
+    assert [list(noise[label]) for label in noise] == [keys, keys]
     # Only noise mode estimates above the minimum; the other modes record the all-voxel median and MAD.
     truncated = ("above_minimum", 1024) if mode == "noise" else ("all", VOXELS)
     assert (noise["truncated"]["estimation"], noise["truncated"]["n_estimation"]) == truncated
@@ -232,7 +237,7 @@ def test_the_noise_record_carries_the_estimation_set(tmp_path, mode, value):
         fov.find_spots(config=SpotFindingPlan(LocalMaximaConfig(threshold_mode=mode, threshold_value=value),
                                               rounds=("round1",)))
     rounds = fov.spot_result.diagnostics["rounds"]["round1"]["noise"]
-    assert list(rounds) == list(CHANNELS) and all(list(rounds[label]) == RECORD_KEYS for label in CHANNELS)
+    assert list(rounds) == list(CHANNELS) and all(list(rounds[label]) == keys for label in CHANNELS)
     assert rounds["ch00"]["estimation"] == ("above_minimum" if mode == "noise" else "all")
 
 
@@ -264,7 +269,7 @@ def test_noise_landmarks_take_the_local_maxima_noise_threshold_on_a_truncated_ch
     if dims == "z1":  # one plane of 32x32: z=6 holds four of the peaks; its own noise record follows from the plane.
         image = image[6:7].copy()
     result, notes = detect(image, NoiseLandmarkConfig(noise_sigma=sigma))
-    pipeline, _ = detect(image, LocalMaximaConfig(threshold_value=sigma))
+    pipeline, _ = detect(image, replace(NOISE_CONFIG, threshold_value=sigma))
     record = result.diagnostics["noise"]["0"]
     assert record == pipeline.diagnostics["noise"]["0"]
     assert result.diagnostics["thresholds"] == pipeline.diagnostics["thresholds"]
@@ -283,7 +288,7 @@ def test_noise_landmarks_floor_the_mad_of_an_integer_channel_as_local_maxima_doe
     # mad_zero: above 0, 700 voxels of 2 hold the median and MAD (2 and 0); the MAD is floored at one grey level.
     image = with_peaks(mad_zero())
     result, notes = detect(image, NoiseLandmarkConfig())
-    pipeline, _ = detect(image, LocalMaximaConfig())
+    pipeline, _ = detect(image, NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     assert record == pipeline.diagnostics["noise"]["0"]
     assert (record["median"], record["mad"], record["mad_floored"]) == (2.0, 0.0, True)
@@ -319,23 +324,23 @@ def test_tiled_statistics_carry_the_estimation_set_and_the_floor(tmp_path):
     from starfinder.dataset.tiled import _detection_statistics
     fov = golden_dataset(tmp_path).fov("FOV_001")
     image = np.stack([channel(NOISE), FULL, channel(NOISE), FULL], axis=-1)
-    records = _detection_statistics(fov, LocalMaximaConfig(), image)["channels"]
+    records = _detection_statistics(fov, NOISE_CONFIG, image)["channels"]
     assert [(r["channel"], r["estimation"], r["n_estimation"], r["mad_floored"]) for r in records] == [
         ("ch00", "above_minimum", 1024, False), ("ch01", "all", VOXELS, False), ("ch02", "above_minimum", 1024, False),
         ("ch03", "all", VOXELS, False)]
     np.testing.assert_allclose(records[0]["threshold"], NOISE_MEDIAN + 5.0 * 1.4826 * NOISE_MAD, **FLOAT64)
     # W-848: an integer channel with signal and a MAD of 0 is floored, as direct detection does, and not refused.
     image[..., 1] = mad_zero()
-    records = _detection_statistics(fov, LocalMaximaConfig(), image)["channels"]
+    records = _detection_statistics(fov, NOISE_CONFIG, image)["channels"]
     assert [r["mad_floored"] for r in records] == [False, True, False, False]
     assert (records[1]["median"], records[1]["mad"], records[1]["constant"]) == (2.0, 0.0, False)
     np.testing.assert_allclose(records[1]["threshold"], 2.0 + SIGMA, **FLOAT64)
-    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0].diagnostics["noise"]
+    direct = detect(image, replace(NOISE_CONFIG, channel_labels=CHANNELS))[0].diagnostics["noise"]
     assert [{k: v for k, v in r.items() if k not in ("channel", "constant")} for r in records] == [
         direct[label] for label in CHANNELS]
     # A float channel keeps the refusal.
     with pytest.raises(spot_finding.SpotFindingError, match=r"^spot finding: round 'round1', channel 'ch01': "):
-        _detection_statistics(fov, LocalMaximaConfig(), image.astype(np.float32))
+        _detection_statistics(fov, NOISE_CONFIG, image.astype(np.float32))
 
 
 def floor_warnings(caught):
@@ -350,7 +355,7 @@ def test_tiled_statistics_warn_for_a_floored_channel_naming_the_reference_round(
     image = np.stack([channel(NOISE), mad_zero(), channel(NOISE), FULL], axis=-1)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        records = _detection_statistics(fov, LocalMaximaConfig(), image)["channels"]
+        records = _detection_statistics(fov, NOISE_CONFIG, image)["channels"]
     emitted = floor_warnings(caught)
     assert len(emitted) == 1 and [r["mad_floored"] for r in records] == [False, True, False, False]
     message = emitted[0]
@@ -360,7 +365,7 @@ def test_tiled_statistics_warn_for_a_floored_channel_naming_the_reference_round(
     # No channel is floored: no floor warning.
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        _detection_statistics(fov, LocalMaximaConfig(), np.stack([channel(NOISE), FULL, FULL, FULL], axis=-1))
+        _detection_statistics(fov, NOISE_CONFIG, np.stack([channel(NOISE), FULL, FULL, FULL], axis=-1))
     assert floor_warnings(caught) == []
 
 
@@ -369,13 +374,13 @@ def test_the_tiled_merge_records_the_floor_and_lists_its_note(tmp_path):
     from starfinder.dataset.tiled import _detection_statistics, _merged_detection
     fov = golden_dataset(tmp_path).fov("FOV_001")
     image = np.stack([channel(NOISE), mad_zero(), channel(NOISE), FULL], axis=-1)
-    pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
+    pipeline = PipelineConfig(spot_finding=NOISE_CONFIG)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
                       "reference_metadata": {"frame_id": "noise-estimation"}}
     emitted = floor_warnings(caught)
-    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
+    direct = detect(image, replace(NOISE_CONFIG, channel_labels=CHANNELS))[0]
     merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
     assert merged.diagnostics["noise"] == direct.diagnostics["noise"]
     assert merged.diagnostics["noise"]["ch01"]["mad_floored"] is True
@@ -403,7 +408,7 @@ def test_the_tiled_route_emits_and_lists_the_above_minimum_note_naming_the_refer
     from starfinder.dataset.tiled import _detection_statistics, _merged_detection
     fov = golden_dataset(tmp_path).fov("FOV_001")
     image = np.stack([channel(NOISE), FULL, channel(NOISE), FULL], axis=-1)
-    pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
+    pipeline = PipelineConfig(spot_finding=NOISE_CONFIG)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
@@ -413,7 +418,7 @@ def test_the_tiled_route_emits_and_lists_the_above_minimum_note_naming_the_refer
                                                           "round 'round1', channel 'ch02'"]
     assert all("estimation 'above_minimum'" in m and "more than half of its voxels are at its minimum" in m
                for m in emitted)
-    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
+    direct = detect(image, replace(NOISE_CONFIG, channel_labels=CHANNELS))[0]
     assert tuple(emitted) == tuple(with_round(n) for n in direct.diagnostics["warnings"])
     merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
     assert merged.diagnostics["warnings"] == tuple(emitted)
@@ -426,7 +431,7 @@ def test_the_tiled_route_emits_and_lists_the_above_plateau_note_naming_the_refer
     fov = golden_dataset(tmp_path).fov("FOV_001")
     image = np.stack([plateau_spots(np.float64), FULL.astype(np.float64), FULL.astype(np.float64),
                       FULL.astype(np.float64)], axis=-1)
-    pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
+    pipeline = PipelineConfig(spot_finding=NOISE_CONFIG)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
@@ -436,7 +441,7 @@ def test_the_tiled_route_emits_and_lists_the_above_plateau_note_naming_the_refer
     assert emitted[0].startswith("spot finding: round 'round1', channel 'ch00': more than half of its voxels "
                                  "(89.0%) are at the value 4.0, above its minimum, ")
     assert "(estimation 'above_plateau')" in emitted[0]
-    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
+    direct = detect(image, replace(NOISE_CONFIG, channel_labels=CHANNELS))[0]
     assert tuple(emitted) == tuple(with_round(n) for n in direct.diagnostics["warnings"])
     merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
     assert merged.diagnostics["warnings"] == tuple(emitted)
@@ -447,7 +452,7 @@ def test_the_tiled_route_orders_the_plateau_note_before_the_floor_note_of_an_int
     from starfinder.dataset.tiled import _detection_statistics, _merged_detection
     fov = golden_dataset(tmp_path).fov("FOV_001")
     image = np.stack([plateau_mad_zero(np.uint8), FULL, FULL, FULL], axis=-1)
-    pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
+    pipeline = PipelineConfig(spot_finding=NOISE_CONFIG)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
@@ -455,7 +460,7 @@ def test_the_tiled_route_orders_the_plateau_note_before_the_floor_note_of_an_int
     emitted = noise_warnings(caught)
     assert len(emitted) == 2 and "'above_plateau'" in emitted[0] and "MAD floor" in emitted[1]
     assert all(m.startswith("spot finding: round 'round1', channel 'ch00': ") for m in emitted)
-    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
+    direct = detect(image, replace(NOISE_CONFIG, channel_labels=CHANNELS))[0]
     merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
     assert merged.diagnostics["warnings"] == tuple(emitted)
 
@@ -484,7 +489,7 @@ def test_a_float_plateau_above_the_minimum_takes_its_noise_from_the_voxels_above
     image = plateau_spots(dtype)
     at_plateau = VOXELS - PLATEAU_ZEROS - 1024
     assert np.count_nonzero(image == PLATEAU) == at_plateau and np.count_nonzero(image == 0) == PLATEAU_ZEROS
-    result, notes = detect(image, LocalMaximaConfig())  # the base refuses this channel: median 4, MAD 0
+    result, notes = detect(image, NOISE_CONFIG)  # the base refuses this channel: median 4, MAD 0
     record = result.diagnostics["noise"]["0"]
     threshold = NOISE_MEDIAN + 5.0 * 1.4826 * NOISE_MAD  # 70.152, from the voxels above 4 alone
     assert record["estimation"] == "above_plateau" and record["n_estimation"] == 1024
@@ -509,7 +514,7 @@ def test_a_plateau_channel_detects_the_spots_above_the_threshold_from_the_voxels
     for peak in ((3, 8, 8), (6, 20, 20)):
         assert image[peak] == PLATEAU
         image[peak] = 200
-    result, _ = detect(image, LocalMaximaConfig())
+    result, _ = detect(image, NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     assert (record["median"], record["mad"], record["n_estimation"]) == (41.0, 4.0, 1026)
     sample = image[image > PLATEAU].astype(np.float64)
@@ -525,7 +530,7 @@ def plateau_mad_zero(dtype):
 def test_an_integer_plateau_keeps_the_mad_floor_and_gains_above_plateau():
     # Base: median 4 and MAD 0 over every voxel, floored. Now the voxels above 4 (median 6, MAD 0), also floored.
     image = plateau_mad_zero(np.uint8)
-    result, notes = detect(image, LocalMaximaConfig())
+    result, notes = detect(image, NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     assert (record["estimation"], record["n_estimation"]) == ("above_plateau", 1024)
     assert (record["plateau_value"], record["median"], record["mad"], record["mad_floored"]) == (4.0, 6.0, 0.0, True)
@@ -542,7 +547,7 @@ def test_a_float_plateau_with_a_mad_of_zero_above_it_is_refused_naming_v_and_its
     fov.images["round1"] = image
     fov.metadata["round1"] = ImageMetadata("FOV_001/round1")
     with pytest.raises(spot_finding.SpotFindingError, match=r"^spot finding: round 'round1', channel 'ch01': ") as caught:
-        fov.find_spots(config=LocalMaximaConfig())
+        fov.find_spots(config=NOISE_CONFIG)
     message = str(caught.value)
     assert "estimation set 'above_plateau' (1024 voxels); 89.0% of its 10240 voxels are at the plateau value 4.0 " \
            "above its minimum 0.0, so threshold_mode 'noise' has no noise to scale" in message
@@ -556,7 +561,7 @@ def test_a_plateau_at_the_maximum_has_no_voxels_above_it_and_keeps_every_voxel()
     image = plateau_channel(np.full(1000, 3), plateau=7)
     assert np.count_nonzero(image == 7) > VOXELS // 2
     image[image == 3] = 7
-    result, notes = detect(image.astype(np.uint8), LocalMaximaConfig())
+    result, notes = detect(image.astype(np.uint8), NOISE_CONFIG)
     record = result.diagnostics["noise"]["0"]
     assert (record["estimation"], record["n_estimation"], record["median"], record["mad"]) == ("all", VOXELS, 7.0, 0.0)
     assert "plateau_value" not in record and not [n for n in notes if "above_plateau" in n]
@@ -568,13 +573,13 @@ def test_a_plateau_channel_in_the_tiled_statistics_and_the_merge(tmp_path):
     fov = golden_dataset(tmp_path).fov("FOV_001")
     image = np.stack([plateau_spots(np.float64), FULL.astype(np.float64), channel(NOISE).astype(np.float64),
                       FULL.astype(np.float64)], axis=-1)
-    pipeline = PipelineConfig(spot_finding=LocalMaximaConfig())
+    pipeline = PipelineConfig(spot_finding=NOISE_CONFIG)
     statistics = {"detection": _detection_statistics(fov, pipeline.spot_finding, image),
                   "reference_metadata": {"frame_id": "noise-estimation"}}
     records = statistics["detection"]["channels"]
     assert [r["estimation"] for r in records] == ["above_plateau", "all", "above_minimum", "all"]
     assert [("plateau_value" in r, "plateau_fraction" in r) for r in records] == [(True, True)] + [(False, False)] * 3
-    direct = detect(image, LocalMaximaConfig(channel_labels=CHANNELS))[0]
+    direct = detect(image, replace(NOISE_CONFIG, channel_labels=CHANNELS))[0]
     merged = _merged_detection(fov, pipeline, statistics, direct.diagnostics, direct.spots, records=[])
     assert merged.diagnostics["noise"] == direct.diagnostics["noise"]
     assert merged.diagnostics["noise"]["ch00"]["plateau_value"] == PLATEAU

@@ -41,6 +41,13 @@
    "type": "string",
    "minLength": 1
   },
+  "fov_list": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "minLength": 1
+  },
   "selected_fovs": {
    "type": [
     "array",

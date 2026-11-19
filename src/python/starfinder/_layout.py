@@ -200,9 +200,17 @@ def tile_config(output_root, sample) -> Path:
     return Path(output_root) / "output" / f"tile_config_{sample}.csv"
 
 
-def fovs_file(input_root) -> Path:
-    """``fovs.csv`` under the input root, the Python workflow's FOV membership (``sample,fov_id``)."""
-    return Path(input_root) / "fovs.csv"
+#: The workflow key naming the FOV list, a ``fovs.csv`` that may lie outside the input root, so that a raw dataset
+#: folder is read in place; absent or null, the FOV list is ``fovs.csv`` under the input root.
+FOV_LIST_KEY = "fov_list"
+FOVS_FILE = "fovs.csv"
+
+
+def fovs_file(input_root, fov_list=None) -> Path:
+    """The Python workflow's FOV list (``sample,fov_id``): ``fov_list``, absolute or relative to the input root, or
+    without it ``fovs.csv`` under the input root."""
+    path = Path(FOVS_FILE if fov_list is None else fov_list)
+    return path if path.is_absolute() else Path(input_root) / path
 
 
 #: The workflow's own folder under the output root (design/specs/orchestration.md, "Where the workflow files live"):

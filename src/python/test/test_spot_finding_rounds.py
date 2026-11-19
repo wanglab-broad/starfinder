@@ -33,7 +33,9 @@ GRID = ImageMetadata("multiround/grid")
 SITES = np.array([(z, y, x) for z in (4, 11) for y in range(7, 57, 7) for x in range(7, 57, 7)], dtype=float)
 N_SHARED, N_PER_ROUND = 5, 15
 # The starfish ISS tutorial values W-266 used for LoG; an example, not a default.
-METHODS = {"local_maxima": LocalMaximaConfig(),
+# The noise rule at 5.0, the default before W-880 (adaptive 0.2 since), which these tests were written for.
+NOISE = LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0)
+METHODS = {"local_maxima": NOISE,
            "starfish_log": StarfishLogConfig(min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.01)}
 
 
@@ -175,8 +177,8 @@ def test_multi_round_diagnostics_move_under_rounds(tmp_path):
 
 def test_a_plan_with_overrides_and_rounds(tmp_path):
     images, _ = multiround(102)
-    base = replace_labels(LocalMaximaConfig())
-    override = LocalMaximaConfig(threshold_value=8.0)
+    base = replace_labels(NOISE)
+    override = LocalMaximaConfig(threshold_mode="noise", threshold_value=8.0)
     plan = SpotFindingPlan(base, (ChannelOverride("ch01", override),), ROUNDS)
     fov = multiround_fov(tmp_path, images)
     fov.find_spots(config=plan)
@@ -272,7 +274,7 @@ def test_the_workflow_rounds_key_builds_a_plan():
     detection = from_workflow_config(workflow({"rounds": ["round1", "round3"]})).pipeline.spot_finding
     assert detection == SpotFindingPlan(LocalMaximaConfig(), rounds=("round1", "round3"))
     detection = from_workflow_config(workflow({"rounds": ["round2"], "channel_overrides": {
-        "ch01": {"threshold_value": 6.0}}})).pipeline.spot_finding
+        "ch01": {"threshold_value": 0.3}}})).pipeline.spot_finding
     assert detection.rounds == ("round2",) and detection.channel_overrides[0].channel == "ch01"
 
 

@@ -1,7 +1,7 @@
 """Per-channel diagnostics of the shared numerical policy (design/specs/preprocessing-algorithms.md)."""
 import numpy as np
 
-#: Sigma multiple of the default local-maxima noise threshold.
+#: Sigma multiple of the local-maxima noise threshold at the value of its former default (the default is adaptive since W-880).
 NOISE_SIGMA = 5
 
 
@@ -9,7 +9,7 @@ def channel_diagnostics(image):
     """Zero fraction, median, MAD, noise threshold and mad_zero per channel of a ZYX(C) image.
 
     The noise threshold is computed as local-maxima detection computes it in
-    noise mode with the default threshold_value (median + 5 * MAD * 1.4826),
+    noise mode with threshold_value 5 (median + 5 * MAD * 1.4826),
     in float64. Values are lists with one entry per channel.
     """
     channels = image[..., None] if image.ndim == 3 else image

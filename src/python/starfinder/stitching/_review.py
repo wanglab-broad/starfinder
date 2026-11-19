@@ -38,9 +38,14 @@ class ReviewPolicy:
     correction exceeds ``max_correction_fraction`` of the FOV's nominal overlap
     width in Y or X (the median over its registered pairs); when a kept link's
     residual exceeds ``max_residual_um`` (µm); or when the method removed a link
-    in its optimization. Both defaults (0.5 and 1.0 µm) are the contract's
-    proposals, tested at their boundary and not tuned. A supplied placement is
-    always ``required``, with the reason ``supplied_placement``.
+    in its optimization and the removals leave the placement less well
+    supported. Removals need no review when all four hold: the number of
+    components of the links before the removals equals that after them;
+    every FOV keeps 2 or more kept links, or all it had before the removals
+    if it had fewer; no kept link's residual exceeds ``max_residual_um``; no
+    correction exceeds the bound. Both defaults (0.5 and 1.0 µm) are the
+    contract's proposals, tested at their boundary and not tuned. A supplied
+    placement is always ``required``, with the reason ``supplied_placement``.
 
     Raises
     ------
@@ -61,6 +66,40 @@ class ReviewPolicy:
 
 def _flag_text(flags):
     return ";".join(f for f in FLAGS if f in flags)
+
+
+def _component_count(nodes, edges):
+    parent = {node: node for node in nodes}
+
+    def root(node):
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    for a, b in edges:
+        if a in parent and b in parent:
+            parent[root(a)] = root(b)
+    return len({root(node) for node in nodes})
+
+
+def _removal_checks(fovs, links, residual_fovs, above):
+    """The four conditions under which the optimizer's removals need no review, each True when it holds."""
+    removed = links["reason"] == "optimizer_removed"
+    before = links[links["kept"] | removed]
+    after = links[links["kept"]]
+    nodes = [fov for fov, component in zip(fovs["fov_id"], fovs["component"]) if component != -1]
+
+    def edges(frame):
+        return list(zip(frame["fov_a"], frame["fov_b"]))
+
+    def degree(frame, fov):
+        return int(((frame["fov_a"] == fov) | (frame["fov_b"] == fov)).sum())
+
+    return {"components_unchanged": _component_count(nodes, edges(before)) == _component_count(nodes, edges(after)),
+            "fovs_keep_links": all(degree(after, f) >= min(2, degree(before, f)) for f in fovs["fov_id"]),
+            "residuals_within_tolerance": not residual_fovs,
+            "corrections_within_bound": not above}
 
 
 def review_placement(result: PlacementResult, policy: ReviewPolicy = ReviewPolicy()) -> PlacementResult:
@@ -93,6 +132,17 @@ def review_placement(result: PlacementResult, policy: ReviewPolicy = ReviewPolic
     and ``optimizer_removed_link``, ``flagged`` the FOVs of each reason, and the
     approvals whose table SHA-256 still match. No status and no origin changes.
 
+    When the optimizer removed links, ``optimizer_removed_link`` is a reason
+    only if one of the four conditions of :class:`ReviewPolicy` fails, and the
+    review gains ``optimizer_removed``: ``{"links", "review_required",
+    "checks"}``, the removed pairs, whether they need review, and each
+    condition (``components_unchanged``, ``fovs_keep_links``,
+    ``residuals_within_tolerance``, ``corrections_within_bound``) with whether
+    it holds. "Before the removals" counts the kept links and those with the
+    reason ``optimizer_removed``; components count the FOVs whose
+    ``component`` is not −1. The removed links keep their rows and the FOVs
+    their flag ``optimizer_removed_link`` either way.
+
     A placement whose method is ``supplied`` keeps ``required`` with the reasons
     exactly ``[supplied_placement]`` and gains no flag, whatever its corrections:
     it has no kept link and no registered pair.
@@ -110,7 +160,7 @@ def review_placement(result: PlacementResult, policy: ReviewPolicy = ReviewPolic
     ids = list(fovs["fov_id"])
     flags = {fov: {f for f in value.split(";") if f and f not in REVIEW_FLAGS} for fov, value in
              zip(ids, fovs["flags"])}
-    flagged = {}
+    flagged, removal = {}, None
     if result.record["method"]["method"] == "supplied":
         reasons = [SUPPLIED_REASON]
     else:
@@ -141,6 +191,12 @@ def review_placement(result: PlacementResult, policy: ReviewPolicy = ReviewPolic
             "residual_above_tolerance": [f for f in ids if "residual_above_tolerance" in flags[f]],
             "optimizer_removed_link": [f for f in ids if "optimizer_removed_link" in flags[f]],
         }
+        if not removed.empty:
+            checks = _removal_checks(fovs, links, candidates["residual_above_tolerance"], above)
+            removal = {"links": [[a, b] for a, b in zip(removed["fov_a"], removed["fov_b"])],
+                       "review_required": not all(checks.values()), "checks": checks}
+            if not removal["review_required"]:
+                candidates["optimizer_removed_link"] = []
         reasons = [reason for reason in REASONS if candidates[reason]]
         flagged = {reason: candidates[reason] for reason in reasons}
     fovs = fovs.assign(flags=[_flag_text(flags[fov]) for fov in ids])
@@ -149,6 +205,8 @@ def review_placement(result: PlacementResult, policy: ReviewPolicy = ReviewPolic
                  == hashes] if isinstance(result.record.get("review"), dict) else []
     review = {"state": "required" if reasons else "not_needed", "reasons": reasons, "policy": asdict(policy),
               "flagged": flagged, "approvals": approvals}
+    if removal is not None:
+        review["optimizer_removed"] = removal
     return replace(result, fovs=fovs, record=dict(result.record, review=review))
 
 
