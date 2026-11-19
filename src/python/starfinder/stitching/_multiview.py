@@ -24,6 +24,13 @@ PAIRWISE = ("phase_correlation",)
 PRUNING = ("alternating_pattern", None)
 GROUPWISE = ("global_optimization",)
 _NOMINAL = "nominal"
+# The link-quality threshold estimated from the data (quality_threshold "auto"; W-874, Jiahao, 2026-11-18):
+# max(QUALITY_FLOOR, the NULL_QUANTILE quantile of the qualities at deliberately wrong offsets).
+AUTO = "auto"
+QUALITY_FLOOR = 0.2
+NULL_QUANTILE = 0.99
+# The fraction of the moving overlap that must stay valid after a shift, the library's (phase_correlation_registration).
+_MIN_VALID_FRACTION = 0.1
 
 
 def _integer(value, name, low=1):
@@ -51,8 +58,10 @@ class MultiviewStitcherConfig:
     upsample_factor : int or None
         Positive subpixel upsampling factor for phase correlation.
         ``None`` uses the library default: 10 in 2D and 2 in 3D.
-    quality_threshold : float
-        Lower Spearman-correlation quality threshold for keeping a registered link.
+    quality_threshold : float or str
+        Lower Spearman-correlation quality threshold for keeping a registered link: a number in
+        [−1, 1], or ``"auto"`` (the default) for the threshold estimated from the data, the larger
+        of 0.2 and the 99th percentile of the qualities at deliberately wrong offsets.
     drop_nan_quality : bool
         Drop registered links whose quality is NaN.
     pruning : str or None
@@ -89,6 +98,21 @@ class MultiviewStitcherConfig:
     the voxel diagonal in µm). ``overlap_tolerance_um`` grows the boxes of the
     neighbour derivation and of the library's overlap regions. CPU only.
 
+    The threshold ``"auto"`` is estimated from the data. For each registered
+    pair, the pair's quality is also measured at two deliberately wrong
+    offsets: the registered shift moved by half the overlap's width, in binned
+    voxels rounded down, both ways along the overlap axis (the narrower of Y
+    and X in the binned overlap). Where the moved overlap keeps less than a
+    tenth of its voxels, or its quality is NaN, there is no value. These
+    qualities are a null distribution, where no tissue lines up, and the
+    threshold is ``max(0.2, q99)``, ``q99`` being their 99th percentile
+    (NumPy's linear quantile); without any null value it is 0.2. The
+    record's ``method_diagnostics["link_quality"]`` holds the chosen
+    threshold, the floor, the quantile, the null's summary and each pair's
+    two null values. A number is used as it is, no null is measured, and the
+    record gains no ``link_quality`` entry. The global optimization's outlier
+    removal (``abs_tol_um``, ``rel_tol``) stays the second line.
+
     Memory: each tile of a registered pair is read once (a ``TileLoader``
     input is called then), binned by ``binning_zyx`` and released, so a run
     from loaders, as ``Dataset.stitch`` passes them, holds at most one
@@ -103,7 +127,7 @@ class MultiviewStitcherConfig:
     ValueError
         A field outside the rules of design/specs/stitching-algorithms.md: a binning
         that is not three integers ≥ 1, an ``upsample_factor`` below 1, a
-        ``quality_threshold`` outside [−1, 1], a negative
+        ``quality_threshold`` that is neither ``"auto"`` nor a number in [−1, 1], a negative
         ``overlap_tolerance_um``, a ``pairwise``, ``pruning`` or ``groupwise``
         value the table does not list, a non-positive tolerance or an
         iteration count below 1.
@@ -115,7 +139,7 @@ class MultiviewStitcherConfig:
     binning_zyx: tuple[int, int, int] = (4, 4, 4)
     pairwise: str = "phase_correlation"
     upsample_factor: int | None = None
-    quality_threshold: float = 0.7
+    quality_threshold: float | str = AUTO
     drop_nan_quality: bool = True
     pruning: str | None = "alternating_pattern"
     overlap_tolerance_um: float = 0.0
@@ -136,9 +160,14 @@ class MultiviewStitcherConfig:
             raise ValueError(f"pairwise must be one of {list(PAIRWISE)}; got {self.pairwise!r}")
         if self.upsample_factor is not None:
             _integer(self.upsample_factor, "upsample_factor")
-        _number(self.quality_threshold, "quality_threshold")
-        if not -1.0 <= self.quality_threshold <= 1.0:
-            raise ValueError(f"quality_threshold must be in [-1, 1]; got {self.quality_threshold!r}")
+        if not (isinstance(self.quality_threshold, str) and self.quality_threshold == AUTO):
+            if isinstance(self.quality_threshold, str):
+                raise ValueError(f"quality_threshold must be 'auto' or a number in [-1, 1]; "
+                                 f"got {self.quality_threshold!r}")
+            _number(self.quality_threshold, "quality_threshold")
+            if not -1.0 <= self.quality_threshold <= 1.0:
+                raise ValueError(f"quality_threshold must be 'auto' or a number in [-1, 1]; "
+                                 f"got {self.quality_threshold!r}")
         if not isinstance(self.drop_nan_quality, (bool, np.bool_)):
             raise TypeError("drop_nan_quality must be Boolean")
         if self.pruning not in PRUNING:
@@ -257,7 +286,96 @@ def _binned_msim(tile, plane, binning, geometry):
     return _msim(sim)
 
 
-def _pairwise_registrations(msims, binned, graph, config):
+def _quality_at(fixed, moving, shift):
+    """The link quality of ``moving`` shifted by ``shift`` (voxels) against ``fixed``, as the library measures it.
+
+    The steps of the library's ``phase_correlation_registration`` for one candidate shift: each overlap
+    rescaled to [0, 1] over its own finite range, ``moving`` resampled at ``x + shift`` (linear, NaN outside),
+    and the Spearman correlation over the voxels valid in both. NaN where less than a tenth of the moving
+    overlap's valid voxels stays (the library's −1), or where the correlation is undefined (a constant side).
+    """
+    from scipy import ndimage, stats
+    from skimage.exposure import rescale_intensity
+    im0, im1 = (rescale_intensity(np.asarray(image), in_range=(np.nanmin(image), np.nanmax(image)), out_range=(0, 1))
+                for image in (fixed, moving))
+    ndim = im0.ndim
+    matrix = np.eye(ndim + 1)
+    matrix[:ndim, ndim] = shift
+    moved = ndimage.affine_transform(im1, matrix, order=1, mode="constant", cval=np.nan)
+    mask = ~np.isnan(moved) & ~np.isnan(im0)
+    if not mask.any() or float(mask.sum()) / np.sum(~np.isnan(im1)) < _MIN_VALID_FRACTION:
+        return math.nan
+    a, b = im0[mask], moved[mask] - 1
+    if np.all(a == a[0]) or np.all(b == b[0]):
+        return math.nan
+    return float(stats.spearmanr(a, b).correlation)
+
+
+def _null_offsets(shape, shift):
+    """The two deliberately wrong shifts of a registered pair: ``shift`` ± half the overlap width (voxels,
+    rounded down, at least 1) along the overlap axis, the narrower of the last two axes (Y and X)."""
+    shift = np.asarray(shift, dtype=np.float64)
+    axis = len(shape) - 2 + int(np.argmin(shape[-2:]))
+    step = np.zeros(len(shape))
+    step[axis] = max(1, shape[axis] // 2)
+    return shift - step, shift + step
+
+
+def _null_qualities(fixed, moving, shift):
+    """The pair's qualities at :func:`_null_offsets`, in that order (NaN where there is none)."""
+    return [_quality_at(fixed, moving, offset) for offset in _null_offsets(np.shape(fixed), shift)]
+
+
+def _recording(null):
+    """The library's phase correlation, which also appends the pair's :func:`_null_qualities` to ``null``."""
+    from multiview_stitcher import registration
+
+    def pairwise(fixed_data, moving_data, **kwargs):
+        result = registration.phase_correlation_registration(fixed_data, moving_data, **kwargs)
+        if isinstance(result, dict):
+            ndim = np.ndim(fixed_data)
+            shift = np.asarray(result["affine_matrix"], dtype=np.float64)[:ndim, ndim]
+            null.extend(_null_qualities(np.asarray(fixed_data.data), np.asarray(moving_data.data), shift))
+        return result
+
+    return pairwise
+
+
+def _null_executor(nulls):
+    """A ``pairwise_executor`` for the library: each edge registered on its own, as the library's default path
+    registers it, by a :func:`_recording` function of its own, whose null qualities go to ``nulls[edge]``."""
+    from dask import compute
+    from multiview_stitcher import registration
+
+    def execute(msims, edges, register_kwargs):
+        params = []
+        for edge in edges:
+            kwargs = dict(register_kwargs, pairwise_reg_func=_recording(nulls.setdefault(edge, [])),
+                          pairwise_reg_func_kwargs=dict(register_kwargs.get("pairwise_reg_func_kwargs") or {}))
+            params.append(compute(registration.register_pair_of_msims_over_time(
+                msims[edge[0]], msims[edge[1]], **kwargs))[0])
+        return params
+
+    return execute
+
+
+def _auto_threshold(nulls, registered, fov_pairs):
+    """The threshold of ``"auto"`` and the record of its null (``method_diagnostics["link_quality"]``)."""
+    per_pair = [[*fov_pairs([e])[0], *[None if math.isnan(q) else q for q in nulls.get(e, [])]] for e in registered]
+    values = np.array([q for e in registered for q in nulls.get(e, []) if math.isfinite(q)], dtype=np.float64)
+    quantile = float(np.quantile(values, NULL_QUANTILE)) if values.size else None
+    threshold = QUALITY_FLOOR if quantile is None else max(QUALITY_FLOOR, quantile)
+    summary = {"pairs": sum(any(math.isfinite(q) for q in nulls.get(e, [])) for e in registered),
+               "values": int(values.size)}
+    if values.size:
+        summary.update(min=float(values.min()), median=float(np.median(values)), quantile=quantile,
+                       max=float(values.max()))
+    return threshold, {"mode": AUTO, "threshold": threshold, "floor": QUALITY_FLOOR, "quantile": NULL_QUANTILE,
+                       "offsets": "the registered shift ± half the overlap width along the overlap axis",
+                       "null": summary, "null_pairs": per_pair}
+
+
+def _pairwise_registrations(msims, binned, graph, config, nulls=None):
     """The library's pairwise registrations of ``graph``'s edges on the binned images (binning 1), each link's
     ``bbox`` taken from the full-resolution geometry.
 
@@ -266,14 +384,18 @@ def _pairwise_registrations(msims, binned, graph, config):
     recomputed with the function the library calls for it, ``registration._get_overlap_bboxes``, on the
     full-resolution images ``msims`` (geometry only), with the library's arguments, so that the links, and so the
     placement, are those of the library binning each pair itself. The private function is pinned by a test.
+
+    With ``nulls`` (a dict), each edge is registered through :func:`_null_executor`, which fills ``nulls[edge]``
+    with its null qualities; the registrations are the same.
     """
     from multiview_stitcher import msi_utils, registration
     dims = msi_utils.get_spatial_dims(msims[0])
     kwargs = {} if config.upsample_factor is None else {"upsample_factor": config.upsample_factor}
+    executor = {} if nulls is None else {"pairwise_executor": _null_executor(nulls)}
     computed = registration.compute_pairwise_registrations(
         binned, graph, transform_key=_NOMINAL, registration_binning={d: 1 for d in dims},
         overlap_tolerance=config.overlap_tolerance_um, pairwise_reg_func=registration.phase_correlation_registration,
-        pairwise_reg_func_kwargs=kwargs)
+        pairwise_reg_func_kwargs=kwargs, **executor)
     # register_pair_of_msims turns a number into one tolerance per spatial axis.
     tolerance = {d: float(config.overlap_tolerance_um) for d in dims}
     for edge in computed.edges:
@@ -307,8 +429,13 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
        the library's own binning of each pair bit for bit. The link's shift
        (µm, of ``fov_b`` against ``fov_a``, view to common frame) is the
        negated translation of the library's fixed-to-moving transform, and its
-       quality the library's.
-    5. Link rule L1: quality below ``quality_threshold`` gives ``kept`` false
+       quality the library's. With ``quality_threshold`` ``"auto"`` each pair
+       is registered on its own (the library's ``pairwise_executor``), with
+       the same result, and its two null qualities are measured on the
+       library's own overlap arrays; the threshold is ``max(0.2, q99)`` of
+       them (``MultiviewStitcherConfig``), recorded in the diagnostics'
+       ``link_quality``.
+    5. Link rule L1: quality below the threshold gives ``kept`` false
        with ``quality_below_threshold``; NaN quality with ``drop_nan_quality``
        gives ``nan_quality``.
     6. The library's global optimization (translation) on the kept links; a
@@ -321,8 +448,8 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
 
     The diagnostics hold the outcome, the registration dimensions, the
     library's overlap pairs (and, as table rows, any outside the neighbour
-    pairs, which are dropped), the pruned and the optimizer-removed pairs, and
-    the edge residuals (µm).
+    pairs, which are dropped), the pruned and the optimizer-removed pairs, the
+    edge residuals (µm) and, with ``"auto"``, ``link_quality``.
     """
     from multiview_stitcher import mv_graph, param_resolution
     from multiview_stitcher import spatial_image_utils as si_utils
@@ -383,7 +510,12 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
     needed = {k for e in registered for k in e}
     binned = [_binned_msim(tiles[i], plane, binning, geometries[k]) if k in needed else msims[k]
               for k, i in enumerate(present)]
-    computed = _pairwise_registrations(msims, binned, pruned_graph, config)
+    auto = isinstance(config.quality_threshold, str)
+    nulls = {} if auto else None
+    computed = _pairwise_registrations(msims, binned, pruned_graph, config, nulls)
+    threshold = config.quality_threshold
+    if auto:
+        threshold, diagnostics["link_quality"] = _auto_threshold(nulls, registered, fov_pairs)
 
     quality, shift, reasons = {}, {}, {}
     for e in registered:
@@ -394,7 +526,7 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
         if math.isnan(quality[e]):
             reasons[e] = "nan_quality" if config.drop_nan_quality else ""
         else:
-            reasons[e] = "quality_below_threshold" if quality[e] < config.quality_threshold else ""
+            reasons[e] = "quality_below_threshold" if quality[e] < threshold else ""
     kept = computed.copy()
     kept.remove_edges_from([e for e in registered if reasons[e]])
 

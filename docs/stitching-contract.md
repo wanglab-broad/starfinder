@@ -102,15 +102,40 @@ placement folder, conventionally `stitching/<sample>/`; a BigStitcher import als
 saves `view_map.csv`. `load_placement` reads the folder. The
 {doc}`reference <stitching-algorithms>` lists the columns and workflow keys.
 
+### Reading `links.csv`
+
+Each row is one pair of overlapping FOVs. `kept` is true when the link was used for
+placement; otherwise `reason` says why it was not:
+
+* `pruned`: the pair was not registered (only some pairs are, to save time); its shift and
+  quality are empty.
+* `quality_below_threshold`: the pair was registered, but its `quality`, the rank correlation
+  of the two overlaps after the shift, is below the threshold.
+* `nan_quality`: one overlap is constant, so the quality is undefined.
+* `optimizer_removed`: the link passed the threshold, but the global optimization dropped it
+  because it disagreed with the other links.
+
+`residual` (µm) is the disagreement between a kept link's shift and the final positions. With
+the default threshold, `placement.json` holds the threshold and the qualities at wrong offsets
+under `method_diagnostics.link_quality`. Links the optimizer removed stay in the table, and
+their FOVs carry the flag `optimizer_removed_link`. They make the review `required` only when
+the removals leave the placement less well supported: a component splits, a FOV keeps fewer
+than 2 links (and fewer than it had), or a residual or correction check fails.
+`record["review"]["optimizer_removed"]` lists the removed links and each condition.
+
 ## Main options
 
 * `input` on `Dataset.stitch`: choose the saved image used for placement.
 * `stage_axes` on `positions_from_leica`: map the acquisition axes to image axes;
   `snap_to_grid` requests a regular layout.
 * `binning_zyx` on `MultiviewStitcherConfig`: choose the image scale used to register
-  overlaps; `quality_threshold` controls link filtering. From loaders, the method
-  keeps only the binned tiles and holds at most one full-resolution tile at a time;
-  with `binning_zyx=(1, 1, 1)` it keeps every tile at full resolution.
+  overlaps. From loaders, the method keeps only the binned tiles and holds at most one
+  full-resolution tile at a time; with `binning_zyx=(1, 1, 1)` it keeps every tile at
+  full resolution.
+* `quality_threshold` on `MultiviewStitcherConfig`: the lowest link quality kept. The
+  default, `"auto"`, estimates it from the sample (the
+  {ref}`reference <stitching-link-threshold>` gives the rule); a number from −1 to 1
+  overrides it.
 * `review`: choose the `ReviewPolicy` used to flag a placement for inspection.
 * `fallback`: request nominal positions when image placement cannot connect a FOV.
 

@@ -167,7 +167,13 @@ One call per sample. Steps, as the parity runs ran them (their notes, sections 3
 4. **Link quality.** The Spearman rank correlation of the overlaps after the shift; NaN
    for a constant overlap (the link then gets the identity).
 5. **Link filter (L1).** The library's filter at `quality_threshold`, plus dropping NaN
-   links, which the library keeps.
+   links, which the library keeps. With `"auto"` (the default since W-874) the threshold is
+   `max(0.2, q99)`, `q99` the 99th percentile (NumPy's linear quantile) of the null qualities:
+   each registered pair's quality, measured as the library measures it, at its registered
+   shift moved by ⌊w / 2⌋ binned voxels both ways along the overlap axis (the narrower of Y
+   and X, `w` its width in the binned overlap); a moved overlap keeping less than a tenth of
+   its voxels, or of NaN quality, gives no value. Each pair is then registered on its own
+   through the library's `pairwise_executor`, with the same result.
 6. **Global optimization.** Per component, one reference view fixed; translations solved
    from virtual bead pairs at the overlap corners; while the largest residual exceeds
    `abs_tol`, the link with the largest `(1 − q)² · √residual · log10(degree)` whose
@@ -186,7 +192,7 @@ One call per sample. Steps, as the parity runs ran them (their notes, sections 3
 | `binning_zyx` | voxels | `(4, 4, 4)` | integers ≥ 1; ignored for z on Z=1 |
 | `pairwise` | | `"phase_correlation"` | the only value in the accepted design |
 | `upsample_factor` | | `None` (library default) | integer ≥ 1 |
-| `quality_threshold` | | `0.7` | in [−1, 1] |
+| `quality_threshold` | | `"auto"` (0.7 before W-874) | `"auto"` or a number in [−1, 1] |
 | `drop_nan_quality` | | `True` | |
 | `pruning` | | `"alternating_pattern"` | or `None` (register every pair) |
 | `overlap_tolerance_um` | µm | `0.0` | ≥ 0 |
@@ -354,7 +360,7 @@ the record and cost nothing measurable.
 | Correction bound | `|correction_y| > f × w_y` or `|correction_x| > f × w_x`, with `w` the median nominal overlap width of the FOV's pairs in that axis | `max_correction_fraction` (–, 0.5) | flag `correction_above_bound`; review required |
 | Link residual | `‖(origin_b − origin_a) − (nominal_b − nominal_a) − shift_ab‖ > r` for a kept link | `max_residual_um` (µm, 1.0) | flag `residual_above_tolerance` on both FOVs; review required |
 | NaN-quality links | quality NaN | – | dropped under L1; flag `nan_quality_link` |
-| Optimizer-removed links | reported by the method | – | flag `optimizer_removed_link`; review required |
+| Optimizer-removed links | reported by the method | – | flag `optimizer_removed_link`; review required unless the components are unchanged, every FOV keeps 2 or more kept links (or all it had), and the residual and correction checks pass (W-874) |
 
 For scale (the parity runs' notes, section 5): LN corrections from the grid start reach 33.9 px in x
 and 44.5 px in y, below half the 149.6 px overlap (74.8 px); from the stage start they

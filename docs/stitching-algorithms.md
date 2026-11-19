@@ -29,6 +29,29 @@ full-resolution geometry with the library's private `registration._get_overlap_b
 A test pins that function. The links and translations are therefore those of the
 library binning each pair itself, bit for bit.
 
+(stitching-link-threshold)=
+#### The link-quality threshold
+
+With `quality_threshold="auto"`, the default, the threshold comes from the sample. For each
+registered pair the method also measures the quality at two deliberately wrong offsets: the
+registered shift moved by half the overlap's width, in binned voxels rounded down, both ways
+along the overlap axis (the narrower of Y and X). There no tissue lines up, so these qualities
+are a null distribution. The threshold is the larger of 0.2 and the null's 99th percentile, or
+0.2 when there is no null value. A link is kept when its quality is at least the threshold and
+not NaN. A number replaces the rule and no null is measured. The global optimization then
+removes links that disagree with the rest, as before.
+
+`placement.json` records the outcome under `method_diagnostics.link_quality`:
+
+| Key | Contents |
+| --- | --- |
+| `mode` | `auto` |
+| `threshold` | The threshold used |
+| `floor`, `quantile` | 0.2 and 0.99 |
+| `offsets` | How the wrong offsets were chosen |
+| `null` | `pairs` and `values` counted, and `min`, `median`, `quantile` (the 99th percentile) and `max` when there are values |
+| `null_pairs` | Per registered pair: `fov_a`, `fov_b` and its two null qualities (`null` where there is none) |
+
 ```{config-options} starfinder.stitching.MultiviewStitcherConfig
 ```
 
@@ -49,6 +72,13 @@ Review and position-conversion settings. See
 
 ```{config-options} starfinder.stitching.ReviewPolicy
 ```
+
+Links removed by the optimizer need review only when a condition fails: the components
+before the removals equal those after, every FOV keeps 2 or more kept links (or all it
+had), and the residual and correction checks pass. When there are removals,
+`record["review"]["optimizer_removed"]` holds `links` (the removed pairs),
+`review_required` and `checks`, each of `components_unchanged`, `fovs_keep_links`,
+`residuals_within_tolerance` and `corrections_within_bound` with whether it holds.
 
 ```{config-options} starfinder.stitching.StageAxisMapping
 ```

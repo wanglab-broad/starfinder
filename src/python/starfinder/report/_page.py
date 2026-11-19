@@ -57,6 +57,12 @@ SECTIONS = (
     ("sample", "Sample measurements", ("b-per-cell", "b-markers", "b-mecr", "b-reads-z")),
     ("files", "Files", ("b-files-input", "b-files-configuration", "b-files-output")),
 )
+#: The text of each condition under which the optimizer's link removals need no review (``ReviewPolicy``), shown
+#: when it fails.
+_REMOVAL_CHECKS = {"components_unchanged": "the removals split a component",
+                   "fovs_keep_links": "a FOV keeps fewer than 2 links and fewer than it had",
+                   "residuals_within_tolerance": "a kept link's residual is above the tolerance",
+                   "corrections_within_bound": "a correction is above the bound"}
 #: The size budget of the page (SB1): 6 MiB + 16 KiB per FOV + 3 MiB per marker figure.
 KIB, MIB = 1024, 1024 * 1024
 _SLOT = re.compile(r"<!--slot:([a-z_]+)-->")
@@ -632,7 +638,7 @@ class _Page:
         rows = self.parts("assembly.examples")
         examples = self._figure_or_rows(f.segmentation, "segmentation", "Segmentation examples", rows, "3/1")
         return {"cells_map": self._map(("m-cells", "lg-cells")),
-                "placement": self.review() + self._map(("m-place", "lg-place")),
+                "placement": self.review() + self.links() + self._map(("m-place", "lg-place")),
                 "seg_examples": examples, "population": '<div id="t-population"></div>'}
 
     def review(self) -> str:
@@ -653,6 +659,39 @@ class _Page:
                 ("Approvals", "<br>".join(f"{_e(a.get('reviewer'))}, {_e(a.get('time_utc'))}: {_e(a.get('note'))}"
                                           for a in approvals) or none)]
         return f'<div id="place-review">{self._table(rows)}</div>'
+
+    def links(self) -> str:
+        """The placement's links (``placement.json``): the link-quality threshold estimated from the data and its
+        null, and the links the optimizer removed with whether they need review. Shown when the placement holds
+        either (``method_diagnostics["link_quality"]``, ``review["optimizer_removed"]``); otherwise nothing."""
+        placement = self.c.placement or {}
+        diagnostics = placement.get("method_diagnostics") if isinstance(placement.get("method_diagnostics"),
+                                                                         dict) else {}
+        quality = diagnostics.get("link_quality")
+        review = placement.get("review") if isinstance(placement.get("review"), dict) else {}
+        removal = review.get("optimizer_removed")
+        rows = []
+        if isinstance(quality, dict):
+            null = quality.get("null") if isinstance(quality.get("null"), dict) else {}
+            rows.append(("Link-quality threshold",
+                         f"{_number(quality.get('threshold'))}: the larger of {_number(quality.get('floor'))} and "
+                         f"percentile {_number(100 * quality.get('quantile'))} of the null"))
+            values = (f"{_int(null.get('values'))} values from {_int(null.get('pairs'))} pairs, "
+                      f"each pair at {_e(quality.get('offsets'))}")
+            if null.get("values"):
+                values += (f"<br>min {_number(null.get('min'))}, median {_number(null.get('median'))}, "
+                           f"percentile {_number(100 * quality.get('quantile'))} {_number(null.get('quantile'))}, "
+                           f"max {_number(null.get('max'))}")
+            rows.append(("Null (quality at wrong offsets)", values))
+        if isinstance(removal, dict):
+            pairs = ", ".join(f"{_e(a)}–{_e(b)}" for a, b in removal.get("links") or [])
+            checks = removal.get("checks") if isinstance(removal.get("checks"), dict) else {}
+            failed = [_REMOVAL_CHECKS.get(k, k) for k, held in checks.items() if not held]
+            state = (f"review required: {_e('; '.join(failed))}" if removal.get("review_required") else
+                     "no review needed: the components are unchanged, every FOV keeps 2 or more links (or all it "
+                     "had), and residuals and corrections are within the policy")
+            rows.append(("Removed by the optimizer", f"{pairs}<br>{state}"))
+        return f'<div id="place-links">{self._table(rows)}</div>' if rows else ""
 
     # Sample measurements ----------------------------------------------------------------------------------------------
 

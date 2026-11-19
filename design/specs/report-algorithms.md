@@ -1053,6 +1053,14 @@ the residual map uses arrows and colour as below.
    export, or with a review that is not needed, is as before. `report.json` gains no key.
 
    % Amended 2026-11-05 for W-814: the review of a placement on the page (Jiahao's decision at W-653, 2026-11-04, D9).
+   Beside it, whatever the export, when `placement.json` holds `method_diagnostics.link_quality` or
+   `review.optimizer_removed` (W-874), a table of the links: **Link-quality threshold**, the
+   threshold estimated from the data, its floor and quantile; **Null (quality at wrong offsets)**,
+   the number of values and pairs, the offsets, and the null's minimum, median, quantile and
+   maximum; **Removed by the optimizer**, the removed pairs and whether they need review, with
+   the conditions that fail. Otherwise there is no table. `report.json` gains no key.
+
+   % Amended 2026-11-18 for W-874: the link-quality threshold and the optimizer removals on the page.
 2. **Example FOVs** (one static JPEG of three tiles, `example_1` to `example_3`, each titled
    with its FOV and role). The route's preview ("How the two routes differ"): the
    background in grey with its own range, the cell outlines in cyan (`#22d3ee`) and the

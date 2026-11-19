@@ -374,7 +374,7 @@ def test_correction_bound_boundary(stub, axis, fovs, bound):
         assert set(frame.status) == {"image_supported"}
 
 
-def test_residual_boundary_and_optimizer_removed_links(stub):
+def test_residual_boundary_and_pruned_links(stub):
     table = stub_table()
     grids = grids_for(table)
     for value, flagged in ((1.0, False), (1.0 + TINY, True)):
@@ -384,18 +384,106 @@ def test_residual_boundary_and_optimizer_removed_links(stub):
         marked = [f for f, text in zip(result.fovs.fov_id, result.fovs["flags"]) if "residual_above_tolerance" in text]
         assert marked == (["FOV0", "FOV1"] if flagged else [])
         assert result.record["review"]["reasons"] == (["residual_above_tolerance"] if flagged else [])
-    removed = run(table, grids, zero(6), overrides=(("FOV0", "FOV1", 0.9, False, "optimizer_removed",
-                                                     (0.0, 0.0, 0.0)),))
-    marked = [f for f, text in zip(removed.fovs.fov_id, removed.fovs["flags"]) if text == "optimizer_removed_link"]
-    assert marked == ["FOV0", "FOV1"] and set(removed.fovs.status) == {"image_supported"}
-    assert removed.record["review"]["state"] == "required"
-    assert removed.record["review"]["reasons"] == ["optimizer_removed_link"]
-    assert np.isnan(removed.links.residual[0])
     pruned = run(table, grids, zero(6), overrides=(("FOV0", "FOV1", 0.9, None, "", (0.0, 0.0, 0.0)),))
     first = pruned.links.iloc[0]
     assert (first.fov_a, first.fov_b, first.kept, first.reason) == ("FOV0", "FOV1", False, "pruned")
     assert np.isnan(first.quality) and np.isnan(first.shift_x)
     assert pruned.record["review"]["state"] == "not_needed"
+
+
+# --- Optimizer removals under the review policy (W-874) -------------------------------------------
+# The 2 × 3 stub grid (column major, down then right) with its diagonals: 11 pairs; FOV0, FOV1, FOV4 and
+# FOV5 have 3 links each, FOV2 and FOV3 have 5.
+CHECKS = ("components_unchanged", "fovs_keep_links", "residuals_within_tolerance", "corrections_within_bound")
+
+
+def removed(pairs):
+    return tuple((a, b, 0.9, False, "optimizer_removed", (0.0, 0.0, 0.0)) for a, b in pairs)
+
+
+def check_removal(result, pairs, failed):
+    """The removed links keep their rows and flags; ``failed`` names the conditions that do not hold."""
+    links = result.links.set_index(["fov_a", "fov_b"])
+    for pair in pairs:
+        assert links.loc[pair, "reason"] == "optimizer_removed" and not links.loc[pair, "kept"]
+        assert np.isnan(links.loc[pair, "residual"])
+    flagged = {f for f, text in zip(result.fovs.fov_id, result.fovs["flags"]) if "optimizer_removed_link" in text}
+    assert flagged == {f for pair in pairs for f in pair}
+    review = result.record["review"]
+    assert review["optimizer_removed"] == {"links": [list(p) for p in pairs], "review_required": bool(failed),
+                                           "checks": {c: c not in failed for c in CHECKS}}
+    assert ("optimizer_removed_link" in review["reasons"]) == bool(failed)
+    if failed:
+        assert review["flagged"]["optimizer_removed_link"] == sorted(flagged, key=result.fovs.fov_id.tolist().index)
+
+
+def test_a_removal_that_leaves_the_placement_supported_needs_no_review(stub):
+    table = stub_table()
+    pairs = [("FOV0", "FOV1")]   # FOV0 and FOV1 keep 2 links each
+    result = run(table, grids_for(table), zero(6), overrides=removed(pairs))
+    check_removal(result, pairs, failed=())
+    assert set(result.fovs.status) == {"image_supported"}
+    assert result.record["review"]["state"] == "not_needed" and result.record["review"]["reasons"] == []
+
+
+def test_a_fov_left_with_one_link_holds_the_placement(stub):
+    table = stub_table()
+    pairs = [("FOV0", "FOV1"), ("FOV0", "FOV2")]   # FOV0 keeps 1 of its 3 links
+    result = run(table, grids_for(table), zero(6), overrides=removed(pairs))
+    check_removal(result, pairs, failed=("fovs_keep_links",))
+    assert set(result.fovs.status) == {"image_supported"}
+    assert result.record["review"]["state"] == "required"
+    assert result.record["review"]["reasons"] == ["optimizer_removed_link"]
+
+
+def test_a_fov_that_had_one_link_and_keeps_it_needs_no_review(stub):
+    table = stub_table()
+    # FOV0 has one link after rule L1 (FOV0–FOV1) and keeps it; FOV2 and FOV3 keep 3 of their 4.
+    pairs = [("FOV2", "FOV3")]
+    overrides = dropped([("FOV0", "FOV2"), ("FOV0", "FOV3")]) + removed(pairs)
+    result = run(table, grids_for(table), zero(6), overrides=overrides)
+    assert result.fovs.set_index("fov_id").loc["FOV0", "n_links_kept"] == 1
+    check_removal(result, pairs, failed=())
+    assert result.record["review"]["state"] == "not_needed"
+
+
+def test_a_removal_that_splits_a_component_holds_the_placement(stub):
+    table = stub_table([f"FOV{k}" for k in range(8)], columns=4, rows=2)
+    # Every link between grid columns 1 and 2: two 2 × 2 blocks, each FOV keeping its 3 links inside its block.
+    pairs = [("FOV2", "FOV4"), ("FOV2", "FOV5"), ("FOV3", "FOV4"), ("FOV3", "FOV5")]
+    result = run(table, grids_for(table), zero(8), overrides=removed(pairs))
+    assert list(result.fovs.component) == [0, 0, 0, 0, 1, 1, 1, 1]
+    check_removal(result, pairs, failed=("components_unchanged",))
+    assert result.record["review"]["reasons"] == ["unplaced_fovs", "optimizer_removed_link"]
+
+
+@pytest.mark.parametrize("value, flagged", [(1.0, False), (1.0 + TINY, True)])
+def test_a_removal_with_a_residual_above_the_tolerance_holds_the_placement(stub, value, flagged):
+    table = stub_table()
+    pairs = [("FOV0", "FOV1")]
+    overrides = removed(pairs) + (("FOV2", "FOV3", 0.9, True, "", (0.0, 0.0, value)),)
+    result = run(table, grids_for(table), zero(6), overrides=overrides)
+    check_removal(result, pairs, failed=("residuals_within_tolerance",) if flagged else ())
+    assert result.record["review"]["reasons"] == (["residual_above_tolerance", "optimizer_removed_link"] if flagged
+                                                  else [])
+
+
+@pytest.mark.parametrize("value, flagged", [(0.75, False), (0.75 + TINY, True)])
+def test_a_removal_with_a_correction_above_the_bound_holds_the_placement(stub, value, flagged):
+    table = stub_table()
+    pairs = [("FOV2", "FOV3")]
+    translations = np.zeros((6, 3))
+    translations[0, 2], translations[5, 2] = value, -value
+    result = run(table, grids_for(table), translations, overrides=removed(pairs))
+    check_removal(result, pairs, failed=("corrections_within_bound",) if flagged else ())
+    assert result.record["review"]["reasons"] == (["correction_above_bound", "optimizer_removed_link"] if flagged
+                                                  else [])
+
+
+def test_a_placement_without_removals_gains_no_removal_record(stub):
+    table = stub_table()
+    result = run(table, grids_for(table), FRACTIONAL)
+    assert set(result.record["review"]) == {"state", "reasons", "policy", "flagged", "approvals"}
 
 
 def test_approval_records_the_tables_and_changes_no_origin(stub, tmp_path):
