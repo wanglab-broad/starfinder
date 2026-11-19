@@ -33,7 +33,7 @@ changes what a task does.
 | 4 | The export was held for review: its placement needs review and `approvals.json` holds no approval of its tables; it failed as 1 does, its failed record says `held`, and it wrote the held page `workflow/held/<sample>/<route>.html` and no report ({ref}`the route <workflow-placement-review>`) | Retried like 1 | Not retried; the run finishes |
 
 `plan` exits 2 when it refuses a configuration and `verify` exits 1 with `--final`
-when a task is not complete. Each retry multiplies a task's memory and runtime by
+when a task, or a route found in the output root, is not complete. Each retry multiplies a task's memory and runtime by
 the attempt.
 
 (workflow-task-kinds)=
@@ -60,6 +60,23 @@ output root. The routes share every other task, so the second route runs only it
 export, report and comparison. A run of one route reads, writes and removes no
 file of another route; `compare` lists the reports of this route and the reports
 of the other routes that the output root holds when the plan runs.
+
+The manifest's `routes` names every route of each sample: the one this plan runs
+(`planned` true, its export and report task ids) and each route found in the output
+root, whose `report.json` another plan wrote (`planned` false, its export and report
+task ids, records, logs and main outputs). A found route is no task: no engine runs
+it, it is in no task list or need and enters no fingerprint. `verify` lists every
+route of each sample in `verify.json` (`routes`: per sample, each route's
+`planned`, `complete` and its tasks' `complete` and `problems`). It checks this
+plan's tasks as before, and a found route's export and report by their records
+without the fingerprint, which another plan made: the record says `succeeded`, lists
+the main output and the log, and every output it lists exists with its recorded
+size, and with `--hash` its SHA-256. A missing or changed file is a problem that
+names the file; the found task ids that are not complete are in `found_incomplete`,
+and with `--final` they fail the check, because this run's comparison page reads
+that route's report. `verify` prints a found route's state to stderr, so that its
+standard output keeps one line per task of the plan. An output root with one route
+lists one route.
 
 ```{workflow-tasks}
 ```

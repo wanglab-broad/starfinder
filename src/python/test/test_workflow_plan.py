@@ -127,7 +127,7 @@ def test_the_resolved_configuration_writes_the_defaults_and_the_api(work):
 def test_every_task_has_the_contracts_fields(work):
     manifest = _plan(work, "after-fusion", X.variants(work)["after-fusion"])
     assert list(manifest) == ["format", "backend", "configuration", "package", "roots", "membership", "inputs",
-                              "export_route", "groups", "tasks"]
+                              "export_route", "routes", "groups", "tasks"]
     assert manifest["package"] == CODE
     for task in manifest["tasks"]:
         keys = ["id", "kind", "group", "identity", "needs", "inputs", "outputs", "record", "log", "command",

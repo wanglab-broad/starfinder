@@ -196,7 +196,11 @@ root holds several routes. Run the configuration of the first route, then plan a
 run the configuration of the second into the same output root: its FOV-level and
 placement tasks are complete already, so only its export, report and comparison
 run, and no file of the first route changes. Copying a route's outputs aside is not
-needed.
+needed. The second plan's manifest names both routes, the first as a route found in
+the output root, which no engine runs, and `verify --final` lists both: it checks the
+first route's export and report records too (their outputs at their recorded size,
+and with `--hash` their SHA-256), and fails, naming the file, when one of them is
+missing or changed.
 
 The workflow's own files are in `workflow/`:
 

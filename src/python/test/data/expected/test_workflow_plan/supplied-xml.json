@@ -420,6 +420,18 @@
   }
  },
  "export_route": "molecules_only",
+ "routes": {
+  "sample": [
+   {
+    "route": "molecules_only",
+    "planned": true,
+    "tasks": [
+     "export/sample/molecules_only",
+     "report/sample/molecules_only"
+    ]
+   }
+  ]
+ },
  "groups": [
   {
    "name": "fov",

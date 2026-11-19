@@ -491,6 +491,18 @@
   }
  },
  "export_route": "after_fusion",
+ "routes": {
+  "sample": [
+   {
+    "route": "after_fusion",
+    "planned": true,
+    "tasks": [
+     "export/sample/after_fusion",
+     "report/sample/after_fusion"
+    ]
+   }
+  ]
+ },
  "groups": [
   {
    "name": "tile_global",

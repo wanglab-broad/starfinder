@@ -475,6 +475,8 @@ class Graph:
         self.out = Path(out)
         self.manifest_path = Path(manifest_path)
         self.tasks, self.by_id, self.groups = [], {}, {}
+        # The export routes of each sample (W-876): {sample: [route entry]}, the manifest's ``routes``.
+        self.routes = {}
 
     # -- paths ------------------------------------------------------------------------------------------------
 
@@ -813,6 +815,7 @@ class Graph:
                 device = ((r.get("export") or {}).get("segmentation") or {}).get("device")
                 export[sample] = self.add("export", {"sample": sample, "route": way}, needs, inputs, outputs,
                                           gpu=device == "cuda")
+        report_of, found = {}, {}
         if "report" in r:
             reports = []
             route = export_route(r) or _layout.NO_EXPORT
@@ -831,16 +834,48 @@ class Graph:
                     needs += [assign[f] for f in members]
                     inputs += [o for f in members for o in self.by_id[assign[f]]["outputs"]
                                if o.endswith(_layout.ASSIGNMENT_RECORD)]
-                reports.append(self.add("report", {"sample": sample, "route": route}, needs, inputs,
-                                        [_layout.report_dir(out, sample, route) / "report.json"]))
+                report_of[sample] = self.add("report", {"sample": sample, "route": route}, needs, inputs,
+                                             [_layout.report_dir(out, sample, route) / "report.json"])
+                reports.append(report_of[sample])
             root = _layout.report_root(out)
-            # The comparison lists every route's report: this plan's, and those another route's run left in the
-            # output root (the samples' report.json of the other routes present when the plan runs).
-            others = [self.rel(path) for sample in samples for name in _layout.REPORT_ROUTES if name != route
-                      if (path := _layout.report_dir(out, sample, name) / "report.json").is_file()]
+            # The comparison lists every route's report: this plan's, and those of the routes found in the output
+            # root, whose report another route's run left there (the samples' report.json of the other routes
+            # present when the plan runs).
+            found = {sample: [name for name in _layout.REPORT_ROUTES if name != route
+                              and (_layout.report_dir(out, sample, name) / "report.json").is_file()]
+                     for sample in samples}
+            others = [self.rel(_layout.report_dir(out, sample, name) / "report.json") for sample in samples
+                      for name in found[sample]]
             self.add("compare", {}, reports, [self.by_id[t]["outputs"][0] for t in reports] + others,
                      [root / "samples.csv", root / "index.html"])
+        self.list_routes(export, report_of, found)
         return self.tasks
+
+    def list_routes(self, export, report_of, found):
+        """The manifest's ``routes``: per sample with an export or report task, the route this plan runs (its tasks'
+        ids) and each route found in the output root (its export and report task ids, records, logs and main
+        outputs), in the order of ``_layout.REPORT_ROUTES``. A found route is no task: no engine runs it, it is in no
+        task list or need and enters no fingerprint; ``verify`` checks its records by the record rule."""
+        r, out = self.r, self.out
+        planned = export_route(r) or _layout.NO_EXPORT
+        for sample in self.membership.samples:
+            mine = [t for t in (export.get(sample), report_of.get(sample)) if t]
+            if not mine:
+                continue
+            entries = [{"route": planned, "planned": True, "tasks": mine}]
+            for name in found.get(sample, []):
+                tasks = []
+                for kind in ("export", "report"):
+                    if kind == "export" and name == _layout.NO_EXPORT:
+                        continue
+                    task_id = f"{kind}/{sample}/{name}"
+                    main = (_layout.export_dir(out, sample, name) / _layout.EXPORT_FILE if kind == "export"
+                            else _layout.report_dir(out, sample, name) / "report.json")
+                    tasks.append({"id": task_id, "kind": kind, "outputs": [self.rel(main)],
+                                  "record": self.rel(_layout.task_record(out, task_id)),
+                                  "log": self.rel(_layout.task_log(out, task_id))})
+                entries.append({"route": name, "planned": False, "tasks": tasks})
+            self.routes[sample] = sorted(entries, key=lambda e: _layout.REPORT_ROUTES.index(e["route"]))
 
     # -- tiled execution --------------------------------------------------------------------------------------
 
@@ -1012,7 +1047,11 @@ def plan(config_path, output_root=None) -> dict:
     report tasks have the export route in their identity and id and write the route's folders,
     ``export/<sample>/<route>/`` and ``report/<sample>/<route>/`` (``no_export`` without an export), so that one
     output root holds every route; the compare task reads this plan's reports and the other routes' reports that the
-    output root holds when the plan runs.
+    output root holds when the plan runs. The manifest's ``routes`` names, for each sample with an export or report
+    task, every route: the one this plan runs (``planned`` true, its task ids) and each route found in the output root
+    (``planned`` false, whose ``report.json`` another plan wrote), with that route's export and report task ids, record
+    and log paths and main outputs. A found route is no task: no engine runs it, it is in no task list or need and
+    enters no fingerprint; ``verify`` checks its records (an addition within manifest format version 1).
     """
     import yaml
     config_path = Path(config_path)
@@ -1064,6 +1103,7 @@ def plan(config_path, output_root=None) -> dict:
                        "selected_fovs": r["selected_fovs"]},
         "inputs": {"files": inputs.files, "images": inputs.images},
         "export_route": export_route(r),
+        "routes": graph.routes,
         "groups": list(graph.groups.values()),
         "tasks": tasks}
     # The route that supplied the identity (version_source) is not part of what ran: one commit has one fingerprint.

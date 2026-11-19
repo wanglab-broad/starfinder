@@ -33,7 +33,8 @@ def add_parser(groups):
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--task", help="One task id; default every task")
     verify.add_argument("--hash", action="store_true", help="Compare each output's SHA-256, not only its size")
-    verify.add_argument("--final", action="store_true", help="Exit 1 when a task is not complete")
+    verify.add_argument("--final", action="store_true",
+                        help="Exit 1 when a task, or a route found in the output root, is not complete")
     for kind in sorted(FUNCTIONS, key=COMMANDS.get):
         task = commands.add_parser(COMMANDS[kind], help=f"Run one task of kind {kind}")
         task.add_argument("--manifest", type=Path, required=True, help="The plan's workflow/manifest.json")
@@ -77,6 +78,13 @@ def run(args, argv=None):
         for task_id, entry in result["tasks"].items():
             state = "complete" if entry["complete"] else "not complete: " + "; ".join(entry["problems"])
             print(f"{task_id}\t{entry['token']}\t{state}")
+        # The routes found in the output root (another plan's export and report) are no tasks of this manifest: their
+        # state goes to stderr, so that stdout keeps one line per task (an engine reads its tokens there).
+        for sample, routes in result["routes"].items():
+            for route in (r for r in routes if not r["planned"]):
+                for task_id, entry in route["tasks"].items():
+                    state = "complete" if entry["complete"] else "not complete: " + "; ".join(entry["problems"])
+                    print(f"found route {sample}/{route['route']}: {task_id}\t{state}", file=sys.stderr)
         return 0 if result["passed"] else 1
     from starfinder.workflow._task import Context, execute
     kind = next(k for k in FUNCTIONS if COMMANDS[k] == args.command)

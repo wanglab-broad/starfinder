@@ -531,6 +531,18 @@
   }
  },
  "export_route": "per_fov",
+ "routes": {
+  "sample": [
+   {
+    "route": "per_fov",
+    "planned": true,
+    "tasks": [
+     "export/sample/per_fov",
+     "report/sample/per_fov"
+    ]
+   }
+  ]
+ },
  "groups": [
   {
    "name": "summarize.percentile_normalization",
