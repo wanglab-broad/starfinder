@@ -32,7 +32,12 @@ library binning each pair itself, bit for bit.
 (stitching-link-threshold)=
 #### The link-quality threshold
 
-With `quality_threshold="auto"`, the default, the threshold comes from the sample. For each
+The default, `quality_threshold=None`, depends on the tiles: `"auto"` when every tile is
+single-plane (Z = 1), and 0.7 when tiles have Z > 1. The wrong offsets below move the overlap
+in Y and X only, so they cannot see a z error, and a weak 3D link can pass a threshold estimated
+this way (W-895 tracks a z-aware null). An explicit `"auto"`, or a number, applies to either kind.
+
+With `"auto"`, the threshold comes from the sample. For each
 registered pair the method also measures the quality at two deliberately wrong offsets: the
 registered shift moved by half the overlap's width, in binned voxels rounded down, both ways
 along the overlap axis (the narrower of Y and X). There no tissue lines up, so these qualities
@@ -41,11 +46,14 @@ are a null distribution. The threshold is the larger of 0.2 and the null's 99th 
 not NaN. A number replaces the rule and no null is measured. The global optimization then
 removes links that disagree with the rest, as before.
 
-`placement.json` records the outcome under `method_diagnostics.link_quality`:
+`placement.json` records the rule that set the threshold. A given number is the method
+config's `quality_threshold`, and `method_diagnostics` has no `link_quality` entry. The default for
+tiles with Z > 1 is recorded as `method_diagnostics.link_quality` =
+`{"rule": "fixed_default_z_above_1", "threshold": 0.7}`. With `"auto"`, `link_quality` holds:
 
 | Key | Contents |
 | --- | --- |
-| `mode` | `auto` |
+| `rule` | `auto` |
 | `threshold` | The threshold used |
 | `floor`, `quantile` | 0.2 and 0.99 |
 | `offsets` | How the wrong offsets were chosen |

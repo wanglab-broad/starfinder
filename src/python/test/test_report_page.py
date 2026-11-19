@@ -639,7 +639,7 @@ def test_placement_section_shows_the_link_threshold_and_the_removed_links(tmp_pa
     path = folder / "placement.json"
     record = json.loads(path.read_text())
     record.setdefault("method_diagnostics", {})["link_quality"] = {
-        "mode": "auto", "threshold": 0.2, "floor": 0.2, "quantile": 0.99, "offsets": "the shift ± half the width",
+        "rule": "auto", "threshold": 0.2, "floor": 0.2, "quantile": 0.99, "offsets": "the shift ± half the width",
         "null": {"pairs": 3, "values": 6, "min": -0.05, "median": 0.01, "quantile": 0.1825, "max": 0.19},
         "null_pairs": []}
     record["review"]["optimizer_removed"] = {
@@ -656,11 +656,32 @@ def test_placement_section_shows_the_link_threshold_and_the_removed_links(tmp_pa
              "no review needed: the components are unchanged, every FOV keeps 2 or more links (or all it had), and "
              "residuals and corrections are within the policy")
     assert _links_rows(text) == {
-        "Link-quality threshold": "0.2: the larger of 0.2 and percentile 99 of the null",
+        "Link-quality threshold": "0.2: auto, the larger of 0.2 and percentile 99 of the null",
         "Null (quality at wrong offsets)": "6 values from 3 pairs, each pair at the shift ± half the width<br>"
                                            "min -0.05, median 0.01, percentile 99 0.1825, max 0.19",
         "Removed by the optimizer": f"F1–F2<br>{state}"}
     assert list(load_report(report)) == CONTRACT_RECORD_KEYS
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("rule, shown", [
+    ({"link_quality": {"rule": "fixed_default_z_above_1", "threshold": 0.7}},
+     "0.7: the default for tiles with Z &gt; 1 (auto is the default for single-plane tiles only)"),
+    ({"quality_threshold": 0.3}, "0.3: the given value")], ids=["fixed_default", "given"])
+def test_placement_section_names_the_rule_of_the_threshold(tmp_path, rule, shown):
+    # W-874 (decision B): the fixed default for tiles with Z > 1 from method_diagnostics, a given value from the
+    # method config of a multiview_stitcher placement.
+    case = report_records(tmp_path / "root")
+    path = case.root / "stitching" / SAMPLE / "placement.json"
+    record = json.loads(path.read_text())
+    if "link_quality" in rule:
+        record.setdefault("method_diagnostics", {})["link_quality"] = rule["link_quality"]
+    else:
+        record["method"] = dict(record["method"], method="multiview_stitcher",
+                                config={"quality_threshold": rule["quality_threshold"]})
+    path.write_text(json.dumps(record))
+    report, _ = case.collect()
+    assert _links_rows((report / "report.html").read_text(encoding="utf-8")) == {"Link-quality threshold": shown}
 
 
 def test_placement_section_shows_no_review_with_an_export(tmp_path):

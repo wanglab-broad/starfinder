@@ -417,6 +417,7 @@ def check_removal(result, pairs, failed):
         assert review["flagged"]["optimizer_removed_link"] == sorted(flagged, key=result.fovs.fov_id.tolist().index)
 
 
+@pytest.mark.contract
 def test_a_removal_that_leaves_the_placement_supported_needs_no_review(stub):
     table = stub_table()
     pairs = [("FOV0", "FOV1")]   # FOV0 and FOV1 keep 2 links each
@@ -426,6 +427,7 @@ def test_a_removal_that_leaves_the_placement_supported_needs_no_review(stub):
     assert result.record["review"]["state"] == "not_needed" and result.record["review"]["reasons"] == []
 
 
+@pytest.mark.contract
 def test_a_fov_left_with_one_link_holds_the_placement(stub):
     table = stub_table()
     pairs = [("FOV0", "FOV1"), ("FOV0", "FOV2")]   # FOV0 keeps 1 of its 3 links
@@ -436,6 +438,7 @@ def test_a_fov_left_with_one_link_holds_the_placement(stub):
     assert result.record["review"]["reasons"] == ["optimizer_removed_link"]
 
 
+@pytest.mark.contract
 def test_a_fov_that_had_one_link_and_keeps_it_needs_no_review(stub):
     table = stub_table()
     # FOV0 has one link after rule L1 (FOV0–FOV1) and keeps it; FOV2 and FOV3 keep 3 of their 4.
@@ -447,6 +450,7 @@ def test_a_fov_that_had_one_link_and_keeps_it_needs_no_review(stub):
     assert result.record["review"]["state"] == "not_needed"
 
 
+@pytest.mark.contract
 def test_a_removal_that_splits_a_component_holds_the_placement(stub):
     table = stub_table([f"FOV{k}" for k in range(8)], columns=4, rows=2)
     # Every link between grid columns 1 and 2: two 2 × 2 blocks, each FOV keeping its 3 links inside its block.
@@ -457,6 +461,7 @@ def test_a_removal_that_splits_a_component_holds_the_placement(stub):
     assert result.record["review"]["reasons"] == ["unplaced_fovs", "optimizer_removed_link"]
 
 
+@pytest.mark.contract
 @pytest.mark.parametrize("value, flagged", [(1.0, False), (1.0 + TINY, True)])
 def test_a_removal_with_a_residual_above_the_tolerance_holds_the_placement(stub, value, flagged):
     table = stub_table()
@@ -468,6 +473,7 @@ def test_a_removal_with_a_residual_above_the_tolerance_holds_the_placement(stub,
                                                   else [])
 
 
+@pytest.mark.contract
 @pytest.mark.parametrize("value, flagged", [(0.75, False), (0.75 + TINY, True)])
 def test_a_removal_with_a_correction_above_the_bound_holds_the_placement(stub, value, flagged):
     table = stub_table()
@@ -480,6 +486,7 @@ def test_a_removal_with_a_correction_above_the_bound_holds_the_placement(stub, v
                                                   else [])
 
 
+@pytest.mark.contract
 def test_a_placement_without_removals_gains_no_removal_record(stub):
     table = stub_table()
     result = run(table, grids_for(table), FRACTIONAL)

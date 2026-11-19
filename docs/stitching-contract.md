@@ -133,11 +133,20 @@ than 2 links (and fewer than it had), or a residual or correction check fails.
   full-resolution tile at a time; with `binning_zyx=(1, 1, 1)` it keeps every tile at
   full resolution.
 * `quality_threshold` on `MultiviewStitcherConfig`: the lowest link quality kept. The
-  default, `"auto"`, estimates it from the sample (the
-  {ref}`reference <stitching-link-threshold>` gives the rule); a number from −1 to 1
-  overrides it.
+  default estimates it from the sample (`"auto"`) when every tile is single-plane and is 0.7
+  for tiles with more than one plane (the {ref}`reference <stitching-link-threshold>` gives
+  the rule). An explicit `"auto"`, or a number from −1 to 1, applies to either kind.
 * `review`: choose the `ReviewPolicy` used to flag a placement for inspection.
 * `fallback`: request nominal positions when image placement cannot connect a FOV.
+
+### Choosing the link-quality threshold
+
+Without `quality_threshold`, single-plane tiles (Z = 1) get `"auto"` and tiles with more than
+one plane get 0.7. On stacks whose tiles share one z range, such as tissue-2D (Z = 30), name
+`quality_threshold: auto` in the configuration: on tissue-2D the fixed 0.7 rejected real links
+and left most FOVs unplaced, while `auto` reproduced the approved placement. `auto` compares
+each link with the quality at wrong offsets in Y and X only, so it cannot catch a link that is
+off in z; W-895 tracks a null that can.
 
 The reference generates configuration defaults from the code. For the
 [link-quality rule](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md#link-quality-rule)

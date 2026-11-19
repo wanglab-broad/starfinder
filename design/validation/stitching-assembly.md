@@ -271,12 +271,6 @@ binning 4 in every axis, links with quality below 0.7 or NaN dropped (L1),
 | MV5 | Wrapper rules | `cut_synthetic` 3 × 3; two tiles with no overlap | Links, errors | The registered pairs are a subset of `neighbor_pairs` and every other pair is recorded `pruned`; no NaN-quality link is kept; translations are in µm, view to common frame; with no link left, every FOV is `failed` (the library's `NotEnoughOverlapError`), and the result is still returned and saved. Links with quality below 0.7 have `kept` false and reason `quality_below_threshold`; a tile below 16 px in Y or X is refused (`min_shape_zyx`); `MultiviewStitcherConfig().method` is `multiview_stitcher`, the spec's name; `MultiviewStitcherConfig` refuses, at construction, `binning_zyx` with a 0, `quality_threshold` 1.5, `upsample_factor` 0, a negative `overlap_tolerance_um`, and a `pairwise`, `pruning` or `groupwise` value its table does not list. Exact. | MV, S |
 | MV6 | Determinism | `cut_synthetic` 3 × 3 | Translations of two runs at one thread, each in its own process | Bitwise identical. The independence of the thread count, which the parity runs measured (`pairs_between_runs.csv`), is checked in the real placement examples (RX7), whose bound allows four threads; the `slow` tier allows one CPU. | MV, S |
 
-% Amended 2026-11-18 for W-874: the default quality_threshold became "auto". MV4 and MV5 run at 0.7, the
-% starting configuration their bounds and rules were set at; at "auto" (threshold 0.2 on these fixtures)
-% the `disconnected` case keeps the link tile4–tile5 (quality 0.46, z shift 4 voxels off), and tile5 is
-% 2.31 voxels off in z. The threshold and the review of optimizer removals are tested in
-% test_stitching_multiview.py and test_stitching_placement.py.
-
 % W-324
 
 ### Assembly (AS)
@@ -814,7 +808,7 @@ records on the share and are run by the real-example issue, not by a test.
 | MV2 | `test_stitching_multiview.py`, `test_known_answer_cut_fixture[MV2]` | `slow` |
 | MV3 | `test_stitching_multiview.py`, `test_fractional_jitter_on_the_synthetic_scene` | `slow` |
 | MV4 | `test_stitching_multiview.py`, `test_hand_built_cases` | `slow` |
-| MV5 | `test_stitching_multiview.py`, `test_wrapper_rules_on_the_cut_fixture`, `test_no_nan_quality_link_is_kept_and_nan_is_recorded`, `test_with_no_link_left_every_fov_is_failed_and_the_result_is_saved`, `test_config_defaults_are_the_starting_configuration`, `test_config_refuses_each_invalid_field_at_construction`, `test_spec_declares_the_contract_capabilities`, `test_a_tile_below_16_px_in_y_or_x_is_refused`; the threshold estimated from the data (W-874): `test_null_offsets_move_the_shift_half_the_overlap_width_along_the_narrow_axis`, `test_null_qualities_of_a_pair_with_a_known_offset`, `test_auto_threshold_is_the_larger_of_the_floor_and_the_null_quantile`, `test_the_recording_registration_is_the_library_s_and_measures_its_quality`, `test_auto_threshold_against_an_explicit_number_on_the_cut_fixture` | `slow`; the configuration, specification, shape and null parts default |
+| MV5 | `test_stitching_multiview.py`, `test_wrapper_rules_on_the_cut_fixture`, `test_no_nan_quality_link_is_kept_and_nan_is_recorded`, `test_with_no_link_left_every_fov_is_failed_and_the_result_is_saved`, `test_config_defaults_are_the_starting_configuration`, `test_config_refuses_each_invalid_field_at_construction`, `test_spec_declares_the_contract_capabilities`, `test_a_tile_below_16_px_in_y_or_x_is_refused`; the threshold estimated from the data (W-874): `test_null_offsets_move_the_shift_half_the_overlap_width_along_the_narrow_axis`, `test_null_qualities_of_a_pair_with_a_known_offset`, `test_auto_threshold_is_the_larger_of_the_floor_and_the_null_quantile`, `test_the_recording_registration_is_the_library_s_and_measures_its_quality`, `test_auto_threshold_against_an_explicit_number_on_the_cut_fixture`, `test_the_default_threshold_resolves_per_tile_set`, `test_the_record_names_the_rule_that_set_the_threshold` | `slow`; the configuration, specification, shape and null parts default |
 | MV6 | `test_stitching_multiview.py`, `test_translations_are_bitwise_identical_in_two_processes` | `slow` |
 | AS1 | `test_stitching_assembly_ownership.py`, `test_as1_*` | default |
 | AS2 | `test_stitching_assembly_ownership.py`, `test_as2_*` | default |

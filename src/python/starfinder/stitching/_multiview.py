@@ -29,6 +29,10 @@ _NOMINAL = "nominal"
 AUTO = "auto"
 QUALITY_FLOOR = 0.2
 NULL_QUANTILE = 0.99
+# The default of quality_threshold (None) per tile set (decision B, Jiahao, 2026-11-19): "auto" for single-plane tiles,
+# FIXED_DEFAULT for tiles with Z > 1, whose z error the in-plane null cannot see (W-895 adds a z-aware null).
+FIXED_DEFAULT = 0.7
+FIXED_DEFAULT_RULE = "fixed_default_z_above_1"
 # The fraction of the moving overlap that must stay valid after a shift, the library's (phase_correlation_registration).
 _MIN_VALID_FRACTION = 0.1
 
@@ -58,10 +62,11 @@ class MultiviewStitcherConfig:
     upsample_factor : int or None
         Positive subpixel upsampling factor for phase correlation.
         ``None`` uses the library default: 10 in 2D and 2 in 3D.
-    quality_threshold : float or str
+    quality_threshold : float, str or None
         Lower Spearman-correlation quality threshold for keeping a registered link: a number in
-        [−1, 1], or ``"auto"`` (the default) for the threshold estimated from the data, the larger
-        of 0.2 and the 99th percentile of the qualities at deliberately wrong offsets.
+        [−1, 1], or ``"auto"`` for the threshold estimated from the data, the larger of 0.2 and
+        the 99th percentile of the qualities at deliberately wrong offsets. ``None`` (the default)
+        uses ``"auto"`` when every tile is single-plane (Z = 1) and 0.7 when tiles have Z > 1.
     drop_nan_quality : bool
         Drop registered links whose quality is NaN.
     pruning : str or None
@@ -107,11 +112,17 @@ class MultiviewStitcherConfig:
     qualities are a null distribution, where no tissue lines up, and the
     threshold is ``max(0.2, q99)``, ``q99`` being their 99th percentile
     (NumPy's linear quantile); without any null value it is 0.2. The
-    record's ``method_diagnostics["link_quality"]`` holds the chosen
-    threshold, the floor, the quantile, the null's summary and each pair's
-    two null values. A number is used as it is, no null is measured, and the
-    record gains no ``link_quality`` entry. The global optimization's outlier
-    removal (``abs_tol_um``, ``rel_tol``) stays the second line.
+    record's ``method_diagnostics["link_quality"]`` holds the rule
+    (``"auto"``), the chosen threshold, the floor, the quantile, the null's
+    summary and each pair's two null values. The default, ``None``, is
+    ``"auto"`` for single-plane tiles only: the null moves the overlap in Y
+    and X and cannot see a z error, so tiles with Z > 1 get 0.7, recorded as
+    ``{"rule": "fixed_default_z_above_1", "threshold": 0.7}`` with no null
+    measured. An explicit ``"auto"`` applies to either kind of tile. A given
+    number is used as it is: no null is measured, the record's method config
+    holds the number, and ``method_diagnostics`` gains no ``link_quality``
+    entry. The global optimization's outlier removal (``abs_tol_um``,
+    ``rel_tol``) stays the second line.
 
     Memory: each tile of a registered pair is read once (a ``TileLoader``
     input is called then), binned by ``binning_zyx`` and released, so a run
@@ -127,7 +138,7 @@ class MultiviewStitcherConfig:
     ValueError
         A field outside the rules of design/specs/stitching-algorithms.md: a binning
         that is not three integers ≥ 1, an ``upsample_factor`` below 1, a
-        ``quality_threshold`` that is neither ``"auto"`` nor a number in [−1, 1], a negative
+        ``quality_threshold`` that is neither ``None``, ``"auto"`` nor a number in [−1, 1], a negative
         ``overlap_tolerance_um``, a ``pairwise``, ``pruning`` or ``groupwise``
         value the table does not list, a non-positive tolerance or an
         iteration count below 1.
@@ -139,7 +150,7 @@ class MultiviewStitcherConfig:
     binning_zyx: tuple[int, int, int] = (4, 4, 4)
     pairwise: str = "phase_correlation"
     upsample_factor: int | None = None
-    quality_threshold: float | str = AUTO
+    quality_threshold: float | str | None = None
     drop_nan_quality: bool = True
     pruning: str | None = "alternating_pattern"
     overlap_tolerance_um: float = 0.0
@@ -160,13 +171,14 @@ class MultiviewStitcherConfig:
             raise ValueError(f"pairwise must be one of {list(PAIRWISE)}; got {self.pairwise!r}")
         if self.upsample_factor is not None:
             _integer(self.upsample_factor, "upsample_factor")
-        if not (isinstance(self.quality_threshold, str) and self.quality_threshold == AUTO):
+        if self.quality_threshold is not None and not (isinstance(self.quality_threshold, str)
+                                                       and self.quality_threshold == AUTO):
             if isinstance(self.quality_threshold, str):
-                raise ValueError(f"quality_threshold must be 'auto' or a number in [-1, 1]; "
+                raise ValueError(f"quality_threshold must be None, 'auto' or a number in [-1, 1]; "
                                  f"got {self.quality_threshold!r}")
             _number(self.quality_threshold, "quality_threshold")
             if not -1.0 <= self.quality_threshold <= 1.0:
-                raise ValueError(f"quality_threshold must be 'auto' or a number in [-1, 1]; "
+                raise ValueError(f"quality_threshold must be None, 'auto' or a number in [-1, 1]; "
                                  f"got {self.quality_threshold!r}")
         if not isinstance(self.drop_nan_quality, (bool, np.bool_)):
             raise TypeError("drop_nan_quality must be Boolean")
@@ -359,6 +371,17 @@ def _null_executor(nulls):
     return execute
 
 
+def _resolved_threshold(quality_threshold, plane):
+    """(rule, threshold) of a configured ``quality_threshold`` for a tile set: ``("auto", None)`` for ``"auto"`` and
+    for the default on single-plane tiles (``plane``), ``(FIXED_DEFAULT_RULE, 0.7)`` for the default on tiles with
+    Z > 1, and ``("given", value)`` for a number."""
+    if quality_threshold is None:
+        return (AUTO, None) if plane else (FIXED_DEFAULT_RULE, FIXED_DEFAULT)
+    if isinstance(quality_threshold, str):
+        return AUTO, None
+    return "given", quality_threshold
+
+
 def _auto_threshold(nulls, registered, fov_pairs):
     """The threshold of ``"auto"`` and the record of its null (``method_diagnostics["link_quality"]``)."""
     per_pair = [[*fov_pairs([e])[0], *[None if math.isnan(q) else q for q in nulls.get(e, [])]] for e in registered]
@@ -370,7 +393,7 @@ def _auto_threshold(nulls, registered, fov_pairs):
     if values.size:
         summary.update(min=float(values.min()), median=float(np.median(values)), quantile=quantile,
                        max=float(values.max()))
-    return threshold, {"mode": AUTO, "threshold": threshold, "floor": QUALITY_FLOOR, "quantile": NULL_QUANTILE,
+    return threshold, {"rule": AUTO, "threshold": threshold, "floor": QUALITY_FLOOR, "quantile": NULL_QUANTILE,
                        "offsets": "the registered shift ± half the overlap width along the overlap axis",
                        "null": summary, "null_pairs": per_pair}
 
@@ -429,7 +452,10 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
        the library's own binning of each pair bit for bit. The link's shift
        (µm, of ``fov_b`` against ``fov_a``, view to common frame) is the
        negated translation of the library's fixed-to-moving transform, and its
-       quality the library's. With ``quality_threshold`` ``"auto"`` each pair
+       quality the library's. The threshold's rule comes from
+       ``quality_threshold`` and the tiles: ``"auto"``, or the default on
+       single-plane tiles; 0.7 for the default on tiles with Z > 1; or the
+       given number. With the rule ``"auto"`` each pair
        is registered on its own (the library's ``pairwise_executor``), with
        the same result, and its two null qualities are measured on the
        library's own overlap arrays; the threshold is ``max(0.2, q99)`` of
@@ -449,7 +475,8 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
     The diagnostics hold the outcome, the registration dimensions, the
     library's overlap pairs (and, as table rows, any outside the neighbour
     pairs, which are dropped), the pruned and the optimizer-removed pairs, the
-    edge residuals (µm) and, with ``"auto"``, ``link_quality``.
+    edge residuals (µm) and, unless a number was given, ``link_quality``
+    (its ``rule``: ``"auto"`` or ``"fixed_default_z_above_1"``).
     """
     from multiview_stitcher import mv_graph, param_resolution
     from multiview_stitcher import spatial_image_utils as si_utils
@@ -510,10 +537,12 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
     needed = {k for e in registered for k in e}
     binned = [_binned_msim(tiles[i], plane, binning, geometries[k]) if k in needed else msims[k]
               for k, i in enumerate(present)]
-    auto = isinstance(config.quality_threshold, str)
+    rule, threshold = _resolved_threshold(config.quality_threshold, plane)
+    if rule == FIXED_DEFAULT_RULE:
+        diagnostics["link_quality"] = {"rule": rule, "threshold": threshold}
+    auto = rule == AUTO
     nulls = {} if auto else None
     computed = _pairwise_registrations(msims, binned, pruned_graph, config, nulls)
-    threshold = config.quality_threshold
     if auto:
         threshold, diagnostics["link_quality"] = _auto_threshold(nulls, registered, fov_pairs)
 

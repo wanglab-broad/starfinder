@@ -167,7 +167,9 @@ One call per sample. Steps, as the parity runs ran them (their notes, sections 3
 4. **Link quality.** The Spearman rank correlation of the overlaps after the shift; NaN
    for a constant overlap (the link then gets the identity).
 5. **Link filter (L1).** The library's filter at `quality_threshold`, plus dropping NaN
-   links, which the library keeps. With `"auto"` (the default since W-874) the threshold is
+   links, which the library keeps. The default (`None`, since W-874) is `"auto"` for
+   single-plane tiles and 0.7 for tiles with Z > 1 (`method_diagnostics.link_quality.rule`
+   `fixed_default_z_above_1`; the null below cannot see a z error, W-895). With `"auto"` the threshold is
    `max(0.2, q99)`, `q99` the 99th percentile (NumPy's linear quantile) of the null qualities:
    each registered pair's quality, measured as the library measures it, at its registered
    shift moved by ⌊w / 2⌋ binned voxels both ways along the overlap axis (the narrower of Y
@@ -192,7 +194,7 @@ One call per sample. Steps, as the parity runs ran them (their notes, sections 3
 | `binning_zyx` | voxels | `(4, 4, 4)` | integers ≥ 1; ignored for z on Z=1 |
 | `pairwise` | | `"phase_correlation"` | the only value in the accepted design |
 | `upsample_factor` | | `None` (library default) | integer ≥ 1 |
-| `quality_threshold` | | `"auto"` (0.7 before W-874) | `"auto"` or a number in [−1, 1] |
+| `quality_threshold` | | `None`: `"auto"` for Z = 1 tiles, 0.7 for Z > 1 (0.7 for every tile before W-874) | `None`, `"auto"` or a number in [−1, 1] |
 | `drop_nan_quality` | | `True` | |
 | `pruning` | | `"alternating_pattern"` | or `None` (register every pair) |
 | `overlap_tolerance_um` | µm | `0.0` | ≥ 0 |

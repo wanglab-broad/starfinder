@@ -661,21 +661,26 @@ class _Page:
         return f'<div id="place-review">{self._table(rows)}</div>'
 
     def links(self) -> str:
-        """The placement's links (``placement.json``): the link-quality threshold estimated from the data and its
-        null, and the links the optimizer removed with whether they need review. Shown when the placement holds
-        either (``method_diagnostics["link_quality"]``, ``review["optimizer_removed"]``); otherwise nothing."""
+        """The placement's links (``placement.json``): the link-quality threshold with the rule that set it, the null
+        of a threshold estimated from the data, and the links the optimizer removed with whether they need review.
+        The rule is ``method_diagnostics["link_quality"]["rule"]`` (``auto`` or the fixed default for tiles with
+        Z > 1), else, for a ``multiview_stitcher`` placement, the number the method config gives. Shown when the
+        placement holds one of them or ``review["optimizer_removed"]``; otherwise nothing."""
         placement = self.c.placement or {}
         diagnostics = placement.get("method_diagnostics") if isinstance(placement.get("method_diagnostics"),
                                                                          dict) else {}
         quality = diagnostics.get("link_quality")
+        method = placement.get("method") if isinstance(placement.get("method"), dict) else {}
+        config = method.get("config") if isinstance(method.get("config"), dict) else {}
+        given = config.get("quality_threshold")
         review = placement.get("review") if isinstance(placement.get("review"), dict) else {}
         removal = review.get("optimizer_removed")
         rows = []
-        if isinstance(quality, dict):
+        if isinstance(quality, dict) and quality.get("rule") == "auto":
             null = quality.get("null") if isinstance(quality.get("null"), dict) else {}
             rows.append(("Link-quality threshold",
-                         f"{_number(quality.get('threshold'))}: the larger of {_number(quality.get('floor'))} and "
-                         f"percentile {_number(100 * quality.get('quantile'))} of the null"))
+                         f"{_number(quality.get('threshold'))}: auto, the larger of {_number(quality.get('floor'))} "
+                         f"and percentile {_number(100 * quality.get('quantile'))} of the null"))
             values = (f"{_int(null.get('values'))} values from {_int(null.get('pairs'))} pairs, "
                       f"each pair at {_e(quality.get('offsets'))}")
             if null.get("values"):
@@ -683,6 +688,12 @@ class _Page:
                            f"percentile {_number(100 * quality.get('quantile'))} {_number(null.get('quantile'))}, "
                            f"max {_number(null.get('max'))}")
             rows.append(("Null (quality at wrong offsets)", values))
+        elif isinstance(quality, dict) and quality.get("rule") == "fixed_default_z_above_1":
+            rows.append(("Link-quality threshold",
+                         f"{_number(quality.get('threshold'))}: the default for tiles with Z &gt; 1 (auto is the "
+                         "default for single-plane tiles only)"))
+        elif method.get("method") == "multiview_stitcher" and is_value(given) and not isinstance(given, (bool, str)):
+            rows.append(("Link-quality threshold", f"{_number(given)}: the given value"))
         if isinstance(removal, dict):
             pairs = ", ".join(f"{_e(a)}–{_e(b)}" for a, b in removal.get("links") or [])
             checks = removal.get("checks") if isinstance(removal.get("checks"), dict) else {}
