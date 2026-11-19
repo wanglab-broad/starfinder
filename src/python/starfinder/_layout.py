@@ -236,6 +236,11 @@ def workflow_export_record(output_root, sample) -> Path:
     return workflow_dir(output_root) / "exports" / f"{sample}.json"
 
 
+def workflow_held_page(output_root, sample) -> Path:
+    """``workflow/held/<sample>.html``, the page of an export held for review, until the export runs again."""
+    return workflow_dir(output_root) / "held" / f"{sample}.html"
+
+
 def resolved_file(output_root) -> Path:
     """``workflow/resolved.json``, the resolved configuration the plan writes."""
     return workflow_dir(output_root) / RESOLVED_FILE

@@ -643,8 +643,8 @@ class _Page:
 
     def review(self) -> str:
         """The placement's review (``placement.json`` ``review``) above the placement map: its state, reasons, the
-        flagged FOVs of each reason and the approvals. Shown only when the sample has no export record and the
-        review is required, as for an export held for review; otherwise nothing."""
+        flagged FOVs of each reason and the approvals of its tables (``approvals.json``). Shown only when the sample
+        has no export record and the review is required, as for a plan without an export; otherwise nothing."""
         c = self.c
         review = (c.placement or {}).get("review") if c.export is None else None
         if not isinstance(review, dict) or review.get("state") != "required":

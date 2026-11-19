@@ -393,11 +393,49 @@ def _held_export_case(tmp_path, monkeypatch):
     return manifest, sample, out
 
 
-def test_a_held_export_makes_the_report_and_exits_4(tmp_path, monkeypatch, capsys):
-    """W-814: an export whose placement needs review fails with exit status 4 after making the sample report from the
-    FOVs' records and placement.json; nothing records it, or the report, as succeeded."""
+def _complete(manifest, task_id):
+    """A record of the task that verify finds complete: succeeded, the manifest's fingerprint, and every declared
+    output and the log listed with its bytes and SHA-256 (as the task's command records them)."""
+    from starfinder import _layout
+    from starfinder._records import file_sha256
+    data = json.loads(manifest.read_text())
+    out = Path(data["roots"]["output"])
+    entry = next(t for t in data["tasks"] if t["id"] == task_id)
+    (out / entry["log"]).parent.mkdir(parents=True, exist_ok=True)
+    (out / entry["log"]).write_text("")
+    outputs = [{"path": o, "bytes": (out / o).stat().st_size, "sha256": "sha256:" + file_sha256(out / o)}
+               for o in [*entry["outputs"], entry["log"]]]
+    _layout.task_record(out, task_id).write_text(json.dumps({
+        "id": task_id, "status": "succeeded", "outputs": outputs, "workflow": {"fingerprint": entry["fingerprint"]}}))
+
+
+def _gated_export(calls):
+    """Dataset.export as far as its review gate (load_placement and require_approval, the real ones), then an
+    export.json; the fixture has no molecule table to export."""
+    def export(self, sample, *, placement, output_dir, **kwargs):
+        from starfinder.stitching import load_placement
+        from starfinder.stitching._review import require_approval
+        require_approval(load_placement(placement))
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        (Path(output_dir) / "export.json").write_text("{}\n")
+        calls.append(sample)
+    return export
+
+
+def _held_files(out, sample):
+    """name → (bytes, inode, mtime_ns) of the placement task's declared outputs."""
+    folder = out / "stitching" / sample
+    return {n: ((folder / n).read_bytes(), (folder / n).stat().st_ino, (folder / n).stat().st_mtime_ns)
+            for n in ("placement.json", "fovs.csv", "links.csv")}
+
+
+def test_a_held_export_writes_the_held_page_and_no_report(tmp_path, monkeypatch, capsys):
+    """W-875: an export whose placement needs review exits 4 after writing the held page (the reasons, the flagged
+    FOVs, the placement's summary and how to approve) from placement.json alone; it writes no report and no report
+    record, so the report is made once, after the export."""
     from starfinder import _layout
     from starfinder.workflow import verify
+    reports = spy(monkeypatch, "report")
     manifest, sample, out = _held_export_case(tmp_path, monkeypatch)
     export_id, report_id = f"export/{sample}", f"report/{sample}"
     assert export_id in T.task(manifest, "report", sample=sample)["needs"]     # the plan is unchanged
@@ -406,16 +444,21 @@ def test_a_held_export_makes_the_report_and_exits_4(tmp_path, monkeypatch, capsy
     failed = json.loads(_layout.failed_record(out, export_id).read_text())
     assert failed["status"] == "held" and failed["error"]["type"] == "TaskHeld"
     assert "approve_placement(result, reviewer=..., note=...)" in failed["error"]["message"]
+    assert "approvals.json" in failed["error"]["message"]
     assert not (out / "export" / sample / "export.json").exists()
+    # No report: no report folder, no report.json, no record of the report task, and Dataset.report not called.
+    assert reports == [] and not (out / "report").exists()
     assert not _layout.task_record(out, export_id).exists() and not _layout.task_record(out, report_id).exists()
-    record = load_report(out / "report" / sample)
-    assert record["fov_ids"] == ["F1", "F2", "F3", "F4"]
-    assert [entry["path"] for entry in record["inputs"] if entry["path"].startswith("stitching/")] == [
-        f"stitching/{sample}/placement.json", f"stitching/{sample}/fovs.csv"]
-    page = (out / "report" / sample / "report.html").read_text(encoding="utf-8")
-    assert "<td>Flagged FOVs</td><td>unplaced_fovs: F3, F4</td>" in page
+    page = _layout.workflow_held_page(out, sample).read_text(encoding="utf-8")
+    assert f"<h1>Sample {sample}: the export is held for review</h1>" in page
+    assert "<tr><td>Reasons</td><td>unplaced_fovs</td></tr>" in page
+    assert "<tr><td>Flagged FOVs</td><td>unplaced_fovs: F3, F4</td></tr>" in page
+    assert "<tr><td>FOVs</td><td>4 (failed 1, image_supported 2, metadata_only 1)</td></tr>" in page
+    assert "<td>F3</td><td>metadata_only</td>" in page and "<td>F4</td><td>failed</td>" in page
+    assert "save_placement(approve_placement(result, reviewer=&quot;...&quot;, note=&quot;...&quot;)" in page
+    assert str(out / "stitching" / sample) in page
     log = (out / T.task(manifest, "export", sample=sample)["log"]).read_text()
-    assert "made the report of the held export" in log
+    assert f"wrote the held page {_layout.workflow_held_page(out, sample)}" in log
     result = verify(manifest, final=True)
     assert not result["passed"] and {export_id, report_id, "compare"} <= set(result["incomplete"])
     assert result["tasks"][export_id]["problems"] == [
@@ -424,45 +467,90 @@ def test_a_held_export_makes_the_report_and_exits_4(tmp_path, monkeypatch, capsy
     assert T.run(manifest, report_id) == 2
 
 
-def test_a_held_export_without_its_report_needs_makes_no_report(tmp_path, monkeypatch):
-    # A need of the report that the export does not have (the assign tasks of the route after fusion), unfinished:
-    # written into the manifest here, since every need of this plan's report is also the export's.
+def test_an_approval_needs_no_stitch_rerun_and_the_report_runs_once(tmp_path, monkeypatch):
+    """W-875: after the held export, approve_placement and save_placement write approvals.json alone: the placement
+    task's outputs keep their bytes, inodes and modification times and verify keeps the task complete; the export then
+    passes its review gate, and the report task runs once. verify reads approvals.json."""
+    from starfinder import _layout
+    from starfinder.stitching import approve_placement, load_placement, save_placement
+    from starfinder.workflow import verify
+    reports = []
+
+    def report(self, sample, fov_ids, *, output_dir, **kwargs):
+        reports.append(sample)
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        (Path(output_dir) / "report.json").write_text("{}\n")
+
+    exports = []
     manifest, sample, out = _held_export_case(tmp_path, monkeypatch)
-    data = json.loads(manifest.read_text())
-    next(t for t in data["tasks"] if t["kind"] == "report")["needs"].append("assign/s1/F1/default")
-    manifest.write_text(json.dumps(data))
-    assert T.run(manifest, f"export/{sample}") == 4
-    assert not (out / "report" / sample).exists()
-    log = (out / T.task(manifest, "export", sample=sample)["log"]).read_text()
-    assert f"the report of sample {sample} is not made: report/{sample} also needs assign/s1/F1/default" in log
+    monkeypatch.setattr(Dataset, "export", _gated_export(exports))
+    monkeypatch.setattr(Dataset, "report", report)
+    stitch_id, export_id, report_id = f"stitch/{sample}", f"export/{sample}", f"report/{sample}"
+    _complete(manifest, stitch_id)
+    assert T.run(manifest, export_id) == 4 and exports == [] and reports == []
+    assert verify(manifest, hash=True)["tasks"][stitch_id]["complete"]
+    before = _held_files(out, sample)
+    folder = out / "stitching" / sample
+    save_placement(approve_placement(load_placement(folder), reviewer="A. Reviewer", note="F3 and F4 are known"),
+                   folder)
+    assert _held_files(out, sample) == before and (folder / "approvals.json").is_file()
+    result = verify(manifest, hash=True)
+    assert result["tasks"][stitch_id]["complete"], result["tasks"][stitch_id]
+    assert result["tasks"][export_id]["problems"] == [
+        "held for review (a failed record that says held) and no task record; the placement now holds an approval "
+        "of its tables or needs no review: run the workflow again"]
+    assert T.run(manifest, export_id) == 0 and exports == [sample]
+    assert not _layout.workflow_held_page(out, sample).exists()
+    _complete(manifest, export_id)
+    for relative in T.task(manifest, "report", sample=sample)["inputs"]:     # stand-ins: Dataset.report is spied
+        if not (out / relative).exists():
+            (out / relative).parent.mkdir(parents=True, exist_ok=True)
+            (out / relative).write_bytes(b"")
+    assert T.run(manifest, report_id) == 0 and reports == [sample]
+    result = verify(manifest, hash=True)
+    assert {stitch_id, export_id, report_id} <= {k for k, v in result["tasks"].items() if v["complete"]}
 
 
-def test_a_stitch_rerun_keeps_the_approvals_of_unchanged_tables(tmp_path):
-    """W-814: approve_placement and save_placement change placement.json; the rerun of the placement task keeps each
-    earlier approval whose table SHA-256 equal the new tables' (review_placement's rule), and only those."""
-    from types import SimpleNamespace
-    from starfinder.stitching import ReviewPolicy, approve_placement, load_placement, review_placement, save_placement
-    from starfinder.workflow._commands import _keep_approvals, earlier_approvals
+def test_an_approval_of_other_tables_is_refused(tmp_path, monkeypatch):
+    """W-875: an approval counts only for the tables it approved. After the placement changes (another statuses'
+    tables saved into the folder), the export is held again and verify finds the completed export unapproved."""
+    from starfinder.stitching import approve_placement, load_placement, review_placement, save_placement
+    from starfinder.workflow import verify
     from .report_fixtures import FOVS, placement_result
-    from .report_fixtures import SAMPLE as sample
-    folder = tmp_path / "stitching" / sample
-    run = SimpleNamespace(out=tmp_path, identity={"sample": sample}, approvals=())
-    assert earlier_approvals(run) == ()
-    placed = review_placement(placement_result(FOVS, statuses={"F4": "failed"}))
-    save_placement(approve_placement(placed, reviewer="A. Reviewer", note="checked"), folder)
-    run.approvals = earlier_approvals(run)
-    assert [a["reviewer"] for a in run.approvals] == ["A. Reviewer"]
-    # The rerun writes the same tables: the approval is kept and the export's review gate passes.
-    save_placement(placed, folder)
-    _keep_approvals(run, ReviewPolicy())
-    kept = load_placement(folder)
-    assert kept.record["review"]["approvals"] == list(run.approvals)
-    from starfinder.stitching._review import require_approval
-    require_approval(kept)
-    # The rerun places the FOVs otherwise: no approval is kept and placement.json stays as written.
-    other = review_placement(placement_result(FOVS, statuses={"F3": "failed"}))
-    save_placement(other, folder)
-    before = (folder / "placement.json").read_bytes()
-    _keep_approvals(run, ReviewPolicy())
-    assert (folder / "placement.json").read_bytes() == before
+    exports = []
+    manifest, sample, out = _held_export_case(tmp_path, monkeypatch)
+    monkeypatch.setattr(Dataset, "export", _gated_export(exports))
+    export_id = f"export/{sample}"
+    folder = out / "stitching" / sample
+    save_placement(approve_placement(load_placement(folder), reviewer="A. Reviewer", note="checked"), folder)
+    assert T.run(manifest, export_id) == 0 and exports == [sample]
+    _complete(manifest, export_id)
+    assert verify(manifest)["tasks"][export_id]["complete"]
+    other = review_placement(placement_result(FOVS, statuses={"F2": "failed"}))
+    record = json.loads((folder / "placement.json").read_text())
+    save_placement(type(other)(other.sample, other.fovs, other.links,
+                               dict(other.record, inputs=record["inputs"])), folder)
     assert load_placement(folder).record["review"]["approvals"] == []
+    problems = verify(manifest)["tasks"][export_id]["problems"]
+    assert problems == [f"the placement {folder / 'placement.json'} needs review and approvals.json holds no "
+                        "approval of its tables"]
+    assert T.run(manifest, export_id) == 4 and exports == [sample]
+    assert len(json.loads((folder / "approvals.json").read_text())["approvals"]) == 1
+
+
+def test_verify_reads_approvals_only_from_a_placement_record(tmp_path, monkeypatch):
+    """W-875: verify's approval check reads a placement.json that is a placement record; an engine's stub writes
+    placeholder text into every declared output, which leaves a completed export complete (the placement task's own
+    record checks that file's size and SHA-256)."""
+    from starfinder.workflow import verify
+    manifest, sample, out = _held_export_case(tmp_path, monkeypatch)
+    export_id = f"export/{sample}"
+    (out / "export" / sample).mkdir(parents=True, exist_ok=True)
+    (out / "export" / sample / "export.json").write_text("Nextflow stub: export\n")
+    _complete(manifest, export_id)
+    # A placement record whose review is required and that holds no approval: not complete.
+    assert verify(manifest)["tasks"][export_id]["problems"] == [
+        f"the placement {out / 'stitching' / sample / 'placement.json'} needs review and approvals.json holds no "
+        "approval of its tables"]
+    (out / "stitching" / sample / "placement.json").write_text(f"Nextflow stub: stitch/{sample}\n")
+    assert verify(manifest)["tasks"][export_id]["complete"]

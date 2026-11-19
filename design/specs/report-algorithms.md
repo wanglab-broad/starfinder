@@ -1045,14 +1045,16 @@ the residual map uses arrows and colour as below.
    categories "not placed", "fell back to the stage position" (dashed outline) and
    "placeholder" (hatched). The tooltip gives the placement status and `correction_z/y/x`.
    Above the Placement map, when the sample has no export record and `placement.json` `review.state`
-   is `required` (an export held for review), a table of the review: **Review** "required: sample
+   is `required` (a plan without an export), a table of the review: **Review** "required: sample
    assembly and the export wait for `approve_placement`"; **Reasons**, `review.reasons` joined by
    commas; **Flagged FOVs**, one line per reason of `review.flagged`, "<reason>: <FOV>, <FOV>"; and
-   **Approvals**, one line per entry of `review.approvals`, "<reviewer>, <time_utc>: <note>". A list
+   **Approvals**, one line per approval of the placement's tables in `approvals.json` beside
+   `placement.json` (read as a `placement` input), "<reviewer>, <time_utc>: <note>". A list
    with no entry is shown as "none". Otherwise there is no table, so the page of a sample with an
    export, or with a review that is not needed, is as before. `report.json` gains no key.
 
    % Amended 2026-11-05 for W-814: the review of a placement on the page (Jiahao's decision at W-653, 2026-11-04, D9).
+   % Amended 2026-11-19 for W-875: a held export writes the held page and no report; the approvals are read from approvals.json.
    Beside it, whatever the export, when `placement.json` holds `method_diagnostics.link_quality`,
    a `multiview_stitcher` method config with a numeric `quality_threshold`, or
    `review.optimizer_removed` (W-874), a table of the links: **Link-quality threshold**, the

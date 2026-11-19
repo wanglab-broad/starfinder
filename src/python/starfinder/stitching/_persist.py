@@ -5,7 +5,8 @@ A placement is a folder, by convention ``<OUTPUT>/stitching/<sample>/``, holding
 ``fovs.csv`` and ``links.csv``; a BigStitcher import also has ``view_map.csv``, and its
 record holds the SHA-256 of the macro and of ``dataset.xml``. The files are written into a temporary sibling folder
 that replaces the target only when all of them are written, so an interrupted save
-leaves no partial folder.
+leaves no partial folder. The approvals are kept beside them in ``approvals.json``, each keyed by the SHA-256 of
+the two tables it approves, so that recording an approval changes none of the placement's files (W-875).
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import json
 import os
 import shutil
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 from ._placement import FORMAT_VERSION, STAGE, PlacementResult, table_csv
@@ -21,8 +23,11 @@ from ._placement import FORMAT_VERSION, STAGE, PlacementResult, table_csv
 RECORD_FILE = "placement.json"
 TABLE_FILES = {"fovs": "fovs.csv", "links": "links.csv"}
 VIEW_MAP_FILE = "view_map.csv"
-# Files a placement folder may hold; view_map.csv belongs to the BigStitcher import.
-PLACEMENT_FILES = (RECORD_FILE, *TABLE_FILES.values(), VIEW_MAP_FILE)
+APPROVALS_FILE = "approvals.json"
+APPROVALS_STAGE = "placement_approvals"
+APPROVAL_KEYS = ("reviewer", "time_utc", "note", "fovs_sha256", "links_sha256")
+# Files a placement folder may hold; view_map.csv belongs to the BigStitcher import, approvals.json to the review.
+PLACEMENT_FILES = (RECORD_FILE, *TABLE_FILES.values(), VIEW_MAP_FILE, APPROVALS_FILE)
 
 
 def _tables(result):
@@ -40,8 +45,72 @@ def _write_file(path, data: bytes) -> None:
     Path(path).write_bytes(data)
 
 
+def _approval_list(value, where):
+    """The approvals of a record or of ``approvals.json``, each a dict with the keys of APPROVAL_KEYS as strings;
+    ValueError naming ``where`` otherwise."""
+    if not isinstance(value, list) or not all(isinstance(a, dict) for a in value):
+        raise ValueError(f"{where}: the approvals must be a list of objects")
+    for approval in value:
+        wrong = [k for k in APPROVAL_KEYS if not isinstance(approval.get(k), str)]
+        if wrong:
+            raise ValueError(f"{where}: an approval lacks the string keys {', '.join(wrong)}")
+    return [dict(a) for a in value]
+
+
+def _joined(*groups):
+    """The approvals of the groups in their order, each once."""
+    out = []
+    for group in groups:
+        for approval in group:
+            if approval not in out:
+                out.append(approval)
+    return out
+
+
+def _read_approvals(directory, sample):
+    """The approvals of ``<directory>/approvals.json`` ([] when there is none); ValueError when it is not an
+    approvals file of the sample."""
+    path = Path(directory) / APPROVALS_FILE
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text())
+    except ValueError as error:
+        raise ValueError(f"{path} is not a JSON file: {error}") from None
+    if not isinstance(data, dict) or data.get("format_version") != FORMAT_VERSION \
+            or data.get("stage") != APPROVALS_STAGE:
+        raise ValueError(f"{path} is not a version {FORMAT_VERSION} approvals file")
+    if data.get("sample") != sample:
+        raise ValueError(f"{path} holds the approvals of sample {data.get('sample')!r}, not {sample!r}")
+    return _approval_list(data.get("approvals"), str(path))
+
+
+def _approvals_text(sample, approvals) -> bytes:
+    return (json.dumps({"format_version": FORMAT_VERSION, "stage": APPROVALS_STAGE, "sample": sample,
+                        "approvals": approvals}, indent=2, allow_nan=False) + "\n").encode("utf-8")
+
+
+def saved_approvals(directory, sample, fovs_sha256, links_sha256) -> list:
+    """The approvals of a saved placement's tables: those of ``approvals.json`` and, as written before W-875, of
+    ``placement.json`` ``review.approvals``, whose ``fovs_sha256`` and ``links_sha256`` equal the given SHA-256.
+
+    ValueError when ``approvals.json`` is not an approvals file of the sample or an approval is malformed.
+    """
+    directory = Path(directory)
+    record = {}
+    if (directory / RECORD_FILE).is_file():
+        try:
+            record = json.loads((directory / RECORD_FILE).read_text())
+        except ValueError:
+            record = {}
+    review = record.get("review") if isinstance(record, dict) else None
+    earlier = review.get("approvals") or [] if isinstance(review, dict) else []
+    approvals = _joined(_approval_list(earlier, str(directory / RECORD_FILE)), _read_approvals(directory, sample))
+    return [a for a in approvals if (a["fovs_sha256"], a["links_sha256"]) == (fovs_sha256, links_sha256)]
+
+
 def save_placement(result: PlacementResult, directory) -> Path:
-    """Write a placement folder: ``placement.json``, ``fovs.csv`` and ``links.csv``; return the folder.
+    """Write a placement folder: ``placement.json``, ``fovs.csv``, ``links.csv`` and the approvals; return the folder.
 
     Parameters
     ----------
@@ -63,8 +132,19 @@ def save_placement(result: PlacementResult, directory) -> Path:
     the path, SHA-256 and dtypes of each table. A BigStitcher import also gets
     ``view_map.csv`` (``view``, ``grid_column``, ``grid_row``, ``fov_id``,
     ``kind``, from ``record["method"]["views"]``), listed in ``tables`` with
-    its SHA-256; the record keeps the macro's and ``dataset.xml``'s SHA-256. An
-    existing placement folder is replaced as a whole.
+    its SHA-256; the record keeps the macro's and ``dataset.xml``'s SHA-256.
+
+    The approvals of ``record["review"]["approvals"]`` are written to
+    ``approvals.json``, joined to those it already holds, and
+    ``placement.json`` keeps ``review.approvals`` empty. Each approval holds
+    the SHA-256 of the two tables it approves, which key it: it counts only
+    for a placement with those tables. So saving an approved placement
+    whose files are already in the folder, byte for byte, writes
+    ``approvals.json`` alone and leaves the other files untouched; in a
+    workflow, the placement task's outputs do not change and the task does
+    not run again. Otherwise the folder is replaced as a whole, but for
+    ``approvals.json``, which is kept. Remove ``approvals.json`` to withdraw
+    every approval.
 
     Raises
     ------
@@ -73,8 +153,11 @@ def save_placement(result: PlacementResult, directory) -> Path:
     FileExistsError
         directory is a file, or a folder holding files that are not placement
         files.
+    ValueError
+        The record holds a ``tables`` key or a malformed approval, or the
+        folder's ``approvals.json`` is not the sample's approvals file.
     """
-    from starfinder._records import _dtype_map, jsonable
+    from starfinder._records import _dtype_map, atomic_file, jsonable
     if not isinstance(result, PlacementResult):
         raise TypeError("result must be a PlacementResult")
     directory = Path(directory)
@@ -87,21 +170,35 @@ def save_placement(result: PlacementResult, directory) -> Path:
                                   "save the placement in its own folder")
     if "tables" in result.record:
         raise ValueError("the placement record must not hold a 'tables' key; save_placement writes it")
+    review = result.record.get("review")
+    given = _approval_list(review.get("approvals") or [], "record['review']['approvals']") \
+        if isinstance(review, dict) else []
+    files, tables = {}, {}
+    for name, (file_name, frame) in _tables(result).items():
+        files[file_name] = table_csv(frame)
+        tables[name] = {"path": file_name, "sha256": hashlib.sha256(files[file_name]).hexdigest(),
+                        "dtypes": _dtype_map(frame)}
+    record = dict(result.record, tables=tables)
+    if isinstance(review, dict) and "approvals" in review:
+        record["review"] = dict(review, approvals=[])
+    files[RECORD_FILE] = (json.dumps(jsonable(record), indent=2, allow_nan=False) + "\n").encode("utf-8")
+    kept = _read_approvals(directory, result.sample) if directory.is_dir() else []
+    approvals = _joined(kept, given)
+    if directory.is_dir() and _holds(directory, files):
+        if approvals != kept:
+            with atomic_file(directory / APPROVALS_FILE) as tmp:
+                tmp.write_bytes(_approvals_text(result.sample, approvals))
+        return directory
     directory.parent.mkdir(parents=True, exist_ok=True)
     tmp = directory.parent / f".{directory.name}.{uuid.uuid4().hex}.tmp"
     old = directory.parent / f".{directory.name}.{uuid.uuid4().hex}.old"
     tmp.mkdir()
     moved = False
     try:
-        tables = {}
-        for name, (file_name, frame) in _tables(result).items():
-            data = table_csv(frame)
+        for file_name, data in files.items():
             _write_file(tmp / file_name, data)
-            tables[name] = {"path": file_name, "sha256": hashlib.sha256(data).hexdigest(),
-                            "dtypes": _dtype_map(frame)}
-        record = dict(result.record, tables=tables)
-        text = json.dumps(jsonable(record), indent=2, allow_nan=False) + "\n"
-        _write_file(tmp / RECORD_FILE, text.encode("utf-8"))
+        if approvals:
+            _write_file(tmp / APPROVALS_FILE, _approvals_text(result.sample, approvals))
         if directory.exists():
             os.replace(directory, old)
             moved = True
@@ -114,6 +211,12 @@ def save_placement(result: PlacementResult, directory) -> Path:
         shutil.rmtree(tmp, ignore_errors=True)
         shutil.rmtree(old, ignore_errors=True)
     return directory
+
+
+def _holds(directory, files) -> bool:
+    """Whether the folder holds exactly these placement files with these bytes (``approvals.json`` aside)."""
+    present = {p.name for p in directory.iterdir() if p.name != APPROVALS_FILE}
+    return present == set(files) and all((directory / name).read_bytes() == data for name, data in files.items())
 
 
 def load_placement(directory) -> PlacementResult:
@@ -133,8 +236,11 @@ def load_placement(directory) -> PlacementResult:
     -----
     Returns a :class:`PlacementResult` whose tables equal the saved ones
     (float64 bit for bit) and whose record equals the saved record without
-    ``tables``. A BigStitcher import's ``view_map.csv`` is checked too: against
-    its recorded SHA-256 and against the views of the record.
+    ``tables``, but for ``review.approvals``: the approvals of
+    ``approvals.json`` (and those an earlier ``placement.json`` held) whose
+    table SHA-256 equal the saved tables'. A BigStitcher import's
+    ``view_map.csv`` is checked too: against its recorded SHA-256 and against
+    the views of the record.
 
     Raises
     ------
@@ -142,7 +248,8 @@ def load_placement(directory) -> PlacementResult:
         The folder has no ``placement.json``.
     ValueError
         A record of another version or stage, or a table that is missing or
-        whose SHA-256 differs from the record (naming the file and both hashes).
+        whose SHA-256 differs from the record (naming the file and both hashes),
+        or an ``approvals.json`` that is not the sample's approvals file.
     """
     from starfinder._records import _read_table, check_file
     directory = Path(directory)
@@ -167,4 +274,7 @@ def load_placement(directory) -> PlacementResult:
         raise ValueError(f"{path}: the view map must be saved exactly for a BigStitcher import")
     if expected is not None and table_csv(frames["view_map"]) != table_csv(expected[1]):
         raise ValueError(f"placement table view_map {directory / VIEW_MAP_FILE} differs from the views of the record")
-    return result
+    if not isinstance(record.get("review"), dict):
+        return result
+    approvals = saved_approvals(directory, record["sample"], tables["fovs"]["sha256"], tables["links"]["sha256"])
+    return replace(result, record=dict(record, review=dict(record["review"], approvals=approvals)))

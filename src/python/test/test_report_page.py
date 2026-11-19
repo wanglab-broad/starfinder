@@ -601,7 +601,8 @@ def _required_review(case, approve=False):
 @pytest.mark.contract
 @pytest.mark.parametrize("approve", [False, True])
 def test_placement_section_shows_a_required_review_without_an_export(tmp_path, approve):
-    # W-814: the report of an export held for review shows placement.json's review above the placement map.
+    # W-814: a report without an export shows placement.json's review above the placement map; W-875: with the
+    # approvals of its tables from approvals.json, which report.json lists as a placement input.
     case = report_records(tmp_path / "root", "placement_states")
     review = _required_review(case, approve)
     assert review["state"] == "required" and review["flagged"] == {"unplaced_fovs": ["F3", "F4"]}
@@ -616,6 +617,8 @@ def test_placement_section_shows_a_required_review_without_an_export(tmp_path, a
         "Reasons": "unplaced_fovs", "Flagged FOVs": "unplaced_fovs: F3, F4", "Approvals": approvals}
     # report.json gains no key: the review is the page's alone.
     assert list(load_report(folder)) == CONTRACT_RECORD_KEYS
+    listed = {e["path"]: e["kind"] for e in load_report(folder)["inputs"] if e["path"].startswith("stitching/")}
+    assert listed.get(f"stitching/{SAMPLE}/approvals.json") == ("placement" if approve else None)
 
 
 @pytest.mark.contract

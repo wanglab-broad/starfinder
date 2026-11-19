@@ -111,7 +111,7 @@ Each engine does the same four things, in its own syntax:
 | 1 | Failed; the attempt's declared outputs are removed | Retried up to the profile's `retries` | `errorStrategy` `retry` up to `maxRetries` |
 | 2 | Refused before any work | Retried like 1: Snakemake does not distinguish exit statuses (each retry refuses again in seconds) | `finish` (no retry; running tasks end) |
 | 3 | A resume refused | As 2 | `finish` |
-| 4 | An export held for review; it made the sample report when the report's other needs had succeeded | As 2: the job fails, and the run ends without `--keep-going`; with `retries` each retry holds again | `finish` |
+| 4 | An export held for review; it wrote the held page and no report | As 2: the job fails, and the run ends without `--keep-going`; with `retries` each retry holds again | `finish` |
 | 137, 140, other | Killed by the scheduler (memory or time) | Retried like 1, with the attempt's larger resources | `retry` |
 
 A retry may raise memory and runtime (an execution setting); it never changes a scientific
@@ -143,29 +143,25 @@ running engine, or a missing input.
 ### An export held for review and the rerun after the approval
 
 % Amended 2026-11-05 for W-814 (Jiahao's decision at W-653, 2026-11-04, D9).
+% Amended 2026-11-19 for W-875 (Jiahao, 2026-11-18): the held page, and approvals.json outside the placement
+% task's outputs, so that no engine reruns the placement task after an approval.
 
-An export whose placement needs review exits 4, after making the sample report when every other task
-the report needs has succeeded (the contract, "The report of a held export"). Both engines end the run
-with a failure. Nextflow finishes without retrying it, and `VERIFY_AFTER` fails. Snakemake fails the
-job, and without `--keep-going` it starts no other job. The report is made inside the export's job when
-the report's other needs have succeeded. Neither engine starts a task after the held export, so a report
-that still waits for one of them (an `assign` task on the routes `after_fusion` and `molecules_only`)
-waits for the rerun after the approval.
+An export whose placement needs review exits 4, after writing the held page and no report (the
+contract, "The held page"). Both engines end the run with a failure. Nextflow finishes without retrying
+it, and `VERIFY_AFTER` fails. Snakemake fails the job, and without `--keep-going` it starts no other job.
+The report waits for the run after the approval.
 
-After `approve_placement` and `save_placement`, `placement.json` differs from the bytes the placement
-task's record lists, and the placement task must run again to record it. That rerun keeps the
-approval, because the command reads the earlier `placement.json`'s approvals before it removes its
-outputs. The engines reach that rerun differently, as `test_workflow_engines_review.py` runs them:
+After `approve_placement` and `save_placement`, which write `stitching/<sample>/approvals.json` and change
+none of the placement task's declared outputs, both engines rerun the same way, as
+`test_workflow_engines_review.py` runs them:
 
-* **Nextflow** with `-resume`: `VERIFY_BEFORE` finds the placement task not complete (its
-  `placement.json` has another size) and gives it a fresh token. The task reruns and keeps the
-  approval; then `export`, `report` and `compare` run.
-* **Snakemake** removes a job's existing outputs before it runs the job, so a rerun of the placement
-  task that Snakemake scheduled would delete the approved `placement.json` first. It also does not
-  rerun a task whose output changed. The person runs the placement task by its command
-  (`starfinder workflow stitch --manifest <manifest> --task stitch/<sample>`, recorded as `manual`),
-  which keeps the approval and records the task again. Then Snakemake runs `export`, `report` and
-  `compare`, which have no records.
+* **Nextflow** with `-resume`: `VERIFY_BEFORE` finds the placement task complete, with its token, and the
+  export not complete. The placement task is cached; `export`, `report` and `compare` run.
+* **Snakemake**: the placement task's outputs are unchanged and newer than its inputs, and
+  `approvals.json` is no declared output, so Snakemake does not schedule it; `export`, `report` and
+  `compare`, which have no records, run.
+
+Over the held run and the run after the approval, the placement task and the report task each run once.
 
 ### The task fingerprint
 

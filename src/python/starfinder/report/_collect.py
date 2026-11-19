@@ -281,6 +281,9 @@ def _check_export(inputs, export_dir, sample, fov_ids, assignment):
 
 
 def _check_placement(inputs, stitching_dir, fov_ids):
+    """placement.json, its ``review.approvals`` those of approvals.json beside it (read as a placement file) whose
+    table SHA-256 equal the tables' it records (stitching.load_placement's rule); None without placement.json."""
+    from starfinder.stitching._persist import APPROVALS_FILE, saved_approvals
     path = stitching_dir / "placement.json"
     if not path.is_file():
         return None
@@ -288,6 +291,12 @@ def _check_placement(inputs, stitching_dir, fov_ids):
     placed = set((record.get("inputs") or {}) if isinstance(record, dict) else ())
     if placed != set(fov_ids):
         raise ValueError(f"{path}: the placement holds the FOVs {sorted(placed)}, the FOV list {sorted(fov_ids)}")
+    review = record.get("review")
+    if isinstance(review, dict) and (stitching_dir / APPROVALS_FILE).is_file():
+        inputs.verify(stitching_dir / APPROVALS_FILE, "placement")
+        approvals = saved_approvals(stitching_dir, record.get("sample"), _get(record, "tables", "fovs", "sha256"),
+                                    _get(record, "tables", "links", "sha256"))
+        record = dict(record, review=dict(review, approvals=approvals))
     return record
 
 

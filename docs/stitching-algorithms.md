@@ -141,10 +141,17 @@ had), and the residual and correction checks pass. When there are removals,
 
 | File | Contents |
 | --- | --- |
-| `placement.json` | Frame, method provenance, inputs, review and table hashes |
+| `placement.json` | Frame, method provenance, inputs, review and table hashes; `review.approvals` stays empty |
 | `fovs.csv` | The per-FOV placement table |
 | `links.csv` | The neighbour-link table |
 | `view_map.csv` | BigStitcher import: `view`, `grid_column`, `grid_row`, `fov_id`, `kind` |
+| `approvals.json` | The approvals (`approve_placement`), each with the SHA-256 of the `fovs.csv` and `links.csv` it approves; written only once there is one |
+
+Saving an approved placement whose files are already in the folder writes
+`approvals.json` alone. Any other save replaces the folder but keeps
+`approvals.json`, so an approval counts again whenever the tables are the ones
+it approved. `load_placement` puts the approvals of the saved tables into
+`record["review"]["approvals"]`.
 
 ## Workflow keys
 

@@ -515,7 +515,9 @@ def _grids(run, dataset, fov_ids):
 
 
 def stitch(run):
-    """Dataset.stitch of one sample into stitching/<sample>/ (an in-process method)."""
+    """Dataset.stitch of one sample into stitching/<sample>/ (an in-process method). The folder's approvals.json,
+    which is no declared output, stays: save_placement keeps it, and an approval counts for the new placement when its
+    tables are the approved ones."""
     from starfinder.dataset.workflow import _sample_table
     block, dataset, fov_ids, position_ids, grid_fov_ids = _stitching(run)
     table = block.positions
@@ -525,39 +527,6 @@ def stitch(run):
     dataset.stitch(run.identity["sample"], fov_ids, table=table, config=block.config, input=block.input,
                    review=block.review, fallback=block.fallback,
                    output_dir=_layout.stitching_dir(run.out, run.identity["sample"]), position_ids=position_ids)
-    _keep_approvals(run, block.review)
-
-
-def earlier_approvals(run):
-    """The approvals of the sample's earlier ``placement.json`` (``review.approvals``), read by the preparation of a
-    placement task before its outputs are removed; () when there is none or it cannot be read."""
-    path = _layout.stitching_dir(run.out, run.identity["sample"]) / "placement.json"
-    try:
-        approvals = (json.loads(path.read_text()).get("review") or {}).get("approvals")
-    except (OSError, ValueError, AttributeError):
-        return ()
-    return tuple(approvals) if isinstance(approvals, list) else ()
-
-
-def _keep_approvals(run, policy):
-    """Keep the earlier approvals (``run.approvals``) whose table SHA-256 equal the new placement's, the rule of
-    review_placement, and save the placement with them: an approval saved with save_placement survives a rerun of
-    the task that places the FOVs as before. Without a kept approval the saved placement stays as written."""
-    if not run.approvals:
-        return
-    import logging
-    from starfinder.stitching import ReviewPolicy, load_placement, review_placement, save_placement
-    folder = _layout.stitching_dir(run.out, run.identity["sample"])
-    result = load_placement(folder)
-    review = dict(result.record.get("review") or {}, approvals=list(run.approvals))
-    kept = review_placement(replace(result, record=dict(result.record, review=review)),
-                            ReviewPolicy() if policy is None else policy)
-    approvals = kept.record["review"]["approvals"]
-    logging.getLogger("starfinder.workflow").info(
-        f"kept {len(approvals)} of the {len(run.approvals)} approvals of the earlier placement (those whose table "
-        "SHA-256 equal the new tables')")
-    if approvals:
-        save_placement(kept, folder)
 
 
 def bigstitcher_macro(run):
@@ -628,7 +597,8 @@ def bigstitcher_check(run):
 
 
 def bigstitcher_import(run):
-    """The import of dataset.xml (checked first) with the view map and the macro, saved with save_placement."""
+    """The import of dataset.xml (checked first) with the view map and the macro, saved with save_placement, which
+    keeps the folder's approvals.json."""
     from starfinder.dataset.workflow import _sample_table
     from starfinder.stitching import import_bigstitcher, save_placement
     block, dataset, fov_ids, position_ids, grid_fov_ids = _stitching(run)
@@ -641,7 +611,6 @@ def bigstitcher_import(run):
                                 review=block.review, fallback=block.fallback, sample=run.identity["sample"],
                                 macro=None if macro is None else Path(macro).read_text())
     save_placement(result, _layout.stitching_dir(run.out, run.identity["sample"]))
-    _keep_approvals(run, block.review)
 
 
 def _from_plain(value):
@@ -669,9 +638,9 @@ def export(run):
     no export record lists that folder. A copy of export.json under workflow/ survives engine removal of the
     declared record, so Dataset.export can remove earlier listed files and reuse saved assembly on a rerun.
 
-    A placement that needs review and holds no approval of its tables holds the export (TaskHeld, exit 4): after
-    its declared outputs are removed, the task makes the sample report (_held_report) for the reviewer when every
-    other task the report needs has succeeded.
+    A placement that needs review and holds no approval of its tables (approvals.json) holds the export (TaskHeld,
+    exit 4): after its declared outputs are removed, the task writes the held page (_held_page) for the reviewer, and
+    no report. The page is removed when the export runs again.
     """
     import shutil
     from starfinder.export._record import PARTS, listed_files
@@ -691,6 +660,7 @@ def export(run):
             dataset.load_codebook(_codebook(run), encoding=_from_plain(codebook["encoding"]),
                                   layout=_from_plain(codebook["layout"]))
     sample = run.identity["sample"]
+    _layout.workflow_held_page(run.out, sample).unlink(missing_ok=True)
     previews = _layout.export_previews_dir(run.out, sample)
     if previews.exists():
         shutil.rmtree(previews)
@@ -708,8 +678,10 @@ def export(run):
         record = dataset.export(sample, placement=_layout.stitching_dir(run.out, sample),
                                 assignment=assembly.assignment, config=config, output_dir=folder)
     except PlacementReviewRequiredError as error:
-        raise TaskHeld(f"{error}; then save_placement it into {_layout.stitching_dir(run.out, sample)} and run the "
-                       "workflow again", then=lambda: _held_report(run)) from error
+        raise TaskHeld(f"{error}; then save_placement it into {_layout.stitching_dir(run.out, sample)}, which "
+                       "writes the approval to approvals.json there, and run the workflow again (the held page "
+                       f"{_layout.workflow_held_page(run.out, sample)} shows the review)",
+                       then=lambda: _held_page(run)) from error
     finally:
         # _task removes declared outputs only after the command raises; keep a failed attempt's record too.
         # SIGKILL runs no finally: files listed only by the killed attempt can outlive this earlier copy.
@@ -751,32 +723,89 @@ def report(run):
                          output_dir=report_dir)
 
 
-def _held_report(run):
-    """The sample report of an export held for review: the report task's command function through that task's own
-    view, once every other task it needs has a succeeded record. It reads the FOVs' records and placement.json (the
-    held export left no export.json) and writes report/<sample>/, but no report record, so the report task runs
-    after the approval as before. Nothing when the plan has no report task."""
+_HELD_STYLE = """body{font:14px/1.45 system-ui,sans-serif;margin:2em auto;max-width:72em;padding:0 1em;color:#1d1d1f;
+background:#fff}h1{font-size:1.4em}h2{font-size:1.1em;margin-top:1.6em}table{border-collapse:collapse}
+td,th{border:1px solid #ccc;padding:.25em .6em;text-align:left;vertical-align:top}th{background:#f2f2f2}
+pre{background:#f6f6f6;padding:.8em;overflow-x:auto}.muted{color:#777}
+@media (prefers-color-scheme:dark){body{color:#e6e6e6;background:#161618}td,th{border-color:#444}
+th{background:#26262a}pre{background:#202024}.muted{color:#999}}"""
+
+
+def _held_page(run):
+    """The held page of an export held for review, workflow/held/<sample>.html, from placement.json and its tables
+    alone: the review's reasons and flagged FOVs, a summary of the placement and how to approve it. The task writes no
+    report and no report record: the report task makes the full report once, after the export."""
+    import html
     import logging
-    from starfinder.workflow._shape import COMMANDS
-    from starfinder.workflow._task import Run, read_record
-    from starfinder.workflow._translate import check_api
-    logger = logging.getLogger("starfinder.workflow")
+    from collections import Counter
+    from starfinder.stitching import load_placement
+    from starfinder.stitching._persist import APPROVALS_FILE, _read_approvals
+    from starfinder.stitching._placement import table_sha256
+
+    def e(value):
+        return html.escape(str(value))
+
+    def table(header, rows):
+        head = "".join(f"<th>{e(h)}</th>" for h in header)
+        body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
+        return f"<table><tr>{head}</tr>{body}</table>"
+
     sample = run.identity["sample"]
-    task = next((t for t in run.manifest["tasks"] if t["kind"] == "report" and t["identity"] == {"sample": sample}),
-                None)
-    if task is None:
-        logger.info(f"the plan has no report of sample {sample}: no report of the held export")
-        return
-    waiting = [need for need in task["needs"]
-               if need != run.id and (read_record(run.manifest, need) or {}).get("status") != "succeeded"]
-    if waiting:
-        logger.warning(f"the report of sample {sample} is not made: {task['id']} also needs {', '.join(waiting)}, "
-                       "which have no record that says succeeded")
-        return
-    held = Run(run.manifest_path, task["id"], COMMANDS["report"], run.context)
-    check_api(held.configuration, held.api, held.task["blocks"], "report")
-    report(held)
-    logger.info(f"made the report of the held export: {_layout.report_dir(run.out, sample) / 'report.html'}")
+    folder = _layout.stitching_dir(run.out, sample)
+    result = load_placement(folder)
+    review = result.record.get("review") or {}
+    none = '<span class="muted">none</span>'
+    flagged = review.get("flagged") or {}
+    fovs, links = result.fovs, result.links
+    statuses = ", ".join(f"{e(k)} {n}" for k, n in sorted(Counter(fovs["status"]).items()))
+    reasons = ", ".join(f"{e(k or 'kept')} {n}" for k, n in sorted(Counter(links["reason"]).items()))
+    method = (result.record.get("method") or {}).get("method")
+    others = len(_read_approvals(folder, sample))
+    summary = [("Method", e(method)), ("FOVs", f"{len(fovs)} ({statuses})"),
+               ("Links", f"{len(links)}, {int(links['kept'].sum())} kept ({reasons or none})"),
+               ("Policy", e(", ".join(f"{k} {v}" for k, v in (review.get("policy") or {}).items())) or none),
+               ("Tables", f"fovs.csv {e(table_sha256(fovs))}<br>links.csv {e(table_sha256(links))}"),
+               ("Approvals", f"none of these tables ({others} in {APPROVALS_FILE})" if others else none)]
+    marked = fovs[(fovs["status"] != "image_supported") | (fovs["flags"] != "")]
+    rows = [(e(r.fov_id), e(r.status), e(f"{r.correction_y:.3g}"), e(f"{r.correction_x:.3g}"), e(r.n_links_kept),
+             e(r.flags.replace(";", ", ")) or none) for r in marked.itertuples()]
+    removed = review.get("optimizer_removed")
+    removal = ""
+    if isinstance(removed, dict):
+        pairs = "; ".join(" – ".join(map(str, pair)) for pair in removed.get("links") or [])
+        checks = [(e(check), "yes" if holds else "<b>no</b>") for check, holds in (removed.get("checks") or {}).items()]
+        removal = f"<h2>Links the optimizer removed</h2>\n<p>{e(pairs)}</p>\n{table(('Check', 'Holds'), checks)}"
+    code = (f"from starfinder.stitching import approve_placement, load_placement, save_placement\n"
+            f"result = load_placement({str(folder)!r})\n"
+            "result.fovs, result.links, result.record[\"review\"]   # inspect the FOVs, the links and the review\n"
+            f"save_placement(approve_placement(result, reviewer=\"...\", note=\"...\"), {str(folder)!r})")
+    page = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>{e(sample)}: export held for review</title>
+<style>{_HELD_STYLE}</style></head><body>
+<h1>Sample {e(sample)}: the export is held for review</h1>
+<p>The placement in <code>{e(folder)}</code> needs review, and <code>{APPROVALS_FILE}</code> holds no approval of its
+tables. The export task <code>{e(run.id)}</code> stopped before it read any origin. The sample report is made once,
+after the export.</p>
+<h2>Review</h2>
+{table(("", ""), [("Reasons", e(", ".join(map(str, review.get("reasons") or []))) or none),
+                  ("Flagged FOVs", "<br>".join(f"{e(reason)}: {e(', '.join(map(str, ids)))}"
+                                               for reason, ids in flagged.items()) or none)])}
+<h2>Placement</h2>
+{table(("", ""), summary)}
+<h2>FOVs not image-supported or flagged</h2>
+{table(("FOV", "Status", "Correction y (µm)", "Correction x (µm)", "Kept links", "Flags"), rows) if rows else none}
+{removal}
+<h2>How to approve</h2>
+<p>Inspect the placement, then record the approval. <code>save_placement</code> writes it to
+<code>{APPROVALS_FILE}</code> and changes none of the placement's files, so the placement task does not run again.</p>
+<pre>{e(code)}</pre>
+<p>Then run the workflow again (Nextflow with <code>-resume</code>): the export, the report and the comparison run.
+An approval holds only for the tables it approved.</p>
+</body></html>
+"""
+    path = _layout.workflow_held_page(run.out, sample)
+    _publish(lambda tmp: tmp.write_text(page, encoding="utf-8"), path)
+    logging.getLogger("starfinder.workflow").info(f"wrote the held page {path}")
 
 
 def compare(run):
