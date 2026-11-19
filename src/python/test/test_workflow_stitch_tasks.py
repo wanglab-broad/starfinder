@@ -399,7 +399,7 @@ def test_the_per_sample_commands_read_the_selected_fovs_only(tmp_path, monkeypat
     manifest, planned = T.plan(tmp_path, "selected", config)
     assert planned["membership"]["samples"] == {"s2": ["F10"], "s1": ["F1"]}
     T.call(manifest, "stitch/s1")
-    T.call(manifest, "report/s1")
+    T.call(manifest, "report/s1/no_export")
     (_, stitch_args, stitch_kwargs), (_, report_args, _) = calls
     assert stitch_args == ("s1", ["F1"]) and report_args == ("s1", ["F1"])
     assert stitch_kwargs["position_ids"] is None       # a regular grid reads no PositionID

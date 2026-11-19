@@ -245,8 +245,8 @@ def _environment(work):
 # reads_assignment), molecules only (assembly.assignment null) and after fusion (the fused projection segmented by an
 # import run of the per-FOV route's fused cell labels). Each route runs in its own output root, golden-<route>.
 EXPORT_ROUTES = ("per_fov", "molecules_only", "after_fusion")
-# The per-FOV route's fused cell labels (export/<sample>/cell_labels.ome.tif, fuse_labels at the fusion's scale), copied
-# as the label file that the route after fusion imports on the fused projection grid.
+# The per-FOV route's fused cell labels (export/<sample>/per_fov/cell_labels.ome.tif, fuse_labels at the fusion's
+# scale), copied as the label file that the route after fusion imports on the fused projection grid.
 FUSED_CELLS = "fused-cells.ome.tif"
 def export_output_root(work, route):
     return Path(work) / "output" / DATASET_ID / f"{OUTPUT_ID}-{route.replace('_', '-')}"
@@ -379,7 +379,8 @@ def run_migrated(work, snakemake, starfinder_path=REPO, cores=1, names=MIGRATED)
     records = []
     for name in (n for n in MIGRATED if n in names):
         if name == "D-molecules-only" or (name == "D-after-fusion" and "D-molecules-only" not in names):
-            _fused_cells(export_output_root(work, "per_fov") / "export" / SAMPLE_ID, work / "labels" / FUSED_CELLS)
+            _fused_cells(export_output_root(work, "per_fov") / "export" / SAMPLE_ID / "per_fov",
+                         work / "labels" / FUSED_CELLS)
         log = work / f"snakemake-g3-{name}.log"
         command = common + ["--configfile", str(paths[name]), "--", *map(str, targets.get(name, ["all"]))]
         with open(log, "w") as handle:
@@ -410,6 +411,20 @@ def _varies(path, varying=VARYING):
     return any(pattern in str(path) for pattern in varying)
 
 
+# W-876 moved the workflow's sample outputs of each export route into a folder of the route, export/<sample>/<route>/
+# and report/<sample>/<route>/ (report/<sample>/no_export/ without an export); the expected values name the folders
+# before it, export/<sample>/ and report/<sample>/, one route per output root. The extraction folds the route folder
+# out of every path it names and of every string of the records, and changes nothing else.
+ROUTE_FOLDER = re.compile(r"\b((?:export|report)/" + SAMPLE_ID + r")/(?:per_fov|after_fusion|molecules_only|no_export)"
+                          r"(?=/|$)")
+
+
+def _folded(path):
+    """A path (or a record's string) with W-876's route folder folded out: export/<sample>/<route>/x is
+    export/<sample>/x, report/<sample>/<route>/x is report/<sample>/x."""
+    return ROUTE_FOLDER.sub(r"\1", str(path))
+
+
 def _normalized(value, work, varying=VARYING, digests=VARYING_DIGESTS):
     """A JSON record without the NORMALIZED keys, the digests of varying records and files, with the work folder's
     absolute path written as ``<work>`` wherever a string holds it."""
@@ -421,7 +436,7 @@ def _normalized(value, work, varying=VARYING, digests=VARYING_DIGESTS):
     if isinstance(value, list):
         return [_normalized(item, work, varying, digests) for item in value]
     if isinstance(value, str):
-        return value.replace(work, "<work>")
+        return _folded(value.replace(work, "<work>"))
     return value
 
 
@@ -474,7 +489,7 @@ def extract(work, out, *, migrated=False):
                                                          "assignment.json")]
     records += sorted((root / "report").rglob("*.json"))
     for path in records:
-        target = out / "records" / path.relative_to(root)
+        target = out / "records" / _folded(path.relative_to(root).as_posix())
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(_normalized(json.loads(path.read_text()), str(work)), indent=1) + "\n")
     tables = {}
@@ -503,7 +518,7 @@ def extract(work, out, *, migrated=False):
             values[f"{name}:sum"] = {"value": float(pixels.sum(dtype=np.float64)),
                                      "compare": "exact" if integer else "float64"}
     for path in sorted((root / "report").rglob("*.csv")):
-        tables["report-" + path.relative_to(root / "report").as_posix().replace("/", "-")] = path
+        tables[_folded(path.relative_to(root).as_posix()).replace("/", "-")] = path
     bigstitcher = work / "bigstitcher" / SAMPLE_ID
     tables["bigstitcher-view_map.csv"] = bigstitcher / "view_map.csv"
     macro = (bigstitcher / "BigStitcher_macro.ijm").read_text()
@@ -534,8 +549,8 @@ def extract(work, out, *, migrated=False):
         dtypes[name] = EV.write_csv(frame, out / name)
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         if not _varies(path.relative_to(root).as_posix()):
-            values[f"file:{path.relative_to(root).as_posix()}"] = {"value": sha256_file(path),
-                                                                    "compare": "same_environment"}
+            values[f"file:{_folded(path.relative_to(root).as_posix())}"] = {"value": sha256_file(path),
+                                                                             "compare": "same_environment"}
     (out / "values.json").write_text(json.dumps(values, indent=1, sort_keys=True) + "\n")
     # Each table's columns keep their order (expected_values.read_csv reads them in it).
     (out / "dtypes.json").write_text(json.dumps({name: dtypes[name] for name in sorted(dtypes)}, indent=1) + "\n")
@@ -678,7 +693,7 @@ def extract_export(work, out):
     for route in EXPORT_ROUTES:
         root = export_output_root(work, route)
         for path in sorted(p for folder in EXPORT_FOLDERS for p in (root / folder).rglob("*") if p.is_file()):
-            relative = path.relative_to(root).as_posix()
+            relative = _folded(path.relative_to(root).as_posix())
             name = f"{route}/{relative}"
             if path.suffix == ".json":
                 target = out / "records" / route / relative

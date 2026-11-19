@@ -173,7 +173,8 @@ class EngineRun:
             # A task a person ran by its command (the placement task after an approval, under Snakemake) says manual.
             assert record["workflow"]["execution_context"]["engine"] in (
                 self.engine, *(("manual",) if task_id in getattr(self, "manual", ()) else ())), task_id
-        assert f'<a href="{X.SAMPLE}/report.html">{X.SAMPLE}</a>' in (self.out / "report/index.html").read_text()
+        route = self.data["export_route"] or "no_export"      # each route's report in its own folder (W-876)
+        assert f'<a href="{X.SAMPLE}/{route}/report.html">{X.SAMPLE}</a>' in (self.out / "report/index.html").read_text()
 
     def replan(self, config):
         X.write_config(self.work, "validation", config)
@@ -255,7 +256,7 @@ def report_hash_cell(run, path, text, tree):
 
     The cell holds ``<code>hash</code>`` when every FOV's record holds one hash, and exactly the short text when
     they differ. The returned value is the hash or the short text; the page keeps the placeholder in either case."""
-    sample = Path(path).parent.name
+    sample = Path(path).parts[1]          # report/<sample>/<route>/report.html (W-876)
     hashes = {json.loads(tree[f"fovs/{fov}/run.json"])["workflow_config"]["sha256"]
               for fov in run.data["membership"]["samples"][sample]}
     value = hashes.pop() if len(hashes) == 1 else REPORT_HASH_SEVERAL
@@ -405,7 +406,7 @@ def fresh_comparison(run, expected, *, name, rerun_tasks):
         if "export" in run.work.name:
             from starfinder.export._record import PARTS, listed_files
             def unlisted(root):
-                folder = root / "export" / X.SAMPLE
+                folder = root / "export" / X.SAMPLE / run.data["export_route"]
                 record = json.loads((folder / "export.json").read_text())
                 listed = {"export.json", *(p for part in PARTS for p in listed_files(record, part))}
                 return sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*")

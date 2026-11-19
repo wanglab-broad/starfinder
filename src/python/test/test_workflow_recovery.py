@@ -544,7 +544,7 @@ def test_x11_stale_results_rerun_only_readers_and_downstream(tmp_path, engine, c
             block = "export" if case == "export" else "processing"
             affected = E.downstream(run.data, {t["id"] for t in run.data["tasks"] if block in t["blocks"]})
             if block == "export":
-                assert affected == {"export/sample", "report/sample", "compare"}
+                assert affected == {"export/sample/per_fov", "report/sample/per_fov", "compare"}
                 config["export"]["previews"] = False
             elif changed:
                 config["processing"]["spot_finding"]["threshold_value"] = 6.0
@@ -679,7 +679,7 @@ def export_engine(export_engine_base):
     yield run
 
 
-EXPORT_DOWNSTREAM = {"export/sample", "report/sample", "compare"}
+EXPORT_DOWNSTREAM = {"export/sample/per_fov", "report/sample/per_fov", "compare"}
 
 
 def _export_files(run):
@@ -699,7 +699,7 @@ def test_export_record_part_off_matches_a_fresh_export(export_engine):
     # Fresh export on the same completed upstream results, with no saved export
     # record in either location; do not repeat the complete FOV pipeline.
     shutil.rmtree(run.out / "export")
-    (run.out / "workflow/exports/sample.json").unlink(missing_ok=True)
+    (run.out / "workflow/exports/sample/per_fov.json").unlink(missing_ok=True)
     for task_id in EXPORT_DOWNSTREAM:
         _layout.task_record(run.out, task_id).unlink()
     run.invoke(EXPORT_DOWNSTREAM)
@@ -725,19 +725,19 @@ def test_export_record_failed_attempt_is_kept_for_retry(export_engine, tmp_path)
     hook.mkdir()
     (hook / "sitecustomize.py").write_text(
         "import sys\n"
-        "if '--task' in sys.argv and sys.argv[sys.argv.index('--task') + 1] == 'export/sample':\n"
+        "if '--task' in sys.argv and sys.argv[sys.argv.index('--task') + 1] == 'export/sample/per_fov':\n"
         " import starfinder.dataset._export as export\n"
         " original = export.fuse_images\n"
         " def fail(*args, **kwargs):\n"
         "  original(*args, **kwargs)\n"
         "  raise RuntimeError('W-758 injected failure after fusion')\n"
         " export.fuse_images = fail\n")
-    task = next(t for t in run.data["tasks"] if t["id"] == "export/sample")
+    task = next(t for t in run.data["tasks"] if t["id"] == "export/sample/per_fov")
     command = [sys.executable, "-m", "starfinder", *task["command"][1:], "--engine", run.engine]
     environment = dict(os.environ, PYTHONPATH=str(hook) + os.pathsep + os.environ.get("PYTHONPATH", ""))
     failed = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=180)
-    folder = run.out / "export/sample"
-    log = _layout.task_log(run.out, "export/sample").read_text()
+    folder = run.out / "export/sample/per_fov"
+    log = _layout.task_log(run.out, "export/sample/per_fov").read_text()
     E.evidence(run.work, "w758-failed-attempt.json", {"command": command, "returncode": failed.returncode,
                "stdout": failed.stdout, "stderr": failed.stderr, "task_log": log})
     assert failed.returncode == 1 and "W-758 injected failure after fusion" in log
@@ -762,7 +762,7 @@ def test_export_record_failed_attempt_is_kept_for_retry(export_engine, tmp_path)
 def test_export_record_saved_assembly_is_reused(export_engine):
     import copy
     run = export_engine
-    folder = run.out / "export/sample"
+    folder = run.out / "export/sample/per_fov"
     before = {p.relative_to(folder).as_posix(): p.read_bytes() for p in (folder / "tables").glob("*")}
     assert before and (folder / "sample.h5ad").is_file()
     before["sample.h5ad"] = (folder / "sample.h5ad").read_bytes()

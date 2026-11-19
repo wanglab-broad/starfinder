@@ -4,7 +4,7 @@
 ``--task`` and the execution context ``--engine``, ``--engine-version``, ``--job-id``, ``--attempt``, ``--image`` and
 ``--cache-token``, which are recorded and never interpreted. Exit status 0 succeeded, 1 failed, 2 refused before any
 work, 3 a refused verified resume, 4 held for review (an export whose placement needs review and holds no approval;
-the task wrote the held page workflow/held/<sample>.html and no report).
+the task wrote the held page workflow/held/<sample>/<route>.html and no report).
 """
 from __future__ import annotations
 

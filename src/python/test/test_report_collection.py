@@ -1110,3 +1110,29 @@ def test_dt1_two_single_thread_processes(tmp_path):
     assert pages[0] != (first["report.html"].decode("utf-8")) and pages[0] == pages[1]
     assert {c: CELLS_RETAINED[c] for c in FOVS} == dict(
         tables_of(case.folder, json.loads(second["report.json"]))["fovs"][["fov_id", "n_cells_retained"]].values)
+
+
+# --- The export folder of a route (W-876) ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+def test_the_report_reads_the_export_folder_it_is_given(tmp_path):
+    """``export_dir`` replaces ``<output_root>/export/<sample>/``: with report_cells' export moved into the folder of
+    the route per FOV, ``export/s1/per_fov/`` (where the workflow writes it), the report given that folder reads it
+    (every export file it lists lies there, the route is the export's and the page names the folder), and the report
+    without it finds no export at ``export/s1/`` (no_export, route null)."""
+    anndata_or_skip()
+    case = report_cells(tmp_path / "root")
+    folder = case.root / "export" / "s1"
+    moved = case.root / "export" / "moved"
+    folder.rename(moved)
+    folder.mkdir()
+    moved.rename(folder / "per_fov")
+    _, record = case.collect(export_dir=folder / "per_fov", output_dir=case.root / "report" / "s1" / "per_fov")
+    exported = [e["path"] for e in record["inputs"] if e["path"].startswith("export/")]
+    assert exported and all(p.startswith("export/s1/per_fov/") for p in exported)
+    assert "export/s1/per_fov/export.json" in exported and record["route"] == "per_fov"
+    page = (case.root / "report" / "s1" / "per_fov" / "report.html").read_text(encoding="utf-8")
+    assert "<td>Sample export</td><td><code>export/s1/per_fov/</code></td>" in page
+    _, record = case.collect(output_dir=case.root / "report" / "s1" / "no_export")
+    assert record["route"] is None and not [e for e in record["inputs"] if e["path"].startswith("export/")]
+    assert any(u["reason"] == "no_export" for u in record["unavailable"])

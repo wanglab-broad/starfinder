@@ -818,7 +818,7 @@ class _Page:
                   ("FOV folders", f"<code>{_layout.FOVS}/&lt;fov_id&gt;/</code>" +
                    ("" if folders else ' <span class="muted">not written</span>')),
                   ("Placement", place(_layout.stitching_dir(root, c.sample), f"{_layout.STITCHING}/{c.sample}/")),
-                  ("Sample export", place(_layout.export_dir(root, c.sample), f"{_layout.EXPORT}/{c.sample}/")),
+                  ("Sample export", place(c.export_dir, f"{self._shown(c.export_dir)}/")),
                   ("Report", f"<code>{_e(self._shown(report / 'report.html'))}</code>"),
                   ("Report tables", f"<code>{_e(self._shown(report / 'tables'))}/</code>")]
         return {"files_input": self._table([("Images", entry("entry=images", images)),

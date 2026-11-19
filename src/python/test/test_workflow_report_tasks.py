@@ -59,6 +59,14 @@ def report_config(work, report, blocks):
     return config
 
 
+def route_of(blocks):
+    """The export route of report_config's blocks, whose folders the report task writes and reads (W-876): per_fov
+    with an assignment name, molecules_only with assignment null, no_export without an assembly block."""
+    if "assembly" not in blocks:
+        return "no_export"
+    return "molecules_only" if blocks["assembly"].get("assignment", "default") is None else "per_fov"
+
+
 #: The cases of test_wf1_report_sample_calls_dataset_report: the blocks and the assignment the report reads.
 CASES = [
     ({"stitching": MERGED, "assembly": {"assignment": "default"}}, "default"),
@@ -74,7 +82,9 @@ CASES = [
 @pytest.mark.parametrize("block", ["contract", "empty"])
 def test_the_report_command_calls_dataset_report(tmp_path, monkeypatch, blocks, assignment, block):
     """From test_wf1_report_sample_calls_dataset_report: the sample's FOVs from fovs.csv, the assembly block's
-    assignment (none without the block, where no task saves an assignment) and the report block's configuration."""
+    assignment (none without the block, where no task saves an assignment) and the report block's configuration, into
+    the route's folder report/<sample>/<route>/, reading the route's export export/<sample>/<route>/ (W-876; none
+    without an export)."""
     calls = spy(monkeypatch, "report")
     config = report_config(tmp_path, copy.deepcopy(REPORT) if block == "contract" else {}, blocks)
     rows = [("sample0", 1, 2), (SAMPLE, 3, 5), ("sample2", 6, 6)]
@@ -83,13 +93,15 @@ def test_the_report_command_calls_dataset_report(tmp_path, monkeypatch, blocks, 
         (tmp_path / "labels").mkdir(exist_ok=True)
         (tmp_path / "labels" / f"Position{i:03d}.tif").write_bytes(b"")
     manifest, _ = T.plan(tmp_path, "report", config)
-    T.call(manifest, f"report/{SAMPLE}")
+    route = route_of(blocks)
+    T.call(manifest, f"report/{SAMPLE}/{route}")
     out = T.output_root(config)
     (dataset, args, kwargs), = calls
     assert dataset.output_root == out and dataset.dataset_id == "data"
     assert args == (SAMPLE, ["Position003", "Position004", "Position005"])
     assert kwargs == {"assignment": assignment, "config": REPORT_CONFIG if block == "contract" else ReportConfig(),
-                      "output_dir": out / "report" / SAMPLE}
+                      "output_dir": out / "report" / SAMPLE / route,
+                      "export_dir": None if route == "no_export" else out / "export" / SAMPLE / route}
 
 
 #: The cases of test_the_report_command_names_the_assignment_block_without_an_assembly_block: the assignment block and
@@ -122,7 +134,7 @@ def test_the_report_command_names_the_assignment_block_without_an_assembly_block
     task = T.task(manifest, "report", sample=SAMPLE)
     assert [i for i in task["inputs"] if i.endswith("assignment.json")] == [
         f"fovs/Position{i:03d}/assignment/{name}/assignment.json" for i in range(3, 6)]
-    T.call(manifest, f"report/{SAMPLE}")
+    T.call(manifest, f"report/{SAMPLE}/no_export")
     (_, args, kwargs), = calls
     assert args == (SAMPLE, ["Position003", "Position004", "Position005"])
     assert kwargs["assignment"] == name
@@ -146,8 +158,8 @@ def test_the_report_of_a_run_without_an_assembly_block_shows_its_cells(tmp_path)
     case = report_records(out)
     for fov in FOVS:
         write_assignment_folder(case, fov)
-    T.call(manifest, f"report/{REPORT_SAMPLE}")
-    folder = out / "report" / REPORT_SAMPLE
+    T.call(manifest, f"report/{REPORT_SAMPLE}/no_export")
+    folder = out / "report" / REPORT_SAMPLE / "no_export"
     record = load_report(folder)
     assert record["assignment"]["name"] == "default"
     assert sorted(record["assignment"]["folders"]) == list(FOVS)
@@ -187,7 +199,7 @@ def test_the_report_task_reads_what_the_fov_segment_and_assign_tasks_wrote(tiny_
         for task in planned:
             if task["kind"] == kind:
                 assert X.run_task(path, task["id"]) == 0, task["id"]
-    folder = Path(manifest["roots"]["output"]) / "report" / X.SAMPLE
+    folder = Path(manifest["roots"]["output"]) / "report" / X.SAMPLE / "no_export"
     record = load_report(folder)
     assert record["fov_ids"] == fovs
     assert record["assignment"]["name"] == "default"
@@ -201,7 +213,7 @@ def test_the_report_task_reads_what_the_fov_segment_and_assign_tasks_wrote(tiny_
 
 def test_the_compare_command_calls_compare_samples_on_every_sample(tmp_path, monkeypatch):
     """From test_wf1_report_dataset_calls_compare_samples_on_every_sample: every sample's report, in fovs.csv's
-    order, into report/."""
+    order, into report/, with the routes of the reports it reads (W-876)."""
     calls = spy(monkeypatch, "compare_samples")
     config = report_config(tmp_path, {}, {})
     T.write_inputs(config, membership([("sample0", 1, 1), (SAMPLE, 2, 2), ("sample2", 3, 3)]))
@@ -210,7 +222,8 @@ def test_the_compare_command_calls_compare_samples_on_every_sample(tmp_path, mon
     out = T.output_root(config)
     (dataset, args, kwargs), = calls
     assert dataset.output_root == out
-    assert args == (["sample0", SAMPLE, "sample2"],) and kwargs == {"report_root": out / "report"}
+    assert args == (["sample0", SAMPLE, "sample2"],)
+    assert kwargs == {"report_root": out / "report", "routes": ["no_export"]}
 
 
 def test_the_compare_command_keeps_the_order_of_fovs_csv(tmp_path, monkeypatch):
@@ -221,11 +234,13 @@ def test_the_compare_command_keeps_the_order_of_fovs_csv(tmp_path, monkeypatch):
     config = report_config(tmp_path, {}, {})
     T.write_inputs(config, "sample,fov_id\ns2,F1\ns1,F2\ns2,F3\n")
     manifest, planned = T.plan(tmp_path, "order", config)
-    assert T.task(manifest, "compare")["inputs"] == ["report/s1/report.json", "report/s2/report.json"]
+    assert T.task(manifest, "compare")["inputs"] == ["report/s1/no_export/report.json",
+                                                     "report/s2/no_export/report.json"]
     assert list(planned["membership"]["samples"]) == ["s2", "s1"]
     T.call(manifest, "compare")
     (_, args, kwargs), = calls
-    assert args == (["s2", "s1"],) and kwargs == {"report_root": T.output_root(config) / "report"}
+    assert args == (["s2", "s1"],)
+    assert kwargs == {"report_root": T.output_root(config) / "report", "routes": ["no_export"]}
 
 
 def test_an_invalid_report_block_is_refused_before_any_task(tmp_path, monkeypatch):
@@ -242,7 +257,7 @@ def test_an_invalid_report_block_is_refused_before_any_task(tmp_path, monkeypatc
 def test_the_report_and_compare_commands_write_the_report_and_the_comparison_page(tmp_path):
     """From test_wf1_the_rules_write_the_report_and_the_comparison_page: the real entries through both commands on
     report_records (hand-written run records and placement of sample s1, FOVs F1 to F4): the report task writes
-    report/s1/ with its report.json, the compare task report/samples.csv and report/index.html."""
+    report/s1/no_export/ with its report.json, the compare task report/samples.csv and report/index.html."""
     from .report_fixtures import DATASET, FOVS, SAMPLE_ID, report_records
     from .report_fixtures import SAMPLE as REPORT_SAMPLE
     config = report_config(tmp_path, {"marker_pairs": [["G1", "G2"]]}, {"stitching": MERGED})
@@ -255,10 +270,10 @@ def test_the_report_and_compare_commands_write_the_report_and_the_comparison_pag
     task = T.task(manifest, "report", sample=REPORT_SAMPLE)
     assert f"stitching/{REPORT_SAMPLE}/placement.json" in task["inputs"]
     assert (out / "stitching" / REPORT_SAMPLE / "placement.json").is_file()
-    T.call(manifest, f"report/{REPORT_SAMPLE}")
-    record = load_report(out / "report" / REPORT_SAMPLE)
-    assert (out / "report" / REPORT_SAMPLE / "report.json").is_file()
-    assert (out / "report" / REPORT_SAMPLE / "report.html").is_file()
+    T.call(manifest, f"report/{REPORT_SAMPLE}/no_export")
+    record = load_report(out / "report" / REPORT_SAMPLE / "no_export")
+    assert (out / "report" / REPORT_SAMPLE / "no_export" / "report.json").is_file()
+    assert (out / "report" / REPORT_SAMPLE / "no_export" / "report.html").is_file()
     assert record["sample"] == REPORT_SAMPLE and record["fov_ids"] == list(FOVS)
     T.call(manifest, "compare")
     samples = pd.read_csv(out / "report" / "samples.csv")
@@ -283,7 +298,7 @@ def _report_rerun_case(tmp_path):
             assert "/checkpoints/" in relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("{}")
-    folder = out / "report" / sample
+    folder = out / "report" / sample / "no_export"
     (folder / "tables").mkdir(parents=True)
     (folder / "report.html").write_text("old page")
     (folder / "tables/stale.csv").write_text("old table")
@@ -292,7 +307,7 @@ def _report_rerun_case(tmp_path):
 
 def test_report_task_replaces_page_and_tables_without_record(tmp_path):
     manifest, sample, folder = _report_rerun_case(tmp_path)
-    assert T.run(manifest, f"report/{sample}") == 0
+    assert T.run(manifest, f"report/{sample}/no_export") == 0
     record = load_report(folder)
     assert {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()} == {
         "report.json", *(entry["path"] for entry in record["files"])}
@@ -302,7 +317,7 @@ def test_report_task_preserves_and_names_a_foreign_file(tmp_path, capsys):
     manifest, sample, folder = _report_rerun_case(tmp_path)
     foreign = folder / "foreign.txt"
     foreign.write_text("owner file")
-    assert T.run(manifest, f"report/{sample}") == 1
+    assert T.run(manifest, f"report/{sample}/no_export") == 1
     assert "foreign.txt" in capsys.readouterr().err
     assert foreign.read_text() == "owner file"
 
@@ -312,7 +327,7 @@ def test_report_command_removes_nothing_when_record_exists(tmp_path, monkeypatch
     (folder / "report.json").write_text("record owned by Dataset.report")
     before = {p.relative_to(folder): p.read_bytes() for p in folder.rglob("*") if p.is_file()}
     calls = spy(monkeypatch, "report")
-    T.call(manifest, f"report/{sample}")
+    T.call(manifest, f"report/{sample}/no_export")
     assert len(calls) == 1
     assert {p.relative_to(folder): p.read_bytes() for p in folder.rglob("*") if p.is_file()} == before
 
@@ -334,10 +349,10 @@ def test_export_task_removes_earlier_previews_when_key_is_off(tmp_path, preview_
     from .test_workflow_export_tasks import SCENE_SAMPLE, plan_scene
     folder, _ = preview_export
     manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "fuse": False}, export_previews=False)
-    previews = folder.export_dir / "previews"
+    previews = folder.export_dir / "per_fov" / "previews"
     previews.mkdir(parents=True)
     (previews / "stale.png").write_bytes(b"earlier figure")
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/per_fov") == 0
     assert not previews.exists()
 
 
@@ -345,11 +360,11 @@ def test_export_task_removes_earlier_previews_when_key_is_off(tmp_path, preview_
 def test_export_task_rebuilds_current_figures_without_stale_files(preview_export):
     from .test_workflow_export_tasks import SCENE_SAMPLE
     folder, manifest = preview_export
-    previews = folder.export_dir / "previews"
+    previews = folder.export_dir / "per_fov" / "previews"
     previews.mkdir(parents=True)
     stale = previews / "stale.txt"
     stale.write_text("not a current figure")
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/per_fov") == 0
     assert not stale.exists()
     expected = {f"{fov}/{name}" for fov in folder.scene.ids
                 for name in ("assignment.png", "assignment_single_layer.png")}
@@ -362,10 +377,10 @@ def test_export_task_preserves_foreign_file_outside_previews(tmp_path, preview_e
     from .test_workflow_export_tasks import SCENE_SAMPLE, plan_scene
     folder, _ = preview_export
     manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "fuse": False}, export_previews=False)
-    folder.export_dir.mkdir(parents=True, exist_ok=True)
-    foreign = folder.export_dir / "owner.txt"
+    (folder.export_dir / "per_fov").mkdir(parents=True, exist_ok=True)
+    foreign = folder.export_dir / "per_fov" / "owner.txt"
     foreign.write_text("owner file")
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/per_fov") == 0
     assert foreign.read_text() == "owner file"
 
 
@@ -437,7 +452,7 @@ def test_a_held_export_writes_the_held_page_and_no_report(tmp_path, monkeypatch,
     from starfinder.workflow import verify
     reports = spy(monkeypatch, "report")
     manifest, sample, out = _held_export_case(tmp_path, monkeypatch)
-    export_id, report_id = f"export/{sample}", f"report/{sample}"
+    export_id, report_id = f"export/{sample}/molecules_only", f"report/{sample}/molecules_only"
     assert export_id in T.task(manifest, "report", sample=sample)["needs"]     # the plan is unchanged
     assert T.run(manifest, export_id) == 4
     assert f"export held for review: {export_id}: TaskHeld:" in capsys.readouterr().err
@@ -445,11 +460,11 @@ def test_a_held_export_writes_the_held_page_and_no_report(tmp_path, monkeypatch,
     assert failed["status"] == "held" and failed["error"]["type"] == "TaskHeld"
     assert "approve_placement(result, reviewer=..., note=...)" in failed["error"]["message"]
     assert "approvals.json" in failed["error"]["message"]
-    assert not (out / "export" / sample / "export.json").exists()
+    assert not (out / "export" / sample / "molecules_only" / "export.json").exists()
     # No report: no report folder, no report.json, no record of the report task, and Dataset.report not called.
     assert reports == [] and not (out / "report").exists()
     assert not _layout.task_record(out, export_id).exists() and not _layout.task_record(out, report_id).exists()
-    page = _layout.workflow_held_page(out, sample).read_text(encoding="utf-8")
+    page = _layout.workflow_held_page(out, sample, "molecules_only").read_text(encoding="utf-8")
     assert f"<h1>Sample {sample}: the export is held for review</h1>" in page
     assert "<tr><td>Reasons</td><td>unplaced_fovs</td></tr>" in page
     assert "<tr><td>Flagged FOVs</td><td>unplaced_fovs: F3, F4</td></tr>" in page
@@ -458,7 +473,7 @@ def test_a_held_export_writes_the_held_page_and_no_report(tmp_path, monkeypatch,
     assert "save_placement(approve_placement(result, reviewer=&quot;...&quot;, note=&quot;...&quot;)" in page
     assert str(out / "stitching" / sample) in page
     log = (out / T.task(manifest, "export", sample=sample)["log"]).read_text()
-    assert f"wrote the held page {_layout.workflow_held_page(out, sample)}" in log
+    assert f"wrote the held page {_layout.workflow_held_page(out, sample, 'molecules_only')}" in log
     result = verify(manifest, final=True)
     assert not result["passed"] and {export_id, report_id, "compare"} <= set(result["incomplete"])
     assert result["tasks"][export_id]["problems"] == [
@@ -485,7 +500,8 @@ def test_an_approval_needs_no_stitch_rerun_and_the_report_runs_once(tmp_path, mo
     manifest, sample, out = _held_export_case(tmp_path, monkeypatch)
     monkeypatch.setattr(Dataset, "export", _gated_export(exports))
     monkeypatch.setattr(Dataset, "report", report)
-    stitch_id, export_id, report_id = f"stitch/{sample}", f"export/{sample}", f"report/{sample}"
+    stitch_id, export_id, report_id = (f"stitch/{sample}", f"export/{sample}/molecules_only",
+                                       f"report/{sample}/molecules_only")
     _complete(manifest, stitch_id)
     assert T.run(manifest, export_id) == 4 and exports == [] and reports == []
     assert verify(manifest, hash=True)["tasks"][stitch_id]["complete"]
@@ -500,7 +516,7 @@ def test_an_approval_needs_no_stitch_rerun_and_the_report_runs_once(tmp_path, mo
         "held for review (a failed record that says held) and no task record; the placement now holds an approval "
         "of its tables or needs no review: run the workflow again"]
     assert T.run(manifest, export_id) == 0 and exports == [sample]
-    assert not _layout.workflow_held_page(out, sample).exists()
+    assert not _layout.workflow_held_page(out, sample, "molecules_only").exists()
     _complete(manifest, export_id)
     for relative in T.task(manifest, "report", sample=sample)["inputs"]:     # stand-ins: Dataset.report is spied
         if not (out / relative).exists():
@@ -520,7 +536,7 @@ def test_an_approval_of_other_tables_is_refused(tmp_path, monkeypatch):
     exports = []
     manifest, sample, out = _held_export_case(tmp_path, monkeypatch)
     monkeypatch.setattr(Dataset, "export", _gated_export(exports))
-    export_id = f"export/{sample}"
+    export_id = f"export/{sample}/molecules_only"
     folder = out / "stitching" / sample
     save_placement(approve_placement(load_placement(folder), reviewer="A. Reviewer", note="checked"), folder)
     assert T.run(manifest, export_id) == 0 and exports == [sample]
@@ -544,9 +560,9 @@ def test_verify_reads_approvals_only_from_a_placement_record(tmp_path, monkeypat
     record checks that file's size and SHA-256)."""
     from starfinder.workflow import verify
     manifest, sample, out = _held_export_case(tmp_path, monkeypatch)
-    export_id = f"export/{sample}"
-    (out / "export" / sample).mkdir(parents=True, exist_ok=True)
-    (out / "export" / sample / "export.json").write_text("Nextflow stub: export\n")
+    export_id = f"export/{sample}/molecules_only"
+    (out / "export" / sample / "molecules_only").mkdir(parents=True, exist_ok=True)
+    (out / "export" / sample / "molecules_only" / "export.json").write_text("Nextflow stub: export\n")
     _complete(manifest, export_id)
     # A placement record whose review is required and that holds no approval: not complete.
     assert verify(manifest)["tasks"][export_id]["problems"] == [

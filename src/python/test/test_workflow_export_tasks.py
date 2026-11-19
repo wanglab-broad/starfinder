@@ -37,7 +37,7 @@ from . import workflow_examples as X  # noqa: E402
 from . import workflow_tasks as T  # noqa: E402
 from .assembly_fixtures import GOLDEN_IDS, golden_placement, unit_grid  # noqa: E402
 from .assembly_fixtures import SAMPLE as GOLDEN_SAMPLE  # noqa: E402
-from .fusion_fixtures import export_folder, golden_codebook, listing  # noqa: E402
+from .fusion_fixtures import export_folder, golden_codebook  # noqa: E402
 from .sample_segmentation_fixtures import IMAGES, SCENES, codebook, per_fov_routes, write_scene  # noqa: E402
 from .sample_segmentation_fixtures import SAMPLE as SCENE_SAMPLE  # noqa: E402
 from .test_sample_segmentation_route import export_grid, truth_config  # noqa: E402
@@ -121,21 +121,24 @@ def spy_export(monkeypatch):
 @needs_library
 def test_the_export_command_writes_the_export_folder_with_the_defaults(tmp_path, monkeypatch):
     """From test_wf3_run_export_writes_the_export_folder_with_the_defaults: with an export block that sets only route:
-    per_fov the defaults run, on the saved placement of stitching/<sample>/."""
+    per_fov the defaults run, on the saved placement of stitching/<sample>/, into the route's folder
+    export/<sample>/per_fov/ (W-876)."""
     calls, _ = spy_export(monkeypatch)
     folder, manifest, _ = golden_export(tmp_path, export={"route": "per_fov"}, assembly={"table_format": "csv"})
-    T.call(manifest, f"export/{GOLDEN_SAMPLE}")
+    T.call(manifest, f"export/{GOLDEN_SAMPLE}/per_fov")
+    exported = folder.export_dir / "per_fov"
     (args, kwargs), = calls
     assert args == (GOLDEN_SAMPLE,)
     assert kwargs == {"placement": folder.placement_dir, "assignment": "default",
-                      "config": ExportConfig(route="per_fov"), "output_dir": folder.export_dir}
-    record = json.loads((folder.export_dir / "export.json").read_text())
+                      "config": ExportConfig(route="per_fov"), "output_dir": exported}
+    record = json.loads((exported / "export.json").read_text())
     assert record["parts"] == {"assemble": "written", "fuse": "written", "segment": "off", "fuse_labels": "off",
                                "export_spatialdata": "off"}
-    assert sorted(p.relative_to(folder.export_dir).as_posix() for p in folder.export_dir.rglob("*") if p.is_file()) \
+    assert sorted(p.relative_to(exported).as_posix() for p in exported.rglob("*") if p.is_file()) \
         == ["export.json", "reference_stain_projection.ome.tif", "sample.h5ad", "tables/cells.csv",
             "tables/counts.csv", "tables/fovs.csv", "tables/molecules.csv"]
-    # Nothing is written outside export/<sample>/ and stitching/<sample>/ is the saved placement, unchanged.
+    # Nothing is written outside export/<sample>/per_fov/ and stitching/<sample>/ is the saved placement, unchanged.
+    assert sorted(p.name for p in folder.export_dir.iterdir()) == ["per_fov"]
     assert load_placement(folder.placement_dir).fovs.equals(folder.placement.fovs)
 
 
@@ -147,8 +150,8 @@ def test_the_export_command_succeeds_without_multiview_stitcher(tmp_path, monkey
     folder, manifest, _ = golden_export(tmp_path, export={"route": "per_fov", "dimensionality": "stack"},
                                         assembly={"table_format": "csv"})
     with pytest.warns(ExportIncompleteWarning, match="fuse could not run: extra_missing"):
-        T.call(manifest, f"export/{GOLDEN_SAMPLE}")
-    record = json.loads((folder.export_dir / "export.json").read_text())
+        T.call(manifest, f"export/{GOLDEN_SAMPLE}/per_fov")
+    record = json.loads((folder.export_dir / "per_fov" / "export.json").read_text())
     assert record["parts"] == {"assemble": "written", "fuse": "not_run", "segment": "off", "fuse_labels": "off",
                                "export_spatialdata": "off"}
     assert record["fusion"]["reason"] == "extra_missing" and record["complete"] is False
@@ -164,8 +167,8 @@ def test_the_export_command_passes_the_duplicate_threshold(tmp_path, monkeypatch
     folder, manifest, _ = golden_export(tmp_path / "workflow", dimensions="plane", export={"route": "per_fov",
                                                                                            "fuse": False},
                                         assembly={"table_format": "csv", "duplicate_threshold": threshold})
-    T.call(manifest, f"export/{GOLDEN_SAMPLE}")
-    record = json.loads((folder.export_dir / "export.json").read_text())
+    T.call(manifest, f"export/{GOLDEN_SAMPLE}/per_fov")
+    record = json.loads((folder.export_dir / "per_fov" / "export.json").read_text())
     expected = ExportConfig(route="per_fov", fuse=False, assembly=AssemblyConfig(duplicate_threshold=threshold))
     assert [k["config"] for _, k in calls] == [expected]
     assert record["assembly"]["config"]["duplicate_threshold"] == threshold
@@ -175,7 +178,7 @@ def test_the_export_command_passes_the_duplicate_threshold(tmp_path, monkeypatch
     again = json.loads((python.export_dir / "export.json").read_text())
     for table in ("fovs", "cells", "molecules", "counts"):
         assert record["assembly"]["files"][table]["sha256"] == again["assembly"]["files"][table]["sha256"]
-    cells = pd.read_csv(folder.export_dir / "tables" / "cells.csv")
+    cells = pd.read_csv(folder.export_dir / "per_fov" / "tables" / "cells.csv")
     excluded = cells[cells.assembly_reason == "duplicate_observation"]
     assert list(excluded.obs_name) == ([] if threshold in (None, 1.0) else ["sample1_Position003_5"])
 
@@ -186,8 +189,8 @@ def test_the_export_command_molecules_only_loads_the_codebook(tmp_path):
     assembled, with the genes of the configured codebook."""
     folder, manifest, _ = golden_export(tmp_path, export={"fuse": False}, assembly={"assignment": None}, cells=False,
                                         stain=False)
-    T.call(manifest, f"export/{GOLDEN_SAMPLE}")
-    record = json.loads((folder.export_dir / "export.json").read_text())
+    T.call(manifest, f"export/{GOLDEN_SAMPLE}/molecules_only")
+    record = json.loads((folder.export_dir / "molecules_only" / "export.json").read_text())
     assert record["parts"] == {"assemble": "written", "fuse": "off", "segment": "off", "fuse_labels": "off",
                                "export_spatialdata": "off"}
     assert record["assembly"]["mode"] == "molecules_only"
@@ -210,23 +213,24 @@ def test_a_removed_export_folder_does_not_restore_a_saved_assembly(tmp_path, rec
     """An undeclared copy cannot resurrect tables removed by hand, even if an engine recreates the parent."""
     from starfinder import _layout
     folder, manifest = scene_export(tmp_path, {"route": "per_fov", "fuse": False}, export_previews=False)
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
-    copy = _layout.workflow_export_record(folder.root, SCENE_SAMPLE)
-    assert copy.read_bytes() == (folder.export_dir / "export.json").read_bytes()
-    shutil.rmtree(folder.export_dir)
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/per_fov") == 0
+    exported = folder.export_dir / "per_fov"
+    copy = _layout.workflow_export_record(folder.root, SCENE_SAMPLE, "per_fov")
+    assert copy.read_bytes() == (exported / "export.json").read_bytes()
+    shutil.rmtree(exported)
     if recreate:
-        folder.export_dir.mkdir()
+        exported.mkdir()
     if recreate == "foreign":
-        (folder.export_dir / "foreign.txt").write_bytes(b"keep this file")
+        (exported / "foreign.txt").write_bytes(b"keep this file")
     manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "assemble": False, "fuse": False,
                                            "fuse_labels": True}, export_previews=False)
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 1
-    log = _layout.task_log(folder.root, f"export/{SCENE_SAMPLE}").read_text()
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/per_fov") == 1
+    log = _layout.task_log(folder.root, f"export/{SCENE_SAMPLE}/per_fov").read_text()
     assert "holds no saved assembly; run with assemble on first" in log
     assert "FileNotFoundError" not in log
-    assert not (folder.export_dir / "export.json").exists()
+    assert not (exported / "export.json").exists()
     if recreate == "foreign":
-        assert (folder.export_dir / "foreign.txt").read_bytes() == b"keep this file"
+        assert (exported / "foreign.txt").read_bytes() == b"keep this file"
 
 
 @needs_anndata
@@ -234,25 +238,26 @@ def test_a_present_export_record_takes_precedence_over_its_workflow_copy(tmp_pat
     """A stale copy must not resurrect an already removed assembly or remove a foreign file."""
     from starfinder import _layout
     folder, manifest = scene_export(tmp_path, {"route": "per_fov", "fuse": False}, export_previews=False)
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
-    copy = _layout.workflow_export_record(folder.root, SCENE_SAMPLE)
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/per_fov") == 0
+    exported = folder.export_dir / "per_fov"
+    copy = _layout.workflow_export_record(folder.root, SCENE_SAMPLE, "per_fov")
     old_record = copy.read_bytes()
-    foreign = folder.export_dir / "foreign.txt"
+    foreign = exported / "foreign.txt"
     foreign.write_bytes(b"keep this file")
     manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "assemble": False, "fuse": False},
                           export_previews=False)
     # Replace the authoritative record with one which lists no assembly. The
     # workflow copy still lists the old tables, which are now foreign to the API.
-    (folder.export_dir / "export.json").write_text('{"sample": "' + SCENE_SAMPLE + '"}\n')
-    assert old_record != (folder.export_dir / "export.json").read_bytes()
-    before = {p.name: p.read_bytes() for p in (folder.export_dir / "tables").glob("*")}
+    (exported / "export.json").write_text('{"sample": "' + SCENE_SAMPLE + '"}\n')
+    assert old_record != (exported / "export.json").read_bytes()
+    before = {p.name: p.read_bytes() for p in (exported / "tables").glob("*")}
     assert before
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
-    record = json.loads((folder.export_dir / "export.json").read_text())
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/per_fov") == 0
+    record = json.loads((exported / "export.json").read_text())
     assert record["parts"]["assemble"] == "off"
-    assert {p.name: p.read_bytes() for p in (folder.export_dir / "tables").glob("*")} == before
+    assert {p.name: p.read_bytes() for p in (exported / "tables").glob("*")} == before
     assert foreign.read_bytes() == b"keep this file"
-    assert copy.read_bytes() == (folder.export_dir / "export.json").read_bytes()
+    assert copy.read_bytes() == (exported / "export.json").read_bytes()
 
 
 def plan_scene(work, folder, export, *, export_previews=True):
@@ -285,9 +290,10 @@ def figure_paths(folder):
 def test_the_export_previews_follow_the_route(tmp_path, monkeypatch):
     """From test_wf2_the_assignment_figures: with export.previews on, on the route after fusion the export draws no
     assignment figure and declares no preview folder (the sample's cells come from no per-FOV assignment); on the
-    route per FOV, planned on the same output root and exported into the same folder, it draws them for every FOV
-    with its ownership into export/<sample>/previews/<fov>/, rewrites the export, and leaves the assign task's figures
-    in fovs/<fov>/previews/ as they are (so that each of these checks can fail)."""
+    route per FOV, planned on the same output root, it draws them for every FOV with its ownership into its own
+    folder's export/<sample>/per_fov/previews/<fov>/, leaves the export of the route after fusion in
+    export/<sample>/after_fusion/ byte for byte as it was (W-876: each route writes its own folder), and leaves the
+    assign task's figures in fovs/<fov>/previews/ as they are (so that each of these checks can fail)."""
     import starfinder.workflow._previews as previews
     folder, manifest = scene_export(tmp_path, AFTER_FUSION)
     for fov in folder.scene.ids:  # the figures the assign task wrote first
@@ -301,31 +307,36 @@ def test_the_export_previews_follow_the_route(tmp_path, monkeypatch):
     task = T.task(manifest, "export", sample=SCENE_SAMPLE)
     assert not [o for o in task["outputs"] if "previews" in o]
     assert not [i for i in task["inputs"] if "/assignment/" in i]
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
-    record = json.loads((folder.export_dir / "export.json").read_text())
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/after_fusion") == 0
+    fused = folder.export_dir / "after_fusion"
+    record = json.loads((fused / "export.json").read_text())
     assert record["parts"] == {"assemble": "written", "fuse": "written", "segment": "written", "fuse_labels": "off",
                                "export_spatialdata": "off"}
     assert record["assembly"]["route"] == "after_fusion" and record["complete"] is True
     assert set(record["assembly"]["fovs"][i]["kind"] for i in range(2)) == {"molecules"}
     assert calls == [] and figure_paths(folder) == before
-    # The route per FOV of the same sample, planned on the same output root and exported into the same folder: the
-    # figures are drawn again with ownership, the assign task's left as they are, and the export rewritten.
-    exported = listing(folder.export_dir)
+    # The route per FOV of the same sample, planned on the same output root: the figures are drawn with ownership
+    # into its own folder, the assign task's left as they are, and the export after fusion left as it was.
+    exported = {p.relative_to(fused).as_posix(): p.read_bytes() for p in sorted(fused.rglob("*")) if p.is_file()}
     manifest = plan_scene(tmp_path, folder, {"route": "per_fov", "fuse": False})        # checks the output root
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
-    record = json.loads((folder.export_dir / "export.json").read_text())
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/per_fov") == 0
+    per_fov = folder.export_dir / "per_fov"
+    record = json.loads((per_fov / "export.json").read_text())
     assert record["assembly"]["route"] == "per_fov" and record["parts"]["segment"] == "off"
     assert sorted(fov for fov, _ in calls) == sorted(folder.scene.ids)
     assert all(kwargs["ownership"] is not None for _, kwargs in calls)
     after = figure_paths(folder)
     assert {k: v for k, v in after.items() if k.startswith("fovs/")} == before
-    folder_previews = f"export/{SCENE_SAMPLE}/previews"
+    folder_previews = f"export/{SCENE_SAMPLE}/per_fov/previews"
     assert {k.rsplit("/", 1)[0] for k in after if not k.startswith("fovs/")} == {f"{folder_previews}/{fov}"
                                                                                 for fov in folder.scene.ids}
     assert all(after[f"{folder_previews}/{fov}/assignment.png"] != before[f"fovs/{fov}/previews/assignment.png"]
                for fov in folder.scene.ids)
-    assert listing(folder.export_dir) != exported
-    check_export(folder.export_dir)
+    assert {p.relative_to(fused).as_posix(): p.read_bytes() for p in sorted(fused.rglob("*")) if p.is_file()} \
+        == exported
+    assert sorted(p.name for p in folder.export_dir.iterdir()) == ["after_fusion", "per_fov"]
+    check_export(fused)
+    check_export(per_fov)
 
 
 @needs_anndata
@@ -334,14 +345,14 @@ def test_the_export_previews_follow_the_route(tmp_path, monkeypatch):
 @pytest.mark.parametrize("route", ["per_fov", "after_fusion"])
 def test_every_declared_output_of_the_export_task_exists(tmp_path, route, assemble):
     """From test_wf2_every_declared_output_of_export_sample_exists: with export.previews on, the export task declares
-    export/<sample>/previews/ only on the route per FOV with assemble on, and after the command runs every declared
+    export/<sample>/per_fov/previews/ only on the route per FOV with assemble on, and after the command runs every declared
     output exists, on each route with the assemble part on and off; the folder holds each FOV's figures exactly when
     declared."""
     export = (dict(AFTER_FUSION, assemble=assemble, **({} if assemble else {"segment": False}))
               if route == "after_fusion" else {"route": "per_fov", "fuse": False, "assemble": assemble})
     if route == "after_fusion" and not assemble:   # the saved sample segmentation it reuses, from a first export
         folder, first = scene_export(tmp_path, AFTER_FUSION)
-        assert T.run(first, f"export/{SCENE_SAMPLE}") == 0
+        assert T.run(first, f"export/{SCENE_SAMPLE}/{route}") == 0
         segmentation = truth_config(folder, export_grid(folder))
         runs = [{"name": run.name, "target": run.target, "method": "import", "path": run.method.path,
                  "relabel": False} for run in segmentation.runs]
@@ -357,14 +368,16 @@ def test_every_declared_output_of_the_export_task_exists(tmp_path, route, assemb
     declared = [T.output_root({"root_output_path": str(tmp_path / "output"), "dataset_id": "data",
                                "output_id": "output"}) / o for o in task["outputs"]]
     previews = [o for o in task["outputs"] if o.endswith("previews/")]
-    assert previews == ([f"export/{SCENE_SAMPLE}/previews/"] if (route, assemble) == ("per_fov", True) else [])
-    assert T.run(manifest, f"export/{SCENE_SAMPLE}") == 0
+    assert previews == ([f"export/{SCENE_SAMPLE}/per_fov/previews/"] if (route, assemble) == ("per_fov", True)
+                        else [])
+    assert T.run(manifest, f"export/{SCENE_SAMPLE}/{route}") == 0
     assert [p for p in declared if not p.exists()] == []
-    drawn = {p.relative_to(folder.export_dir).as_posix() for p in folder.export_dir.rglob("*.png")}
+    exported = folder.export_dir / route
+    drawn = {p.relative_to(exported).as_posix() for p in exported.rglob("*.png")}
     expected = {f"previews/{fov}/{name}" for fov in folder.scene.ids
                 for name in ("assignment.png", "assignment_single_layer.png")}
     assert drawn == (expected if previews else set())
-    check_export(folder.export_dir)
+    check_export(exported)
 
 
 @needs_anndata
@@ -376,7 +389,7 @@ def test_the_declared_preview_folder_exists_when_the_assemble_part_cannot_run(tm
     import starfinder.workflow._previews as previews
     folder, manifest = scene_export(tmp_path, {"route": "per_fov", "fuse": False})
     task = T.task(manifest, "export", sample=SCENE_SAMPLE)
-    assert f"export/{SCENE_SAMPLE}/previews/" in task["outputs"]
+    assert f"export/{SCENE_SAMPLE}/per_fov/previews/" in task["outputs"]
 
     def not_run(self, sample, *, output_dir, **kwargs):
         Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -385,9 +398,9 @@ def test_the_declared_preview_folder_exists_when_the_assemble_part_cannot_run(tm
 
     monkeypatch.setattr(Dataset, "export", not_run)
     monkeypatch.setattr(previews, "ownership_figures", lambda *args: pytest.fail("no assembly to draw"))
-    T.call(manifest, f"export/{SCENE_SAMPLE}")
-    assert (folder.export_dir / "export.json").is_file()
-    assert list((folder.export_dir / "previews").iterdir()) == []
+    T.call(manifest, f"export/{SCENE_SAMPLE}/per_fov")
+    assert (folder.export_dir / "per_fov" / "export.json").is_file()
+    assert list((folder.export_dir / "per_fov" / "previews").iterdir()) == []
 
 
 # --- the assign and export previews with ownership (from test_workflow_assembly_figures.py) ------------------------
@@ -489,7 +502,7 @@ def saved_figures(monkeypatch):
 def test_the_export_draws_the_figures_with_ownership(tmp_path, monkeypatch, dimensions):
     """From test_export_sample_draws_the_figures_with_ownership: with assignment.previews and export.previews on, the
     assign task's figures in fovs/{fov}/previews/, the export task's (with the ownership) in
-    export/sample1/previews/{fov}/; one writer each, and neither file is overwritten; the export's files and record
+    export/sample1/per_fov/previews/{fov}/; one writer each, and neither file is overwritten; the export's files and record
     are those of the same export without previews."""
     out, manifest, _ = build_route(tmp_path, dimensions, previews=True)
     before = {fov: {p.name: p.read_bytes() for p in sorted((out / "fovs" / fov / "previews").glob("*.png"))}
@@ -499,17 +512,17 @@ def test_the_export_draws_the_figures_with_ownership(tmp_path, monkeypatch, dime
     # The export without the figures, then with them, into the same folder.
     import starfinder.workflow._previews as previews
     monkeypatch.setattr(previews, "ownership_figures", lambda *args: [])
-    T.call(manifest, "export/sample1")
+    T.call(manifest, "export/sample1/per_fov")
     monkeypatch.undo()
-    folder = out / "export" / "sample1"
+    folder = out / "export" / "sample1" / "per_fov"
     plain = snapshot(folder)
     saved = saved_figures(monkeypatch)
-    assert T.run(manifest, "export/sample1") == 0
+    assert T.run(manifest, "export/sample1/per_fov") == 0
     monkeypatch.undo()
     assert snapshot(folder) == plain
     check_export(folder)
     assert "assignment.png" not in json.dumps(json.loads((folder / "export.json").read_text()))
-    assert "export/sample1/previews/" in T.task(manifest, "export", sample="sample1")["outputs"]
+    assert "export/sample1/per_fov/previews/" in T.task(manifest, "export", sample="sample1")["outputs"]
     assembly, placement = load_assembly(folder), load_placement(out / "stitching" / "sample1")
     expected = [str(folder / "previews" / fov / name) for fov in GOLDEN_IDS for name in FIGURES[dimensions]]
     assert [path for path, _ in saved] == expected
@@ -527,7 +540,7 @@ def test_the_export_draws_the_figures_with_ownership(tmp_path, monkeypatch, dime
         assert all(after[name] != before[fov][name] for name in after), fov   # every FOV has an excluded cell
     assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*.png")) == sorted(
         [f"fovs/{fov}/previews/{name}" for fov in GOLDEN_IDS for name in FIGURES[dimensions]]
-        + [f"export/sample1/previews/{fov}/{name}" for fov in GOLDEN_IDS for name in FIGURES[dimensions]])
+        + [f"export/sample1/per_fov/previews/{fov}/{name}" for fov in GOLDEN_IDS for name in FIGURES[dimensions]])
 
 
 @needs_anndata
@@ -541,12 +554,13 @@ def test_by_default_the_route_per_fov_writes_no_preview(tmp_path, monkeypatch):
     resolved = json.loads((out / "workflow" / "resolved.json").read_text())["configuration"]
     assert resolved["assignment"]["previews"] is False and resolved["export"]["previews"] is False
     assert not [o for t in T.tasks(manifest, "assign", "export") for o in t["outputs"] if "previews" in o]
-    assert T.run(manifest, "export/sample1") == 0
+    assert T.run(manifest, "export/sample1/per_fov") == 0
     assert saved == []                                                   # neither the assign tasks nor the export
     assert all((out / "fovs" / fov / "assignment" / "default" / "assignment.json").is_file() for fov in GOLDEN_IDS)
-    assert json.loads((out / "export" / "sample1" / "export.json").read_text())["parts"]["assemble"] == "written"
+    assert json.loads((out / "export" / "sample1" / "per_fov" / "export.json").read_text())["parts"]["assemble"] \
+        == "written"
     assert list(out.rglob("*.png")) == [] and not (out / "expr").exists()
-    assert not (out / "export" / "sample1" / "previews").exists()
+    assert not (out / "export" / "sample1" / "per_fov" / "previews").exists()
 
 
 @needs_anndata
@@ -557,6 +571,7 @@ def test_with_assignment_null_no_figure_is_written(tmp_path, monkeypatch):
     assert T.tasks(manifest, "assign") == []
     assert not [o for o in T.task(manifest, "export", sample="sample1")["outputs"] if "previews" in o]
     saved = saved_figures(monkeypatch)
-    assert T.run(manifest, "export/sample1") == 0
-    assert json.loads((out / "export" / "sample1" / "export.json").read_text())["assembly"]["mode"] == "molecules_only"
+    assert T.run(manifest, "export/sample1/molecules_only") == 0
+    record = json.loads((out / "export" / "sample1" / "molecules_only" / "export.json").read_text())
+    assert record["assembly"]["mode"] == "molecules_only"
     assert saved == [] and list(out.rglob("*.png")) == []

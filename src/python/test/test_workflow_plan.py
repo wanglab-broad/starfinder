@@ -451,7 +451,7 @@ def test_selected_fovs_restricts_every_task(tmp_path):
     assert manifest["membership"]["fovs"] == ["F10", "F3"] and manifest["membership"]["samples"] == {"s2": ["F10", "F3"]}
     assert [t["identity"]["fov"] for t in _of_kind(manifest, "fov")] == ["F10", "F3"]
     assert [t["id"] for t in manifest["tasks"] if t["kind"] in ("stitch", "export", "report", "compare")] == [
-        "stitch/s2", "export/s2", "report/s2", "compare"]
+        "stitch/s2", "export/s2/molecules_only", "report/s2/molecules_only", "compare"]
     (export,) = _of_kind(manifest, "export")
     assert {"stitching/s2/placement.json", "fovs/F10/molecules.csv", "fovs/F3/molecules.csv"} <= set(export["inputs"])
     named = [path for t in manifest["tasks"] for path in t["inputs"] + t["outputs"]]
@@ -480,8 +480,9 @@ def test_without_the_report_block_no_report_task_is_planned(tmp_path, blocks):
     """From test_report_workflow.py, test_wf1_without_the_block_no_rule_and_no_output_is_added and
     test_wf1_with_the_block_the_report_rules_are_requested: without the report block the plan has no report or
     compare task and no output under report/; with it, exactly one report task per sample (in fovs.csv's order) and
-    the compare task are added, and every other task is the same. (No workflow file includes the old report rules,
-    and no MATLAB rule file names a report rule: test_workflow_boundary.py, C8.)"""
+    the compare task are added, and every other task is the same. Each report lies in its route's folder (W-876):
+    report/<sample>/molecules_only/ with the assembly block, report/<sample>/no_export/ without an export. (No workflow
+    file includes the old report rules, and no MATLAB rule file names a report rule: test_workflow_boundary.py, C8.)"""
     config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), **copy.deepcopy(blocks))
     W.write_inputs(config, "sample,fov_id\nsample1,tile_1\nsample2,tile_2\n")
     _, without = W.plan(tmp_path, "without", dict(config, output_id="without"))
@@ -489,8 +490,10 @@ def test_without_the_report_block_no_report_task_is_planned(tmp_path, blocks):
     assert not [p for t in without["tasks"] for p in t["outputs"] if p.startswith("report/")]
     _, with_block = W.plan(tmp_path, "with", dict(config, output_id="with", report={}))
     added = [t for t in with_block["tasks"] if t["kind"] in ("report", "compare")]
-    assert [t["id"] for t in added] == ["report/sample1", "report/sample2", "compare"]
-    assert [o for t in added for o in t["outputs"]] == ["report/sample1/report.json", "report/sample2/report.json",
+    route = "molecules_only" if "assembly" in blocks else "no_export"
+    assert [t["id"] for t in added] == [f"report/sample1/{route}", f"report/sample2/{route}", "compare"]
+    assert [o for t in added for o in t["outputs"]] == [f"report/sample1/{route}/report.json",
+                                                         f"report/sample2/{route}/report.json",
                                                          "report/index.html", "report/samples.csv"]
     assert [t["id"] for t in with_block["tasks"] if t not in added] == [t["id"] for t in without["tasks"]]
 

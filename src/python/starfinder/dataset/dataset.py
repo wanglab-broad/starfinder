@@ -756,7 +756,7 @@ class Dataset:
                              config=ExportConfig() if config is None else config, output_dir=output_dir)
 
     def report(self, sample: str, fov_ids, *, assignment: str | None = "default", segmentation: str | None = None,
-               config=None, output_dir=None):
+               config=None, output_dir=None, export_dir=None):
         """Write a sample's processing report: ``report.html``, ``report.json`` and ``tables/``.
 
         The one sample report entry (design/specs/report.md, "The sample
@@ -765,7 +765,7 @@ class Dataset:
         output root ("Where each record is looked for": the FOVs'
         ``fovs/{fovID}/run.json`` and saved transforms, segmentation and
         assignment records, the reference images, ``stitching/<sample>/`` and
-        ``export/<sample>/``) and the raw input of the main example for its
+        ``export/<sample>/`` or ``export_dir``) and the raw input of the main example for its
         replay, and writes only its output folder. The report describes the
         run and judges nothing. After the checks before anything is written
         (the arguments; a run record or an export to report; each run record's
@@ -798,6 +798,11 @@ class Dataset:
             None is ``ReportConfig()``.
         output_dir : str or Path or None
             None is ``<output_root>/report/<sample>/``.
+        export_dir : str or Path or None
+            The export folder to read; None is ``<output_root>/export/<sample>/``.
+            The workflow writes each export route into its own folder,
+            ``export/<sample>/<route>/``, and its report into
+            ``report/<sample>/<route>/``, and passes both.
 
         Returns
         -------
@@ -820,9 +825,9 @@ class Dataset:
         # §2.9
         from starfinder.report._collect import report_sample
         return report_sample(self, sample, fov_ids, assignment=assignment, segmentation=segmentation, config=config,
-                             output_dir=output_dir)
+                             output_dir=output_dir, export_dir=export_dir)
 
-    def compare_samples(self, samples, *, report_root=None):
+    def compare_samples(self, samples, *, report_root=None, routes=None):
         """Write the dataset's comparison page ``index.html`` and ``samples.csv`` from finished sample reports.
 
         The comparison entry (design/specs/report.md, "The comparison
@@ -843,6 +848,11 @@ class Dataset:
         report_root : str or Path or None
             None is ``<output_root>/report/``, where ``Dataset.report`` writes
             each sample's report.
+        routes : Sequence[str] or None
+            None reads ``<report_root>/<sample>/``. Otherwise the export
+            routes, nonempty and unique: each sample's report of a route is
+            ``<report_root>/<sample>/<route>/``, where the workflow writes it,
+            and the page has one row and one box per sample and route.
 
         Returns
         -------
@@ -852,11 +862,11 @@ class Dataset:
         Raises
         ------
         ValueError
-            samples is empty or repeats a sample, or a sample's report.json or
-            one of the files it lists differs from its record (naming the
-            file); nothing is written then.
+            samples or routes is empty or repeats a name, or a sample's
+            report.json or one of the files it lists differs from its record
+            (naming the file); nothing is written then.
         """
         from starfinder import _layout
         from starfinder.report._compare import compare_samples
         root = _layout.report_root(self.output_root) if report_root is None else report_root
-        return compare_samples(root, samples, dataset_id=self.dataset_id)
+        return compare_samples(root, samples, dataset_id=self.dataset_id, routes=routes)

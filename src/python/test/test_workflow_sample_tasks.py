@@ -84,8 +84,10 @@ def test_the_molecules_only_variant_runs_to_its_comparison_page(work):
     assert result["passed"] and result["incomplete"] == []
     assert {entry["token"] for entry in result["tasks"].values()} == {"t1"}
     out = manifest.parents[1]
-    assert (out / "report" / "index.html").is_file() and (out / "export" / "sample" / "export.json").is_file()
-    assert json.loads((out / "export" / "sample" / "export.json").read_text())["assembly"]["mode"] == "molecules_only"
+    exported = out / "export" / "sample" / "molecules_only" / "export.json"
+    assert (out / "report" / "index.html").is_file() and exported.is_file()
+    assert (out / "report" / "sample" / "molecules_only" / "report.json").is_file()
+    assert json.loads(exported.read_text())["assembly"]["mode"] == "molecules_only"
 
 
 def test_the_bigstitcher_check_fails_without_fijis_dataset_xml(work, capsys):

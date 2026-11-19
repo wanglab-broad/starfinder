@@ -52,11 +52,11 @@ def _check_held(run, ran):
     failed = json.loads(_layout.failed_record(run.out, export_id).read_text())
     assert failed["status"] == "held" and failed["error"]["type"] == "TaskHeld", failed
     assert not _layout.task_record(run.out, export_id).exists()
-    assert not (run.out / "export" / X.SAMPLE / "export.json").exists()
+    assert not (run.out / "export" / X.SAMPLE / "molecules_only" / "export.json").exists()
     review = json.loads((run.out / "stitching" / X.SAMPLE / "placement.json").read_text())["review"]
     assert review["state"] == "required" and review["flagged"] and review["approvals"] == [], review
     assert not (run.out / "stitching" / X.SAMPLE / "approvals.json").exists()
-    page = _layout.workflow_held_page(run.out, X.SAMPLE).read_text(encoding="utf-8")
+    page = _layout.workflow_held_page(run.out, X.SAMPLE, "molecules_only").read_text(encoding="utf-8")
     flagged = "<br>".join(f"{reason}: {', '.join(fovs)}" for reason, fovs in review["flagged"].items())
     assert f"<tr><td>Reasons</td><td>{', '.join(review['reasons'])}</td></tr>" in page
     assert f"<tr><td>Flagged FOVs</td><td>{flagged}</td></tr>" in page
@@ -102,9 +102,9 @@ def _check_final(run, review, held, ran):
     approvals = json.loads((run.out / "stitching" / X.SAMPLE / "approvals.json").read_text())["approvals"]
     assert [a["reviewer"] for a in approvals] == ["W-814 test"]
     assert approvals[0]["fovs_sha256"] == placement["tables"]["fovs"]["sha256"]
-    assert (run.out / "export" / X.SAMPLE / "export.json").is_file()
-    assert not _layout.workflow_held_page(run.out, X.SAMPLE).exists()
-    page = (run.out / "report" / X.SAMPLE / "report.html").read_text(encoding="utf-8")
+    assert (run.out / "export" / X.SAMPLE / "molecules_only" / "export.json").is_file()
+    assert not _layout.workflow_held_page(run.out, X.SAMPLE, "molecules_only").exists()
+    page = (run.out / "report" / X.SAMPLE / "molecules_only" / "report.html").read_text(encoding="utf-8")
     assert 'id="place-review"' not in page
     command = [sys.executable, "-m", "starfinder", "workflow", "verify", "--manifest", str(run.manifest), "--hash",
                "--final"]

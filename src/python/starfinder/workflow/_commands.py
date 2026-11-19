@@ -629,18 +629,22 @@ def _from_plain(value):
 
 
 def export(run):
-    """Dataset.export of one sample into export/<sample>/; the molecule routes load the codebook for its genes.
+    """Dataset.export of one sample into its route's folder export/<sample>/<route>/; the molecule routes load the
+    codebook for its genes.
 
-    With export.previews on the route per FOV with ``assemble`` (the plan then declares export/<sample>/previews/),
-    each assembled FOV's assignment figures with its ownership, into previews/<fov>/ (P5), over the FOV's reference
-    image when it is a declared input; the folder exists, empty, when the assemble part was neither written nor
-    reused. Before Dataset.export, the command removes its earlier previews/ whatever export.previews says;
-    no export record lists that folder. A copy of export.json under workflow/ survives engine removal of the
-    declared record, so Dataset.export can remove earlier listed files and reuse saved assembly on a rerun.
+    Each route has its own folder, saved record and held page, so an export of one route reads, writes and removes
+    nothing of another route's in the same output root. With export.previews on the route per FOV with ``assemble``
+    (the plan then declares export/<sample>/per_fov/previews/), each assembled FOV's assignment figures with its
+    ownership, into previews/<fov>/ (P5), over the FOV's reference image when it is a declared input; the folder
+    exists, empty, when the assemble part was neither written nor reused. Before Dataset.export, the command removes
+    its earlier previews/ whatever export.previews says; no export record lists that folder. A copy of export.json,
+    workflow/exports/<sample>/<route>.json, survives engine removal of the declared record, so Dataset.export can
+    remove earlier listed files and reuse saved assembly on a rerun.
 
     A placement that needs review and holds no approval of its tables (approvals.json) holds the export (TaskHeld,
-    exit 4): after its declared outputs are removed, the task writes the held page (_held_page) for the reviewer, and
-    no report. The page is removed when the export runs again.
+    exit 4): after its declared outputs are removed, the task writes the held page (_held_page,
+    workflow/held/<sample>/<route>.html) for the reviewer, and no report. The page is removed when the export runs
+    again.
     """
     import shutil
     from starfinder.export._record import PARTS, listed_files
@@ -659,14 +663,15 @@ def export(run):
             codebook = run.api["processing"]["codebook"]
             dataset.load_codebook(_codebook(run), encoding=_from_plain(codebook["encoding"]),
                                   layout=_from_plain(codebook["layout"]))
-    sample = run.identity["sample"]
-    _layout.workflow_held_page(run.out, sample).unlink(missing_ok=True)
-    previews = _layout.export_previews_dir(run.out, sample)
+    sample, route = run.identity["sample"], run.identity["route"]
+    held_page = _layout.workflow_held_page(run.out, sample, route)
+    held_page.unlink(missing_ok=True)
+    previews = _layout.export_previews_dir(run.out, sample, route=route)
     if previews.exists():
         shutil.rmtree(previews)
-    folder = _layout.export_dir(run.out, sample)
+    folder = _layout.export_dir(run.out, sample, route)
     record_path = folder / _layout.EXPORT_FILE
-    saved = _layout.workflow_export_record(run.out, sample)
+    saved = _layout.workflow_export_record(run.out, sample, route)
     if not record_path.exists() and saved.is_file():
         previous = json.loads(saved.read_text())
         # A removed folder (even recreated empty or with foreign files) has no saved assembly to reuse:
@@ -680,7 +685,7 @@ def export(run):
     except PlacementReviewRequiredError as error:
         raise TaskHeld(f"{error}; then save_placement it into {_layout.stitching_dir(run.out, sample)}, which "
                        "writes the approval to approvals.json there, and run the workflow again (the held page "
-                       f"{_layout.workflow_held_page(run.out, sample)} shows the review)",
+                       f"{held_page} shows the review)",
                        then=lambda: _held_page(run)) from error
     finally:
         # _task removes declared outputs only after the command raises; keep a failed attempt's record too.
@@ -702,8 +707,10 @@ def export(run):
 
 
 def report(run):
-    """Dataset.report of one sample into report/<sample>/, with the assignment name of report_assignment: the assembly
-    block's (None for molecules only), else the assignment block's, which the assign tasks saved per FOV, else None."""
+    """Dataset.report of one sample into its route's folder report/<sample>/<route>/ (report/<sample>/no_export/
+    without an export), reading the export of that route, export/<sample>/<route>/, with the assignment name of
+    report_assignment: the assembly block's (None for molecules only), else the assignment block's, which the assign
+    tasks saved per FOV, else None."""
     from starfinder.dataset.workflow import _report_block
     from starfinder.workflow._translate import _base, report_assignment
     configuration = run.configuration.plain()
@@ -711,8 +718,9 @@ def report(run):
     from starfinder.report._collect import PAGE_FILE
     from starfinder.report._schema import REPORT_FILE, TABLE_DIR
     import shutil
-    sample = run.identity["sample"]
-    report_dir = _layout.report_dir(run.out, sample)
+    sample, route = run.identity["sample"], run.identity["route"]
+    report_dir = _layout.report_dir(run.out, sample, route)
+    export_dir = None if route == _layout.NO_EXPORT else _layout.export_dir(run.out, sample, route)
     if not (report_dir / REPORT_FILE).exists():
         (report_dir / PAGE_FILE).unlink(missing_ok=True)
         tables = report_dir / TABLE_DIR
@@ -720,7 +728,7 @@ def report(run):
             shutil.rmtree(tables)
     run.dataset().report(sample, list(run.manifest["membership"]["samples"][sample]),
                          assignment=report_assignment(configuration), config=config,
-                         output_dir=report_dir)
+                         output_dir=report_dir, export_dir=export_dir)
 
 
 _HELD_STYLE = """body{font:14px/1.45 system-ui,sans-serif;margin:2em auto;max-width:72em;padding:0 1em;color:#1d1d1f;
@@ -732,9 +740,9 @@ th{background:#26262a}pre{background:#202024}.muted{color:#999}}"""
 
 
 def _held_page(run):
-    """The held page of an export held for review, workflow/held/<sample>.html, from placement.json and its tables
-    alone: the review's reasons and flagged FOVs, a summary of the placement and how to approve it. The task writes no
-    report and no report record: the report task makes the full report once, after the export."""
+    """The held page of an export held for review, workflow/held/<sample>/<route>.html, from placement.json and its
+    tables alone: the review's reasons and flagged FOVs, a summary of the placement and how to approve it. The task
+    writes no report and no report record: the report task makes the full report once, after the export."""
     import html
     import logging
     from collections import Counter
@@ -803,17 +811,20 @@ after the export.</p>
 An approval holds only for the tables it approved.</p>
 </body></html>
 """
-    path = _layout.workflow_held_page(run.out, sample)
+    path = _layout.workflow_held_page(run.out, sample, run.identity["route"])
     _publish(lambda tmp: tmp.write_text(page, encoding="utf-8"), path)
     logging.getLogger("starfinder.workflow").info(f"wrote the held page {path}")
 
 
 def compare(run):
-    """Dataset.compare_samples of every sample whose report is an input, in the membership's order (fovs.csv's; the
-    task's declared inputs are sorted), into report/."""
-    reported = {path.parent.name for path in run.inputs("report.json")}
-    samples = [sample for sample in run.manifest["membership"]["samples"] if sample in reported]
-    run.dataset().compare_samples(samples, report_root=_layout.report_root(run.out))
+    """Dataset.compare_samples of every report that is an input, report/<sample>/<route>/report.json, into report/:
+    the samples in the membership's order (fovs.csv's; the task's declared inputs are sorted), each with the routes
+    whose report is an input (this plan's, and another route's that the plan found in the output root), in the order
+    of _layout.REPORT_ROUTES."""
+    reported = {(path.parent.parent.name, path.parent.name) for path in run.inputs("report.json")}
+    samples = [sample for sample in run.manifest["membership"]["samples"] if any(s == sample for s, _ in reported)]
+    routes = [route for route in _layout.REPORT_ROUTES if any(r == route for _, r in reported)]
+    run.dataset().compare_samples(samples, report_root=_layout.report_root(run.out), routes=routes)
 
 
 #: The function of each kind.

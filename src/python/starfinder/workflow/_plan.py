@@ -537,7 +537,8 @@ class Graph:
         command = ["starfinder", "workflow", COMMANDS[kind], "--manifest", str(self.out / self.manifest_path),
                    "--task", task_id]
         group_name = group or kind
-        wildcards = [k for k in ID_FIELDS if k in identity and k not in ("run", "name")]
+        # A run, an assignment name and the export route are the same for every task of a group: literal parts.
+        wildcards = [k for k in ID_FIELDS if k in identity and k not in ("run", "name", "route")]
         task = {"id": task_id, "kind": kind, "group": group_name, "identity": identity,
                 "needs": sorted(set(n for n in needs if n)), "inputs": sorted(set(inputs)), "outputs": declared,
                 "record": record, "log": log, "command": command}
@@ -805,14 +806,16 @@ class Graph:
                             inputs.append(self.inputs.add_file(f"export.segmentation.{run['name']}",
                                                                str(run["path"]),
                                                                f"export.segmentation run {run['name']!r}"))
-                outputs = [_layout.export_dir(out, sample) / _layout.EXPORT_FILE]
+                # Each route writes its own folder, so that one output root holds every route's export.
+                outputs = [_layout.export_dir(out, sample, way) / _layout.EXPORT_FILE]
                 if r["export"]["previews"] and way == "per_fov" and api["assemble"]:
-                    outputs.append(self.rel(_layout.export_previews_dir(out, sample)) + "/")
+                    outputs.append(self.rel(_layout.export_previews_dir(out, sample, route=way)) + "/")
                 device = ((r.get("export") or {}).get("segmentation") or {}).get("device")
-                export[sample] = self.add("export", {"sample": sample}, needs, inputs, outputs,
+                export[sample] = self.add("export", {"sample": sample, "route": way}, needs, inputs, outputs,
                                           gpu=device == "cuda")
         if "report" in r:
             reports = []
+            route = export_route(r) or _layout.NO_EXPORT
             for sample, members in samples.items():
                 needs = [fov_task[f] for f in members if f in fov_task]
                 inputs = [self.rel(_layout.run_record(out, f)) for f in members if f in fov_task]
@@ -828,10 +831,14 @@ class Graph:
                     needs += [assign[f] for f in members]
                     inputs += [o for f in members for o in self.by_id[assign[f]]["outputs"]
                                if o.endswith(_layout.ASSIGNMENT_RECORD)]
-                reports.append(self.add("report", {"sample": sample}, needs, inputs,
-                                        [_layout.report_dir(out, sample) / "report.json"]))
+                reports.append(self.add("report", {"sample": sample, "route": route}, needs, inputs,
+                                        [_layout.report_dir(out, sample, route) / "report.json"]))
             root = _layout.report_root(out)
-            self.add("compare", {}, reports, [self.by_id[t]["outputs"][0] for t in reports],
+            # The comparison lists every route's report: this plan's, and those another route's run left in the
+            # output root (the samples' report.json of the other routes present when the plan runs).
+            others = [self.rel(path) for sample in samples for name in _layout.REPORT_ROUTES if name != route
+                      if (path := _layout.report_dir(out, sample, name) / "report.json").is_file()]
+            self.add("compare", {}, reports, [self.by_id[t]["outputs"][0] for t in reports] + others,
                      [root / "samples.csv", root / "index.html"])
         return self.tasks
 
@@ -1001,7 +1008,11 @@ def plan(config_path, output_root=None) -> dict:
     contract defines and ``api``, the API configs of each block; its hash leaves out ``execution`` and the roots.
     The manifest lists the inputs (path relative to the input root, or absolute outside it, bytes, modification
     time; no content hash), the rule groups and the tasks in an order that respects ``needs``, each with
-    ``blocks_sha256`` and ``fingerprint``. Each file is rewritten only when its content changes.
+    ``blocks_sha256`` and ``fingerprint``. Each file is rewritten only when its content changes. The export and
+    report tasks have the export route in their identity and id and write the route's folders,
+    ``export/<sample>/<route>/`` and ``report/<sample>/<route>/`` (``no_export`` without an export), so that one
+    output root holds every route; the compare task reads this plan's reports and the other routes' reports that the
+    output root holds when the plan runs.
     """
     import yaml
     config_path = Path(config_path)

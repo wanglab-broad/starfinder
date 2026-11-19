@@ -668,11 +668,11 @@
     "sample"
    ],
    "outputs": [
-    "export/{sample}/export.json",
-    "export/{sample}/previews/"
+    "export/{sample}/per_fov/export.json",
+    "export/{sample}/per_fov/previews/"
    ],
-   "record": "workflow/tasks/export.{sample}.json",
-   "log": "workflow/logs/export.{sample}.log",
+   "record": "workflow/tasks/export.{sample}.per_fov.json",
+   "log": "workflow/logs/export.{sample}.per_fov.log",
    "temporary": []
   },
   {
@@ -682,10 +682,10 @@
     "sample"
    ],
    "outputs": [
-    "report/{sample}/report.json"
+    "report/{sample}/per_fov/report.json"
    ],
-   "record": "workflow/tasks/report.{sample}.json",
-   "log": "workflow/logs/report.{sample}.log",
+   "record": "workflow/tasks/report.{sample}.per_fov.json",
+   "log": "workflow/logs/report.{sample}.per_fov.log",
    "temporary": []
   },
   {
@@ -2020,11 +2020,12 @@
    "fingerprint": "<sha256>"
   },
   {
-   "id": "export/sample",
+   "id": "export/sample/per_fov",
    "kind": "export",
    "group": "export",
    "identity": {
-    "sample": "sample"
+    "sample": "sample",
+    "route": "per_fov"
    },
    "needs": [
     "assign/sample/FOV_001/default",
@@ -2071,11 +2072,11 @@
     "stitching/sample/placement.json"
    ],
    "outputs": [
-    "export/sample/export.json",
-    "export/sample/previews/"
+    "export/sample/per_fov/export.json",
+    "export/sample/per_fov/previews/"
    ],
-   "record": "workflow/tasks/export.sample.json",
-   "log": "workflow/logs/export.sample.log",
+   "record": "workflow/tasks/export.sample.per_fov.json",
+   "log": "workflow/logs/export.sample.per_fov.log",
    "command": [
     "starfinder",
     "workflow",
@@ -2083,7 +2084,7 @@
     "--manifest",
     "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
     "--task",
-    "export/sample"
+    "export/sample/per_fov"
    ],
    "execution": {
     "threads": 1,
@@ -2103,25 +2104,26 @@
    "fingerprint": "<sha256>"
   },
   {
-   "id": "report/sample",
+   "id": "report/sample/per_fov",
    "kind": "report",
    "group": "report",
    "identity": {
-    "sample": "sample"
+    "sample": "sample",
+    "route": "per_fov"
    },
    "needs": [
     "assign/sample/FOV_001/default",
     "assign/sample/FOV_002/default",
     "assign/sample/FOV_003/default",
     "assign/sample/FOV_004/default",
-    "export/sample",
+    "export/sample/per_fov",
     "fov/sample/FOV_001",
     "fov/sample/FOV_002",
     "fov/sample/FOV_003",
     "fov/sample/FOV_004"
    ],
    "inputs": [
-    "export/sample/export.json",
+    "export/sample/per_fov/export.json",
     "fovs/FOV_001/assignment/default/assignment.json",
     "fovs/FOV_001/checkpoints/candidates.json",
     "fovs/FOV_001/checkpoints/pre_qc.json",
@@ -2140,10 +2142,10 @@
     "fovs/FOV_004/run.json"
    ],
    "outputs": [
-    "report/sample/report.json"
+    "report/sample/per_fov/report.json"
    ],
-   "record": "workflow/tasks/report.sample.json",
-   "log": "workflow/logs/report.sample.log",
+   "record": "workflow/tasks/report.sample.per_fov.json",
+   "log": "workflow/logs/report.sample.per_fov.log",
    "command": [
     "starfinder",
     "workflow",
@@ -2151,7 +2153,7 @@
     "--manifest",
     "<work>/output/sample-tiny-v1/example-per-fov/workflow/manifest.json",
     "--task",
-    "report/sample"
+    "report/sample/per_fov"
    ],
    "execution": {
     "threads": 1,
@@ -2174,10 +2176,10 @@
    "group": "compare",
    "identity": {},
    "needs": [
-    "report/sample"
+    "report/sample/per_fov"
    ],
    "inputs": [
-    "report/sample/report.json"
+    "report/sample/per_fov/report.json"
    ],
    "outputs": [
     "report/index.html",

@@ -374,11 +374,11 @@ def own_files(folder: Path) -> list[str]:
 
 class _Collection:
     def __init__(self, inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
-                 config):
+                 config, export_dir):
         self.inputs, self.root, self.sample, self.fov_ids = inputs, root, sample, fov_ids
         self.records, self.export, self.placement = records, export, placement
         self.assignment, self.segmentation, self.config = assignment, segmentation, config
-        self.export_dir = _layout.export_dir(root, sample)
+        self.export_dir = export_dir
         self.stitching_dir = _layout.stitching_dir(root, sample)
         self._transform_files = {}
         self.assembly = (export or {}).get("assembly") if isinstance((export or {}).get("assembly"), dict) else None
@@ -1100,7 +1100,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
                    assignment: str | None = "default", segmentation: str | None = None,
                    config: ReportConfig | None = None, output_dir=None,
                    reference_image: str | None = None, reference_image_import: str | None = None,
-                   input_root=None) -> tuple[Path, dict]:
+                   input_root=None, export_dir=None) -> tuple[Path, dict]:
     """Collect one sample's records into its report folder; return the folder and the ``report.json`` content.
 
     The checks 1 to 7 of design/specs/report.md ("Checks before anything is
@@ -1114,7 +1114,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     output_root : str or Path
         The dataset's output root.
     sample : str
-        The sample: ``stitching/<sample>/``, ``export/<sample>/`` and ``report/<sample>/``.
+        The sample: ``stitching/<sample>/``, ``export/<sample>/`` (or ``export_dir``) and ``report/<sample>/``.
     fov_ids : Sequence[str]
         The FOV list, nonempty and unique, in report order.
     dataset_id, sample_id : str
@@ -1135,6 +1135,9 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     input_root : str or Path or None
         The input root the relative source paths of version-2 run records resolve against (the replay's raw
         images, the codebook); None uses each record's ``input_root``. Version-1 records keep their recorded paths.
+    export_dir : str or Path or None
+        The export folder the report reads; None is ``<output_root>/export/<sample>/``. The workflow passes its
+        route's folder, ``<output_root>/export/<sample>/<route>/``.
 
     Raises
     ------
@@ -1156,7 +1159,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     timer = Timer()
     folder, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                                   assignment=assignment, segmentation=segmentation, config=config,
-                                  output_dir=output_dir, input_root=input_root)
+                                  output_dir=output_dir, input_root=input_root, export_dir=export_dir)
     collection.reference_image = reference_image
     collection.reference_image_import = reference_image_import
     inputs, records, placement, export = collection.inputs, collection.records, collection.placement, collection.export
@@ -1228,27 +1231,27 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
 
 def report_sample(dataset, sample: str, fov_ids: Sequence[str], *, assignment: str | None = "default",
                   segmentation: str | None = None, config: ReportConfig | None = None,
-                  output_dir=None) -> ReportRecord:
+                  output_dir=None, export_dir=None) -> ReportRecord:
     """``Dataset.report``: :func:`collect_report` on the dataset's output root, input root and IDs, as a
     :class:`ReportRecord`."""
     folder, record = collect_report(dataset.output_root, sample, fov_ids, dataset_id=dataset.dataset_id,
                                     sample_id=dataset.sample_id, assignment=assignment, segmentation=segmentation,
                                     config=config, output_dir=output_dir, reference_image=dataset.reference_image,
                                     reference_image_import=dataset.reference_image_import,
-                                    input_root=dataset.input_root)
+                                    input_root=dataset.input_root, export_dir=export_dir)
     return ReportRecord(Path(folder), record)
 
 
 def report_examples(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
                     assignment: str | None = "default", segmentation: str | None = None,
-                    config: ReportConfig | None = None, input_root=None):
+                    config: ReportConfig | None = None, input_root=None, export_dir=None):
     """The images of the examples as :func:`collect_report` makes them, without writing anything: the replay of
     the main example (:class:`._replay.Replay`, or None when there is none to replay) and the segmentation preview
     of each example role (:class:`._previews.Preview`, or :class:`._values.Unavailable`). The checks before
-    anything is written apply, as for the report; ``input_root`` as for :func:`collect_report`."""
+    anything is written apply, as for the report; ``input_root`` and ``export_dir`` as for :func:`collect_report`."""
     _, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                              assignment=assignment, segmentation=segmentation, config=config, output_dir=None,
-                             check_folder=False, input_root=input_root)
+                             check_folder=False, input_root=input_root, export_dir=export_dir)
     collection.fovs_rows()
     collection.registration_rows()
     collection.examples_parts()
@@ -1257,21 +1260,21 @@ def report_examples(output_root, sample: str, fov_ids: Sequence[str], *, dataset
 
 def report_measurements(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
                         assignment: str | None = "default", segmentation: str | None = None,
-                        config: ReportConfig | None = None, input_root=None):
+                        config: ReportConfig | None = None, input_root=None, export_dir=None):
     """The static figures of "Sample measurements" as the report makes them, without writing anything
     (:class:`._measurements.SampleFigures`): the per-cell distributions, the marker figures with the data of the
     group selector, and the reads along Z; a part that cannot be drawn is its :class:`._values.Unavailable`, the
     reason its row of ``unavailable.csv`` holds. The checks before anything is written apply, as for the report;
-    ``input_root`` as for :func:`collect_report`."""
+    ``input_root`` and ``export_dir`` as for :func:`collect_report`."""
     _, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                              assignment=assignment, segmentation=segmentation, config=config, output_dir=None,
-                             check_folder=False, input_root=input_root)
+                             check_folder=False, input_root=input_root, export_dir=export_dir)
     collection.fovs_rows()
     return collection.measurements.figures()
 
 
 def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment, segmentation, config, output_dir,
-             check_folder=True, input_root=None):
+             check_folder=True, input_root=None, export_dir=None):
     """The checks 1 to 7 before anything is written, in order; the report folder and the collection."""
     root = Path(output_root)
     fov_ids, config = _check_arguments(sample, fov_ids, config)
@@ -1280,7 +1283,8 @@ def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment,
     if segmentation is not None and (not isinstance(segmentation, str) or not segmentation):
         raise ValueError(f"segmentation must be a run name or None; got {segmentation!r}")
     inputs = _Inputs(root, input_root)
-    export_dir, stitching_dir = _layout.export_dir(root, sample), _layout.stitching_dir(root, sample)
+    export_dir = _layout.export_dir(root, sample) if export_dir is None else Path(export_dir)
+    stitching_dir = _layout.stitching_dir(root, sample)
     if not any(_layout.run_record(root, f).is_file() for f in fov_ids) and \
             not (export_dir / _layout.EXPORT_FILE).is_file():
         raise FileNotFoundError(f"nothing to report for sample {sample!r}: no FOV of the list has a run record "
@@ -1295,7 +1299,7 @@ def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment,
     if check_folder:
         own_files(folder)
     collection = _Collection(inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
-                             config)
+                             config, export_dir)
     collection.dataset_id = dataset_id
     return folder, collection
 

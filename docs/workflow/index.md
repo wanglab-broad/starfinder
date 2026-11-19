@@ -151,7 +151,7 @@ when a FOV is not `image_supported`, a correction exceeds half the nominal
 overlap width, a kept link's residual exceeds 1 µm (both bounds are
 `stitching.review`), the optimizer removed a link, or the placement is supplied.
 The `export` task then stops before it reads any origin and writes the held
-page `workflow/held/<sample>.html`: the review's reasons, the flagged FOVs, a
+page `workflow/held/<sample>/<route>.html`: the review's reasons, the flagged FOVs, a
 summary of the placement (its FOVs by status, its links, the tables' SHA-256)
 and how to approve it. It makes no report: the `report` task makes the full
 report once, after the export. The task exits 4, the run fails, and
@@ -185,8 +185,20 @@ with a `stitch` task.
 Under the output root, each task writes the files the
 {doc}`reference <reference>` lists for its kind, for example
 `fovs/<fov>/molecules.csv` and `fovs/<fov>/run.json` for a `fov` task, and
-`export/<sample>/` for an `export` task. The workflow's own files are in
-`workflow/`:
+`export/<sample>/<route>/` for an `export` task, whose route is `per_fov`,
+`after_fusion` or `molecules_only`. The report of a sample is in
+`report/<sample>/<route>/` (`report/<sample>/no_export/` without an export), and
+the comparison page `report/index.html` lists every report the output root holds,
+one row per sample and route.
+
+Each route has its own export and report folders and task records, so one output
+root holds several routes. Run the configuration of the first route, then plan and
+run the configuration of the second into the same output root: its FOV-level and
+placement tasks are complete already, so only its export, report and comparison
+run, and no file of the first route changes. Copying a route's outputs aside is not
+needed.
+
+The workflow's own files are in `workflow/`:
 
 * `resolved.json` and `manifest.json`, written by the plan;
 * `tasks/<task>.json`, the record of each task that succeeded, with its outputs
@@ -194,9 +206,9 @@ Under the output root, each task writes the files the
   `tasks/<task>.failed.json` keeps the record of a failed attempt;
 * `logs/<task>.log`, the log of each task;
 * `verify.json`, written by `verify`;
-* `exports/<sample>.json`, a copy of each sample's export record, which lets a
+* `exports/<sample>/<route>.json`, a copy of each sample's export record, which lets a
   rerun of `export` remove the files the earlier export wrote;
-* `held/<sample>.html`, the held page of an export held for review, until the
+* `held/<sample>/<route>.html`, the held page of an export held for review, until the
   export runs again.
 
 ## Main options

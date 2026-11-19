@@ -217,7 +217,7 @@ def test_a_changed_key_reruns_the_tasks_of_its_block_and_their_downstream(per_fo
     readers = {t["id"] for t in plan["tasks"] if block in TASK_BLOCKS[t["kind"]]}
     assert set(tasks) == downstream(plan, readers) and set(tasks.values()) == {1}
     if block == "export":
-        assert set(tasks) == {"export/sample", "report/sample", "compare"}
+        assert set(tasks) == {"export/sample/per_fov", "report/sample/per_fov", "compare"}
     else:
         assert {t["kind"] for t in plan["tasks"] if t["id"] not in tasks} == {"morphology"}
 

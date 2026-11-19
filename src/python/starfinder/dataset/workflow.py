@@ -1776,7 +1776,7 @@ def _assembly_block(config) -> _AssemblyBlock:
     table_format (csv or parquet) and previews (default false: on the route
     of a saved assignment, reads_assignment draws the local assignment
     figures into fovs/<fov>/previews/ and export_sample the ownership figures
-    into export/<sample>/previews/<fov>/). It needs backend: python and a
+    into export/<sample>/per_fov/previews/<fov>/). It needs backend: python and a
     stitching block, whose placement it reads.
     """
     from starfinder._registry import check_name

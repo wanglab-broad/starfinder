@@ -106,8 +106,9 @@ TASK_BLOCKS = {
 KINDS = tuple(TASK_BLOCKS)
 #: The command of each kind: the kind with ``-``; the Fiji task's record is written by bigstitcher-check.
 COMMANDS = {kind: kind.replace("_", "-") for kind in KINDS} | {"bigstitcher_engine": "bigstitcher-check"}
-#: The identity fields of a task id, in the id's order.
-ID_FIELDS = ("sample", "step", "fov", "tile", "run", "name")
+#: The identity fields of a task id, in the id's order. ``route`` is the export route of the export and report tasks
+#: (``export/<sample>/<route>``), so that the routes' tasks have records of their own in one output root.
+ID_FIELDS = ("sample", "route", "step", "fov", "tile", "run", "name")
 
 
 # --- the canonical serialization -------------------------------------------------------------------------------

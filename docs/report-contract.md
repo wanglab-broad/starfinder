@@ -53,7 +53,9 @@ the {doc}`workflow reference <workflow/reference>` for the complete workflow.
 ### Inputs and unavailable parts
 
 The usual inputs are under `fovs/<FOV>/`, `stitching/<sample>/` and
-`export/<sample>/`. The main example also reads its raw input images. Keep the
+`export/<sample>/`; `export_dir` names another export folder, such as the
+workflow's `export/<sample>/<route>/`. The main example also reads its raw input
+images. Keep the
 dataset's input root available for replay. `run.json` records the pipeline,
 input files, preprocessing, registration, transforms, read counts, codebook or
 direct panel, and workflow configuration provenance.
@@ -80,7 +82,8 @@ give the detailed selection and replay procedure.
 ## What you get
 
 `Dataset.report` returns a {py:class}`~starfinder.report.ReportRecord` with `path`
-and `record`. Its default folder is `<output_root>/report/<sample>/`:
+and `record`. Its default folder is `<output_root>/report/<sample>/`; the
+workflow writes each export route's report into `report/<sample>/<route>/`:
 
 | Output | Contents |
 | --- | --- |
@@ -91,7 +94,9 @@ and `record`. Its default folder is `<output_root>/report/<sample>/`:
 The comparison returns a {py:class}`~starfinder.report.ComparisonRecord` and writes
 `report/index.html` and `report/samples.csv`. It shows spots per FOV, matched
 fraction and cells per FOV by sample. A sample without a report appears as
-“missing”.
+“missing”. With `routes`, as the workflow calls it, each sample has one report per
+export route in `report/<sample>/<route>/`, and the page has one row and one box per
+sample and route.
 
 ## Main options
 

@@ -35,8 +35,10 @@ See {py:class}`~starfinder.export.SpatialDataExportConfig`.
 
 ## Export folder
 
-The workflow writes `export/<sample>/` under its output root;
-`Dataset.export` takes an explicit `output_dir`.
+The workflow writes `export/<sample>/<route>/` under its output root, one folder per
+export route (`per_fov`, `after_fusion` or `molecules_only`), so that one output
+root holds the export of every route; `Dataset.export` takes an explicit
+`output_dir`.
 
 | Path | Contents |
 | --- | --- |

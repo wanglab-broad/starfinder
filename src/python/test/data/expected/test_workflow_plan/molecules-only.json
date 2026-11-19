@@ -456,10 +456,10 @@
     "sample"
    ],
    "outputs": [
-    "export/{sample}/export.json"
+    "export/{sample}/molecules_only/export.json"
    ],
-   "record": "workflow/tasks/export.{sample}.json",
-   "log": "workflow/logs/export.{sample}.log",
+   "record": "workflow/tasks/export.{sample}.molecules_only.json",
+   "log": "workflow/logs/export.{sample}.molecules_only.log",
    "temporary": []
   },
   {
@@ -469,10 +469,10 @@
     "sample"
    ],
    "outputs": [
-    "report/{sample}/report.json"
+    "report/{sample}/molecules_only/report.json"
    ],
-   "record": "workflow/tasks/report.{sample}.json",
-   "log": "workflow/logs/report.{sample}.log",
+   "record": "workflow/tasks/report.{sample}.molecules_only.json",
+   "log": "workflow/logs/report.{sample}.molecules_only.log",
    "temporary": []
   },
   {
@@ -776,11 +776,12 @@
    "fingerprint": "<sha256>"
   },
   {
-   "id": "export/sample",
+   "id": "export/sample/molecules_only",
    "kind": "export",
    "group": "export",
    "identity": {
-    "sample": "sample"
+    "sample": "sample",
+    "route": "molecules_only"
    },
    "needs": [
     "fov/sample/FOV_001",
@@ -804,10 +805,10 @@
     "stitching/sample/placement.json"
    ],
    "outputs": [
-    "export/sample/export.json"
+    "export/sample/molecules_only/export.json"
    ],
-   "record": "workflow/tasks/export.sample.json",
-   "log": "workflow/logs/export.sample.log",
+   "record": "workflow/tasks/export.sample.molecules_only.json",
+   "log": "workflow/logs/export.sample.molecules_only.log",
    "command": [
     "starfinder",
     "workflow",
@@ -815,7 +816,7 @@
     "--manifest",
     "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
     "--task",
-    "export/sample"
+    "export/sample/molecules_only"
    ],
    "execution": {
     "threads": 1,
@@ -835,21 +836,22 @@
    "fingerprint": "<sha256>"
   },
   {
-   "id": "report/sample",
+   "id": "report/sample/molecules_only",
    "kind": "report",
    "group": "report",
    "identity": {
-    "sample": "sample"
+    "sample": "sample",
+    "route": "molecules_only"
    },
    "needs": [
-    "export/sample",
+    "export/sample/molecules_only",
     "fov/sample/FOV_001",
     "fov/sample/FOV_002",
     "fov/sample/FOV_003",
     "fov/sample/FOV_004"
    ],
    "inputs": [
-    "export/sample/export.json",
+    "export/sample/molecules_only/export.json",
     "fovs/FOV_001/checkpoints/candidates.json",
     "fovs/FOV_001/checkpoints/pre_qc.json",
     "fovs/FOV_001/run.json",
@@ -864,10 +866,10 @@
     "fovs/FOV_004/run.json"
    ],
    "outputs": [
-    "report/sample/report.json"
+    "report/sample/molecules_only/report.json"
    ],
-   "record": "workflow/tasks/report.sample.json",
-   "log": "workflow/logs/report.sample.log",
+   "record": "workflow/tasks/report.sample.molecules_only.json",
+   "log": "workflow/logs/report.sample.molecules_only.log",
    "command": [
     "starfinder",
     "workflow",
@@ -875,7 +877,7 @@
     "--manifest",
     "<work>/output/sample-tiny-v1/example-molecules-only/workflow/manifest.json",
     "--task",
-    "report/sample"
+    "report/sample/molecules_only"
    ],
    "execution": {
     "threads": 1,
@@ -898,10 +900,10 @@
    "group": "compare",
    "identity": {},
    "needs": [
-    "report/sample"
+    "report/sample/molecules_only"
    ],
    "inputs": [
-    "report/sample/report.json"
+    "report/sample/molecules_only/report.json"
    ],
    "outputs": [
     "report/index.html",

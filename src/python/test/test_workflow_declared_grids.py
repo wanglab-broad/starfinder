@@ -194,7 +194,7 @@ def command_run(root, dimensions, *, stored):
     if dimensions == "2d":
         planned["segmentation"]["runs"][0]["projection"] = True
         manifest, _ = T.plan(root, "out-plane", planned)
-    assert T.task(manifest, "export", sample="sample1")["outputs"] == ["export/sample1/export.json"]
+    assert T.task(manifest, "export", sample="sample1")["outputs"] == ["export/sample1/per_fov/export.json"]
     T.succeed(manifest, "fov", "stitch")
     T.run_kinds(manifest, "segment", "assign", "export")
     return out, manifest, planned
@@ -242,7 +242,9 @@ def test_the_segment_assign_and_export_commands_on_declared_grids(tmp_path, dime
         assert saved_folder(plain_out, fov) == saved_folder(stored_out, fov), fov
         names, tables, _ = saved_folder(plain_out, fov)
         assert names == ["assignment.json", "cells.csv", "counts.csv", "molecules.csv"] and tables["molecules.csv"]
-    folders = {key: out / "export" / "sample1" for key, out in (("stored", stored_out), ("plain", plain_out))}
+    # The export task writes its route's folder (W-876); dimensionality both is the route per FOV.
+    folders = {key: out / "export" / "sample1" / "per_fov" for key, out in (("stored", stored_out),
+                                                                            ("plain", plain_out))}
     records = {key: json.loads((folder / "export.json").read_text()) for key, folder in folders.items()}
     for key, folder in folders.items():
         assert records[key]["complete"] is True, key
@@ -261,7 +263,7 @@ def test_the_segment_assign_and_export_commands_on_declared_grids(tmp_path, dime
     # a failed task removes its own declared outputs, which the tasks after it read).
     unconfigured = {k: v for k, v in config.items() if k not in ("voxel_size_xy", "voxel_size_z")}
     manifest, _ = T.plan(tmp_path / "plain", "unconfigured", unconfigured)
-    for task in ("export/sample1", "assign/sample1/Position001/default", "segment/sample1/Position001/cell"):
+    for task in ("export/sample1/per_fov", "assign/sample1/Position001/default", "segment/sample1/Position001/cell"):
         assert T.run(manifest, task) == 1, task
         assert "lacks voxel_size_xy and voxel_size_z: set voxel_size_xy and voxel_size_z" in \
             T.failure(manifest, task)["message"], task
