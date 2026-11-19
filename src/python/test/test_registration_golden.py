@@ -34,8 +34,6 @@ from .expected_values import FLOAT64, read_arrays
 
 pytestmark = [pytest.mark.registration, pytest.mark.golden]
 
-pytest.importorskip("SimpleITK")
-
 SHAPE_ZYX = (8, 32, 32)
 CHANNELS = 4
 SEED = 20260929

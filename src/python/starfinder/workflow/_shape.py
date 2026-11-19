@@ -26,7 +26,7 @@ VERIFY_FORMAT = "starfinder.workflow.verify/1"
 BLOCKS = ("processing", "morphology", "segmentation", "assignment", "stitching", "assembly", "export", "report")
 #: The top-level keys outside the blocks and execution (the dataset keys); every kind may read them.
 DATASET_KEYS = ("backend", "root_input_path", "dataset_id", "sample_id", "root_output_path", "output_id",
-                "selected_fovs", "n_rounds", "ref_round", "ref_channel", "reference_stains", "seq_channel_order",
+                "fov_list", "selected_fovs", "n_rounds", "ref_round", "ref_channel", "reference_stains", "seq_channel_order",
                 "additional_round", "rotate_angle", "voxel_size_xy", "voxel_size_z", "reference_image",
                 "reference_image_import", "image_dir_template", "readout_mode", "codebook", "direct_panel")
 #: The two roots, which the resolved-configuration hash and the blocks' hash leave out.

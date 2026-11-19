@@ -48,7 +48,7 @@ def test_registry_table_holds_the_registered_methods():
                            spec.space, tuple((d.module, d.distribution, d.extra) for d in spec.requires))
              for config_type, spec in REGISTRATION_METHODS.items()}
     elastix = ("itk", "itk-elastix", "registration-elastix")
-    simpleitk = ("SimpleITK", "SimpleITK", "local-registration")
+    simpleitk = ("SimpleITK", "SimpleITK", None)
     assert table == {
         TranslationConfig: ("translation", "global", {2, 3}, (1, 1, 1), "translation", "index", ()),
         RigidConfig: ("rigid", "global", {2, 3}, (4, 16, 16), "affine", "physical", (elastix,)),

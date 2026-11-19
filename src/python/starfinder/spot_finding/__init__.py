@@ -169,6 +169,14 @@ def find_spots(
     centroid weighting; input pixels are never modified. Global thresholds
     require uint8/uint16. Unknown physical geometry remains unknown.
 
+    Local maxima detects by default with threshold_mode 'adaptive' and
+    threshold_value 0.2 (W-880). In adaptive mode the noise record adds maximum,
+    noise_threshold, empty_channel and bright_artifact, and a channel whose
+    maximum does not exceed its noise threshold (empty_channel), or whose
+    maximum lies more than 3 times as far above the median as the 99th
+    percentile of its voxels above the noise threshold (bright_artifact), gets
+    a SpotFindingWarning, also listed in diagnostics['warnings'].
+
     Local maxima records, per channel and in every threshold mode, the noise
     record diagnostics['noise'] (zero fraction, median, MAD, threshold, and
     the estimation set of the median and MAD, 'all', 'above_minimum' or
@@ -261,6 +269,25 @@ def _plateau_note(record, label, round_name):
             f"are at the value {record['plateau_value']!r}, above its minimum, so its noise median "
             f"({record['median']!r}) and MAD ({record['mad']!r}) were estimated on the {record['n_estimation']} voxels "
             f"above that value (estimation 'above_plateau'); the threshold is {record['threshold']!r}")
+
+
+def _adaptive_notes(record, label, round_name, fov_level=False):
+    """The notes of an adaptive-mode noise record for the two weak points of a threshold that follows the channel
+    maximum (W-880): an empty channel, whose maximum does not exceed its noise threshold, and a bright artifact,
+    whose maximum lies far above the signal. fov_level (tiled execution) names the reference round's statistics."""
+    where = f"round {round_name!r}, " if round_name is not None else ""
+    tail = (f" (the FOV-level statistics of round {round_name!r}, applied to every round)" if fov_level else "")
+    notes = []
+    if record.get('empty_channel'):
+        notes.append(f"spot finding: {where}channel {label!r}: its maximum ({record['maximum']!r}) does not exceed its "
+                     f"noise threshold ({record['noise_threshold']!r}), so it holds no signal above noise and the "
+                     f"adaptive threshold {record['threshold']!r} calls noise{tail}")
+    if record.get('bright_artifact'):
+        notes.append(f"spot finding: {where}channel {label!r}: its maximum ({record['maximum']!r}) is more than 3 "
+                     f"times as far above its median ({record['median']!r}) as the 99th percentile of its voxels "
+                     f"above the noise threshold ({record['noise_threshold']!r}), so a bright artifact may have "
+                     f"raised the adaptive threshold {record['threshold']!r} above most of the signal{tail}")
+    return notes
 
 
 def _model_record(models, keys):
@@ -394,6 +421,9 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
             if noise[c]['mad_floored']:
                 messages.append(_floor_note(noise[c], keys[c], round_name))
                 warnings.warn(messages[-1], SpotFindingWarning, stacklevel=3)
+            for note in _adaptive_notes(noise[c], keys[c], round_name):
+                messages.append(note)
+                warnings.warn(note, SpotFindingWarning, stacklevel=3)
     if models:
         diagnostics['model'] = _model_record(models, keys)
     diagnostics['effective_settings'] = {keys[c]: tuples(jsonable(effective.get(c, configs[c])))

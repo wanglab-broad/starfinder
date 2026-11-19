@@ -57,8 +57,9 @@ properties:
     type: string
     description: "Output folder identifier"
 
-  # The FOVs: MATLAB backend only (required there). The Python backend reads <input>/fovs.csv
-  # (sample,fov_id and an optional position_id) and selected_fovs, and refuses these eight keys.
+  # The FOVs: MATLAB backend only (required there). The Python backend reads its FOV list, the file
+  # fov_list names or else <input>/fovs.csv (sample,fov_id and an optional position_id), and
+  # selected_fovs, and refuses these eight keys.
   fov_id_pattern:
     type: string
     description: "MATLAB backend only: pattern for FOV naming (e.g., 'tile_{i}' or 'Position{i:03}')"
@@ -68,6 +69,10 @@ properties:
     minimum: 1
     description: "MATLAB backend only: total number of FOVs in the dataset"
 
+  fov_list:
+    type: [string, "null"]
+    minLength: 1
+    description: "Python FOV list (a fovs.csv), relative to the input root or absolute; omitted uses <input>/fovs.csv."
   selected_fovs:
     type: [array, "null"]
     items:
@@ -75,7 +80,7 @@ properties:
       minLength: 1
     minItems: 1
     uniqueItems: true
-    description: "Python FOV IDs selected from fovs.csv."
+    description: "Python FOV IDs selected from the FOV list."
   n_rounds:
     type: integer
     minimum: 1
@@ -521,7 +526,7 @@ allOf:
   # segmentation, assignment, stitching, assembly, export and report blocks, the
   # stardist_segmentation target and the rules' checkpoints are Python-only (backend
   # defaults to matlab); so are the codebook, direct_panel and image_dir_template that name another
-  # codebook or image layout than MATLAB's genes.csv and round-first folders, when not null (OC5)
+  # codebook or image layout than MATLAB's genes.csv and round-first folders, and fov_list, when not null (OC5)
   - if:
       not:
         required: [backend]
@@ -538,6 +543,8 @@ allOf:
             properties: {direct_panel: {type: string}}
           - required: [image_dir_template]
             properties: {image_dir_template: {type: string}}
+          - required: [fov_list]
+            properties: {fov_list: {type: string}}
           - required: [reference_stains]
           - required: [segmentation]
           - required: [assignment]

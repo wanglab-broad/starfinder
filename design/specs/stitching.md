@@ -862,6 +862,43 @@ with a NaN or infinite value each raise `ValueError` naming the FOV. The arithme
 **Recommendation: L1.** It applies one rule to both backends, matches the macro's current
 behavior, and treats a constant overlap as carrying no information about the offset.
 
+**Amended 2026-11-18 (W-874): the threshold of `multiview_stitcher` is estimated from the data.**
+`MultiviewStitcherConfig.quality_threshold` is `"auto"` by default; a number in [−1, 1] still
+overrides it. With `"auto"`, each registered pair's quality is also measured at two deliberately
+wrong offsets, the registered shift moved by half the overlap's width (binned voxels, rounded
+down) both ways along the overlap axis, the narrower of Y and X. These qualities are a null
+distribution where no tissue lines up, and the threshold is `max(0.2, q99)`, with `q99` their 99th
+percentile; without a null value it is 0.2. L1 then applies at that threshold, NaN still dropped.
+The record's `method_diagnostics["link_quality"]` keeps the threshold, the floor, the quantile, the
+null's summary and each pair's null values, and the report shows them. The global optimization's
+outlier removal stays the second line. The import is unchanged. Reason: on tissue-2D (W-870),
+0.7 rejected all four real stage-1 links (quality 0.49 to 0.68, corrections about 1 µm) and held the
+export; multiview-stitcher's own default is 0.2.
+
+% Amended 2026-11-18 for W-874 (W-870's finding F9; Jiahao, 2026-11-18: floor 0.2, the 99th percentile).
+
+**Amended 2026-11-19 (W-874, decision B): `"auto"` is the default for single-plane tiles only.**
+The default is `quality_threshold=None`: `"auto"` when every tile has Z = 1, and 0.7 when tiles
+have Z > 1, recorded as `method_diagnostics["link_quality"]` = `{"rule": "fixed_default_z_above_1",
+"threshold": 0.7}`; `"auto"` records `"rule": "auto"`. An explicit `"auto"` or number applies to
+either kind of tile; a given number is named by the method config and adds no `link_quality`. The
+report names the rule. Reason: the null moves the overlap in Y and X only and cannot see a z error;
+on the synthetic 3D case `disconnected` `"auto"` (0.2) kept a link 4 voxels off in z, and on LN's
+cut tiles the null reached 0.85. W-895 adds a z-aware null; W-896 tracks the cut-tile check's
+LN condition B, 1 px off at binning 4 before and after this change.
+
+% Amended 2026-11-19 for W-874 (Jiahao, 2026-11-19, at the review stop: "Auto for 2D only").
+
+**Correction, 2026-11-19 (W-874 repair 2).** Decision B was taken on the premise that tissue-2D's
+tiles are single-plane. They are not: W-870's per-FOV stitching inputs are 30 × 3072 × 3072
+stacks, so the rule gives them 0.7. At 0.7 the tissue-2D restitch keeps 9 of W-870's 94 links,
+leaves 54 of 56 FOVs `failed` and requires review; with `quality_threshold: auto` named, the
+placement equals W-870's approved one bit for bit, with no review needed. The rule stands
+(the null cannot see a z error); tissue-2D's runs name `auto` in their configuration until
+W-895's z-aware null can make `auto` the default for Z > 1.
+
+% Ruling of the §2.14 coordinating session, 2026-11-19, under Jiahao's overnight delegation (R-20261119T072539Z-cb90ce96).
+
 ## Failure policy
 
 As agreed on 2026-09-27:
@@ -907,6 +944,20 @@ reconcile. The two defaults are proposals for the validation design
 ([stitching-assembly-validation](../validation/stitching-assembly.md)); neither is
 accepted. Whatever the criterion, a supplied placement is always `required`, with the
 reason `supplied_placement` ("Supplied placement").
+
+**Amended 2026-11-18 (W-874): optimizer removals that leave the placement well supported need no
+review.** Links the optimizer removed make the review `required` (reason `optimizer_removed_link`)
+only when one of these fails: the number of components of the links before the removals (the kept
+ones and the removed ones) equals that after them; every FOV keeps 2 or more kept links, or all it
+had before the removals if it had fewer; no kept link's residual exceeds `max_residual_um`; no
+correction exceeds the bound. The removed links keep their rows (`optimizer_removed`) and both FOVs
+their flag `optimizer_removed_link` either way, and `record["review"]["optimizer_removed"]` holds
+the removed pairs, `review_required` and each condition with whether it holds. The other reasons
+are unchanged. Reason: W-870's stage-2 tissue-2D placement (56 of 56 FOVs `image_supported` in one
+component, every flagged FOV keeping 2 or more links, kept-link residuals at most 0.346 µm,
+corrections at most 7.8 µm under the 14.5 µm bound) waited hours for an approval.
+
+% Amended 2026-11-18 for W-874 (W-870's finding F11; Jiahao, 2026-11-18).
 
 % The W-324 stage-start case; W-331's validation design
 

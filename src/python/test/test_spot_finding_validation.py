@@ -139,7 +139,9 @@ S16_FACE_DISTANCE = 1
 # LoG uses the starfish ISS tutorial values W-266 used (an example, not a default); every other method its
 # native defaults.
 LOG = StarfishLogConfig(min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.01)
-METHODS = {"local_maxima": LocalMaximaConfig(), "starfish_log": LOG,
+# The validation sets pin local maxima's noise rule, the default before W-880 (the default is adaptive 0.2 since).
+NOISE = LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0)
+METHODS = {"local_maxima": NOISE, "starfish_log": LOG,
            **{f"spotiflow-{m}": SpotiflowConfig(m) for m in ("synth_3d", "smfish_3d", "general", "hybiss")},
            **{f"piscis-{m}": PiscisConfig(m) for m in ("20230905", "20251212")}}
 LM, LOG_ = ["local_maxima"], ["starfish_log"]
@@ -654,7 +656,7 @@ def test_s10_multi_round_identities(method, seed, record_property):
 S11_CASES = ([("multiround", m, SEEDS[0], f) for m in LM + LOG_ + SF3 + PI for f in ("csv", "parquet")]
              + [("iso3d", m, SEEDS[0], f) for m in LOG_ + SF3 + PI for f in ("csv", "parquet")])
 # The multi-round sets of LM and LoG run a plan with a ch01 override through FOV.run and FOV.load_checkpoint.
-S11_OVERRIDES = {"local_maxima": LocalMaximaConfig(threshold_value=6.0),
+S11_OVERRIDES = {"local_maxima": replace(NOISE, threshold_value=6.0),
                  "starfish_log": StarfishLogConfig(min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.02)}
 
 
@@ -911,8 +913,8 @@ def test_s16_the_w218_option_and_exclude_border_on_formed16(part, variant, seed,
     if variant == "uint8":
         image = normalize_min_max(image, config=RECIPE1)
     if part == "merge":
-        _, legacy, _ = s16(image, metadata, truth, eligible, LocalMaximaConfig())
-        result, merged, _ = s16(image, metadata, truth, eligible, LocalMaximaConfig(merge_radius_zyx=RADIUS))
+        _, legacy, _ = s16(image, metadata, truth, eligible, NOISE)
+        result, merged, _ = s16(image, metadata, truth, eligible, replace(NOISE, merge_radius_zyx=RADIUS))
         report(record_property, legacy=legacy, merged=merged, removed=result.diagnostics["merged"])
         assert merged["duplicate_same_group"] == S16_SAME_CHANNEL_DUPLICATES
         assert merged["matched"] >= legacy["matched"]
@@ -920,8 +922,8 @@ def test_s16_the_w218_option_and_exclude_border_on_formed16(part, variant, seed,
         shape = np.asarray(FORMED16_SHAPE)
         near_face = set(np.flatnonzero(eligible & (np.minimum(truth, shape - 1 - truth).min(axis=1)
                                                    <= S16_FACE_DISTANCE)).tolist())
-        _, excluded, matched_excluded = s16(image, metadata, truth, eligible, LocalMaximaConfig())
-        _, kept, matched = s16(image, metadata, truth, eligible, LocalMaximaConfig(exclude_border=False))
+        _, excluded, matched_excluded = s16(image, metadata, truth, eligible, NOISE)
+        _, kept, matched = s16(image, metadata, truth, eligible, replace(NOISE, exclude_border=False))
         report(record_property, near_face=len(near_face), missed_with_exclusion=len(near_face - matched_excluded),
                missed_without_exclusion=len(near_face - matched), eligible=int(eligible.sum()),
                matched=[excluded["matched"], kept["matched"]],

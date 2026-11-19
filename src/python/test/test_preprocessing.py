@@ -108,6 +108,69 @@ class TestHistogramMatch:
         assert abs(result.mean() - ref.mean()) < abs(vol.mean() - ref.mean())
 
 
+def _sort_based_correction(volume, radius):
+    """The reconstruction step before W-886, with skimage's sort-based reconstruction: the tests' oracle."""
+    from skimage.morphology import black_tophat, disk, erosion, reconstruction, white_tophat
+    channels = volume[..., None] if volume.ndim == 3 else volume
+    result = np.empty_like(channels)
+    se = disk(radius)
+    limits = np.iinfo(volume.dtype) if volume.dtype.kind in "ui" else np.finfo(volume.dtype)
+    for c in range(channels.shape[-1]):
+        for z in range(channels.shape[0]):
+            image = channels[z, :, :, c].astype(np.float64)
+            image = image - reconstruction(erosion(image, se), image, method="dilation")
+            image = image + white_tophat(image, se) - black_tophat(image, se)
+            result[z, :, :, c] = np.clip(image, limits.min, limits.max).astype(volume.dtype)
+    return result[..., 0] if volume.ndim == 3 else result
+
+
+def _scaled(values, dtype):
+    """values in [0, 1] on the dtype's range: integers fill it to the maximum; floats span -1000 to 1000."""
+    if dtype.kind in "ui":
+        info = np.iinfo(dtype)
+        return np.round(info.min + values * (int(info.max) - int(info.min))).astype(dtype)
+    return (values * 2000 - 1000).astype(dtype)
+
+
+def _ties(dtype):
+    """Four grey levels only, so most neighbours tie (4 x 64 x 64 x 2)."""
+    return _scaled(np.random.default_rng(886).integers(0, 4, (4, 64, 64, 2)) / 3, dtype)
+
+
+def _plateaus(dtype):
+    """Flat cells on a flat background, with single bright spots and a cell at the maximum (4 x 64 x 64 x 2)."""
+    values = np.full((4, 64, 64, 2), 0.1)
+    values[:, 8:24, 8:30] = 0.4
+    values[:, 30:50, 20:44] = 0.6
+    values[:, 40:60, 48:60] = 1.0
+    values[:, 16, 16] = values[:, 36, 30] = 0.9
+    values[1, ..., 1] = values[1, ..., 1][::-1]
+    return _scaled(values, dtype)
+
+
+def _constant(dtype):
+    """Every slice constant, one per Z plane and channel, at levels including the maximum (4 x 64 x 64 x 2)."""
+    levels = np.array([[0.0, 1.0], [0.5, 0.25], [1.0, 1.0], [0.75, 0.0]])
+    return _scaled(np.broadcast_to(levels[:, None, None, :], (4, 64, 64, 2)).copy(), dtype)
+
+
+def _zeros(dtype):
+    """All-zero slices (4 x 64 x 64 x 2)."""
+    return np.zeros((4, 64, 64, 2), dtype=dtype)
+
+
+def _noisy_spots(dtype):
+    """Noise around a mid level with spots, non-integer for floats, on 32 x 64 x 64 (the fixture limit)."""
+    rng = np.random.default_rng(887)
+    values = np.clip(rng.normal(0.3, 0.05, (32, 64, 64, 1)), 0, 1)
+    values[:, rng.integers(0, 64, 40), rng.integers(0, 64, 40)] = 1.0
+    return _scaled(values, dtype)
+
+
+_RECONSTRUCTION_SCENES = {"ties": _ties, "plateaus": _plateaus, "constant": _constant, "zeros": _zeros,
+                          "noisy_spots": _noisy_spots}
+
+
 class TestMorphologicalReconstruction:
     """Tests for correct_background."""
 
@@ -130,6 +193,38 @@ class TestMorphologicalReconstruction:
         # Background should be suppressed (lower than original 100)
         bg_val = result[0, 0, 0]
         assert bg_val < 100
+
+    @pytest.mark.parametrize("scene", sorted(_RECONSTRUCTION_SCENES))
+    @pytest.mark.parametrize("dtype", ["uint8", "uint16", ">u2", "int16", "float32", "float64"])
+    def test_equals_the_sort_based_reconstruction_bit_for_bit(self, scene, dtype):
+        """W-886: SimpleITK's downhill filter gives the step's earlier skimage output exactly, in every dtype."""
+        volume = _RECONSTRUCTION_SCENES[scene](np.dtype(dtype))
+        original = volume.copy()
+        result = correct_background(volume, config=ReconstructionConfig(radius_yx=3))
+        expected = _sort_based_correction(volume, 3)
+        assert result.dtype == volume.dtype and result.shape == volume.shape
+        assert result.tobytes() == expected.tobytes()
+        np.testing.assert_array_equal(volume, original)
+
+    def test_zyx_input_and_another_radius_equal_the_sort_based_reconstruction(self):
+        volume = _RECONSTRUCTION_SCENES["plateaus"](np.dtype(np.uint16))[..., 0]
+        result = correct_background(volume, config=ReconstructionConfig(radius_yx=5))
+        assert result.tobytes() == _sort_based_correction(volume, 5).tobytes()
+
+    @pytest.mark.parametrize("dtype, work", [("uint8", "uint8"), ("uint16", "uint16"), (">u2", "uint16"),
+                                             ("int32", "int32"), ("float32", "float64"), ("float64", "float64")])
+    def test_the_reconstruction_runs_in_the_source_integer_type_or_float64(self, monkeypatch, dtype, work):
+        import SimpleITK as sitk
+        seen = []
+        to_image = sitk.GetImageFromArray
+
+        def spy(array, *args, **kwargs):
+            seen.append(array.dtype)
+            return to_image(array, *args, **kwargs)
+
+        monkeypatch.setattr(sitk, "GetImageFromArray", spy)
+        correct_background(_RECONSTRUCTION_SCENES["ties"](np.dtype(dtype)))
+        assert seen and set(seen) == {np.dtype(work)}
 
 
 class TestTophatFilter:

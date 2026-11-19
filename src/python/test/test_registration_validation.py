@@ -37,9 +37,8 @@ from starfinder.synthetic import (DEVELOPMENT_SIZES, GeometryConfig, forward_dis
 from .test_registration_golden import fixture_rounds
 from .test_registration_methods import gaussian_geometry, landmark_fixture, polynomial_geometry, preset, rigid_geometry
 
-HAS_ELASTIX = importlib.util.find_spec("itk") is not None and importlib.util.find_spec("SimpleITK") is not None
-requires_elastix = pytest.mark.skipif(not HAS_ELASTIX,
-                                      reason="requires the registration-elastix and local-registration extras")
+HAS_ELASTIX = importlib.util.find_spec("itk") is not None
+requires_elastix = pytest.mark.skipif(not HAS_ELASTIX, reason="requires the registration-elastix extra")
 
 pytestmark = [
     pytest.mark.registration,
@@ -62,9 +61,8 @@ SIGNAL = RegistrationSignalConfig("channel", 0)
 @pytest.fixture(autouse=True, scope="module")
 def one_thread():
     """ITK and SimpleITK at one thread, as the project contract requires."""
-    if importlib.util.find_spec("SimpleITK") is not None:
-        import SimpleITK as sitk
-        sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(1)
+    import SimpleITK as sitk
+    sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(1)
     if importlib.util.find_spec("itk") is not None:
         import itk
         itk.MultiThreaderBase.SetGlobalDefaultNumberOfThreads(1)

@@ -1563,8 +1563,24 @@ class _Membership:
 _MEMBERSHIP_COLUMNS = ('sample', 'fov_id')
 
 
+def _fov_list(config):
+    """The FOV list of a Python run: the file the Python-only key fov_list names, absolute or relative to the input
+    root, or without it (absent or null) <input_root>/fovs.csv. fov_list lets a raw dataset folder be read in place:
+    the list lies outside it. Raises ValueError for a value other than a nonempty string or null, or without
+    backend: python."""
+    value = config.get(_layout.FOV_LIST_KEY)
+    if value is None:
+        return _layout.fovs_file(_input_root(config))
+    _python_only(config, [_layout.FOV_LIST_KEY])
+    if not isinstance(value, str) or not value:
+        raise ValueError(f'{_layout.FOV_LIST_KEY} must be the path of a fovs.csv, absolute or relative to the input '
+                         f'root (omit it to read <input_root>/fovs.csv); got {value!r}')
+    return _layout.fovs_file(_input_root(config), value)
+
+
 def _membership(config, path=None) -> _Membership:
-    """The FOVs of a Python run: <input_root>/fovs.csv (or path), restricted by the top-level selected_fovs.
+    """The FOVs of a Python run: the FOV list (path, else _fov_list: fov_list or <input_root>/fovs.csv), restricted
+    by the top-level selected_fovs.
 
     fovs.csv has the columns sample and fov_id and an optional position_id
     (the stage file's PositionID of the FOV, an integer), read in row order:
@@ -1579,7 +1595,7 @@ def _membership(config, path=None) -> _Membership:
     """
     import csv
     from collections import Counter
-    path = _layout.fovs_file(_input_root(config)) if path is None else Path(path)
+    path = _fov_list(config) if path is None else Path(path)
     if not path.is_file():
         raise FileNotFoundError(f'the FOV membership file {path} (columns sample,fov_id and optionally position_id) '
                                 'does not exist')
@@ -1697,9 +1713,38 @@ def _input_root(config):
 
 
 def _sample_grid_fovs(config, sample, path=None):
-    """Every FOV of a sample in fovs.csv, selected_fovs aside: the FOVs a regular grid places in its cells, so that a
-    selection keeps each selected FOV's cell."""
+    """Every FOV of a sample in the FOV list, selected_fovs aside: the FOVs a regular grid places in its cells, in the
+    list's row order (the grid's first cell takes the first row), so that a selection keeps each selected FOV's
+    cell."""
     return _sample_fovs(dict(config, selected_fovs=None), sample, path)
+
+
+def _numbered(fov_ids):
+    """The FOV IDs in the order of their number when they follow one numeric pattern (the same text around the last
+    run of digits, as tile_{i} or Position{i:03}), else None."""
+    import re
+    parts = [re.fullmatch(r'(.*?)(\d+)(\D*)', fov) for fov in fov_ids]
+    if any(p is None for p in parts) or len({(p[1], p[3]) for p in parts}) != 1:
+        return None
+    return [p[0] for p in sorted(parts, key=lambda p: int(p[2]))]
+
+
+def _lexical_order(config, path=None):
+    """The samples whose FOV list rows, selected_fovs aside, are in lexical order where a numeric FOV pattern gives
+    another order (tile_1, tile_10, tile_11, ... against tile_1, tile_2, ...): {sample: (rows, numeric order)}.
+
+    A regular grid places a sample's FOVs in the list's row order
+    (_sample_grid_fovs), so such a list places them in the wrong cells
+    without an error; the plan warns about each sample returned. A list in
+    numeric order, in another order, or whose IDs follow no single numeric
+    pattern is not returned.
+    """
+    found = {}
+    for sample, fovs in _membership(dict(config, selected_fovs=None), path).samples.items():
+        numeric = _numbered(fovs)
+        if numeric is not None and list(fovs) == sorted(fovs) and list(fovs) != numeric:
+            found[sample] = (list(fovs), numeric)
+    return found
 
 
 def _sample_table(block, dataset, sample, fov_ids, grids, position_ids, grid_fov_ids=None):

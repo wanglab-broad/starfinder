@@ -123,7 +123,10 @@ The reference gives each config's options and their defaults.
 `LocalMaximaConfig.threshold_mode` says how `threshold_value` becomes a channel's
 threshold:
 
-* `noise`, the default: `median + threshold_value × 1.4826 × MAD` of the channel,
+* `adaptive`, the default, at `threshold_value` 0.2: `threshold_value` times the channel's
+  maximum, so 0.2 times the maximum, which is MATLAB's rule. The threshold follows each
+  channel's maximum, which has two weak points; see [Weak points of adaptive mode](#weak-points-of-adaptive-mode);
+* `noise`: `median + threshold_value × 1.4826 × MAD` of the channel,
   where MAD is the median absolute deviation, so the value counts robust standard
   deviations above the median. The median and MAD are taken over all the channel's
   voxels, except over the voxels above its minimum when more than half equal its minimum
@@ -136,12 +139,16 @@ threshold:
   has post-registration steps: direct detection on the image that enters detection,
   after those steps, and tiled execution on the FOV-level statistics of its global
   task;
-* `adaptive`: `threshold_value` times the channel's maximum;
 * `adaptive_round`: `threshold_value` times the maximum of the whole image, all
   channels together;
 * `global`: `threshold_value` times the maximum of the image's integer dtype.
 * `absolute`: `threshold_value` itself, in the image's grey levels; the tile task of
   tiled execution detects with the FOV-level threshold of each channel this way.
+
+The default changed from `noise` at 5.0 to `adaptive` at 0.2 (W-880): 0.2 is a fraction of
+the maximum and must lie in [0, 1], so a call that changes only `threshold_value` to a
+value above 1 needs `threshold_mode="noise"` or `"absolute"` as well. Registration's
+`NoiseLandmarkConfig` keeps the noise rule.
 
 Local maxima records each channel's median, MAD, zero fraction and threshold in
 `diagnostics["noise"]`, in every mode, with the set the median and MAD were taken over:
@@ -150,6 +157,26 @@ Local maxima records each channel's median, MAD, zero fraction and threshold in
 `plateau_fraction` (the share of the channel's voxels at it). `mad` is the measured MAD, and `mad_floored` is
 `True` when the floor of one grey level replaced it in the threshold. The other pipeline methods have their own
 thresholds: `threshold` for `starfish_log` and `piscis`, `prob_thresh` for `spotiflow`.
+
+### Weak points of adaptive mode
+
+`adaptive` ties the threshold to each channel's maximum, which fails in two cases. Each is
+noted with a `SpotFindingWarning`, a flag in the channel's `diagnostics["noise"]` record
+(`empty_channel`, `bright_artifact`, with `maximum` and `noise_threshold`) and a message in
+`diagnostics["warnings"]`; detection runs as usual in both cases.
+
+* **A bright artifact** (`bright_artifact`): one bright object raises the maximum, so
+  0.2 times the maximum lies above most of the signal and the channel loses sensitivity.
+  The flag is set when the maximum minus the channel median exceeds 3 times the 99th
+  percentile of the voxels above the noise threshold minus that median.
+* **An empty channel** (`empty_channel`): a channel with no spots has a low maximum,
+  and 0.2 times it lies within the noise, so the detections are noise. The flag is set
+  when the maximum does not exceed the channel's noise threshold, `median + 5 × 1.4826 × MAD`
+  estimated as in `noise` mode (`noise_threshold`, with the floor of one grey level on an
+  integer image).
+
+A constant channel has neither flag. The checks apply to `adaptive` only. In tiled
+execution they use the FOV-level statistics of the reference round, and the notes say so.
 
 ### Truncated channels
 
@@ -205,7 +232,7 @@ from starfinder.spot_finding import ChannelOverride, LocalMaximaConfig, SpotFind
 
 plan = SpotFindingPlan(
     LocalMaximaConfig(),
-    channel_overrides=(ChannelOverride("ch01", LocalMaximaConfig(threshold_value=8.0)),),
+    channel_overrides=(ChannelOverride("ch01", LocalMaximaConfig(threshold_value=0.3)),),
 )
 ```
 
@@ -286,10 +313,10 @@ rules:
         ref_round: round1
         method: local_maxima
         device: cpu            # cuda: spotiflow and piscis only
-        threshold_mode: noise
-        threshold_value: 5.0
+        threshold_mode: adaptive
+        threshold_value: 0.2
         channel_overrides:
-          ch01: {threshold_value: 8.0}
+          ch01: {threshold_value: 0.3}
 ```
 
 Under `backend: python`, local maxima takes the field names `threshold_mode`,

@@ -32,7 +32,7 @@ BACKGROUND = ScalarBackgroundConfig(percentile=10.0)
 RECIPE_2 = PreprocessingRecipe((PreprocessingStep(BACKGROUND, save_as="bg_corrected"),
                                 PreprocessingStep(PercentileNormalizationConfig())), extraction_source="bg_corrected")
 TRANSLATION = RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=RegistrationSignalConfig("sum"))
-DETECTION = LocalMaximaConfig(threshold_value=5.0)
+DETECTION = LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0)
 EXTRACTION = NeighborhoodSumConfig((0, 1, 1))
 
 

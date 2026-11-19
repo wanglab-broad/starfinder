@@ -301,7 +301,8 @@ def morphology_fov(root):
 
 
 def test_the_composite_reuses_the_registration_outputs(tmp_path):
-    pytest.importorskip("SimpleITK").ProcessObject.SetGlobalDefaultNumberOfThreads(1)
+    import SimpleITK as sitk
+    sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(1)
     p = grid()
     acquired = np.stack([texture(s, p - SHIFT.reshape(3, 1, 1, 1)) for s in (0, 4, 5, 10)], axis=-1)
     fov = morphology_fov(tmp_path)

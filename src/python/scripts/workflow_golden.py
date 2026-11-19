@@ -183,7 +183,8 @@ def configurations(work, starfinder_path):
                  "rounding": "truncate"},
                 {"method": "white_tophat", "radius_yx": 3}]},
             "registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}},
-            "spot_finding": {"run": True, "method": "local_maxima", "exclude_border": False},
+            "spot_finding": {"run": True, "method": "local_maxima", "threshold_mode": "noise", "threshold_value": 5.0,
+                             "exclude_border": False},  # the noise rule the golden values pin (the default before W-880)
             "reads_extraction": {"run": True, "voxel_size": [1, 2, 2]},
             "reads_filtration": {"run": True, "end_base": "CC", "start_base": "C"},
             "decoding": {"method": "wta", "negative_policy": "clip_negative"},

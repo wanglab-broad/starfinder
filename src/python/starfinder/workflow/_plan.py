@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import warnings
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 
@@ -32,6 +33,15 @@ MATLAB_BACKEND = ("backend: matlab runs the frozen MATLAB workflow (workflow/Sna
 ASSIGNMENT_WITHOUT_MOLECULES = ("the assignment block assigns each FOV's molecules, which only the processing block "
                                 "produces (with spot_finding, reads_extraction and reads_filtration): add a processing "
                                 "block")
+
+
+def lexical_order_warning(path, sample, rows, numeric):
+    """The plan's warning for a sample whose FOV list rows are in lexical order where their numeric order differs
+    (_lexical_order): a regular grid places the FOVs in the rows' order."""
+    shown = lambda fovs: ", ".join(fovs[:4]) + (", ..." if len(fovs) > 4 else "")  # noqa: E731
+    return (f"the FOV list {path} lists the FOVs of sample {sample!r} in lexical order ({shown(rows)}), not in the "
+            f"order of their numbers ({shown(numeric)}); stitching.positions regular_grid places a sample's FOVs in "
+            "the list's row order, so write the rows in scan order")
 
 
 class PlanRefused(ValueError):
@@ -284,7 +294,10 @@ def _relative(path, root):
 
 
 def _channel_file(folder, fov, round_name, label):
-    """The one file of a channel in a round folder, as io.load_round finds it (``*<label>*.tif`` or ``.tiff``)."""
+    """The one file of a channel in a round folder, as io.load_round finds it (``*<label>*.tif`` or ``.tiff``).
+
+    A file that matches no configured label (an ``.hgsb`` file, a ``_history.txt``) is never read; a label that
+    matches no file or two is refused, naming the files found."""
     matches = sorted(set(folder.glob(f"*{label}*.tif")) | set(folder.glob(f"*{label}*.tiff")))
     if len(matches) != 1:
         found = ", ".join(p.name for p in matches) if matches else "none"
@@ -305,14 +318,22 @@ def codebook_path(r):
     return path if path.is_absolute() else input_root(r) / path
 
 
+def fovs_path(r):
+    """The FOV list: the file fov_list names (absolute or relative to the input root), else <input root>/fovs.csv."""
+    return _layout.fovs_file(input_root(r), r.get(_layout.FOV_LIST_KEY))
+
+
 class Inputs:
-    """The plan's input discovery: membership, the files and the images, each with path, bytes and mtime_ns."""
+    """The plan's input discovery: membership, the files and the images, each with path, bytes and mtime_ns.
+
+    The FOV list is listed as the file ``fovs.csv`` wherever it lies. An image is the one file of its channel in the
+    round's folder (``_channel_file``); the folder's other files are not read."""
 
     def __init__(self, r, membership, needs_rounds, needs_codebook):
         self.r, self.root = r, input_root(r)
         self.files, self.images = {}, {}
         self.declared = {}
-        self.membership = self.add_file("fovs.csv", _layout.fovs_file(self.root))
+        self.membership = self.add_file(_layout.FOVS_FILE, fovs_path(r), "the FOV list")
         self.codebook = None
         if needs_codebook:
             self.codebook = self.add_file("codebook", codebook_path(r), "the codebook" if r.get("readout_mode") !=
@@ -983,16 +1004,24 @@ def plan(config_path, output_root=None) -> dict:
         A configuration the plan refuses (exit status 2 of ``starfinder workflow plan``), before anything is
         written; the message names the key, block, FOV, round or label.
 
+    Warns
+    -----
+    UserWarning
+        A sample whose FOV list rows are in lexical order where a numeric FOV pattern gives another order
+        (``tile_1, tile_10, ...``): a regular grid places the FOVs in the rows' order.
+
     Notes
     -----
     The checks V1 to V10 of design/specs/orchestration.md: the backend (``python``, the default; a configuration
     without backend that holds MATLAB-dialect keys is refused), the keys that left the Python dialect, the Python
-    schema (a package resource), the block translators, ``fovs.csv`` and ``selected_fovs``, and the data
-    dependencies (a step whose input no task produces). The resolved configuration writes every default the
+    schema (a package resource), the block translators, the FOV list (the file ``fov_list`` names, else
+    ``fovs.csv`` under the input root) and ``selected_fovs``, and the data dependencies (a step whose input no task
+    produces). In a round's folder only the one file of each configured channel label is listed; other files are
+    not read, and a label that matches two files is refused. The resolved configuration writes every default the
     contract defines and ``api``, the API configs of each block; its hash leaves out ``execution`` and the roots.
-    The manifest lists the inputs (path relative to the input root, bytes, modification time; no content hash), the
-    rule groups and the tasks in an order that respects ``needs``, each with ``blocks_sha256`` and ``fingerprint``.
-    Each file is rewritten only when its content changes.
+    The manifest lists the inputs (path relative to the input root, or absolute outside it, bytes, modification
+    time; no content hash), the rule groups and the tasks in an order that respects ``needs``, each with
+    ``blocks_sha256`` and ``fingerprint``. Each file is rewritten only when its content changes.
     """
     import yaml
     config_path = Path(config_path)
@@ -1010,11 +1039,13 @@ def plan(config_path, output_root=None) -> dict:
     resolved = resolve(config, source)
     r = resolved["configuration"]
     out = Path(output_root).resolve() if output_root is not None else default_output_root(r).absolute()
-    from starfinder.dataset.workflow import _membership
+    from starfinder.dataset.workflow import _lexical_order, _membership
     try:
-        membership = _membership(r, _layout.fovs_file(input_root(r)))
+        membership = _membership(r, fovs_path(r))
     except (ValueError, FileNotFoundError) as error:
         raise PlanRefused(str(error)) from None
+    for sample, (rows, numeric) in _lexical_order(r, fovs_path(r)).items():
+        warnings.warn(lexical_order_warning(fovs_path(r), sample, rows, numeric), UserWarning, stacklevel=2)
     check_names(r, membership)
     if "stitching" in r:
         # V6: a stage file names the sample's FOVs by the PositionIDs of fovs.csv (_stage_position_ids), checked

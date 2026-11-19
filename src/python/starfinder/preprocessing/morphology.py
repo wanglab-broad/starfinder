@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 
 import numpy as np
-from skimage.morphology import black_tophat, disk, erosion, reconstruction, white_tophat
+from skimage.morphology import black_tophat, disk, erosion, white_tophat
 
 from starfinder.image import _validate_image
 
@@ -24,6 +24,8 @@ class ReconstructionConfig:
     Notes
     -----
     Disk radius in XY pixels, independently applied to each Z/channel slice.
+    The radius sets the erosion that seeds the reconstruction and the two
+    top-hats; the reconstruction itself uses the 3 x 3 neighbourhood.
     """
     radius_yx: int = 3
 
@@ -50,6 +52,43 @@ class TophatConfig:
         _radius(self.radius_yx)
 
 
+def _reconstruct_by_dilation(marker, mask, dtype):
+    """Grayscale reconstruction by dilation of marker under mask, in dtype, with 8-connectivity.
+
+    Parameters
+    ----------
+    marker : numpy.ndarray
+        Float64 YX slice, at most mask everywhere and integer-valued when
+        dtype is an integer type.
+    mask : numpy.ndarray
+        Float64 YX slice of the same shape.
+    dtype : numpy.dtype
+        Work type: the source integer type of the slice, or float64.
+
+    Returns
+    -------
+    numpy.ndarray
+        The float64 reconstruction, with the shape of mask.
+
+    Notes
+    -----
+    Runs SimpleITK's ReconstructionByDilationImageFilter (Robinson and Whelan's
+    downhill filter, no global sort) with FullyConnected, the 3 x 3 neighbourhood
+    of skimage.morphology.reconstruction's default footprint; its result equals
+    reconstruction(marker, mask, method="dilation") exactly. The reconstruction
+    takes its values from marker and mask, so an integer slice gives the same
+    result in its own type as in float64, and the casts to dtype and back are
+    exact.
+    """
+    import SimpleITK as sitk
+
+    reconstruct = sitk.ReconstructionByDilationImageFilter()
+    reconstruct.SetFullyConnected(True)
+    background = reconstruct.Execute(sitk.GetImageFromArray(np.ascontiguousarray(marker, dtype=dtype)),
+                                     sitk.GetImageFromArray(np.ascontiguousarray(mask, dtype=dtype)))
+    return sitk.GetArrayFromImage(background).astype(np.float64)
+
+
 def _morph(volume, radius, reconstruct):
     volume = _validate_image(volume)
     if volume.dtype.kind in "ui" and volume.dtype.itemsize > 4:
@@ -57,11 +96,13 @@ def _morph(volume, radius, reconstruct):
     channels = volume[..., None] if volume.ndim == 3 else volume
     result = np.empty_like(channels)
     se = disk(radius)
+    # The reconstruction's work type: the source integer type in native byte order, otherwise float64.
+    work = volume.dtype.newbyteorder("=") if volume.dtype.kind in "ui" else np.dtype(np.float64)
     for c in range(channels.shape[-1]):
         for z in range(channels.shape[0]):
             image = channels[z, :, :, c].astype(np.float64)
             if reconstruct:
-                background = reconstruction(erosion(image, se), image, method="dilation")
+                background = _reconstruct_by_dilation(erosion(image, se), image, work)
                 image = image - background
                 image = image + white_tophat(image, se) - black_tophat(image, se)
             else:
@@ -122,6 +163,12 @@ def correct_background(volume: np.ndarray, *, config: ReconstructionConfig = Rec
     from the slice eroded with a disk of ``config.radius_yx``, then add the white
     top-hat and subtract the black top-hat of the result. The step's registry ID
     stays ``reconstruction``.
+
+    The reconstruction runs SimpleITK's ReconstructionByDilationImageFilter
+    (Robinson and Whelan's downhill filter) with 8-connectivity, in the
+    slice's own integer type, or in float64 for floating inputs. Its result
+    equals ``skimage.morphology.reconstruction(..., method="dilation")``
+    exactly, without that function's sort of every seed and mask value.
 
     Float64 slice intermediates avoid uint16 signed overflow. Output retains
     source dtype, explicitly saturating to its representable range (float

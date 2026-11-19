@@ -10,6 +10,7 @@ job, on a laptop or on a cluster.
 :hidden:
 :maxdepth: 2
 
+Preparing a dataset <preparing-a-dataset>
 Reference <reference>
 Broad UGER <broad-uger>
 MATLAB legacy workflow <matlab-legacy>
@@ -69,7 +70,8 @@ cd "$PROJECT"
 uv run starfinder workflow verify --manifest "$WORK/nextflow/output/sample-tiny-v1/full/workflow/manifest.json" --final
 ```
 
-For your own data, edit a copy of the full configuration or of the
+For your own data, {doc}`prepare the dataset <preparing-a-dataset>` and edit a
+copy of the full configuration or of the
 {download}`minimal configuration <../examples/workflow-minimal.yaml>`, which runs
 the per-FOV processing alone; the
 {download}`recipe 2 example <../examples/workflow-recipe-2.yaml>` shows an explicit
@@ -79,8 +81,9 @@ preprocessing recipe.
 
 **The plan.** `starfinder workflow plan --config <file>` reads one configuration
 file, checks it and refuses, before any task runs, a configuration it cannot run,
-naming the key. It reads `fovs.csv` under the input folder
-(`<root_input_path>/<dataset_id>/<sample_id>/`), looks up every input image and
+naming the key. It reads the FOV list, the file `fov_list` names or else
+`fovs.csv` under the input folder (`<root_input_path>/<dataset_id>/<sample_id>/`),
+looks up every input image in place and
 writes two files under the output root (`<root_output_path>/<dataset_id>/<output_id>/`):
 `workflow/resolved.json`, the configuration with every default written out, and
 `workflow/manifest.json`, the tasks.
@@ -187,7 +190,7 @@ Under the output root, each task writes the files the
 
 * The dataset keys at the top level: the roots and identifiers, `n_rounds`,
   `ref_round`, `seq_channel_order`, `reference_stains`, `additional_round`,
-  `selected_fovs`, the codebook and the image layout.
+  the FOV list (`fov_list`), `selected_fovs`, the codebook and the image layout.
 * `processing`: the per-FOV pipeline, with `mode` `direct` (one task per FOV) or
   `tiled` (tiles of a FOV), `recipe: deep` and the checkpoint stages.
 * `morphology`, `segmentation` and `assignment`: the images for segmentation,

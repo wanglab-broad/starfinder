@@ -24,7 +24,7 @@ import yaml
 from starfinder import _layout
 from starfinder.dataset import Dataset, RoundState, from_workflow_config
 from starfinder.dataset.types import REFERENCE_STAIN
-from starfinder.dataset.workflow import _assembly_block, _export_dataset, _reference_file, _reference_genes
+from starfinder.dataset.workflow import _assembly_block, _export_dataset, _fov_list, _reference_file, _reference_genes
 
 from . import workflow_tasks as T
 from .test_dataset_fov_layout import rule_files
@@ -155,11 +155,12 @@ def test_the_direct_panel_key_names_the_panel_of_readout_mode_direct(tmp_path):
         _reference_file(python_example(tmp_path, direct_panel="panel.csv"))
 
 
-@pytest.mark.parametrize("key", ["codebook", "direct_panel", "image_dir_template"])
+@pytest.mark.parametrize("key", ["codebook", "direct_panel", "image_dir_template", "fov_list"])
 def test_the_matlab_backend_refuses_the_python_input_keys(tmp_path, monkeypatch, key):
     """MATLAB reads <INPUT>/genes.csv round-first: the MATLAB schema refuses the keys for backend matlab and without
     backend (OC5: the refusal moved from common.smk to the schema's Python-only clause, which the MATLAB rule set
-    validates first; null stays accepted), and so does the package; without them CODEBOOK is <INPUT>/genes.csv."""
+    validates first; null stays accepted), and so does the package; without them CODEBOOK is <INPUT>/genes.csv.
+    fov_list (W-872) names the Python FOV list; MATLAB reads its sample annotation."""
     config = matlab_config(tmp_path)
     assert common_names(config, monkeypatch)["CODEBOOK"] == f"{input_root(config)}/genes.csv"
     value = "{fov}/{round}" if key == "image_dir_template" else "other.csv"
@@ -168,9 +169,12 @@ def test_the_matlab_backend_refuses_the_python_input_keys(tmp_path, monkeypatch,
     for backend in ({"backend": "matlab"}, {}):
         errors = list(jsonschema.Draft202012Validator(SCHEMA).iter_errors(dict(config, **{key: value}, **backend)))
         assert errors and all(e.validator == "not" for e in errors), key
-    if key != "image_dir_template":
+    if key in ("codebook", "direct_panel"):
         with pytest.raises(ValueError, match=f"{key} is Python-only"):
             _reference_file(dict(config, **{key: value}))
+    if key == "fov_list":
+        with pytest.raises(ValueError, match="fov_list is Python-only"):
+            _fov_list(dict(config, fov_list=value))
     # The MATLAB rule set itself refuses them (the base's refusal in common.smk, W-750): legacy.smk validates the
     # configuration against that schema before it includes common.smk or any rule file.
     legacy = (RULES / "legacy.smk").read_text()

@@ -39,6 +39,16 @@ Both remove background in XY, on each Z plane and channel separately. See
 ```{config-options} starfinder.preprocessing.ReconstructionConfig
 ```
 
+On a tissue-2D field of view the reconstruction step took about three quarters of the
+task's time, about 6 s per 3072 × 3072 slice, before the change to SimpleITK. Per slice it
+erodes with a disk of `radius_yx`, reconstructs the background by dilation, and takes
+the white and black top-hats, all in float64 on one thread. The reconstruction runs
+SimpleITK's `ReconstructionByDilationImageFilter` (Robinson and Whelan's downhill
+filter, 8-connected) in the slice's own integer type, or in float64 for floating
+inputs. It gives the result of scikit-image's `reconstruction(..., method="dilation")`
+exactly, without that function's sort of every seed and mask value, which took most
+of the step's time.
+
 ```{config-options} starfinder.preprocessing.TophatConfig
 ```
 
@@ -120,7 +130,7 @@ channel. The other methods record none.
 | --- | --- |
 | `zero_fraction` | Fraction of voxels equal to 0 |
 | `median`, `mad` | Median and median absolute deviation |
-| `noise_threshold` | `median + 5 × 1.4826 × mad`, the local-maxima `noise` threshold at its default `threshold_value` |
+| `noise_threshold` | `median + 5 × 1.4826 × mad`, the local-maxima `noise` threshold at `threshold_value` 5 (its default before W-880) |
 | `mad_zero` | Whether `mad` is 0 |
 | `constant_channel` | Whether the input channel was constant |
 | `degenerate_range` | `percentile_normalization` only: whether `low` equals `high` or the channel was constant |

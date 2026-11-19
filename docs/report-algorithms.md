@@ -44,7 +44,7 @@ The sample page groups its displays into these sections.
 | Preprocessing | Main example before and after preprocessing, and intensity distributions |
 | Registration | Shift maps, residual heatmap and the main example's alignment |
 | Readout | Totals, counts and fractions per FOV, distributions and a FOV table |
-| Segmentation and assembly | Cell counts and density, placement, segmentation examples and population accounting |
+| Segmentation and assembly | Cell counts and density, placement (with the link-quality threshold and the links the optimizer removed, when the placement records them), segmentation examples and population accounting |
 | Sample measurements | Reads, genes and size per cell, marker patterns, MECR and reads along Z |
 | Files | Input, configuration and output records |
 
