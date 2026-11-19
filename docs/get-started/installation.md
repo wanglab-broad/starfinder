@@ -44,7 +44,7 @@ uv sync --locked --no-default-groups --extra local-registration --extra checkpoi
 | Extra | Installs | Needed for |
 | --- | --- | --- |
 | `ome` | bioio-ome-tiff ≥1.0 | Installed on request; no current public function switches to it ({doc}`../api/backends`) |
-| `local-registration` | SimpleITK ≥2.3 | Demons estimation and application; the B-spline grid of the elastix route ({doc}`../api/backends`) |
+| `local-registration` | SimpleITK ≥2.3, numba ≥0.62 | Demons estimation and application; the B-spline grid of the elastix route ({doc}`../api/backends`) |
 | `registration-elastix` | itk-elastix 0.25.4, itk 5.4.7 | Rigid, affine and B-spline registration through elastix ({doc}`../api/backends`) |
 | `spotiflow` | spotiflow 0.6.5, torch 2.7.1, torchvision 0.22.1 | The learned spot detector Spotiflow (below) |
 | `piscis` | piscis 1.1.0, torch 2.7.1, torchvision 0.22.1 | The learned spot detector Piscis (below) |

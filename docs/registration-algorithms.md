@@ -97,6 +97,16 @@ before each update and so returned the last update unsmoothed (see the
 The pyramid is not MATLAB's: it filters with a separable rather than a radial
 Butterworth filter and resamples on a corner-aligned grid.
 
+Performance: steps 1 and 2, the addition of step 3 and the RMS sum run as one pass
+over the voxels of a compiled numba kernel, in float64 on one thread; the smoothing
+runs SciPy's `correlate1d` into a buffer. Besides the two images, the loop of a level
+holds the field, that buffer, the gradient and its squared norm (3·n + 1 float64
+values per voxel for n axes), allocated once per level; an iteration allocates no
+image-sized array. The first `demons` estimate in a process compiles the kernels
+(about 2 s) or loads them from numba's cache, which `NUMBA_CACHE_DIR` places; where
+no cache folder is writable, as in a read-only container image, they compile in each
+process.
+
 See {py:class}`~starfinder.registration.DemonsConfig` for the precise rules.
 
 ```{config-options} starfinder.registration.DemonsConfig

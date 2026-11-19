@@ -9,7 +9,7 @@ extras and installation commands. The tables below show which interfaces use the
 | --- | --- |
 | Translation estimation | NumPy/SciPy or scikit-image |
 | TPS and CPD estimation | NumPy/SciPy/scikit-image |
-| Demons estimation | SimpleITK, extra `local-registration` |
+| Demons estimation | SimpleITK and, for the classic variant, numba; extra `local-registration` |
 | Rigid and affine estimation | itk-elastix and itk, extra `registration-elastix` |
 | B-spline estimation and grid evaluation | itk-elastix, itk and SimpleITK |
 | SciPy transform application | NumPy/SciPy |

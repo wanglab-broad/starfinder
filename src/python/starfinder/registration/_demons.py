@@ -1,7 +1,8 @@
 """Non-rigid registration using the demons algorithm.
 
 The classic variant runs its own update loop (_MatlabOrderDemons), which smooths
-the field after each update as MATLAB's imregdemons does; the other variants run
+the field after each update as MATLAB's imregdemons does, with the update of each
+iteration in fused numba kernels (_demons_kernels); the other variants run
 SimpleITK's filters.
 """
 
@@ -43,77 +44,104 @@ def _face_gradient(image):
     """SimpleITK's demons gradient: central differences inside, 0 on the two faces normal to each axis.
 
     As itk::CentralDifferenceImageFunction at the buffer boundary. An axis of
-    one or two voxels has gradient 0 along it.
+    one or two voxels has gradient 0 along it. Returns one C-contiguous array
+    of shape (ndim, *image.shape), one component per axis.
     """
-    gradient = []
+    gradient = np.zeros((image.ndim, *image.shape), dtype=image.dtype)
     for axis, n in enumerate(image.shape):
-        component = np.zeros_like(image)
         if n > 2:
             inner = [slice(None)] * image.ndim
             inner[axis] = slice(1, -1)
             ahead, behind = list(inner), list(inner)
             ahead[axis], behind[axis] = slice(2, None), slice(None, -2)
-            component[tuple(inner)] = (image[tuple(ahead)] - image[tuple(behind)]) / 2
-        gradient.append(component)
+            gradient[axis][tuple(inner)] = (image[tuple(ahead)] - image[tuple(behind)]) / 2
     return gradient
 
 
-def _sampled_inside(coordinate, size):
-    """Whether a sampled coordinate counts as inside an axis of size voxels: [-0.5, size - 0.5), as SimpleITK's.
+def _thirion_kernel(ndim):
+    """The fused update kernel of _demons_kernels for ZYX (ndim 3) or YX (ndim 2) levels; compiles on first use.
 
-    itk::ImageFunction::IsInsideBuffer accepts half a voxel beyond the first
-    and last voxel centres; the linear interpolation there takes the edge
-    voxel's value (map_coordinates with mode="nearest").
+    Raises RegistrationBackendUnavailableError, naming the extra, when numba is
+    not installed.
     """
-    return (coordinate >= -0.5) & (coordinate < size - 0.5)
+    try:
+        from . import _demons_kernels
+    except ImportError as error:
+        if error.name is None or error.name.split(".")[0] not in ("numba", "llvmlite"):
+            raise
+        raise RegistrationBackendUnavailableError(
+            "numba required for the classic demons variant. "
+            "Install with: uv add 'starfinder[local-registration]'"
+        ) from error
+    kernels = {2: _demons_kernels.thirion_update_2d, 3: _demons_kernels.thirion_update_3d}
+    if ndim not in kernels:
+        raise ValueError(f"The classic demons loop takes 2D or 3D levels, not {ndim}D")
+    return kernels[ndim]
 
 
 def _thirion_iterations(fixed, moving, field, iterations, kernel):
     """Run classic Thirion demons iterations on field; return the field (a reused buffer) and the last update's RMS.
 
-    fixed and moving are float64 arrays of one level (ZYX or YX); field is
-    float64 with shape (ndim, *fixed.shape), one component per axis in voxels,
-    pulling: moving is sampled at p + field[:, p]. Each iteration, in MATLAB's
-    Demons3D order and with SimpleITK's boundary rules:
+    Parameters
+    ----------
+    fixed : numpy.ndarray
+        Fixed image of one level, float64, ZYX or YX.
+    moving : numpy.ndarray
+        Moving image of the same level and shape, float64.
+    field : numpy.ndarray
+        Pulling field in voxels, float64, shape (ndim, *fixed.shape), one
+        component per axis: moving is sampled at p + field[:, p]. Updated in
+        place, and used as one of the two smoothing buffers.
+    iterations : int
+        Number of iterations; every one runs.
+    kernel : numpy.ndarray
+        The 1D smoothing kernel (_sampled_gaussian); one tap, no smoothing.
+
+    Returns
+    -------
+    field : numpy.ndarray
+        The field after the last iteration: the field passed in or the
+        smoothing buffer this function allocated.
+    rms : float
+        RMS of the last update over the voxels sampled inside the grid, as
+        SimpleITK's RMS change; 0 when no voxel is.
+
+    Notes
+    -----
+    Each iteration, in MATLAB's Demons3D order and with SimpleITK's boundary
+    rules:
 
     * warped = moving(p + field(p)), linear interpolation, clamped to the edge
       voxel within half a voxel outside the grid;
     * update = (fixed - warped) * grad / (|grad|^2 + (fixed - warped)^2), with
       grad the fixed image's _face_gradient (0 on the faces), and 0 where
       |fixed - warped| < 0.001, the denominator < 1e-9 or p + field(p) lies
-      outside the grid on any axis (_sampled_inside);
+      outside [-0.5, N - 0.5) on any axis (SimpleITK's IsInsideBuffer);
     * field = S(field + update), S the separable kernel on every spatial axis,
       edges replicated.
 
-    The RMS of the update is taken over the voxels sampled inside the grid, as
-    SimpleITK's RMS change.
+    The sampling, the update, field + update and the RMS sum are one pass of a
+    fused numba kernel (_demons_kernels), in place, with each voxel's
+    arithmetic in the order of the NumPy and SciPy loop it replaced (W-882),
+    so the field is the same bit for bit; the RMS sum is compensated rather
+    than pairwise. The smoothing is scipy.ndimage.correlate1d into a second
+    field buffer. The gradient, its squared norm and that buffer are allocated
+    once per call (one pyramid level).
     """
     from scipy import ndimage
 
     ndim = fixed.ndim
+    update = _thirion_kernel(ndim)
+    fixed = np.ascontiguousarray(fixed, dtype=np.float64)
+    moving = np.ascontiguousarray(moving, dtype=np.float64)
+    field = np.ascontiguousarray(field, dtype=np.float64)
     grad = _face_gradient(fixed)
     grad_sq = sum(g * g for g in grad)
-    axes = [np.arange(n, dtype=np.float64).reshape([-1 if a == axis else 1 for a in range(ndim)])
-            for axis, n in enumerate(fixed.shape)]
-    coords = np.empty_like(field)
-    inside = np.empty(fixed.shape, dtype=bool)
     smoothed = np.empty_like(field)
     rms = 0.0
     for _ in range(iterations):
-        inside[...] = True
-        for axis in range(ndim):
-            np.add(field[axis], axes[axis], out=coords[axis])
-            inside &= _sampled_inside(coords[axis], fixed.shape[axis])
-        warped = ndimage.map_coordinates(moving, coords, order=1, mode="nearest", prefilter=False)
-        diff = fixed - warped
-        denominator = grad_sq + diff * diff
-        scale = np.zeros_like(diff)
-        np.divide(diff, denominator, out=scale,
-                  where=inside & (np.abs(diff) >= 0.001) & (denominator >= 1e-9))
-        for axis in range(ndim):
-            field[axis] += scale * grad[axis]
-        count = np.count_nonzero(inside)
-        rms = float(np.sqrt((scale * scale * grad_sq)[inside].sum() / count)) if count else 0.0
+        count, total = update(fixed, moving, grad, grad_sq, field)
+        rms = float(np.sqrt(total / count)) if count else 0.0
         if len(kernel) > 1:
             for axis in range(1, ndim + 1):
                 ndimage.correlate1d(field, kernel, axis=axis, mode="nearest", output=smoothed)
@@ -130,7 +158,7 @@ class _MatlabOrderDemons:
     returns S(f) + u, the last update unsmoothed; this one returns S(f + u),
     with MATLAB's sampled Gaussian (_sampled_gaussian) and SimpleITK's two
     boundary rules: a zero gradient on the faces (_face_gradient) and the
-    half-voxel inside rule (_sampled_inside), as W-825's c7 route. Every
+    half-voxel inside rule (_thirion_iterations), as W-825's c7 route. Every
     iteration runs: MATLAB has no early stop, and SimpleITK's never triggered
     on the W-825 scenes. Fields are float64 SimpleITK vector images on the
     fixed image's grid, in voxels.
@@ -444,7 +472,8 @@ def demons_register(
           update, with a sampled Gaussian of radius ceil(3 sigma). It keeps
           SimpleITK's boundary rules (a zero gradient on the faces; a sample
           within half a voxel outside the grid takes the edge voxel's value)
-          and this package's pyramid, which differs from MATLAB's.
+          and this package's pyramid, which differs from MATLAB's. Its update
+          runs as a compiled numba kernel on one thread.
 
         - "diffeomorphic": Topology-preserving. Better quality on large
           deformations but ~37% more memory.
@@ -470,7 +499,9 @@ def demons_register(
     Raises
     ------
     ImportError
-        SimpleITK is unavailable. Install the ``local-registration`` extra.
+        SimpleITK, or numba for the classic variant, is unavailable
+        (``RegistrationBackendUnavailableError``). Install the
+        ``local-registration`` extra.
 
     Notes
     -----
