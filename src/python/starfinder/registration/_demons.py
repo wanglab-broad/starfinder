@@ -14,15 +14,15 @@ from ._errors import RegistrationBackendUnavailableError
 
 
 def _import_sitk():
-    """Lazy import SimpleITK with helpful error message."""
+    """Lazy import SimpleITK, a core dependency; a broken install raises RegistrationBackendUnavailableError."""
     try:
         import SimpleITK as sitk
         return sitk
-    except ImportError:
+    except ImportError as error:
         raise RegistrationBackendUnavailableError(
-            "SimpleITK required for local registration. "
-            "Install with: uv add 'starfinder[local-registration]'"
-        )
+            "SimpleITK, a core dependency of starfinder, could not be imported; "
+            "reinstall the package's dependencies (uv sync --locked)"
+        ) from error
 
 
 def _sampled_gaussian(sigma):

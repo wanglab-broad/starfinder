@@ -782,7 +782,6 @@ def recovery_runs(tmp_path_factory):
 def test_workflow_recovery_records(recovery_runs, tmp_path, monkeypatch):
     """The workflow's task records keep the requested and actual methods and every attempt of a recovered
     registration, and a failed task's metrics are skipped, not evaluated as zero."""
-    pytest.importorskip("SimpleITK", reason="the recovery alternative demons needs SimpleITK (local-registration)")
     sources = {"sources": [
         *({"name": name, "kind": "workflow",
            "manifest": str(X.output_root(recovery_runs, name) / "workflow" / "manifest.json")}

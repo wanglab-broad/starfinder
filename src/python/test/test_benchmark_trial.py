@@ -47,8 +47,6 @@ def _run(tmp_path, value):
     ("preprocessing", "min_max_normalization", dict(output_dtype="uint8", output_range=[0, 255])),
 ])
 def test_private_trial_subprocess(tmp_path, module, method, config):
-    if method in ("demons", "bspline") and importlib.util.find_spec("SimpleITK") is None:
-        pytest.skip("SimpleITK required for this execution coverage")
     if method == "bspline" and importlib.util.find_spec("itk") is None:
         pytest.skip("itk-elastix required for B-spline execution coverage")
     image = _inputs(tmp_path)
@@ -440,8 +438,6 @@ _FRACTIONAL = dict(frame_id="trial/fractional", spacing_zyx=[0.35, 0.65, 0.65], 
 
 
 def _demons(tmp_path):
-    if importlib.util.find_spec("SimpleITK") is None:
-        pytest.skip("SimpleITK required for the demons trial")
     _inputs(tmp_path)
     status, record = _main_record(tmp_path, dict(
         method=dict(module="registration", method="demons", config=dict(iterations=[2], pyramid_mode="sitk")),

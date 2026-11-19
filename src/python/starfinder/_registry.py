@@ -18,10 +18,10 @@ _NAME = re.compile(r"[a-z][a-z0-9]*(_[a-z0-9]+)*")
 
 @dataclass(frozen=True)
 class Dependency:
-    """An optional dependency of a method: imported lazily, recorded with its version."""
+    """A dependency of a method: imported lazily, recorded with its version; extra None for a core dependency."""
     module: str               # imported lazily, e.g. "SimpleITK"
     distribution: str         # recorded with its version, e.g. "SimpleITK"
-    extra: str | None = None  # install hint, e.g. "local-registration"
+    extra: str | None = None  # install hint, e.g. "registration-elastix"; None when the package installs it
 
     def __post_init__(self):
         for name in ("module", "distribution"):

@@ -46,8 +46,7 @@ from starfinder.synthetic import (BENCHMARK_PRESETS, DEVELOPMENT_SIZES, Geometry
 
 pytestmark = [
     pytest.mark.registration,
-    pytest.mark.skipif(importlib.util.find_spec("itk") is None or importlib.util.find_spec("SimpleITK") is None,
-                       reason="requires the registration-elastix and local-registration extras"),
+    pytest.mark.skipif(importlib.util.find_spec("itk") is None, reason="requires the registration-elastix extra"),
     # SWIG wrappers of itk warn when pytest inspects their builtin types.
     pytest.mark.filterwarnings("ignore:builtin type .* has no __module__ attribute:DeprecationWarning"),
 ]
@@ -162,7 +161,7 @@ def test_registry_entries_of_the_new_methods():
                          spec.space, tuple((d.module, d.distribution, d.extra) for d in spec.requires))
              for config_type, spec in REGISTRATION_METHODS.items()}
     elastix = ("itk", "itk-elastix", "registration-elastix")
-    simpleitk = ("SimpleITK", "SimpleITK", "local-registration")
+    simpleitk = ("SimpleITK", "SimpleITK", None)
     assert table["rigid"] == (RigidConfig, "global", {2, 3}, (4, 16, 16), "affine", "physical", (elastix,))
     assert table["affine"] == (AffineConfig, "global", {2, 3}, (4, 16, 16), "affine", "physical", (elastix,))
     assert table["bspline"] == (BSplineConfig, "local", {2, 3}, (4, 16, 16), "bspline", "physical",

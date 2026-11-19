@@ -109,16 +109,14 @@ RECIPES = {
 }
 ELASTIX = pytest.mark.skipif(importlib.util.find_spec("itk") is None,
                              reason="the affine step requires the registration-elastix extra")
-SITK = pytest.mark.skipif(importlib.util.find_spec("SimpleITK") is None,
-                          reason="the demons step requires the local-registration extra")
 
 
 @pytest.fixture(scope="module", params=[
     ("translation", NO_REGISTERED), ("translation", ALL_STAGES),
     pytest.param(("translation_affine", NO_REGISTERED), marks=ELASTIX),
     pytest.param(("translation_affine", ALL_STAGES), marks=ELASTIX),
-    pytest.param(("translation_demons", NO_REGISTERED), marks=SITK),
-    pytest.param(("translation_demons", ALL_STAGES), marks=SITK),
+    ("translation_demons", NO_REGISTERED),
+    ("translation_demons", ALL_STAGES),
 ], ids=lambda p: f"{p[0]}-{'registered' if 'registered' in p[1] else 'no_registered'}")
 def registered_run(request, tmp_path_factory):
     recipe, stages = request.param

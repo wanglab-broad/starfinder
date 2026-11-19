@@ -84,7 +84,6 @@ def test_translation_outside_grid_is_zero(shift):
 def _native_warp(backend):
     if backend == "scipy":
         return apply_tps_deformation
-    pytest.importorskip("SimpleITK")
     def warp(source, field, output_dtype="input"):
         transform = DenseDisplacementTransform(field, source.shape, source.shape, ImageMetadata("ref"), ImageMetadata("mov"))
         return apply_transform(source, transform, config=WarpConfig(backend="simpleitk", output_dtype=output_dtype))
@@ -117,8 +116,6 @@ def test_native_fractional_rounding_and_float_output(backend, dtype, values):
 
 @pytest.mark.parametrize("backend", ["scipy", "simpleitk"])
 def test_channels_use_same_final_conversion(backend):
-    if backend == "simpleitk":
-        pytest.importorskip("SimpleITK")
     source = np.broadcast_to(np.arange(5, dtype=np.int16), (3, 3, 5)).copy()
     images = np.stack([source, -source], axis=-1)
     field = np.zeros((*source.shape, 3), dtype=np.float64)

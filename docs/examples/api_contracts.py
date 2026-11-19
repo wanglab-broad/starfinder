@@ -4,7 +4,6 @@ from starfinder.preprocessing import MinMaxNormalizationConfig
 from starfinder.preprocessing import ProjectionConfig
 
 from dataclasses import replace
-import importlib.util
 from pathlib import Path
 import sys
 
@@ -20,7 +19,7 @@ from starfinder.dataset import RoundState, Dataset
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.io import ImageLoadResult, load_volume, save_volume
 from starfinder.preprocessing import normalize_min_max
-from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, TpsConfig, DemonsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError, RegistrationSignalConfig
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, TpsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError, RegistrationSignalConfig
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
 from starfinder.image import ImageMetadata
 from starfinder.preprocessing import project_image
@@ -84,13 +83,6 @@ def main(output: Path) -> None:
     assert csv[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]
     assert fov.spot_result.spots[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]
 
-    if importlib.util.find_spec("SimpleITK") is None:
-        try:
-            estimate_transform(fixed, moving, config=DemonsConfig(iterations=(1,)), reference_metadata=ImageMetadata("reference"), moving_metadata=ImageMetadata("moving"))
-        except ImportError as exc:
-            assert "SimpleITK" in str(exc)
-        else:
-            raise AssertionError("Expected missing SimpleITK error")
     fov.images = {r: np.zeros_like(image) for r in dataset.rounds.sequencing_rounds}
     fov.metadata = {r: ImageMetadata(r) for r in dataset.rounds.sequencing_rounds}
     try:

@@ -41,7 +41,7 @@ BUMP_CENTER, BUMP_DIRECTION = np.array([3.5, 12.4, 18.6]), np.array([0.0, 1.0, 1
 @pytest.fixture(autouse=True, scope="module")
 def one_thread():
     """SimpleITK at one thread, as the project contract requires."""
-    sitk = pytest.importorskip("SimpleITK")
+    import SimpleITK as sitk
     sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(1)
 
 

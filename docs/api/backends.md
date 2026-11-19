@@ -9,11 +9,11 @@ extras and installation commands. The tables below show which interfaces use the
 | --- | --- |
 | Translation estimation | NumPy/SciPy or scikit-image |
 | TPS and CPD estimation | NumPy/SciPy/scikit-image |
-| Demons estimation | SimpleITK and, for the classic variant, numba; extra `local-registration` |
+| Demons estimation | SimpleITK, in the base package; for the classic variant also numba, extra `local-registration` |
 | Rigid and affine estimation | itk-elastix and itk, extra `registration-elastix` |
 | B-spline estimation and grid evaluation | itk-elastix, itk and SimpleITK |
 | SciPy transform application | NumPy/SciPy |
-| SimpleITK transform application | SimpleITK |
+| SimpleITK transform application | SimpleITK, in the base package |
 
 The {doc}`registration reference <../registration-algorithms>` links the method
 configs. For installation failures, see {doc}`../troubleshooting`; for backend
@@ -25,6 +25,7 @@ execution and error details, see the
 | Interface | Dependency / extra |
 | --- | --- |
 | TIFF reads and writes | tifffile, in the base package |
+| Preprocessing step `reconstruction` | scikit-image and SimpleITK, in the base package |
 | Checkpoint Parquet tables | pyarrow, extra `checkpoint` |
 | AnnData output | anndata, extra `anndata` |
 | SpatialData export | SpatialData packages, extra `spatialdata`; see the {doc}`sample-output guide <../sample-output-contract>` |
