@@ -21,8 +21,8 @@ the full rules behind it.
 
 | Record | Status | Changes on approval |
 | --- | --- | --- |
-| `specs/segmentation-input-recipe.md` | Proposed (W-885): the segmentation input recipe on both routes, the replaced keys and `starfinder segment preview` | `specs/segmentation.md`, `specs/sample-segmentation.md` and the other pages its "Pages that change" lists |
-| `validation/segmentation-input-recipe.md` | Proposed (W-885): its validation plan and the first use on W-870's stage 1 | — |
+| `specs/segmentation-input-recipe.md` | Approved (W-885, 2026-11-18, amendments A and B1–B3): the segmentation input recipe on both routes, the replaced keys and `starfinder segment preview` | `specs/segmentation.md`, `specs/sample-segmentation.md` and the other pages its "Pages that change" lists |
+| `validation/segmentation-input-recipe.md` | Approved (W-885, 2026-11-18, amendments A and B3): its validation plan and the first use on W-870's stage 1 | — |
 
 ## How this folder relates to the site
 

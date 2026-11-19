@@ -1,6 +1,6 @@
 # Segmentation input recipe: dataset-tunable input preparation on both routes
 
-% Status: Proposed (W-885, 2026-11-18, written against 76cd058); awaits Jiahao's approval
+% Status: Approved (Jiahao, 2026-11-18, W-885), with amendments A and B1–B3; written against 76cd058
 
 This page specifies the **input recipe**: a named, dataset-level description of how a
 segmentation run turns its source channels into the image the model receives. One recipe
@@ -65,11 +65,12 @@ What the package cannot express at `76cd058`:
 
 % W-870 run directory runs/W-870/20261118T0309Z-tissue2d: configs/tissue2d.yaml (scale 0.25, projection max), scripts/make_configs.py:27-32 (after_fusion copies the run's scale), results/stage1-look/stats.json (diameter quantiles per FOV)
 
-## What Jiahao decides
+## Decisions (Jiahao, 2026-11-18)
 
-The choices of this page, each with its options further down and one recommendation:
+Jiahao approved this page on 2026-11-18 and accepted all eight recommendations ("Accept
+all eight", W-885). The options of each choice are further down.
 
-| # | Choice | Recommendation | Section |
+| # | Choice | Decision | Section |
 | --- | --- | --- | --- |
 | 1 | Where the steps come from | ST1: the registered preprocessing steps, with `gaussian` and `clahe` added to `PREPROCESSING_METHODS` | [The steps](#the-steps) |
 | 2 | The working type of the steps | WT1: float32 from the first step on, on the `img_as_float32` scale | [The working type](#the-working-type) |
@@ -80,14 +81,25 @@ The choices of this page, each with its options further down and one recommendat
 | 7 | The model input file after fusion | SI1: the fused file itself when the recipe leaves it unchanged; otherwise `model_inputs/<run>.ome.tif`, in a subfolder only model inputs use | [Records](#records) |
 | 8 | The reusable-functions decision (D4) | Amend its sentence "there is no general step chain" to "the input recipe is the one chain: fixed stages of registered steps" | [Relation to the settled decisions](#relation-to-the-settled-decisions) |
 
-Criterion 3 of W-885 is Jiahao's approval of this page. Nothing on it is implemented
-before that approval.
+**Amendments approved with the page** (Jiahao, 2026-11-18: "批准 A(a) 和 B"):
+
+* **A.** A 3D Cellpose run refuses a model input whose Z factor differs from the one
+  Cellpose applies ([The model input](#the-model-input)).
+* **B1.** Input recipes are not presets
+  ([Relation to the settled decisions](#relation-to-the-settled-decisions)). W-887 joins
+  W-872 and W-876 among the issues whose keys these must fit ([Configuration](#configuration)).
+* **B2.** The implementation starts after W-887 (which removes `processing.recipe`) and
+  W-873 (a configuration per dataset) are merged. It migrates W-873's configurations to
+  `input_recipe` and `model_input`.
+* **B3.** The first use on W-870's stage 1 (FU1–FU3) is a separate evidence issue, which
+  the coordinating session runs on UGER under W-889's rule for real-data evidence
+  ([validation](../validation/segmentation-input-recipe.md)).
 
 ## Relation to the settled decisions
 
 The settled decisions of [segmentation](segmentation.md) and
-[sample-segmentation](sample-segmentation.md) hold, with one amendment for Jiahao to
-confirm (choice 8):
+[sample-segmentation](sample-segmentation.md) hold, with one amendment, which Jiahao
+confirmed on 2026-11-18 (choice 8):
 
 * **The reusable-functions decision (D4)** says that input preparation reuses the
   preprocessing mechanism where it fits and that there is no second recipe engine. The
@@ -111,6 +123,13 @@ confirm (choice 8):
 * **Lengths in pixels (LS2).** It holds for the method fields that remain in pixels
   (Cellpose `min_size`, StarDist `block_size`, `min_overlap`, `context`). `scale` and
   `diameter` leave `LENGTH_FIELDS` because `model_input` replaces them.
+* **Input recipes are not presets (amendment B1).** W-887 removes `processing.recipe`
+  (`recipe: deep`). That was a preset defined in package code; its name did not describe
+  its content, and run records did not keep it. An input recipe differs on each point:
+  * it is written in the user's configuration;
+  * its records keep its content and SHA-256;
+  * the package ships no named input recipe;
+  * a run gives a name or a full inline recipe, never a name plus overrides.
 
 ## Terms
 
@@ -339,8 +358,17 @@ output_roles)`. A new composite is a new method here.
   the image's axes, and a Z factor other than 1 is refused for it as today. A factor of 1
   on every axis is passed as None. Cellpose passes `diameter = 30 / f_yx`, since its image is rescaled
   by 30 / `diameter`. `f_yx = 1` therefore gives diameter 30, which is the old
-  `diameter: None` (no rescale). Cellpose needs equal Y and X factors. The method's
-  `effective` entry still records `scale_zyx` and `diameter` as used.
+  `diameter: None` (no rescale). Cellpose needs equal Y and X factors.
+* **A 3D Cellpose run (amendment A).** For a run with Z > 1, Cellpose scales Z by
+  `anisotropy` × 30 / `diameter`, that is `anisotropy` × `f_yx`. `anisotropy` is the run's
+  configured value, and the recipe does not change it.
+  * A `model_input` that sets a Z factor (a ZYX `pixel_size_um` or `factor`) must equal
+    that value within the float64 tolerance.
+  * Otherwise the run is refused at configuration, with `ValueError` naming the run, the
+    requested Z factor and the one Cellpose applies.
+  * A number sets Y and X only, and Cellpose's own Z factor applies.
+* **The record.** The method's `effective` entry records `scale_zyx`, with the Z factor
+  actually applied, and `diameter` as used. The preview states the same factors.
 * **`seeded_watershed`** refuses a recipe with `model_input` (`ValueError`: cell
   outlines are never computed on a shrunk grid).
 * **Where the image is rescaled.**
@@ -671,9 +699,14 @@ The values illustrate the layout and are not recommended settings.
 * `workflow/_plan.py`'s `_reference_inputs` (which runs read the reference merged image)
   reads the source channels with `reference_merged: true`. The amplicon of a composite is
   such a source now.
-* These keys are written against `76cd058`. W-872 (the FOV list in the configuration) and
-  W-876 also change the configuration schema. When both have landed, the implementation
-  issue checks that `segmentation.input_recipes`, `input_recipe` and
+* These keys are written against `76cd058`. Three other issues also change the
+  configuration schema:
+  * W-872 (the FOV list in the configuration);
+  * W-876;
+  * W-887, which removes `processing.recipe` (amendment B1).
+
+  When all three have landed, the implementation issue checks that
+  `segmentation.input_recipes`, `input_recipe` and
   `export.segmentation.runs[*].input_recipe` fit their keys, and restates any conflict
   for Jiahao rather than resolving it.
 

@@ -1,6 +1,6 @@
 # Validation design: the segmentation input recipe
 
-% Status: Proposed (W-885, 2026-11-18, written against 76cd058); awaits Jiahao's approval with its specification
+% Status: Approved with its specification (Jiahao, 2026-11-18, W-885), with amendments A and B3; written against 76cd058
 
 This is the validation plan for implementing
 [segmentation-input-recipe](../specs/segmentation-input-recipe.md). It covers unit tests
@@ -86,6 +86,7 @@ atol=1e-6` and "f64" means `rtol=1e-9, atol=1e-12`.
 | MI2 | `factor` per route | `factor` 0.25 at `k` 1 and 2 | 0.25 per FOV; 0.5 after fusion (LS2's rule for the old `scale`). | f64 | H |
 | MI3a | StarDist, a 2D model | `model_stub` (StarDist, `n_dim` 2), `factor_zyx` (1, 0.25, 0.25) | The stub receives `scale=(0.25, 0.25)`, Y and X only, as `library_scale` passes it to a 2D model today (`_learned.py:429`). `effective.scale_zyx` records (1, 0.25, 0.25). A factor of 1 on every axis passes `scale=None`. A 2D model with a Z factor other than 1 is refused as today. | tuple length: exact (integers); values: f64; None and refusal: exact (strings) | H |
 | MI3b | StarDist, a 3D model | `model_stub` (StarDist, `n_dim` 3), `factor_zyx` (1, 0.25, 0.25) | The stub receives `scale=(1, 0.25, 0.25)`, all three axes. `effective.scale_zyx` records the same. | tuple length: exact (integers); values: f64 | H |
+| MI4b | Cellpose, a 3D run (amendment A) | `model_stub` (Cellpose, Z > 1), grid spacing (1.0, 0.25, 0.25) µm, `anisotropy` 4 | A number `pixel_size_um` 1.0 (`f_yx` 0.25) passes `diameter` 120 and `anisotropy` 4 unchanged. `effective.scale_zyx` records (1.0, 0.25, 0.25), where 1.0 = 4 × 0.25 is Cellpose's Z factor. A ZYX `pixel_size_um` (1.0, 1.0, 1.0) (Z factor 1.0) is accepted. A ZYX `pixel_size_um` (2.0, 1.0, 1.0) (Z factor 0.5) is refused with `ValueError` naming the run, 0.5 and 1.0. | diameter, anisotropy and factors: f64; refusal: exact (strings) | H |
 | MI4 | Cellpose receives the diameter | `model_stub` (Cellpose) | Factor 0.25 gives `diameter` 120. Factor 1 gives `diameter` 30, which Cellpose 4.2's `eval` turns into `rescale` 1.0, as for `diameter=None` (`rescale = 30. / diameter`). Unequal Y and X factors are refused. | diameter: f64; refusal: exact (strings) | H |
 | MI5 | Refusals | `recipes` | A run of a method with a model and no `model_input`; `seeded_watershed` with `model_input`; both or neither of `pixel_size_um` and `factor` in a `model_input`; `pixel_size_um` on a grid without spacing. Each raises `ValueError` naming the key. | exact (exception types and strings) | H |
 | MI6 | `LENGTH_FIELDS` | — | The table no longer holds `stardist.scale` or `cellpose.diameter`. The test that keeps it equal to the registered methods' pixel fields still passes. | exact (strings) | H |
@@ -159,6 +160,13 @@ This is the implementation issue's first use of the recipe on real data. It show
 code works on a real dataset and that the preview can compare recipes. It chooses no
 recipe and makes no quality claim.
 
+**Where it runs (amendment B3).**
+
+* FU1–FU3 are a separate evidence issue, under W-889's rule for real-data evidence.
+* The coordinating session runs them on UGER, on the implementation branch's commit, before
+  merge.
+* The implementation batch runs every other check of this page.
+
 * **Data.** W-870's stage 1: the four FOVs tile_28, tile_29, tile_36 and tile_37 of the
   tissue-2D dataset (single-plane tiles of 3072 × 3072 uint8, 0.094635 µm per pixel), the
   PI stain as `reference_stain`, configurations `configs/stage1-per_fov.yaml` and
@@ -197,10 +205,9 @@ recipe and makes no quality claim.
   `check_export` passing. `compare_routes` runs and its report is kept, as a
   report only.
 * **Records.** Records as the project guidance defines them ("Records of a run with
-  steps"), with the resource table per step. Resource bounds come from the implementation
-  batch's guidance. Stage 1's segment tasks ran with 32,000 MB and the export with
-  64,000 MB in W-870, so a StarDist call on one 3072 × 3072 FOV needs more than the 4 GiB
-  worker default, and the guidance has to name the exception.
+  steps"), with the resource table per step. Resource bounds come from the evidence
+  issue's UGER requests. Stage 1's segment tasks ran with 32,000 MB and the export with
+  64,000 MB in W-870.
 * **What it is not.** Not a sweep, not a choice of a tissue-2D recipe, and not a
   comparison of recipes by quality. The owner looks at the overlay and the sizes and
   decides what to try next.
