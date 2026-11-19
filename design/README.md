@@ -17,6 +17,14 @@ the full rules behind it.
 | `proposals/` | Designs proposed and not, or not yet, implemented. | No |
 | `notes/` | Longer notes behind a guide: calibration targets, API behaviour, research scripts, the full migration notes. | No |
 
+The proposals:
+
+| Record | Proposes | Status |
+| --- | --- | --- |
+| [`proposals/cells-across-fovs.md`](proposals/cells-across-fovs.md) | How a cell seen by two FOVs is kept once, with measurements on two real 2 × 2 blocks | Proposed (W-399); its decisions are recorded under each question |
+| [`proposals/benchmark-drafts/`](proposals/benchmark-drafts/) | Three draft issues for the benchmark: retirement and commands, the report template, the site section | Proposed (W-771) |
+| [`proposals/test-suite-slimming.md`](proposals/test-suite-slimming.md) | Which tests to keep, merge, move to evidence workloads or retire after Chapter II development, the helper splits, and the projected validation time | Proposed (W-893); Jiahao decides by category |
+
 ## Records awaiting approval
 
 | Record | Status | Changes on approval |
