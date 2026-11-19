@@ -22,7 +22,7 @@ grids.
   ([Replaced keys and their migration](#replaced-keys-and-their-migration)).
 * **What it records.** Every step's configuration as given, the value used on the run's
   grid and what the step fitted. The saved `input.ome.tif` per FOV, and on the route after
-  fusion the fused file or `model_input_<run>.ome.tif`, is the array passed to `segment`
+  fusion the fused file or `model_inputs/<run>.ome.tif`, is the array passed to `segment`
   ([Records](#records)).
 * **How a dataset's recipe is chosen.** `starfinder segment preview` draws a few FOVs ×
   a few recipes as an overlay grid on the model input with size distributions, without a
@@ -77,7 +77,7 @@ The choices of this page, each with its options further down and one recommendat
 | 4 | How the model scale is given | MI1: `model_input.pixel_size_um`, the pixel size the model sees, with `factor` only for a grid without spacing | [The model input](#the-model-input) |
 | 5 | Where the image is rescaled for the model | RS1: inside the method, as today (StarDist `scale`, Cellpose `diameter`); the labels come back on the run's grid | [The model input](#the-model-input) |
 | 6 | Where recipes live | RL1: named recipes in `segmentation.input_recipes`, referred to by name; an inline mapping is also accepted | [Configuration](#configuration) |
-| 7 | The model input file after fusion | SI1: the fused file itself when the recipe leaves it unchanged; otherwise `model_input_<run>.ome.tif` | [Records](#records) |
+| 7 | The model input file after fusion | SI1: the fused file itself when the recipe leaves it unchanged; otherwise `model_inputs/<run>.ome.tif`, in a subfolder only model inputs use | [Records](#records) |
 | 8 | The reusable-functions decision (D4) | Amend its sentence "there is no general step chain" to "the input recipe is the one chain: fixed stages of registered steps" | [Relation to the settled decisions](#relation-to-the-settled-decisions) |
 
 Criterion 3 of W-885 is Jiahao's approval of this page. Nothing on it is implemented
@@ -296,10 +296,12 @@ output_roles)`. A new composite is a new method here.
     at most 32 bits, since `ProjectionConfig` refuses 64-bit integer sums. Even 2³² − 1 in
     every one of 10⁹ planes sums to about 4.3 × 10¹⁸. For a uint16 stack of 50 planes, the
     largest sum is 3,276,750.
-* **The `exact` flag** applies to a `sum` of an integer input only. It is `true` when
-  every sum is at most 2²⁴ = 16,777,216, the largest bound up to which float32 holds every
-  integer (the uint16 example above is), and `false` otherwise. With `output_dtype:
-  float64` the bound is 2⁵³. For `max` it is null, because the input dtype is kept. For `mean`,
+* **The `exact` flag** applies to a `sum` of an integer input only, signed or unsigned
+  (`_validate_image` accepts signed integer images). It is `true` when every sum has an
+  absolute value of at most 2²⁴ = 16,777,216, the bound up to which float32 holds every
+  integer of either sign (the uint16 example above is), and `false` otherwise. An int32
+  sum of −16,777,217 is therefore `false`, because float32 rounds it to −16,777,216. With
+  `output_dtype: float64` the bound is |sum| ≤ 2⁵³. For `max` it is null, because the input dtype is kept. For `mean`,
   and for any float input, it is null: the mean of integers need not be representable (the
   mean of 0, 1 and 1 is 2/3). For every `sum` and `mean`, the record states `rounding:
   "float64 result rounded once to <output dtype>"`, so a reader knows that a null `exact`
@@ -379,7 +381,7 @@ Only fused images exist after fusion. The two ways to give a recipe what it need
 
 | Option | Rule | Cost on tissue-2D (56 tiles of 3072 × 3072 uint8 at 0.094635 µm; fused 11,291 × 9,848 at 0.18927 µm) | Consequence |
 | --- | --- | --- | --- |
-| **AF1. Fused channels (recommended)** | Every source channel of a recipe is an image of `export.images` (checked by check 7 before anything is written). `segment_fused` reads the fused projections and runs the recipe on them, on the segmentation grid, with the fit region of the footprints. | No new fused file for the recipes of W-870. `reference_stain` (PI) and `reference_merged` are already fused, so a PI recipe and the PI–amplicon composite need nothing more. Each further channel adds one fused projection, 111.2 MB as uint8 (11,291 × 9,848 = 111,193,768 pixels). A recipe that changes the image writes `model_input_<run>.ome.tif`, 444.8 MB as uncompressed float32. One float32 copy of the fused plane is 444.8 MB in memory, so a Gaussian (input and output) holds about 0.9 GB. These figures are arithmetic and not measured. | One fit over the whole sample: one percentile range and one CLAHE mapping, so no step makes a seam. Steps run after fusion's own resampling to `k`. The recipe's `channels` stage runs on a plane that is already the Z maximum (see below). |
+| **AF1. Fused channels (recommended)** | Every source channel of a recipe is an image of `export.images` (checked by check 7 before anything is written). `segment_fused` reads the fused projections and runs the recipe on them, on the segmentation grid, with the fit region of the footprints. | No new fused file for the recipes of W-870. `reference_stain` (PI) and `reference_merged` are already fused, so a PI recipe and the PI–amplicon composite need nothing more. Each further channel adds one fused projection, 111.2 MB as uint8 (11,291 × 9,848 = 111,193,768 pixels). A recipe that changes the image writes `model_inputs/<run>.ome.tif`, 444.8 MB as uncompressed float32. One float32 copy of the fused plane is 444.8 MB in memory, so a Gaussian (input and output) holds about 0.9 GB. These figures are arithmetic and not measured. | One fit over the whole sample: one percentile range and one CLAHE mapping, so no step makes a seam. Steps run after fusion's own resampling to `k`. The recipe's `channels` stage runs on a plane that is already the Z maximum (see below). |
 | AF2. Fused prepared inputs | Each FOV's prepared input (stages `channels` to `after_projection`) is written per FOV and fused as a new image. | 56 prepared files, 56 × 37.7 MB = 2.11 GB as float32, plus their fused projection, 444.8 MB as float32, plus a preparation task per FOV on a route that has none today. | Steps fitted per FOV (percentiles, CLAHE) differ between neighbouring tiles. The blend then mixes two different mappings in every overlap (10 % of each tile's side), and the seams show in the model input. It is the only way to run 3D steps before the projection on a fused 3D sample. |
 
 **Recommendation: AF1.** On tissue-2D it needs no new fused image, and it fits each
@@ -484,15 +486,37 @@ of `channels` is a source channel and loses `prepare` and `prepare_channel`:
 
 | Option | When the recipe changes the fused image | When it does not (the empty recipe, or `combine: single` with one fused channel and no step) |
 | --- | --- | --- |
-| **SI1 (recommended)** | `model_input_<run>.ome.tif` (float32, or the combine's uint8; the segmentation grid's geometry; the package's OME-TIFF writer) | No new file. The run's `input` names the fused projection file and its SHA-256, as today. |
+| **SI1 (recommended)** | `model_inputs/<run>.ome.tif` (float32, or the combine's uint8; the segmentation grid's geometry; the package's OME-TIFF writer) | No new file. The run's `input` names the fused projection file and its SHA-256, as today. |
 | SI2 | The same file | The same file, a copy of the fused projection |
 
-**Recommendation: SI1.** `model_input_` is a new prefix. No name it produces can equal a
-label file (`segmentation_<run>.ome.tif`), `cell_labels.ome.tif`, `territories.ome.tif` or
-a fused image (`<image>_projection.ome.tif`, `<image>_stack.ome.tif`), because none of those
-begins with `model_input_`. R2 of `check_export` lists the new files. T1 gains: each
-`model_input_<run>.ome.tif` exists with its recorded SHA-256 and the segmentation grid's
-shape and geometry.
+**Recommendation: SI1.**
+
+**Where the file goes.** A model input is written as `model_inputs/<run>.ome.tif`, in a
+subfolder of `export/<sample>/` that only model inputs use. A file name prefix at the top
+of the folder is not used, because it can collide. An image of `export.images` may be
+named `model_input_cell` from a file source (`export/_config.py`, `_check_images` allows
+letters, digits, `_`, `-` and `.`). Its fused projection, `model_input_cell_projection.ome.tif`,
+would then be the model input of a run named `cell_projection` under a prefix
+`model_input_<run>.ome.tif`. The subfolder cannot collide:
+
+* A fused image is a top-level entry whose name ends in `_projection.ome.tif`,
+  `_stack.ome.tif`, `_projection.ome.zarr` or `_stack.ome.zarr`. An image name holds no
+  `/`, so no image can name `model_inputs` or anything inside it.
+* The other top-level entries have fixed names (`export.json`, `tables/`,
+  `sample.h5ad`, `sample.zarr/`, `cell_labels.ome.tif`, `territories.ome.tif`,
+  `segmentation_<run>.ome.tif`, the workflow's `previews/`), and none is `model_inputs`.
+* Inside the subfolder, a file is named by its run alone. Run names are lowercase
+  snake_case and differ within a configuration, so two runs cannot share a file, also on a
+  file system that ignores case.
+
+The subfolder exists only while a run has a model input. Its files are listed among the
+`segmentation` section's outputs, so the export removes them with the section's other
+listed files when the part runs again (`remove_listed`; [sample-output](sample-output.md),
+"How the folder is kept equal to its record"), and it removes the subfolder when the
+subfolder is empty. R2 of `check_export` lists the files under `model_inputs/` and fails on
+an unlisted file there, as for any other unlisted file outside `previews/`. T1 gains: each
+listed `model_inputs/<run>.ome.tif` exists with its recorded SHA-256 and the segmentation
+grid's shape and geometry, and names a run of the section.
 
 The `segmentation` section's run entry gains:
 
@@ -577,7 +601,7 @@ All names are in `starfinder.segmentation` unless stated.
 | Import grid | `LabelImportConfig.projection`: `max`, `sum`, `mean` or None | field |
 | Model scale | `SegmentationInput.model_scale_zyx`; `SegmentationSpec.scales` | field |
 | Preview | `preview_recipes(...)`; CLI `starfinder segment preview` | function, command |
-| After fusion | `model_input_<run>.ome.tif` | file |
+| After fusion | `model_inputs/<run>.ome.tif` | file in a subfolder of `export/<sample>/` |
 
 The new exports go into `__all__` and the autosummary lists of `docs/api/segmentation.rst`
 and `docs/api/preprocessing.rst`, which `docs/check_reference.py` requires.
