@@ -46,18 +46,22 @@ A test's time is its setup, call and teardown. A module or session fixture's cos
 
 | Kind | Rule | Tests |
 | --- | --- | ---: |
-| Specification row | The function is named in a row of a design record at the base (the validation tables map rows to tests), or its name carries a row id and its module cites the record | 3,210 |
-| Contract | The `contract` or `golden` marker (an interface, a workflow key, pinned outputs), an identity contract kept by decision (GN1, GA1), or a `validation` test that no design record names and that checks an issue's criteria on the public API | 1,780 |
+| Specification row | The function is named in a row of a design record at the base (the validation tables map rows to tests), or its name carries a row id that a record's table holds | 3,007 |
+| Contract | The `contract` or `golden` marker (an interface, a workflow key, pinned outputs), an identity contract kept by decision (GN1, GA1), or a `validation` test that no design record names and that checks an issue's criteria on the public API | 1,977 |
 | Defect | The function was first added by a `fix` commit (the commit is named), or its docstring cites a W- issue as a regression | 559 |
 | Development scaffolding | A pin of a base revision, parity with a moved implementation, or a repeated seed with the same assertion | 176 |
-| Unit behavior | None of these: an ordinary unit test of its module | 1,199 |
+| Unit behavior | None of these: an ordinary unit test of its module, or a check of a test's own fixture | 1,205 |
 
-Each row's reference names what is protected. Where the test does not name a design row, it is read from the test's
-own code: the docs or design pages it names or reads (`docs_pages.read`, `docs_pages.design`), else the public API it
-calls (`starfinder.<module>.<name>`, with its page under `docs/api/`), and the issue criteria its module states
-(W-390 criterion 4, for example). For 20 files whose code names neither, one citation per file names the page that
-documents them (the workflow guides and reference, the migration guide, `docs/contributing.md`). No row is left with a
-bare marker or with "none found".
+Each row's reference names what is protected, read from the test itself. Where no design row names the test (by
+name, or by a pattern such as `test_r1_*` in a row that names its file), the reference is what the test's code names
+or reaches: the records and pages its docstring, its body, and the helpers and fixtures of its module it uses name or
+read (`docs_pages.read`, `docs_pages.design`), else the package functions it reaches the same way, directly or
+through the suite's shared helper modules (a public one with its page under `docs/api/`, an internal one marked as
+such). Where the code names neither, a per-test citation names the page that documents what the test asserts (the
+workflow guides and reference, the migration guide, `docs/contributing.md`, the docs builder code), or says that the
+test checks only its own fixture ("none found", 8 rows). A citation that covers every test of a file is used only
+where every test of that file asserts the cited thing (checked test by test; the run's README lists the check). No
+row has a bare marker.
 
 **Overlap** is named where it is known from the test code: the same assertion on another parameter (a seed, a
 profile), the same assertion on stub tasks, or the same real run made by another test that asserts more. No coverage
@@ -172,14 +176,14 @@ graph of the test modules at the base:
 
 | Helper | Test files that import it, directly or through another module | Their tests | Their CPU in a full validation (min) |
 | --- | ---: | ---: | ---: |
-| `workflow_tasks.py` | 62 | 2,361 | 181.2 |
+| `workflow_tasks.py` | 62 | 2,361 | 184.2 |
 | `workflow_examples.py` | 41 | 1,266 | 131.6 |
 | `workflow_nextflow.py` | 11 | 188 | 122.1 |
 | `tiled_fixtures.py` | 9 | 206 | 96.6 |
 | `test_workflow_snakemake_dryrun.py` (a test module that helpers import) | 6 | 141 | 93.0 |
 | `workflow_engine_validation.py` | 4 | 115 | 90.3 |
-| `coordination_helpers.py` | 86 | 3,371 | 88.6 |
-| `expected_values.py` | 34 | 1,438 | 53.8 |
+| `coordination_helpers.py` | 86 | 3,371 | 92.2 |
+| `expected_values.py` | 34 | 1,438 | 57.4 |
 
 The full table, with the commits since 2026-10-01 that changed each helper, is in the run's
 `results/analysis/summary.json` (`helpers`), and each check's import closure under `check_inputs`.
