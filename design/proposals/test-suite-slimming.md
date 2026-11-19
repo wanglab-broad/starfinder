@@ -31,7 +31,14 @@ known, the category, the proposal with one line of reason, and the seconds a ful
    `--durations=0 --durations-min=0`, one process each, on hyper-threads beside busy cores and under the record
    wrapper's `strace`: they read high and rank the tests. Each own time is put on W-880's scale by the ratio of W-880's
    pytest session time of the same selection to the own run's (0.63 for the fast tier, 0.84 to 0.97 for the slow
-   groups, 0.95 to 1.02 for the learned checks; W-874's 0.99).
+   groups, 0.95 to 1.02 for the learned checks; W-874's 0.99). The step of the selection `learned and slow and not
+   integration` stopped at the batch's 4 GiB bound, so its 26 tests were measured one by one afterwards, each in its own
+   step, and taken as they are. Alone, a test loads its models and fixtures itself, so these times are an upper bound
+   on what it costs inside a session.
+
+A test with no measured time has the source `unmeasured`, with no number, and is left out of every saving and of the
+projection; no selection's time is spread over its tests. One test is unmeasured:
+`test_l12_cpu_and_gpu_labels_agree_within_the_w306_bounds`, which every source skipped (it needs a GPU Python).
 
 A test's time is its setup, call and teardown. A module or session fixture's cost falls on the first test that uses it.
 
@@ -39,11 +46,18 @@ A test's time is its setup, call and teardown. A module or session fixture's cos
 
 | Kind | Rule | Tests |
 | --- | --- | ---: |
-| Specification row | The function is named in a row of a design record at the base (the validation tables map rows to tests), or its name carries a row id and its module cites the record | 3,272 |
-| Contract | The `contract` or `golden` marker (an interface, a workflow key, pinned outputs), or an identity contract kept by decision (GN1, GA1); the reference is the page or record the module cites | 1,718 |
+| Specification row | The function is named in a row of a design record at the base (the validation tables map rows to tests), or its name carries a row id and its module cites the record | 3,210 |
+| Contract | The `contract` or `golden` marker (an interface, a workflow key, pinned outputs), an identity contract kept by decision (GN1, GA1), or a `validation` test that no design record names and that checks an issue's criteria on the public API | 1,780 |
 | Defect | The function was first added by a `fix` commit (the commit is named), or its docstring cites a W- issue as a regression | 559 |
 | Development scaffolding | A pin of a base revision, parity with a moved implementation, or a repeated seed with the same assertion | 176 |
 | Unit behavior | None of these: an ordinary unit test of its module | 1,199 |
+
+Each row's reference names what is protected. Where the test does not name a design row, it is read from the test's
+own code: the docs or design pages it names or reads (`docs_pages.read`, `docs_pages.design`), else the public API it
+calls (`starfinder.<module>.<name>`, with its page under `docs/api/`), and the issue criteria its module states
+(W-390 criterion 4, for example). For 20 files whose code names neither, one citation per file names the page that
+documents them (the workflow guides and reference, the migration guide, `docs/contributing.md`). No row is left with a
+bare marker or with "none found".
 
 **Overlap** is named where it is known from the test code: the same assertion on another parameter (a seed, a
 profile), the same assertion on stub tasks, or the same real run made by another test that asserts more. No coverage
@@ -80,7 +94,7 @@ The issue's 4.35 CPU-hours count Q's 3.1 wall minutes once; its four CPUs make 1
 runs only in the Nextflow checks: the other checks that select it skip it, because only the Nextflow checks put
 Nextflow on `PATH`.
 
-The 127 tests of 20 s or more take 182 of the 254 CPU minutes the tests themselves take in a full
+The 137 tests of 20 s or more take 190 of the 262 CPU minutes the tests themselves take in a full
 validation. They are almost all real-engine workflow runs, the learned detectors' validation and the slow presets of
 the synthetic scenes; the 6,200 tests of the fast tier take 28 minutes together.
 
@@ -102,9 +116,10 @@ These come first: they are 118 of the 271 CPU minutes (44 %) of a full validatio
   raw replacements and a memory-only change) on stub tasks (266 s) and on real tasks (720 s), with the same assertions:
   which tasks run, their tokens, and the unchanged records.
 * **X1, X2 and X3** (`test_workflow_engines_e2e.py`): X3 runs a variant on Snakemake, then on Nextflow, and compares
-  the two output trees byte for byte; X1 and X2 run per-fov and molecules-only on one engine each and assert only
-  completion. `test_real_per_fov_commands` (`test_workflow_nextflow_commands.py`) runs X3's Nextflow per-fov workflow
-  again and asserts the task kinds completed.
+  the two output trees byte for byte; X1 and X2 run per-fov and molecules-only on one engine each through the same
+  `EngineRun.invoke` that X3 calls, with the same assertions. `test_real_per_fov_commands`
+  (`test_workflow_nextflow_commands.py`) runs the Nextflow per-fov workflow too, and asserts two things X3 does not:
+  the exact set of task kinds, and workflow tokens that start with `rerun:` (X3's comparison leaves the token out).
 * **N1** (`test_workflow_nextflow_stub.py`) runs each of eight variants on stub tasks under the `local` profile and
   again under `google-batch,local`.
 
@@ -114,7 +129,7 @@ These come first: they are 118 of the 271 CPU minutes (44 %) of a full validatio
 | --- | --- | --- | ---: |
 | K1: the case matrix of X7, X10 (Nextflow) and X11 | 18 in `test_workflow_recovery.py` | **Merge**: one complete run per engine, shared by the module and restored between cases (the W-758 and W-760 pattern), so each case runs only its damage or change, the rerun and the comparison. **Move** X11 `restored-twice`, `raw-size` and `raw-older` on Nextflow to the engine evidence workload: the stub cache test makes the same sequence on Nextflow (A, B, A, B of two blocks, the two raw replacements). Their Snakemake cases stay, since no stub test covers Snakemake's reruns, and keep the fresh-output comparison; Snakemake's `restored-twice` reuses the fresh runs of configurations A (the shared run) and B (the `processing` case's fresh run), which the module keeps at the same paths | 39.3 |
 | K2: the cache test's `[real]` variant | 1 | **Move** to the engine evidence workload; `[stub]` stays | 12.0 |
-| K3: X1 and X2 on per-fov and molecules-only, `test_real_per_fov_commands`, the uncalibrated Nextflow run | 6 | **Retire** the first five (X3 makes the same runs and compares them); **move** the uncalibrated Nextflow run (the Snakemake one asserts the same grids on the same commands) | 6.2 |
+| K3: X1 and X2 on per-fov and molecules-only, the uncalibrated Nextflow run | 5 | **Retire** the first four (X3 makes the same `EngineRun.invoke` calls with the same assertions, and compares the runs); **move** the uncalibrated Nextflow run (the Snakemake one asserts the same grids on the same commands). **Keep** `test_real_per_fov_commands`: its task-kind set and `rerun:` token checks have no retained replacement, and moving them into X3 would change X3, which compares without the token, for 1.4 CPU-min | 4.9 |
 | K8: the Snakemake dry run after a complete per-fov run | 1 | **Merge** its dry-run assertion into K1's shared Snakemake run | 0.9 |
 | K10: N1 under `google-batch,local` for seven of its eight variants | 7 | **Retire**; the per-fov run under that profile stays, and `test_workflow_nextflow_google_batch.py` checks the profile offline | 2.4 |
 
@@ -124,7 +139,7 @@ The shared run adds one complete run per engine back to the module (61.2 s and 7
 
 | Route | Snakemake, real tasks | Nextflow, real tasks | Stub tasks or dry runs |
 | --- | --- | --- | --- |
-| per-fov | X3 (with Nextflow); K1's shared run with X7, X10, X11 and the dry run; the export-record run; the held export (`test_workflow_engines_review.py`); the uncalibrated direct run | X3; K1's shared run with X7, X10, X11; the export-record run; the held export | N1, N2, N3 and the cache test on Nextflow stubs; the Snakemake dry runs |
+| per-fov | X3 (with Nextflow); K1's shared run with X7, X10, X11 and the dry run; the export-record run; the held export (`test_workflow_engines_review.py`); the uncalibrated direct run | X3; `test_real_per_fov_commands`; K1's shared run with X7, X10, X11; the export-record run; the held export | N1, N2, N3 and the cache test on Nextflow stubs; the Snakemake dry runs |
 | molecules-only | X3 | X3 | N1 |
 | supplied-xml | none (as today) | X2 `supplied-xml`; the supplied BigStitcher import command | N1 |
 | tiled processing | the uncalibrated tiled run; the tiled dry run after a complete tiled run | `test_real_tiled_commands` (with its `-resume`) | N1 (`after-fusion`) |
@@ -136,12 +151,12 @@ Every engine and route that has a real run today keeps at least one.
 
 | Category | Tests | Proposal | Saved (CPU-min) |
 | --- | --- | --- | ---: |
-| K4: spot-finding validation, seeds 101 and 102 of S1 to S8 and S10 | 164 in `test_spot_finding_validation.py` (learned and classical) | **Move** to a spot-finding evidence workload; seed 100 stays, and so does S10's Piscis seed 102, the only seed that passes there (100 and 101 are expected failures). `design/specs/spot-finding-algorithms.md` parametrizes each check by seeds 100 to 102 with the same assertion, so its rows change with this (a decision on the design, not only on the suite). The other expected failures recorded per seed (S4, S10) move with their seeds | 24.0 |
+| K4: spot-finding validation, seeds 101 and 102 of S1 to S8 and S10 | 164 in `test_spot_finding_validation.py` (learned and classical) | **Move** to a spot-finding evidence workload; seed 100 stays, and so does S10's Piscis seed 102, the only seed that passes there (100 and 101 are expected failures). `design/specs/spot-finding-algorithms.md` parametrizes each check by seeds 100 to 102 with the same assertion, so its rows change with this (a decision on the design, not only on the suite). The other expected failures recorded per seed (S4, S10) move with their seeds | 24.8 |
 | K5: GN5 and GN7 on the three slow presets | 6 in `test_synthetic_cellular_presets.py` | **Move** to the scene's evidence workload: the same checks run on the three routine presets in the fast tier, and the slow presets' generation is most of the time | 6.2 |
 | K6: GA1 digests of the three slow context presets | 3 in `test_synthetic_appearance_golden.py` | **Keep** (an identity contract kept by decision); moving them would save 6.9 CPU-min (option O1) and needs Jiahao's decision | 0 |
 | K7: G3, the refactored workflow against the values of the workflow before the dispatcher | 28 in `test_workflow_orchestration_golden.py`: G3's two runs and the 26 tests of its own comparison (`compare_migrated` of `scripts/workflow_golden.py`) | **Move** to an orchestration evidence workload with its expected folders: a pin of a finished refactor (W-647). The task commands' values are pinned by `test_workflow_core_golden.py`, `test_workflow_cell_golden.py` and `test_workflow_stitching_golden.py`, and every default change breaks G3 (both failed in W-880's validation) | 2.8 |
 | K9: Q at a full validation | the `pytest-quick` check | **Runner**: skip `pytest-quick` when `pytest-fast-tier` runs in the same validation (R = Q ∪ V); Q stays the gate of every other change | 12.0 |
-| K0: everything else | 6,690 | **Keep**: contracts, specification rows, defects and unit tests, each under a few seconds on average | 0 |
+| K0: everything else | 6,691 | **Keep**: contracts, specification rows, defects and unit tests, each under a few seconds on average | 0 |
 
 Development scaffolding that stays: ten tests are pins of a base revision or parity checks of a finished
 move (for example `test_paths_keep_the_attributes_of_the_base_revision`, the two `*_the_base_revisions` option checks
@@ -200,7 +215,7 @@ takes about 4.
 
 What the splits do not do: a change to the processing values that the real-engine tests run (as W-880's three lines)
 still reruns the real-engine checks, which is right, since those runs depend on them; K1, K2 and K3 make those checks
-60 minutes instead of 118.
+61 minutes instead of 118.
 
 ## Projection against the targets
 
@@ -215,25 +230,27 @@ no single check above 20 minutes, Q unchanged or faster.
 | `pytest-learned-slow-piscis-20251212` | 20.7 | 10.2 | 10.5 |
 | `pytest-slow-synthetic` | 18.9 | 6.2 | 12.8 |
 | `pytest-slow-other` | 16.1 | 3.3 | 12.7 |
-| `pytest-learned-slow-other` | 5.6 | 1.7 | 3.9 |
+| `pytest-learned-slow-other` | 5.6 | 2.4 | 3.1 |
 | `pytest-learned-slow-chain-culture`, `-chain-other` | 10.4 | 0.0 | 10.4 |
 | `pytest-learned-fast` | 3.7 | 1.2 | 2.5 |
 | `pytest-extended-recovery` (S2: two parts) | 33.6 | 10.2 | 23.5 |
 | `pytest-extended-other` | 8.4 | 1.5 | 6.9 |
 | `pytest-nextflow-recovery` | 43.4 | 29.1 | 14.3 |
 | `pytest-nextflow-engines` | 25.2 | 15.4 | 9.8 |
-| `pytest-nextflow-other` | 15.8 | 3.7 | 12.1 |
+| `pytest-nextflow-other` | 15.8 | 2.4 | 13.5 |
 | `strict-docs`, slow benchmark, registration and spot finding, reference audit | 7.7 | 0.0 | 7.7 |
-| **Total** | **270.7 (4.51 CPU-h)** | | **165 (2.75 CPU-h)** |
+| **Total** | **270.7 (4.51 CPU-h)** | | **166 (2.76 CPU-h)** |
 
 | | CPU | Wall on four CPUs | Largest check | Q |
 | --- | ---: | ---: | --- | --- |
 | D3's target | about 2.5 CPU-h or less | 45 min or less | 20 min or less | unchanged or faster |
 | W-880, measured | 4.51 CPU-h | 69.1 min placed as below (78 min as the controller ran it) | `pytest-nextflow-recovery` 43.4 min | 3.1 min |
-| The categories K1 to K10 with S1 and S2 | **2.75 CPU-h** | **41.5 min** | `pytest-nextflow-recovery` 14.3 min | faster (K7 takes 26 tests out of Q) |
-| … and option O1 | 2.63 CPU-h | 39.8 min | 14.3 min | |
-| … and options O1 and O2 | 2.57 CPU-h | 38.7 min | 14.3 min | |
-| … and options O1, O2 and O3 | **2.40 CPU-h** | 36.1 min | 14.3 min | |
+| The categories K1 to K10 with S1 and S2 | **2.76 CPU-h** | **41.8 min** | `pytest-nextflow-recovery` 14.3 min | faster (K7 takes 26 tests out of Q) |
+| … and option O1 | 2.64 CPU-h | 40.0 min | 14.3 min | |
+| … and option O3 | 2.59 CPU-h | 39.0 min | 14.3 min | |
+| … and options O1 and O2 | 2.58 CPU-h | 39.0 min | 14.3 min | |
+| … and options O1 and O3 | about 2.48 CPU-h | | 14.3 min | |
+| … and options O1, O2 and O3 | **2.41 CPU-h** | 36.4 min | 14.3 min | |
 
 The options, each Jiahao's decision on its own:
 
@@ -246,15 +263,20 @@ The options, each Jiahao's decision on its own:
   would do" of D1. Both models' weight identity and recorded settings (`test_piscis.py`) stay.
 
 **Method.** Per check: W-880's measured minutes, minus the seconds each proposed change saves among the tests that
-check runs (on W-880's scale), plus the shared runs K1 adds back; Q is not run at a full validation (K9); the fast tier
-and extended-recovery are split into two checks each (S1, S2). Wall time: the checks placed longest first on four
-CPUs. The measured wall time placed the same way is 69.1 minutes (W-880's controller ran it in 78). Q loses the 26
-tests of K7 and is otherwise unchanged.
+check runs (on W-880's scale; measured times only, so an unmeasured test saves nothing), plus the shared runs K1 adds
+back; Q is not run at a full validation (K9); the fast tier and extended-recovery are split into two checks each (S1,
+S2). Wall time: the checks placed longest first on four CPUs. The measured wall time placed the same way is 69.1
+minutes (W-880's controller ran it in 78). Q loses the 26 tests of K7 and is otherwise unchanged.
 
-**Result.** The categories alone meet three of D3's four targets: 41.5 minutes of wall time, no check above 20 minutes
-(with S1 and S2), and a faster Q. They bring the CPU time from 4.51 to 2.75 CPU-hours (−39 %), not to 2.5: the CPU
-target needs O3 and at least one of O1 and O2 (2.40 CPU-hours with all three; about 2.47 with O1 and O3, the
-options' savings being additive).
+Of the savings, 2.4 CPU-min come from the 26 tests measured one by one (K4's Spotiflow seeds in
+`pytest-learned-slow-other`); as those times are upper bounds, that check's projected 3.1 minutes may be low by up to
+that much.
+
+**Result.** D3's targets are not all met by the categories alone. They meet three of the four: 41.8 minutes of wall
+time, no check above 20 minutes (with S1 and S2), and a faster Q. They bring the CPU time from 4.51 to 2.76 CPU-hours
+(−39 %), not to 2.5. The CPU target is met only with further options, which are Jiahao's decisions: O1 and O3
+together (about 2.48 CPU-hours, the options' savings being additive) or all three (2.41). O2 and O3 without O1 give
+about 2.53, and no single option is enough.
 
 ## Phase 2
 
@@ -298,8 +320,9 @@ a contract of the new default and stays; its times are not in this inventory.
 * Two of W-893's own runs differ from the controller's. The steps' `PATH` lacked nvm's Node 24, so 37 tests that run
   the report page's script failed on the system's Node 10; they were rerun by node id with Node 24 and all passed, and
   their times are from that rerun. The step of the selection `learned and slow and not integration` stopped at the
-  batch's 4 GiB bound (summed over its process tree) during its third test, Cellpose; it was not retried with a higher
-  limit, and the 26 tests of that check take an even share of W-880's measured session time (stated per row).
+  batch's 4 GiB bound (summed over its process tree) during its third test; it was not retried with a higher limit,
+  and its 26 tests were measured one by one (upper bounds, above).
+* One test is unmeasured (skipped in every source) and saves nothing in the projection.
 * The savings of K1 and K8 are estimates from the cost of one complete run per engine (X1 and X2 per-fov); phase 2
   measures them.
 * Overlap is named from the test code (the same assertion, the same run); no coverage comparison of pairs of tests was
