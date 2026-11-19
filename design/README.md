@@ -17,6 +17,13 @@ the full rules behind it.
 | `proposals/` | Designs proposed and not, or not yet, implemented. | No |
 | `notes/` | Longer notes behind a guide: calibration targets, API behaviour, research scripts, the full migration notes. | No |
 
+## Records awaiting approval
+
+| Record | Status | Changes on approval |
+| --- | --- | --- |
+| `specs/segmentation-input-recipe.md` | Approved (W-885, 2026-11-18, amendments A and B1–B3): the segmentation input recipe on both routes, the replaced keys and `starfinder segment preview` | `specs/segmentation.md`, `specs/sample-segmentation.md` and the other pages its "Pages that change" lists |
+| `validation/segmentation-input-recipe.md` | Approved (W-885, 2026-11-18, amendments A and B3): its validation plan and the first use on W-870's stage 1 | — |
+
 ## How this folder relates to the site
 
 * A guide on the site says what a stage or scene does and how to use it. Its
