@@ -30,7 +30,9 @@ from starfinder.report._values import NA, Unavailable
 
 from . import hash_oracles
 from .report_fixtures import report_records
-from .report_scene import scene_chain_stain  # noqa: F401 (module-scoped fixture)
+from .report_scene import (require_extras, scene_chain_stain,  # noqa: F401 (module-scoped fixtures)
+                           scene_chain_stain_merged)
+from .report_stain_runs import export_after_fusion_on_stain
 from .test_report_collection import collect, keyed
 
 pytestmark = [pytest.mark.report, pytest.mark.contract]
@@ -379,8 +381,8 @@ def test_the_background_and_sizes_of_the_stain_chain_on_the_route_per_fov(scene_
 
 @pytest.mark.slow
 @pytest.mark.integration
-def test_the_background_and_sizes_of_the_stain_chain_after_fusion(scene_chain_stain):  # noqa: F811
-    chain = scene_chain_stain["after_fusion"]
+def test_the_background_and_sizes_of_the_stain_chain_after_fusion(scene_chain_stain_merged):  # noqa: F811
+    chain = scene_chain_stain_merged
     folder, record = chain.collect()
     assert record["route"] == "after_fusion"
     assert [u for u in record["unavailable"] if u["part"] == "assembly.examples"] == []
@@ -417,3 +419,45 @@ def test_the_background_and_sizes_of_the_stain_chain_after_fusion(scene_chain_st
     assert nuclei["n_objects"] == len(np.unique(labels[labels != 0]))
     per_fov = sizes[(sizes["scope"] == "fov") & (sizes["object"] == "nucleus")]
     assert set(per_fov["fov_id"]) <= set(chain.fov_ids) and 0 < per_fov["n_objects"].sum() <= nuclei["n_objects"]
+
+
+@pytest.fixture(scope="module")
+def stain_fusion_chain(scene_chain_stain, tmp_path_factory):  # noqa: F811
+    """The stain chain exported after fusion with the cell run segmenting the fused reference stain (not
+    ``report_scene.export_after_fusion``'s ``reference_merged``), into ``export_on_stain/`` beside the copied export."""
+    require_extras()
+    return export_after_fusion_on_stain(scene_chain_stain["per_fov"], tmp_path_factory.mktemp("stain_fusion") / "chain",
+                                        export_name="export_on_stain")
+
+
+@pytest.mark.slow
+@pytest.mark.integration
+def test_the_background_after_fusion_is_the_reference_stain_when_the_cell_run_segments_it(stain_fusion_chain, tmp_path):
+    chain = stain_fusion_chain
+    export_dir = chain.root / "export_on_stain" / chain.sample
+    folder, record = chain.collect(export_dir=export_dir, output_dir=tmp_path / "report")
+    assert [u for u in record["unavailable"] if u["part"] == "assembly.examples"] == []
+    _, previews = report_examples(chain.root, chain.sample, chain.fov_ids, dataset_id=chain.dataset_id,
+                                  sample_id=chain.sample, export_dir=export_dir)
+    export = json.loads((export_dir / "export.json").read_text())
+    cell = next(r for r in export["segmentation"]["runs"] if r["name"] == "cell")
+    assert cell["inputs"] == [{"role": "cytoplasm", "image": "reference_stain"}]
+    outputs = {o["image"]: o for o in export["fusion"]["outputs"] if o["dimensionality"] == "projection"}
+    fovs = pd.read_csv(export_dir / "tables" / "fovs.csv", float_precision="round_trip").set_index("fov_id")
+
+    def crop(name, fov):
+        entry = outputs[name]
+        image = tifffile.imread(export_dir / entry["path"])
+        image = image.reshape(-1, *image.shape[-2:]).max(axis=0)
+        (_, sy, sx), (_, oy, ox) = entry["spacing_zyx"], entry["origin_zyx"]
+        row = fovs.loc[fov]
+        y0, y1 = (int(np.floor((row[k] - oy) / sy + 0.5)) for k in ("footprint_y0", "footprint_y1"))
+        x0, x1 = (int(np.floor((row[k] - ox) / sx + 0.5)) for k in ("footprint_x0", "footprint_x1"))
+        return image[max(0, y0):min(image.shape[0], y1), max(0, x0):min(image.shape[1], x1)]
+    for preview in previews.values():
+        assert (preview.source, preview.background_name, preview.background_run, preview.background_role) == (
+            "segmentation_input", "reference_stain", "cell", "cytoplasm")
+        np.testing.assert_array_equal(preview.background, crop("reference_stain", preview.fov_id))
+        assert not np.array_equal(preview.background, crop("reference_merged", preview.fov_id))
+    page = (folder / "report.html").read_text(encoding="utf-8")
+    assert "segmentation input of run cell, its first channel (cytoplasm)" in page and "reference_stain" in page

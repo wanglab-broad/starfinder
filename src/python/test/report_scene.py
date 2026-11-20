@@ -279,12 +279,17 @@ def scene_chain_registered(tmp_path_factory) -> Chain:
 
 @pytest.fixture(scope="module")
 def scene_chain_stain(tmp_path_factory) -> dict:
-    """``{"per_fov": chain, "after_fusion": chain}`` as ``scene_chain_plane``, the route per FOV with its cell and
-    nucleus runs computed on the stain and saved with their inputs (W-884)."""
+    """``{"per_fov": chain}``: the plane chain of ``scene_chain_plane`` with its cell and nucleus runs computed on the stain
+    and saved with their inputs (W-884); ``scene_chain_stain_merged`` exports a copy of it after fusion."""
     require_extras()
-    per_fov = build_chain(tmp_path_factory.mktemp("scene_chain_stain"), plane=True, computed_runs=True)
-    after = export_after_fusion(per_fov, tmp_path_factory.mktemp("scene_chain_stain_after") / "chain")
-    return {"per_fov": per_fov, "after_fusion": after}
+    return {"per_fov": build_chain(tmp_path_factory.mktemp("scene_chain_stain"), plane=True, computed_runs=True)}
+
+
+@pytest.fixture(scope="module")
+def scene_chain_stain_merged(scene_chain_stain, tmp_path_factory) -> Chain:
+    """The copy of ``scene_chain_stain``'s chain exported after fusion by ``export_after_fusion`` (the cell run reads the
+    fused ``reference_merged``)."""
+    return export_after_fusion(scene_chain_stain["per_fov"], tmp_path_factory.mktemp("scene_chain_stain_after") / "chain")
 
 
 @pytest.fixture(scope="module")
