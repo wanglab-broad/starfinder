@@ -18,6 +18,8 @@ from starfinder.benchmark._trial import _main, _resolve
 from starfinder.synthetic import UNCALIBRATED_PREPROCESSING_VERSION
 from starfinder.workflow._shape import configuration_sha256
 
+from .test_segmentation_recipe import cellpose_file, stardist_folder, stubs  # noqa: F401  (the library stubs)
+
 pytestmark = [pytest.mark.benchmark, pytest.mark.contract]
 
 
@@ -362,6 +364,82 @@ def test_new_module_failures_are_named_before_any_output(tmp_path, monkeypatch, 
     assert record["error"]["type"] == error and match in record["error"]["message"]
     assert "execution" not in record
     assert [p.name for p in (tmp_path / "out").iterdir()] == ["record.json"]
+
+
+# Learned segmentation trials build their model input with the input recipe, as a run does (W-907): the library
+# stubs of test_segmentation_recipe.py stand in for StarDist and Cellpose, and record what the model receives.
+_RECIPE = dict(projection=dict(method="max"), model_input=dict(factor=0.5))
+_LEARNED = {"stardist": lambda tmp_path: dict(model_path=str(stardist_folder(tmp_path, 2))),
+            "cellpose": lambda tmp_path: dict(model_path=str(cellpose_file(tmp_path)))}
+
+
+@pytest.mark.segmentation
+@pytest.mark.parametrize("name", list(_LEARNED))
+def test_learned_segmentation_trial_reaches_the_model_through_its_recipe(tmp_path, stubs, name):
+    from starfinder.segmentation import ReferenceGrid, apply_input_recipe
+    from starfinder.segmentation._recipe import recipe_config
+    from .test_segmentation_recipe import F64
+    image = _inputs(tmp_path)
+    method = dict(module="segmentation", method=name, target="nucleus", roles=["nuclear"],
+                  config=_LEARNED[name](tmp_path), input_recipe=_RECIPE)
+    status, record = _main_record(tmp_path, dict(method=method, inputs=dict(image="reference.npy"), seed=17))
+    assert status == 0 and record["status"] == "succeeded", record["error"]
+    assert record["configuration"]["method"]["input_recipe"] == _RECIPE
+    _hashed_outputs(tmp_path / "out", record, ["labels.npy", "segmentation.json"])
+    # The model was reached, at the recipe's factor 0.5 on the max projection.
+    (call,) = stubs
+    if name == "stardist":
+        assert call["axes"] == "YX" and call["shape"] == (24, 24)
+        np.testing.assert_allclose(call["scale"], [0.5, 0.5], **F64)
+    else:
+        assert call["diameter"] == pytest.approx(60.0, rel=1e-9, abs=1e-12)
+    assert np.load(tmp_path / "out/labels.npy").shape == (1, 24, 24)
+    saved = json.loads((tmp_path / "out/segmentation.json").read_text())["record"]
+    recipe = saved["input"]["recipe"]
+    from starfinder.dataset.workflow import _input_recipe
+    assert recipe["config"] == recipe_config(_input_recipe(_RECIPE, "trial"))
+    np.testing.assert_allclose(recipe["model_input"]["factor_zyx"], [1.0, 0.5, 0.5], **F64)
+    np.testing.assert_allclose(recipe["model_input"]["method_value"]["scale_zyx"], [1.0, 0.5, 0.5], **F64)
+    # The model input is apply_input_recipe's, as FOV.segment builds it.
+    from starfinder.image import ImageMetadata
+    from starfinder.segmentation._labels import array_sha256
+    grid = ReferenceGrid((8, 24, 24), ImageMetadata("trial/reference"), "declared")
+    expected, _, _ = apply_input_recipe([("nuclear", image, {})], grid,
+                                        recipe=_input_recipe(_RECIPE, "trial"), run="trial")
+    assert expected.image.shape == (1, 24, 24, 1)
+    assert saved["input"]["sha256"] == array_sha256(expected.image)
+    assert record["execution"]["device"] == "cpu" and record["execution"]["model"]["method"] == name
+
+
+_ROW = r" \(docs/migration.md, 'Segmentation input recipe'\)"
+
+
+@pytest.mark.segmentation
+@pytest.mark.parametrize("name,config,keys,match", [
+    # No recipe is the empty recipe, as for a run: a method with a model has no default model input.
+    ("stardist", {}, dict(input_recipe=None), "run 'trial': method 'stardist' names a model and needs "
+                                              "input_recipe.model_input"),
+    ("cellpose", {}, dict(input_recipe=None), "run 'trial': method 'cellpose' names a model and needs "
+                                              "input_recipe.model_input"),
+    ("stardist", dict(scale=0.5), {}, r"scale is replaced by input_recipe.model_input .*, not shimmed" + _ROW),
+    ("cellpose", dict(diameter=30.0), {}, r"diameter is replaced by input_recipe.model_input .*, not shimmed" + _ROW),
+    ("stardist", dict(projection=dict(method="max")), {},
+     r"projection is replaced by input_recipe.projection, not shimmed" + _ROW),
+    ("stardist", {}, dict(model_scale_zyx=[1.0, 0.5, 0.5]), "model_scale_zyx is not a method key"),
+    ("stardist", {}, dict(model_input=dict(factor=0.5)), "model_input is not a method key"),
+])
+def test_learned_segmentation_trial_refuses_the_replaced_keys(tmp_path, stubs, name, config, keys, match):
+    import re
+    _inputs(tmp_path)
+    method = dict(dict(module="segmentation", method=name, target="nucleus", roles=["nuclear"],
+                       config=dict(_LEARNED[name](tmp_path), **config), input_recipe=_RECIPE), **keys)
+    if method["input_recipe"] is None:
+        del method["input_recipe"]
+    status, record = _main_record(tmp_path, dict(method=method, inputs=dict(image="reference.npy"), seed=17))
+    assert status == 1 and record["status"] == "failed" and record["outputs"] == []
+    assert record["error"]["type"] == "ValueError"
+    assert re.search(match, record["error"]["message"]), record["error"]["message"]
+    assert stubs == [] and [p.name for p in (tmp_path / "out").iterdir()] == ["record.json"]
 
 
 def test_registration_records_keep_their_fields(tmp_path):

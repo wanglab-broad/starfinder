@@ -1,6 +1,6 @@
 # Segmentation input recipe: dataset-tunable input preparation on both routes
 
-% Status: Approved (Jiahao, 2026-11-18, W-885), with amendments A and B1–B3; written against 76cd058. Implemented by W-891 (2026-11-20); its implementation notes are under "Implementation (W-891)" at the end.
+% Status: Approved (Jiahao, 2026-11-18, W-885), with amendments A and B1–B3; written against 76cd058. Implemented by W-891 (2026-11-20) and W-907 (2026-11-20); their implementation notes are under "Implementation (W-891)" at the end.
 
 This page specifies the **input recipe**: a named, dataset-level description of how a
 segmentation run turns its source channels into the image the model receives. One recipe
@@ -811,3 +811,30 @@ it:
   ([orchestration](orchestration.md), "The exception of the golden comparison"): the cell run's
   record of format version 2 and the export run's `recipe` and `input`. Everything else stays
   compared.
+
+### Follow-up (W-907)
+
+W-907 (2026-11-20) finished what W-891's review found missing, within the rules above:
+
+* **Benchmark trials build their model input as a run does.** A segmentation trial
+  (`python -m starfinder.benchmark._trial`) takes an optional `input_recipe`, a mapping in the
+  layout of `segmentation.input_recipes`; without one it has the empty recipe. Its image
+  channels are the source channels of its roles, `apply_input_recipe` makes the model input,
+  `check_model_input` runs after the weights check and before any input is loaded, and the
+  record holds the recipe record as `input.recipe`. `scale`, `diameter` and `projection` in a
+  trial's `config` are refused with the migration row, not shimmed.
+* **The FOV's grid of an export run's preview** is the one the export's fusion reads, that of
+  the saved reference image. Without that file it is the grid of the reference stain the
+  preview read (`fov:reference_stain`, from its saved form or prepared in memory), the same
+  acquisition as the reference round. `preview.json` records each FOV's grid as `fov_grids`
+  (source, SHA-256, shape and spacing). An export run that reads no reference stain on a FOV
+  without a saved reference image is refused before anything runs.
+* **The reference stain prepared in memory** is the first step of `FOV.prepare_morphology`
+  alone: the reference round's stain files loaded with the morphology task's rotation and
+  recorded as the same acquisition. `prepare_morphology` itself always prepares the other
+  rounds too, and `MorphologyConfig.rounds` cannot name none.
+* **The label operations in the preview.** Each result of `preview.json` records the run's
+  `operations` as `segmentation.json` does. With `--factor-yx`, a run of `segmentation.runs`
+  has its `expand_labels` applied on the fused view's grid, as `FOV.segment` applies it; a run
+  that extends its labels through Z is refused, because the view has one plane. A run of
+  `export.segmentation.runs` has no operations.

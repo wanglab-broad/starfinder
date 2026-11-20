@@ -25,7 +25,7 @@ from starfinder.image import ImageMetadata
 from starfinder.io import load_volume, save_volume
 from starfinder.segmentation import (InputChannel, LabelImportConfig, SeededWatershedConfig,
                                      SegmentationPlan, SegmentationRun, apply_input_recipe, preview_recipes)
-from starfinder.segmentation._labels import array_sha256
+from starfinder.segmentation._labels import array_sha256, grid_sha256
 
 from .test_registration_other_rounds import SHIFT, TRANSLATION, grid, texture
 from .test_segmentation_recipe import stardist_folder, stubs  # noqa: F401  (the library stubs of MI3)
@@ -190,6 +190,162 @@ def test_pv2_the_fused_view_is_the_recipe_on_one_view_at_k(dataset_config, tmp_p
                                    recipe_record["model_input"]["factor_zyx"], **F64)
     np.testing.assert_allclose(record["results"][1]["recipe_record"]["model_input"]["factor_zyx"],
                                [1.0, 2 * SPACING[1] / 0.2, 2 * SPACING[1] / 0.2], **F64)
+
+
+# --- PV2: the export run on the raw reference stain, and the label operations on every path (W-907) ---------------
+
+needs_library = pytest.mark.skipif(importlib.util.find_spec("multiview_stitcher") is None,
+                                   reason="the multiview-stitcher extra (starfinder[multiview-stitcher]) is not "
+                                          "installed")
+STAIN = "ch05"
+# In pixels: a projected run grid has no spacing (ImageMetadata.projected), and at K = 1 a pixel of the fused view
+# is a pixel of the FOV.
+EXPAND = {"operation": "expand_labels", "distance": 2, "unit": "pixel", "mode": "planar"}
+MAX_RECIPE = {"projection": {"method": "max"}, "model_input": {"factor": 1.0}}
+
+
+# How the reference stain is there: only its raw files, with a morphology block and the other round morph
+# (``prepared``) or without either (``no_morphology_block``, the configuration of W-891's review probe), or also its
+# saved form, which FOV.prepare_morphology wrote (``saved``). No form has a saved reference image.
+STAIN_FORMS = ("prepared", "no_morphology_block", "saved")
+
+
+def stain_dataset(tmp_path, form="prepared"):
+    """Two FOVs with the raw files of the reference round's stain and no saved reference image (``STAIN_FORMS``). The
+    export run ``nucleus_fused`` reads the image ``reference_stain`` of export.images, and the run ``nucleus_grown``
+    of segmentation.runs grows its labels by ``expand_labels``."""
+    from starfinder.dataset import MorphologyConfig
+    from starfinder.dataset.workflow import _workflow_dataset
+    from starfinder.workflow._plan import resolve
+    from starfinder.workflow._translate import _base
+    import SimpleITK as sitk
+    sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(1)
+    work = tmp_path / "work"
+    model = stardist_folder(tmp_path, 2)
+    config = configuration(work, model)
+    config["reference_stains"] = [{"channel": STAIN, "name": "PI"}]
+    config["segmentation"]["input_recipes"]["sd_max"] = MAX_RECIPE
+    config["segmentation"]["runs"] = [
+        {"name": "nucleus_grown", "target": "nucleus", "method": "stardist", "model_path": str(model),
+         "inputs": [{"role": "nuclear", "round": "reference_stain", "channel": "PI"}], "input_recipe": "sd_max",
+         "operations": [dict(EXPAND)]}]
+    config["stitching"] = {"method": "multiview_stitcher", "input": "reference_stain",
+                           "positions": {"source": "regular_grid",
+                                         "regular_grid": {"columns": 2, "rows": 1,
+                                                          "order": "column_major_down_right", "overlap": 0.25}}}
+    config["assembly"] = {"assignment": None}
+    if form != "prepared":
+        del config["morphology"]
+        config["additional_round"] = []
+    config["export"] = {"images": ["reference_stain"], "route": "after_fusion", "segmentation": {
+        "device": "cpu", "cells": "nucleus_fused", "runs": [
+            {"name": "nucleus_fused", "target": "nucleus", "method": "stardist", "model_path": str(model),
+             "inputs": [{"role": "nuclear", "image": "reference_stain"}], "input_recipe": "sd_plain"}]}}
+    path = work / "starfinder.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
+    dataset = _workflow_dataset(_base(resolve(config, {"path": str(path), "sha256": None})["configuration"]))
+    p = grid()
+    for i, fov_id in enumerate(FOVS):
+        save_volume(texture(11 + i, p), Path(dataset.input_root) / "round1" / fov_id / f"{fov_id}_{STAIN}.tif",
+                    metadata=ImageMetadata(f"{fov_id}/round1", SPACING, spatial_unit="micrometer"))
+        if form == "saved":
+            dataset.fov(fov_id).prepare_morphology(MorphologyConfig(rotation_degrees=0), checkpoints=CheckpointConfig())
+    return path, dataset
+
+
+
+@pytest.fixture
+def thresholding(stubs, monkeypatch):
+    """The StarDist stub with labels: the connected components of the normalized model input above 0.5."""
+    from skimage.measure import label
+
+    from .test_segmentation_recipe import CALLS, _StarDistStub
+
+    class Thresholding(_StarDistStub):
+        def predict_instances(self, x, axes, scale, **options):
+            CALLS.append({"scale": scale, "axes": axes, "shape": x.shape})
+            return label(np.asarray(x) > 0.5).astype(np.int32), {"prob": []}
+
+    monkeypatch.setattr(sys.modules["stardist.models"], "StarDist2D", Thresholding)
+    return CALLS
+
+
+@needs_library
+@pytest.mark.parametrize("form", STAIN_FORMS)
+def test_pv2_an_export_run_on_the_raw_reference_stain_needs_no_saved_reference_image(tmp_path, stubs, form):
+    from starfinder.dataset._export import reference_stain_path
+    from starfinder.dataset.workflow import _input_recipe
+    from starfinder.export._fuse import fuse_one_view
+    from starfinder.segmentation import ReferenceGrid
+    path, dataset = stain_dataset(tmp_path, form)
+    roots = (Path(dataset.output_root), Path(dataset.input_root))
+    before = [directory_files(root) for root in roots]
+    for fov_id in FOVS:
+        assert not dataset.fov(fov_id)._reference_image_path().exists()
+        assert reference_stain_path(dataset.output_root, fov_id).exists() is (form == "saved")
+    record = preview_recipes(path, run="nucleus_fused", fovs=FOVS, recipes=["sd_plain", "sd_smooth"],
+                             output=tmp_path / "preview", factor_yx=2, save_inputs=True)
+    assert record["route"] == "after_fusion" and record["grid"] == "fused_view" and len(record["results"]) == 4
+    assert [directory_files(root) for root in roots] == before
+    p = grid()
+    for i, fov_id in enumerate(FOVS):
+        stain = texture(11 + i, p)   # the raw file the fixture wrote, unrotated (rotate_angle 0)
+        # The grid's source: the reference stain prepared in memory, the same acquisition as the reference round.
+        entry = record["fov_grids"][fov_id]
+        assert entry["source"] == "fov:reference_stain" and entry["shape_zyx"] == [8, 32, 32]
+        assert entry["sha256"] == grid_sha256(stain[..., np.newaxis])
+        np.testing.assert_allclose(entry["spacing_zyx"], SPACING, **F64)
+        fused, metadata = fuse_one_view(stain, SPACING, 2, name=fov_id)
+        view = ReferenceGrid(fused.shape, metadata, "declared")
+        for entry in (e for e in record["results"] if e["fov"] == fov_id):
+            recipe = _input_recipe(RECIPES[entry["recipe"]], entry["recipe"], entry["recipe"])
+            model, _, _ = apply_input_recipe([("nuclear", fused, {})], view, recipe=recipe, k=2,
+                                             fit_mask=np.ones(view.shape_zyx, bool), run="nucleus_fused",
+                                             projected="fused_maximum")
+            saved = load_volume(tmp_path / "preview" / "inputs" / fov_id / f"{entry['recipe']}.ome.tif").image
+            np.testing.assert_allclose(saved.reshape(model.image.shape), model.image, **F32)
+            assert entry["operations"] == []
+
+
+@needs_library
+@pytest.mark.parametrize("form", ["prepared", "saved"])
+def test_pv2_a_fused_view_applies_and_records_the_label_operations(tmp_path, thresholding, form):
+    path, _ = stain_dataset(tmp_path, form)
+    common = dict(run="nucleus_grown", fovs=FOVS, recipes=["sd_max"])
+    per_fov = preview_recipes(path, output=tmp_path / "fov", **common)
+    view = preview_recipes(path, output=tmp_path / "view", factor_yx=1, save_inputs=True, **common)
+    assert per_fov["grid"] == "fov" and view["grid"] == "fused_view" and view["route"] == "per_fov"
+    for fov_id in FOVS:
+        (fov_entry,) = [e for e in per_fov["results"] if e["fov"] == fov_id]
+        (view_entry,) = [e for e in view["results"] if e["fov"] == fov_id]
+        for entry in (fov_entry, view_entry):
+            (operation,) = entry["operations"]
+            assert operation["operation"] == "expand_labels"
+            assert operation["config"] == {"distance": 2.0, "unit": "pixel", "mode": "planar"}
+            assert operation["record"]["voxels_added"] > 0 and entry["labels"]["n_labels"] > 0
+            assert operation["record"]["output"] == entry["labels"]["sha256"]
+        # At K = 1 the fused view is the FOV's grid in Y and X, and the run's Z maximum is the view's (fuse
+        # projects each FOV by its Z maximum): the labels are the same.
+        assert view_entry["labels"]["sha256"] == fov_entry["labels"]["sha256"]
+        # Without the operation the preview returns the method's labels, the operation's input.
+        record = view_entry["operations"][0]["record"]
+        assert record["inputs"][0] != record["output"]
+        np.testing.assert_allclose(record["physical_distance_yx"], [2 * SPACING[1], 2 * SPACING[2]], **F64)
+
+
+@needs_library
+def test_pv3_a_fused_view_refuses_extension_through_z(tmp_path):
+    path, _ = stain_dataset(tmp_path, "saved")
+    config = yaml.safe_load(path.read_text())
+    config["segmentation"]["runs"][0]["operations"] = [
+        {"operation": "extend_labels_through_z", "median_um": 0.1, "min_area_um2": 0.1, "dilation_um": 0.1,
+         "fill_holes": "twice"}]
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
+    with pytest.raises(ValueError, match=r"extend their labels through Z .* preview them without factor_yx"):
+        preview_recipes(path, run="nucleus_grown", fovs=FOVS[:1], recipes=["sd_max"], output=tmp_path / "view",
+                        factor_yx=1)
+    assert not (tmp_path / "view").exists()
 
 
 # --- PV3: nothing written outside --output -----------------------------------------------------------------------

@@ -328,5 +328,15 @@ of the equivalent diameter `2·√(area/π)` in µm), `sizes.csv` (one row per l
 `summary.csv` (one row per FOV and recipe) and `preview.json` (the records). It takes at most
 8 FOVs and 8 recipes, and chooses or ranks none.
 
+Each result applies the run's label operations, as `FOV.segment` does, and `preview.json`
+records them with the run's other records. With `--factor-yx K` the preview is at the pixel
+size of the route after fusion, on each FOV fused alone at `K`: a run of `segmentation.runs`
+keeps its `expand_labels` there, and a run that extends its labels through Z is refused, since
+the view has one plane. A run of `export.segmentation.runs` reads the files of
+`export.images`. Its FOV grid is the one the export's fusion reads, that of the saved
+reference image; without that file it is the grid of the reference stain, read from its saved
+form or prepared in memory from the raw files, so a run on the raw reference stain needs no
+earlier run. `preview.json` names each FOV's grid and its source under `fov_grids`.
+
 ```{segment-commands}
 ```

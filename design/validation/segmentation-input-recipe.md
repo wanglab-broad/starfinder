@@ -268,13 +268,23 @@ revision's (12a8f14) hashes as constants, computed there before the change
 | RE2 | `test_segmentation_recipe.py` | `test_re2_a_version_1_record_still_loads` |
 | RE3 | `test_sample_segmentation_recipe.py` | `test_re3_the_export_record_and_check_export_cover_the_model_inputs` |
 | MG1 | `test_segmentation_recipe.py` | `test_mg1_the_replaced_python_fields_are_unknown` |
-| MG2 | `test_segmentation_recipe_workflow.py` | `test_mg2_the_replaced_keys_of_a_segmentation_run_are_refused`, `test_mg2_the_replaced_keys_of_an_export_run_are_refused`, `test_mg2_an_import_keeps_its_own_projection` |
+| MG2 | `test_segmentation_recipe_workflow.py`; `test_benchmark_trial.py` | `test_mg2_the_replaced_keys_of_a_segmentation_run_are_refused`, `test_mg2_the_replaced_keys_of_an_export_run_are_refused`, `test_mg2_an_import_keeps_its_own_projection`; `test_learned_segmentation_trial_refuses_the_replaced_keys`, `test_learned_segmentation_trial_reaches_the_model_through_its_recipe` |
 | MG3 | `test_segmentation_workflow.py` | `test_rescale_is_the_implicit_recipes_model_factor`, `test_the_projection_that_made_the_input_is_recorded`, `test_the_rule_writes_uint32_labels_equal_to_the_legacy_pins` |
 | MG4 | `test_segmentation_recipe_docs_contract.py` | `test_mg4_every_migration_row_is_in_the_guide` |
 | MG5 | `test_segmentation_recipe_workflow.py` | `test_mg5_the_schema_keys_equal_the_configs`, `test_mg5_the_schema_validates_the_recipe_layout` |
 | WF1 | `test_segmentation_recipe_workflow.py` | `test_wf1_recipes_without_runs_plan_no_segment_task`, `test_wf1_runs_with_recipes_plan_the_tasks_they_planned_before` |
 | WF2 | `test_workflow_plan.py`; `test_workflow_morphology_tasks.py` | `test_the_plan_writes_the_expected_manifest_of_each_variant`, `test_the_tasks_respect_their_needs_and_the_contracts_counts`; `test_the_segment_command_writes_uint32_labels_equal_to_the_legacy_pins` |
 | PV1 | `test_segmentation_preview.py` | `test_pv1_the_outputs` |
-| PV2 | `test_segmentation_preview.py` | `test_pv2_the_labels_and_the_model_input_are_those_of_fov_segment`, `test_pv2_the_fused_view_is_the_recipe_on_one_view_at_k` |
-| PV3 | `test_segmentation_preview.py` | `test_pv3_nothing_is_written_outside_the_output`, `test_pv3_a_recipe_file_tries_a_recipe_before_it_is_written` |
+| PV2 | `test_segmentation_preview.py` | `test_pv2_the_labels_and_the_model_input_are_those_of_fov_segment`, `test_pv2_the_fused_view_is_the_recipe_on_one_view_at_k`, `test_pv2_an_export_run_on_the_raw_reference_stain_needs_no_saved_reference_image`, `test_pv2_a_fused_view_applies_and_records_the_label_operations` |
+| PV3 | `test_segmentation_preview.py` | `test_pv3_nothing_is_written_outside_the_output`, `test_pv3_a_recipe_file_tries_a_recipe_before_it_is_written`, `test_pv3_a_fused_view_refuses_extension_through_z` |
 | PV4 | `test_segmentation_preview.py` | `test_pv4_the_command_lists_the_options_and_runs`, `test_pv4_the_cli_reference_is_generated_from_the_parser` |
+
+W-907 (2026-11-20, from W-891's review) added cases to MG2, PV2 and PV3 without changing a
+check or a tolerance. MG2: a benchmark segmentation trial builds its model input with its
+`input_recipe` (none is the empty recipe), so StarDist and Cellpose trials reach the model,
+and it refuses `scale`, `diameter` and `projection` with the migration row. PV2: a run of
+`export.segmentation.runs` whose source is the raw reference stain, without a saved
+reference image, takes the grid of the reference stain prepared in memory and records its
+source (`fov_grids`); with `--factor-yx` a run's `expand_labels` is applied and recorded, and
+at `K` 1 its labels equal those of the preview without `--factor-yx`. PV3: with
+`--factor-yx`, a run that extends its labels through Z is refused before anything runs.

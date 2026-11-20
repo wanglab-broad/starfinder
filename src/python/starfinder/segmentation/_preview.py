@@ -110,10 +110,15 @@ def _source_plan(dataset, fov_id, chain, route):
     """
     from starfinder import _layout
     from starfinder.dataset.types import REFERENCE_STAIN
+    fov = dataset.fov(fov_id)
     if route == "after_fusion":
         names = list(dict.fromkeys(image for run in chain for _, image in run.inputs))
+        reference = fov._reference_image_path()
+        if REFERENCE_STAIN not in names and not Path(reference).is_file():
+            raise ValueError(f"FOV {fov_id}: the FOV's grid is read from its reference image {reference}, which is "
+                             "absent, and the run reads no reference_stain: run the fov task (the processing block) "
+                             "first")
         return [("image", name) for name in names], _imports(dataset, fov_id, chain)
-    fov = dataset.fov(fov_id)
     fov_dir = _layout.fov_dir(dataset.output_root, fov_id)
     actions = []
     sequencing = set(fov.rounds.sequencing_rounds)
@@ -162,13 +167,25 @@ def _imports(dataset, fov_id, chain):
     return files
 
 
-def _morphology(r):
-    """The morphology task's FOV.prepare_morphology settings for the reference stain alone."""
-    from starfinder.dataset import MorphologyConfig
+def _prepare_stain(fov, r):
+    """The reference stain alone, prepared in memory as the first step of FOV.prepare_morphology prepares it.
+
+    The reference round's stain files are loaded as the image ``reference_stain`` with the morphology task's
+    rotation (``load_images``), and recorded as the same acquisition as the reference round, which gives the FOV's
+    grid. No other round is loaded or registered (``MorphologyConfig.rounds`` cannot name none), and nothing is
+    written.
+    """
+    from starfinder.dataset._prepared import SAME_ACQUISITION
+    from starfinder.dataset.types import REFERENCE_STAIN
     from starfinder.workflow import _translate
-    if "morphology" in r:
-        return replace(_translate.morphology(r), rounds=())
-    return MorphologyConfig(rotation_degrees=_translate.rotation(r))
+    if not fov.dataset.reference_stains:
+        raise ValueError(f"FOV {fov.fov_id}: the reference stain is prepared from the reference round's stain files, "
+                         "and the configuration names none: set reference_stains")
+    fov.load_images(rounds=[REFERENCE_STAIN], rotation_degrees=_translate.rotation(r))
+    fov.registration_record = dict(fov.registration_record)
+    fov.registration_record.setdefault("rounds", {})[REFERENCE_STAIN] = dict(
+        relation=SAME_ACQUISITION, reference=fov.rounds.reference_round, reference_sha256=None, recipe=None)
+    return fov
 
 
 def _load(dataset, fov_id, actions, r):
@@ -176,7 +193,7 @@ def _load(dataset, fov_id, actions, r):
     fov = dataset.fov(fov_id)
     for action in actions:
         if action[0] == "prepare":
-            fov.prepare_morphology(_morphology(r))
+            _prepare_stain(fov, r)
         elif action[0] == "registered":
             fov.load_checkpoint("registered")
         elif action[0] == "reference":
@@ -188,7 +205,12 @@ def _load(dataset, fov_id, actions, r):
 
 def _view_images(dataset, fov, fov_id, names, r):
     """The ZYX image of each export image name of one FOV, read from the files the export reads (the reference
-    stain prepared in memory when its saved form is absent), and the FOV's grid."""
+    stain prepared in memory when its saved form is absent), and the FOV's grid.
+
+    The grid is the one the export's fusion reads, that of the FOV's reference image, when that file is saved;
+    without it, it is the grid of the reference stain the preview read (``fov:reference_stain``, from its saved
+    form or prepared in memory), the same acquisition as the reference round.
+    """
     from starfinder.dataset._export import _reference_grid, source_path
     from starfinder.dataset.types import REFERENCE_STAIN
     from starfinder.export._config import image_name
@@ -202,11 +224,15 @@ def _view_images(dataset, fov, fov_id, names, r):
         if path.is_file():
             images[name] = np.asarray(load_volume(path).image)
         elif name == REFERENCE_STAIN:
-            images[name] = np.asarray(fov.prepare_morphology(_morphology(r)).images[REFERENCE_STAIN])[..., 0]
+            images[name] = np.asarray(_prepare_stain(fov, r).images[REFERENCE_STAIN])[..., 0]
         else:
             raise ValueError(f"FOV {fov_id}: image {name!r} is read from {path}, which is absent: run the task that "
                              "writes it first")
-    return images, _reference_grid(dataset, fov_id)
+    if Path(fov._reference_image_path()).is_file():
+        return images, _reference_grid(dataset, fov_id)
+    if REFERENCE_STAIN not in fov.images:
+        fov.load_registered_round(REFERENCE_STAIN)
+    return images, fov.reference_grid()
 
 
 # --- One FOV and recipe ---------------------------------------------------------------------------------------
@@ -226,9 +252,12 @@ def _view(images, spacing, k, fov_id):
 
 
 def _segment_view(run, recipe, sources, grid, k, planes, seeds, dataset, fov_id, device):
-    """One run on the fused view: its recipe (``k``, the view as the fit region) and its method at factor ``k``."""
+    """One run on the fused view: its recipe (``k``, the view as the fit region), its method at factor ``k`` and its
+    label operations, applied and recorded as ``FOV.segment`` applies them (``expand_labels`` on the view's grid; a
+    run of export.segmentation.runs has none, and ``preview_recipes`` refuses ``extend_labels_through_z`` here)."""
     from starfinder.export._segment import scale_lengths
 
+    from ._plan import _expand
     from ._recipe import apply_input_recipe, check_model_input, model_factor
     from ._segment import segment
     projected = "fused_maximum" if planes > 1 else "single_plane"
@@ -240,6 +269,8 @@ def _segment_view(run, recipe, sources, grid, k, planes, seeds, dataset, fov_id,
     used, _ = scale_lengths(run.method, k)
     result = segment(segmentation_input, config=used, target=run.target, seeds=seeds, device=device,
                      label_namespace=_namespace(dataset, fov_id, run.name))
+    for operation in getattr(run, "operations", ()):
+        result = _expand(result, operation)
     return result, segmentation_input, record
 
 
@@ -378,20 +409,31 @@ def preview_recipes(config, *, run: str, fovs, recipes, output, recipe_file=None
     source is read from a file the workflow would read (the saved reference
     image, a round's saved form ``other_rounds/<name>/image.ome.tif``, the fov
     task's saved registered stage, an import's file); without its saved form,
-    the reference stain is prepared in memory by ``FOV.prepare_morphology``. A
+    the reference stain is prepared in memory as the first step of
+    ``FOV.prepare_morphology`` prepares it (the stain files alone, no other
+    round). A
     source that needs ``FOV.run`` or a registration that has not been saved is
     refused before anything runs, naming the workflow step that produces it. No
     preprocessing, registration, detection or assignment runs, and nothing is
     written outside ``output``. Per FOV, the labels and the model input are
-    those of ``FOV.segment`` with the recipe (the function it calls).
+    those of ``FOV.segment`` with the recipe (the function it calls),
+    including the run's label operations, which each result records.
 
     With ``factor_yx`` K, the preview is at the pixel size of the route after
     fusion: each FOV's source channels are fused alone at K
     (``starfinder.export._fuse.fuse_one_view``, the call ``fuse`` makes for one
     view, no blend) and the recipe runs with ``k`` K on that ``fused_view``
     grid; the run is taken from ``export.segmentation.runs`` when it has it,
-    else from ``segmentation.runs``. A run whose seeds are imported is refused
-    with ``factor_yx``: an imported mask lies on another grid.
+    else from ``segmentation.runs``. A run of ``segmentation.runs`` keeps its
+    label operations there: ``expand_labels`` runs on the view's grid and is
+    recorded as ``FOV.segment`` records it. A run whose seeds are imported is
+    refused with ``factor_yx`` (an imported mask lies on another grid), and so
+    is a run that extends its labels through Z (the view has one plane). A run
+    of ``export.segmentation.runs`` reads the files of ``export.images``, and
+    the FOV's grid is the one the export's fusion reads, that of the saved
+    reference image; without that file, it is the grid of the reference stain
+    the preview read (saved, or prepared in memory), so a run whose source is
+    the raw reference stain needs no earlier run.
 
     Parameters
     ----------
@@ -426,11 +468,12 @@ def preview_recipes(config, *, run: str, fovs, recipes, output, recipe_file=None
     -------
     dict
         The record written to ``preview.json``: the configuration's path and
-        SHA-256, the run, the route and grid, the recipes, and per FOV and
+        SHA-256, the run, the route and grid, the recipes, per FOV its grid
+        (``fov_grids``: source, SHA-256, shape and spacing), and per FOV and
         recipe the recipe record as ``segmentation.json`` holds it, the method
-        entry (model artifacts, ``effective``), the model input's and the
-        labels' SHA-256, the counts, the wall time and the peak RSS, and the
-        files written with their SHA-256.
+        entry (model artifacts, ``effective``), the label operations applied,
+        the model input's and the labels' SHA-256, the counts, the wall time
+        and the peak RSS, and the files written with their SHA-256.
 
     Raises
     ------
@@ -438,7 +481,9 @@ def preview_recipes(config, *, run: str, fovs, recipes, output, recipe_file=None
         Before anything runs: an output folder that is not empty, more than 8
         FOVs or 8 recipes, an unknown run or recipe, a run refused by a recipe,
         a source whose saved form is absent (naming the step that writes it), a
-        grid without spacing, or ``factor_yx`` with imported seeds.
+        grid without spacing, ``factor_yx`` with imported seeds or with
+        ``extend_labels_through_z``, or a run of ``export.segmentation.runs``
+        that reads no reference stain on a FOV without a saved reference image.
     """
     from starfinder._records import software
     from starfinder.dataset.workflow import _workflow_dataset
@@ -472,10 +517,16 @@ def preview_recipes(config, *, run: str, fovs, recipes, output, recipe_file=None
     if factor_yx is not None and any(isinstance(item.method, LabelImportConfig) for item in seeds_chain):
         raise ValueError(f"run {run!r} has imported seeds, which lie on the FOV's grid and not on a fused view: "
                          "preview it without factor_yx")
+    from ._operations import ZExtensionConfig
+    extending = [item.name for item in chain
+                 if any(type(o) is ZExtensionConfig for o in getattr(item, "operations", ()))]
+    if factor_yx is not None and extending:
+        raise ValueError(f"the runs {extending} extend their labels through Z (extend_labels_through_z), which needs "
+                         "the FOV's Z planes, and a fused view has one plane: preview them without factor_yx")
     dataset = _workflow_dataset(_base(r))
     plans = {fov: _source_plan(dataset, fov, chain, route if factor_yx is not None else "per_fov") for fov in fovs}
 
-    rows, summaries, panels, results = [], [], {}, []
+    rows, summaries, panels, results, grids = [], [], {}, [], {}
     method_entry = None
     for fov_id in fovs:
         actions, imports = plans[fov_id]
@@ -484,7 +535,7 @@ def preview_recipes(config, *, run: str, fovs, recipes, output, recipe_file=None
             fov = _load(dataset, fov_id, actions, r)
             seed_runs = tuple(replace(item, method=replace(item.method, path=str(imports[item.name])))
                               if item.name in imports else item for item in seeds_chain)
-            grid = fov.reference_grid()
+            grid = fov_grid = fov.reference_grid()
             spacing = grid.metadata.spacing_zyx
             if spacing is None:
                 raise ValueError(f"FOV {fov_id}: the preview measures sizes in micrometres and needs the grid's "
@@ -508,6 +559,9 @@ def preview_recipes(config, *, run: str, fovs, recipes, output, recipe_file=None
             if spacing is None:
                 raise ValueError(f"FOV {fov_id}: a fused view needs the grid's spacing: set voxel_size_xy and "
                                  "voxel_size_z")
+        grids[fov_id] = {"source": fov_grid.source, "sha256": fov_grid.sha256, "shape_zyx": list(fov_grid.shape_zyx),
+                         "spacing_zyx": list(fov_grid.metadata.spacing_zyx)}
+        if factor_yx is not None:
             fused, view_grid = _view(images, spacing, factor_yx, fov_id)
             planes = fov_grid.shape_zyx[0]
             spacing = view_grid.metadata.spacing_zyx
@@ -555,6 +609,7 @@ def preview_recipes(config, *, run: str, fovs, recipes, output, recipe_file=None
                                             "shape_zyxc": list(segmentation_input.image.shape),
                                             "dtype": str(segmentation_input.image.dtype),
                                             "model_scale_zyx": None if factor is None else list(factor)},
+                            "operations": result.record.get("operations", []),
                             "labels": {"sha256": array_sha256(result.labels), "n_labels": len(sizes),
                                        "shape_zyx": list(result.labels.shape)},
                             "wall_s": wall, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss})
@@ -578,7 +633,7 @@ def preview_recipes(config, *, run: str, fovs, recipes, output, recipe_file=None
     files = {p.relative_to(output).as_posix(): file_sha256(p) for p in sorted(output.rglob("*")) if p.is_file()}
     record = {"format": PREVIEW_FORMAT, "config": {"path": str(Path(config).resolve()), "sha256": config_sha},
               "run": run, "route": route, "grid": "fov" if factor_yx is None else "fused_view",
-              "factor_yx": factor_yx, "fovs": fovs,
+              "factor_yx": factor_yx, "fovs": fovs, "fov_grids": grids,
               "recipes": {name: {"sha256": recipe_sha256(recipe), "config": recipe_config(recipe)}
                           for name, recipe in selected},
               "method": method_entry, "results": results, "files": files, "software": software()}

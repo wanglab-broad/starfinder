@@ -320,6 +320,7 @@ raises `ValueError` naming the recipe field that replaces the key and this secti
 | YAML `scale` (StarDist), `diameter` (Cellpose) in `segmentation.runs` and `export.segmentation.runs` | `input_recipe` with `model_input` |
 | `LENGTH_FIELDS["stardist"]["scale"]`, `LENGTH_FIELDS["cellpose"]["diameter"]` | Removed; `model_input` derives each route's factor |
 | `segmentation.json` `format_version` 1 (`input.projection`, `channels[*].prepare`, `prepare_channel`) | `format_version` 2 (`input.recipe`); version 1 records still load |
+| A benchmark segmentation trial's `config` with `scale` (StarDist), `diameter` (Cellpose) or `projection` | The trial's `input_recipe` with `model_input` or `projection`; a trial without one has the empty recipe, which a method with a model refuses |
 
 `enhance_with_flamingo` and `composite_nuclei_amplicon` keep their signatures and their
 outputs; `FlamingoEnhancementConfig` keeps `median_radius_px` for a direct call. The record
