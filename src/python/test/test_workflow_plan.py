@@ -209,6 +209,11 @@ def _stats(manifest):
     return stats
 
 
+#: The FOV-level task kinds (design/specs/orchestration.md, "The blocks of a task kind"), whose hash leaves out
+#: selected_fovs and output_id; every other kind is sample-level.
+FOV_LEVEL = {"summarize", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment", "assign"}
+
+
 def _fingerprints(manifest, code=None):
     """Each task's fingerprint from its components (design/specs/orchestration-engines.md, "The task fingerprint")."""
     stats, out = _stats(manifest), {}
@@ -253,8 +258,11 @@ def test_each_fingerprint_equals_an_independent_hash_of_its_components(work, cod
     common = {k: v for k, v in c.items() if k not in ("processing", "morphology", "segmentation", "assignment",
                                                       "stitching", "assembly", "export", "report", "execution",
                                                       "root_input_path", "root_output_path", "api")}
+    # A FOV-level kind's hash leaves out the FOV selection and the output id (W-877; no reference_image_import here).
+    fov_common = {k: v for k, v in common.items() if k not in ("selected_fovs", "output_id")}
     for task in manifest["tasks"]:
-        part = {"common": common, "blocks": {b: c.get(b) for b in TASK_BLOCKS[task["kind"]]}}
+        part = {"common": fov_common if task["kind"] in FOV_LEVEL else common,
+                "blocks": {b: c.get(b) for b in TASK_BLOCKS[task["kind"]]}}
         assert task["blocks_sha256"] == _sha(_canonical(part)), task["id"]
 
 
@@ -339,6 +347,75 @@ def test_the_install_route_of_the_same_commit_changes_no_fingerprint(work, monke
     after = _plan(work, "molecules-only", config)
     assert (before["package"]["version_source"], after["package"]["version_source"]) == ("dist", "build")
     assert _changed(before, after) == set()
+
+
+#: Per variant, the kinds of the tasks that both plans of the extended selection hold and whose fingerprint stays.
+#: per-fov's supplied statistics are merged over the selected FOVs, so its fov tasks, which read the merged file,
+#: and their consumers rerun; its summaries (one FOV each) and morphology tasks stay.
+REUSED = {"molecules-only": {"fov": 2},
+          "after-fusion": {"tile_global": 2, "tile": 8, "tile_merge": 2, "morphology": 2},
+          "per-fov": {"summarize": 2, "morphology": 2}}
+
+
+def _two_stages(work, root, variant, change=None):
+    """Plan ``variant`` with FOV_001 and FOV_002 under output id ``smoke``, then with every FOV under ``full``
+    (``change`` applied to the second configuration), both into ``root``; returns the two manifests."""
+    first = dict(X.variants(work)[variant], output_id="smoke", selected_fovs=["FOV_001", "FOV_002"])
+    second = copy.deepcopy(dict(X.variants(work)[variant], output_id="full", selected_fovs=None))
+    if change is not None:
+        change(second)
+    return (plan(X.write_config(work, "stage1", first), output_root=root),
+            plan(X.write_config(work, "stage2", second), output_root=root))
+
+
+@pytest.mark.parametrize("variant", sorted(REUSED))
+def test_extending_the_selection_keeps_the_fov_tasks_and_reruns_the_sample_level_ones(work, tmp_path, variant):
+    # W-877: the FOV-level kinds' hash leaves out selected_fovs and output_id; the sample-level kinds keep them.
+    before, after = _two_stages(work, tmp_path / "shared", variant)
+    a = {t["id"]: t["fingerprint"] for t in before["tasks"]}
+    b = {t["id"]: t["fingerprint"] for t in after["tasks"]}
+    kind = {t["id"]: t["kind"] for t in after["tasks"]}
+    common = set(a) & set(b)
+    assert set(a) <= set(b) and {t["identity"].get("fov") for t in after["tasks"]} - {None} == set(X.FOVS)
+    changed = {i for i in common if a[i] != b[i]}
+    sample_level = {i for i in common if kind[i] not in FOV_LEVEL}
+    assert sample_level and changed == _downstream(after, sample_level) & common
+    reused = {}
+    for i in sorted(common - changed):
+        reused[kind[i]] = reused.get(kind[i], 0) + 1
+    assert reused == REUSED[variant]
+
+
+#: A FOV-level setting changed with the selection: a key of the processing block and a dataset key.
+FOV_SETTINGS = {
+    "processing": lambda c: c["processing"]["spot_finding"].update(threshold_value=6.0),
+    "voxel_size_xy": lambda c: c.update(voxel_size_xy=0.25),
+}
+
+
+@pytest.mark.parametrize("setting", sorted(FOV_SETTINGS))
+def test_a_changed_fov_level_setting_still_reruns_the_fov_tasks_of_an_extended_selection(work, tmp_path, setting):
+    before, after = _two_stages(work, tmp_path / "shared", "molecules-only", FOV_SETTINGS[setting])
+    a = {t["id"]: t["fingerprint"] for t in before["tasks"]}
+    b = {t["id"]: t["fingerprint"] for t in after["tasks"]}
+    assert {i for i in a if a[i] == b[i]} == set()
+    assert {i for i in a if i.startswith("fov/")} == {"fov/sample/FOV_001", "fov/sample/FOV_002"}
+
+
+@pytest.mark.parametrize("kind", sorted(TASK_BLOCKS))
+def test_only_a_supplied_reference_image_keeps_the_output_id_in_a_fov_level_hash(kind):
+    from starfinder.workflow._shape import blocks_sha256
+    base = {"dataset_id": "d", "output_id": "smoke", "selected_fovs": ["F1"], "reference_image_import": None}
+    selection = dict(base, selected_fovs=None)
+    renamed = dict(base, output_id="full")
+    fov_level = kind in FOV_LEVEL
+    assert (blocks_sha256(selection, kind) == blocks_sha256(base, kind)) is fov_level
+    assert (blocks_sha256(renamed, kind) == blocks_sha256(base, kind)) is fov_level
+    # A supplied reference image without stored metadata takes the frame declared:<dataset_id>/<output_id>/<fov_id>.
+    imported = dict(base, reference_image_import="refs/{fov_id}.tif")
+    assert (blocks_sha256(dict(imported, selected_fovs=None), kind) == blocks_sha256(imported, kind)) is fov_level
+    assert blocks_sha256(dict(imported, output_id="full"), kind) != blocks_sha256(imported, kind)
+    assert blocks_sha256(dict(base, dataset_id="e"), kind) != blocks_sha256(base, kind)
 
 
 def test_a_command_reads_its_configuration_through_the_restricted_view():

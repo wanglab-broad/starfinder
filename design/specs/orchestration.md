@@ -422,7 +422,17 @@ is decided by the narrower hash below.
 the blocks the task's kind reads, an absent block written as null. The common part is every top-level
 key of `configuration` outside the blocks, `execution` and the two roots: the dataset keys such as
 `n_rounds`, `ref_round`, `seq_channel_order`, `rotate_angle` and `voxel_size_xy`, which every kind may
-read.
+read. The FOV-level kinds, `summarize`, `fov`, `tile_global`, `tile`, `tile_merge`, `morphology`,
+`segment` and `assign`, each work on one FOV, and their hash leaves `selected_fovs` and `output_id`
+out of the common part: a run extended by FOVs, or planned under another output id into the same
+output root, keeps its finished FOV tasks. The sample-level kinds (`merge`, the placing kinds,
+`export`, `report` and `compare`), whose inputs change with the selection, keep both keys. With
+`reference_image_import` the FOV-level hash keeps `output_id`: a supplied reference image without
+stored metadata takes the frame `declared:<dataset_id>/<output_id>/<fov_id>`, which the FOV's
+segmentation and assignment record and the export compares with the frame it declares.
+
+% Amended 2026-11-19 W-877: the FOV-level kinds leave the FOV selection and the output id out of their hash
+% (option a of W-877, agreed by Jiahao on 2026-11-18).
 
 (orchestration-task-blocks)=
 

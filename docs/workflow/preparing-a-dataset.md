@@ -58,7 +58,11 @@ no image content and writes nothing under the input folder.
 `fov_list` names the file, absolute or relative to the input folder. Without
 `fov_list`, the plan reads `fovs.csv` in the input folder. Keep the list outside
 a raw folder, next to the configuration, so that the folder is read in place.
-`selected_fovs` then picks FOVs of the list to run.
+`selected_fovs` then picks FOVs of the list to run. To process a dataset in
+parts, for example the first tiles while the rest are imaged, plan each larger
+selection into the same output root: the finished FOVs' tasks are kept, and the
+new FOVs and the sample-level tasks (stitching, export, report) run
+({ref}`the task kinds <workflow-task-kinds>`).
 
 **The row order.** The rows are read in order: a sample's FOVs keep the order of
 their rows in the manifest, the sample tables and the report. With

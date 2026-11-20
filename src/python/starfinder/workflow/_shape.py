@@ -104,6 +104,13 @@ TASK_BLOCKS = {
     "report": ("report", "assembly", "assignment"), "compare": ("report",),
 }
 KINDS = tuple(TASK_BLOCKS)
+#: The FOV-level kinds: each task works on one FOV (or one tile of it), whatever other FOVs the run selects. The other
+#: kinds (merge, the placing kinds, export, report, compare) are sample-level: they read every selected FOV.
+FOV_KINDS = ("summarize", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment", "assign")
+#: The keys of the common part that a FOV-level kind's hash leaves out (W-877): the FOV selection and the output id,
+#: so that a run extended by FOVs, or planned under another output id into the same output root, keeps its finished
+#: FOV tasks.
+SELECTION_KEYS = ("selected_fovs", "output_id")
 #: The command of each kind: the kind with ``-``; the Fiji task's record is written by bigstitcher-check.
 COMMANDS = {kind: kind.replace("_", "-") for kind in KINDS} | {"bigstitcher_engine": "bigstitcher-check"}
 #: The identity fields of a task id, in the id's order. ``route`` is the export route of the export and report tasks
@@ -152,9 +159,41 @@ def common_part(configuration) -> dict:
             and k != "api"}
 
 
+def hashed_common_part(configuration, kind) -> dict:
+    """The common part as the hash of ``kind`` covers it (design/specs/orchestration.md, "The blocks of a task kind").
+
+    Parameters
+    ----------
+    configuration : Mapping
+        The resolved configuration.
+    kind : str
+        A task kind of ``TASK_BLOCKS``.
+
+    Returns
+    -------
+    dict
+        ``common_part(configuration)``; for a kind of ``FOV_KINDS`` without ``selected_fovs``, and without
+        ``output_id`` unless ``reference_image_import`` is set.
+
+    Notes
+    -----
+    A FOV-level task's result does not depend on which other FOVs the run selects or on the output id, so these keys
+    leave its hash (W-877); the sample-level kinds keep them. With ``reference_image_import`` the output id stays: a
+    supplied reference image without stored metadata takes the declared frame
+    ``declared:<dataset_id>/<output_id>/<fov_id>``, which the FOV's segmentation and assignment record and the
+    sample-level tasks compare with the frame they declare.
+    """
+    part = common_part(configuration)
+    if kind not in FOV_KINDS:
+        return part
+    left = {"selected_fovs"} if configuration.get("reference_image_import") else set(SELECTION_KEYS)
+    return {k: v for k, v in part.items() if k not in left}
+
+
 def blocks_sha256(configuration, kind) -> str:
-    """The hash of the common part and the blocks ``kind`` reads, an absent block written as null."""
-    part = {"common": common_part(configuration),
+    """The hash of the common part as ``kind``'s hash covers it (``hashed_common_part``) and the blocks ``kind``
+    reads, an absent block written as null."""
+    part = {"common": hashed_common_part(configuration, kind),
             "blocks": {block: configuration.get(block) for block in TASK_BLOCKS[kind]}}
     return sha256(canonical(part))
 

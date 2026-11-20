@@ -78,6 +78,20 @@ that route's report. `verify` prints a found route's state to stderr, so that it
 standard output keeps one line per task of the plan. An output root with one route
 lists one route.
 
+The FOV-level kinds, `summarize`, `fov`, `tile_global`, `tile`, `tile_merge`,
+`morphology`, `segment` and `assign`, work on one FOV each, and their fingerprint
+leaves out `selected_fovs` and `output_id`. The sample-level kinds, `merge`, the
+placing kinds, `export`, `report` and `compare`, keep both. A run extended by FOVs,
+or planned under another `output_id` into the same output root (`plan --output-root`),
+therefore keeps its finished FOV tasks and runs the new FOVs and the sample-level
+tasks. Two cases still rerun FOV tasks. With supplied statistics merged by the plan
+(`fit: supplied` without a named file), the merged file covers the selected FOVs, so
+a larger selection reruns `merge`, every `fov` task and their consumers. With
+`reference_image_import`, `output_id` stays in the FOV-level fingerprints, because
+a supplied reference image without stored metadata takes the frame
+`declared:<dataset_id>/<output_id>/<fov_id>`, which the FOV's segmentation and
+assignment record.
+
 ```{workflow-tasks}
 ```
 

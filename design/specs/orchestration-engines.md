@@ -178,7 +178,7 @@ no insignificant whitespace) of an object with:
 | Component | What it makes a task rerun on |
 | --- | --- |
 | `entry`: the task entry without `fingerprint`, `execution` and `command` | A change of its kind, identity, `needs`, declared inputs or outputs, record, log, group or Fiji command line |
-| `blocks_sha256`: the hash of the common part and the blocks the kind reads (`orchestration.md`, "The blocks of a task kind") | A change of a setting this task reads; a change of another block reaches it only through `needs` |
+| `blocks_sha256`: the hash of the common part and the blocks the kind reads (`orchestration.md`, "The blocks of a task kind"); a FOV-level kind's common part leaves out `selected_fovs` and `output_id` (W-877) | A change of a setting this task reads; a change of another block reaches it only through `needs`; a FOV-level task keeps its result when the selection grows or the output id changes |
 | `inputs`: for every declared input outside the output root (each `input:` path and each absolute path: the raw images, the codebook, the supplied files), its `path`, `bytes` and `mtime_ns` from `manifest.inputs` | An input replaced at the same path with another size or another modification time, older included |
 | `package`: only with `execution.code_version: rerun`, the code identity (`orchestration.md`, "The code identity"); with `keep`, the default, nothing | With `rerun`, a new code version; with `keep`, a finished task is kept across versions |
 | `needs`: the fingerprints of the tasks in `needs`, in their order | Any of the above upstream: staleness is transitive, so `verify` and a person find the consumers of a stale task as well as the engines do |
@@ -215,6 +215,7 @@ non-temporary declared outputs as targets. Nextflow carries the fingerprint in t
 and in `VERIFY_BEFORE`'s token, both part of the process's cache hash.
 
 % Amended 2026-11-01 for W-760: distinguish Snakemake's triggers from the record-based completion check.
+% Amended 2026-11-19 for W-877: the FOV-level kinds' `blocks_sha256` leaves out the FOV selection and the output id.
 
 #### Choice: what the fingerprint covers
 
