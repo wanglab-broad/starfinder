@@ -27,7 +27,7 @@ from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.preprocessing import ProjectionConfig
 from starfinder.registration import RegistrationSignalConfig, TranslationConfig
 from starfinder.segmentation import (SEGMENTATION_METHODS, CompositeConfig, FlamingoEnhancementConfig, InputChannel,
-    LabelImportConfig, MissingModelError, ModelHashMismatchError, ReferenceGrid, SeededWatershedConfig,
+    InputRecipe, LabelImportConfig, MissingModelError, ModelHashMismatchError, ReferenceGrid, SeededWatershedConfig,
     SegmentationBackendUnavailableError, SegmentationInput, SegmentationPlan, SegmentationResult, SegmentationRun,
     SegmentationSpec, ZExtensionConfig, composite_nuclei_amplicon, enhance_with_flamingo, extend_labels_through_z,
     segment)
@@ -167,7 +167,7 @@ def test_l8_a_registered_method_runs_and_the_record_holds_the_provenance_entry(r
     assert entry["execution"] == {"device": "cpu", "framework": None,
                                   "threads": {name: entry["execution"]["threads"][name] for name in THREAD_VARIABLES}}
     assert (record["format_version"], record["stage"], record["target"], record["geometry"]) == (
-        1, "segmentation", "nucleus", "volume")
+        2, "segmentation", "nucleus", "volume")
     assert (record["dataset_id"], record["sample_id"], record["fov_id"], record["subtile_id"], record["run"]) == (
         "data", "sample", "FOV_001", None, "probe")
     assert record["grid"] == {"shape_zyx": list(SHAPE_ZYX),
@@ -175,7 +175,7 @@ def test_l8_a_registered_method_runs_and_the_record_holds_the_provenance_entry(r
                               "source": "declared", "sha256": None}
     assert record["input"] == {"path": None, "sha256": digest(image), "file_sha256": None,
                                "shape_zyxc": [*SHAPE_ZYX, 1], "dtype": "uint8",
-                               "metadata": record["grid"]["metadata"], "projection": None,
+                               "metadata": record["grid"]["metadata"], "recipe": None,
                                "channels": [{"role": "nuclear"}]}
     n_labels = len(np.unique(expected)) - 1
     assert record["labels"] == {"dtype": "uint32", "sha256": digest(expected.astype(np.uint32)),
@@ -603,7 +603,7 @@ def test_a_two_run_plan_imports_the_nuclei_and_grows_the_cells(fov, tmp_path):
     assert cell.record["input"]["sha256"] == digest(image)
     assert cell.record["input"]["channels"] == [{"role": "amplicon", "round": None, "channel": None,
                                                  "name": None, "wavelength": "unavailable",
-                                                 "reference_merged": True, "prepare": None, "prepare_channel": None,
+                                                 "reference_merged": True,
                                                  "registration": None, "sha256": digest(merged(fov))}]
     assert np.array_equal(cell.labels[mask > 0], mask[mask > 0])
     assert set(np.unique(cell.labels)) - {0} == {7, 12}
@@ -614,23 +614,30 @@ def test_a_two_run_plan_imports_the_nuclei_and_grows_the_cells(fov, tmp_path):
 
 
 @pytest.mark.dataset
-def test_a_morphology_round_goes_through_its_input_function(fov, tmp_path):
+def test_a_morphology_round_goes_through_its_input_function(fov, tmp_path, register):
+    # W-891: the composite and the Flamingo enhancement are the combine methods of an input recipe, on two source
+    # channels each; the inputs and their expected hashes are those of the prepare functions before.
     add_morphology_round(fov)
     path, _ = write_mask(fov, tmp_path)
     channels = fov.dataset.channel_order
-    inputs = (InputChannel("composite", "morph", "ch00", prepare=CompositeConfig()),)
-    fov.segment(two_run_plan(path, inputs))
+    inputs = (InputChannel("nuclear", "morph", "ch00"), InputChannel("amplicon", reference_merged=True))
+    fov.segment(two_run_plan(path, inputs, input_recipe=InputRecipe(combine=CompositeConfig())))
     record = fov.segmentation_results["cell"].record
     morph = fov.images["morph"]
     expected, prepared = composite_nuclei_amplicon(morph[..., channels.index("ch00")], merged(fov))
     assert record["input"]["sha256"] == digest(expected[..., None])
-    (channel,) = record["input"]["channels"]
-    assert channel["prepare"] == json.loads(json.dumps(prepared)) and channel["sha256"] == digest(expected)
-    assert channel["registration"] == {"reference": fov.rounds.reference_round, "reference_sha256": None}
-    inputs = (InputChannel("cytoplasm", "morph", 1, prepare=FlamingoEnhancementConfig(), prepare_channel="ch03"),)
-    fov.segment(two_run_plan(path, inputs))
+    combine = next(stage for stage in record["input"]["recipe"]["stages"] if stage["stage"] == "combine")
+    assert combine["record"] == json.loads(json.dumps(prepared)) and combine["outputs"] == [digest(expected)]
+    nuclear, amplicon = record["input"]["channels"]
+    assert (nuclear["role"], amplicon["role"]) == ("nuclear", "amplicon")
+    assert nuclear["registration"] == {"reference": fov.rounds.reference_round, "reference_sha256": None}
+    # The Flamingo enhancement gives a nuclear model channel, which the test-only probe method segments.
+    spacing_yx = fov.reference_grid().metadata.spacing_zyx[1]
+    recipe = InputRecipe(combine=FlamingoEnhancementConfig(median_radius_um=1 * spacing_yx))
+    inputs = (InputChannel("nuclear", "morph", 1), InputChannel("cytoplasm", "morph", "ch03"))
+    fov.segment(SegmentationPlan((SegmentationRun("nucleus", "nucleus", inputs, ProbeConfig(), input_recipe=recipe),)))
     expected, _ = enhance_with_flamingo(morph[..., 1], morph[..., channels.index("ch03")])
-    assert fov.segmentation_results["cell"].record["input"]["sha256"] == digest(expected[..., None])
+    assert fov.segmentation_results["nucleus"].record["input"]["sha256"] == digest(expected[..., None])
 
 
 @pytest.mark.dataset
@@ -665,8 +672,7 @@ def test_coordination_errors(fov, tmp_path):
     # A seed run on another grid: the nuclei imported on the projected grid, the cells on the volume.
     plane_path, _ = write_mask(fov, tmp_path, plane=True)
     plan = SegmentationPlan((
-        SegmentationRun("nucleus", "nucleus", (), LabelImportConfig(str(plane_path), "nucleus"),
-                        projection=ProjectionConfig()),
+        SegmentationRun("nucleus", "nucleus", (), LabelImportConfig(str(plane_path), "nucleus", projection="max")),
         SegmentationRun("cell", "cell", (InputChannel("amplicon", reference_merged=True),),
                         SeededWatershedConfig(sigma_um=0.1), seeds="nucleus")))
     before = dict(fov.segmentation_results)
@@ -696,10 +702,10 @@ def test_a_projected_run_is_extended_through_z(fov, tmp_path, register):
     plane_path, plane_mask = write_mask(fov, tmp_path, plane=True)
     grid = fov.reference_grid()
     plan = SegmentationPlan((
-        SegmentationRun("seeds", "nucleus", (), LabelImportConfig(str(plane_path), "nucleus"),
-                        projection=ProjectionConfig()),
+        SegmentationRun("seeds", "nucleus", (), LabelImportConfig(str(plane_path), "nucleus", projection="max")),
         SegmentationRun("nucleus", "nucleus", (InputChannel("nuclear", fov.rounds.reference_round, "ch02"),),
-                        ProbeConfig(level=-1.0), projection=ProjectionConfig(), operations=(EXTENSION,))))
+                        ProbeConfig(level=-1.0), input_recipe=InputRecipe(projection=ProjectionConfig()),
+                        operations=(EXTENSION,))))
     fov.segment(plan)
     seeds, nucleus = fov.segmentation_results["seeds"], fov.segmentation_results["nucleus"]
     assert seeds.grid == grid.projected() and seeds.geometry == "plane"
@@ -712,7 +718,9 @@ def test_a_projected_run_is_extended_through_z(fov, tmp_path, register):
     assert nucleus.geometry == "extended" and nucleus.grid == grid
     assert expected.any() and np.array_equal(nucleus.labels, expected)
     record = nucleus.record
-    assert record["input"]["projection"] == json.loads(json.dumps(asdict(ProjectionConfig())))
+    assert record["input"]["recipe"]["config"]["projection"] == {"method": "max", "output_dtype": None}
+    (projection,) = [stage for stage in record["input"]["recipe"]["stages"] if stage["stage"] == "projection"]
+    assert projection["applied"] and projection["grid"]["shape_zyx"] == [1, *grid.shape_zyx[1:]]
     assert record["input"]["shape_zyxc"] == [1, *grid.shape_zyx[1:], 1]
     assert record["geometry"] == "extended" and record["grid"]["shape_zyx"] == list(grid.shape_zyx)
     (operation,) = record["operations"]
@@ -729,11 +737,8 @@ def test_plan_validation(register):
         (lambda: InputChannel("amplicon"), ValueError, "names a round"),
         (lambda: InputChannel("amplicon", "round1"), ValueError, "needs a channel"),
         (lambda: InputChannel("amplicon", "round1", True), TypeError, "channel label"),
-        (lambda: InputChannel("amplicon", reference_merged=True, prepare=CompositeConfig()), ValueError,
-         "reference merged"),
-        (lambda: InputChannel("nuclear", "morph", 0, prepare=FlamingoEnhancementConfig()), ValueError,
-         "prepare_channel"),
-        (lambda: InputChannel("nuclear", "morph", 0, prepare_channel=1), ValueError, "Flamingo"),
+        (lambda: InputChannel("amplicon", reference_merged=True, prepare=CompositeConfig()), TypeError, "prepare"),
+        (lambda: InputChannel("nuclear", "morph", 0, prepare_channel=1), TypeError, "prepare_channel"),
         (lambda: SegmentationRun("Cell", "cell", watershed, SeededWatershedConfig()), ValueError, "snake_case"),
         (lambda: SegmentationRun("cell", "tissue", watershed, SeededWatershedConfig()), ValueError, "target"),
         (lambda: SegmentationRun("cell", "cell", watershed, UnregisteredConfig()), TypeError, "no segmentation"),
@@ -747,11 +752,14 @@ def test_plan_validation(register):
         (lambda: SegmentationRun("nucleus", "nucleus", (), LabelImportConfig("x.tif", "nucleus"), seeds="a"),
          ValueError, "takes no seeds"),
         (lambda: SegmentationRun("cell", "cell", watershed, SeededWatershedConfig(),
-                                 projection=ProjectionConfig(axis="channel")), ValueError, "along z"),
+                                 input_recipe=InputRecipe(projection=ProjectionConfig(axis="channel"))), ValueError,
+         "along z"),
+        (lambda: SegmentationRun("cell", "cell", watershed, SeededWatershedConfig(), projection=ProjectionConfig()),
+         TypeError, "projection"),
         (lambda: SegmentationRun("cell", "cell", watershed, SeededWatershedConfig(), operations=(object(),)),
          TypeError, "operations"),
         (lambda: SegmentationRun("cell", "cell", watershed, SeededWatershedConfig(),
-                                 operations=(EXTENSION,)), ValueError, "projected run"),
+                                 operations=(EXTENSION,)), ValueError, "with a projection"),
         (lambda: SegmentationPlan(()), ValueError, "at least one run"),
         (lambda: SegmentationPlan([import_run]), TypeError, "tuple of SegmentationRun"),
         (lambda: SegmentationPlan((import_run, import_run)), ValueError, "more than once"),

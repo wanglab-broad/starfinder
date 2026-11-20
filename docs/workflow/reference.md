@@ -189,11 +189,12 @@ channel_images: null, or {projection: null or max} to write images/<round>/<labe
 
 ```{workflow-keys} segmentation
 device: cpu, or cuda, which makes each segment task a GPU task.
-runs: The segmentation runs, each with name, target, inputs, seeds, projection, operations and a method with its config's fields.
+input_recipes: Named input recipes, each a mapping of its stages (channels, combine, projection, after_projection, model_input), which runs of this block and of export.segmentation name; the block may hold recipes without runs.
+runs: The segmentation runs, each with name, target, inputs (the source channels), seeds, input_recipe (a name of input_recipes, or a recipe inline), operations and a method with its config's fields.
 ```
 
 The {doc}`segmentation reference <../segmentation-algorithms>` lists the methods,
-the run's fields and the preparation functions.
+the run's fields, the input recipe's stages and steps and the preparation functions.
 
 (workflow-keys-assignment)=
 ### `assignment`

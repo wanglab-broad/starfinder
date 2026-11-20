@@ -31,19 +31,26 @@ class LabelImportConfig:
         ``None`` selects ``plane`` for Z=1 and ``volume`` for Z>1.
     relabel : bool
         Renumber positive labels consecutively from one in increasing source-value order.
+    projection : str or None
+        Z projection whose grid the mask is on in a segmentation plan: ``max``,
+        ``sum`` or ``mean`` (the run's grid is the FOV's reference grid
+        projected so); ``None`` keeps the reference grid.
 
     Notes
     -----
     ``path`` is a YX or ZYX integer TIFF readable by :func:`starfinder.io.load_volume`;
     ``target`` is ``nucleus`` or ``cell``; ``geometry`` ``None`` derives ``plane``
     (Z=1) or ``volume`` (Z>1), or names ``extended``; ``relabel`` ``False`` keeps the
-    file's values. See :func:`import_labels`.
+    file's values; ``projection`` puts an import run of ``FOV.segment`` on the
+    projected reference grid (``ReferenceGrid.projected(method=projection)``).
+    See :func:`import_labels`.
     """
 
     path: str
     target: str
     geometry: str | None = None
     relabel: bool = False
+    projection: str | None = None
 
     def __post_init__(self):
         if not isinstance(self.path, (str, os.PathLike)) or not str(self.path):
@@ -54,6 +61,9 @@ class LabelImportConfig:
             raise ValueError(f"geometry must be None, volume, plane or extended; got {self.geometry!r}")
         if not isinstance(self.relabel, bool):
             raise TypeError("relabel must be a bool")
+        if self.projection not in (None, "max", "sum", "mean"):
+            raise ValueError(f"projection of an import must be max, sum, mean or None; got {self.projection!r} "
+                             "(docs/migration.md, 'Segmentation input recipe')")
 
 
 def import_labels(path: Path | str, *, grid: ReferenceGrid, target: str, geometry: str | None = None,

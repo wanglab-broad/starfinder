@@ -842,7 +842,8 @@
     "export",
     "assignment",
     "stitching",
-    "processing"
+    "processing",
+    "segmentation"
    ],
    "blocks_sha256": "<sha256>",
    "fingerprint": "<sha256>"

@@ -393,12 +393,25 @@ def model_files(tmp_path):
 
 
 def length_configs(tmp_path) -> dict:
+    """One method config per registered method with pixel lengths, and StarDist with block fields. W-891: their
+    model scales (Cellpose diameter 240, StarDist scale 0.25 and 1.0 before) are the runs' model inputs,
+    :func:`length_recipes`."""
     cellpose, stardist = model_files(tmp_path)
-    return {"cellpose": CellposeConfig(diameter=240, min_size=15, model_path=str(cellpose)),
-            "stardist": StarDistConfig(scale=0.25, model_path=str(stardist)),
-            "stardist_blocks": StarDistConfig(scale=1.0, block_size=(1, 256, 256), min_overlap=(0, 64, 64),
+    return {"cellpose": CellposeConfig(min_size=15, model_path=str(cellpose)),
+            "stardist": StarDistConfig(model_path=str(stardist)),
+            "stardist_blocks": StarDistConfig(block_size=(1, 256, 256), min_overlap=(0, 64, 64),
                                               context=(0, 52, 52), model_path=str(stardist)),
             "seeded_watershed": SeededWatershedConfig(sigma_um=1.5)}
+
+
+def length_recipes() -> dict:
+    """The input recipe of each :func:`length_configs` method: the model input factor of its old scale (Cellpose
+    diameter 240 is the factor 30 / 240 = 0.125, StarDist scale 0.25 and 1.0); none for seeded_watershed."""
+    from starfinder.segmentation import InputRecipe, ModelInputConfig
+    return {"cellpose": InputRecipe(model_input=ModelInputConfig(factor=0.125)),
+            "stardist": InputRecipe(model_input=ModelInputConfig(factor=0.25)),
+            "stardist_blocks": InputRecipe(model_input=ModelInputConfig(factor=1.0)),
+            "seeded_watershed": None}
 
 
 def route_config(*, route=None, dimensionality="projection", projection="max", segment=True, fuse=True,

@@ -7,7 +7,7 @@ prediction") and design/specs/segmentation-algorithms.md ("Golden and parity tes
 * L10, the ``learned`` parity test: the W-306 parity outputs, copied from
   ``parity/parity_expected.npz`` of run W-306/20261004T194036Z-74e12949 into
   ``test/data/segmentation_parity.npz`` (SHA-256 below), recomputed by the ``stardist``
-  method with ``scale`` 1.0, the script's tiling, the stored thresholds and, for
+  method with the model scale 1.0 (``model_scale_zyx``, an input recipe's ``model_input``), the script's tiling, the stored thresholds and, for
   ``expand1``, planar expansion by 4 pixels; equal after a cast to ``uint16``. The
   ``rescale1`` arrays are records only (the package has no legacy round trip).
 * The order of the wrapper checks for a dimensionality rejection, and the effective block
@@ -80,7 +80,7 @@ def cached(method, model):
 @pytest.fixture(scope="module")
 def versatile():
     cached("stardist", "2D_versatile_fluo")
-    return StarDistConfig(model="2D_versatile_fluo", scale=1.0)
+    return StarDistConfig(model="2D_versatile_fluo")
 
 
 @pytest.fixture(scope="module")
@@ -89,7 +89,7 @@ def spleen():
     if not path or not Path(path, "weights_best.h5").is_file():
         pytest.skip(f"the user-trained 3D_spleen model is given by {SPLEEN_VARIABLE}, which is unset or names no "
                     "model folder")
-    return StarDistConfig(model_path=path, scale=1.0)
+    return StarDistConfig(model_path=path)
 
 
 def zyx(image):
@@ -99,7 +99,7 @@ def zyx(image):
 def parity_input(image, name):
     image = zyx(image)
     grid = ReferenceGrid(image.shape, ImageMetadata(f"parity_{name}"), "declared")
-    return SegmentationInput(image[..., np.newaxis], grid, ("nuclear",))
+    return SegmentationInput(image[..., np.newaxis], grid, ("nuclear",), model_scale_zyx=(1.0, 1.0, 1.0))
 
 
 def check_parity(parity, name, config):
@@ -169,7 +169,7 @@ def test_l10_a_model_of_the_wrong_dimensionality_is_rejected_at_check_7(parity, 
 def test_block_wise_prediction_records_the_requested_and_effective_block_values(parity, tensorflow):
     cached("stardist", "2D_versatile_fluo")
     requested = dict(block_size=(255, 257), min_overlap=(33, 35), context=(15, 17))
-    config = StarDistConfig(model="2D_versatile_fluo", scale=1.0, **requested)
+    config = StarDistConfig(model="2D_versatile_fluo", **requested)
     result = segment(parity_input(parity["input__P2_tissue_pi_2d"], "P2"), config=config, target="nucleus",
                      label_namespace=NAMESPACE)
     effective = result.record["methods"][0]["effective"]
@@ -189,7 +189,7 @@ def cellpose_model():
     pytest.importorskip("cellpose", reason="needs the cellpose extra")
     pytest.importorskip("torch", reason="needs the cellpose extra")
     cached("cellpose", "cpsam_v2")
-    return CellposeConfig(model="cpsam_v2", diameter=10.0)
+    return CellposeConfig(model="cpsam_v2")
 
 
 def l11_input():
@@ -199,7 +199,8 @@ def l11_input():
     stains = [np.where(mask[4] > 0, 200.0, 20.0) + rng.normal(0, 5, mask[4].shape) for mask in (cells, nuclei)]
     image = np.clip(np.rint(np.stack(stains, axis=-1)), 0, 255).astype(np.uint8)[np.newaxis]
     grid = ReferenceGrid((1, *cells.shape[1:]), BOXES_METADATA.projected(method="max"), "declared")
-    return SegmentationInput(image, grid, ("cytoplasm", "nuclear"))
+    # diameter 10 pixels before W-891: the model scale f_yx = 30 / 10 = 3 gives Cellpose diameter 30 / 3 = 10.
+    return SegmentationInput(image, grid, ("cytoplasm", "nuclear"), model_scale_zyx=(1.0, 3.0, 3.0))
 
 
 # Two Cellpose calls in one process of their own: cpsam_v2 holds about 2.5 GiB while it loads, and the pytest process
@@ -247,11 +248,11 @@ def test_l11_a_missing_cellpose_model_raises_before_any_library_call(cellpose_mo
     built = []
     monkeypatch.setattr(models, "CellposeModel", lambda *a, **k: built.append((a, k)))
     with pytest.raises(MissingModelError, match="does not exist; segmentation never downloads"):
-        segment(l11_input(), config=CellposeConfig(model_path=str(tmp_path / "cpsam_v2"), diameter=10.0),
+        segment(l11_input(), config=CellposeConfig(model_path=str(tmp_path / "cpsam_v2")),
                 target="cell", label_namespace=NAMESPACE)
     assert built == []
     with pytest.raises(TypeError):
-        CellposeConfig(model="cpsam_v2")               # diameter is required
+        CellposeConfig(model="cpsam_v2", diameter=10.0)   # replaced by input_recipe.model_input (W-891)
 
 
 # --- L14: model resolution with the cached files -------------------------------------------------------
@@ -285,8 +286,9 @@ def test_l14_the_cached_files_equal_the_table_and_a_changed_copy_raises(tmp_path
                         replace(spec, requires=(), run=lambda *a: calls.append(a)))
     image = np.zeros((1, 8, 8, 1), np.uint8)
     with pytest.raises(ModelHashMismatchError, match=changed):
-        segment(SegmentationInput(image, ReferenceGrid((1, 8, 8), ImageMetadata("l14"), "declared"), ("nuclear",)),
-                config=StarDistConfig(model="2D_versatile_fluo", scale=1.0), target="nucleus",
+        segment(SegmentationInput(image, ReferenceGrid((1, 8, 8), ImageMetadata("l14"), "declared"), ("nuclear",),
+                                  model_scale_zyx=(1.0, 1.0, 1.0)),
+                config=StarDistConfig(model="2D_versatile_fluo"), target="nucleus",
                 label_namespace=NAMESPACE)
     (copy / "weights_best.h5").unlink()
     with pytest.raises(MissingModelError, match="starfinder weights fetch stardist 2D_versatile_fluo"):

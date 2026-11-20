@@ -369,10 +369,10 @@ def export_route(r):
 
 
 def _reference_inputs(r):
-    """The segmentation runs that read the reference merged image (directly, or as a composite's amplicon)."""
-    return [run["name"] for run in (r.get("segmentation") or {}).get("runs") or []
-            for item in run.get("inputs") or [] if item.get("reference_merged") or item.get("prepare")
-            and item["prepare"].get("function") == "composite_nuclei_amplicon"]
+    """The segmentation runs that read the reference merged image: a source channel with ``reference_merged: true``,
+    such as the amplicon of a composite."""
+    return list(dict.fromkeys(run["name"] for run in (r.get("segmentation") or {}).get("runs") or []
+                              for item in run.get("inputs") or [] if item.get("reference_merged")))
 
 
 def _morphology_needed_for(r):
@@ -399,7 +399,7 @@ def check_producers(r):
     if "assignment" in r and "segmentation" not in r:
         errors.append("the assignment block reads the cell run of the segmentation block: add a segmentation block")
     if "assignment" in r and "segmentation" in r:
-        names = [run["name"] for run in r["segmentation"]["runs"]]
+        names = [run["name"] for run in r["segmentation"].get("runs") or []]
         for key in ("cells", "nuclei"):
             if r["assignment"].get(key) is not None and r["assignment"][key] not in names:
                 errors.append(f"assignment.{key} names the run {r['assignment'][key]!r}, which the segmentation block "
@@ -414,7 +414,8 @@ def check_producers(r):
     if "processing" not in r and sequencing_inputs(r):
         errors.append(f"the segmentation inputs {sequencing_inputs(r)} read registered sequencing rounds, which the "
                       "processing block writes: add a processing block")
-    if "segmentation" in r and "processing" not in r and not r.get("reference_image_import") and "morphology" not in r:
+    if (r.get("segmentation") or {}).get("runs") and "processing" not in r and not r.get("reference_image_import") \
+            and "morphology" not in r:
         errors.append("a segmentation run lies on the FOV's reference grid, which the processing block's reference "
                       "image or the morphology block's reference stain gives: add one of them")
     if "assembly" in r and "stitching" not in r:
@@ -669,7 +670,7 @@ class Graph:
             s = r["segmentation"]
             for sample, members in samples.items():
                 for fov in members:
-                    for run in s["runs"]:
+                    for run in s.get("runs") or []:   # input_recipes alone plan no segment task
                         needs, inputs = [], []
                         fov_dir = self.fov_dir(fov)
                         # The grid: the processing task's reference image, else the morphology task's saved

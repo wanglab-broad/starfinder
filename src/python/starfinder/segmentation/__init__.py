@@ -14,7 +14,13 @@ cell territories and keeps both masks. :func:`segment` runs one method of
 ``SEGMENTATION_METHODS`` (``stardist``, ``cellpose``, ``seeded_watershed``) on a
 :class:`SegmentationInput` behind the stage checks; :func:`resolve_model` verifies a
 model of ``KNOWN_MODELS`` or a user-trained model by path without downloading;
-``FOV.segment`` runs a :class:`SegmentationPlan` of named runs on one FOV.
+``FOV.segment`` runs a :class:`SegmentationPlan` of named runs on one FOV. A run's
+:class:`InputRecipe` (stages of :class:`RecipeStep`, a ``combine`` method of
+``COMBINE_METHODS`` and a :class:`ModelInputConfig`) says how its source channels
+become the image its method receives; :func:`apply_input_recipe` is the one function
+that applies it, on both routes, and :func:`preview_recipes` (``starfinder segment
+preview``) draws a few FOVs × a few recipes before a workflow run
+(design/specs/segmentation-input-recipe.md).
 :class:`SampleSegmentation` is what ``starfinder.export.segment_fused``
 returns on the route after fusion: the segmentation grid, one
 :class:`SegmentationResult` per run and the ``segmentation`` section
@@ -34,6 +40,9 @@ from ._models import KNOWN_MODELS as _KNOWN_MODELS
 from ._models import KnownModel, ModelFile, resolve_model
 from ._operations import ExpandLabelsConfig, ZExtensionConfig, expand_labels, extend_labels_through_z, resample_labels
 from ._plan import InputChannel, SegmentationPlan, SegmentationRun
+from ._preview import preview_recipes
+from ._recipe import COMBINE_METHODS as _COMBINE_METHODS
+from ._recipe import CombineSpec, InputRecipe, ModelInputConfig, RecipeStep, apply_input_recipe
 from ._segment import SegmentationInput, segment
 
 #: The segmentation method registry, mapping each exact frozen config type to its
@@ -45,6 +54,10 @@ SEGMENTATION_METHODS = _SEGMENTATION_METHODS
 #: user-trained models to model_path.
 KNOWN_MODELS = _KNOWN_MODELS
 
+#: The combine registry of an input recipe, mapping each exact config type to its CombineSpec (``NoneType``
+#: for ``single``, the default; CompositeConfig for ``composite``; FlamingoEnhancementConfig for ``flamingo_enhance``).
+COMBINE_METHODS = _COMBINE_METHODS
+
 __all__ = ["ReferenceGrid", "reference_grid_from_file", "SegmentationResult", "SampleSegmentation", "to_label_dtype",
            "LabelImportConfig", "import_labels", "resample_labels", "ExpandLabelsConfig", "expand_labels",
            "ZExtensionConfig", "extend_labels_through_z",
@@ -52,5 +65,6 @@ __all__ = ["ReferenceGrid", "reference_grid_from_file", "SegmentationResult", "S
            "normalize_percentile_unclipped", "rescale_input",
            "segment", "SegmentationInput", "SEGMENTATION_METHODS", "SegmentationSpec", "MethodContext",
            "SeededWatershedConfig", "StarDistConfig", "CellposeConfig", "SegmentationPlan", "SegmentationRun",
-           "InputChannel", "KNOWN_MODELS", "KnownModel", "ModelFile", "resolve_model",
+           "InputChannel", "InputRecipe", "RecipeStep", "ModelInputConfig", "COMBINE_METHODS", "CombineSpec",
+           "apply_input_recipe", "preview_recipes", "KNOWN_MODELS", "KnownModel", "ModelFile", "resolve_model",
            "SegmentationBackendUnavailableError", "MissingModelError", "ModelHashMismatchError"]

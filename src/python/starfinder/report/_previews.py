@@ -41,6 +41,18 @@ SLAB_UM = 3.0
 _WRITTEN = ("written", "reused")
 
 
+def _recipe_label(recipe) -> str | None:
+    """The caption's name of the input recipe a saved segmentation input was made with: ``input recipe <name>`` and
+    ``model pixel size <p> µm`` when the record gives them; None without a recipe (design/specs/report.md, W-891)."""
+    if not isinstance(recipe, dict):
+        return None
+    parts = [f"input recipe {recipe['name']}"] if recipe.get("name") else []
+    size = (recipe.get("model_input") or {}).get("pixel_size_um")
+    if size is not None:
+        parts.append(f"model pixel size {size} µm")
+    return ", ".join(parts) or None
+
+
 @dataclass
 class Preview:
     """One example tile: the background and the label images in the same plane, with their extents.
@@ -51,7 +63,9 @@ class Preview:
     fusion; the whole grid per FOV) and ``plane`` its plane. ``source`` is what the background is
     (``segmentation_input``, or ``reference_image`` / ``fused_image`` of a sample without a run input) and
     ``background_name`` the file or image it is, ``background_run`` and ``background_role`` the run and the role
-    of its channel (None for a reference or fused image).
+    of its channel (None for a reference or fused image), and ``background_recipe`` the input recipe the saved
+    input was made with, named for the caption (its name and the pixel size its model sees; None without a
+    recipe, as in a record of version 1).
     """
 
     fov_id: str
@@ -68,6 +82,7 @@ class Preview:
     background_name: str = ""
     background_run: str | None = None
     background_role: str | None = None
+    background_recipe: str | None = None
 
     @property
     def cell_outline(self):
@@ -188,13 +203,14 @@ class _Previews:
             if isinstance(data, Unavailable):
                 return data
             first = (channels.get("channels") or [{}])[0]
-            return _first_channel(path), "segmentation_input", c.inputs.relative(path), run, first.get("role")
+            return (_first_channel(path), "segmentation_input", c.inputs.relative(path), run, first.get("role"),
+                    _recipe_label(channels.get("recipe")))
         pattern = getattr(c, "reference_image", None) or _layout.REFERENCE_IMAGE
         path = _layout.reference_image_path(c.root, fov, pattern, getattr(c, "reference_image_import", None))
         image = _read_image(c.inputs, path, "reference_image")
         if isinstance(image, Unavailable):
             return image
-        return _zyx(image), "reference_image", c.inputs.relative(path), None, None
+        return _zyx(image), "reference_image", c.inputs.relative(path), None, None, None
 
     def _run_record(self, directory, entry):
         """The record of a nucleus run: its ``segmentation.json`` when the run was saved under the FOV, else the
@@ -220,7 +236,7 @@ class _Previews:
         loaded = self._run_input(fov, record, seg)
         if isinstance(loaded, Unavailable):
             return loaded
-        background, source, name, run, role_name = loaded
+        background, source, name, run, role_name, recipe = loaded
         cells, nuclei = labels["cells"], labels["nuclei"]
         plane = int(np.argmax((cells != 0).reshape(cells.shape[0], -1).sum(axis=1)))
         if background.shape[0] != cells.shape[0]:  # a projected input: its one plane stands for the volume
@@ -234,7 +250,7 @@ class _Previews:
         extent = (-0.5, nx - 0.5, ny - 0.5, -0.5)
         return Preview(fov, "", "per_fov", background[slab].max(axis=0), cells[plane],
                        None if nuclei is None else nuclei[plane], extent, extent, (0, ny, 0, nx), plane,
-                       source, name, run, role_name)
+                       source, name, run, role_name, recipe)
 
     def label_sources(self):
         """``(files, grid)`` of the export's label images (``files`` the ZYX cell and nucleus images, None for a

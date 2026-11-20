@@ -50,6 +50,7 @@ class StepContext:
     metadata: ImageMetadata
     reference: np.ndarray | None = None      # only for needs_reference steps
     supplied: Mapping[str, Any] | None = None  # this step's supplied section, fit="supplied" only
+    fit_mask: np.ndarray | None = None       # the fit region (boolean ZYX); None: the whole image (W-891)
 
 @dataclass(frozen=True)
 class StepResult:
@@ -59,7 +60,11 @@ class StepResult:
 ```
 
 A step never mutates its input and never reads other rounds except through
-`context.reference`.
+`context.reference`. Amended 2026-11-20 W-891: `fit_mask` is the fit region, from which the
+steps that fit a global statistic (`percentile_normalization` with `fit="fov"`, `clahe`) take
+it; every other step ignores it, `run_step` checks its shape, and `FOV.run` passes None, so
+its results do not change ([segmentation-input-recipe](segmentation-input-recipe.md), "The
+steps").
 
 ## Registration of step implementations
 
@@ -111,6 +116,16 @@ called `StepSpec`, `STEPS` and `RecipeStep` before the registry renames
 | `scalar_background` | `ScalarBackgroundConfig` | background | per_channel | preserve |
 | `background_3d` | `Background3DConfig` | background | per_channel | preserve |
 | `percentile_normalization` | `PercentileNormalizationConfig` | intensity | per_channel | preserve |
+| `gaussian` | `GaussianConfig` | contrast | per_channel | preserve |
+| `clahe` | `ClaheConfig` | contrast | per_channel | preserve |
+
+Amended 2026-11-20 W-891 (choice ST1 of [segmentation-input-recipe](segmentation-input-recipe.md)):
+`gaussian` (`sigma_um`) and `clahe` (`kernel_um`, `clip_limit`, `nbins`) are registered with
+lengths in micrometres, converted with `StepContext.metadata`; an integer image is rounded
+with `np.rint` back to its dtype. `TophatConfig` and `ReconstructionConfig` take exactly one
+of `radius_yx` (pixels, the default 3) and `radius_um`, which the step converts to
+`floor(radius_um / spacing_yx + ½)` pixels; a record of a radius in pixels holds
+`radius_yx` alone, as before.
 
 ### Histogram reference channel
 
@@ -188,6 +203,11 @@ views, both with maximum projection by default:
 The views and the alignment of the Python reference merged image with MATLAB
 are specified in [workflows](../../docs/workflows.md), "Projection views and the reference merged
 image" (an amendment of 2026-09-27).
+
+Amended 2026-11-20 W-891: `ProjectionConfig` and `ImageMetadata.projected` also take the
+method `mean` (frame `/projection:mean`), which accumulates in float64; a segmentation input
+recipe's projection stage uses it ([segmentation-input-recipe](segmentation-input-recipe.md),
+"The projection stage").
 
 % W-235
 

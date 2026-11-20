@@ -393,6 +393,9 @@
       "cuda"
      ]
     },
+    "input_recipes": {
+     "type": "object"
+    },
     "runs": {
      "type": "array",
      "minItems": 1

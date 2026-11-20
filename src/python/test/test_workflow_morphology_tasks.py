@@ -199,7 +199,8 @@ def stardist_route(work, image, *, operations=True):
     metadata = ImageMetadata("FOV", spacing_zyx=(0.35, 0.1, 0.1), spatial_unit="micrometer")
     run = {"name": "nucleus", "target": "nucleus", "method": "stardist", "model_path": str(work / "models" /
                                                                                          "stand_in"),
-           "scale": 1.0, "inputs": [{"role": "nuclear", "round": "reference_stain", "channel": "ch04"}]}
+           "input_recipe": {"model_input": {"factor": 1.0}},
+           "inputs": [{"role": "nuclear", "round": "reference_stain", "channel": "ch04"}]}
     if operations:
         run["operations"] = [{"operation": "expand_labels", "distance": DISTANCE, "unit": "pixel", "mode": "planar"}]
     config = T.dataset_keys(work, n_rounds=1, seq_channel_order=["ch00"], ref_channel="DAPI",

@@ -16,7 +16,9 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 LABEL_DTYPE = np.dtype(np.uint32)
 TARGETS = ("nucleus", "cell")
 GEOMETRIES = ("volume", "plane", "extended")
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+#: The versions of a segmentation record that read_run loads: 1 (before the input recipe) and 2.
+READABLE_VERSIONS = (1, 2)
 _MAX_LABEL = int(np.iinfo(np.uint32).max)
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _NAMESPACE_FIELDS = ("dataset_id", "sample_id", "fov_id", "subtile_id", "run")
@@ -176,7 +178,7 @@ class ReferenceGrid:
         Parameters
         ----------
         method : str
-            Z-projection method recorded in the derived metadata: ``max`` or ``sum``.
+            Z-projection method recorded in the derived metadata: ``max``, ``sum`` or ``mean``.
 
         Returns
         -------

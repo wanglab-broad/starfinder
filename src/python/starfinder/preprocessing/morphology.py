@@ -1,15 +1,44 @@
 """XY slice-wise morphology with safe intermediate precision."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 from skimage.morphology import black_tophat, disk, erosion, white_tophat
 
 from starfinder.image import _validate_image
+from starfinder.preprocessing._lengths import OMIT_NONE, check_length, yx_pixels
 
 
 def _radius(radius):
     if isinstance(radius, bool) or not isinstance(radius, int) or radius < 0:
         raise ValueError("radius_yx must be a nonnegative integer")
+
+
+def _check_radius(config):
+    """Exactly one of radius_yx and radius_um; neither given is radius_yx 3, the default in pixels."""
+    name = type(config).__name__
+    if config.radius_um is None:
+        if config.radius_yx is None:
+            object.__setattr__(config, "radius_yx", 3)
+        _radius(config.radius_yx)
+        return
+    if config.radius_yx is not None:
+        raise ValueError(f"{name} takes exactly one of radius_yx (pixels) and radius_um (micrometres); got both")
+    object.__setattr__(config, "radius_um", check_length(config.radius_um, f"{name}.radius_um"))
+
+
+def _pixel_config(config, metadata):
+    """The config with radius_um converted to radius_yx = floor(radius_um / spacing_yx + ½) with ``metadata``."""
+    if config.radius_um is None:
+        return config
+    return replace(config, radius_yx=yx_pixels(config.radius_um, metadata, f"{type(config).__name__}.radius_um"),
+                   radius_um=None)
+
+
+def _pixels(config, what):
+    if config.radius_yx is None:
+        raise ValueError(f"{what} with radius_um needs the image's spacing: run the step through run_step (FOV.run or "
+                         "an input recipe), which converts it, or give radius_yx")
+    return config.radius_yx
 
 
 @dataclass(frozen=True)
@@ -18,19 +47,29 @@ class ReconstructionConfig:
 
     Parameters
     ----------
-    radius_yx : int
-        Nonnegative disk radius in XY pixels.
+    radius_yx : int or None
+        Nonnegative disk radius in XY pixels; ``None`` with ``radius_um`` also ``None`` is 3 pixels.
+    radius_um : float or None
+        Nonnegative disk radius in micrometres, converted to
+        ``floor(radius_um / spacing_yx + ½)`` pixels with the image's spacing;
+        ``None`` gives the radius in pixels.
 
     Notes
     -----
     Disk radius in XY pixels, independently applied to each Z/channel slice.
     The radius sets the erosion that seeds the reconstruction and the two
     top-hats; the reconstruction itself uses the 3 x 3 neighbourhood.
+    Exactly one of ``radius_yx`` and ``radius_um`` is given (neither: 3
+    pixels). ``radius_um`` needs equal Y and X spacing (relative difference at
+    most 1e-9) and is converted by the step (``run_step``) with
+    ``StepContext.metadata``; an input recipe of segmentation takes
+    ``radius_um`` only (design/specs/segmentation-input-recipe.md).
     """
-    radius_yx: int = 3
+    radius_yx: int | None = None
+    radius_um: float | None = field(default=None, metadata=OMIT_NONE)
 
     def __post_init__(self):
-        _radius(self.radius_yx)
+        _check_radius(self)
 
 
 @dataclass(frozen=True)
@@ -39,17 +78,27 @@ class TophatConfig:
 
     Parameters
     ----------
-    radius_yx : int
-        Nonnegative disk radius in XY pixels.
+    radius_yx : int or None
+        Nonnegative disk radius in XY pixels; ``None`` with ``radius_um`` also ``None`` is 3 pixels.
+    radius_um : float or None
+        Nonnegative disk radius in micrometres, converted to
+        ``floor(radius_um / spacing_yx + ½)`` pixels with the image's spacing;
+        ``None`` gives the radius in pixels.
 
     Notes
     -----
-    Disk radius in XY pixels; no filtering along Z or channels.
+    Disk radius in XY pixels; no filtering along Z or channels. Exactly one
+    of ``radius_yx`` and ``radius_um`` is given (neither: 3 pixels).
+    ``radius_um`` needs equal Y and X spacing (relative difference at most
+    1e-9) and is converted by the step (``run_step``) with
+    ``StepContext.metadata``; an input recipe of segmentation takes
+    ``radius_um`` only (design/specs/segmentation-input-recipe.md).
     """
-    radius_yx: int = 3
+    radius_yx: int | None = None
+    radius_um: float | None = field(default=None, metadata=OMIT_NONE)
 
     def __post_init__(self):
-        _radius(self.radius_yx)
+        _check_radius(self)
 
 
 def _reconstruct_by_dilation(marker, mask, dtype):
@@ -138,8 +187,10 @@ def filter_tophat(volume: np.ndarray, *, config: TophatConfig = TophatConfig()) 
     Allocates an output and float64 slice work. Reflect boundaries (skimage
     default), disk footprint. Constants give zero; empty/nonfinite inputs error.
     Inputs are not mutated. Results saturate to source dtype representability.
+    A config with ``radius_um`` is converted by the step (``run_step``), which
+    knows the spacing; called directly it raises ValueError.
     """
-    return _morph(volume, config.radius_yx, False)
+    return _morph(volume, _pixels(config, "filter_tophat"), False)
 
 
 def correct_background(volume: np.ndarray, *, config: ReconstructionConfig = ReconstructionConfig()) -> np.ndarray:
@@ -174,6 +225,8 @@ def correct_background(volume: np.ndarray, *, config: ReconstructionConfig = Rec
     source dtype, explicitly saturating to its representable range (float
     outputs may be negative). Allocates output and slice work, not a full float
     volume. Disk/reflect XY boundaries; no Z/channel mixing. Constants give
-    zero. Empty/nonfinite inputs error. Input is never mutated.
+    zero. Empty/nonfinite inputs error. Input is never mutated. A config with
+    ``radius_um`` is converted by the step (``run_step``), which knows the
+    spacing; called directly it raises ValueError.
     """
-    return _morph(volume, config.radius_yx, True)
+    return _morph(volume, _pixels(config, "correct_background"), True)

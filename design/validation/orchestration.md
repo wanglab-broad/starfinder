@@ -83,7 +83,7 @@ at most 4 GiB, at most 1800 s per test (AGENTS.md); a test of 5 s or more is `sl
 
 The refactored Snakemake workflow on the migrated configurations against the values of today's
 workflow, with the exceptions the contract lists (`orchestration.md`, "The exception of the golden
-comparison": OC3, OC4, D6, D8) and the comparison across environments of W-643 (`STAGE_RECORD_DIGEST`).
+comparison": OC3, OC4, D6, D8, IR) and the comparison across environments of W-643 (`STAGE_RECORD_DIGEST`).
 P2: the comparison runs in the `slow` tier.
 
 | # | Check | Fixture | Marker | Selection | Threshold | Resource bound | Identity |

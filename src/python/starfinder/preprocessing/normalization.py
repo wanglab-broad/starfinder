@@ -265,8 +265,12 @@ def _supplied_range(fitted, n_channels):
     return low, high
 
 
-def _percentile_normalize(volume, config, fitted=None):
-    """Normalized image, fitted {"low", "high"} and per-channel diagnostics."""
+def _percentile_normalize(volume, config, fitted=None, mask=None):
+    """Normalized image, fitted {"low", "high"} and per-channel diagnostics.
+
+    With fit="fov", ``mask`` (a boolean ZYX array, or None for the whole image) is the fit region whose pixels the
+    percentiles are taken from; every pixel is normalized.
+    """
     volume = _validate_image(volume)
     channels = volume[..., None] if volume.ndim == 3 else volume
     n = channels.shape[-1]
@@ -277,8 +281,11 @@ def _percentile_normalize(volume, config, fitted=None):
     else:
         if fitted is not None:
             raise ValueError('fitted values are accepted only with fit="supplied"')
-        low = [_channel_percentile(channels[..., c], config.p_low) for c in range(n)]
-        high = [_channel_percentile(channels[..., c], config.p_high) for c in range(n)]
+
+        def region(c):
+            return channels[..., c] if mask is None else channels[..., c][mask]
+        low = [_channel_percentile(region(c), config.p_low) for c in range(n)]
+        high = [_channel_percentile(region(c), config.p_high) for c in range(n)]
     result = np.empty(channels.shape, dtype=volume.dtype)
     degenerate, constant = [], []
     for c in range(n):

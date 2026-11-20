@@ -238,7 +238,8 @@ def _probes(save_dir):
     tiled["stitching"] = {"method": "bigstitcher", "bigstitcher_save_dir": str(save_dir),
                           "positions": full["stitching"]["positions"]}
     tiled["segmentation"]["runs"] = [
-        {"name": "nucleus", "target": "nucleus", "method": "stardist", "model_path": str(save_dir), "scale": 1.0,
+        {"name": "nucleus", "target": "nucleus", "method": "stardist", "model_path": str(save_dir),
+         "input_recipe": {"model_input": {"factor": 1.0}},
          "inputs": [{"role": "nuclear", "round": "reference_stain", "channel": "DAPI"}]},
         {"name": "cell", "target": "cell", "seeds": "nucleus", "method": "seeded_watershed",
          "inputs": [{"role": "amplicon", "reference_merged": True}]}]

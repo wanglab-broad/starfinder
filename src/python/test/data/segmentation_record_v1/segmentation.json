@@ -1,0 +1,174 @@
+{
+  "format_version": 1,
+  "stage": "segmentation",
+  "dataset_id": "dev",
+  "sample_id": "sample",
+  "fov_id": "FOV_001",
+  "subtile_id": null,
+  "run": "cell",
+  "target": "cell",
+  "geometry": "volume",
+  "label_namespace": "[\"dev\",\"sample\",\"FOV_001\",null,\"cell\"]",
+  "grid": {
+    "shape_zyx": [
+      9,
+      32,
+      32
+    ],
+    "metadata": {
+      "frame_id": "[\"controlled-development-v1-small-clean\",\"sample\",\"FOV_001\",\"formed\"]/reference",
+      "spacing_zyx": [
+        0.35,
+        0.1,
+        0.1
+      ],
+      "origin_zyx": null,
+      "direction_zyx": null,
+      "spatial_unit": "micrometer"
+    },
+    "source": "fov:round10",
+    "sha256": "1aa3323b070a49d7efa916c5a1d79cc0e067f2b94138d25a2e69207aaac187a5"
+  },
+  "input": {
+    "path": "input.ome.tif",
+    "sha256": "454af56774f18f7a164b33f46fffed9bdc62e01cdbf02503c4238bc6b90a86b2",
+    "file_sha256": "049beeef7be4465125fa3be446edb491d5e86fa8f40a1480543f46e5b6f9372d",
+    "shape_zyxc": [
+      9,
+      32,
+      32,
+      1
+    ],
+    "dtype": "uint8",
+    "metadata": {
+      "frame_id": "[\"controlled-development-v1-small-clean\",\"sample\",\"FOV_001\",\"formed\"]/reference",
+      "spacing_zyx": [
+        0.35,
+        0.1,
+        0.1
+      ],
+      "origin_zyx": null,
+      "direction_zyx": null,
+      "spatial_unit": "micrometer"
+    },
+    "projection": null,
+    "channels": [
+      {
+        "role": "composite",
+        "round": "morph",
+        "channel": "ch00",
+        "name": null,
+        "wavelength": "unavailable",
+        "reference_merged": false,
+        "prepare": {
+          "function": "composite_nuclei_amplicon",
+          "config": {
+            "nuclear_quantile": 0.005,
+            "amplicon_quantile": 0.001
+          },
+          "inputs": [
+            "54e5f9fb2658b19c604e692366bb289d1934a55015e8538931243176897249fe",
+            "5be22ea2e8874c5340ca8fcb389c658354f7cc34c30a1449b118891083472313"
+          ],
+          "output": "650feb4ef7ce78bce7dee47c78c8fdf4a41dc8e1081b66063be0e16fead920ea",
+          "quantiles": {
+            "nuclear": [
+              0.0,
+              1.3290714025497437
+            ],
+            "amplicon": [
+              0.0,
+              5.809192180633545
+            ]
+          }
+        },
+        "prepare_channel": null,
+        "registration": {
+          "reference": "round10",
+          "reference_sha256": null
+        },
+        "sha256": "650feb4ef7ce78bce7dee47c78c8fdf4a41dc8e1081b66063be0e16fead920ea"
+      }
+    ]
+  },
+  "seeds": {
+    "run": "nucleus",
+    "label_namespace": "[\"dev\",\"sample\",\"FOV_001\",null,\"nucleus\"]",
+    "sha256": "d2f0d36b93a16c5b769163f0bfb839f52713498d6067485f6da115027ca0b0f0",
+    "label_rule": "seed_values"
+  },
+  "methods": [
+    {
+      "stage": "segmentation",
+      "method": "seeded_watershed",
+      "config_type": "starfinder.segmentation.SeededWatershedConfig",
+      "implementation": "starfinder.segmentation._methods._seeded_watershed",
+      "config": {
+        "sigma_um": 0.1,
+        "threshold": "otsu",
+        "compactness": 0.0,
+        "connectivity": 1,
+        "method": "seeded_watershed"
+      },
+      "requires": {},
+      "artifacts": [],
+      "execution": {
+        "device": "cpu",
+        "framework": null,
+        "threads": {
+          "OMP_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "NUMEXPR_NUM_THREADS": "1",
+          "NUMBA_NUM_THREADS": "1"
+        }
+      },
+      "effective": {
+        "sigma_px_zyx": [
+          0.28571428571428575,
+          1.0,
+          1.0
+        ],
+        "threshold": 0.2469560189270361,
+        "threshold_source": "otsu"
+      }
+    }
+  ],
+  "operations": [],
+  "outcome": "ok",
+  "labels": {
+    "path": "labels.tif",
+    "dtype": "uint32",
+    "sha256": "7a79df35c56696e981d2ccb18a21c1dd990765613dfebee631df04606ea079d7",
+    "file_sha256": "e01370829f6ec62085a30d8574120ed286ed9eda1f0d79c802fab02dcc6a7adb",
+    "n_labels": 2,
+    "max_label": 12
+  },
+  "software": {
+    "code": {
+      "version": "0.2.3.dev24+g12a8f14",
+      "version_source": "checkout",
+      "git_commit": "12a8f14ca664dcb6d5ce93666c0d0ce2ac7159b2",
+      "git_dirty": false
+    },
+    "environment": {
+      "python": "3.12.12",
+      "platform": "Linux-5.15.0-153-generic-x86_64-with-glibc2.31",
+      "packages": {
+        "starfinder": "0.1.dev770+g704b5e88f",
+        "numpy": "2.2.6",
+        "pandas": "3.0.0",
+        "scipy": "1.17.0",
+        "scikit-image": "0.26.0",
+        "tifffile": "2026.1.28",
+        "pyarrow": "23.0.0",
+        "SimpleITK": "2.5.3"
+      }
+    }
+  },
+  "upstream": {
+    "preprocessing_record_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "registration_record_sha256": "72c55248ff0467ef0bad9985674fea5e68e74a30bf0a0649808ee2a842729440"
+  },
+  "wall_s": 0.00336383655667305
+}

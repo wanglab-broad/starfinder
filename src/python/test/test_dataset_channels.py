@@ -20,7 +20,8 @@ from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.dataset.workflow import _nuclear_stain, _nuclei_registration, _reference_stains
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.registration import RegistrationSignalConfig, TranslationConfig
-from starfinder.segmentation import (SEGMENTATION_METHODS, FlamingoEnhancementConfig, InputChannel, SegmentationPlan,
+from starfinder.segmentation import (SEGMENTATION_METHODS, FlamingoEnhancementConfig, InputChannel, InputRecipe,
+                                     SegmentationPlan,
                                      SegmentationRun, SegmentationSpec)
 from starfinder.synthetic import development_scene_preset, generate_amplicon_scene
 
@@ -350,9 +351,10 @@ def test_an_unknown_name_gives_one_error_form(development, threshold):
                                                       ThresholdConfig()),)))
     messages.append(str(error.value))
     with pytest.raises(ValueError) as error:
-        fov.segment(SegmentationPlan((SegmentationRun("nucleus", "nucleus", (InputChannel(
-            "nuclear", "morph", "DAPI", prepare=FlamingoEnhancementConfig(), prepare_channel="Nissl"),),
-            ThresholdConfig()),)))
+        # W-891: the Flamingo channel is a source channel of the enhancement, the input recipe's combine method.
+        fov.segment(SegmentationPlan((SegmentationRun("nucleus", "nucleus", (
+            InputChannel("nuclear", "morph", "DAPI"), InputChannel("cytoplasm", "morph", "Nissl")),
+            ThresholdConfig(), input_recipe=InputRecipe(combine=FlamingoEnhancementConfig(median_radius_um=0.1))),)))
     messages.append(str(error.value))
     with pytest.raises(ValueError) as expected:
         fov.dataset.channel_index("morph", "Nissl")

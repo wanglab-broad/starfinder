@@ -103,17 +103,6 @@ def _check_blocks(config):
         if not o + 2 * c < b:
             raise ValueError(f"block-wise prediction needs min_overlap + 2 × context < block_size on every axis; "
                              f"axis {axis}: {o} + 2 × {c} >= {b}")
-    if any(s != 1 for s in _scale_zyx(config.scale)):
-        # W-309
-        raise ValueError("block fields together with a scale other than 1 are not supported: nothing has "
-                         "tested that combination")
-
-
-def _scale_zyx(scale) -> tuple[float, float, float]:
-    """A number scales Y and X (Z factor 1); a 3-tuple is per axis ZYX."""
-    if isinstance(scale, tuple):
-        return tuple(float(s) for s in scale)
-    return (1.0, float(scale), float(scale))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -122,9 +111,6 @@ class StarDistConfig:
 
     Parameters
     ----------
-    scale : float or tuple[float, float, float]
-        Positive finite dimensionless prediction scale: a scalar sets the Y and X factors with Z factor 1,
-        and a three-tuple sets the ZYX factors.
     model : str or None
         Known pretrained model name in the weights cache, ``2D_versatile_fluo``.
     model_path : str or None
@@ -164,9 +150,11 @@ class StarDistConfig:
     one is given, and model_sha256 optionally maps a path's file names to their
     expected SHA-256. The model's ``n_dim`` decides 2D (Z=1) or 3D (Z>1).
 
-    scale is required (no default; it follows the model's training data): a
-    number scales Y and X with Z factor 1, a 3-tuple is per axis ZYX; it is
-    passed to ``predict_instances(scale=…)`` and the labels come back on the
+    The prediction scale is the input's ``model_scale_zyx``, which the run's
+    input recipe gives (``model_input``, design/specs/segmentation-input-recipe.md):
+    a 3D model receives it ZYX, a 2D model Y and X only (a Z factor other
+    than 1 is refused), and a factor of 1 on every axis is passed as None; it
+    is passed to ``predict_instances(scale=…)`` and the labels come back on the
     input grid. prob_thresh and nms_thresh are None for the model's stored
     ``thresholds.json`` (``threshold_source`` ``stored``); a number is a
     sensitivity override (``override``). normalize_percentiles is csbdeep's
@@ -177,7 +165,7 @@ class StarDistConfig:
     block_size, min_overlap and context (voxels of the input grid, one integer
     for every axis or one per axis) are all None for whole-image prediction, or
     all given for block-wise prediction with ``predict_instances_big``; on every
-    axis min_overlap + 2 × context < block_size, and scale must be 1. The
+    axis min_overlap + 2 × context < block_size, and the model scale must be 1. The
     library rounds each value up to a multiple of the model's grid; the record
     holds both. Objects must be smaller than min_overlap on each axis. There is
     no default block size, and the method never switches to blocks on its own.
@@ -185,13 +173,11 @@ class StarDistConfig:
     Raises
     ------
     ValueError
-        Neither or both of model and model_path, an unknown model, a scale,
-        threshold, percentile or tile count out of range, block fields given
-        partly, violating the overlap condition or combined with a scale other
-        than 1.
+        Neither or both of model and model_path, an unknown model, a
+        threshold, percentile or tile count out of range, or block fields given
+        partly or violating the overlap condition.
     """
 
-    scale: float | tuple[float, float, float]
     model: str | None = None
     model_path: str | None = None
     model_sha256: Mapping[str, str] | None = None
@@ -206,13 +192,6 @@ class StarDistConfig:
 
     def __post_init__(self):
         _check_model(self)
-        if isinstance(self.scale, tuple):
-            if len(self.scale) != 3:
-                raise ValueError(f"scale must be a number (Y and X) or a ZYX 3-tuple; got {self.scale!r}")
-            for s in self.scale:
-                _finite(s, "scale", low=0.0, low_open=True)
-        else:
-            _finite(self.scale, "scale", low=0.0, low_open=True)
         for name in ("prob_thresh", "nms_thresh"):
             if getattr(self, name) is not None:
                 _finite(getattr(self, name), name, low=0.0, high=1.0)
@@ -232,9 +211,6 @@ class CellposeConfig:
 
     Parameters
     ----------
-    diameter : float or None
-        Positive finite object diameter in pixels, setting the image rescale factor to 30 / diameter;
-        ``None`` requests no rescaling.
     model : str or None
         Known pretrained model name in the weights cache, ``cpsam_v2``.
     model_path : str or None
@@ -270,11 +246,14 @@ class CellposeConfig:
     (and download) its default model for a missing path; resolution raises
     first.
 
-    diameter (pixels) is required and has no default: the image is rescaled
-    by 30/diameter; ``None`` must be given explicitly, means no rescale and is
-    refused with ``do_3d=True``. do_3d runs 3D mode on Z>1 (a Z>1 input with
+    The image is rescaled by the input's ``model_scale_zyx``, which the run's
+    input recipe gives (``model_input``, design/specs/segmentation-input-recipe.md):
+    Cellpose receives ``diameter = 30 / f_yx``, since it rescales its image by
+    30 / ``diameter``, so ``f_yx`` 1 is diameter 30, no rescale. Y and X need
+    one factor. do_3d runs 3D mode on Z>1 (a Z>1 input with
     False is rejected, as is Z=1 with True) and needs anisotropy, the Z spacing
-    over the Y, X spacing. flow_threshold (0.4), cellprob_threshold (0.0),
+    over the Y, X spacing; Cellpose then scales Z by ``anisotropy × f_yx``,
+    recorded in ``effective.scale_zyx``. flow_threshold (0.4), cellprob_threshold (0.0),
     tile_overlap (0.1, within the [0.05, 0.5] Cellpose keeps), bfloat16
     (True) and min_size (15 pixels) are the library defaults, recorded.
     normalize_percentiles is passed per channel as a new mapping on every
@@ -283,14 +262,11 @@ class CellposeConfig:
     Raises
     ------
     ValueError
-        Neither or both of model and model_path, an unknown model, a diameter,
+        Neither or both of model and model_path, an unknown model, an
         anisotropy, threshold, overlap, size or percentile out of range, a
-        missing diameter or anisotropy in 3D mode, or anisotropy without it.
-    TypeError
-        diameter is not given.
+        missing anisotropy in 3D mode, or anisotropy without it.
     """
 
-    diameter: float | None
     model: str | None = None
     model_path: str | None = None
     model_sha256: Mapping[str, str] | None = None
@@ -306,14 +282,9 @@ class CellposeConfig:
 
     def __post_init__(self):
         _check_model(self)
-        if self.diameter is not None:
-            _finite(self.diameter, "diameter", low=0.0, low_open=True)
         if not isinstance(self.do_3d, bool) or not isinstance(self.bfloat16, bool):
             raise ValueError("do_3d and bfloat16 must be Boolean")
         if self.do_3d:
-            if self.diameter is None:
-                # W-306
-                raise ValueError("diameter None (no rescale) is refused with do_3d=True")
             if self.anisotropy is None:
                 raise ValueError("do_3d=True needs anisotropy (Z spacing over Y, X spacing)")
         elif self.anisotropy is not None:
@@ -415,17 +386,24 @@ def _stardist(image, config: StarDistConfig, context) -> tuple[np.ndarray, dict[
     (normalize_percentile_unclipped, float32); a Z=1 input to a 2D model is
     squeezed to YX (the wrapper restores the axis). The model folder is loaded
     with ``StarDist2D`` or ``StarDist3D(None, name=…, basedir=…)``, which reads
-    the folder and downloads nothing. A scale of 1 on every axis is passed as
-    None, as the current script calls the library.
+    the folder and downloads nothing. The scale is the input's model scale
+    (``context.model_scale_zyx``): a 3D model receives it ZYX, a 2D model Y
+    and X only, and a scale of 1 on every axis is passed as None, as the
+    current script calls the library.
     """
     if image.shape[-1] != 1:
         raise ValueError(f"stardist segments one channel (nuclear or composite); the input has roles {context.roles}")
     folder = context.model
     model_config = json.loads((folder / "config.json").read_text())
     n_dim, grid = int(model_config["n_dim"]), tuple(int(g) for g in model_config["grid"])
-    scale_zyx = _scale_zyx(config.scale)
+    scale_zyx = tuple(float(f) for f in context.model_scale_zyx)
     if n_dim == 2 and scale_zyx[0] != 1:
-        raise ValueError(f"a 2D model scales Y and X only; the Z factor of scale {config.scale!r} must be 1")
+        raise ValueError(f"a 2D model scales Y and X only; the Z factor of the model scale {list(scale_zyx)} "
+                         "(input_recipe.model_input) must be 1")
+    if config.block_size is not None and any(f != 1 for f in scale_zyx):
+        # W-309
+        raise ValueError("block fields together with a model scale other than 1 are not supported: nothing has "
+                         "tested that combination")
     library_scale = None if all(s == 1 for s in scale_zyx) else (scale_zyx if n_dim == 3 else scale_zyx[1:])
     n_tiles = config.n_tiles if config.n_tiles is not None else ((1, 4, 4) if n_dim == 3 else (2, 2))
     if len(n_tiles) != n_dim:
@@ -475,12 +453,23 @@ def _cellpose(image, config: CellposeConfig, context) -> tuple[np.ndarray, dict[
     The channels are passed in role order, ``cytoplasm`` then ``nuclear``; a
     Z=1 input is passed as one plane (YX, or YXC with ``channel_axis``) and the
     wrapper restores the Z axis Cellpose drops; 3D mode passes the ZYXC stack
-    with ``z_axis=0``, ``do_3D=True`` and the anisotropy. The normalization is
-    a new mapping on every call; HF_HUB_OFFLINE=1 is set during the call.
+    with ``z_axis=0``, ``do_3D=True`` and the anisotropy. The model scale
+    (``context.model_scale_zyx``) gives ``diameter = 30 / f_yx`` (Y and X need
+    one factor; a plane refuses a Z factor other than 1); in 3D mode Cellpose
+    scales Z by ``anisotropy × f_yx``, recorded in ``effective.scale_zyx``. The
+    normalization is a new mapping on every call; HF_HUB_OFFLINE=1 is set during
+    the call.
     """
+    fz, fy, fx = (float(f) for f in context.model_scale_zyx)
+    if not math.isclose(fy, fx, rel_tol=1e-9, abs_tol=1e-12):
+        raise ValueError(f"cellpose scales Y and X by one factor (diameter 30 / f_yx); the model scale gives Y {fy} "
+                         f"and X {fx}")
+    if image.shape[0] == 1 and fz != 1:
+        raise ValueError(f"cellpose on a plane scales Y and X only; the Z factor of the model scale {fz} must be 1")
+    diameter = 30.0 / fy
     channels = [role for role in ("cytoplasm", "nuclear") if role in context.roles]
     x = image[..., [context.roles.index(role) for role in channels]]
-    kwargs = dict(diameter=config.diameter, flow_threshold=config.flow_threshold,
+    kwargs = dict(diameter=diameter, flow_threshold=config.flow_threshold,
                   cellprob_threshold=config.cellprob_threshold, min_size=config.min_size,
                   tile_overlap=config.tile_overlap,
                   normalize={"normalize": True, "percentile": list(config.normalize_percentiles)})
@@ -504,8 +493,8 @@ def _cellpose(image, config: CellposeConfig, context) -> tuple[np.ndarray, dict[
     masks = np.asarray(masks)
     defaults = config.flow_threshold == 0.4 and config.cellprob_threshold == 0.0
     details = {
-        "effective": {"diameter": config.diameter,
-                      "rescale": None if config.diameter is None else 30.0 / config.diameter,
+        "effective": {"diameter": diameter, "rescale": 30.0 / diameter,
+                      "scale_zyx": [float(config.anisotropy) * fy if image.shape[0] > 1 else 1.0, fy, fx],
                       "flow_threshold": config.flow_threshold, "cellprob_threshold": config.cellprob_threshold,
                       "threshold_source": "library_default" if defaults else "override",
                       "tile_overlap": config.tile_overlap, "bfloat16": config.bfloat16, "min_size": config.min_size,

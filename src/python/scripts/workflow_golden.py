@@ -829,6 +829,12 @@ EXCEPTIONS = (
      "the outputs of the morphology task's saved forms and of the segment task, which no rule of A to D wrote"),
     ("D8", r"^file:workflow/.+: only in actual$", "the plan's files, the task records and the task logs"),
     ("D8", _RECORD + _FOV + r"run\.json\.workflow: only in actual$", "run.json's workflow section"),
+    ("IR", _RECORD + r"(?:" + _FOV + r"assignment/[^/]+/assignment\.json|"
+     r"export/[^/]+/(?:export\.json|sample\.h5ad\.uns\.json)\.assembly\.assignment)"
+     r"\.inputs\.cells\.record\.format_version: 2 != 1 \(exact\)$",
+     "the cell run's segmentation record, format version 2 (W-891, the input recipe)"),
+    ("IR", _RECORD + r"export/[^/]+/export\.json\.segmentation\.runs\[\d+\]\.(?:recipe|input): only in actual$",
+     "the export's run entry gains the input recipe's record and the model input (W-891)"),
 )
 
 

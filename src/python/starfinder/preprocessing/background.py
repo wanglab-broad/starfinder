@@ -1,6 +1,6 @@
 """Scalar and 3D background subtraction (design/specs/preprocessing-algorithms.md, task group 2)."""
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 import math
 
 import numpy as np
@@ -234,8 +234,10 @@ def scalar_background_histograms(summary: HistogramSummary, config: ScalarBackgr
             if not float(b).is_integer() or b < 0:
                 raise ValueError(f"the histogram shortcut requires integer backgrounds >= 0, not {b!r}")
             counts[r, c] = _subtract_counts(summary.counts[r, c], int(b))
+    from starfinder.preprocessing._lengths import config_record
     from starfinder.preprocessing.steps import step_spec
-    after = _steps_record(list(summary.summarized_after) + [{"step": step_spec(config).name, "config": asdict(config)}])
+    after = _steps_record(list(summary.summarized_after) + [{"step": step_spec(config).name,
+                                                             "config": config_record(config)}])
     return HistogramSummary(counts, summary.dtype, summary.round_names, summary.channel_labels, tuple(after),
                             summary.fovs_used, summary.fovs_excluded)
 

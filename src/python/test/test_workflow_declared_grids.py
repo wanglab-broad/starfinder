@@ -192,7 +192,7 @@ def command_run(root, dimensions, *, stored):
                                     codebook_table=golden_codebook().table, voxel_size_xy=1.0, voxel_size_z=1.0)
     assert T.output_root(planned) == out
     if dimensions == "2d":
-        planned["segmentation"]["runs"][0]["projection"] = True
+        planned["segmentation"]["runs"][0]["projection"] = "max"   # the import's projection (W-891)
         manifest, _ = T.plan(root, "out-plane", planned)
     assert T.task(manifest, "export", sample="sample1")["outputs"] == ["export/sample1/per_fov/export.json"]
     T.succeed(manifest, "fov", "stitch")

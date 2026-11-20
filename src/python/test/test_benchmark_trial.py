@@ -334,7 +334,7 @@ _FAILURES = {
     ("segmentation", "type"): (dict(_SEEDED, config=dict(type="CellposeConfig")), "ValueError", "type disagrees"),
     ("segmentation", "input"): (_SEEDED, "ValueError", "unsupported input keys"),
     ("segmentation", "weights"): (dict(_SEEDED, method="stardist", target="nucleus", roles=["nuclear"],
-                                       config=dict(model="2D_versatile_fluo", scale=1.0)),
+                                       config=dict(model="2D_versatile_fluo")),
                                   "MissingModelError", "is missing"),
 }
 

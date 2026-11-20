@@ -190,17 +190,21 @@ morphology:
   recipe: null
   channel_images: {projection: max}
 # W-870 (D2): StarDist's 2D_versatile_fluo on the PI stain's maximum projection, scaled by 0.25 (a 6-10 um nucleus is
-# about 16-26 px after scaling)
+# about 16-26 px after scaling). W-891: the input recipe pi_max; the model sees pixels of 0.37854 um (0.094635 / 0.25),
+# the factor 0.25 per FOV and 0.5 after fusion at k = 2
 segmentation:
   device: cpu
+  input_recipes:
+    pi_max:
+      projection: {method: max}
+      model_input: {pixel_size_um: 0.37854}
   runs:
     - name: nucleus
       target: nucleus
       method: stardist
       model: 2D_versatile_fluo
-      scale: 0.25
       inputs: [{role: nuclear, round: reference_stain, channel: PI}]
-      projection: {method: max}
+      input_recipe: pi_max
 # W-870 (D2): the cells are the nuclei expanded by 0.7776 um in each plane (W-858's primary territory)
 assignment:
   cells: nucleus

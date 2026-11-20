@@ -296,6 +296,65 @@ for explicit segment layouts. See the [readout reference](readout-algorithms.md)
 | Assignment figures produced implicitly on that route | Enable `assembly.previews` |
 | Earlier exact-containment correspondence default | Set `CorrespondenceConfig(outside_tolerance=0.0)` to retain it |
 
+(migration-input-recipe)=
+
+### Segmentation input recipe
+
+A segmentation run's input preparation is its input recipe (W-891,
+{doc}`segmentation guide <segmentation-contract>`). The keys it replaced are refused, not
+shimmed: Python raises `TypeError` for the unknown field, and the workflow configuration
+raises `ValueError` naming the recipe field that replaces the key and this section.
+
+(migration-input-recipe-rows)=
+
+| Before | After |
+| --- | --- |
+| `InputChannel(role="composite", round=R, channel=C, prepare=CompositeConfig(...))` | Two source channels, `InputChannel(role="nuclear", round=R, channel=C)` and `InputChannel(role="amplicon", reference_merged=True)`, with `InputRecipe(combine=CompositeConfig(...))` |
+| `InputChannel(role="nuclear", round=R, channel=C, prepare=FlamingoEnhancementConfig(median_radius_px=m, ...), prepare_channel=F)` | `InputChannel(role="nuclear", round=R, channel=C)` and `InputChannel(role="cytoplasm", round=R, channel=F)`, with `InputRecipe(combine=FlamingoEnhancementConfig(median_radius_um=m × spacing_yx, ...))` |
+| `SegmentationRun(projection=ProjectionConfig(method=M))` for a method | `SegmentationRun(input_recipe=InputRecipe(projection=ProjectionConfig(method=M)))` |
+| `SegmentationRun(projection=…)` for an import | `LabelImportConfig(projection=M)` |
+| `StarDistConfig(scale=f)` | `InputRecipe(model_input=ModelInputConfig(pixel_size_um=spacing_yx / f))`, or `ModelInputConfig(factor=f)` on a grid without spacing |
+| `CellposeConfig(diameter=d)` | `ModelInputConfig(pixel_size_um=spacing_yx × d / 30)`; `diameter=None` becomes `ModelInputConfig(factor=1.0)` |
+| YAML `segmentation.runs[*].inputs[*].prepare`, `prepare_channel` | `input_recipe` with `combine`, and the extra source channel in `inputs` |
+| YAML `segmentation.runs[*].projection` | `input_recipe` with `projection`; for `method: import`, the import's `projection` |
+| YAML `scale` (StarDist), `diameter` (Cellpose) in `segmentation.runs` and `export.segmentation.runs` | `input_recipe` with `model_input` |
+| `LENGTH_FIELDS["stardist"]["scale"]`, `LENGTH_FIELDS["cellpose"]["diameter"]` | Removed; `model_input` derives each route's factor |
+| `segmentation.json` `format_version` 1 (`input.projection`, `channels[*].prepare`, `prepare_channel`) | `format_version` 2 (`input.recipe`); version 1 records still load |
+
+`enhance_with_flamingo` and `composite_nuclei_amplicon` keep their signatures and their
+outputs; `FlamingoEnhancementConfig` keeps `median_radius_px` for a direct call. The record
+of a run is now `format_version` 2; a version 1 record still loads, and its run has no
+recipe. The tissue-2D configuration of W-870, for example, becomes:
+
+```yaml
+# before
+segmentation:
+  runs:
+    - name: nucleus
+      target: nucleus
+      method: stardist
+      model: 2D_versatile_fluo
+      scale: 0.25
+      inputs: [{role: nuclear, round: reference_stain, channel: PI}]
+      projection: {method: max}
+# after: 0.37854 µm = 0.094635 µm / 0.25, the factor 0.25 per FOV and 0.5 after fusion at k = 2
+segmentation:
+  input_recipes:
+    pi_max:
+      projection: {method: max}
+      model_input: {pixel_size_um: 0.37854}
+  runs:
+    - name: nucleus
+      target: nucleus
+      method: stardist
+      model: 2D_versatile_fluo
+      inputs: [{role: nuclear, round: reference_stain, channel: PI}]
+      input_recipe: pi_max
+```
+
+A plan over an earlier output root reruns the segment tasks and the export, whose
+blocks changed.
+
 ## Dataset, files and saved records
 
 ### Dataset and FOV coordination migration

@@ -181,7 +181,8 @@ def test_the_plan_refuses_the_settings_the_key_excludes(work, case, expected):
         p["checkpoints"] = ["registered", "candidates"]
     elif case == "segmentation":
         config["segmentation"] = {"runs": [{"name": "nucleus", "target": "nucleus", "method": "stardist",
-                                            "model": "2D_versatile_fluo", "scale": 1.0,
+                                            "model": "2D_versatile_fluo",
+                                            "input_recipe": {"model_input": {"factor": 1.0}},
                                             "inputs": [{"role": "nuclear", "round": "round2", "channel": "ch00"}]}]}
     else:
         config["execution"] = {"resume_from_checkpoint": True}

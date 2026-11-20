@@ -1,6 +1,6 @@
 # Segmentation input recipe: dataset-tunable input preparation on both routes
 
-% Status: Approved (Jiahao, 2026-11-18, W-885), with amendments A and B1–B3; written against 76cd058
+% Status: Approved (Jiahao, 2026-11-18, W-885), with amendments A and B1–B3; written against 76cd058. Implemented by W-891 (2026-11-20); its implementation notes are under "Implementation (W-891)" at the end.
 
 This page specifies the **input recipe**: a named, dataset-level description of how a
 segmentation run turns its source channels into the image the model receives. One recipe
@@ -725,6 +725,8 @@ Replaced, not shimmed (AGENTS.md). A replaced key is refused with a `ValueError`
 `TypeError` for an unknown field) that names the new key and this table's row. Rows for
 `docs/migration.md`:
 
+(segmentation-input-recipe-migration)=
+
 | Before | After |
 | --- | --- |
 | `InputChannel(role="composite", round=R, channel=C, prepare=CompositeConfig(...))` | Two source channels, `InputChannel(role="nuclear", round=R, channel=C)` and `InputChannel(role="amplicon", reference_merged=True)`, with `InputRecipe(combine=CompositeConfig(...))` |
@@ -769,3 +771,43 @@ preprocessing or its records beyond the two registered steps. No 3D steps before
 maximum on the route after fusion (refused, see AF1). No block-wise driver. No change to
 Cellpose's `anisotropy`, which stays a ratio of the method. No change to the MATLAB rules
 or keys.
+
+## Implementation (W-891)
+
+Implemented on 2026-11-20 by W-891, on the branch of the §2.14 phase 3 batch. What the
+implementation decided within the rules above, stated so that a reader of this page knows
+it:
+
+* **`apply_input_recipe` takes three more keyword arguments**: `run` (the run's name, for the
+  steps' `reference_round` and the messages), `projected` (None per FOV; `fused_maximum` or
+  `single_plane` after fusion, `input_file` for the legacy rule's projected file: the
+  projection stage is then recorded `applied: false` with that reason and keeps the grid) and
+  `source` (`given`, or `legacy` for the implicit recipe). The recipe record names `source`.
+* **`InputRecipe.name`** holds the recipe's name in `segmentation.input_recipes` (None
+  inline). It is recorded and is not part of the recipe's SHA-256.
+* **The projection stage projects each model channel in its own dtype**, so each stage's input
+  hash is the previous stage's output hash; the model input is then stacked as ZYXC with
+  NumPy's promotion, as the empty recipe stacks the sources.
+* **`check_model_input`** applies the model input's rules at configuration: a method with a
+  model needs it, `seeded_watershed` refuses it, Cellpose needs equal Y and X factors and, in
+  3D, a Z factor equal to `anisotropy × f_yx` when the model input sets one (amendment A),
+  and StarDist's block-wise prediction needs the factor 1. It runs when a run is built (a
+  `factor` needs no grid), per FOV before any step runs, and in check 7 after fusion.
+* **The export task reads the `segmentation` block** (`TASK_BLOCKS`, amended in
+  [orchestration](orchestration.md), "The blocks of a task kind"), because the runs of
+  `export.segmentation` name the recipes of `segmentation.input_recipes`.
+* **The preview** refuses `--factor-yx` for a run whose seeds are imported: an imported mask
+  lies on the FOV's grid, not on a fused view. A run of `segmentation.runs` previewed with
+  `--factor-yx` uses its source channels' one-view fusion; a run of `export.segmentation.runs`
+  reads the files of `export.images`.
+* **A model input of several model channels** after fusion is written as one CYX OME-TIFF.
+* **`TophatConfig()`, `ReconstructionConfig()` and `FlamingoEnhancementConfig()`** keep their
+  pixel defaults (3, 3 and 1 pixels when neither length is given), and a record of a length in
+  pixels keeps its form without the µm field (`config_record`).
+* **The recipe record names its spacing's unit** (`spatial_unit` beside `spacing_zyx`, null
+  without a spacing), as every persisted grid of the workflow does (the declared-grid check of
+  `test_workflow_engines_e2e.py`).
+* **The golden comparison** names the record changes above as its exception IR
+  ([orchestration](orchestration.md), "The exception of the golden comparison"): the cell run's
+  record of format version 2 and the export run's `recipe` and `input`. Everything else stays
+  compared.

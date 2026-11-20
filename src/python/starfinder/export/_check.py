@@ -410,8 +410,8 @@ def _same_grid(output, grid) -> bool:
 
 
 def _t1(folder, record, section):
-    """T1: the label files with their SHA-256, uint32, on the recorded grid; with the fusion written, the fused
-    projection of each input image with the recorded SHA-256 and grid."""
+    """T1: the label files with their SHA-256, uint32, on the recorded grid; the model inputs (SI1); with the fusion
+    written, the fused projection of each input image with the recorded SHA-256 and grid."""
     import tifffile
 
     from starfinder._records import file_sha256
@@ -435,6 +435,7 @@ def _t1(folder, record, section):
         if labels.dtype != np.uint32 or [1, *labels.shape[-2:]] != list(grid["shape_zyx"]) or labels.ndim != 2:
             _fail("T1", f"the label file {run['path']} holds {labels.dtype} of shape {labels.shape}, not uint32 of the "
                         f"grid's shape {grid['shape_zyx']}")
+    _t1_model_inputs(folder, section, grid)
     if part_status(record, "fuse") != "written":
         return   # the fused files are absent; the recorded input SHA-256 values are provenance only
     fused = {o["image"]: o for o in (record.get("fusion") or {}).get("outputs") or []
@@ -453,6 +454,39 @@ def _t1(folder, record, section):
             _fail("T1", f"the fused projection of image {entry['image']!r} is on the grid {output['shape_zyx']}, "
                         f"spacing {output['spacing_zyx']}, origin {output['origin_zyx']}; the segmentation grid "
                         f"{grid['shape_zyx']}, {grid['spacing_zyx']}, {grid['origin_zyx']}")
+
+
+def _t1_model_inputs(folder, section, grid):
+    """T1 for the model inputs of the route after fusion (SI1): each listed ``model_inputs/<run>.ome.tif`` names a
+    run of the section, whose ``input`` names it, and exists with its recorded SHA-256 on the segmentation grid."""
+    import tifffile
+
+    from starfinder._records import file_sha256
+    from starfinder.export._record import MODEL_INPUTS
+    runs = {run["name"]: run for run in section.get("runs") or []}
+    for output in section.get("outputs") or []:
+        if output.get("kind") != "model_input":
+            continue
+        relative, name = output.get("path"), output.get("run")
+        if name not in runs or relative != f"{MODEL_INPUTS}/{name}.ome.tif":
+            _fail("T1", f"the model input {relative} names the run {name!r}, which is not a run of the segmentation "
+                        "section")
+        entry = runs[name].get("input") or {}
+        if entry.get("path") != relative or entry.get("sha256") != output.get("sha256") or not entry.get("written"):
+            _fail("T1", f"the model input {relative} is not the input of run {name!r}, which records {entry}")
+        path = folder / relative
+        if not path.is_file():
+            _fail("T1", f"the model input {relative} of run {name!r} is missing")
+        actual = file_sha256(path)
+        if actual != output.get("sha256"):
+            _fail("T1", f"the model input {relative} of run {name!r} has SHA-256 {actual}, the segmentation section "
+                        f"{output.get('sha256')}")
+        if not _same_grid(output, grid):
+            _fail("T1", f"the model input {relative} is not on the segmentation grid {grid['shape_zyx']}")
+        image = tifffile.imread(path)
+        if [1, *image.shape[-2:]] != list(grid["shape_zyx"]) or str(image.dtype) != output.get("dtype"):
+            _fail("T1", f"the model input {relative} holds {image.dtype} of shape {image.shape}, not "
+                        f"{output.get('dtype')} on the grid's shape {grid['shape_zyx']}")
 
 
 def _t5(record, section):
@@ -1169,7 +1203,9 @@ def check_export(folder) -> None:
     record"), R1 includes the part ``segment``, and when that part is
     ``written`` or ``reused``: T1 the ``segmentation`` section's label files
     with their SHA-256, uint32, the OME-TIFF layout checks and the recorded
-    grid, and, when the ``fusion`` section is ``written``, each input image's
+    grid, each listed model input ``model_inputs/<run>.ome.tif`` with its
+    SHA-256 on the recorded grid, naming a run of the section whose ``input``
+    it is, and, when the ``fusion`` section is ``written``, each input image's
     fused projection with the recorded SHA-256 and grid within 1e-9 µm (with
     the fusion ``off``, ``not_run`` or ``empty`` the label files alone); with
     the assembly ``written`` or ``reused``, T5 the ``assembly`` and

@@ -26,7 +26,8 @@ from starfinder.image import ImageMetadata
 from starfinder.segmentation import (KNOWN_MODELS, SEGMENTATION_METHODS, CellposeConfig, KnownModel, MissingModelError,
     ModelFile, ModelHashMismatchError, ReferenceGrid, SegmentationBackendUnavailableError, SegmentationInput,
     StarDistConfig, resolve_model, segment)
-from starfinder.segmentation import _models
+from starfinder.segmentation import InputRecipe, ModelInputConfig, _models
+from starfinder.segmentation._recipe import check_model_input
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.contract]
 
@@ -82,7 +83,7 @@ def test_block_fields_are_given_together(blocks, monkeypatch):
     for module in BACKENDS:
         monkeypatch.setitem(sys.modules, module, None)
     with pytest.raises(ValueError, match="given together"):
-        StarDistConfig(model="2D_versatile_fluo", scale=1.0, **blocks)
+        StarDistConfig(model="2D_versatile_fluo", **blocks)
 
 
 @pytest.mark.parametrize("blocks", [
@@ -93,53 +94,51 @@ def test_block_fields_need_min_overlap_plus_twice_the_context_below_the_block_si
     for module in BACKENDS:
         monkeypatch.setitem(sys.modules, module, None)
     with pytest.raises(ValueError, match=r"min_overlap \+ 2 × context < block_size"):
-        StarDistConfig(model="2D_versatile_fluo", scale=1.0, **blocks)
+        StarDistConfig(model="2D_versatile_fluo", **blocks)
 
 
-@pytest.mark.parametrize("scale", [0.5, (1.0, 0.5, 0.5), (0.5, 1.0, 1.0)])
-def test_block_fields_with_a_scale_other_than_one_raise(scale, monkeypatch):
+@pytest.mark.parametrize("factor", [0.5, (1.0, 0.5, 0.5), (0.5, 1.0, 1.0)])
+def test_block_fields_with_a_model_factor_other_than_one_raise(factor, monkeypatch):
+    # W-891: the scale is the input recipe's model_input; a run with block fields refuses a factor other than 1.
     for module in BACKENDS:
         monkeypatch.setitem(sys.modules, module, None)
-    with pytest.raises(ValueError, match="scale other than 1"):
-        StarDistConfig(model="2D_versatile_fluo", scale=scale, block_size=64, min_overlap=8, context=8)
+    config = StarDistConfig(model="2D_versatile_fluo", block_size=64, min_overlap=8, context=8)
+    with pytest.raises(ValueError, match="factor other than 1"):
+        check_model_input(config, InputRecipe(model_input=ModelInputConfig(factor=factor)), run="nucleus")
+    check_model_input(config, InputRecipe(model_input=ModelInputConfig(factor=1.0)), run="nucleus")
 
 
 def test_stardist_config_fields():
-    config = StarDistConfig(model="2D_versatile_fluo", scale=1.0)
+    config = StarDistConfig(model="2D_versatile_fluo")
     assert (config.method, config.model_path, config.prob_thresh, config.nms_thresh, config.normalize_percentiles,
             config.n_tiles, config.block_size, config.min_overlap, config.context) == (
         "stardist", None, None, None, (1.0, 99.8), None, None, None, None)
-    blocks = StarDistConfig(model_path="/models/3D_spleen", scale=(1.0, 1.0, 1.0), block_size=(50, 256, 256),
+    blocks = StarDistConfig(model_path="/models/3D_spleen", block_size=(50, 256, 256),
                             min_overlap=(0, 64, 64), context=(0, 32, 32))
     assert blocks.block_size == (50, 256, 256)
     with pytest.raises(TypeError):
-        StarDistConfig(model="2D_versatile_fluo")      # scale has no default
+        StarDistConfig(model="2D_versatile_fluo", scale=1.0)   # replaced by input_recipe.model_input (W-891)
     for change in (dict(), dict(model="2D_versatile_fluo", model_path="/m"), dict(model="2D_versatile_fluo_x"),
-                   dict(model="2D_brain_overlay_05"), dict(model="2D_versatile_fluo", scale=0),
-                   dict(model="2D_versatile_fluo", scale=(1.0, 0.5)), dict(model="2D_versatile_fluo", prob_thresh=1.5),
+                   dict(model="2D_brain_overlay_05"), dict(model="2D_versatile_fluo", prob_thresh=1.5),
                    dict(model="2D_versatile_fluo", normalize_percentiles=(99.8, 1.0)),
                    dict(model="2D_versatile_fluo", n_tiles=(2,)), dict(model="2D_versatile_fluo", n_tiles=(0, 2)),
                    dict(model="2D_versatile_fluo", model_sha256={"config.json": "0" * 64}),
                    dict(model="2D_versatile_fluo", block_size=64, min_overlap=-1, context=8),
                    dict(model="2D_versatile_fluo", block_size=(64, 64), min_overlap=(8, 8, 8), context=8)):
-        change.setdefault("scale", 1.0)
         with pytest.raises(ValueError):
             StarDistConfig(**change)
 
 
 def test_cellpose_config_fields():
-    config = CellposeConfig(model="cpsam_v2", diameter=30.0)
+    config = CellposeConfig(model="cpsam_v2")
     assert (config.method, config.do_3d, config.anisotropy, config.flow_threshold, config.cellprob_threshold,
             config.tile_overlap, config.bfloat16, config.min_size, config.normalize_percentiles) == (
         "cellpose", False, None, 0.4, 0.0, 0.1, True, 15, (1.0, 99.0))
-    assert CellposeConfig(model="cpsam_v2", diameter=None).diameter is None
-    assert CellposeConfig(model="cpsam_v2", diameter=240.0, do_3d=True, anisotropy=2.0).do_3d
+    assert CellposeConfig(model="cpsam_v2", do_3d=True, anisotropy=2.0).do_3d
     with pytest.raises(TypeError):
-        CellposeConfig(model="cpsam_v2")                # diameter is required
-    for change in (dict(diameter=None, do_3d=True, anisotropy=2.0), dict(diameter=30.0, do_3d=True),
-                   dict(diameter=30.0, anisotropy=2.0), dict(diameter=0.0), dict(diameter=30.0, tile_overlap=0.6),
-                   dict(diameter=30.0, min_size=-2), dict(diameter=30.0, model="cyto3"),
-                   dict(diameter=30.0, model_path="/m"), dict(diameter=30.0, do_3d="yes")):
+        CellposeConfig(model="cpsam_v2", diameter=30.0)   # replaced by input_recipe.model_input (W-891)
+    for change in (dict(do_3d=True), dict(anisotropy=2.0), dict(tile_overlap=0.6), dict(min_size=-2),
+                   dict(model="cyto3"), dict(model_path="/m"), dict(do_3d="yes")):
         change.setdefault("model", "cpsam_v2")          # with model_path: both are given
         with pytest.raises(ValueError):
             CellposeConfig(**change)
@@ -165,12 +164,13 @@ def test_the_registry_lists_the_three_methods_with_their_contract_fields():
 
 def plane_input(roles=("nuclear",)):
     image = np.zeros((1, 16, 16, len(roles)), np.uint8)
-    return SegmentationInput(image, ReferenceGrid((1, 16, 16), ImageMetadata("plane"), "declared"), roles)
+    return SegmentationInput(image, ReferenceGrid((1, 16, 16), ImageMetadata("plane"), "declared"), roles,
+                             model_scale_zyx=(1.0, 1.0, 1.0))
 
 
 @pytest.mark.parametrize("config, extra", [
-    (StarDistConfig(model="2D_versatile_fluo", scale=1.0), "stardist"),
-    (CellposeConfig(model="cpsam_v2", diameter=30.0), "cellpose")])
+    (StarDistConfig(model="2D_versatile_fluo"), "stardist"),
+    (CellposeConfig(model="cpsam_v2"), "cellpose")])
 def test_without_the_extras_a_learned_method_names_its_extra(config, extra, monkeypatch):
     # The locked environment without the extras: the backend imports fail (guidance: monkeypatch sys.modules).
     for module in BACKENDS:
@@ -263,7 +263,7 @@ def test_segment_resolves_the_model_before_the_backend_runs(cache, tmp_path, mon
     monkeypatch.setitem(SEGMENTATION_METHODS, StarDistConfig,
                         replace(spec, requires=(), run=lambda *a: calls.append(a)))
     with pytest.raises(MissingModelError, match="does not exist"):
-        segment(plane_input(), config=StarDistConfig(model_path=str(tmp_path / "absent"), scale=1.0),
+        segment(plane_input(), config=StarDistConfig(model_path=str(tmp_path / "absent")),
                 target="nucleus", label_namespace=NAMESPACE)
     assert calls == []
 
@@ -336,6 +336,6 @@ def test_no_segmentation_entry_downloads(cache, monkeypatch):
     spec = SEGMENTATION_METHODS[CellposeConfig]
     monkeypatch.setitem(SEGMENTATION_METHODS, CellposeConfig, replace(spec, requires=()))
     with pytest.raises(MissingModelError, match="starfinder weights fetch cellpose cpsam_v2"):
-        segment(plane_input(("cytoplasm",)), config=CellposeConfig(model="cpsam_v2", diameter=30.0),
+        segment(plane_input(("cytoplasm",)), config=CellposeConfig(model="cpsam_v2"),
                 target="cell", label_namespace=NAMESPACE)
     assert opened == []

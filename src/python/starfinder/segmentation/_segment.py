@@ -1,11 +1,13 @@
 """The segment entry and the checks the stage wrapper applies to every method (design/specs/segmentation.md)."""
 from __future__ import annotations
 
+import math
 import os
 import sys
 import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
+from numbers import Real
 
 import numpy as np
 
@@ -39,6 +41,10 @@ class SegmentationInput:
         ``amplicon`` or ``composite``.
     sources : tuple of Mapping
         Channel provenance in channel order; the empty default supplies no channel provenance.
+    model_scale_zyx : tuple[float, float, float] or None
+        The scale factor ZYX at which a method with a model sees the input
+        (an input recipe's ``model_input``); ``None`` for a method that does
+        not scale its input.
 
     Notes
     -----
@@ -49,6 +55,10 @@ class SegmentationInput:
     describes where the channel came from (``FOV.segment`` records the
     InputChannel fields and the channel's SHA-256; a direct caller may pass
     empty mappings). Which roles a method needs is checked by :func:`segment`.
+    ``model_scale_zyx`` holds three positive finite factors: a method that
+    scales (``SegmentationSpec.scales``, StarDist and Cellpose) needs it and
+    resamples internally, returning labels on ``grid``; every other method
+    refuses it (design/specs/segmentation-input-recipe.md, "The model input").
 
     Raises
     ------
@@ -58,14 +68,16 @@ class SegmentationInput:
         image is not four-dimensional, or its ZYX shape differs from the grid.
     ValueError
         The image is empty or not finite and real (InvalidImageError), a role is
-        unknown or repeated, or the number of roles or sources differs from the
-        number of channels.
+        unknown or repeated, the number of roles or sources differs from the
+        number of channels, or model_scale_zyx is not three positive finite
+        numbers.
     """
 
     image: np.ndarray
     grid: ReferenceGrid
     roles: tuple[str, ...]
     sources: tuple[Mapping, ...] = ()
+    model_scale_zyx: tuple[float, float, float] | None = None
 
     def __post_init__(self):
         if not isinstance(self.grid, ReferenceGrid):
@@ -91,6 +103,12 @@ class SegmentationInput:
             raise ValueError("sources must hold one mapping per channel, or be empty")
         if not all(isinstance(s, Mapping) for s in self.sources):
             raise TypeError("each source must be a mapping")
+        scale = self.model_scale_zyx
+        if scale is not None:
+            if not isinstance(scale, (tuple, list)) or len(scale) != 3 or any(
+                    isinstance(f, bool) or not isinstance(f, Real) or not math.isfinite(f) or f <= 0 for f in scale):
+                raise ValueError(f"model_scale_zyx must be three positive finite factors or None; got {scale!r}")
+            object.__setattr__(self, "model_scale_zyx", tuple(float(f) for f in scale))
 
 
 def _check_input(segmentation_input, spec):
@@ -107,6 +125,17 @@ def _check_input(segmentation_input, spec):
         if not required & set(roles):
             raise ValueError(f"{_WHAT} {spec.name!r} needs a channel with the role "
                              f"{' or '.join(repr(r) for r in sorted(required))}")
+
+
+def _check_scale(segmentation_input, spec):
+    """Check 3 (continued): a method that scales needs the model scale, and every other method refuses it."""
+    scale = segmentation_input.model_scale_zyx
+    if spec.scales and scale is None:
+        raise ValueError(f"{_WHAT} {spec.name!r} scales its input for its model and needs model_scale_zyx, the factor "
+                         "an input recipe's model_input gives (input_recipe.model_input)")
+    if not spec.scales and scale is not None:
+        raise ValueError(f"{_WHAT} {spec.name!r} does not scale its input and refuses model_scale_zyx "
+                         "(input_recipe.model_input)")
 
 
 def _check_device(device, spec):
@@ -205,7 +234,9 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
     The stage wrapper applies, in order: (1) the config is registered in
     ``SEGMENTATION_METHODS`` by its exact type (a ``LabelImportConfig`` is
     refused: import is not a method); (2) the target is one of the method's;
-    (3) the input is valid and its roles are accepted and complete; (4) the
+    (3) the input is valid, its roles are accepted and complete, and it has a
+    model scale (``model_scale_zyx``) exactly when the method scales its input
+    (``SegmentationSpec.scales``); (4) the
     device is ``"cpu"`` or ``"cuda"`` and one of the method's; (5) the
     method's optional dependencies import; (6) a model is resolved and its
     files hashed before any library call; (7) the dimensionality (Z=1 as a
@@ -245,8 +276,9 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
         (Z=1) or ``volume``, the run record (``methods`` holds the uniform
         provenance entry with ``artifacts``, ``execution`` and ``effective``;
         ``input`` the input's SHA-256, shape, dtype, metadata and channel
-        sources; ``seeds`` the seed run and its labels' SHA-256) and the
-        method's details and wall time as diagnostics.
+        sources, with ``recipe`` None (``FOV.segment`` and the route after
+        fusion record the input recipe there); ``seeds`` the seed run and its
+        labels' SHA-256) and the method's details and wall time as diagnostics.
 
     Raises
     ------
@@ -256,7 +288,8 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
         non-integer labels from the method.
     ValueError
         A target the method does not produce, a role it does not accept or a
-        missing required role, an unknown or unsupported device, seeds given
+        missing required role, a model scale missing for a method that scales
+        its input or given to one that does not, an unknown or unsupported device, seeds given
         to a method without seeds or missing for one that needs them, seeds
         with another target, labels of another shape or with negative values.
     IncompatibleGeometryError
@@ -275,6 +308,7 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
     if target not in spec.targets:
         raise ValueError(f"{_WHAT} {spec.name!r} produces {', '.join(sorted(spec.targets))}, not {target!r}")
     _check_input(segmentation_input, spec)
+    _check_scale(segmentation_input, spec)
     _check_device(device, spec)
     require(spec, _WHAT, SegmentationBackendUnavailableError)
     model, artifacts, n_dim = _resolve_model(spec, config) if spec.models else (None, [], None)
@@ -284,7 +318,8 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
     _check_seeds(seeds, spec, grid)
     _check_namespace(label_namespace)
 
-    context = MethodContext(segmentation_input.roles, None if seeds is None else seeds.labels, grid, device, model)
+    context = MethodContext(segmentation_input.roles, None if seeds is None else seeds.labels, grid, device, model,
+                            segmentation_input.model_scale_zyx)
     start = time.perf_counter()
     output = spec.run(image, config, context)
     seconds = time.perf_counter() - start
@@ -303,7 +338,7 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
         "target": target, "geometry": geometry, "label_namespace": label_namespace, "grid": _grid_record(grid),
         "input": {"path": None, "sha256": array_sha256(image), "file_sha256": None,
                   "shape_zyxc": list(image.shape), "dtype": str(image.dtype),
-                  "metadata": _json(asdict(grid.metadata)), "projection": None,
+                  "metadata": _json(asdict(grid.metadata)), "recipe": None,
                   "channels": [{"role": role, **_json(dict(source))} for role, source in
                                zip(segmentation_input.roles,
                                    segmentation_input.sources or ({},) * len(segmentation_input.roles))]},

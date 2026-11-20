@@ -443,12 +443,13 @@ segmentation and assignment record and the export compares with the frame it dec
 | `segment` | `segmentation` | |
 | `assign` | `assignment` | |
 | `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import`, `stitch` | `stitching` | |
-| `export` | `assembly`, `export`, `assignment`, `stitching`, `processing` | `_export_config` reads `assembly`; `_assembly_block` needs `stitching` present; the route after fusion reads `assignment` (`_sample_segmentation_block`, `workflow.py:1715`); the molecule routes load the codebook with `processing`'s encoding and layout |
+| `export` | `assembly`, `export`, `assignment`, `stitching`, `processing`, `segmentation` | `_export_config` reads `assembly`; `_assembly_block` needs `stitching` present; the route after fusion reads `assignment` (`_sample_segmentation_block`, `workflow.py:1715`) and the input recipes of `segmentation.input_recipes` that its runs name (W-891); the molecule routes load the codebook with `processing`'s encoding and layout |
 | `report` | `report`, `assembly`, `assignment` | It reads the other steps through their records; `assembly.assignment` names the assignment it reports, else, without an `assembly` block, the `assignment` block's `name` (W-807) |
 | `compare` | `report` | It reads the other steps through their records |
 
 % Amended 2026-10-31 after W-647's review: the rows of export, report and compare (the operator's decision on W-152).
 % Amended 2026-11-04 W-807: the report row also reads `assignment`, which names the report's assignment when there is no `assembly` block.
+% Amended 2026-11-20 W-891: the export row also reads `segmentation`, whose `input_recipes` the runs of `export.segmentation` name by name (design/specs/segmentation-input-recipe.md, option RL1).
 
 **The map is also the command's access.** A command reads `configuration` and `api` only through a
 view limited to the common part and its kind's blocks; reading anything else raises, in every run,
@@ -1628,7 +1629,14 @@ migrated configurations, with the tolerances of `docs/contributing.md`. The comp
   migrated ones state the same); the new task records and logs, the plan's files under `workflow/`
   and `run.json`'s `workflow` section.
 
+* **IR.** The segmentation input recipe (W-891, design/specs/segmentation-input-recipe.md,
+  "Records"): the cell run's segmentation record that the assignment record and the export's
+  assembly hold is of `format_version` 2 (1 before), and each run entry of the export's
+  `segmentation` section gains `recipe` and `input`. The labels and every other value of those
+  records stay compared.
+
 % Amended 2026-10-31 after W-737's review: what the comparison found on the migrated configurations (the operator's decision on W-152).
+% Amended 2026-11-20 W-891: IR, the record changes of the approved input-recipe specification (format version 2; the export run's recipe and input); to be confirmed by Jiahao at merge.
 
 Everything else is compared as W-642 and invocation D recorded it: the molecule tables, the counts
 and statuses, the registration results, the assignment tables, the placement, the export tables and

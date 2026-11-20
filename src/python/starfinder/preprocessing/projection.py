@@ -13,7 +13,7 @@ class ProjectionConfig:
     Parameters
     ----------
     method : str
-        Reduction method: ``max`` or ``sum``.
+        Reduction method: ``max``, ``sum`` or ``mean``.
     output_dtype : str or None
         Output real numeric dtype for checked casting; with ``None``, ``conversion`` determines the output dtype when set, otherwise the reduction result's dtype is retained.
     conversion : ImageConversionConfig or None
@@ -30,6 +30,7 @@ class ProjectionConfig:
 
     Max retains dtype. Sum uses uint64/int64 for integer inputs up to 32 bits,
     float64 for floats. Integer 64-bit sums are rejected rather than overflow.
+    Mean accumulates in float64 and gives float64.
     Requested output_dtype uses checked casting; conversion is required for
     clipping or rescaling. Both cannot be specified together.
     """
@@ -39,8 +40,8 @@ class ProjectionConfig:
     axis: str = "z"
 
     def __post_init__(self):
-        if self.method not in ("max", "sum"):
-            raise ValueError("projection method must be max or sum")
+        if self.method not in ("max", "sum", "mean"):
+            raise ValueError("projection method must be max, sum or mean")
         if self.axis not in ("z", "channel"):
             raise ValueError("projection axis must be z or channel")
         if self.output_dtype is not None:
@@ -83,6 +84,8 @@ def project_image(volume: np.ndarray, *, config: ProjectionConfig = ProjectionCo
         axis, keepdims = 0, True
     if config.method == "max":
         result = np.max(volume, axis=axis, keepdims=keepdims)
+    elif config.method == "mean":
+        result = np.mean(volume, axis=axis, keepdims=keepdims, dtype=np.float64)
     else:
         if volume.dtype.kind in "ui" and volume.dtype.itemsize > 4:
             raise ValueError("64-bit integer sum projection is unsupported; convert explicitly")

@@ -132,15 +132,16 @@ import numpy as np
 from starfinder.image import ImageMetadata
 from starfinder.segmentation import ReferenceGrid, SegmentationInput, StarDistConfig, segment
 device, parity, out = sys.argv[1:4]
-configs = {"P1_ln_dapi_round4_3d": StarDistConfig(model_path=os.environ["STARFINDER_STARDIST_3D_SPLEEN"], scale=1.0),
-           "P2_tissue_pi_2d": StarDistConfig(model="2D_versatile_fluo", scale=1.0)}
+configs = {"P1_ln_dapi_round4_3d": StarDistConfig(model_path=os.environ["STARFINDER_STARDIST_3D_SPLEEN"]),
+           "P2_tissue_pi_2d": StarDistConfig(model="2D_versatile_fluo")}
 labels = {}
 with np.load(parity) as data:
     for name, config in configs.items():
         image = data[f"input__{name}"]
         image = image if image.ndim == 3 else image[np.newaxis]
         grid = ReferenceGrid(image.shape, ImageMetadata(f"parity_{name}"), "declared")
-        result = segment(SegmentationInput(image[..., np.newaxis], grid, ("nuclear",)), config=config,
+        result = segment(SegmentationInput(image[..., np.newaxis], grid, ("nuclear",), model_scale_zyx=(1.0, 1.0, 1.0)),
+                         config=config,
                          target="nucleus", device=device, label_namespace=f'["parity",null,null,null,"{name}"]')
         assert result.record["methods"][0]["execution"]["device"] == device
         labels[name] = result.labels

@@ -205,16 +205,15 @@ class InputChannel:
     round: str | None = None           # a loaded round in the reference frame; None with reference_merged
     channel: str | int | None = None   # a pattern or a name of the round (Dataset.channel_index), or an index
     reference_merged: bool = False     # the reference round's channel maximum (save_reference_image "merged")
-    prepare: CompositeConfig | FlamingoEnhancementConfig | None = None  # an input function and its own sources
 
 @dataclass(frozen=True)
 class SegmentationRun:
     name: str                          # snake_case; the key of FOV.segmentation_results and the record folder
     target: str                        # nucleus or cell
-    inputs: tuple[InputChannel, ...]
+    inputs: tuple[InputChannel, ...]   # the source channels
     method: object                     # a SEGMENTATION_METHODS config, or a LabelImportConfig
     seeds: str | None = None           # name of an earlier run of the same plan
-    projection: ProjectionConfig | None = None   # optional Z projection of the input (legacy maximum_projection)
+    input_recipe: InputRecipe | None = None   # the input recipe; None is the empty recipe
     operations: tuple = ()             # ExpandLabelsConfig, ZExtensionConfig, applied in order after the method
 
 @dataclass(frozen=True)
@@ -223,8 +222,9 @@ class SegmentationPlan:
 ```
 
 `FOV.segment(plan, *, device="cpu", checkpoints=None)` runs each run in order: it
-takes the FOV's reference grid (`FOV.reference_grid()`, below), assembles the
-`SegmentationInput` from the FOV's resident images, calls `segment` (or `import_labels`
+takes the FOV's reference grid (`FOV.reference_grid()`, below), takes the source
+channels from the FOV's resident images and applies the run's input recipe with
+`apply_input_recipe` to make the `SegmentationInput`, calls `segment` (or `import_labels`
 with that grid), applies the run's label operations, stores the result in
 `FOV.segmentation_results[run.name]` and, when `checkpoints` is given, writes the run's
 files ("Saved format"). It never runs registration, detection or decoding, and
@@ -233,9 +233,14 @@ files ("Saved format"). It never runs registration, detection or decoding, and
 % (D1)
 
 A plan is not a recipe engine (the reusable-functions decision): each run names one method
-or one import, at most one input function per channel and an ordered tuple of the two
-label functions. There is no general step chain; preprocessing of the rounds stays in
-`FOV.run`'s `PreprocessingRecipe`.
+or one import, its source channels, an input recipe and an ordered tuple of the two label
+functions. The input recipe is the one chain: fixed stages of registered steps
+([segmentation-input-recipe](segmentation-input-recipe.md)); preprocessing of the rounds
+stays in `FOV.run`'s `PreprocessingRecipe`.
+
+% Amended 2026-11-20 W-891 (choice 8 of segmentation-input-recipe.md, approved 2026-11-18): InputChannel loses
+% prepare and prepare_channel, SegmentationRun's projection becomes input_recipe, and the sentence of D4 "there is no
+% general step chain" becomes "the input recipe is the one chain: fixed stages of registered steps".
 
 % (D4)
 
@@ -368,7 +373,7 @@ hash).
 | `FOV.prepare_morphology` (`FOV.register`) | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
 | `FOV.prepare_morphology` | the image `reference_stain` (the reference round's stain files, rotated as the reference round, with its metadata) | a nuclear stain stored as an extra file of the reference round |
 | `FOV.prepare_morphology` (`FOV.register`) | `registration_record["rounds"][name]`: the recipe summary, the reference label and `reference_sha256`, or for `reference_stain` the statement `same acquisition as the reference round`; after `FOV.load_registered_round`, also `saved` (the image file's path relative to the FOV checkpoint directory and its SHA-256) | the input-channel identity in the segmentation record: its `registration` entry names the reference and, when present, the relation and the saved file |
-| `Dataset` | `channel_index(round, key)` and `channel_info(round)` ([coordination](../../docs/coordination.md), "Channels") | resolving `InputChannel.channel` and `prepare_channel` by pattern or by name, and the channel's `name` and `wavelength` in the record; an unknown key or a repeated name raises `ValueError` naming the round and its channels |
+| `Dataset` | `channel_index(round, key)` and `channel_info(round)` ([coordination](../../docs/coordination.md), "Channels") | resolving `InputChannel.channel` (each source channel, the Flamingo stain included since W-891) by pattern or by name, and the channel's `name` and `wavelength` in the record; an unknown key or a repeated name raises `ValueError` naming the round and its channels |
 
 Every image `FOV.segment` reads must be resident: the reference round (after `FOV.run`,
 whose streaming mode keeps it, or after `FOV.load_checkpoint("registered")`), or, for the
@@ -420,7 +425,7 @@ mapping in `SegmentationResult.record`:
 
 ```json
 {
-  "format_version": 1,
+  "format_version": 2,
   "stage": "segmentation",
   "dataset_id": "...", "sample_id": "...", "fov_id": "FOV_001", "subtile_id": null,
   "run": "nucleus", "target": "nucleus", "geometry": "volume",
@@ -429,9 +434,9 @@ mapping in `SegmentationResult.record`:
   "input": {
     "path": "input.ome.tif", "sha256": "<C-order bytes>", "file_sha256": "...",
     "shape_zyxc": [50, 512, 512, 1], "dtype": "uint8", "metadata": {"frame_id": "..."},
-    "projection": null,
+    "recipe": {"name": null, "source": "given", "sha256": "...", "config": {}, "stages": [], "model_input": {}},
     "channels": [{"role": "nuclear", "round": "reference_stain", "channel": "DAPI", "name": "DAPI",
-                  "wavelength": 405.0, "reference_merged": false, "prepare": null,
+                  "wavelength": 405.0, "reference_merged": false,
                   "registration": {"reference": "round1", "reference_sha256": null,
                                    "relation": "same acquisition as the reference round",
                                    "saved": {"path": "other_rounds/reference_stain/image.ome.tif",
@@ -456,6 +461,12 @@ mapping in `SegmentationResult.record`:
   `"segmentation"`, plus `execution` (as in the [spot-finding specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/spot-finding.md#execution-device)) and
   `effective` (the parameters the method resolved: scale, thresholds and their source,
   tiles). An imported run has `methods: []` and an `import` entry instead.
+* `input` is the model input: the array the method received after every stage of the
+  run's input recipe, with one `channels` entry per source channel and the recipe record
+  under `recipe` (its layout: [segmentation-input-recipe](segmentation-input-recipe.md),
+  "Records"). Amended 2026-11-20 W-891: `format_version` 2; `input.projection`,
+  `channels[*].prepare` and `prepare_channel` leave the record, and a record of version 1
+  still loads.
 * `input.sha256` is the SHA-256 of the segmentation input as an array; each channel also
   has its own. The hash of an array is the SHA-256 of the UTF-8 text
   `"<dtype>|<shape>|"`, NumPy's dtype string (`<u4`, `<f4`) and the shape as Python
@@ -587,6 +598,7 @@ class SegmentationInput:
     grid: ReferenceGrid                # image.shape[:3] == grid.shape_zyx; FOV.reference_grid() in a FOV run
     roles: tuple[str, ...]             # one role per channel, in channel order
     sources: tuple[Mapping, ...]       # per channel: the InputChannel fields and its SHA-256
+    model_scale_zyx: tuple[float, float, float] | None = None   # the model input's factor (W-891)
 ```
 
 * Roles are `nuclear`, `cytoplasm`, `membrane`, `amplicon` and `composite`; each role
@@ -595,9 +607,14 @@ class SegmentationInput:
   shape and metadata.
 * A direct caller of `segment` builds the grid itself, from `FOV.reference_grid()`, from
   `reference_grid_from_file` or as a declared grid.
+* **The model scale** (amended 2026-11-20 W-891). `model_scale_zyx` is the factor at
+  which a method with a model sees the input, the input recipe's `model_input`; a method
+  that scales (`SegmentationSpec.scales`, `stardist` and `cellpose`) needs it and every
+  other method refuses it (check 3).
 * **The input as a saved artifact.** `FOV.segment` assembles the input from the
-  reference-frame images, applying each channel's `prepare` function and the run's
-  `projection`, then writes it as `segmentation/<run>/input.ome.tif` with `save_volume`
+  reference-frame images by the run's input recipe (`apply_input_recipe`; amended
+  2026-11-20 W-891, in place of each channel's `prepare` function and the run's
+  `projection`), then writes it as `segmentation/<run>/input.ome.tif` with `save_volume`
   (ZYXC, the input's dtype, its `ImageMetadata`) before the method runs. It is in the
   reference frame (or its projection). Its SHA-256 (C-order bytes) and the file's
   SHA-256 are in the run record, and each label file's record names that hash, so a
@@ -660,7 +677,13 @@ of limitations is under "Device and environments".
 
 % are from W-306; the W-305 inventory
 
-Config fields (frozen dataclasses, validated in `__post_init__`):
+Config fields (frozen dataclasses, validated in `__post_init__`). Amended 2026-11-20 W-891:
+`StarDistConfig.scale` and `CellposeConfig.diameter` left the configs. The input recipe's
+`model_input` gives the factor (`SegmentationInput.model_scale_zyx`), which StarDist passes as
+`scale` (ZYX for a 3D model, Y and X for a 2D model, none when every factor is 1) and Cellpose
+as `diameter = 30 / f_yx`; a 3D Cellpose run scales Z by `anisotropy × f_yx`, and a model input
+that sets another Z factor is refused. `SegmentationSpec` gains `scales`, true for `stardist`
+and `cellpose` ([segmentation-input-recipe](segmentation-input-recipe.md), "The model input").
 
 **`StarDistConfig`** (`method="stardist"`)
 
@@ -669,7 +692,6 @@ Config fields (frozen dataclasses, validated in `__post_init__`):
 | `model` | `None` | A known pretrained model name (`2D_versatile_fluo`); exactly one of `model` and `model_path`. |
 | `model_path` | `None` | Folder of a user-trained model (`config.json`, `thresholds.json`, `weights_best.h5`), such as `3D_spleen`. |
 | `model_sha256` | `None` | Optional mapping of file name to expected SHA-256 for `model_path`; checked when given. |
-| `scale` | required | Input scale passed to `predict_instances(scale=…)`: a number scales Y and X (Z factor 1), a 3-tuple is per axis ZYX. No default (the rule set after the survey). |
 | `prob_thresh`, `nms_thresh` | `None` | `None` uses the model's `thresholds.json`; a number is a sensitivity override and is recorded with `threshold_source: "override"`. |
 | `normalize_percentiles` | `(1.0, 99.8)` | csbdeep percentile normalization over the whole image, as the current script. |
 | `n_tiles` | `None` | `None` is the current script's tiling: 1×4×4 for a volume, 2×2 for a plane. A tuple is passed as given (ZYX; Y, X for a plane). |
@@ -698,8 +720,9 @@ segmentation and is not an alternative (decided at the acceptance review).
 * `n_tiles` applies inside each block. Label values are numbered in block order, so they
   differ from the whole-image result; two results are compared by matched objects.
 * The method never switches to block-wise prediction on its own.
-* Proposed rule: block fields together with a `scale` other than 1 raise `ValueError`
-  until a test covers that combination, which nothing has run.
+* Proposed rule: block fields together with a model scale other than 1 raise `ValueError`
+  until a test covers that combination, which nothing has run (checked with the model
+  input's factor since W-891, also after fusion at `k`).
 
 % (W-305: `3D_spleen` labels on LN are about 31 pixels)
 
@@ -715,7 +738,6 @@ field of view ([assignment-algorithms](assignment-algorithms.md), "Bounded real 
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `model`, `model_path`, `model_sha256` | `None` | As for StarDist; the known model is `cpsam_v2`. |
-| `diameter` | required | Object diameter [pixels] passed to `eval`; the image is rescaled by 30/`diameter`. `None` must be given explicitly and means no rescale; it is rejected with `do_3d=True` (dependency study, section 6). |
 | `do_3d` | `False` | 3D mode on Z>1; a Z>1 input with `False` raises. |
 | `anisotropy` | `None` | Z spacing over Y, X spacing; required with `do_3d=True`. |
 | `flow_threshold` | 0.4 | Library default, recorded. |
@@ -835,7 +857,10 @@ grid's shape, metadata, source and hash. CellProfiler outputs, the legacy
 ## Input preparation and label functions
 
 These are plain functions (the reusable-functions decision), callable on their own and
-from `FOV.segment` through `InputChannel.prepare` and `SegmentationRun.operations`. Each
+from `FOV.segment` through the input recipe's `combine` stage (amended 2026-11-20 W-891: in
+place of `InputChannel.prepare`; the composite is `combine: composite` on the sources
+`nuclear` and `amplicon`, the enhancement `combine: flamingo_enhance` on `nuclear` and
+`cytoplasm`, with `median_radius_um`) and `SegmentationRun.operations`. Each
 returns its result and a record mapping (`{"function": name, "config": …, "inputs":
 [sha256 …], "output": sha256}`), which the run record keeps.
 
@@ -844,7 +869,7 @@ returns its result and a record mapping (`{"function": name, "config": …, "inp
 | Function | Signature | Parameters and units | What it records |
 | --- | --- | --- | --- |
 | `composite_nuclei_amplicon` | `(nuclear, amplicon, *, config=CompositeConfig()) -> np.ndarray` | `nuclear_quantile` 0.005 and `amplicon_quantile` 0.001 (fractions; the stretch uses q and 1 − q of the whole volume); two ZYX arrays of equal shape, else `IncompatibleGeometryError` (arrays carry no metadata, so `FOV.segment` checks that both come from images with the reference metadata); output uint8 ZYX | the config, the four quantile values reached, both input hashes |
-| `enhance_with_flamingo` | `(nuclear, flamingo, *, config=FlamingoEnhancementConfig()) -> np.ndarray` | `flamingo_quantile` 0.005, `nuclear_quantile` 0.001 (fractions), `median_radius_px` 1 (pixels, a disk in each plane); two ZYX arrays of equal shape, checked as for the composite; output uint8 ZYX | the config, the quantile values, both input hashes |
+| `enhance_with_flamingo` | `(nuclear, flamingo, *, config=FlamingoEnhancementConfig()) -> np.ndarray` | `flamingo_quantile` 0.005, `nuclear_quantile` 0.001 (fractions), `median_radius_px` 1 (pixels, a disk in each plane; an input recipe gives `median_radius_um` instead, converted with the grid's spacing, W-891); two ZYX arrays of equal shape, checked as for the composite; output uint8 ZYX | the config, the quantile values, both input hashes |
 | `normalize_percentile_unclipped` | `(image, *, p_low=1.0, p_high=99.8, axes=None) -> np.ndarray` | percents of the intensity distribution over `axes` (default all spatial axes); output float32, unclipped | `p_low`, `p_high` and the two values reached |
 | `rescale_input` | `(image, metadata, *, scale_zyx) -> tuple[np.ndarray, ImageMetadata]` | per-axis factors > 0 (dimensionless); linear interpolation with anti-aliasing; the metadata's spacing, when it has one, is divided by the factors, and its `frame_id` is extended | factors, input and output shapes |
 | `resample_labels` | `(labels, *, target_shape) -> np.ndarray` | nearest neighbour by pixel centres, source index ⌊(i + 0.5) × n_source / n_target⌋ per axis, onto exactly `target_shape`; the caller attaches the target grid | both shapes |
@@ -861,8 +886,8 @@ Rules:
   trip cannot happen. `FOV.segment` has no option that shrinks an input, and `segment`
   rejects seeds whose grid differs from the input's, so a cell run never computes
   outlines on a shrunk grid. StarDist and Cellpose scale internally (`scale`,
-  `diameter`), which the dependency study found returns labels on the input grid, so they never use
-  these two functions.
+  `diameter`, which the input recipe's `model_input` gives since W-891), which the dependency
+  study found returns labels on the input grid, so they never use these two functions.
 * `expand_labels` is the only expansion. It is applied once, by a run's `operations`,
   and recorded; `expand_labels(mode="planar", unit="pixel")` reproduces the current
   script and the golden digests.
@@ -963,8 +988,12 @@ hashes.
 
 ### Input scale
 
-`StarDistConfig.scale` and `CellposeConfig.diameter` are required: none of the three
-models records a training pixel size, so no scale can be derived from the spacing. The
+Amended 2026-11-20 W-891: the input scale is the input recipe's `model_input`, the pixel size
+the model sees (`pixel_size_um`, or `factor` on a grid without spacing), required for a method
+with a model and with no default ([segmentation-input-recipe](segmentation-input-recipe.md),
+"The model input"); it replaced `StarDistConfig.scale` and `CellposeConfig.diameter`, which
+were required in the same way. None of the three models records a training pixel size, so no
+pixel size can be derived from the model. The
 values the survey found (`3D_spleen` 1.0 on LN; `2D_versatile_fluo` 0.25 on the tissue-2D
 PI stain; Cellpose diameter 240 for culture cells) are observations on one field of view
 each, not recommended settings, and the documentation says so. The dependency study
@@ -1226,11 +1255,15 @@ and on [segmentation-algorithms](segmentation-algorithms.md):
 
 ## Workflow configuration
 
-A Python-only top-level `segmentation` block describes a plan:
+A Python-only top-level `segmentation` block describes a plan and names the input recipes
+of both routes (amended 2026-11-20 W-891):
 
 ```yaml
 segmentation:
   device: cpu
+  input_recipes:
+    spleen:
+      model_input: {factor: 1.0}
   runs:
     - name: nucleus
       target: nucleus
@@ -1238,7 +1271,7 @@ segmentation:
         - {role: nuclear, round: reference_stain, channel: DAPI}
       method: stardist
       model_path: /absolute/stardist_models/3D_spleen
-      scale: 1.0
+      input_recipe: spleen
       operations:
         - {operation: expand_labels, distance: 4, unit: pixel, mode: planar}
     - name: cell
@@ -1250,7 +1283,7 @@ segmentation:
       sigma_um: 1.5
 ```
 
-Each run's keys besides `name`, `target`, `inputs`, `seeds`, `projection`, `operations`
+Each run's keys besides `name`, `target`, `inputs`, `seeds`, `input_recipe`, `operations`
 and `method` are exactly the init fields of the method's config (or of
 `LabelImportConfig` with `method: import`); `method` takes the `SEGMENTATION_METHODS`
 names, and a default-tier test keeps the schema list equal to the registry, as for the
@@ -1260,7 +1293,8 @@ unless `backend: python`.
 The block is executed by the method-agnostic segmentation rule of the workflow
 integration, which loads the FOV's reference-frame images (for example from the
 `registered` checkpoint) and runs the segment call; until then it serves the Python API
-and the adapter function.
+and the adapter function. A block with `input_recipes` and no `runs` plans no segment task
+(W-891).
 
 % the §2.13 method-agnostic segmentation rule
 
@@ -1277,11 +1311,11 @@ as declared.
 | --- | --- |
 | `stardist_base_path`, `stardist_model_name` | `model_path = <base>/<name>`; the files' SHA-256 values are recorded. A name equal to a known model with the base path of the weights cache resolves through `KNOWN_MODELS`. |
 | `prob_thresh`, `nms_thresh` | `prob_thresh`, `nms_thresh`; recorded with `threshold_source: "stored"` when they equal the model's `thresholds.json`, else `"override"`. |
-| `rescale` | `true` becomes `scale` 0.5 in Y and X inside StarDist, so the labels are rendered on the input grid instead of the legacy round trip; the change is recorded in `docs/migration.md`. `false` becomes `scale` 1.0. |
+| `rescale` | `true` becomes the implicit input recipe's `model_input` factor 0.5 in Y and X (StarDist's `scale`), so the labels are rendered on the input grid instead of the legacy round trip; the change is recorded in `docs/migration.md`. `false` becomes the factor 1.0. The implicit recipe is recorded with `name: null` and `source: legacy` (W-891). |
 | `expand_labels`, `distance` | `operations: [{operation: expand_labels, distance: <distance>, unit: pixel, mode: planar}]` when `expand_labels` is true. |
 | `segmentation_input_folder` | The role of the input file's one channel: `overlay` (default; the file written by the `create_nuclei_amplicon_overlay` rule, which itself calls `composite_nuclei_amplicon`): `composite`; `DAPI`: `nuclear`; `flamingo/enhanced_DAPI` (written by the `enhance_dapi_with_flamingo` rule through `enhance_with_flamingo`): `nuclear`; any other folder: `nuclear`. |
 | (none) | `target`: a new Python-only key of the legacy block; without it, `cell` for `overlay` and `nucleus` otherwise, recorded as `"target_source": "legacy_default"`. |
-| `create_nuclei_amplicon_overlay.parameters.maximum_projection`, top-level `maximum_projection` | the run's `projection` (`ProjectionConfig()` when true). |
+| `create_nuclei_amplicon_overlay.parameters.maximum_projection`, top-level `maximum_projection` | the implicit recipe's `projection: max`, recorded as not applied (`reason: input_file`): the input file is the projection (W-891; it was the run's `projection`). |
 | `rotate_angle`, `dapi_round` | not read by the segmentation adapter. In the legacy rules they still drive `rotate_nuclei` (on the Python backend `reference_stains` replaces `dapi_round` since 2026-10-25), whose file the composite rule reads; `get_dapi_input` raises unless exactly one file matches, naming the matches. In the `segmentation` block, inputs come from the FOV's rounds after `FOV.run`'s rotation and `FOV.register`. |
 
 % `dapi_round`, W-569

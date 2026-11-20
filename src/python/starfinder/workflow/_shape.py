@@ -100,7 +100,8 @@ TASK_BLOCKS = {
     "tile_global": ("processing",), "tile": ("processing",), "tile_merge": ("processing",),
     "morphology": ("morphology",), "segment": ("segmentation",), "assign": ("assignment",),
     "bigstitcher_macro": ("stitching",), "bigstitcher_engine": ("stitching",), "bigstitcher_import": ("stitching",),
-    "stitch": ("stitching",), "export": ("assembly", "export", "assignment", "stitching", "processing"),
+    "stitch": ("stitching",),
+    "export": ("assembly", "export", "assignment", "stitching", "processing", "segmentation"),
     "report": ("report", "assembly", "assignment"), "compare": ("report",),
 }
 KINDS = tuple(TASK_BLOCKS)
@@ -133,9 +134,12 @@ def sha256(data: bytes) -> str:
 
 def plain(value):
     """A value as the resolved configuration writes it: a dataclass field by field with its type name (``type``),
-    tuples as lists, paths as strings, enums by value; NaN and infinities refused."""
+    tuples as lists, paths as strings, enums by value; NaN and infinities refused. A field marked to be recorded
+    only when set (``preprocessing._lengths.OMIT_NONE``, such as ``TophatConfig.radius_um``) is left out when None."""
     if is_dataclass(value) and not isinstance(value, type):
-        return {"type": type(value).__name__, **{f.name: plain(getattr(value, f.name)) for f in fields(value)}}
+        return {"type": type(value).__name__,
+                **{f.name: plain(getattr(value, f.name)) for f in fields(value)
+                   if not (f.metadata.get("record") == "omit_none" and getattr(value, f.name) is None)}}
     if isinstance(value, Mapping):
         return {str(k): plain(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
