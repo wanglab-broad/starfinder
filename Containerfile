@@ -11,7 +11,9 @@
 # `starfinder._records.code()` reads, so that the image reports the same `version` and `git_commit` as a clean checkout
 # of that commit (W-827).
 #
-#   docker buildx build --builder <docker-container builder> --target cpu \
+# Run these commands from the repository root:
+#
+#   docker buildx build --file Containerfile --builder <docker-container builder> --target cpu \
 #     --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<full commit> \
 #     --build-arg STARFINDER_DIRTY=<true|false> \
 #     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
@@ -19,13 +21,13 @@
 #
 # The two targets that hold `piscis` build the same way, with their own target and archive name:
 #
-#   docker buildx build --builder <docker-container builder> --target learned \
+#   docker buildx build --file Containerfile --builder <docker-container builder> --target learned \
 #     --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<full commit> \
 #     --build-arg STARFINDER_DIRTY=<true|false> \
 #     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
 #     --output type=oci,dest=starfinder-learned-<version>.oci.tar .
 #
-#   docker buildx build --builder <docker-container builder> --target learned-cuda \
+#   docker buildx build --file Containerfile --builder <docker-container builder> --target learned-cuda \
 #     --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<full commit> \
 #     --build-arg STARFINDER_DIRTY=<true|false> \
 #     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \

@@ -134,10 +134,11 @@ commit and flag with `version_source` `build`, so a run in the image and a run f
 record the same `version` and `git_commit`.
 
 The `learned` and `learned-cuda` targets, which hold `piscis`, build with the same arguments and the target and archive
-name changed (build commands only: they need the network and are run on a build host, not by the tests):
+name changed. Run these commands from the repository root (build commands only: they need the network and are run on a
+build host, not by the tests):
 
 ```bash
-docker buildx build --builder <docker-container builder> --target learned \
+docker buildx build --file Containerfile --builder <docker-container builder> --target learned \
   --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<full commit> \
   --build-arg STARFINDER_DIRTY=<true|false> \
   --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
