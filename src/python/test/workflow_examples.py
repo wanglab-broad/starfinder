@@ -128,7 +128,8 @@ def variants(work):
         assembly={"assignment": None}, export={"images": ["reference_merged"]}, report={})
     out["morphology-only"] = dict(dataset(work, "example-morphology-only"), morphology={}, segmentation={
         "device": "cuda", "runs": [{"name": "nucleus", "target": "nucleus", "method": "stardist",
-                                    "model": "2D_versatile_fluo", "scale": 1.0, "projection": True,
+                                    "model": "2D_versatile_fluo",
+                                    "input_recipe": {"projection": {"method": "max"}, "model_input": {"factor": 1.0}},
                                     "inputs": [{"role": "nuclear", "round": "reference_stain", "channel": "ch04"}]}]})
     reference = {k: v for k, v in copy.deepcopy(PROCESSING).items()
                  if k in ("load_codebook", "preprocessing", "registration", "checkpoints")}
@@ -137,9 +138,9 @@ def variants(work):
                                  segmentation={"runs": [
                                      {"name": "nucleus", "target": "nucleus", "method": "import", "path": labels},
                                      {"name": "cell", "target": "cell", "method": "seeded_watershed",
-                                      "seeds": "nucleus", "inputs": [
-                                          {"role": "composite", "round": "reference_stain", "channel": "ch04",
-                                           "prepare": {"function": "composite_nuclei_amplicon"}}]}]})
+                                      "seeds": "nucleus", "input_recipe": {"combine": {"method": "composite"}},
+                                      "inputs": [{"role": "nuclear", "round": "reference_stain", "channel": "ch04"},
+                                                 {"role": "amplicon", "reference_merged": True}]}]})
     out["refused-assignment"] = dict(dataset(work, "example-refused"), morphology={}, segmentation={"runs": [
         {"name": "cell", "target": "cell", "method": "import", "path": labels}]}, assignment={})
     refused = {k: v for k, v in dataset(work, "example-refused").items() if k != "backend"}

@@ -114,6 +114,7 @@ The run record's format version is 2. Fields are grouped below for lookup.
 | `checkpoint_directory` | Checkpoint folder path |
 | `checkpoints` | Stage record paths and hashes |
 | `outputs` | Files added by output writers, with paths, hashes and table details where applicable |
+| `spot_finding_input` | Only in a workflow `fov` task run from a saved set ({ref}`processing.spot_finding_input <workflow-spot-finding-input>`): the set's output root (`path`), its `run.json` and registered stage record of the FOV (`run_record`, `registered`, each `{path, sha256}`), the set's `code` and its `ended_at`. `inputs`, `steps` before the registered stage was written, `preprocessing`, `registration` and `transforms` are the set's; `config.pipeline` is this run's whole pipeline, and `checkpoints` names no registered stage |
 
 The [run-record specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/checkpoints.md#runjson)
 gives nested fields, path resolution and version compatibility.

@@ -19,7 +19,7 @@ import numpy as np
 from starfinder._records import check_file, file_sha256, json_record
 from starfinder.image import ImageMetadata
 
-from ._labels import FORMAT_VERSION, LABEL_DTYPE, ReferenceGrid, SegmentationResult, array_sha256
+from ._labels import LABEL_DTYPE, READABLE_VERSIONS, ReferenceGrid, SegmentationResult, array_sha256
 
 LABELS_FILE = "labels.tif"
 INPUT_FILE = "input.ome.tif"
@@ -104,14 +104,20 @@ def write_run(directory, result: SegmentationResult, segmentation_input=None) ->
 
 
 def read_run(directory, name) -> SegmentationResult:
-    """Read one saved run, checking the recorded SHA-256 values; see ``FOV.load_segmentation``."""
+    """Read one saved run, checking the recorded SHA-256 values; see ``FOV.load_segmentation``.
+
+    A record of version 1 (written before the input recipe: ``input.projection``,
+    ``channels[*].prepare``) still loads; its fields are not read, and its run has
+    no recipe (``input.recipe`` absent). Reading it is data compatibility.
+    """
     directory = Path(directory)
     path = directory / RECORD_FILE
     if not path.is_file():
         raise FileNotFoundError(f"no saved segmentation run {name!r} at {path}")
     record = json.loads(path.read_text())
-    if record.get("format_version") != FORMAT_VERSION or record.get("stage") != "segmentation":
-        raise ValueError(f"{path} is not a version {FORMAT_VERSION} segmentation record")
+    if record.get("format_version") not in READABLE_VERSIONS or record.get("stage") != "segmentation":
+        raise ValueError(f"{path} is not a segmentation record of version "
+                         f"{' or '.join(map(str, READABLE_VERSIONS))}")
     if record.get("run") != name:
         raise ValueError(f"{path} records run {record.get('run')!r}, not {name!r}")
     entry = record["labels"]

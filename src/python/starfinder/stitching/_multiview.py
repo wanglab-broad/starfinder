@@ -30,9 +30,17 @@ AUTO = "auto"
 QUALITY_FLOOR = 0.2
 NULL_QUANTILE = 0.99
 # The default of quality_threshold (None) per tile set (decision B, Jiahao, 2026-11-19): "auto" for single-plane tiles,
-# FIXED_DEFAULT for tiles with Z > 1, whose z error the in-plane null cannot see (W-895 adds a z-aware null).
+# FIXED_DEFAULT for tiles with Z > 1, whose z error the in-plane null cannot see. W-895 adds the per-link z check to
+# "auto" on tiles with Z > 1; the default stays 0.7 until W-904's LN evidence (Jiahao, 2026-11-19, "Yes, adopt it").
 FIXED_DEFAULT = 0.7
 FIXED_DEFAULT_RULE = "fixed_default_z_above_1"
+# The per-link z check of "auto" on tiles with Z > 1 (W-895): each link's quality at the registered shift ± d planes
+# of the binned overlap, d = max(1, round(Z_OFFSET_UM / z step)); a link scoring higher at either offset is dropped.
+Z_OFFSET_UM = 1.0
+Z_DROP_REASON = "quality_higher_at_z_offset"
+Z_CHECK_RULE = ("a link is kept only if its quality at the registered shift is at least its quality at each z offset "
+                "that has a value")
+Z_OUTCOMES = ("passed", Z_DROP_REASON, "skipped_thin_overlap", "skipped_nan_quality")
 # The fraction of the moving overlap that must stay valid after a shift, the library's (phase_correlation_registration).
 _MIN_VALID_FRACTION = 0.1
 
@@ -65,8 +73,9 @@ class MultiviewStitcherConfig:
     quality_threshold : float, str or None
         Lower Spearman-correlation quality threshold for keeping a registered link: a number in
         [−1, 1], or ``"auto"`` for the threshold estimated from the data, the larger of 0.2 and
-        the 99th percentile of the qualities at deliberately wrong offsets. ``None`` (the default)
-        uses ``"auto"`` when every tile is single-plane (Z = 1) and 0.7 when tiles have Z > 1.
+        the 99th percentile of the qualities at deliberately wrong offsets, with a per-link z check
+        on tiles with Z > 1. ``None`` (the default) uses ``"auto"`` when every tile is single-plane
+        (Z = 1) and 0.7 when tiles have Z > 1.
     drop_nan_quality : bool
         Drop registered links whose quality is NaN.
     pruning : str or None
@@ -114,15 +123,38 @@ class MultiviewStitcherConfig:
     (NumPy's linear quantile); without any null value it is 0.2. The
     record's ``method_diagnostics["link_quality"]`` holds the rule
     (``"auto"``), the chosen threshold, the floor, the quantile, the null's
-    summary and each pair's two null values. The default, ``None``, is
-    ``"auto"`` for single-plane tiles only: the null moves the overlap in Y
-    and X and cannot see a z error, so tiles with Z > 1 get 0.7, recorded as
-    ``{"rule": "fixed_default_z_above_1", "threshold": 0.7}`` with no null
-    measured. An explicit ``"auto"`` applies to either kind of tile. A given
-    number is used as it is: no null is measured, the record's method config
-    holds the number, and ``method_diagnostics`` gains no ``link_quality``
-    entry. The global optimization's outlier removal (``abs_tol_um``,
-    ``rel_tol``) stays the second line.
+    summary and each pair's two null values.
+
+    The null moves the overlap in Y and X and cannot see a z error, so on
+    tiles with Z > 1 ``"auto"`` also checks each link in z. The link's
+    quality is measured, as the null's, at the registered shift moved by
+    ``d`` planes of the binned overlap both ways along z, with
+    ``d = max(1, round(1 µm / z step))``, the z step being the z spacing
+    times ``binning_zyx[0]`` (Python's ``round``, half to even; 3 planes at
+    0.35 µm without binning, 1 at LN's 0.346 µm with binning 4). A link is
+    kept only if its quality at the registered shift is at least its quality
+    at each z offset that has a value; an offset with too little valid
+    overlap (NaN) does not count against it. A link that passes the
+    threshold but fails this check gets ``kept`` false and the reason
+    ``quality_higher_at_z_offset``. A pair whose binned overlap has fewer
+    than ``2 d + 1`` planes skips the check. ``link_quality["z_check"]``
+    holds ``offset_planes`` (``d``), ``offset_um``, ``z_step_um``,
+    ``min_planes``, the ``rule``, the number ``dropped`` and, per registered
+    link, ``[fov_a, fov_b, quality at −d, quality, quality at +d, outcome]``
+    (``None`` for a NaN and for the offsets of a skipped pair), the outcome
+    being ``passed``, ``quality_higher_at_z_offset``,
+    ``skipped_thin_overlap`` or ``skipped_nan_quality``. Single-plane tiles,
+    registered in 2D, have no z check and no ``z_check`` entry.
+
+    The default, ``None``, is ``"auto"`` for single-plane tiles only; tiles
+    with Z > 1 get 0.7, recorded as ``{"rule": "fixed_default_z_above_1",
+    "threshold": 0.7}`` with no null and no z check measured, until the LN
+    evidence (W-904) decides whether ``"auto"`` with its z check becomes
+    their default. An explicit ``"auto"`` applies to either kind of tile. A
+    given number is used as it is: no null and no z check are measured, the
+    record's method config holds the number, and ``method_diagnostics``
+    gains no ``link_quality`` entry. The global optimization's outlier
+    removal (``abs_tol_um``, ``rel_tol``) stays the second line.
 
     Memory: each tile of a registered pair is read once (a ``TileLoader``
     input is called then), binned by ``binning_zyx`` and released, so a run
@@ -338,8 +370,38 @@ def _null_qualities(fixed, moving, shift):
     return [_quality_at(fixed, moving, offset) for offset in _null_offsets(np.shape(fixed), shift)]
 
 
-def _recording(null):
-    """The library's phase correlation, which also appends the pair's :func:`_null_qualities` to ``null``."""
+def _z_offset_planes(spacing_z_um, binning_z):
+    """The z offset ``d`` of the z check in planes of the binned overlap: ``max(1, round(1 µm / z step))``, the z step
+    being ``spacing_z_um × binning_z`` (Python's ``round``, half to even); 3 at 0.35 µm without binning."""
+    return max(1, round(Z_OFFSET_UM / (float(spacing_z_um) * int(binning_z))))
+
+
+def _z_qualities(fixed, moving, shift, d):
+    """The pair's qualities at the registered ``shift`` moved by −``d`` and +``d`` planes along z (axis 0), in that
+    order (NaN where there is none); ``None`` when the binned overlap has fewer than ``2 d + 1`` planes."""
+    if np.shape(fixed)[0] < 2 * d + 1:
+        return None
+    step = np.zeros(np.ndim(fixed))
+    step[0] = d
+    shift = np.asarray(shift, dtype=np.float64)
+    return [_quality_at(fixed, moving, shift - step), _quality_at(fixed, moving, shift + step)]
+
+
+def _z_outcome(quality, z):
+    """The z check's outcome for a link of ``quality`` with :func:`_z_qualities` ``z``: ``"skipped_nan_quality"``
+    (the library gives a constant overlap NaN quality without calling the pairwise function, so ``z`` is then
+    ``None`` too), ``"skipped_thin_overlap"`` (``z`` is ``None``), ``"quality_higher_at_z_offset"`` when a z offset
+    with a value (not NaN) scores higher, else ``"passed"``."""
+    if math.isnan(quality):
+        return "skipped_nan_quality"
+    if z is None:
+        return "skipped_thin_overlap"
+    return Z_DROP_REASON if any(q > quality for q in z if not math.isnan(q)) else "passed"
+
+
+def _recording(null, z=None, d=None):
+    """The library's phase correlation, which also appends the pair's :func:`_null_qualities` to ``null`` and, with
+    ``d``, its :func:`_z_qualities` (one entry, ``None`` for a thin overlap) to ``z``."""
     from multiview_stitcher import registration
 
     def pairwise(fixed_data, moving_data, **kwargs):
@@ -347,22 +409,27 @@ def _recording(null):
         if isinstance(result, dict):
             ndim = np.ndim(fixed_data)
             shift = np.asarray(result["affine_matrix"], dtype=np.float64)[:ndim, ndim]
-            null.extend(_null_qualities(np.asarray(fixed_data.data), np.asarray(moving_data.data), shift))
+            fixed, moving = np.asarray(fixed_data.data), np.asarray(moving_data.data)
+            null.extend(_null_qualities(fixed, moving, shift))
+            if d is not None:
+                z.append(_z_qualities(fixed, moving, shift, d))
         return result
 
     return pairwise
 
 
-def _null_executor(nulls):
+def _null_executor(nulls, zs=None, d=None):
     """A ``pairwise_executor`` for the library: each edge registered on its own, as the library's default path
-    registers it, by a :func:`_recording` function of its own, whose null qualities go to ``nulls[edge]``."""
+    registers it, by a :func:`_recording` function of its own, whose null qualities go to ``nulls[edge]`` and, with
+    ``d``, whose z qualities go to ``zs[edge]``."""
     from dask import compute
     from multiview_stitcher import registration
 
     def execute(msims, edges, register_kwargs):
         params = []
         for edge in edges:
-            kwargs = dict(register_kwargs, pairwise_reg_func=_recording(nulls.setdefault(edge, [])),
+            z = None if d is None else zs.setdefault(edge, [])
+            kwargs = dict(register_kwargs, pairwise_reg_func=_recording(nulls.setdefault(edge, []), z, d),
                           pairwise_reg_func_kwargs=dict(register_kwargs.get("pairwise_reg_func_kwargs") or {}))
             params.append(compute(registration.register_pair_of_msims_over_time(
                 msims[edge[0]], msims[edge[1]], **kwargs))[0])
@@ -398,7 +465,26 @@ def _auto_threshold(nulls, registered, fov_pairs):
                        "null": summary, "null_pairs": per_pair}
 
 
-def _pairwise_registrations(msims, binned, graph, config, nulls=None):
+def _z_check(d, z_step_um, zs, quality, registered, fov_pairs):
+    """Each registered link's :func:`_z_outcome` and the record of the z check (``link_quality["z_check"]``).
+
+    ``zs[edge]`` holds the edge's :func:`_z_qualities` entry and ``quality[edge]`` its quality at the registered
+    shift. Each link's row is ``[fov_a, fov_b, quality at −d, quality, quality at +d, outcome]``, ``None`` for a NaN
+    and for the two offsets of a thin overlap.
+    """
+    outcomes, links = {}, []
+    for e in registered:
+        z = (zs.get(e) or [None])[-1]
+        outcomes[e] = _z_outcome(quality[e], z)
+        below, above = (None, None) if z is None else z
+        links.append([*fov_pairs([e])[0], *[None if v is None or math.isnan(v) else v
+                                            for v in (below, quality[e], above)], outcomes[e]])
+    return outcomes, {"offset_planes": d, "offset_um": Z_OFFSET_UM, "z_step_um": z_step_um, "min_planes": 2 * d + 1,
+                      "rule": Z_CHECK_RULE, "dropped": sum(o == Z_DROP_REASON for o in outcomes.values()),
+                      "links": links}
+
+
+def _pairwise_registrations(msims, binned, graph, config, nulls=None, zs=None, d=None):
     """The library's pairwise registrations of ``graph``'s edges on the binned images (binning 1), each link's
     ``bbox`` taken from the full-resolution geometry.
 
@@ -409,14 +495,14 @@ def _pairwise_registrations(msims, binned, graph, config, nulls=None):
     placement, are those of the library binning each pair itself. The private function is pinned by a test.
 
     With ``nulls`` (a dict), each edge is registered through :func:`_null_executor`, which fills ``nulls[edge]``
-    with its null qualities; the registrations are the same.
+    with its null qualities and, with ``d``, ``zs[edge]`` with its z qualities; the registrations are the same.
     """
     from multiview_stitcher import msi_utils, registration
     dims = msi_utils.get_spatial_dims(msims[0])
     kwargs = {} if config.upsample_factor is None else {"upsample_factor": config.upsample_factor}
-    executor = {} if nulls is None else {"pairwise_executor": _null_executor(nulls)}
+    executor = {} if nulls is None else {"pairwise_executor": _null_executor(nulls, zs, d)}
     computed = registration.compute_pairwise_registrations(
-        binned, graph, transform_key=_NOMINAL, registration_binning={d: 1 for d in dims},
+        binned, graph, transform_key=_NOMINAL, registration_binning={dim: 1 for dim in dims},
         overlap_tolerance=config.overlap_tolerance_um, pairwise_reg_func=registration.phase_correlation_registration,
         pairwise_reg_func_kwargs=kwargs, **executor)
     # register_pair_of_msims turns a number into one tolerance per spatial axis.
@@ -460,10 +546,13 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
        the same result, and its two null qualities are measured on the
        library's own overlap arrays; the threshold is ``max(0.2, q99)`` of
        them (``MultiviewStitcherConfig``), recorded in the diagnostics'
-       ``link_quality``.
+       ``link_quality``. On tiles with Z > 1, ``"auto"`` also measures each
+       pair's quality at the registered shift ± ``d`` planes along z, on the
+       same arrays (the z check, recorded in ``link_quality["z_check"]``).
     5. Link rule L1: quality below the threshold gives ``kept`` false
        with ``quality_below_threshold``; NaN quality with ``drop_nan_quality``
-       gives ``nan_quality``.
+       gives ``nan_quality``. A link that passes the threshold and fails the
+       z check gives ``quality_higher_at_z_offset``.
     6. The library's global optimization (translation) on the kept links; a
        kept link the optimizer removes becomes ``optimizer_removed``.
     7. Per tile, the translation of its resolved affine (µm, fractional); an
@@ -542,7 +631,11 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
         diagnostics["link_quality"] = {"rule": rule, "threshold": threshold}
     auto = rule == AUTO
     nulls = {} if auto else None
-    computed = _pairwise_registrations(msims, binned, pruned_graph, config, nulls)
+    # The z check of "auto" on tiles with Z > 1; every tile has one z spacing (stitch checks it).
+    spacing_z = float(grids[present[0]].metadata.spacing_zyx[0])
+    d = _z_offset_planes(spacing_z, config.binning_zyx[0]) if auto and not plane else None
+    zs = {} if d is not None else None
+    computed = _pairwise_registrations(msims, binned, pruned_graph, config, nulls, zs, d)
     if auto:
         threshold, diagnostics["link_quality"] = _auto_threshold(nulls, registered, fov_pairs)
 
@@ -552,10 +645,17 @@ def _multiview_stitcher(tiles, grids, nominal_zyx, pairs, *, config: MultiviewSt
         full = np.zeros(3)
         full[list(axes)] = -_translation(computed.edges[e]["transform"], ndim)
         shift[e] = full
+    outcomes = {}
+    if d is not None:
+        outcomes, diagnostics["link_quality"]["z_check"] = _z_check(d, spacing_z * config.binning_zyx[0], zs, quality,
+                                                                    registered, fov_pairs)
+    for e in registered:
         if math.isnan(quality[e]):
             reasons[e] = "nan_quality" if config.drop_nan_quality else ""
+        elif quality[e] < threshold:
+            reasons[e] = "quality_below_threshold"
         else:
-            reasons[e] = "quality_below_threshold" if quality[e] < threshold else ""
+            reasons[e] = Z_DROP_REASON if outcomes.get(e) == Z_DROP_REASON else ""
     kept = computed.copy()
     kept.remove_edges_from([e for e in registered if reasons[e]])
 

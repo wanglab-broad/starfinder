@@ -443,12 +443,13 @@ segmentation and assignment record and the export compares with the frame it dec
 | `segment` | `segmentation` | |
 | `assign` | `assignment` | |
 | `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import`, `stitch` | `stitching` | |
-| `export` | `assembly`, `export`, `assignment`, `stitching`, `processing` | `_export_config` reads `assembly`; `_assembly_block` needs `stitching` present; the route after fusion reads `assignment` (`_sample_segmentation_block`, `workflow.py:1715`); the molecule routes load the codebook with `processing`'s encoding and layout |
+| `export` | `assembly`, `export`, `assignment`, `stitching`, `processing`, `segmentation` | `_export_config` reads `assembly`; `_assembly_block` needs `stitching` present; the route after fusion reads `assignment` (`_sample_segmentation_block`, `workflow.py:1715`) and the input recipes of `segmentation.input_recipes` that its runs name (W-891); the molecule routes load the codebook with `processing`'s encoding and layout |
 | `report` | `report`, `assembly`, `assignment` | It reads the other steps through their records; `assembly.assignment` names the assignment it reports, else, without an `assembly` block, the `assignment` block's `name` (W-807) |
 | `compare` | `report` | It reads the other steps through their records |
 
 % Amended 2026-10-31 after W-647's review: the rows of export, report and compare (the operator's decision on W-152).
 % Amended 2026-11-04 W-807: the report row also reads `assignment`, which names the report's assignment when there is no `assembly` block.
+% Amended 2026-11-20 W-891: the export row also reads `segmentation`, whose `input_recipes` the runs of `export.segmentation` name by name (design/specs/segmentation-input-recipe.md, option RL1).
 
 **The map is also the command's access.** A command reads `configuration` and `api` only through a
 view limited to the common part and its kind's blocks; reading anything else raises, in every run,
@@ -671,7 +672,7 @@ execution:
 
 | Block | Its keys | Its tasks |
 | --- | --- | --- |
-| `processing` | Today's processing rule parameters without the `run` flags: `preprocessing`, `registration`, `reference_image_view` (with `projection`), `spot_finding`, `reads_extraction`, `reads_filtration`, `decoding`, `scoring` (`false` turns it off), `deduplication`, `load_codebook`, `load_raw_images`, `streaming`, `device`; and `mode` (`direct` or `tiled`), `tiled` (W-644) and `checkpoints` | `fov`, or `tile_global`, `tile`, `tile_merge`; `summarize` and `merge` for supplied steps |
+| `processing` | Today's processing rule parameters without the `run` flags: `preprocessing`, `registration`, `reference_image_view` (with `projection`), `spot_finding`, `reads_extraction`, `reads_filtration`, `decoding`, `scoring` (`false` turns it off), `deduplication`, `load_codebook`, `load_raw_images`, `streaming`, `device`; and `mode` (`direct` or `tiled`), `tiled` (W-644), `checkpoints` and `spot_finding_input` (W-889) | `fov`, or `tile_global`, `tile`, `tile_merge`; `summarize` and `merge` for supplied steps |
 | `morphology` | `rounds` (default every other round), `recipe` (a registration recipe; default one translation step on the shared stain, `MorphologyConfig`), `channel_images` (null; or `{projection: null or max}` to write `images/<round>/<label>/<fov>.tif` as today) | `morphology` |
 | `segmentation` | As today: `device`, `runs` | `segment` per (FOV, run) |
 | `assignment` | As today: the `AssignmentConfig` fields, `cells`, `nuclei`, `name` (default `default`), `population`; and `previews` (P5) | `assign` per FOV |
@@ -1118,6 +1119,28 @@ hashes play no part in a resume; a resumed attempt writes a new log and, on succ
 Nothing verifies a resume against `run.json` today (`checkpoints.md`, "Reload and continue").
 Resume applies to the `fov` kind (and to the tiled global task, by the tiled record); every other
 kind reruns from scratch.
+
+**Amendment (W-889, 2026-11-20): the saved spot-finding input.** The stage `registered` is written after each
+round's post-registration steps, so it holds the stack that spot finding reads. A verified resume cannot reuse it
+for another spot-finding setting or package version (the table above), and four full FOV tasks of tissue-2D were
+rerun for W-880 for that reason (2 h 17 min). `processing.spot_finding_input` names the output root of a run whose
+`fov` tasks wrote `registered` (absolute, or relative to the input root); no default is written, so a configuration
+without it keeps its hashes. With it:
+
+* The plan refuses `mode: tiled`, a block without `spot_finding`, `registered` in `processing.checkpoints` (also when
+  a segmentation input of a sequencing round would add it) and `execution.resume_from_checkpoint: true`; each `fov`
+  task declares the set's `fovs/<fov>/run.json` and `fovs/<fov>/checkpoints/registered/transforms.json` in place of
+  the raw images, and a missing file refuses the plan.
+* Before any work the `fov` command reads the set's `run.json` and refuses with exit 2, naming every field, unless it
+  is a version-2 record that `succeeded`, of the task's dataset, sample and FOV, with an established and clean code
+  identity on its side, a `checkpoints.registered` entry whose record has its SHA-256, and the task's `rounds`,
+  `channels`, `config.pipeline` `load`, `rotation_degrees`, `preprocessing` (its supplied statistics compared by the
+  file's SHA-256) and `registration`. The package version is recorded, not compared (W-889 D2): a change that leaves
+  preprocessing and registration output bit-identical keeps the set; one that changes it makes the set stale, which
+  its maker states and the set's manifest records.
+* The task then loads the stage (`FOV.load_checkpoint`, which checks every payload SHA-256), runs the part of the
+  pipeline after `registered` and writes its own stages; its `run.json` gains the section `spot_finding_input`
+  ([checkpoints](checkpoints.md), "run.json").
 
 ### Choice: what a resume must match
 
@@ -1606,7 +1629,14 @@ migrated configurations, with the tolerances of `docs/contributing.md`. The comp
   migrated ones state the same); the new task records and logs, the plan's files under `workflow/`
   and `run.json`'s `workflow` section.
 
+* **IR.** The segmentation input recipe (W-891, design/specs/segmentation-input-recipe.md,
+  "Records"): the cell run's segmentation record that the assignment record and the export's
+  assembly hold is of `format_version` 2 (1 before), and each run entry of the export's
+  `segmentation` section gains `recipe` and `input`. The labels and every other value of those
+  records stay compared.
+
 % Amended 2026-10-31 after W-737's review: what the comparison found on the migrated configurations (the operator's decision on W-152).
+% Amended 2026-11-20 W-891: IR, the record changes of the approved input-recipe specification (format version 2; the export run's recipe and input); to be confirmed by Jiahao at merge.
 
 Everything else is compared as W-642 and invocation D recorded it: the molecule tables, the counts
 and statuses, the registration results, the assignment tables, the placement, the export tables and

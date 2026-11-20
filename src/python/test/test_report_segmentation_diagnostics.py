@@ -177,9 +177,10 @@ def write_labels(path, labels):
     return hash_oracles.file_sha256(path)
 
 
-def write_fov(case, fov, *, nucleus_input=True, cell_input=False):
+def write_fov(case, fov, *, nucleus_input=True, cell_input=False, recipe=None):
     """The saved runs ``nucleus`` and ``cell`` of a FOV and its assignment folder, a ``reference.tif`` unlike every
-    input. A run with an input holds ``input.ome.tif`` of two channels (the first is ``stain_pattern(fov, 0)``)."""
+    input. A run with an input holds ``input.ome.tif`` of two channels (the first is ``stain_pattern(fov, 0)``),
+    and ``recipe`` as its record's ``input.recipe`` (W-891)."""
     folder = case.fov_folder(fov)
     sides = SIDES[fov]
     runs = {"nucleus": (squares(sides), nucleus_input), "cell": (squares(sides, pad=2), cell_input)}
@@ -196,7 +197,7 @@ def write_fov(case, fov, *, nucleus_input=True, cell_input=False):
             save_volume(stack, directory / "input.ome.tif")
             record["input"] = {"path": "input.ome.tif", "file_sha256": hash_oracles.file_sha256(
                 directory / "input.ome.tif"), "shape_zyxc": list(stack.shape),
-                "channels": [{"role": "nuclear"}, {"role": "cytoplasm"}]}
+                "channels": [{"role": "nuclear"}, {"role": "cytoplasm"}], "recipe": recipe}
         (directory / "segmentation.json").write_text(json.dumps(record, indent=2) + "\n")
         entries[name] = {"run": name, "target": name, "geometry": "plane", "saved_under_run": True,
                          "record_sha256": hash_oracles.record_sha256(record), "record": record,
@@ -237,6 +238,15 @@ def test_background_is_the_first_channel_of_the_nucleus_run_input_not_the_refere
         np.testing.assert_array_equal(preview.background, stain_pattern(preview.fov_id, 0)[0])
         assert not (preview.background == 99).any()          # reference.tif is a constant 99
         np.testing.assert_array_equal(preview.nuclei, squares(SIDES[preview.fov_id])[0])
+
+
+def test_the_caption_names_the_input_recipe_of_the_saved_input(tmp_path):
+    """W-891 (design/specs/report.md): a saved input made with a named recipe is captioned with the recipe and the
+    pixel size its model sees; a record without a recipe keeps the caption it had."""
+    recipe = {"name": "pi_max", "model_input": {"pixel_size_um": 0.37854}}
+    for given, expected in ((recipe, "input recipe pi_max, model pixel size 0.37854 µm"), (None, None)):
+        previews = previews_of(case_with_runs(tmp_path / str(expected is None), recipe=given))
+        assert {p.background_recipe for p in previews.values()} == {expected}
 
 
 def test_background_is_the_cell_run_input_when_the_nucleus_run_has_none(tmp_path):

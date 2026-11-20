@@ -2,7 +2,9 @@
 
 :func:`segment_fused` segments the fused projection that ``fuse`` wrote, run by run, and
 writes one label OME-TIFF per run and the ``segmentation`` section of ``export.json``;
-:func:`load_sample_segmentation` reads them back with their SHA-256 checked. The pixel
+:func:`load_sample_segmentation` reads them back with their SHA-256 checked. Each run's input
+recipe runs on the fused projections (AF1, design/specs/segmentation-input-recipe.md), and a
+recipe that changes the fused image writes ``model_inputs/<run>.ome.tif`` (SI1). The pixel
 lengths of a method's settings are given for the acquired grid and converted here to the
 segmentation grid by the table "Lengths in pixels" of design/specs/sample-segmentation.md,
 both values recorded (LS2, :data:`LENGTH_FIELDS`). :func:`resolve_route` gives a dataset's route,
@@ -21,24 +23,25 @@ import numpy as np
 
 from starfinder.image import ImageMetadata
 from starfinder.segmentation import (LabelImportConfig, ReferenceGrid, SampleSegmentation,
-                                     SegmentationBackendUnavailableError, SegmentationInput, SegmentationResult,
+                                     SegmentationBackendUnavailableError, SegmentationResult, apply_input_recipe,
                                      import_labels, resolve_model, segment)
+from starfinder.segmentation._recipe import check_model_input, method_value, model_factor, recipe_sha256
 
 from ._config import ROUTES, ExportConfig, SampleSegmentationConfig, _segmentation_spec
-from ._record import (ExportIncompleteWarning, Timer, as_json, listed_files, part_status, read_export, remove_listed,
-                      update_section)
+from ._record import (MODEL_INPUTS, ExportIncompleteWarning, Timer, as_json, listed_files, part_status, read_export,
+                      remove_listed, update_section)
 
 IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 FILE_PREFIX = "segmentation_"
 PROJECTION = "max"
 #: The method settings the route converts from the acquired grid to the segmentation grid at factor ``k`` (LS2),
-#: per registered method, field → rule: ``length`` (pixels: value / k), ``area`` (pixels²: max(1, round(value /
-#: k²))), ``factor_yx`` (a factor of Y and X: value · k in Y and X, Z unchanged), ``length_yx`` (pixels per axis:
-#: ceil(value / k) in Y and X, Z unchanged) and ``unchanged`` (a count, or µm that ``segment`` converts with the
-#: grid's spacing). Each value is recorded as given and as used. A test keeps it equal to SEGMENTATION_METHODS.
-LENGTH_FIELDS = {"cellpose": {"diameter": "length", "min_size": "area"},
-                 "stardist": {"scale": "factor_yx", "block_size": "length_yx", "min_overlap": "length_yx",
-                              "context": "length_yx", "n_tiles": "unchanged"},
+#: per registered method, field → rule: ``area`` (pixels²: max(1, round(value / k²))), ``length_yx`` (pixels per
+#: axis: ceil(value / k) in Y and X, Z unchanged) and ``unchanged`` (a count, or µm that ``segment`` converts with
+#: the grid's spacing). Each value is recorded as given and as used. A test keeps it equal to SEGMENTATION_METHODS.
+#: The model scale is not a length here: the input recipe's ``model_input`` derives each route's factor.
+LENGTH_FIELDS = {"cellpose": {"min_size": "area"},
+                 "stardist": {"block_size": "length_yx", "min_overlap": "length_yx", "context": "length_yx",
+                              "n_tiles": "unchanged"},
                  "seeded_watershed": {"sigma_um": "unchanged"}}
 STACK_REFUSED = ("segmentation after fusion is specified for projection samples only; a dataset with "
                  "dimensionality 'stack' is segmented per FOV (route: per_fov)")
@@ -69,14 +72,8 @@ def segment_off_section(route: str, route_source: str, assignment) -> dict:
 def _scaled(value, rule, k):
     if value is None or rule == "unchanged":
         return value
-    if rule == "length":
-        return value / k
     if rule == "area":
         return max(1, round(value / k ** 2))
-    if rule == "factor_yx":
-        if isinstance(value, tuple):
-            return (value[0], value[1] * k, value[2] * k)
-        return value * k
     if rule == "length_yx":
         if isinstance(value, tuple):
             yx = tuple(math.ceil(v / k) for v in value[-2:])
@@ -90,9 +87,7 @@ def scale_lengths(method, k: int):
 
     ``lengths`` maps each field of :data:`LENGTH_FIELDS` to ``given``, ``used``
     and ``rule``. The config is rebuilt with ``dataclasses.replace``, so its own
-    checks apply to the values used (StarDist refuses block fields with a scale
-    other than 1, so a block run is possible at ``k = 1`` only). An import has
-    no lengths.
+    checks apply to the values used. An import has no lengths.
     """
     spec = _segmentation_spec(method)
     if spec is None:
@@ -130,7 +125,33 @@ def check_models(segmentation: SampleSegmentationConfig) -> list[dict]:
     return resolved
 
 
-def check_route(config: ExportConfig, assignment, *, reuse=None, models=True) -> tuple[str, str]:
+def check_recipe_planes(segmentation: SampleSegmentationConfig, tiles_z) -> None:
+    """The Z rule of check 7: with tiles of Z > 1, a run's input recipe refuses a ``channels`` step and a projection
+    other than ``max``, because the fused images are the tiles' Z maxima (ValueError naming the run, the recipe,
+    the stage and ``after_projection``). ``tiles_z`` is the tiles' largest Z, or a callable giving it, called only
+    when a recipe needs it."""
+    needs = [run for run in segmentation.runs if run.input_recipe is not None and (
+        run.input_recipe.channels or (run.input_recipe.projection is not None
+                                      and run.input_recipe.projection.method != "max"))]
+    if not needs:
+        return
+    z = tiles_z() if callable(tiles_z) else tiles_z
+    if z is None or z <= 1:
+        return
+    for run in needs:
+        recipe = run.input_recipe
+        name = repr(recipe.name) if recipe.name else "(inline)"
+        if recipe.channels:
+            raise ValueError(f"export.segmentation run {run.name!r}: input recipe {name} has steps in stage channels, "
+                             f"but the tiles have Z = {z} and the route after fusion segments their Z maximum, after "
+                             "which a step before the maximum cannot run; give 2D steps in stage after_projection")
+        raise ValueError(f"export.segmentation run {run.name!r}: input recipe {name} has projection "
+                         f"{recipe.projection.method}, but the tiles have Z = {z} and the route after fusion segments "
+                         "their Z maximum, from which a sum or mean cannot be recovered; give projection max or none, "
+                         "and 2D steps in stage after_projection")
+
+
+def check_route(config: ExportConfig, assignment, *, reuse=None, models=True, tiles_z=None) -> tuple[str, str]:
     """Check 7 of ``Dataset.export`` (design/specs/sample-segmentation.md, "The entry"); returns the route.
 
     In this order: the route is a value of :data:`ROUTES` or None; the route
@@ -141,8 +162,12 @@ def check_route(config: ExportConfig, assignment, *, reuse=None, models=True) ->
     are on unless ``segment`` is off, the reuse conditions hold when
     ``segment`` is off (``reuse``, a callable that ``Dataset.export`` passes
     and that raises ``ValueError``), the runs validate (their seeds name
-    earlier runs, ``cells`` and ``nuclei`` name runs of their targets) and,
-    with ``models`` (the workflow's parse-time check passes False and leaves
+    earlier runs, ``cells`` and ``nuclei`` name runs of their targets; each
+    run's source roles are those of its input recipe's combine method, and a
+    method with a model has a ``model_input`` that ``seeded_watershed``
+    refuses), the recipes keep the Z rule of :func:`check_recipe_planes` with
+    ``tiles_z`` (the tiles' largest Z or a callable giving it; None skips
+    it) and, with ``models`` (the workflow's parse-time check passes False and leaves
     them to ``Dataset.export``), every model resolves with its SHA-256. Each
     failure raises ``ValueError`` (or ``MissingModelError``,
     ``ModelHashMismatchError``) naming the key.
@@ -183,12 +208,28 @@ def check_route(config: ExportConfig, assignment, *, reuse=None, models=True) ->
     if not config.segment and reuse is not None:
         reuse()
     segmentation.__post_init__()
+    if tiles_z is not None:
+        check_recipe_planes(segmentation, tiles_z)
     if models:
         check_models(segmentation)
     return route, source
 
 
 # --- The sample segmentation ----------------------------------------------------------------------------------
+
+def changed_recipes(section: Mapping, config: SampleSegmentationConfig) -> list[tuple[str, str | None, str]]:
+    """``(run, recorded SHA-256, configured SHA-256)`` of each run whose input recipe differs from the one the saved
+    section records (an import has none); the reuse rule (``segment: false``) refuses them."""
+    saved = {run.get("name"): (run.get("recipe") or {}).get("sha256") for run in section.get("runs") or []}
+    changed = []
+    for run in config.runs:
+        if isinstance(run.method, LabelImportConfig) or run.name not in saved:
+            continue
+        current = recipe_sha256(run.input_recipe)
+        if saved[run.name] != current:
+            changed.append((run.name, saved[run.name], current))
+    return changed
+
 
 def label_file(run: str) -> str:
     """The file name of a run's label image, ``segmentation_<run>.ome.tif``."""
@@ -214,6 +255,42 @@ def _grid_record(grid: ReferenceGrid, k: int) -> dict:
             "factor_yx": k, "projection": PROJECTION}
 
 
+def model_input_file(run: str) -> str:
+    """The path of a run's model input below the export folder, ``model_inputs/<run>.ome.tif`` (SI1)."""
+    return f"{MODEL_INPUTS}/{run}.ome.tif"
+
+
+def footprints(fusion: Mapping, grid: ReferenceGrid) -> np.ndarray:
+    """The fit region after fusion: the pixels of the segmentation grid inside an included FOV's footprint.
+
+    A boolean ``(1, Y, X)`` mask. Each footprint is the half-open box ``[o − s/2, o + (n − ½)·s)`` of the FOV's
+    placed grid in Y and X (``assembly._ownership.footprint_yx``), from the fusion section's origin and grid of
+    the FOV; a pixel is inside when its centre is. These are the pixels that ``ownership_map`` gives an owner
+    under ``nearest_center``.
+    """
+    from starfinder.assembly._ownership import footprint_yx
+    metadata = grid.metadata
+    _, ny, nx = grid.shape_zyx
+    ys = metadata.origin_zyx[1] + np.arange(ny) * metadata.spacing_zyx[1]
+    xs = metadata.origin_zyx[2] + np.arange(nx) * metadata.spacing_zyx[2]
+    mask = np.zeros((ny, nx), bool)
+    for entry in fusion.get("fovs") or []:
+        tile = entry.get("grid")
+        if not entry.get("included") or not tile or any(v is None for v in entry.get("origin_zyx") or [None]):
+            continue
+        (y0, y1, x0, x1), _ = footprint_yx(entry["origin_zyx"][1:], tile["shape_zyx"][1:],
+                                           tile["metadata"]["spacing_zyx"][1:])
+        mask |= ((ys >= y0) & (ys < y1))[:, None] & ((xs >= x0) & (xs < x1))[None, :]
+    return mask[np.newaxis]
+
+
+def tiles_z(fusion: Mapping) -> int | None:
+    """The largest Z of the included FOVs' grids in a fusion section, or None without one."""
+    values = [int(entry["grid"]["shape_zyx"][0]) for entry in fusion.get("fovs") or []
+              if entry.get("included") and entry.get("grid")]
+    return max(values) if values else None
+
+
 @dataclass
 class _Plan:
     status: str
@@ -223,6 +300,7 @@ class _Plan:
     images: dict = None
     placement: dict = None
     imports: dict = None
+    tiles_z: int | None = None
 
 
 def _check(output_dir, config, sample, identity) -> _Plan:
@@ -280,7 +358,8 @@ def _check(output_dir, config, sample, identity) -> _Plan:
     placement = fusion.get("placement") or {}
     plan = _Plan("written", grid=grid, k=int(first["factor_yx"]), images=images,
                  placement={"fovs_sha256": placement.get("fovs_sha256"),
-                            "links_sha256": placement.get("links_sha256")}, imports={})
+                            "links_sha256": placement.get("links_sha256")}, imports={}, tiles_z=tiles_z(fusion))
+    check_recipe_planes(config, plan.tiles_z)
     for run in config.runs:
         if isinstance(run.method, LabelImportConfig):
             method = run.method
@@ -289,8 +368,56 @@ def _check(output_dir, config, sample, identity) -> _Plan:
                                                    label_namespace=_namespace(identity, sample, run.name))
         else:
             scale_lengths(run.method, plan.k)
+            recipe = run.input_recipe
+            factor = model_factor(None if recipe is None else recipe.model_input, grid.metadata, k=plan.k)
+            check_model_input(run.method, recipe, run=run.name,
+                              factor_zyx=None if factor is None else factor["factor_zyx"])
     check_models(config)
     return plan
+
+
+def _unchanged(segmentation_input, sources):
+    """The source record of the one fused projection the model input equals value for value, or None (SI1)."""
+    image = segmentation_input.image
+    if image.shape[-1] != 1:
+        return None
+    for _, array, record in sources:
+        if array.dtype == image.dtype and array.shape == image.shape[:3] and np.array_equal(array, image[..., 0]):
+            return record
+    return None
+
+
+def _write_model_input(output_dir, run, segmentation_input, sources, recipe, plan, sample, outputs) -> dict:
+    """The run's ``input`` entry (SI1): the fused projection itself when the recipe leaves it unchanged, else
+    ``model_inputs/<run>.ome.tif`` written with the package's OME-TIFF writer (one channel YX, several CYX) and
+    listed among the section's outputs."""
+    from starfinder._records import file_sha256
+    from starfinder.io import _ome
+    image = segmentation_input.image
+    entry = {"dtype": str(image.dtype), "shape_zyxc": list(image.shape)}
+    same = _unchanged(segmentation_input, sources)
+    if same is not None:
+        return {"path": same["path"], "sha256": same["sha256"], **entry, "written": False}
+    relative = model_input_file(run.name)
+    path = Path(output_dir) / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    channels = image.shape[-1] > 1
+    data = np.ascontiguousarray(np.moveaxis(image[0], -1, 0) if channels else image[0, ..., 0])
+    grid = plan.grid
+    annotation = {"sample": sample, "image": f"{MODEL_INPUTS}/{run.name}", "run": run.name, "kind": "model_input",
+                  "recipe_sha256": recipe["sha256"], "factor_yx": plan.k,
+                  "placement_fovs_sha256": plan.placement["fovs_sha256"],
+                  "placement_links_sha256": plan.placement["links_sha256"]}
+    layout = _ome.write_ome_tiff(path, data, metadata=grid.metadata, annotation=annotation, channels=channels)
+    digest = file_sha256(path)
+    metadata = grid.metadata
+    outputs.append({"path": relative, "format": "ome_tiff", "kind": "model_input", "image": annotation["image"],
+                    "run": run.name, "dimensionality": "projection", "factor_yx": plan.k,
+                    "shape_zyx": list(grid.shape_zyx), "channels": int(image.shape[-1]), "dtype": str(image.dtype),
+                    "spacing_zyx": list(metadata.spacing_zyx), "origin_zyx": list(metadata.origin_zyx), "levels": [],
+                    "tile_yx": layout["tile_yx"], "compression": layout["compression"], "axes": layout["axes"],
+                    "annotation": annotation, "sha256": digest})
+    return {"path": relative, "sha256": digest, **entry, "written": True}
 
 
 def _read_projection(output_dir, entry) -> np.ndarray:
@@ -312,19 +439,29 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     (design/specs/sample-segmentation.md, "The entry"), callable alone on an
     export folder whose ``fuse`` ran. It reads the fused projection of each
     input image from the ``fusion`` section (its path, checked against the
-    recorded SHA-256), builds per run one
-    :class:`~starfinder.segmentation.SegmentationInput` on the segmentation
+    recorded SHA-256), applies per run its input recipe to the fused
+    projections of its source images with
+    :func:`~starfinder.segmentation.apply_input_recipe` on the segmentation
     grid (shape, spacing and origin of the fusion section's output, frame
-    ``sample:<sample>``; channels in the run's role order), converts the
-    method's pixel lengths by the scale factor (LS2, ``LENGTH_FIELDS``)
+    ``sample:<sample>``), with the fit region of the included FOVs'
+    footprints (``footprints``), the fusion factor ``k`` of a ``factor``
+    model input, and the fused images taken as the tiles' Z maxima
+    (``fused_maximum``, or ``single_plane`` for tiles of one plane), converts
+    the method's pixel lengths by the scale factor (LS2, ``LENGTH_FIELDS``)
     and calls :func:`~starfinder.segmentation.segment`, with the seeds of the
     run it names, or :func:`~starfinder.segmentation.import_labels` with that
-    grid for an import. It applies no label operation. Each run's labels are
+    grid for an import. It applies no label operation. A recipe that changes
+    the fused image writes the model input as ``model_inputs/<run>.ome.tif``
+    (float32, or the combine's uint8; the segmentation grid's geometry), in a
+    subfolder that only model inputs use, listed among the section's outputs
+    (SI1). Each run's labels are
     written as ``segmentation_<run>.ome.tif`` (uint32, the OME-TIFF layout of
     the fused image, the segmentation grid's geometry) and the section records
     the status, the route, the inputs (the grid, each fused file's name and
     SHA-256 and the placement's SHA-256 values, no hash of the ``fusion``
-    section), per run its method record, its lengths as given and as used,
+    section), per run its method record, its ``recipe`` record, its model
+    ``input`` (path, SHA-256, dtype, ZYXC shape and ``written``, false when the
+    path is the fused file), its lengths as given and as used,
     its label file's path and SHA-256 and its counts, ``cells``, ``nuclei``,
     ``device``, the assignment settings ``assignment`` (the
     :class:`~starfinder.assignment.AssignmentConfig` of ``config``, which the
@@ -333,7 +470,8 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     false`` it records the current export's settings there, because the
     labels do not depend on them and the tables do; the ``assembly``
     section's ``assignment`` is the record of the assignment made), the
-    software, the times and the peak RSS. The files of the earlier section are removed first.
+    software, the times and the peak RSS. The files of the earlier section are removed first (and the
+    ``model_inputs/`` subfolder when that leaves it empty).
 
     When ``fuse`` did not run, it writes no label file and records
     ``not_run`` (``part_not_run``) with :class:`ExportIncompleteWarning`;
@@ -370,8 +508,10 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
         Before anything is written: a folder of another sample, a fusion
         section whose projection is not ``max``, an input image without a fused
         projection, a fused file missing or whose SHA-256 differs from the
-        record, or a method config the lengths at the scale factor make
-        invalid.
+        record, a method config the lengths at the scale factor make
+        invalid, a recipe the tiles' Z refuses (a ``channels`` step or a
+        projection other than ``max`` with tiles of Z > 1), or a model input
+        its method refuses on the segmentation grid.
     IncompatibleGeometryError
         Before anything is written: an import file of another shape than the
         segmentation grid.
@@ -387,7 +527,7 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     plan = _check(output_dir, config, sample, identity)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    remove_listed(output_dir, listed_files(read_export(output_dir), "segment"))
+    remove_listed(output_dir, listed_files(read_export(output_dir), "segment"))   # model_inputs/ too, when empty
     runs, outputs, results = [], [], {}
 
     def finish(status, *, warn=None, **extra):
@@ -414,22 +554,26 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     fusion = read_export(output_dir)["fusion"]
     entries = {o["image"]: o for o in fusion["outputs"]
                if o.get("format") == "ome_tiff" and o.get("dimensionality") == "projection"}
-    arrays = {}
+    arrays, mask = {}, None
+    projected = "fused_maximum" if (plan.tiles_z or 1) > 1 else "single_plane"
     try:
         for run in config.runs:
             if run.name in plan.imports:
                 result = plan.imports[run.name]
-                method, lengths = None, {}
+                method, lengths, recipe, model_input = None, {}, None, None
             else:
                 for _, image in run.inputs:
                     if image not in arrays:
                         arrays[image] = _read_projection(output_dir, entries[image])
-                image = np.stack([arrays[name] for _, name in run.inputs], axis=-1)
-                sources = tuple(dict(plan.images[name]) for _, name in run.inputs)
+                if mask is None:
+                    mask = footprints(fusion, grid)
+                sources = [(role, arrays[name], dict(plan.images[name])) for role, name in run.inputs]
+                segmentation_input, _, recipe = apply_input_recipe(sources, grid, recipe=run.input_recipe,
+                                                                   fit_mask=mask, k=k, run=run.name,
+                                                                   projected=projected)
                 used, lengths = scale_lengths(run.method, k)
                 try:
-                    result = segment(SegmentationInput(image, grid, tuple(role for role, _ in run.inputs), sources),
-                                     config=used, target=run.target,
+                    result = segment(segmentation_input, config=used, target=run.target,
                                      seeds=None if run.seeds is None else results[run.seeds],
                                      device=config.device, label_namespace=_namespace(identity, sample, run.name))
                 except SegmentationBackendUnavailableError as error:
@@ -437,6 +581,10 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
                     return finish("not_run", reason="extra_missing", extra=extras[0] if len(extras) == 1 else extras,
                                   run=run.name, warn=f"extra_missing: {error}")
                 method = (result.record.get("methods") or [None])[0]
+                if recipe["model_input"] is not None:
+                    recipe["model_input"]["method_value"] = method_value(result.record)
+                model_input = _write_model_input(output_dir, run, segmentation_input, sources, recipe, plan, sample,
+                                                 outputs)
             result = replace(result, record=dict(result.record, run=run.name))
             results[run.name] = result
             name = label_file(run.name)
@@ -458,7 +606,8 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
                          "label_namespace": result.label_namespace,
                          "inputs": [{"role": role, "image": image} for role, image in run.inputs],
                          "seeds": result.record.get("seeds"), "method": method,
-                         "import": result.record.get("import"), "lengths": lengths, "path": name, "sha256": digest,
+                         "import": result.record.get("import"), "recipe": recipe, "input": model_input,
+                         "lengths": lengths, "path": name, "sha256": digest,
                          "n_labels": result.n_labels, "max_label": result.max_label,
                          "outcome": result.record.get("outcome")})
     except BaseException as error:
@@ -522,5 +671,6 @@ def load_sample_segmentation(output_dir) -> SampleSegmentation:
                              f"uint32 of the grid's shape {grid.shape_zyx}")
         runs[run["name"]] = SegmentationResult(np.ascontiguousarray(labels), grid, run["target"], run["geometry"],
                                                run["label_namespace"],
-                                               dict(run, run=run["name"], operations=[], input={"projection": None}))
+                                               dict(run, run=run["name"], operations=[],
+                                                    input={"projection": None, "recipe": run.get("recipe")}))
     return SampleSegmentation(grid, runs, dict(section))

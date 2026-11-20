@@ -32,7 +32,11 @@ See {py:class}`~starfinder.preprocessing.HistogramMatchingConfig`.
 
 ### Reconstruction and white top-hat
 
-Both remove background in XY, on each Z plane and channel separately. See
+Both remove background in XY, on each Z plane and channel separately. The radius is
+`radius_yx` in pixels (3 when neither is given), or `radius_um` in micrometres, which the
+step converts to `floor(radius_um / spacing_yx + ½)` pixels with the image's spacing (equal
+Y and X spacing needed); a segmentation input recipe takes `radius_um` only. A record of a
+radius in pixels holds `radius_yx` alone. See
 {py:class}`~starfinder.preprocessing.ReconstructionConfig` and
 {py:class}`~starfinder.preprocessing.TophatConfig`.
 
@@ -78,6 +82,25 @@ keeping the input dtype. See
 ```{config-options} starfinder.preprocessing.PercentileNormalizationConfig
 ```
 
+### Gaussian smoothing and CLAHE
+
+Two contrast steps with lengths in micrometres, converted with the image's spacing. Per
+channel, `gaussian` smooths with `skimage.filters.gaussian` at `sigma_um / spacing` pixels
+per axis (0 on an axis of length 1); `clahe` maps the fit region's minimum and maximum to
+[0, 1], clips there and runs `skimage.exposure.equalize_adapthist` with a kernel of
+`max(1, floor(kernel_um / spacing + ½))` pixels per axis. A float image keeps its dtype; an
+integer image is rounded with `np.rint` back to its dtype (CLAHE's [0, 1] result scaled to
+the dtype's full range). In `FOV.run` the fit region is the whole image; a segmentation
+input recipe after fusion passes the FOVs' footprints (`StepContext.fit_mask`). See
+{py:class}`~starfinder.preprocessing.GaussianConfig` and
+{py:class}`~starfinder.preprocessing.ClaheConfig`.
+
+```{config-options} starfinder.preprocessing.GaussianConfig
+```
+
+```{config-options} starfinder.preprocessing.ClaheConfig
+```
+
 ## Recipe options
 
 Configure the ordered recipe and its entries. See
@@ -117,7 +140,8 @@ Each step record holds:
 | --- | --- |
 | `min_max_normalization` | `groups`: per channel (or once for the whole volume), `channel`, `min`, `max` and `mode` (`rescale` or `clip`) |
 | `histogram_matching` | `reference_round`, `reference_channel` |
-| `reconstruction`, `white_tophat` | Empty |
+| `reconstruction`, `white_tophat`, `gaussian` | Empty |
+| `clahe` | `in_range`: the low and high values mapped to 0 and 1 (one pair per channel of a ZYXC image) |
 | `scalar_background` | `background`: one level per channel |
 | `background_3d` | `radius_voxels_zyx` |
 | `percentile_normalization` | `low`, `high`: one value per channel |
@@ -133,7 +157,7 @@ channel. The other methods record none.
 | `noise_threshold` | `median + 5 × 1.4826 × mad`, the local-maxima `noise` threshold at `threshold_value` 5 (its default before W-880) |
 | `mad_zero` | Whether `mad` is 0 |
 | `constant_channel` | Whether the input channel was constant |
-| `degenerate_range` | `percentile_normalization` only: whether `low` equals `high` or the channel was constant |
+| `degenerate_range` | `percentile_normalization`: whether `low` equals `high` or the channel was constant; `clahe`, its one diagnostic: whether the fit region was constant |
 | `footprint_voxels` | `background_3d` only: the number of voxels of the footprint |
 
 ## Sample-level statistics

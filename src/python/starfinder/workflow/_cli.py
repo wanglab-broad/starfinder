@@ -97,8 +97,12 @@ def run(args, argv=None):
 
 
 def _prepare_fov(run):
-    """The fov task's verified resume: the earlier run.json and its kept stages, or nothing (exit 3 on a mismatch)."""
+    """The fov task's saved spot-finding input (exit 2 on a mismatch), or its verified resume: the earlier run.json
+    and its kept stages, or nothing (exit 3 on a mismatch)."""
     from starfinder.workflow import _resume
+    run.source = _resume.prepare_input(run)
+    if run.source is not None:
+        return ()
     resume = _resume.prepare(run)
     if resume is None:
         return ()

@@ -42,12 +42,13 @@ def rule_configuration(configuration):
 
     The present sub-blocks spot_finding, reads_extraction and reads_filtration are enabled; the codebook is loaded
     whenever the block decodes (load_codebook always runs); deduplication is on when present; ``scoring: false``
-    is ``{run: false}``; reference_image_view.projection is the rule's maximum_projection; mode, tiled and
-    checkpoints are the plan's (the checkpoints are passed to FOV.run by the fov command, the tiled settings to the
-    tiled commands, ``tiled``).
+    is ``{run: false}``; reference_image_view.projection is the rule's maximum_projection; mode, tiled,
+    checkpoints and spot_finding_input are the plan's (the checkpoints are passed to FOV.run by the fov command, the
+    tiled settings to the tiled commands, ``tiled``, and the fov command reads the saved spot-finding input).
     """
     block = configuration["processing"]
-    params = copy.deepcopy({k: v for k, v in block.items() if k not in ("mode", "tiled", "checkpoints")})
+    params = copy.deepcopy({k: v for k, v in block.items()
+                            if k not in ("mode", "tiled", "checkpoints", "spot_finding_input")})
     for name in _ENABLED:
         if name in params:
             params[name] = {"run": True, **(params[name] or {})}
@@ -174,15 +175,24 @@ def _stitching_api(configuration):
                   "view_map": block.view_map})
 
 
-def export(configuration):
-    """(ExportConfig, assembly block) of the assembly and export blocks (_export_config), without the previews."""
-    from starfinder.dataset.workflow import _export_config
+def _export_view(configuration):
+    """The keys the export translation reads: the dataset keys, stitching, assembly and export (without its previews),
+    the assignment (without its previews) and the segmentation block, whose input_recipes the runs of
+    export.segmentation name (design/specs/segmentation-input-recipe.md, RL1)."""
     values = {k: v for k, v in (configuration.get("export") or {}).items() if k != "previews"}
     config = dict(_base(configuration), stitching=configuration["stitching"], assembly=configuration["assembly"],
                   export=values)
     if configuration.get("assignment") is not None:
         config["assignment"] = {k: v for k, v in configuration["assignment"].items() if k != "previews"}
-    return _export_config(config)
+    if configuration.get("segmentation") is not None:
+        config["segmentation"] = configuration["segmentation"]
+    return config
+
+
+def export(configuration):
+    """(ExportConfig, assembly block) of the assembly and export blocks (_export_config), without the previews."""
+    from starfinder.dataset.workflow import _export_config
+    return _export_config(_export_view(configuration))
 
 
 def route(export_config, assembly):
@@ -194,12 +204,7 @@ def route(export_config, assembly):
 def _export_api(configuration):
     from starfinder.dataset.workflow import _check_export_route
     config, assembly = export(configuration)
-    values = {k: v for k, v in (configuration.get("export") or {}).items() if k != "previews"}
-    check = dict(_base(configuration), stitching=configuration["stitching"], assembly=configuration["assembly"],
-                 export=values)
-    if configuration.get("assignment") is not None:
-        check["assignment"] = {k: v for k, v in configuration["assignment"].items() if k != "previews"}
-    _check_export_route(check)
+    _check_export_route(_export_view(configuration))
     return {"config": plain(config), "assignment": assembly.assignment, "route": route(config, assembly),
             "previews": configuration["export"]["previews"]}
 

@@ -869,15 +869,18 @@ class _Page:
 
     def background_caption(self) -> str:
         """The caption of the example FOVs: what the background of each tile is, from its previews: the first channel
-        of the segmentation input of the run, named with its role and file or image, or the reference image or fused
-        image of a sample whose runs have no input."""
+        of the segmentation input of the run, named with its role and file or image (and with the input recipe it
+        was made with and the model's pixel size when its record gives them), or the reference image or fused image
+        of a sample whose runs have no input."""
         previews = [p for p in (self.c.previews if isinstance(self.c.previews, dict) else {}).values()
                     if hasattr(p, "background")]
-        text = {"segmentation_input": "the segmentation input of run {run}, its first channel ({role})",
+        text = {"segmentation_input": "the segmentation input of run {run}{recipe}, its first channel ({role})",
                 "reference_image": "the reference image (no run has a saved segmentation input)",
                 "fused_image": "the fused image (no run has a segmentation input)"}
-        named = dict.fromkeys((text[p.source].format(run=_e(p.background_run), role=_e(p.background_role)),
-                               p.background_name) for p in previews)
+        named = dict.fromkeys((text[p.source].format(
+            run=_e(p.background_run), role=_e(p.background_role),
+            recipe=f" ({_e(p.background_recipe)})" if getattr(p, "background_recipe", None) else ""),
+            p.background_name) for p in previews)
         lines = [f'{kind}: {", ".join(f"<code>{_e(n)}</code>" for n in names)}'
                  for kind, names in _group(named).items()]
         return f'<p class="sp-cap" id="seg-background">Background: {"; ".join(lines)}</p>'

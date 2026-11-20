@@ -7,6 +7,7 @@ keys each accepts, and ``evaluation-arguments`` the keys of a metric argument, b
 ``starfinder.benchmark._evaluate``. Their content describes, one ``name: description`` line each, every kind or key
 the code has; a missing or extra line fails the build, so the tables cannot drift from the code.
 ``report-protocol`` renders the keys of the report's protocol with their meaning from ``starfinder.benchmark._report``.
+``segment-commands`` renders ``starfinder segment preview`` (W-891) with its arguments from the same parser.
 """
 from __future__ import annotations
 
@@ -18,24 +19,25 @@ from method_tables import _table
 from workflow_config import _described
 
 COMMANDS = (("experiment", "expand"), ("experiment", "evaluate"), ("experiment", "report"), ("trial", "run"))
+SEGMENT_COMMANDS = (("segment", "preview"),)
 
 
 def _choices(parser):
     return next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction)).choices
 
 
-def command_rows():
+def command_rows(names=COMMANDS):
     """(rows of the commands, rows of their arguments), from the package's parser."""
     from starfinder.__main__ import _parser
     root = _parser()
     commands, arguments = [], []
-    for group, name in COMMANDS:
+    for group, name in names:
         parser = _choices(_choices(root)[group])[name]
         commands.append([f"starfinder {group} {name}", parser.description or ""])
         for action in parser._actions:
             if isinstance(action, argparse._HelpAction):
                 continue
-            arguments.append([", ".join(action.option_strings), f"{group} {name}",
+            arguments.append([", ".join(action.option_strings) or action.dest.upper(), f"{group} {name}",
                               "required" if action.required else "optional", action.help or ""])
     return commands, arguments
 
@@ -48,6 +50,18 @@ class ExperimentCommands(Directive):
             commands, arguments = command_rows()
         except (ImportError, StopIteration, KeyError) as error:
             raise self.error(f"experiment-commands: {error}")
+        return [_table(["Command", "What it does and its exit status"], commands, literal_columns={0}),
+                _table(["Argument", "Of", "Required", "Description"], arguments, literal_columns={0, 1})]
+
+
+class SegmentCommands(Directive):
+    """``starfinder segment preview`` and its arguments, from the package's parser."""
+
+    def run(self):
+        try:
+            commands, arguments = command_rows(SEGMENT_COMMANDS)
+        except (ImportError, StopIteration, KeyError) as error:
+            raise self.error(f"segment-commands: {error}")
         return [_table(["Command", "What it does and its exit status"], commands, literal_columns={0}),
                 _table(["Argument", "Of", "Required", "Description"], arguments, literal_columns={0, 1})]
 
@@ -94,6 +108,7 @@ class ReportProtocol(Directive):
 
 def setup(app):
     app.add_directive("experiment-commands", ExperimentCommands)
+    app.add_directive("segment-commands", SegmentCommands)
     app.add_directive("evaluation-sources", EvaluationSources)
     app.add_directive("evaluation-arguments", EvaluationArguments)
     app.add_directive("report-protocol", ReportProtocol)

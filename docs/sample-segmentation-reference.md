@@ -39,6 +39,7 @@ These files live in the sample's export folder; the
 | File | Contents |
 | --- | --- |
 | `segmentation_<run>.ome.tif` | The named run's labels on the segmentation grid |
+| `model_inputs/<run>.ome.tif` | The named run's model input, when its recipe changes the fused image: float32 (or the combine's uint8), YX (CYX for several model channels), on the segmentation grid |
 | `territories.ome.tif` | The cell territories written when assignment expands labels |
 | `tables/cells.<fmt>` | Sample cells, including `cell_namespace`, `cell_id` and `obs_name` |
 | `tables/molecules.<fmt>` | Molecules with source spot identity, assigned cell key and sample coordinates |
@@ -60,12 +61,18 @@ The `segmentation` section of `export.json` describes the saved segmentation.
 | `status`, `reason` | Outcome and its explanation |
 | `route` | Export route |
 | `inputs` | Grid, fused input files and placement hashes |
-| `runs` | Named run records, method provenance, pixel lengths given and used, label paths and hashes |
+| `runs` | Named run records: method provenance, the input recipe record (`recipe`), the model input (`input`: path, SHA-256, dtype, ZYXC shape and `written`, false when the path is the fused file), pixel lengths given and used, label paths and hashes |
 | `cells`, `nuclei` | Runs used for assignment |
 | `assignment` | Assignment configuration |
 | `device` | Segmentation device |
-| `outputs` | Written files |
+| `outputs` | Written files: the label images, and the model inputs (`kind` `model_input`) |
 | `software`, `wall_s`, `cpu_s`, `peak_rss_kib` | Software versions and resource use |
+
+Reusing a saved sample segmentation (`segment: false`) is refused when a run's input recipe
+differs from the one its record holds, naming the run and both SHA-256 values. The
+`check_export` conditions R2 and T1 cover the `model_inputs/` files: each listed model input
+exists with its recorded SHA-256 on the segmentation grid and names a run of the section,
+and no file there is unlisted.
 
 ## Route comparison
 

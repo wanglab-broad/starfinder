@@ -5,7 +5,7 @@ plan's manifest) on W-642's fixture and A to D migrated to the Python shape (``s
 ``migrated_configurations``) reproduces the expected values that W-642 (invocations A, A2, B and C, G1) and W-643
 (invocation D, G2) recorded with the workflow before the dispatcher, except the contract's exceptions
 (design/specs/orchestration.md, "The exception of the golden comparison"), each difference named by its decision
-(``workflow_golden.compare_migrated``: OC3, D6, D8). G1 and G2 ran that workflow, which no longer exists for
+(``workflow_golden.compare_migrated``: OC3, D6, D8, IR). G1 and G2 ran that workflow, which no longer exists for
 ``backend: python``; G3 compares with the same two expected folders, updated only for W-790's removed spots
 using the maintained task commands and extractors, with a per-file ledger and independent audit in that issue. The
 runs use Snakemake 9 from the ``workflow`` dependency group, the one beside the interpreter, and skip with a stated
@@ -31,7 +31,7 @@ EXPECTED_CORE = Path(__file__).parent / "data" / "expected" / "test_workflow_cor
 NO_SNAKEMAKE = "the golden comparison runs the workflow with Snakemake 9, which this environment does not have"
 #: The decisions that may explain a difference (the contract's exceptions; OC4 explains none here: the records'
 #: absolute paths under the work folder are written <work> on both sides).
-DECISIONS = {"OC3", "OC4", "D6", "D8"}
+DECISIONS = {"OC3", "OC4", "D6", "D8", "IR"}
 
 
 def _snakemake():
@@ -233,6 +233,21 @@ MIGRATED_CASES = {
     "another FOV's imported label file": (EXPECTED, _record(
         "fovs/FOV_001/assignment/default/assignment.json",
         _set("inputs", "cells", "record", "import", "path", value=lambda _: "<work>/labels/FOV_002.tif")), None),
+    "the cell run's record of format version 2": (EXPECTED, _record(
+        "fovs/FOV_001/assignment/default/assignment.json",
+        _set("inputs", "cells", "record", "format_version", value=lambda _: 2)), "IR"),
+    "the cell run's record of another format version": (EXPECTED, _record(
+        "fovs/FOV_001/assignment/default/assignment.json",
+        _set("inputs", "cells", "record", "format_version", value=lambda _: 3)), None),
+    "the export's cell record of format version 2": (EXPECTED_EXPORT, _record(
+        "after_fusion/export/sample/export.json",
+        _set("assembly", "assignment", "inputs", "cells", "record", "format_version", value=lambda _: 2)), "IR"),
+    "the export run's recipe": (EXPECTED_EXPORT, _record(
+        "after_fusion/export/sample/export.json",
+        lambda r: r["segmentation"]["runs"][0].update(recipe=None)), "IR"),
+    "another key of the export run": (EXPECTED_EXPORT, _record(
+        "after_fusion/export/sample/export.json",
+        lambda r: r["segmentation"]["runs"][0].update(colour="red")), None),
 }
 
 

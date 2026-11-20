@@ -20,8 +20,8 @@ from starfinder.dataset.workflow import _segmentation, _segmentation_block
 from starfinder._legacy_workflow import _run_stardist_segmentation
 from starfinder.preprocessing import ProjectionConfig
 from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, CompositeConfig, ExpandLabelsConfig,
-                                     InputChannel, LabelImportConfig, SeededWatershedConfig, SegmentationPlan,
-                                     SegmentationRun, StarDistConfig)
+                                     InputChannel, InputRecipe, LabelImportConfig, ModelInputConfig,
+                                     SeededWatershedConfig, SegmentationPlan, SegmentationRun, StarDistConfig)
 
 from .coordination_helpers import digest
 from .test_segmentation_golden import DISTANCE, LABELS_3D, fixture, stand_in_model
@@ -59,9 +59,10 @@ def workflow(tmp_path, backend="python", **parameters):
 def test_the_legacy_keys_translate_to_one_stardist_run(tmp_path):
     model_folder(tmp_path / "models" / "stand_in")
     legacy = _segmentation(workflow(tmp_path))
-    assert legacy.config == StarDistConfig(scale=1.0, model_path=str(tmp_path / "models" / "stand_in"))
+    assert legacy.config == StarDistConfig(model_path=str(tmp_path / "models" / "stand_in"))
+    assert legacy.recipe == InputRecipe(model_input=ModelInputConfig(factor=1.0))   # W-891: the implicit recipe
     assert legacy.operations == (ExpandLabelsConfig(DISTANCE, "pixel", "planar"),)
-    assert (legacy.target, legacy.role, legacy.device, legacy.projection) == ("nucleus", "nuclear", "cpu", None)
+    assert (legacy.target, legacy.role, legacy.device, legacy.recipe.projection) == ("nucleus", "nuclear", "cpu", None)
     assert legacy.record["threshold_source"] == "stored" and legacy.record["stored_thresholds"] == STORED
     assert legacy.record["target_source"] == "legacy_default" and legacy.record["model"] == "path"
 
@@ -90,9 +91,10 @@ def test_a_known_model_in_the_weights_cache_resolves_by_name(tmp_path, monkeypat
     assert _segmentation(config).config.model_path == str(tmp_path / "other" / "2D_versatile_fluo")
 
 
-@pytest.mark.parametrize("rescale, scale", [(False, 1.0), (True, 0.5)])
-def test_rescale_is_the_stardist_scale(tmp_path, rescale, scale):
-    assert _segmentation(workflow(tmp_path, rescale=rescale)).config.scale == scale
+@pytest.mark.parametrize("rescale, factor", [(False, 1.0), (True, 0.5)])
+def test_rescale_is_the_implicit_recipes_model_factor(tmp_path, rescale, factor):
+    """MG3 of design/validation/segmentation-input-recipe.md: rescale true / false is model_input factor 0.5 / 1.0."""
+    assert _segmentation(workflow(tmp_path, rescale=rescale)).recipe.model_input == ModelInputConfig(factor=factor)
 
 
 def test_no_expansion_without_expand_labels(tmp_path):
@@ -123,13 +125,13 @@ def test_the_python_only_target_and_device(tmp_path):
 
 def test_the_projection_that_made_the_input_is_recorded(tmp_path):
     config = workflow(tmp_path, segmentation_input_folder="overlay")
-    assert _segmentation(config).projection is None
+    assert _segmentation(config).recipe.projection is None
     config["rules"]["create_nuclei_amplicon_overlay"]["parameters"]["maximum_projection"] = True
-    assert _segmentation(config).projection == ProjectionConfig()
+    assert _segmentation(config).recipe.projection == ProjectionConfig()
     config = workflow(tmp_path, segmentation_input_folder="DAPI")
     config["rules"]["create_nuclei_amplicon_overlay"]["parameters"]["maximum_projection"] = True
-    assert _segmentation(config).projection is None  # the overlay's projection does not reach the DAPI folder
-    assert _segmentation(dict(config, maximum_projection=True)).projection == ProjectionConfig()
+    assert _segmentation(config).recipe.projection is None  # the overlay's projection does not reach the DAPI folder
+    assert _segmentation(dict(config, maximum_projection=True)).recipe.projection == ProjectionConfig()
 
 
 def test_unknown_keys_and_the_block_raise(tmp_path):
@@ -177,6 +179,10 @@ def test_the_rule_writes_uint32_labels_equal_to_the_legacy_pins(tmp_path, stand_
     assert record["workflow"]["metadata_source"] == "declared" and record["workflow"]["target_source"] == "legacy_default"
     assert record["grid"]["metadata"]["spacing_zyx"] == [0.35, 0.1, 0.1]
     assert record["methods"][0]["effective"] == {"stand_in": True}
+    # MG3: the implicit recipe, recorded with name null and source legacy.
+    recipe = record["input"]["recipe"]
+    assert (recipe["name"], recipe["source"], recipe["config"]["projection"]) == (None, "legacy", None)
+    assert recipe["model_input"]["factor"] == 1.0 and recipe["model_input"]["factor_zyx"] == [1.0, 1.0, 1.0]
 
 
 def test_an_image_without_foreground_gives_an_empty_label_image(tmp_path, monkeypatch):
@@ -199,6 +205,9 @@ def test_an_image_without_foreground_gives_an_empty_label_image(tmp_path, monkey
 BLOCK = yaml.safe_load("""
 segmentation:
   device: cpu
+  input_recipes:
+    spleen:
+      model_input: {factor: 1.0}
   runs:
     - name: nucleus
       target: nucleus
@@ -206,7 +215,7 @@ segmentation:
         - {role: nuclear, round: round4, channel: ch04}
       method: stardist
       model_path: /absolute/stardist_models/3D_spleen
-      scale: 1.0
+      input_recipe: spleen
       operations:
         - {operation: expand_labels, distance: 4, unit: pixel, mode: planar}
     - name: cell
@@ -224,34 +233,44 @@ def test_the_block_of_the_contract_gives_a_plan():
     assert device == "cpu"
     assert plan == SegmentationPlan((
         SegmentationRun("nucleus", "nucleus", (InputChannel("nuclear", "round4", "ch04"),),
-                        StarDistConfig(scale=1.0, model_path="/absolute/stardist_models/3D_spleen"),
+                        StarDistConfig(model_path="/absolute/stardist_models/3D_spleen"),
+                        input_recipe=InputRecipe(model_input=ModelInputConfig(factor=1.0), name="spleen"),
                         operations=(ExpandLabelsConfig(4, "pixel", "planar"),)),
         SegmentationRun("cell", "cell", (InputChannel("amplicon", reference_merged=True),),
                         SeededWatershedConfig(sigma_um=1.5), seeds="nucleus")))
 
 
-def test_block_imports_prepare_and_projection():
+def test_block_imports_and_recipes():
+    """W-891: the composite and the projection are the run's input recipe; an import's projection is its own key."""
     runs = [{"name": "nucleus", "target": "nucleus", "method": "import", "path": "/labels/nuclei.tif",
-             "relabel": True},
-            {"name": "cell", "target": "cell", "method": "cellpose", "model": "cpsam_v2", "diameter": 30,
-             "projection": True,
-             "inputs": [{"role": "cytoplasm", "round": "round1", "channel": 0,
-                         "prepare": {"function": "composite_nuclei_amplicon", "nuclear_quantile": 0.01}}]}]
+             "relabel": True, "projection": "max"},
+            {"name": "cell", "target": "cell", "method": "seeded_watershed", "seeds": "nucleus",
+             "input_recipe": {"combine": {"method": "composite", "nuclear_quantile": 0.01},
+                              "projection": {"method": "max"}},
+             "inputs": [{"role": "nuclear", "round": "round1", "channel": 0},
+                        {"role": "amplicon", "reference_merged": True}]},
+            {"name": "cytoplasm", "target": "cell", "method": "cellpose", "model": "cpsam_v2",
+             "input_recipe": {"model_input": {"pixel_size_um": 0.4}},
+             "inputs": [{"role": "cytoplasm", "round": "round1", "channel": 1}]}]
     plan, device = _segmentation_block({"backend": "python", "segmentation": {"device": "cuda", "runs": runs}})
     assert device == "cuda"
-    assert plan.runs[0].method == LabelImportConfig("/labels/nuclei.tif", "nucleus", relabel=True)
-    assert plan.runs[1].method == CellposeConfig(diameter=30, model="cpsam_v2")
-    assert plan.runs[1].projection == ProjectionConfig()
-    assert plan.runs[1].inputs[0].prepare == CompositeConfig(nuclear_quantile=0.01)
+    assert plan.runs[0].method == LabelImportConfig("/labels/nuclei.tif", "nucleus", relabel=True, projection="max")
+    assert plan.runs[1].input_recipe == InputRecipe(combine=CompositeConfig(nuclear_quantile=0.01),
+                                                    projection=ProjectionConfig())
+    assert plan.runs[1].inputs == (InputChannel("nuclear", "round1", 0), InputChannel("amplicon", reference_merged=True))
+    assert plan.runs[2].method == CellposeConfig(model="cpsam_v2")
+    assert plan.runs[2].input_recipe == InputRecipe(model_input=ModelInputConfig(pixel_size_um=0.4))
 
 
 @pytest.mark.parametrize("change, error, match", [
     ({"backend": "matlab"}, ValueError, "Python-only"),
     ({"runs": [{"name": "x", "target": "cell", "method": "watershed"}]}, ValueError, "unknown segmentation method"),
-    ({"runs": [{"name": "x", "target": "cell", "method": "cellpose", "model": "cpsam_v2"}]}, ValueError,
-     "requires diameter"),
-    ({"runs": [{"name": "x", "target": "nucleus", "method": "stardist", "scale": 1.0, "model": "2D_versatile_fluo",
-                "tile_size": 4}]}, ValueError, "unknown segmentation run 'x' \\(stardist\\) keys"),
+    ({"runs": [{"name": "x", "target": "cell", "method": "cellpose", "model": "cpsam_v2",
+                "inputs": [{"role": "cytoplasm", "round": "round1", "channel": 0}]}]}, ValueError,
+     "needs input_recipe.model_input"),
+    ({"runs": [{"name": "x", "target": "nucleus", "method": "stardist", "input_recipe": "spleen",
+                "model": "2D_versatile_fluo", "tile_size": 4}]}, ValueError,
+     "unknown segmentation run 'x' \\(stardist\\) keys"),
     ({"runs": []}, ValueError, "nonempty list"),
     ({"device": "gpu"}, ValueError, "segmentation.device"),
 ])

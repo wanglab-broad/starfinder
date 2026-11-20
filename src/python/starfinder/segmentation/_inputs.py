@@ -4,18 +4,20 @@ Each takes arrays, never changes them, and returns its result with a record mapp
 ``{"function", "config", "inputs", "output", ...}`` whose hashes are array SHA-256
 values (design/specs/segmentation.md, "Input preparation and label functions").
 None is registered in ``PREPROCESSING_METHODS``: the composite and the enhancement
-combine two images, normalization returns float32, and rescaling changes the grid.
+combine two images (they are the ``combine`` methods of an input recipe,
+``COMBINE_METHODS``), normalization returns float32, and rescaling changes the grid.
 """
 # D4
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from numbers import Integral, Real
 
 import numpy as np
 
 from starfinder.image import ImageMetadata, IncompatibleGeometryError, _validate_image
+from starfinder.preprocessing._lengths import OMIT_NONE, check_length, config_record
 
 from ._labels import _json, array_sha256
 
@@ -67,8 +69,13 @@ class FlamingoEnhancementConfig:
     nuclear_quantile : float
         Stretch fraction q for the nuclear image, in [0, 0.5).
         The image is stretched between its q and 1 − q quantiles over the whole volume.
-    median_radius_px : int
-        Nonnegative integer disk radius in pixels for median filtering the Flamingo image in each Z plane.
+    median_radius_px : int or None
+        Nonnegative integer disk radius in pixels for median filtering the Flamingo image in each Z plane;
+        ``None`` with ``median_radius_um`` also ``None`` is 1 pixel.
+    median_radius_um : float or None
+        Nonnegative disk radius in micrometres, which an input recipe converts to
+        ``floor(median_radius_um / spacing_yx + ½)`` pixels on its grid; ``None``
+        gives the radius in pixels.
 
     Notes
     -----
@@ -76,17 +83,28 @@ class FlamingoEnhancementConfig:
     1 − q quantiles over the whole volume); ``median_radius_px`` is the radius in
     pixels of the disk the stretched Flamingo image is median-filtered with in each
     Z plane (0: one pixel, no filtering). The defaults are the values of
-    ``enhance_dapi_with_flamingo.py``.
+    ``enhance_dapi_with_flamingo.py``. Exactly one of ``median_radius_px`` (for a
+    direct call of :func:`enhance_with_flamingo`) and ``median_radius_um`` (for
+    the ``flamingo_enhance`` combine method of an input recipe, which refuses
+    ``median_radius_px``) is given; neither is 1 pixel.
     """
 
     flamingo_quantile: float = 0.005
     nuclear_quantile: float = 0.001
-    median_radius_px: int = 1
+    median_radius_px: int | None = None
+    median_radius_um: float | None = field(default=None, metadata=OMIT_NONE)
 
     def __post_init__(self):
         for name in ("flamingo_quantile", "nuclear_quantile"):
             object.__setattr__(self, name, _quantile(getattr(self, name), name))
-        radius = self.median_radius_px
+        if self.median_radius_um is not None:
+            if self.median_radius_px is not None:
+                raise ValueError("FlamingoEnhancementConfig takes exactly one of median_radius_px (pixels) and "
+                                 "median_radius_um (micrometres); got both")
+            object.__setattr__(self, "median_radius_um",
+                               check_length(self.median_radius_um, "FlamingoEnhancementConfig.median_radius_um"))
+            return
+        radius = 1 if self.median_radius_px is None else self.median_radius_px
         if isinstance(radius, bool) or not isinstance(radius, Integral) or radius < 0:
             raise ValueError(f"median_radius_px must be an integer >= 0; got {radius!r}")
         object.__setattr__(self, "median_radius_px", int(radius))
@@ -197,9 +215,16 @@ def enhance_with_flamingo(nuclear, flamingo, *,
     IncompatibleGeometryError
         An input is not three-dimensional, or the shapes differ.
     ValueError
-        An input is empty or not finite and real (InvalidImageError).
+        An input is empty or not finite and real (InvalidImageError), or the config gives
+        ``median_radius_um`` instead of ``median_radius_px``.
     TypeError
         config is not a FlamingoEnhancementConfig.
+
+    Notes
+    -----
+    A config with ``median_radius_um`` is refused (ValueError): the arrays
+    carry no spacing, so a direct call gives ``median_radius_px``; the
+    ``flamingo_enhance`` combine method of an input recipe converts it.
     """
     from skimage.filters import median
     from skimage.morphology import disk
@@ -207,6 +232,9 @@ def enhance_with_flamingo(nuclear, flamingo, *,
 
     if not isinstance(config, FlamingoEnhancementConfig):
         raise TypeError("config must be a FlamingoEnhancementConfig")
+    if config.median_radius_px is None:
+        raise ValueError("enhance_with_flamingo needs median_radius_px: the arrays carry no spacing, so "
+                         "median_radius_um is converted by an input recipe's flamingo_enhance combine method")
     nuclear, flamingo = _pair(nuclear, flamingo, ("nuclear", "flamingo"))
     stretched, flamingo_values = _stretch(flamingo, config.flamingo_quantile)
     footprint = disk(config.median_radius_px)
@@ -215,7 +243,7 @@ def enhance_with_flamingo(nuclear, flamingo, *,
         filtered[z] = median(stretched[z], footprint)
     nuclear_stretched, nuclear_values = _stretch(nuclear, config.nuclear_quantile)
     output = img_as_ubyte(img_as_float(nuclear_stretched) * invert(img_as_float(filtered)))
-    record = {"function": "enhance_with_flamingo", "config": _json(asdict(config)),
+    record = {"function": "enhance_with_flamingo", "config": _json(config_record(config)),
               "inputs": [array_sha256(nuclear), array_sha256(flamingo)], "output": array_sha256(output),
               "quantiles": {"nuclear": nuclear_values, "flamingo": flamingo_values}}
     return output, record

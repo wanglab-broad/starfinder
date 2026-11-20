@@ -69,7 +69,7 @@ def save_stain_runs(root, fov_id, stain, grid, dataset_id, sample) -> dict:
         for name, (fraction, grow) in RUNS.items():
             level = fraction * otsu
             source = {"round": "reference_stain", "channel": None, "name": None, "wavelength": None,
-                      "reference_merged": False, "prepare": None, "prepare_channel": None, "registration": None,
+                      "reference_merged": False, "registration": None,
                       "sha256": array_sha256(image[..., 0])}
             segmentation_input = SegmentationInput(image, grid, ("nuclear",), (source,))
             namespace = json.dumps([dataset_id, sample, fov_id, None, name], separators=(",", ":"))

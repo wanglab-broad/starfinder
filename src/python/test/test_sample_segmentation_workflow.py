@@ -44,6 +44,7 @@ from starfinder.segmentation._methods import ROLES
 from . import docs_pages
 from .sample_segmentation_fixtures import (
     length_configs,
+    length_recipes,
 )
 
 pytestmark = [pytest.mark.workflow, pytest.mark.validation]
@@ -190,8 +191,10 @@ def test_rs5_a_run_s_method_keys_equal_the_config_fields(method, monkeypatch):
 
 
 def test_rs5_every_init_field_of_a_method_config_translates(tmp_path):
-    """length_configs and an import, each written as a run with every init field, give back the same config."""
+    """length_configs and an import, each written as a run with every init field, give back the same config; a method
+    with a model has its input recipe inline (W-891: its model input, length_recipes)."""
     configs = dict(length_configs(tmp_path), imported=LabelImportConfig(str(tmp_path / "n.tif"), "nucleus"))
+    recipes = length_recipes()
     runs = []
     for key, config in configs.items():
         values = {k: (list(v) if isinstance(v, tuple) else v) for k, v in asdict(config).items()}
@@ -202,8 +205,10 @@ def test_rs5_every_init_field_of_a_method_config_translates(tmp_path):
         spec = SEGMENTATION_METHODS[type(config)]
         target = "nucleus" if "nucleus" in spec.targets else "cell"
         role = sorted(spec.roles)[0]
+        recipe = recipes[key]
         runs.append({"name": key, "target": target, "inputs": [{"role": role, "image": "dapi"}], "method": spec.name,
-                     **({"seeds": "nucleus"} if spec.seeds == "required" else {}), **values})
+                     **({"seeds": "nucleus"} if spec.seeds == "required" else {}), **values,
+                     **({} if recipe is None else {"input_recipe": {"model_input": {"factor": recipe.model_input.factor}}})})
     runs.insert(0, runs.pop())  # the import first: the seeds of the watershed
     block = {"images": ["dapi=file:images/dapi/{fov_id}.tif"], "route": "after_fusion",
              "segmentation": {"cells": "seeded_watershed", "nuclei": "nucleus", "runs": runs}}
@@ -214,6 +219,7 @@ def test_rs5_every_init_field_of_a_method_config_translates(tmp_path):
     export, _ = workflow._export_config(config)
     expected = {"nucleus": configs.pop("imported"), **configs}
     assert {run.name: run.method for run in export.segmentation.runs} == expected
+    assert {run.name: run.input_recipe for run in export.segmentation.runs} == {"nucleus": None, **recipes}
 
 
 @pytest.mark.parametrize("combination", COMBINATIONS, ids=lambda c: "-".join(map(str, c)))
@@ -261,8 +267,8 @@ def test_rs5_invalid_route_keys_fail_the_schema(change, tmp_path):
     assert T.validation_error(config)
 
 
-#: A cellpose run that names its diameter and model, so that a run's own invalid key is what the package refuses.
-CELLPOSE = {"name": "cell", "method": "cellpose", "diameter": 30.0, "model": "cpsam_v2"}
+#: A cellpose run that names its model input and model, so that a run's own invalid key is what the package refuses.
+CELLPOSE = {"name": "cell", "method": "cellpose", "input_recipe": {"model_input": {"factor": 1.0}}, "model": "cpsam_v2"}
 
 
 @pytest.mark.parametrize("run, message", [
@@ -274,7 +280,7 @@ CELLPOSE = {"name": "cell", "method": "cellpose", "diameter": 30.0, "model": "cp
 ])
 def test_rs5_an_invalid_run_key_hits_its_own_refusal(run, message, tmp_path):
     """From test_rs5_invalid_route_keys_fail_the_schema's three runs (target membrane, role dapi, an input with no
-    image): with the diameter and model cellpose needs, which the package refuses first without them, each is refused
+    image): with the model input and model cellpose needs, which the package refuses first without them, each is refused
     by its own key's message."""
     from . import workflow_tasks as T
     config = python_route_config(tmp_path, None, "projection", True, True, True, "default")

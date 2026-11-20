@@ -16,7 +16,8 @@ import yaml
 from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState, from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, save_volume
-from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig, HistogramMatchingConfig, MinMaxNormalizationConfig,
+from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig, ClaheConfig, GaussianConfig,
+    HistogramMatchingConfig, MinMaxNormalizationConfig,
     PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig, StepContext, StepResult, PreprocessingSpec, TophatConfig, run_step, step_config_type,
     step_spec)
 
@@ -71,7 +72,10 @@ def test_registered_steps_match_the_contract_table():
         TophatConfig: ("white_tophat", "background", "per_channel", "preserve"),
         ScalarBackgroundConfig: ("scalar_background", "background", "per_channel", "preserve"),
         Background3DConfig: ("background_3d", "background", "per_channel", "preserve"),
-        PercentileNormalizationConfig: ("percentile_normalization", "intensity", "per_channel", "preserve")}
+        PercentileNormalizationConfig: ("percentile_normalization", "intensity", "per_channel", "preserve"),
+        # W-891 (ST8 of design/validation/segmentation-input-recipe.md): the two contrast steps of input recipes.
+        GaussianConfig: ("gaussian", "contrast", "per_channel", "preserve"),
+        ClaheConfig: ("clahe", "contrast", "per_channel", "preserve")}
 
 
 def test_step_names_are_unique_and_name_lookup_is_derived_from_steps(monkeypatch):

@@ -70,23 +70,28 @@ def plane_positions(spacing_zyx, origin_zyx, n_z) -> list[tuple[float, float, fl
     return [(origin_zyx[0] + i * spacing_zyx[0], origin_zyx[1], origin_zyx[2]) for i in range(n_z)]
 
 
-def write_ome_tiff(path, array, *, metadata: ImageMetadata, annotation: dict, levels=()) -> dict:
+def write_ome_tiff(path, array, *, metadata: ImageMetadata, annotation: dict, levels=(), channels=False) -> dict:
     """Write a fused array as an OME-TIFF; return its layout (tile shape, compression, level shapes).
 
-    ``array`` is 2D (``YX``) or 3D (``ZYX``), a numpy or lazy (dask) array of
-    uint8, uint16, uint32 or float32; ``metadata`` is the output level's
-    ``ImageMetadata`` (spacing and origin in µm); ``levels`` are the SubIFD
-    levels, each an array of the same dimensionality, already reduced. The
-    file is written to a temporary sibling and renamed into place. Its UUID
-    is a name-based UUID of the shapes, dtype, layout, metadata and tiles
-    written, set in place after the last tile.
+    ``array`` is 2D (``YX``) or 3D (``ZYX``, or ``CYX`` with ``channels``), a
+    numpy or lazy (dask) array of uint8, uint16, uint32 or float32;
+    ``metadata`` is the output level's ``ImageMetadata`` (spacing and origin
+    in µm); ``levels`` are the SubIFD levels, each an array of the same
+    dimensionality, already reduced. With ``channels`` the first axis of a 3D
+    array is the channel axis (a segmentation model input of several model
+    channels, each one plane at the origin's Z). The file is written to a
+    temporary sibling and renamed into place. Its UUID is a name-based UUID of
+    the shapes, dtype, layout, metadata and tiles written, set in place after
+    the last tile.
     """
     path = Path(path)
     dtype = np.dtype(array.dtype)
-    axes = "YX" if array.ndim == 2 else "ZYX"
+    if channels and array.ndim != 3:
+        raise ValueError(f"a CYX OME-TIFF needs a 3D array; got {array.ndim} dimensions")
+    axes = "CYX" if channels else "YX" if array.ndim == 2 else "ZYX"
     n_z = 1 if array.ndim == 2 else array.shape[0]
     spacing, origin = metadata.spacing_zyx, metadata.origin_zyx
-    positions = plane_positions(spacing, origin, n_z)
+    positions = plane_positions(spacing, origin, 1) * n_z if channels else plane_positions(spacing, origin, n_z)
     plane = {"PositionZ": [p[0] for p in positions], "PositionY": [p[1] for p in positions],
              "PositionX": [p[2] for p in positions], "PositionZUnit": ["µm"] * n_z,
              "PositionYUnit": ["µm"] * n_z, "PositionXUnit": ["µm"] * n_z}

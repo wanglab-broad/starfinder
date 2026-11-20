@@ -149,6 +149,8 @@ class Run:
         self.kept = set()
         # A verified resume of the fov task: (stage, earlier run.json), set by the command's preparation.
         self.resume = None
+        # The saved spot-finding input of the fov task ({root, record, path}), set by the command's preparation.
+        self.source = None
         self.started = time.perf_counter()
         path = self.out / self.manifest["configuration"]["path"]
         try:

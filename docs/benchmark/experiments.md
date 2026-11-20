@@ -77,9 +77,16 @@ method's `module` is one of:
   `device` (`cpu`) and `spot_namespace` (`trial`); input `image` (ZYX or ZYXC).
   Outputs `spots.csv` (the `find_spots` table) and `spot_finding.json`.
 * `segmentation`: a method of `SEGMENTATION_METHODS` with its `config`,
-  `target`, one `roles` entry per image channel, `device` and
-  `label_namespace`; input `image`, and `seeds` labels for a seeded method.
-  Outputs `labels.npy` and `segmentation.json`.
+  `target`, one `roles` entry per image channel, `device`, `label_namespace`
+  and an optional `input_recipe` (a recipe in the layout of
+  `segmentation.input_recipes`); input `image`, and `seeds` labels for a
+  seeded method. Each image channel is the source channel of its role, and the
+  model input is built from them by `apply_input_recipe`, as `FOV.segment`
+  builds a run's; without `input_recipe` the recipe is empty, as a run's, and a
+  method with a model (StarDist, Cellpose) refuses it because it needs
+  `model_input`. `scale`, `diameter` and `projection` in `config` are refused
+  ({ref}`migration-input-recipe`). Outputs `labels.npy` and
+  `segmentation.json`, whose record holds the recipe record as `input.recipe`.
 
 A preprocessing or spot-finding input may instead be a regenerative scene
 descriptor: `scene` (preset `uncalibrated_preprocessing`, version

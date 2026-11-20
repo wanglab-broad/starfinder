@@ -143,6 +143,7 @@ need adjustment in the stage entries below.
 | `stitching.bigstitcher_macro` | `stitching.export_bigstitcher` |
 | `export_bigstitcher` on single-plane tiles (Z = 1, such as tissue-2D) wrote the default HDF5 levels `{2,2,2}, {4,4,4}` and downsample `(4, 4, 4)` (or the caller's `(4, 4, 1)`), and Fiji failed with `Matrix is singular` after exiting 0 with no pairwise results (v0.2.0) | For single-plane tiles with `BigStitcherConfig` levels, chunk sizes and downsample at their defaults, the macro resaves levels `(1,1,1), (2,2,1), (4,4,1)` (chunks 16×16×1) and uses downsample `(1, 1, 1)`; the config's own defaults are unchanged, and the macro for tiles of more than one plane is byte-identical. `export_bigstitcher` raises `ValueError` before writing when no resaved level serves the downsample (v0.2.1) |
 | `MultiviewStitcherConfig()` and a `multiview_stitcher` stitching block without `quality_threshold` kept links of quality at least 0.7; on the tissue-2D sample (56 FOVs) that rejected real links of quality 0.49 to 0.68 and held the export. Any link the optimizer removed made the review `required` | `quality_threshold` defaults to `None`: `"auto"` when every tile is single-plane (Z = 1), the larger of 0.2 and the 99th percentile of each registered pair's quality at two wrong offsets; 0.7, as before, when tiles have Z > 1. The rule is recorded in `method_diagnostics["link_quality"]` ({ref}`rule <stitching-link-threshold>`). Name `quality_threshold=0.7` to keep the old rule on single-plane tiles, or `"auto"` to estimate it on any tiles; stacks whose tiles share one z range, such as tissue-2D (Z = 30), name `"auto"`, which cannot check a z error (W-895). Optimizer removals make the review `required` only when a component splits, a FOV keeps fewer than 2 links (and fewer than it had), or a residual or correction check fails; `record["review"]` then also holds `optimizer_removed`. The removed links keep their rows and flags |
+| `quality_threshold="auto"` on tiles with Z > 1 kept any link at or above the threshold estimated from wrong offsets in Y and X, which cannot see a z error; a link registered a few planes off in z could stay. `links.csv` reasons were `quality_below_threshold`, `nan_quality`, `optimizer_removed` and `pruned` | On tiles with Z > 1, `"auto"` also measures each link at its registered shift ± `d` planes along z (`d = max(1, round(1 µm / (z spacing × z binning)))`) and drops a link that scores higher at either offset, with the new reason `quality_higher_at_z_offset` ({ref}`the z check <stitching-link-threshold>`); a pair with fewer than `2d + 1` binned planes skips it. `method_diagnostics["link_quality"]` gains `z_check`: `d`, the rule and each link's three qualities and outcome. Single-plane tiles, a given number and the default for Z > 1 (still 0.7) are unchanged. A placement saved with the new reason does not load in a version without it; placements saved before load as before |
 | `StitchingInput.image` was always a ZYX array after construction, and `Dataset.stitch` (and the workflow's stitching and BigStitcher export tasks) loaded every FOV's stitching image before placement; a stored-metadata reference image was read whole to hash its pixels | `StitchingInput.image` is an array, a `stitching.TileLoader` (a function that reads the tile, with its dtype declared) or `None`; call `StitchingInput.read()` for the checked array. `Dataset.stitch` and the workflow's tasks read headers only and pass loaders, and the reference image is hashed one plane at a time. `multiview_stitcher` reads each tile once, keeps it binned by `binning_zyx` and holds at most one full-resolution tile; its placements are unchanged, bit for bit. A loader that fails raises `RuntimeError` naming the FOV, during `stitch` |
 | `export.fuse` | `export.fuse_images` |
 | The workflow report of a run with `assignment` and `report` blocks and no `assembly` block (a sample without cells, its Segmentation and Assignment steps "not run") | The report names the `assignment` block's `name` and shows the cells, the cell run and the per-FOV segment and assign steps ({ref}`reference <workflow-keys-report>`). Its `report` task now also reads the `assignment` block, so every report task has a new cache token and an engine that compares it reruns the task once; a run with an `assembly` block keeps `assembly.assignment` |
@@ -161,6 +162,7 @@ need adjustment in the stage entries below.
 | The report's Workflow overview showed the recipe's `steps` as Preprocessing and left out the `post_registration` steps (the Preprocessing figures replayed them, a reconstruction column the overview never named), had no card for the read extraction and the scoring, listed Read QC filter before Deduplication, and gave no parameters: to read a step's values you opened `workflow/resolved.json` or a FOV's `run.json` | The overview has a card for every stage the run records, in the order the steps run: Preprocessing, Registration, Post-registration preprocessing (the `post_registration` methods, "not run" without any), Spot finding, Read extraction, Decoding, Scoring, Deduplication and Read QC filter, then Segmentation and Assignment on the route per FOV; Stitching, Segmentation (route after fusion), Assembly and Export per sample. Clicking a card opens its parameters from `workflow/resolved.json`: the method, the values that differ from the defaults of the configuration dataclass its block names, the fitted values (the minimum and maximum per channel and the shifts of the example FOV, the report's first example `example_1`, which the panel names; the link qualities of the placement), each with a relative link to the file that holds them (the FOV's `fovs/<fov>/run.json`, the report's `tables/registration.csv`, the placement's `links.csv`; a report without an example says so and shows no other FOV's values), and the whole block behind "all parameters". The Files table gains a Parameters row, and the report reads `workflow/resolved.json` and, for the Stitching card, the placement's `links.csv`. A run outside the workflow, or one whose `resolved.json` is missing, keeps cards without parameters; the card numbers after Registration move up by one or more ({doc}`the report reference <report-algorithms>`) |
 | The report drew the segmentation outlines of the example FOVs over the reference image (`fovs/<fov>/reference.tif`, the merged sequencing channels) on the route per FOV and over the first fused image after fusion, so a reader could not judge the outlines against the stain the model segmented, and the report showed no sign of nuclei split into small objects | The examples are drawn over the first channel (the nuclear role) of the segmentation input the run saved: `fovs/<fov>/segmentation/<run>/input.ome.tif` of the nucleus run, else the cell run, checked against its recorded SHA-256 (route per FOV), and the fused image `export.json` names as the run's first input (route after fusion); a caption names the run, the role and the file. A sample whose runs have no saved input keeps the reference image and says so. A changed or missing input makes the example unavailable. "Segmentation and assembly" gains an Object sizes block and a new table `sizes.csv` (the equivalent diameter in µm of the nuclei and cells, for the sample and each FOV), the part `assembly.sizes`, the input kind `segmentation_input` and a rule `small_nucleus_fraction` under Problematic FOVs; `ReportLimits` gains `small_nucleus_fraction` (`RuleLimit(k=3, floor=0.05)`) and `small_nucleus_diameter_um` (3), and the workflow's `report.limits` accepts both. A report made before has no `sizes.csv`; make it again. The limit is a display rule, not a qualification of the segmentation ({doc}`the report reference <report-algorithms>`) |
 | Every task's fingerprint (`blocks_sha256` in `workflow/manifest.json` and `workflow.blocks_sha256` in its record) covered `selected_fovs` and `output_id`, so adding FOVs to a run, or planning it under another `output_id` into the same output root, reran every finished FOV task | The FOV-level tasks (`summarize`, `fov`, `tile_global`, `tile`, `tile_merge`, `morphology`, `segment`, `assign`) leave both keys out of their hash and keep their result; the sample-level tasks (`merge`, the placing tasks, `export`, `report`, `compare`) keep both and rerun. With `reference_image_import` the FOV-level hash keeps `output_id`. The FOV-level tasks' `blocks_sha256` and fingerprints change once: records written before this change do not match, so the first plan with this version reruns those tasks, and a verified resume (`execution.resume_from_checkpoint`) of a `fov` or `tile_global` attempt from before it is refused with exit status 3; run that task again without the resume ({ref}`the task kinds <workflow-task-kinds>`) |
+| The build check of a `learned` image ran `uv pip check` and stopped on its one line, ``The package `piscis` requires `opencv-python`, but it's not installed``, which every build reports because `uv.lock` holds only `opencv-python-headless` | `scripts/image_check.py pip-check <variant>` accepts that one line by its exact text in the `learned` and `learned-cuda` images and fails on any other line (the `cpu` image accepts none); `scripts/image_check.py imports` imports `cv2`, `cellpose`, `piscis` and `stardist` on the CPU. The lock does not change. The commands are in {ref}`Checking a built image <broad-uger-image-check>` |
 
 ### Evaluation and command line
 
@@ -293,6 +295,66 @@ for explicit segment layouts. See the [readout reference](readout-algorithms.md)
 | Per-FOV expression files on the saved-assignment route | Read `fovs/<fov>/assignment/<name>/assignment.json` and its saved tables |
 | Assignment figures produced implicitly on that route | Enable `assembly.previews` |
 | Earlier exact-containment correspondence default | Set `CorrespondenceConfig(outside_tolerance=0.0)` to retain it |
+
+(migration-input-recipe)=
+
+### Segmentation input recipe
+
+A segmentation run's input preparation is its input recipe (W-891,
+{doc}`segmentation guide <segmentation-contract>`). The keys it replaced are refused, not
+shimmed: Python raises `TypeError` for the unknown field, and the workflow configuration
+raises `ValueError` naming the recipe field that replaces the key and this section.
+
+(migration-input-recipe-rows)=
+
+| Before | After |
+| --- | --- |
+| `InputChannel(role="composite", round=R, channel=C, prepare=CompositeConfig(...))` | Two source channels, `InputChannel(role="nuclear", round=R, channel=C)` and `InputChannel(role="amplicon", reference_merged=True)`, with `InputRecipe(combine=CompositeConfig(...))` |
+| `InputChannel(role="nuclear", round=R, channel=C, prepare=FlamingoEnhancementConfig(median_radius_px=m, ...), prepare_channel=F)` | `InputChannel(role="nuclear", round=R, channel=C)` and `InputChannel(role="cytoplasm", round=R, channel=F)`, with `InputRecipe(combine=FlamingoEnhancementConfig(median_radius_um=m × spacing_yx, ...))` |
+| `SegmentationRun(projection=ProjectionConfig(method=M))` for a method | `SegmentationRun(input_recipe=InputRecipe(projection=ProjectionConfig(method=M)))` |
+| `SegmentationRun(projection=…)` for an import | `LabelImportConfig(projection=M)` |
+| `StarDistConfig(scale=f)` | `InputRecipe(model_input=ModelInputConfig(pixel_size_um=spacing_yx / f))`, or `ModelInputConfig(factor=f)` on a grid without spacing |
+| `CellposeConfig(diameter=d)` | `ModelInputConfig(pixel_size_um=spacing_yx × d / 30)`; `diameter=None` becomes `ModelInputConfig(factor=1.0)` |
+| YAML `segmentation.runs[*].inputs[*].prepare`, `prepare_channel` | `input_recipe` with `combine`, and the extra source channel in `inputs` |
+| YAML `segmentation.runs[*].projection` | `input_recipe` with `projection`; for `method: import`, the import's `projection` |
+| YAML `scale` (StarDist), `diameter` (Cellpose) in `segmentation.runs` and `export.segmentation.runs` | `input_recipe` with `model_input` |
+| `LENGTH_FIELDS["stardist"]["scale"]`, `LENGTH_FIELDS["cellpose"]["diameter"]` | Removed; `model_input` derives each route's factor |
+| `segmentation.json` `format_version` 1 (`input.projection`, `channels[*].prepare`, `prepare_channel`) | `format_version` 2 (`input.recipe`); version 1 records still load |
+| A benchmark segmentation trial's `config` with `scale` (StarDist), `diameter` (Cellpose) or `projection` | The trial's `input_recipe` with `model_input` or `projection`; a trial without one has the empty recipe, which a method with a model refuses |
+
+`enhance_with_flamingo` and `composite_nuclei_amplicon` keep their signatures and their
+outputs; `FlamingoEnhancementConfig` keeps `median_radius_px` for a direct call. The record
+of a run is now `format_version` 2; a version 1 record still loads, and its run has no
+recipe. The tissue-2D configuration of W-870, for example, becomes:
+
+```yaml
+# before
+segmentation:
+  runs:
+    - name: nucleus
+      target: nucleus
+      method: stardist
+      model: 2D_versatile_fluo
+      scale: 0.25
+      inputs: [{role: nuclear, round: reference_stain, channel: PI}]
+      projection: {method: max}
+# after: 0.37854 µm = 0.094635 µm / 0.25, the factor 0.25 per FOV and 0.5 after fusion at k = 2
+segmentation:
+  input_recipes:
+    pi_max:
+      projection: {method: max}
+      model_input: {pixel_size_um: 0.37854}
+  runs:
+    - name: nucleus
+      target: nucleus
+      method: stardist
+      model: 2D_versatile_fluo
+      inputs: [{role: nuclear, round: reference_stain, channel: PI}]
+      input_recipe: pi_max
+```
+
+A plan over an earlier output root reruns the segment tasks and the export, whose
+blocks changed.
 
 ## Dataset, files and saved records
 

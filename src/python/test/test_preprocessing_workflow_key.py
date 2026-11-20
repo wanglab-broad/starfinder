@@ -78,7 +78,8 @@ def test_consistency_check_fails_for_a_missing_step_or_different_parameters(monk
     extra = copy.deepcopy(SCHEMA)
     extra["$defs"]["preprocessing_step_white_tophat"]["properties"]["radius_z"] = {"type": "integer"}
     assert schema_mismatches(extra, PREPROCESSING_METHODS) == [
-        "step 'white_tophat' parameters differ: schema ['radius_yx', 'radius_z'], config ['radius_yx']"]
+        "step 'white_tophat' parameters differ: schema ['radius_um', 'radius_yx', 'radius_z'], config ['radius_um', "
+        "'radius_yx']"]
 
     @dataclass(frozen=True)
     class GammaConfig:

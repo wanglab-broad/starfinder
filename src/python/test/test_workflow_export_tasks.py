@@ -422,7 +422,7 @@ def build_route(root, dimensions, *, assignment="default", previews=False, outpu
     cells = assignment is not None
     labels = str(out / "images" / "stardist_segmentation" / "{fov_id}.tif")
     if cells and dimensions == "2d":
-        labels_run = {"projection": True}
+        labels_run = {"projection": "max"}   # the import's projection (W-891)
     else:
         labels_run = {}
     manifest, config = plan_sample(root, "sample1", list(GOLDEN_IDS),

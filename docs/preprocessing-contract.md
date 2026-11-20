@@ -73,6 +73,11 @@ Every step's output is checked; the
 ```{method-table} starfinder.preprocessing.PREPROCESSING_METHODS
 ```
 
+`gaussian` and `clahe` smooth and equalize each channel with lengths in micrometres, which
+the image's spacing converts to pixels; they are also steps of a segmentation input recipe
+({doc}`segmentation guide <segmentation-contract>`), as are `white_tophat` and
+`reconstruction` with `radius_um`.
+
 Two recipes are in use. Recipe 1 is `min_max_normalization` then `histogram_matching`,
 optionally followed by `reconstruction` or `white_tophat`; the MATLAB keys translate
 to its steps. Recipe 2, `scalar_background` or `background_3d` then

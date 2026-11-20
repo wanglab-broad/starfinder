@@ -113,7 +113,7 @@ block are dropped, and the block's labels are renumbered after those already wri
 | Parameter | Unit | Default | Notes |
 | --- | --- | --- | --- |
 | `model` or `model_path` | | required (one) | known `2D_versatile_fluo`; user-trained `3D_spleen` by path |
-| `scale` | factor (Y, X, or ZYX) | required | Observations of the survey, not settings: 1.0 for `3D_spleen` on LN, 0.25 for `2D_versatile_fluo` on tissue-2D PI. `3D_spleen` stores anisotropy (2.286, 1, 1) but has no spacing parameter; a per-axis scale is the only route (spacing (1, 2, 2) fixture: nothing at scale 1, 2 labels at (1/2.286, 2, 2)). |
+| `scale` | factor (Y, X, or ZYX) | required | Since W-891 the input recipe's `model_input` factor (`SegmentationInput.model_scale_zyx`), not a field of `StarDistConfig`. Observations of the survey, not settings: 1.0 for `3D_spleen` on LN, 0.25 for `2D_versatile_fluo` on tissue-2D PI. `3D_spleen` stores anisotropy (2.286, 1, 1) but has no spacing parameter; a per-axis scale is the only route (spacing (1, 2, 2) fixture: nothing at scale 1, 2 labels at (1/2.286, 2, 2)). |
 | `prob_thresh` | probability | `None` = stored | `3D_spleen` 0.6429, `2D_versatile_fluo` 0.4791 |
 | `nms_thresh` | overlap | `None` = stored | `3D_spleen` 0.5, `2D_versatile_fluo` 0.3 |
 | `normalize_percentiles` | percent | (1.0, 99.8) | the current script's values |
@@ -209,7 +209,7 @@ network on the YX, ZY and ZX planes.
 | Parameter | Unit | Default | Notes |
 | --- | --- | --- | --- |
 | `model` or `model_path` | | required (one) | known `cpsam_v2` |
-| `diameter` | pixels | required | An observation of the survey, not a setting: 240 for culture cells; the dependency study also ran 60 for nuclei. `None` (explicit) means no rescale and is refused in 3D mode, where diameter None on 14-pixel objects gave 85 fragments (the dependency study). |
+| `diameter` | pixels | required | Since W-891 derived from the input recipe's `model_input`: `30 / f_yx`, so the factor 1 is diameter 30, no rescale (the old `None`); a 3D run's Z factor is `anisotropy × f_yx`. An observation of the survey, not a setting: 240 for culture cells; the dependency study also ran 60 for nuclei. Diameter None on 14-pixel objects in 3D mode gave 85 fragments (the dependency study). |
 | `do_3d`, `anisotropy` | -, Z/YX spacing ratio | `False`, `None` | 3D mode needs both; `anisotropy=0.5` recovered the 4 objects of the spacing (1, 2, 2) fixture |
 | `flow_threshold`, `cellprob_threshold` | -, logit | 0.4, 0.0 | library defaults; the dependency study's sensitivity rows at diameter 240: cellprob −1 gives 31 labels, the defaults 34, flow 0.8 gives 41 |
 | `tile_overlap` | fraction | 0.1 | clipped to [0.05, 0.5] by Cellpose; 0.1 against 0.5 changed outlines (median matched IoU 0.954, 131,716 pixels) |
@@ -304,6 +304,17 @@ fixtures. The watershed job had no warm-up call and no watchdog, and its `/usr/b
 record covers only the part after the last reset. A 3D field of view was not measured.
 
 ## Input functions
+
+Amended 2026-11-20 W-891: `composite_nuclei_amplicon` and `enhance_with_flamingo` are the
+combine methods `composite` and `flamingo_enhance` of an input recipe
+([segmentation-input-recipe](segmentation-input-recipe.md), "The combine stage"): the
+composite combines the source channels `nuclear` and `amplicon` (the reference merged image,
+now a source channel of its own) into one model channel of role `composite`; the
+enhancement combines `nuclear` and `cytoplasm` (the Flamingo stain) into one of role
+`nuclear`, with the recipe's `median_radius_um` converted to `median_radius_px =
+floor(median_radius_um / spacing_yx + ½)`. Their algorithms, signatures and golden digests do
+not change. After float32 steps of the recipe their inputs lie in [0, 1], which the stretch
+maps as it maps uint8 inputs.
 
 ### `composite_nuclei_amplicon`
 

@@ -6,13 +6,14 @@ recording summarized_after, params and fitted by round, and validates it
 itself. See design/specs/preprocessing-algorithms.md.
 """
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, replace
+from dataclasses import replace
 import json
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from starfinder.preprocessing._lengths import config_record
 from starfinder.preprocessing.histograms import HistogramSummary, _labels, _steps_record
 from starfinder.preprocessing.steps import (PREPROCESSING_METHODS, PreprocessingRecipe, _supplied, step_config_type,
     step_spec)
@@ -23,7 +24,7 @@ _SECTION = {"summarized_after", "params", "fitted"}
 
 
 def _preceding(recipe, index):
-    return _steps_record({"step": step_spec(entry.config).name, "config": asdict(entry.config)}
+    return _steps_record({"step": step_spec(entry.config).name, "config": config_record(entry.config)}
                          for entry in recipe.steps[:index])
 
 

@@ -30,7 +30,8 @@ PLACED = ("image_supported", "metadata_only", "placeholder")
 OWNING = ("image_supported", "metadata_only")
 FLAGS = ("fallback", "supplied", "correction_above_bound", "residual_above_tolerance", "nan_quality_link",
          "optimizer_removed_link")
-LINK_REASONS = ("", "quality_below_threshold", "nan_quality", "optimizer_removed", "pruned")
+LINK_REASONS = ("", "quality_below_threshold", "nan_quality", "optimizer_removed", "pruned",
+                "quality_higher_at_z_offset")
 AXES = ("z", "y", "x")
 FOV_COLUMNS = ("fov_id", "status", *(f"origin_{a}" for a in AXES), *(f"nominal_{a}" for a in AXES),
                *(f"correction_{a}" for a in AXES), *(f"method_translation_{a}" for a in AXES),

@@ -245,6 +245,13 @@
       ]
      }
     },
+    "spot_finding_input": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "minLength": 1
+    },
     "streaming": {
      "type": "boolean"
     },
@@ -385,6 +392,9 @@
       "cpu",
       "cuda"
      ]
+    },
+    "input_recipes": {
+     "type": "object"
     },
     "runs": {
      "type": "array",

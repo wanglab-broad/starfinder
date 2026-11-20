@@ -98,7 +98,7 @@ def _projection_method(cells):
     if isinstance(projection, Mapping) and projection.get("method"):
         return projection["method"]
     frame = cells.grid.metadata.frame_id
-    for method in ("max", "sum"):
+    for method in ("max", "sum", "mean"):
         if frame.endswith(f"/projection:{method}"):
             return method
     return None

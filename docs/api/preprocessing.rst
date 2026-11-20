@@ -51,6 +51,15 @@ Background removal
    subtract_scalar_background
    TophatConfig
 
+Smoothing and contrast
+----------------------
+
+.. autosummary::
+   :toctree: generated
+
+   ClaheConfig
+   GaussianConfig
+
 Projection
 ----------
 

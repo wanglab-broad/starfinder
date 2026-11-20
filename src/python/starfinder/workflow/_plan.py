@@ -369,10 +369,10 @@ def export_route(r):
 
 
 def _reference_inputs(r):
-    """The segmentation runs that read the reference merged image (directly, or as a composite's amplicon)."""
-    return [run["name"] for run in (r.get("segmentation") or {}).get("runs") or []
-            for item in run.get("inputs") or [] if item.get("reference_merged") or item.get("prepare")
-            and item["prepare"].get("function") == "composite_nuclei_amplicon"]
+    """The segmentation runs that read the reference merged image: a source channel with ``reference_merged: true``,
+    such as the amplicon of a composite."""
+    return list(dict.fromkeys(run["name"] for run in (r.get("segmentation") or {}).get("runs") or []
+                              for item in run.get("inputs") or [] if item.get("reference_merged")))
 
 
 def _morphology_needed_for(r):
@@ -399,7 +399,7 @@ def check_producers(r):
     if "assignment" in r and "segmentation" not in r:
         errors.append("the assignment block reads the cell run of the segmentation block: add a segmentation block")
     if "assignment" in r and "segmentation" in r:
-        names = [run["name"] for run in r["segmentation"]["runs"]]
+        names = [run["name"] for run in r["segmentation"].get("runs") or []]
         for key in ("cells", "nuclei"):
             if r["assignment"].get(key) is not None and r["assignment"][key] not in names:
                 errors.append(f"assignment.{key} names the run {r['assignment'][key]!r}, which the segmentation block "
@@ -414,7 +414,8 @@ def check_producers(r):
     if "processing" not in r and sequencing_inputs(r):
         errors.append(f"the segmentation inputs {sequencing_inputs(r)} read registered sequencing rounds, which the "
                       "processing block writes: add a processing block")
-    if "segmentation" in r and "processing" not in r and not r.get("reference_image_import") and "morphology" not in r:
+    if (r.get("segmentation") or {}).get("runs") and "processing" not in r and not r.get("reference_image_import") \
+            and "morphology" not in r:
         errors.append("a segmentation run lies on the FOV's reference grid, which the processing block's reference "
                       "image or the morphology block's reference stain gives: add one of them")
     if "assembly" in r and "stitching" not in r:
@@ -619,7 +620,14 @@ class Graph:
                 for fov in members:
                     stats = [stats_file[sample]] if sample in stats_file else (
                         [supplied_input] if supplied_input else [])
-                    inputs = self.inputs.image_inputs(fov, sequencing) + [codebook] + stats
+                    if spot_finding_input(r) is None:
+                        images = self.inputs.image_inputs(fov, sequencing)
+                    else:
+                        # The saved set replaces the raw images: the FOV's run.json and its registered stage record.
+                        images = [self.inputs.add_file(f"spot_finding_input:{fov}:{path.name}", path,
+                                                       f"processing.spot_finding_input, FOV {fov}")
+                                  for path in spot_finding_input_files(r, fov)]
+                    inputs = images + [codebook] + stats
                     if r["processing"]["mode"] == "tiled":
                         fov_task[fov], reference_task[fov] = self.tiled(sample, fov, merges[-1:],
                                                                          [i for i in inputs if i])
@@ -662,7 +670,7 @@ class Graph:
             s = r["segmentation"]
             for sample, members in samples.items():
                 for fov in members:
-                    for run in s["runs"]:
+                    for run in s.get("runs") or []:   # input_recipes alone plan no segment task
                         needs, inputs = [], []
                         fov_dir = self.fov_dir(fov)
                         # The grid: the processing task's reference image, else the morphology task's saved
@@ -961,6 +969,49 @@ def supplied_path(r, supplied):
     return path if path.is_absolute() else input_root(r) / path
 
 
+def spot_finding_input(r):
+    """The saved set that ``processing.spot_finding_input`` names (absolute, or relative to the input root): the
+    output root of a run whose fov tasks wrote the stage registered; None when the key is absent or null."""
+    value = (r.get("processing") or {}).get("spot_finding_input")
+    if value is None:
+        return None
+    path = Path(value)
+    return path if path.is_absolute() else input_root(r) / path
+
+
+def spot_finding_input_files(r, fov):
+    """The files of a saved set that a fov task reading it declares: the FOV's ``run.json`` and its registered stage
+    record (``checkpoints/registered/transforms.json``), which names and hashes the round images."""
+    folder = _layout.fov_dir(spot_finding_input(r), fov)
+    return [_layout.run_record(spot_finding_input(r), fov),
+            _layout.checkpoint_dir(folder) / _layout.REGISTERED / _layout.TRANSFORMS_FILE]
+
+
+def check_spot_finding_input(r):
+    """The settings ``processing.spot_finding_input`` excludes: the fov task reads the registered stage of the saved
+    set and runs spot finding and the steps after it, so it needs mode direct and spot_finding, writes no stage
+    registered of its own and is not resumed from its own checkpoints."""
+    if spot_finding_input(r) is None:
+        return
+    p, errors = r["processing"], []
+    if p.get("mode") == "tiled":
+        errors.append("processing.spot_finding_input is read in processing.mode direct only; the tiled tasks read "
+                      "their own chunked checkpoint")
+    if "spot_finding" not in p:
+        errors.append("processing.spot_finding_input: the fov task runs spot finding from the saved set; add "
+                      "processing.spot_finding")
+    if "registered" in p.get("checkpoints", []):
+        errors.append("processing.spot_finding_input: the fov task writes no stage registered of its own (the saved "
+                      "set holds it); remove registered from processing.checkpoints"
+                      + (f", and the segmentation inputs {sequencing_inputs(r)}, which read registered sequencing "
+                         "rounds" if sequencing_inputs(r) else ""))
+    if r["execution"].get("resume_from_checkpoint"):
+        errors.append("processing.spot_finding_input: a fov task that reads the saved set always runs from it; set "
+                      "execution.resume_from_checkpoint: false")
+    if errors:
+        raise PlanRefused("; ".join(errors))
+
+
 def _needs_rounds(r):
     rounds = set(sequencing_rounds(r) if "processing" in r else [])
     if "morphology" in r:
@@ -1038,7 +1089,10 @@ def plan(config_path, output_root=None) -> dict:
     without backend that holds MATLAB-dialect keys is refused), the keys that left the Python dialect, the Python
     schema (a package resource), the block translators, the FOV list (the file ``fov_list`` names, else
     ``fovs.csv`` under the input root) and ``selected_fovs``, and the data dependencies (a step whose input no task
-    produces). In a round's folder only the one file of each configured channel label is listed; other files are
+    produces). With ``processing.spot_finding_input`` the plan refuses mode tiled, a block without spot_finding, the
+    stage registered and ``execution.resume_from_checkpoint`` (``check_spot_finding_input``), and each fov task
+    declares the saved set's ``run.json`` and registered stage record of its FOV, which must exist, in place of the
+    raw images. In a round's folder only the one file of each configured channel label is listed; other files are
     not read, and a label that matches two files is refused. The resolved configuration writes every default the
     contract defines and ``api``, the API configs of each block; its hash leaves out ``execution`` and the roots.
     The manifest lists the inputs (path relative to the input root, or absolute outside it, bytes, modification
@@ -1086,6 +1140,7 @@ def plan(config_path, output_root=None) -> dict:
         except ValueError as error:
             raise PlanRefused(str(error)) from None
     check_producers(r)
+    check_spot_finding_input(r)
     inputs = Inputs(r, membership, _needs_rounds(r), _needs_codebook(r))
     manifest_path = _layout.manifest_file(out)
     graph = Graph(r, membership, inputs, out, manifest_path.relative_to(out))

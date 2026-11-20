@@ -558,13 +558,23 @@ for `stardist_segmentation` and the `anndata` extra for `reads_assignment`; no r
 Two Python-only top-level blocks (rejected unless `backend: python`) describe the same
 steps for the workflow orchestration's rule that loads a FOV and runs `FOV.segment` and `FOV.assign_molecules`; the
 legacy rules translate their own keys and raise when a block is present. In
-`segmentation`, `device` is `cpu` (default) or `cuda`, and each run has a `name`, a
-`target`, `inputs` (`InputChannel` fields; `prepare` names `composite_nuclei_amplicon` or
-`enhance_with_flamingo` with its config fields), optional `seeds`, `projection` (`true`
-or `ProjectionConfig` fields) and `operations` (`expand_labels` or
+`segmentation`, `device` is `cpu` (default) or `cuda`, `input_recipes` names input
+recipes ([segmentation input recipe](segmentation-input-recipe.md#configuration); W-891),
+and each run has a `name`, a `target`, `inputs` (its source channels, `InputChannel`
+fields), optional `seeds`, `input_recipe` (a name of `input_recipes`, or a full recipe
+inline, never a name plus overrides) and `operations` (`expand_labels` or
 `extend_labels_through_z` with their config fields), and a `method`: a
 `SEGMENTATION_METHODS` name whose config fields are the run's other keys, or `import`
-with the `LabelImportConfig` fields. The `assignment` block holds the `AssignmentConfig`
+with the `LabelImportConfig` fields (`projection` among them: `max`, `sum` or `mean`).
+A recipe's keys are its stages: `channels` and `after_projection` (lists of steps, each a
+registered step name as `method`, its config fields and optional `roles`), `combine`
+(`method` `single`, `composite` or `flamingo_enhance` with its config fields),
+`projection` (`method` `max`, `sum` or `mean`, optional `output_dtype`) and
+`model_input` (`pixel_size_um` or `factor`). `input_recipes` may be given without `runs`,
+for a dataset that segments after fusion only; the per-FOV segment tasks are planned only
+for `runs`. The keys a recipe replaced (an input's `prepare` and `prepare_channel`, a
+method run's `projection`, StarDist `scale` and Cellpose `diameter`) are refused, naming
+the recipe field that replaces them ([migration](../../docs/migration.md)). The `assignment` block holds the `AssignmentConfig`
 fields and the `FOV.assign_molecules` arguments (`cells`, `nuclei`, `name`, `population`,
 `checkpoints`); `correspondence` holds the `CorrespondenceConfig` fields (by default
 `match_fraction` 0.5 and `outside_tolerance` 0.1, a provisional value). Default-tier
@@ -576,6 +586,9 @@ to those fields and arguments.
 ```yaml
 segmentation:
   device: cpu
+  input_recipes:
+    spleen:
+      model_input: {factor: 1.0}
   runs:
     - name: nucleus
       target: nucleus
@@ -583,7 +596,7 @@ segmentation:
         - {role: nuclear, round: reference_stain, channel: DAPI}
       method: stardist
       model_path: /absolute/stardist_models/3D_spleen
-      scale: 1.0
+      input_recipe: spleen
     - name: cell
       target: cell
       seeds: nucleus
@@ -768,13 +781,15 @@ export:
         inputs: [{role: nuclear, image: dapi}]
         method: cellpose
         model: cpsam_v2
-        diameter: 60             # pixels of the acquired grid: 15 at 1/4
+        input_recipe:
+          model_input: {factor: 0.5}     # Cellpose diameter 30 / 0.5 = 60 pixels of the acquired grid: 15 at 1/4
       - name: cell
         target: cell
         inputs: [{role: cytoplasm, image: flamingo}, {role: nuclear, image: dapi}]
         method: cellpose
         model: cpsam_v2
-        diameter: 240            # 60 at 1/4
+        input_recipe:
+          model_input: {factor: 0.125}   # diameter 240: 60 at 1/4
 ```
 
 ## Processing report
@@ -849,7 +864,7 @@ report:
 | `create_nuclei_amplicon_overlay` | `maximum_projection` | boolean, default false; the Z maximum of the composite; separate from top-level projection |
 | `stardist_segmentation` | `stardist_base_path`, `stardist_model_name`, `segmentation_input_folder` | strings; the model is `<base>/<name>` (the known model of that name when the base is the weights cache's `stardist` folder); the input folder defaults in rule code to `overlay` and gives the channel role (`overlay`: composite, any other folder: nuclear) |
 | `stardist_segmentation` | `prob_thresh`, `nms_thresh` | numbers in [0,1]; equal to the model's `thresholds.json`, they are its stored thresholds, otherwise overrides; omitted, the stored ones |
-| `stardist_segmentation` | `rescale`, `expand_labels`, `distance` | booleans and integer >=0, defaults false; `rescale: true` is StarDist `scale` 0.5 in Y and X, rendered on the input grid; `expand_labels` is a planar pixel expansion by `distance`, which `reads_assignment` refuses (expand there instead) |
+| `stardist_segmentation` | `rescale`, `expand_labels`, `distance` | booleans and integer >=0, defaults false; `rescale: true` is the implicit input recipe's `model_input` factor 0.5 in Y and X (false: 1.0), rendered on the input grid; `expand_labels` is a planar pixel expansion by `distance`, which `reads_assignment` refuses (expand there instead) |
 | `stardist_segmentation` | `target`, `device` | Python only: `nucleus` or `cell` (default `cell` for the `overlay` folder, `nucleus` otherwise) and `cpu` (default) or `cuda` |
 | `reads_assignment` | `expand_labels`, `dilation_distance` | boolean, default false, and integer >=0; with `expand_labels`, assign expands the territories once by `dilation_distance` pixels per plane and keeps both masks |
 

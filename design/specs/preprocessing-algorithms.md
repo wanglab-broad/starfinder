@@ -196,6 +196,26 @@ Sources: the inverted-CDF quantile as above. Per-bit percentile normalization is
 documented by split-FISH (Goh et al. 2020, *Nature Methods* 17, 689–693; the
 `split-fish` repository parameters).
 
+## Gaussian smoothing and CLAHE
+
+Amended 2026-11-20 W-891 ([segmentation-input-recipe](segmentation-input-recipe.md), "The
+steps"). Two per-channel contrast steps with lengths in micrometres:
+
+* **`gaussian`.** `skimage.filters.gaussian(image, sigma=sigma_px_zyx)` with its defaults
+  (mode `nearest`, truncate 4.0), `sigma_px_zyx = sigma_um / spacing` per axis and 0 on an
+  axis of length 1, the conversion of `seeded_watershed`. A float image keeps its dtype; an
+  integer image is smoothed with `preserve_range=True` and rounded with `np.rint`.
+* **`clahe`.** The fit region's minimum and maximum (`in_range`, recorded) map linearly to
+  [0, 1] and the image is clipped there; a constant fit region gives zeros and records
+  `degenerate_range` true. Then `skimage.exposure.equalize_adapthist(image,
+  kernel_size=kernel_px_zyx, clip_limit, nbins)` with `kernel_px_zyx = max(1,
+  floor(kernel_um / spacing + ½))` per axis (1 on an axis of length 1); `kernel_um` has no
+  default. A float image keeps its dtype; on an integer image the [0, 1] result is scaled to
+  the dtype's full range and rounded with `np.rint`, as `percentile_normalization` does.
+* **Radii in µm.** `white_tophat` and `reconstruction` convert `radius_um` to
+  `floor(radius_um / spacing_yx + ½)` pixels (equal Y and X spacing needed) and run
+  unchanged.
+
 ## Pre-normalization extraction source
 
 * **Problem.** Normalization changes the intensities used for colour calling:

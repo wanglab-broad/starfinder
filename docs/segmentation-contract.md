@@ -65,12 +65,14 @@ The run writes one folder per run, `results/fovs/FOV_001/segmentation/nucleus/` 
 
 `FOV.segment` takes the runs of the plan in order. For each run it:
 
-1. **Grid.** Takes the FOV's reference grid (`FOV.reference_grid()`), or its Z
-   projection when the run sets `projection`. Without the reference round or the saved
-   reference image, the reference stain that `FOV.prepare_morphology` prepared (or
-   `FOV.load_registered_round("reference_stain")` restored) gives the grid.
-2. **Input.** For a method, builds the input image from the FOV's images: one channel
-   per `InputChannel`, each with its role.
+1. **Grid.** Takes the FOV's reference grid (`FOV.reference_grid()`). Without the
+   reference round or the saved reference image, the reference stain that
+   `FOV.prepare_morphology` prepared (or `FOV.load_registered_round("reference_stain")`
+   restored) gives the grid.
+2. **Input.** For a method, takes one source channel per `InputChannel` from the FOV's
+   images and applies the run's input recipe ([Input recipes](#input-recipes)): steps such
+   as smoothing, a combination such as the DAPI–amplicon composite, a Z projection (which
+   puts the run on the grid's projection) and the pixel size the model sees.
 3. **Labels.** Runs the method, with the labels of the run that `seeds` names as seeds;
    or, for an import, reads the mask file onto the grid.
 4. **Operations.** Applies the run's label operations, such as `expand_labels`, in order.
@@ -102,21 +104,23 @@ earlier run. This page does not recommend a method or a model.
     label operations and the outcome (`ok`, or `empty` without objects).
 * **On disk:** with `checkpoints`, each run's folder
   `<FOV folder>/segmentation/<run>/` holds `labels.tif`, `segmentation.json` and, for a
-  method, `input.ome.tif`. `fov.load_segmentation(name)` reads a run back and checks its
-  hashes, so assignment can run in another process.
+  method, `input.ome.tif`, the image the method received after every stage of the recipe.
+  `fov.load_segmentation(name)` reads a run back and checks its hashes, so assignment can
+  run in another process. A record written before the input recipe (`format_version` 1)
+  still loads.
 
 ## Main options
 
 * `SegmentationRun.method`: the method config with its settings, or a
   `LabelImportConfig` for an import.
 * `target`: what the run segments, `nucleus` or `cell`.
-* `inputs`: the channels the method reads.
+* `inputs`: the source channels.
+* `input_recipe`: how the source channels become the method's input, an
+  `InputRecipe` ([Input recipes](#input-recipes)); its `model_input` is the pixel size a
+  learned method's model sees.
 * `seeds`: the earlier run whose nuclei a method grows from.
 * `operations`: label operations after the method, such as expanding the labels.
-* `projection`: segments a Z projection of the input as one plane.
 * `model` or `model_path`: the model of a learned method.
-* `StarDistConfig.scale` and `CellposeConfig.diameter`: how the input is scaled to the
-  model's training data.
 
 The reference gives each config's options and their defaults.
 
@@ -129,14 +133,14 @@ cell keeps the value of the nucleus it grew from. Assignment pairs nuclei with c
 
 ## Method input
 
-Each `InputChannel` gives a channel a role and a source:
+Each `InputChannel` gives a source channel a role and a source:
 
 * a channel of a loaded round, by its name, file pattern or index:
   `InputChannel("nuclear", round="reference_stain", channel="DAPI")`;
 * the reference round's channel maximum: `InputChannel("amplicon", reference_merged=True)`.
 
 The roles are `nuclear`, `cytoplasm`, `membrane`, `amplicon` and `composite`. The
-methods read:
+methods read the model channels, the channels after the recipe's `combine`:
 
 * `stardist`: one `nuclear` or `composite` channel;
 * `cellpose`: a `cytoplasm` or a `nuclear` channel, or both;
@@ -148,10 +152,48 @@ stain files (`Dataset.reference_stains`, the round `reference_stain`) or from a
 morphology round is brought into the reference frame with
 `fov.prepare_morphology(...)` ({doc}`coordination`).
 
-`prepare` makes the channel with an input function: `CompositeConfig` combines a nuclear
-stain with the reference merged image (`composite_nuclei_amplicon`), and
-`FlamingoEnhancementConfig` dims the DAPI signal where the Flamingo stain of
-`prepare_channel` is bright (`enhance_with_flamingo`).
+## Input recipes
+
+An `InputRecipe` says how a run's source channels become the image its method receives.
+Its stages run in a fixed order: `channels` (steps on each source channel), `combine`,
+`projection`, `after_projection` (steps on the model channels) and `model_input`. Every
+length is in micrometres, so one recipe means the same on the route per FOV and on the
+route after fusion.
+
+```python
+from starfinder.preprocessing import ClaheConfig, GaussianConfig, ProjectionConfig
+from starfinder.segmentation import (CompositeConfig, InputChannel, InputRecipe, ModelInputConfig, SeededWatershedConfig,
+                                     SegmentationRun, StarDistConfig)
+
+# Smooth the stain, sum it over Z, equalize its contrast, and show the model pixels of 0.37854 µm.
+smooth = InputRecipe(channels=(GaussianConfig(sigma_um=0.3),), projection=ProjectionConfig(method="sum"),
+                     after_projection=(ClaheConfig(kernel_um=6.0),),
+                     model_input=ModelInputConfig(pixel_size_um=0.37854))
+nucleus = SegmentationRun("nucleus", "nucleus", (InputChannel("nuclear", round="reference_stain", channel="DAPI"),),
+                          StarDistConfig(model="2D_versatile_fluo"), input_recipe=smooth)
+
+# The DAPI–amplicon composite: two source channels and the combine method composite.
+composite = InputRecipe(combine=CompositeConfig())
+cell = SegmentationRun("cell", "cell", (InputChannel("nuclear", round="reference_stain", channel="DAPI"),
+                                        InputChannel("amplicon", reference_merged=True)),
+                       SeededWatershedConfig(), seeds="nucleus", input_recipe=composite)
+print(cell.input_recipe.combine, nucleus.input_recipe.model_input)
+```
+
+* **Steps.** `gaussian` and `clahe`, `white_tophat` and `reconstruction` with `radius_um`, and
+  `percentile_normalization`. A channel becomes float32 before its first step.
+* **Combine.** `single` (the default) keeps each source channel; `composite` combines
+  `nuclear` with `amplicon`; `flamingo_enhance` dims `nuclear` where the Flamingo stain, a
+  `cytoplasm` source, is bright.
+* **Projection.** `max`, `sum` or `mean` along Z; a run with a projection lies on the
+  grid's projection.
+* **Model input.** `pixel_size_um`, the pixel size the model sees (or `factor` on a grid
+  without spacing). StarDist and Cellpose need it, and the method rescales internally:
+  the labels come back on the run's grid. `seeded_watershed` refuses it.
+
+The package ships no recipe and recommends no value. `starfinder segment preview` draws a
+few FOVs × a few recipes before a workflow run, so you can compare them
+({doc}`reference <segmentation-algorithms>`).
 
 A later process can segment from saved images: `fov.load_reference_image()` restores
 the reference merged image, and `fov.load_registered_round(name)` each prepared round. The
@@ -207,7 +249,8 @@ gave the same labels on a 32 × 32 check. StarDist gave the same labels on both.
 | `SegmentationBackendUnavailableError` | The method's extra is not installed | Install the extra (above) |
 | `MissingModelError` | A model file or folder is not there | Fetch the known model, or check `model_path` |
 | `ModelHashMismatchError` | A model file differs from its expected SHA-256 | Fetch the model again, or check `model_sha256` |
-| `TypeError` naming `scale` or `diameter` | A StarDist or Cellpose config without it | Set the input scale |
+| `ValueError` naming `input_recipe.model_input` | A StarDist or Cellpose run without a model input, or a seeded watershed with one | Give the pixel size the model sees, or remove it |
+| `TypeError` naming `scale`, `diameter`, `prepare` or `projection` | A key that the input recipe replaced | See the {doc}`migration guide <migration>` |
 | `ValueError` naming `'cuda'` | A plan with a watershed run uses `device="cuda"` | Use `"cpu"` |
 | `IncompatibleGeometryError` | An input, a mask or the seeds have another ZYX shape than the run's grid, or the model does not fit the input's Z | Check the grid, or choose a model for 2D or 3D input |
 
@@ -218,12 +261,16 @@ file per FOV from `rules.stardist_segmentation.parameters`, and writes
 `images/stardist_segmentation/{fovID}.tif` with its run record. It runs in Snakemake's
 environment, with the package and its `stardist` extra. The reference lists the legacy keys.
 
-With `backend: python`, the top-level `segmentation` block describes a plan:
+With `backend: python`, the top-level `segmentation` block describes a plan and names
+its input recipes:
 
 ```yaml
 backend: python
 segmentation:
   device: cpu
+  input_recipes:
+    spleen:
+      model_input: {factor: 1.0}
   runs:
     - name: nucleus
       target: nucleus
@@ -231,7 +278,7 @@ segmentation:
         - {role: nuclear, round: reference_stain, channel: DAPI}
       method: stardist
       model_path: /absolute/stardist_models/3D_spleen
-      scale: 1.0
+      input_recipe: spleen
     - name: cell
       target: cell
       seeds: nucleus
@@ -241,12 +288,16 @@ segmentation:
 ```
 
 A run's other keys are the fields of its method's config, or with `method: import` those
-of `LabelImportConfig`. No rule runs the block yet.
+of `LabelImportConfig`. A run's `input_recipe` names a recipe of `input_recipes`, or holds
+a full recipe inline. The runs of `export.segmentation` name the same recipes on the route
+after fusion, so `input_recipes` may be given without `runs`. The workflow's `segment`
+tasks run the block.
 
 ## Limits
 
 * No training or fine-tuning, and no segmentation from the molecules.
-* No default model, no recommended scale and no accuracy claim.
+* No default model, no default recipe, no recommended sigma, kernel or pixel size, and no
+  accuracy claim.
 * Segmentation does not assign molecules or pair nuclei with cells; assignment does.
 
 ## How it is checked
@@ -256,7 +307,9 @@ resampling to the legacy scripts' outputs. Tests check the stage checks, the see
 watershed on hand-built fixtures, the saved files and the workflow translation; a
 `learned` parity test compares StarDist on the CPU with saved legacy results. The
 validation design for segmentation and assignment is in
-[`design/specs/assignment-algorithms.md`](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment-algorithms.md).
+[`design/specs/assignment-algorithms.md`](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/assignment-algorithms.md),
+and that of the input recipe in
+[`design/validation/segmentation-input-recipe.md`](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/segmentation-input-recipe.md).
 
 The full specification is in
 [`design/specs/segmentation.md`](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/segmentation.md).

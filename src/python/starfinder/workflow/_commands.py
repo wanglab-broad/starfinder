@@ -95,7 +95,8 @@ def fov(run):
     """FOV.run with checkpoints, FOV.save_reference_image and FOV.export_spots (as rsf_single_fov did).
 
     The device is processing.spot_finding.device, which find_spots receives; with cuda the task has its GPU
-    (``execution.gpu``)."""
+    (``execution.gpu``). With processing.spot_finding_input the task runs from the saved set's registered stage
+    (``_from_input``), else from the raw images or, after a verified resume, from its own stages (``_resume``)."""
     from starfinder.dataset.config import CheckpointConfig
     from starfinder.dataset.workflow import _load_reference
     adapted, pipeline, stages = _processing(run)
@@ -107,7 +108,9 @@ def fov(run):
     dataset._workflow = run.workflow_section()
     fov_ = dataset.fov(run.identity["fov"])
     execution = adapted.execution
-    if run.resume is None:
+    if run.source is not None:
+        _from_input(run, fov_, adapted, pipeline, stages)
+    elif run.resume is None:
         fov_.run(pipeline, execution=execution, checkpoints=CheckpointConfig(stages=stages, overwrite=True))
     else:
         _resume(run, fov_, adapted, pipeline, stages)
@@ -156,6 +159,27 @@ def _resume(run, fov_, adapted, pipeline, stages):
                                      preprocessing=pipeline.preprocessing),
                       execution=replace(adapted.execution, mode="batch"), checkpoints=None)
         fov_.images[ref], fov_.metadata[ref] = reference.images[ref], reference.metadata[ref]
+
+
+def _from_input(run, fov_, adapted, pipeline, stages):
+    """Load the registered stage of the saved set (``processing.spot_finding_input``, checked by the preparation) and
+    run the part of the pipeline after it (spot finding, extraction, decoding, scoring, deduplication, filtering),
+    writing this task's stages; run.json names the set in ``spot_finding_input``."""
+    from starfinder._records import file_sha256
+    from starfinder.dataset.config import CheckpointConfig, PipelineConfig
+    root, record = run.source["root"], run.source["record"]
+    fov_.load_checkpoint("registered", checkpoints=CheckpointConfig(directory=root / _layout.FOVS))
+    folder = _layout.fov_dir(root, run.identity["fov"])
+    header = folder / record[_layout.CHECKPOINTS]["registered"]["path"]
+    entry = {"path": str(root),
+             "run_record": {"path": str(run.source["path"]), "sha256": file_sha256(run.source["path"])},
+             "registered": {"path": str(header), "sha256": record[_layout.CHECKPOINTS]["registered"]["sha256"]},
+             "code": record.get("code"), "ended_at": record.get("ended_at")}
+    rest = PipelineConfig(**{f.name: getattr(pipeline, f.name) if f.name in _AFTER["registered"] else None
+                             for f in fields(PipelineConfig) if f.init})
+    fov_._run_from_input(rest, execution=adapted.execution,
+                         checkpoints=CheckpointConfig(stages=stages, overwrite=True),
+                         source={"record": record, "pipeline": pipeline, "entry": entry})
 
 
 def _tiled(run):

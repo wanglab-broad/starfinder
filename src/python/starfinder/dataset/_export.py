@@ -316,7 +316,7 @@ def _input_grids(dataset, placement):
 def _reuse(dataset, placement, config, output_dir, held):
     """The reuse conditions of ``segment: false`` (and ``assemble: false``), before anything is written."""
     from starfinder.export._grid import fused_grid
-    from starfinder.export._segment import load_sample_segmentation
+    from starfinder.export._segment import changed_recipes, load_sample_segmentation
     from starfinder.stitching._placement import table_sha256
     where = f"export.segment: false reuses the saved sample segmentation of {output_dir}"
     try:
@@ -344,6 +344,11 @@ def _reuse(dataset, placement, config, output_dir, held):
     if missing:
         raise ValueError(f"{where}, but it was made from the images {missing}, which are not names of export.images "
                          f"{list(names)}")
+    changed = changed_recipes(saved.record, config.segmentation) if config.segmentation is not None else []
+    if changed:
+        run, recorded, current = changed[0]
+        raise ValueError(f"{where}, but run {run!r} was made with another input recipe: SHA-256 {recorded} recorded, "
+                         f"{current} configured")
     held["segmentation"] = saved
     if config.assemble:
         return
@@ -371,7 +376,10 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
     # 7. The route, with the reuse conditions when segment is off. On this route it comes before checks 4 and 5, so
     # that a configuration without the route's settings is refused naming them (RD1), not for its inputs.
     held = {}
-    check_route(config, assignment, reuse=lambda: _reuse(dataset, placement, config, output_dir, held))
+
+    def planes():
+        return max((grid.shape_zyx[0] for grid in _input_grids(dataset, placement).values()), default=None)
+    check_route(config, assignment, reuse=lambda: _reuse(dataset, placement, config, output_dir, held), tiles_z=planes)
     # 4. Assembly: the molecule tables of every FOV; their molecules_only assembly is computed in memory, so that
     # every check of assemble runs before anything is written.
     inputs = assembly_inputs(dataset, placement, None)

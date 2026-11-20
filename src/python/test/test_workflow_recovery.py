@@ -205,7 +205,8 @@ def test_without_resume_from_checkpoint_the_task_reruns_from_scratch(full, monke
 
 #: A segmentation input of a sequencing round makes the plan add the stage registered and declare the round's image.
 REGISTERED_RUN = {"runs": [{"name": "nucleus", "target": "nucleus", "method": "stardist", "model": "2D_versatile_fluo",
-                            "scale": 1.0, "inputs": [{"role": "nuclear", "round": "round2", "channel": "ch00"}]}]}
+                            "input_recipe": {"model_input": {"factor": 1.0}},
+                            "inputs": [{"role": "nuclear", "round": "round2", "channel": "ch00"}]}]}
 REGISTERED_FILES = ["checkpoints/registered/round2.ome.tif", "checkpoints/registered/transforms.json"]
 
 

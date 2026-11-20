@@ -262,7 +262,7 @@ def test_the_reference_tables_cover_the_commands_task_kinds_and_keys(monkeypatch
     assert isinstance(written.pop("halo"), int) and tiled.pop("halo") == workflow_config.DERIVED[
         ("processing.tiled", "halo")]
     assert tiled == {key: json.dumps(value) for key, value in written.items()}
-    with pytest.raises(ValueError, match="describe runs"):
+    with pytest.raises(ValueError, match="describe input_recipes, runs"):
         workflow_config.key_rows("segmentation", ["device: cpu or cuda"])
     with pytest.raises(ValueError, match="no segmentation key named colour"):
-        workflow_config.key_rows("segmentation", ["device: d", "runs: r", "colour: c"])
+        workflow_config.key_rows("segmentation", ["device: d", "input_recipes: i", "runs: r", "colour: c"])

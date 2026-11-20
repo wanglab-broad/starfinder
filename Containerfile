@@ -11,11 +11,31 @@
 # `starfinder._records.code()` reads, so that the image reports the same `version` and `git_commit` as a clean checkout
 # of that commit (W-827).
 #
-#   docker buildx build --builder <docker-container builder> --target cpu \
+# Run these commands from the repository root:
+#
+#   docker buildx build --file Containerfile --builder <docker-container builder> --target cpu \
 #     --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<full commit> \
 #     --build-arg STARFINDER_DIRTY=<true|false> \
 #     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
 #     --output type=oci,dest=starfinder-cpu-<version>.oci.tar .
+#
+# The two targets that hold `piscis` build the same way, with their own target and archive name:
+#
+#   docker buildx build --file Containerfile --builder <docker-container builder> --target learned \
+#     --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<full commit> \
+#     --build-arg STARFINDER_DIRTY=<true|false> \
+#     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
+#     --output type=oci,dest=starfinder-learned-<version>.oci.tar .
+#
+#   docker buildx build --file Containerfile --builder <docker-container builder> --target learned-cuda \
+#     --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<full commit> \
+#     --build-arg STARFINDER_DIRTY=<true|false> \
+#     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
+#     --output type=oci,dest=starfinder-learned-cuda-<version>.oci.tar .
+#
+# After a build, `src/python/scripts/image_check.py` checks the image (docs/workflow/broad-uger.md, "Checking a built
+# image"): `uv pip check` may report only the one line that `piscis` requires `opencv-python`, which the lock leaves out
+# on purpose (W-813, W-878), and `cv2`, `cellpose`, `piscis` and `stardist` must import together on the CPU.
 #
 # Every target has `ps` (procps) for Nextflow's trace, report and timeline (W-786), and none has Fiji, MATLAB, Java
 # or Nextflow.

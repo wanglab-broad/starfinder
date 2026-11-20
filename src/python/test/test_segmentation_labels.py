@@ -237,7 +237,7 @@ def test_l3_the_record(tmp_path):
     assert {key: record[key] for key in ("format_version", "stage", "dataset_id", "sample_id", "fov_id",
                                          "subtile_id", "run", "target", "geometry", "input", "seeds",
                                          "methods", "operations", "outcome")} == {
-        "format_version": 1, "stage": "segmentation", "dataset_id": "data", "sample_id": "sample",
+        "format_version": 2, "stage": "segmentation", "dataset_id": "data", "sample_id": "sample",
         "fov_id": "FOV_001", "subtile_id": None, "run": "nucleus", "target": "cell", "geometry": "volume",
         "input": None, "seeds": None, "methods": [], "operations": [], "outcome": "ok"}
     assert record["grid"] == {"shape_zyx": [2, 8, 8],

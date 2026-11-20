@@ -36,7 +36,7 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import save_volume
 from starfinder.preprocessing import ProjectionConfig
 from starfinder.segmentation import (SEGMENTATION_METHODS, CompositeConfig, FlamingoEnhancementConfig, InputChannel,
-                                     ReferenceGrid, SeededWatershedConfig, SegmentationPlan, SegmentationResult,
+                                     InputRecipe, ReferenceGrid, SeededWatershedConfig, SegmentationPlan, SegmentationResult,
                                      SegmentationRun, reference_grid_from_file)
 from starfinder.segmentation._labels import same_grid
 from starfinder.segmentation._plan import assemble_input
@@ -100,17 +100,19 @@ def plan(fov):
     return SegmentationPlan((
         SegmentationRun("nucleus", "nucleus", (InputChannel("nuclear", round="reference_stain", channel="DAPI"),),
                         ThresholdConfig(float(np.percentile(stain, 90)))),
-        SegmentationRun("cell", "cell", (InputChannel("composite", round="reference_stain", channel="DAPI",
-                                                      prepare=CompositeConfig()),),
-                        SeededWatershedConfig(), seeds="nucleus"),
+        SegmentationRun("cell", "cell", (InputChannel("nuclear", round="reference_stain", channel="DAPI"),
+                                         InputChannel("amplicon", reference_merged=True)),
+                        SeededWatershedConfig(), seeds="nucleus", input_recipe=InputRecipe(combine=CompositeConfig())),
         morph_run(float(np.percentile(enhanced, 90))),
     ))
 
 
 def morph_run(level):
-    return SegmentationRun("morph_nucleus", "nucleus", (InputChannel(
-        "nuclear", round="morph", channel="DAPI", prepare=FlamingoEnhancementConfig(), prepare_channel="Flamingo"),),
-        ThresholdConfig(level))
+    # W-891: the enhancement is the recipe's combine on two source channels; one pixel is 0.5 µm on this grid.
+    return SegmentationRun("morph_nucleus", "nucleus", (InputChannel("nuclear", round="morph", channel="DAPI"),
+                                                        InputChannel("cytoplasm", round="morph", channel="Flamingo")),
+                           ThresholdConfig(level),
+                           input_recipe=InputRecipe(combine=FlamingoEnhancementConfig(median_radius_um=0.5)))
 
 
 def process_run(root, output):
@@ -235,7 +237,7 @@ def test_load_reference_image_restores_the_grid_and_the_merged_image(raw, thresh
     # InputChannel(reference_merged=True) reads the file, and the record links it.
     run = SegmentationRun("merged", "nucleus", (InputChannel("nuclear", reference_merged=True),),
                           ThresholdConfig(float(np.mean(saved))))
-    segmentation_input, _ = assemble_input(fresh, run, restored)
+    segmentation_input = assemble_input(fresh, run, restored)[0]
     assert np.array_equal(segmentation_input.image[..., 0], saved.reshape(restored.shape_zyx))
     assert segmentation_input.image.dtype == saved.dtype == np.uint16
     fresh.segment(SegmentationPlan((run,)))
@@ -308,9 +310,11 @@ def test_a_channel_of_the_reference_round_still_needs_the_round(raw, threshold):
     ds = dataset(raw["root"], "channel")
     ds.fov("FOV").run(pipeline(rotation=ANGLE)).save_reference_image()
     fresh = ds.fov("FOV").load_reference_image()
-    for channel in (InputChannel("nuclear", round="round1", channel="ch00"),
-                    InputChannel("nuclear", round="round1", channel="ch00", prepare=CompositeConfig())):
-        run = SegmentationRun("nucleus", "nucleus", (channel,), ThresholdConfig(0.0))
+    composite = InputRecipe(combine=CompositeConfig())
+    for channels, recipe in (((InputChannel("nuclear", round="round1", channel="ch00"),), None),
+                             ((InputChannel("nuclear", round="round1", channel="ch00"),
+                               InputChannel("amplicon", reference_merged=True)), composite)):
+        run = SegmentationRun("nucleus", "nucleus", channels, ThresholdConfig(0.0), input_recipe=recipe)
         with pytest.raises(ValueError, match="needs the reference round resident"):
             fresh.segment(SegmentationPlan((run,)))
     assert fresh.segmentation_results == {}
@@ -366,15 +370,19 @@ def test_three_processes_segment_and_assign_as_one_process(raw, threshold, tmp_p
         assert file_sha256(folder / record["input"]["path"]) == record["input"]["file_sha256"]
         assert file_sha256(folder / record["labels"]["path"]) == record["labels"]["file_sha256"]
         for channel in record["input"]["channels"]:
-            saved = channel["registration"]["saved"]
-            assert file_sha256(fov_folder / saved["path"]) == saved["sha256"]
+            if channel["registration"] is not None:   # the reference merged image (an amplicon) has none
+                saved = channel["registration"]["saved"]
+                assert file_sha256(fov_folder / saved["path"]) == saved["sha256"]
             if "reference_image" in channel:
                 link = channel["reference_image"]
                 assert file_sha256(ds.output_root / link["path"]) == link["sha256"]
-    assert loaded.segmentation_results["cell"].record["input"]["channels"][0]["reference_image"]["path"] == \
+    # W-891: the composite's amplicon is the second source channel of the cell run, the reference merged image.
+    assert loaded.segmentation_results["cell"].record["input"]["channels"][1]["reference_image"]["path"] == \
         "fovs/FOV/reference.tif"
-    composite = loaded.segmentation_results["cell"].record["input"]["channels"][0]["prepare"]
-    assert composite == json.loads(json.dumps(one.segmentation_results["cell"].record["input"]["channels"][0]["prepare"]))
+
+    def combine(result):
+        return next(s for s in result.record["input"]["recipe"]["stages"] if s["stage"] == "combine")["record"]
+    assert combine(loaded.segmentation_results["cell"]) == json.loads(json.dumps(combine(one.segmentation_results["cell"])))
 
     assignment = loaded.load_assignment("default")
     expected = one.assignment_results["default"]
