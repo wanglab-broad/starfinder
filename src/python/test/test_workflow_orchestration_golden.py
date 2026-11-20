@@ -279,27 +279,27 @@ def _exchange(inputs):
 
 #: case: (change of the swapped inputs, the unexplained lines, the explained lines by decision).
 REPORT_INPUT_CASES = {
-    "the label swap alone": (lambda i: None, 0, {"D6": 10}),
-    "a raw image's digest": (lambda i: _entry(i, "round1/FOV_001/ch00.ome.tif").update(sha256="0" * 64), 1, {"D6": 10}),
-    "a retained input's size": (lambda i: _entry(i, "stitching/sample/fovs.csv").update(bytes=1), 1, {"D6": 10}),
+    "the label swap alone": (lambda i: None, 0, {"D6": 12}),
+    "a raw image's digest": (lambda i: _entry(i, "round1/FOV_001/ch00.ome.tif").update(sha256="0" * 64), 1, {"D6": 12}),
+    "a retained input's size": (lambda i: _entry(i, "stitching/sample/fovs.csv").update(bytes=1), 1, {"D6": 12}),
     "a retained input's kind": (lambda i: _entry(i, "export/sample/tables/fovs.csv").update(kind="placement_table"),
-                                1, {"D6": 10}),
-    "a retained input's verified flag": (lambda i: _entry(i, "tables/cells.csv").update(verified=False), 1, {"D6": 10}),
-    "a retained input removed": (lambda i: i.remove(_entry(i, "stitching/sample/links.csv")), 1, {"D6": 10}),
+                                1, {"D6": 12}),
+    "a retained input's verified flag": (lambda i: _entry(i, "tables/cells.csv").update(verified=False), 1, {"D6": 12}),
+    "a retained input removed": (lambda i: i.remove(_entry(i, "stitching/sample/links.csv")), 1, {"D6": 12}),
     "a new input that is no label entry": (lambda i: i.append({"path": "fovs/FOV_001/other.tif", "kind": "label_image",
-                                                               "verified": True}), 1, {"D6": 10}),
-    "two retained inputs exchanged": (_exchange, 6, {"D6": 10}),
+                                                               "verified": True}), 1, {"D6": 12}),
+    "two retained inputs exchanged": (_exchange, 6, {"D6": 12}),
     "a labels.tif of a FOV without copied labels": (lambda i: i.append(dict(
         _entry(i, "FOV_001/segmentation/stardist_segmentation/labels.tif"),
-        path=SAVED_RUN.format(fov="FOV_003", name="labels.tif"))), 1, {"D6": 11}),
+        path=SAVED_RUN.format(fov="FOV_005", name="labels.tif"))), 1, {"D6": 13}),
     "copied labels without a labels.tif": (lambda i: i.remove(_entry(i, "FOV_002/segmentation/stardist_segmentation/"
-                                                                        "labels.tif")), 1, {"D6": 9}),
+                                                                        "labels.tif")), 1, {"D6": 11}),
     "a label entry not verified": (lambda i: _entry(i, "FOV_001/segmentation/stardist_segmentation/labels.tif").update(
-        verified=False), 1, {"D6": 9}),
+        verified=False), 1, {"D6": 11}),
     "a reference image's digest": (lambda i: _entry(i, "FOV_001/reference.tif").update(sha256="0" * 64), 0,
-                                   {"D6": 10, "OC3": 1}),
+                                   {"D6": 12, "OC3": 1}),
     "a reference image's size": (lambda i: _entry(i, "FOV_002/reference.tif").update(bytes=7672), 0,
-                                 {"D6": 10, "OC3": 1}),
+                                 {"D6": 12, "OC3": 1}),
 }
 
 
@@ -319,8 +319,8 @@ def test_the_migrated_comparison_compares_the_report_inputs_entry_by_entry(tmp_p
     assert all(line.startswith(f"records/{REPORT}.inputs") for found in decided.values() for line in found)
     if case == "the label swap alone":
         named = sorted(re.search(r": (\S+) only in", line)[1] for line in decided["D6"])
-        assert named == sorted([f"fovs/FOV_00{n}/assignment/default/cell_labels.tif" for n in (1, 2, 4)]
-                               + [SAVED_RUN.format(fov=f"FOV_00{n}", name="labels.tif") for n in (1, 2, 4)]
+        assert named == sorted([f"fovs/FOV_00{n}/assignment/default/cell_labels.tif" for n in range(1, 5)]
+                               + [SAVED_RUN.format(fov=f"FOV_00{n}", name="labels.tif") for n in range(1, 5)]
                                + [SAVED_RUN.format(fov=f"FOV_00{n}", name="segmentation.json") for n in range(1, 5)])
 
 

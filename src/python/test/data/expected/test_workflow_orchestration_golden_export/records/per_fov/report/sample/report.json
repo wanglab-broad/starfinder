@@ -67,7 +67,13 @@
     "floor": 0.05,
     "absolute": null
    },
-   "spots_near_zero": 0.05
+   "spots_near_zero": 0.05,
+   "small_nucleus_fraction": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "small_nucleus_diameter_um": 3.0
   },
   "figure_width_px": 1600,
   "jpeg_quality": 85
@@ -278,6 +284,13 @@
    "verified": false
   },
   {
+   "path": "fovs/FOV_003/assignment/default/cell_labels.tif",
+   "kind": "label_image",
+   "sha256": "eb00dedf8576aa19abba2b755b0c587202517848939d9a24261575f9c95447e2",
+   "bytes": 2107,
+   "verified": true
+  },
+  {
    "path": "workflow/resolved.json",
    "kind": "workflow_config",
    "verified": false
@@ -461,9 +474,27 @@
    }
   },
   {
+   "path": "tables/sizes.csv",
+   "sha256": "afc6b93e0d19c6561048d948a3e8e63feae13e5da9fecb5b31ea9b7b1d7669a3",
+   "bytes": 747,
+   "dtypes": {
+    "scope": "string",
+    "fov_id": "string",
+    "object": "string",
+    "n_objects": "int64",
+    "diameter_p5": "float64",
+    "diameter_p25": "float64",
+    "diameter_median": "float64",
+    "diameter_p75": "float64",
+    "diameter_p95": "float64",
+    "below_limit": "int64",
+    "below_fraction": "float64"
+   }
+  },
+  {
    "path": "tables/unavailable.csv",
-   "sha256": "e8a02bc83dbe9a60f44276777c4dabcbbd3bf47ca61652ad65b9cd2156a4e744",
-   "bytes": 590,
+   "sha256": "dfbb36358c421c3e32501312104bec2794e5a2aa6242e1e462cb6b1f9eef8e3a",
+   "bytes": 668,
    "dtypes": {
     "part": "string",
     "table": "string",
@@ -482,6 +513,14 @@
    "row_key": "",
    "reason": "not_configured",
    "detail": "config.limits.alignment_score sets no limit"
+  },
+  {
+   "part": "rule:small_nucleus_fraction",
+   "table": null,
+   "column": null,
+   "row_key": "",
+   "reason": "no_segmentation",
+   "detail": "no nucleus label image"
   },
   {
    "part": "sample.marker_zoom",
@@ -739,6 +778,16 @@
    "unit": null,
    "evaluated": true,
    "fovs_marked": 0
+  },
+  "small_nucleus_fraction": {
+   "limit": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "unit": "fraction",
+   "evaluated": false,
+   "fovs_marked": null
   }
  },
  "summary": {

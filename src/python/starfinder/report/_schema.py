@@ -24,18 +24,18 @@ REPORT_PARTS = (
     "preprocessing.example", "preprocessing.intensity",
     "registration.maps", "registration.heatmap", "registration.example",
     "readout.totals", "readout.per_fov", "readout.distributions", "readout.table",
-    "assembly.cells_per_fov", "assembly.placement", "assembly.examples", "assembly.accounting",
+    "assembly.cells_per_fov", "assembly.placement", "assembly.examples", "assembly.sizes", "assembly.accounting",
     "sample.per_cell", "sample.markers", "sample.marker_zoom", "sample.mecr", "sample.reads_along_z",
     "files.input", "files.configuration", "files.output")
 
 #: The tables of ``tables/``, in the order of the output folder ("The output folder").
 REPORT_TABLES = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs", "cells",
-                 "mecr", "reads_along_z", "intensity", "unavailable")
+                 "mecr", "reads_along_z", "intensity", "sizes", "unavailable")
 
 #: The rules of the problematic FOVs, in the order of their rows (D5).
 PROBLEM_RULES = ("fov_failed", "fov_not_run", "shift_residual", "alignment_score", "registration_rejected",
                  "registration_fallback", "correct_form_fraction", "matched_fraction", "spots_near_zero",
-                 "not_placed", "stage_position_fallback", "reads_no_cell")
+                 "not_placed", "stage_position_fallback", "reads_no_cell", "small_nucleus_fraction")
 
 REPORT_FILE = "report.json"
 TABLE_DIR = "tables"
@@ -79,6 +79,10 @@ TABLE_DTYPES = {
     "intensity": {"round": "string", "step_index": "int64", "phase": "string", "step": "string",
                   "channel": "string", "bin": "int64", "bin_low": "float64", "bin_high": "float64",
                   "count": "int64"},
+    "sizes": {"scope": "string", "fov_id": "string", "object": "string", "n_objects": "int64",
+              "diameter_p5": "float64", "diameter_p25": "float64", "diameter_median": "float64",
+              "diameter_p75": "float64", "diameter_p95": "float64", "below_limit": "int64",
+              "below_fraction": "float64"},
     "unavailable": {"part": "string", "table": "string", "column": "string", "row_key": "string",
                     "reason": "string", "detail": "string"},
 }
@@ -88,7 +92,7 @@ TABLE_KEYS = {"fovs": ("fov_id",), "registration": ("fov_id", "round"), "steps":
               "readout_totals": ("level",), "population": ("population",),
               "problematic_fovs": ("fov_id", "rule", "round", "axis"), "cells": ("obs_name",),
               "mecr": ("gene_a", "gene_b"), "reads_along_z": ("fov_id", "z"),
-              "intensity": ("round", "step_index", "channel", "bin"),
+              "intensity": ("round", "step_index", "channel", "bin"), "sizes": ("scope", "fov_id", "object"),
               "unavailable": ("part", "table", "column", "row_key")}
 
 #: The levels of ``readout_totals.csv`` and the populations of ``population.csv``, in row order.
@@ -109,7 +113,7 @@ SUMMARY_KEYS = ("fovs_expected", "fovs_with_run_record", "fovs_succeeded", "spot
 #: The unit of each rule on values (design/specs/report-algorithms.md, "The rules of the first delivery"); the
 #: categorical rules have none.
 RULE_UNITS = {"shift_residual": "voxels", "alignment_score": "dimensionless", "correct_form_fraction": "fraction",
-              "matched_fraction": "fraction", "spots_near_zero": "reads"}
+              "matched_fraction": "fraction", "spots_near_zero": "reads", "small_nucleus_fraction": "fraction"}
 
 
 #: The columns and dtypes of the comparison page's ``samples.csv``, in column order (design/specs/report.md,

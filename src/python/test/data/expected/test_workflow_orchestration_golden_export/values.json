@@ -149,9 +149,13 @@
   "compare": "same_environment",
   "value": "bb6894fefddfd7a579ca869613f49e2d90493a893a947052d823334c615b52c3"
  },
+ "file:after_fusion/report/sample/tables/sizes.csv": {
+  "compare": "same_environment",
+  "value": "d946a8b6103f2532d7c827a50dfc6771566e84c7db9d3aa25547bd16b33e0bf9"
+ },
  "file:after_fusion/report/sample/tables/unavailable.csv": {
   "compare": "same_environment",
-  "value": "ca6821a95433c1ad028f5b60da7aff3843a0f62c71f90d875bae68d6f3007152"
+  "value": "dfbb36358c421c3e32501312104bec2794e5a2aa6242e1e462cb6b1f9eef8e3a"
  },
  "file:after_fusion/stitching/sample/fovs.csv": {
   "compare": "same_environment",
@@ -209,9 +213,13 @@
   "compare": "same_environment",
   "value": "bb6894fefddfd7a579ca869613f49e2d90493a893a947052d823334c615b52c3"
  },
+ "file:molecules_only/report/sample/tables/sizes.csv": {
+  "compare": "same_environment",
+  "value": "3e1c7bff1fc68224e5466fdf45c11508c484964240a6bc9cc22ef6aeab7d8a7f"
+ },
  "file:molecules_only/report/sample/tables/unavailable.csv": {
   "compare": "same_environment",
-  "value": "f559f301902d31c4c9bb6f5308682d57d1481585f01964693e3ce5ce4a2b3e32"
+  "value": "7c52c8538e4dea08da2d8339458165366ea386775d3379779ee3343fc24801e3"
  },
  "file:molecules_only/stitching/sample/fovs.csv": {
   "compare": "same_environment",
@@ -273,9 +281,13 @@
   "compare": "same_environment",
   "value": "bb6894fefddfd7a579ca869613f49e2d90493a893a947052d823334c615b52c3"
  },
+ "file:per_fov/report/sample/tables/sizes.csv": {
+  "compare": "same_environment",
+  "value": "afc6b93e0d19c6561048d948a3e8e63feae13e5da9fecb5b31ea9b7b1d7669a3"
+ },
  "file:per_fov/report/sample/tables/unavailable.csv": {
   "compare": "same_environment",
-  "value": "8620640460b3e183aa12e5e566b413be0fdac0320c7f742cfbf608d5c08088d4"
+  "value": "dfbb36358c421c3e32501312104bec2794e5a2aa6242e1e462cb6b1f9eef8e3a"
  },
  "file:per_fov/stitching/sample/fovs.csv": {
   "compare": "same_environment",

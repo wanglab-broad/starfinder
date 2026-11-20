@@ -117,13 +117,22 @@ class ReportLimits:
         Limit for low codebook-matched read fractions, measured as fractions.
     spots_near_zero : float
         Positive fraction of the sample median spot count used as the near-zero spot limit.
+    small_nucleus_fraction : RuleLimit
+        Limit for the high fraction of a FOV's nuclei below ``small_nucleus_diameter_um``, measured as fractions.
+    small_nucleus_diameter_um : float
+        Positive equivalent diameter in µm below which a nucleus counts as small.
+
+    Notes
+    -----
+    ``small_nucleus_fraction`` and ``small_nucleus_diameter_um`` are a display rule on the nucleus size, not a
+    qualification of the segmentation.
 
     Raises
     ------
     TypeError
-        A rule's limit that is not a RuleLimit, or spots_near_zero not a number.
+        A rule's limit that is not a RuleLimit, or spots_near_zero or small_nucleus_diameter_um not a number.
     ValueError
-        spots_near_zero outside (0, 1).
+        spots_near_zero outside (0, 1), small_nucleus_diameter_um not finite and positive.
     """
 
     shift_residual: RuleLimit = RuleLimit(k=5.0, floor=5.0)
@@ -131,9 +140,12 @@ class ReportLimits:
     correct_form_fraction: RuleLimit = RuleLimit(k=3.0, floor=0.05)
     matched_fraction: RuleLimit = RuleLimit(k=3.0, floor=0.05)
     spots_near_zero: float = 0.05
+    small_nucleus_fraction: RuleLimit = RuleLimit(k=3.0, floor=0.05)
+    small_nucleus_diameter_um: float = 3.0
 
     def __post_init__(self):
-        for name in ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction"):
+        for name in ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction",
+                     "small_nucleus_fraction"):
             if not isinstance(getattr(self, name), RuleLimit):
                 raise TypeError(f"ReportLimits.{name} must be a RuleLimit; got {getattr(self, name)!r}")
         value = self.spots_near_zero
@@ -142,6 +154,12 @@ class ReportLimits:
         if not 0 < value < 1:
             raise ValueError(f"ReportLimits.spots_near_zero must be in (0, 1); got {value!r}")
         object.__setattr__(self, "spots_near_zero", float(value))
+        value = self.small_nucleus_diameter_um
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, Real):
+            raise TypeError(f"ReportLimits.small_nucleus_diameter_um must be a number; got {value!r}")
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"ReportLimits.small_nucleus_diameter_um must be a finite number > 0; got {value!r}")
+        object.__setattr__(self, "small_nucleus_diameter_um", float(value))
 
 
 @dataclass(frozen=True)

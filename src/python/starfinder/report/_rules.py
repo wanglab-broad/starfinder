@@ -20,7 +20,8 @@ RULE_SECTIONS = {"fov_failed": "Workflow overview", "fov_not_run": "Workflow ove
                  "registration_rejected": "Registration", "registration_fallback": "Registration",
                  "correct_form_fraction": "Readout", "matched_fraction": "Readout", "spots_near_zero": "Readout",
                  "not_placed": "Segmentation and assembly", "stage_position_fallback": "Segmentation and assembly",
-                 "reads_no_cell": "Segmentation and assembly"}
+                 "reads_no_cell": "Segmentation and assembly",
+                 "small_nucleus_fraction": "Segmentation and assembly"}
 _UNPLACED = ("missing", "failed")
 
 
@@ -86,6 +87,7 @@ class RuleInputs(NamedTuple):
     placement_flags: dict | Unavailable   # fov → the placement's flags ("" for none), or the placement's reason
     rounds_reason: Unavailable | None     # the reason the registration has no round, when it has none
     shift_medians: dict       # (round, axis) → the round's median shift
+    nucleus_fractions: dict | Unavailable | None = None   # fov → fraction of nuclei below the limit, or the reason
 
 
 def evaluate_rules(fovs, registration, limits: ReportLimits, inputs: RuleInputs):
@@ -182,6 +184,21 @@ def evaluate_rules(fovs, registration, limits: ReportLimits, inputs: RuleInputs)
         for fov in pairs:
             if by_fov[fov]["n_molecules_retained"] > 0 and by_fov[fov]["n_cells_retained"] == 0:
                 add("reads_no_cell", fov, "reads but no cell")
+
+    small = inputs.nucleus_fractions
+    if small is None or isinstance(small, Unavailable):
+        state["small_nucleus_fraction"] = small or Unavailable("no_segmentation", "no nucleus sizes")
+    else:
+        values = [(f, small[f]) for f in inputs.fov_ids if f in small and is_value(small[f])]
+        form = rule_form(values, limits.small_nucleus_fraction, "high")
+        if not values:
+            state["small_nucleus_fraction"] = _not_evaluated([small[f] for f in inputs.fov_ids if f in small],
+                                                             Unavailable("undefined", "no FOV has a nucleus"))
+        elif form is not None:
+            reason = f"nuclei below {limits.small_nucleus_diameter_um:g} µm: fraction above the limit"
+            for fov in form.marked:
+                add("small_nucleus_fraction", fov, reason, measured=float(small[fov]),
+                    sample_median=NA if form.absolute else form.median, limit=form.limit)
 
     marks.sort(key=lambda m: m[0])
     rows = [row for _, row in marks]

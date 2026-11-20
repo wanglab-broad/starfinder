@@ -45,7 +45,13 @@
     "floor": 0.05,
     "absolute": null
    },
-   "spots_near_zero": 0.05
+   "spots_near_zero": 0.05,
+   "small_nucleus_fraction": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "small_nucleus_diameter_um": 3.0
   },
   "figure_width_px": 1600,
   "jpeg_quality": 85
@@ -323,9 +329,27 @@
    }
   },
   {
+   "path": "tables/sizes.csv",
+   "sha256": "3e1c7bff1fc68224e5466fdf45c11508c484964240a6bc9cc22ef6aeab7d8a7f",
+   "bytes": 124,
+   "dtypes": {
+    "scope": "string",
+    "fov_id": "string",
+    "object": "string",
+    "n_objects": "int64",
+    "diameter_p5": "float64",
+    "diameter_p25": "float64",
+    "diameter_median": "float64",
+    "diameter_p75": "float64",
+    "diameter_p95": "float64",
+    "below_limit": "int64",
+    "below_fraction": "float64"
+   }
+  },
+  {
    "path": "tables/unavailable.csv",
-   "sha256": "ab643149c230deb5393bfa2c6d3532a50593d9646cb73cb5de4841bd387eec4b",
-   "bytes": 10403,
+   "sha256": "6fc1c5cf521f0aa9098a553113e89cfba95613f275e9289838ffe193dd60f601",
+   "bytes": 10528,
    "dtypes": {
     "part": "string",
     "table": "string",
@@ -424,6 +448,14 @@
    "row_key": "",
    "reason": "no_export",
    "detail": "export/sample/export.json"
+  },
+  {
+   "part": "rule:small_nucleus_fraction",
+   "table": null,
+   "column": null,
+   "row_key": "",
+   "reason": "no_segmentation",
+   "detail": "no assignment"
   },
   {
    "part": "registration.maps",
@@ -1058,6 +1090,14 @@
    "detail": "no assignment"
   },
   {
+   "part": "assembly.sizes",
+   "table": null,
+   "column": null,
+   "row_key": "",
+   "reason": "no_segmentation",
+   "detail": "no assignment"
+  },
+  {
    "part": "assembly.accounting",
    "table": "population",
    "column": "cells",
@@ -1439,6 +1479,16 @@
   "reads_no_cell": {
    "limit": null,
    "unit": null,
+   "evaluated": false,
+   "fovs_marked": null
+  },
+  "small_nucleus_fraction": {
+   "limit": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "unit": "fraction",
    "evaluated": false,
    "fovs_marked": null
   }

@@ -104,7 +104,8 @@ sample and route.
 * `marker_pairs`: gene pairs for mutually exclusive co-expression rate (MECR).
 * `positive_threshold`: the count used to call a cell positive for a gene.
 * `example_fovs`: choose the image examples.
-* `limits`: tune which FOVs the problematic-FOV list draws attention to.
+* `limits`: tune which FOVs the problematic-FOV list draws attention to, including the fraction of small nuclei
+  (`small_nucleus_fraction`) and the diameter below which a nucleus counts as small (`small_nucleus_diameter_um`).
 * `figure_width_px` and `jpeg_quality`: adjust whole-sample figure size and quality.
 
 The reference generates the option names and defaults from the configuration

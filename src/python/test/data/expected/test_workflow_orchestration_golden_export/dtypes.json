@@ -233,6 +233,19 @@
   "residual_x": "float64",
   "alignment_score": "float64"
  },
+ "after_fusion-report-sample-tables-sizes.csv": {
+  "scope": "string",
+  "fov_id": "string",
+  "object": "string",
+  "n_objects": "int64",
+  "diameter_p5": "float64",
+  "diameter_p25": "float64",
+  "diameter_median": "float64",
+  "diameter_p75": "float64",
+  "diameter_p95": "float64",
+  "below_limit": "int64",
+  "below_fraction": "int64"
+ },
  "after_fusion-report-sample-tables-steps.csv": {
   "scope": "string",
   "fov_id": "string",
@@ -523,6 +536,19 @@
   "residual_y": "float64",
   "residual_x": "float64",
   "alignment_score": "float64"
+ },
+ "molecules_only-report-sample-tables-sizes.csv": {
+  "scope": "string",
+  "fov_id": "string",
+  "object": "string",
+  "n_objects": "string",
+  "diameter_p5": "string",
+  "diameter_p25": "string",
+  "diameter_median": "string",
+  "diameter_p75": "string",
+  "diameter_p95": "string",
+  "below_limit": "string",
+  "below_fraction": "string"
  },
  "molecules_only-report-sample-tables-steps.csv": {
   "scope": "string",
@@ -821,6 +847,19 @@
   "residual_y": "float64",
   "residual_x": "float64",
   "alignment_score": "float64"
+ },
+ "per_fov-report-sample-tables-sizes.csv": {
+  "scope": "string",
+  "fov_id": "string",
+  "object": "string",
+  "n_objects": "int64",
+  "diameter_p5": "float64",
+  "diameter_p25": "float64",
+  "diameter_median": "float64",
+  "diameter_p75": "float64",
+  "diameter_p95": "float64",
+  "below_limit": "int64",
+  "below_fraction": "float64"
  },
  "per_fov-report-sample-tables-steps.csv": {
   "scope": "string",

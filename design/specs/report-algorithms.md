@@ -672,6 +672,7 @@ second configuration of the same sample and are given in brackets where they dif
 | `not_placed` | Segmentation and assembly | `placement_status` in (`missing`, `failed`) | categorical | — | `w376_placement_status.csv` (every LN and culture FOV `image_supported`; no tissue-2D placement in the first stitching run) | 0 | 0 | not countable from the source-inventory run (the accepted [stitching and assembly validation design](https://github.com/wanglab-broad/starfinder/blob/dev/design/validation/stitching-assembly.md), "Results of the real examples", places all 56 `image_supported` in the tissue-2D run: 0) |
 | `stage_position_fallback` | Segmentation and assembly | The placement's `fovs.csv` `flags` holds `fallback` (`metadata_only` at the nominal position; a `supplied` placement is not a fallback) | categorical | — | as `not_placed` | 0 | 0 | as `not_placed` (0) |
 | `reads_no_cell` | Segmentation and assembly | An owning FOV with `n_molecules_retained > 0` and `n_cells_retained = 0` | categorical | — | no row: no log holds cells, and the own-folder run's exports are `molecules_only` | not countable from the logs | not countable | not countable |
+| `small_nucleus_fraction` | Segmentation and assembly | The fraction of a FOV's nuclei whose equivalent diameter is below `small_nucleus_diameter_um`, high side | `k = 3`, floor 0.05; the diameter 3 µm | fraction | no row: no log holds nucleus sizes (W-884) | not countable from the logs | not countable | not countable |
 
 % W-384, W-383, W-376, W-388, W-389, W-398
 
@@ -697,6 +698,13 @@ Notes on the rules:
 * **The sample of amendment 2.** A sample with no run record does not evaluate `fov_failed`,
   `fov_not_run`, the registration rules or the readout rules: one `rule:<rule>` row each,
   `no_run_record` ([report-contract](report.md), "A FOV without a run record").
+* **Small nuclei (W-884).** The one rule on a size. A nucleus is small when its equivalent diameter ("Object sizes") is
+  below `small_nucleus_diameter_um` (3 µm by default: a 6 to 10 µm nucleus is the expected size, and W-870's per-FOV labels
+  held 5.8 and 7.5 % below 3 µm in the two FOVs that showed the split). The rule judges the high side of each FOV's
+  fraction with the one form of a rule on values, so a FOV is marked when its fraction exceeds
+  `max(k × 1.4826 × MAD, floor)` above the sample median, or `absolute`. It is a display rule that points at FOVs; it does
+  not qualify the segmentation. A FOV with no nucleus has no fraction and is not judged; without a nucleus label image
+  the rule is not evaluated, with the reason of the sizes (`no_segmentation`, `input_missing`, …).
 * **Section.** The section column is the rule's section in this table; the Summary table
   lists the rows in the contract's order (FOVs in list order, then the rule order, then
   rounds and axes).
@@ -719,6 +727,33 @@ Notes on the rules:
 | `not_placed` | "not placed (`<placement_status>`)" |
 | `stage_position_fallback` | "fell back to the stage position" |
 | `reads_no_cell` | "reads but no cell" |
+| `small_nucleus_fraction` | "nuclei below `<limit>` µm: fraction above the limit" (`<limit>` the configured diameter, as Python's `:g` writes it) |
+
+## Object sizes
+
+W-884 (2026-11-19). The equivalent diameter of the nuclei and the cells ("Segmentation and assembly", `sizes.csv`),
+read from the label images the example FOVs read, on the route of the sample ("How the two routes differ").
+
+* **The diameter.** Of an object with `n` voxels on a grid of spacing `(s_z, s_y, s_x)` µm: on a one-plane image the
+  diameter of the circle of its area, `2 × sqrt(n × s_y × s_x / π)`; on an image with several planes the diameter of the
+  sphere of its volume, `(6 × n × s_z × s_y × s_x / π)^(1/3)`. The objects are the nonzero labels; labels need not be
+  consecutive. The spacing is that of the FOV's grid (`assignment.json` `grid.metadata.spacing_zyx`, route per FOV) or of
+  the segmentation grid (`export.json` `segmentation.inputs.grid.spacing_zyx`, route after fusion), in µm.
+* **The FOV of an object (route after fusion).** The centroid of the object's pixels in the frame of the segmentation
+  grid (a pixel `i` centred at `origin + i × spacing`), tested by `OwnershipMap.owner` as a point of the plane of the
+  grid's origin; the owner's FOV gets the object. An object with no owner, and the objects of a sample whose
+  ownership cannot be built (`no_placement`), belong to the sample's rows only. A FOV that does not own points has no
+  row. The route per FOV has no such step: a FOV's objects are its labels.
+* **The rows.** One per kind (nucleus, then cell) of the sample, then one per FOV and kind in list order: the count,
+  the 5th, 25th, 50th, 75th and 95th percentile of the diameters (NumPy's linear percentile; a set without an object
+  has `undefined` cells), the count strictly below `small_nucleus_diameter_um` and its fraction. The same limit is
+  applied to the cells' rows; the rule reads the nuclei's.
+* **The rule.** `small_nucleus_fraction` ("The rules of the first delivery") on the nuclei's `below_fraction` of the
+  FOVs that have one.
+* **No verdict.** The limit is a display rule on the size; the report states no expected size and passes no
+  segmentation.
+
+% W-884, Jiahao's review of the W-870 reports, 2026-11-18
 
 ## The example FOVs
 
@@ -788,7 +823,8 @@ same columns on both routes; only these elements differ:
 
 | Element | Route per FOV (`per_fov`) | Route after fusion (`after_fusion`) |
 | --- | --- | --- |
-| Segmentation preview of an example FOV | Labels: the assignment folder's `cell_labels.tif` and `nucleus_labels.tif` (or the linked `segmentation/<run>/labels.tif`), on the FOV's own grid. Background: the reference image `fovs/<fov>/reference.tif` (or the `reference_image` or `reference_image_import` pattern). | Labels: `segmentation_<run>.ome.tif` of the cell run (and of the nucleus run when the export has one), cut to the FOV's footprint (`fovs.csv` `footprint_*` mapped to the label grid by `floor((q − O) / S + ½)`, inclusive of the start, exclusive of the end). Background: the fused image of the marker patterns, cut to the same footprint. |
+| Segmentation preview of an example FOV | Labels: the assignment folder's `cell_labels.tif` and `nucleus_labels.tif` (or the linked `segmentation/<run>/labels.tif`), on the FOV's own grid. Background (W-884): the first channel, the nuclear role, of the saved input of the nucleus run, else of the cell run, `fovs/<fov>/segmentation/<run>/input.ome.tif` (checked against `segmentation.json` `input.file_sha256`), on the label grid; a run with a projection has one plane. A sample whose runs have no saved input (imports) has the reference image `fovs/<fov>/reference.tif` (or the `reference_image` or `reference_image_import` pattern), and the caption says so. | Labels: `segmentation_<run>.ome.tif` of the cell run (and of the nucleus run when the export has one), cut to the FOV's footprint (`fovs.csv` `footprint_*` mapped to the label grid by `floor((q − O) / S + ½)`, inclusive of the start, exclusive of the end). Background (W-884): the fused projection of the image `export.json` `segmentation.runs[*].inputs[0].image` names for the nucleus run, else for the cell run (located by `segmentation.inputs.images`, checked against its SHA-256), cut to the same footprint on its own grid; the first image of `fusion.outputs` when neither run has an input. |
+| Size diagnostics (W-884) | The nonzero labels of each FOV's own label images, with the grid spacing of `assignment.json`; the FOV's objects are its labels | The labels of `segmentation_<run>.ome.tif` on the segmentation grid; an object belongs to the FOV that owns its centroid under the export's ownership map (the sample's own row counts all of them) |
 | Plane of a 3D preview | The plane `z*` of the label image with the most nonzero voxels; the background is the maximum over the planes of the slab of 3 µm centred on `z*` ("Sample measurements"). | A plane (the route after fusion needs a projection sample). |
 | Cells attributed to a FOV (`n_cells`, `n_cells_retained`) | The FOV's own cells, and those it retains | The sample's cells whose ownership centroid the FOV owns (both columns equal) |
 | Population accounting | Every reason of the route per FOV, with `duplicate_observation` when the rule is on | No duplicate rows (n/a); the cells' input are the run's labels |
@@ -1115,7 +1151,17 @@ the residual map uses arrows and colour as below.
    resolution and reduced to the tile by the maximum over blocks, so that no outline is
    lost. Two adjacent tiles are separated by a white gap of at least 8 px as shown. The
    legend: nucleus outline, cell outline, on a row below the tiles and their grey bars, at
-   the figure's left margin.
+   the figure's left margin. Under the figure, a caption names the background: the segmentation input of
+   run `<run>`, its first channel (`<role>`), with the file (route per FOV) or the fused image (route after fusion)
+   of each tile, or the reference image or the first fused image when no run has an input (W-884).
+   % Amended 2026-11-19 for W-884: the background is the run's segmentation input, with a caption.
+2a. **Object sizes** (W-884; a block below the example FOVs): two static PNGs, the equivalent diameter of the nuclei and
+   of the cells across the sample, drawn as the per-cell distributions are (equal bins over `[0, p99]`, at most 30, the
+   objects above `p99` in one last bar and counted at the top right), the median as a solid vertical line and the lower
+   limit `small_nucleus_diameter_um` as a dashed one, with the median and the number of objects below the limit in the
+   axis label; then a table of the sample's rows of `sizes.csv` (count, 5, 25, 50, 75 and 95 %, objects below the
+   limit with their share) and a line stating that the limit is a display rule on the size. The FOVs outside the
+   rule are under Problematic FOVs.
 3. **Population accounting** (table from `population`): Population, Cells, Molecules, the
    rows of `population.csv` whose two cells are not both n/a, labelled "Input, all FOVs",
    "Retained", "Excluded: not owner", "Excluded: FOV not placed", "Excluded: duplicate
@@ -1488,6 +1534,9 @@ Rules:
 | RR1 | The records added to `run.json` | the golden test's synthetic FOV ([report-contract](report.md), "The tests that pin `run.json`") with stages `candidates` and `pre_qc`, and with `registered` too; recipes with an affine step and with a `demons` step (the golden FOV's own seeded background) | `run.json` keys | `transforms.<round>.results[*]` equal, whole and with nothing left out, the entries `_transform_json(result, i, field_name)` of the run's results with the field name R1 writes (null without `registered`, `<round>_field.npz` with it); `codebook` path and SHA-256 of the file; `counts.filtering.endpoint_valid` equals the filter's `endpoint_valid_count`; `workflow_config` null outside the workflow and the file's path and SHA-256 from a workflow run; a workflow run writes `run.json` and a rerun replaces it (R5). Exact. |
 | RR2 | An older record still loads | the golden test's pinned `run.json` form (none) | The report on it | Loads; the values of R1 to R4 null with `not_recorded` (as RC11); `test_report_records_golden.py` passes unchanged. Exact. |
 | WF1 | The workflow block and rules | the repository's test configurations with and without a `report` block, through a stub `snakemake` object (none) | Schema, adapter, rules | The block's keys equal the fields of `ReportConfig` (`MarkerGroup`, `RuleLimit`, `ReportLimits`); an unknown key raises naming it; `report: {}` gives `ReportConfig()`; the rules' declared inputs and outputs are those of [report-contract](report.md) (WR1); a configuration without the block has no new rule. Exact. |
+| SZ1 | The background of the segmentation examples (W-884) | hand-written FOVs with a nucleus run and a cell run, each with a two-channel `input.ome.tif` or none, and a `reference.tif` of constant 99; `scene_chain_stain`, both routes (42) | The previews | Route per FOV: the background equals the first channel of the nucleus run's input (the cell run's when the nucleus run has none, the reference image when neither has), its source, run and role are recorded, and the reference image is not used when an input exists; a changed or missing input is `input_changed` or `input_missing`, not a reference background; the caption names the run, the role and the file. On the chain per FOV the background equals the scene's stain and the saved input's first channel; after fusion it equals the fused image the run names (`reference_merged`), cut to the footprint, and differs from the first fused image. Exact. |
+| SZ2 | Equivalent diameters and the sizes table (W-884) | label images of squares of known side on a 0.5 µm grid, a cube on a 2 × 1 × 1 µm grid, a list of diameters, the four hand-written FOVs; the stain chain on both routes (42) | `sizes.csv`, the size figures | The diameter of a square of `s` pixels is `s / sqrt(π)` µm, of the cube `(6 V / π)^(1/3)`; percentiles and the strict limit on a list with a value at the limit; the sample and FOV rows of the hand-written FOVs with the counts 16 and 3 and the cell sizes of the grown squares; a configured limit; kinds, FOVs or label files that are missing give their rows and reasons; the chain's sample counts equal the labels' counts on both routes, after fusion the FOV counts add up to at most the sample's. Within 1e-9. |
+| SZ3 | The small-nucleus rule (W-884) | hand-written fractions of four FOVs; the four hand-written FOVs | `problematic_fovs.csv`, `report.json` `rules` | The high side with the form of a rule on values: with `k = 3` and floor 0.05 on 0.02, 0.03, 0.30, 0.025 the limit is 0.05 and the third FOV is marked, with its median and the limit; an absolute limit alone, strict; a FOV without a value is skipped; no value, no segmentation or no limit is a `rule:small_nucleus_fraction` row; on the hand-written FOVs only the FOV with three of five nuclei below 3 µm is marked. Within 1e-9. |
 | DT1 | Determinism | `report_cells` and `scene_chain`, each built once; the report made by two single-thread processes, one after the other, into the same default output folder, the first report's files copied aside before the second runs (none; 42) | Bytes of every table; `report.json`; `report.html` | Every table byte-identical. `report.json` identical after leaving out `generated_at`, `wall_s`, `cpu_s`, `peak_rss_kib` and the `files` entry of `report.html` (its `sha256` and `bytes`, which depend on the generation time the page shows). `report.html` identical after leaving out the text of the Summary's Generated fact (`generated_at`). No field left in depends on one left out: the tables, the other `files` entries, `inputs`, `summary`, `rules`, `examples`, `replay` and `unavailable` are computed from the records alone, and the page's data blocks hold no time. Exact. |
 
 % W-386, W-384, W-475, W-478, D5
@@ -1495,11 +1544,11 @@ Rules:
 ### What the default tier covers and what it does not
 
 RC1 to RC13, DF1 to DF12, PR1 to PR5, EF1, EF2 (without its `scene_no_run_json` part),
-PG1 to PG7 on the hand-written pages, RR1, RR2 and WF1 run in the routine tier on
+PG1 to PG7 on the hand-written pages, RR1, RR2, WF1 and SZ1 to SZ3 (their hand-written FOVs) run in the routine tier on
 hand-written records, except PG7's entry on `report_cells` (5.4 s) and DT1 on
 `report_cells` (6.4 s, two processes), which are `slow` by the 5-s rule (the test-tier rule of 2026-10-20). RP1 to
-RP3, CH1 to CH3, RT1, RT2, Z1, A2, CP1 and DT1 on `scene_chain` run the synthetic chain and
-are `slow`. The cases with an export need
+RP3, CH1 to CH3, RT1, RT2, Z1, A2, CP1 and DT1 on `scene_chain`, and the chain parts of SZ1 and SZ2 on `scene_chain_stain`,
+run the synthetic chain and are `slow`. The cases with an export need
 the `anndata` extra; the chains also need `multiview-stitcher` for the fused image; RP2's
 `demons` step needs `local-registration`. Nothing here measures how well a sample was
 processed, and nothing shows that a marker pattern is biologically right.
@@ -1612,6 +1661,9 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 | RR1 | `test_report_run_record_additions.py`, `test_r1_*`, `test_r2_*`, `test_r5_*`; `test_workflow_fov_tasks.py`, `test_r4_r5_the_fov_task_writes_run_json_and_no_log_in_the_fov_folder` | default | none compared |
 | RR2 | `test_report_records_golden.py`, `test_run_record_holds_every_pinned_key_and_value`, `test_checkpoint_folder_holds_every_pinned_file`, `test_the_comparison_accepts_additions_and_finds_removals_and_changes`; `test_report_run_record_additions.py`, `test_an_older_record_and_the_format_version`; `test_report_collection.py`, `test_rc11_older_record` | default | exact |
 | WF1 | `test_report_workflow.py`, `test_wf1_*` | default | none compared |
+| SZ1 | `test_report_segmentation_diagnostics.py`, `test_background_is_the_first_channel_of_the_nucleus_run_input_not_the_reference_image`, `test_background_is_the_cell_run_input_when_the_nucleus_run_has_none`, `test_background_is_the_reference_image_when_no_run_has_an_input`, `test_a_changed_run_input_is_input_changed_not_a_silent_reference_background`, `test_the_report_shows_the_background_caption_and_the_size_panel`, `test_the_background_and_sizes_of_the_stain_chain_on_the_route_per_fov`, `test_the_background_and_sizes_of_the_stain_chain_after_fusion` | default and slow | exact |
+| SZ2 | `test_report_segmentation_diagnostics.py`, `test_equivalent_diameters_of_squares_on_a_plane`, `test_equivalent_diameters_of_a_volume_use_the_volume`, `test_centroids_are_in_the_frame_of_the_grid`, `test_size_row_percentiles_and_the_limit_is_strict`, `test_the_size_table_of_the_hand_built_sample`, `test_the_lower_limit_of_the_diameter_is_configurable`, `test_a_sample_without_a_nucleus_label_file_has_cell_sizes_only`, `test_sizes_need_the_label_images`, `test_the_background_and_sizes_of_the_stain_chain_on_the_route_per_fov`, `test_the_background_and_sizes_of_the_stain_chain_after_fusion` | default and slow | within 1e-9 |
+| SZ3 | `test_report_segmentation_diagnostics.py`, `test_small_nucleus_rule_marks_the_high_side`, `test_small_nucleus_rule_skips_fovs_without_a_value_and_reports_the_unevaluated_sample`, `test_the_limits_of_the_sizes`, `test_the_size_table_of_the_hand_built_sample` | default | within 1e-9 |
 | DT1 | `test_report_collection.py`, `test_dt1_two_single_thread_processes`; `test_report_chain.py`, `test_dt1_the_chain_in_two_single_thread_processes` | slow | exact (bytes) |
 
 ### Tour notebook

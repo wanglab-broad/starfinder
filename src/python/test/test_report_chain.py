@@ -335,6 +335,8 @@ def stage_rows(chain: Chain, *, placement, assignment, export):
         # The segmentation examples read the assignment folder on the route per FOV; it does not exist yet.
         roles = expected_roles(chain)
         rows += [("assembly.examples", None, None, f"fov_id={roles[r]};role={r}", "input_missing") for r in ROLES]
+        # The object sizes read the same label images (W-884): without an assignment folder or an export, no_export.
+        rows += collection_checks.SIZES_ROWS
     if not export:
         rows.append(collection_checks.READS_NO_CELL_RULE)
         for row in collection_checks.no_export_rows(fovs):

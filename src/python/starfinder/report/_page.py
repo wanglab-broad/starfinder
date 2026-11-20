@@ -34,6 +34,7 @@ from starfinder import _layout
 
 from ._parameters import CARD_NODES, Resolved, differing, path_text, shown, typed
 from ._schema import READOUT_LEVELS
+from ._sizes import PLURAL
 from ._values import (Unavailable, acquisition, configuration_check, is_value, reference_image_z_size, run_time,
                       software, step_name, time_per_step, z_size)
 
@@ -41,7 +42,8 @@ TEMPLATE = "report.html"
 #: The slots of the template, in document order; each is filled exactly once.
 SLOTS = ("title", "heading", "facts", "key_numbers", "problematic", "chart", "fov_status", "time", "prep_title",
          "prep_example", "prep_intensity", "reg_maps", "reg_heatmap", "reg_title", "reg_example", "read_totals",
-         "read_map", "read_distributions", "read_table", "cells_map", "placement", "seg_examples", "population",
+         "read_map", "read_distributions", "read_table", "cells_map", "placement", "seg_examples", "seg_sizes",
+         "population",
          "per_cell", "markers", "mecr", "reads_z", "files_input", "files_configuration", "files_output", "data")
 #: The tables of the data block, in the contract's order ("The data embedded in the page"); ``cells`` and
 #: ``intensity`` are saved but not embedded.
@@ -54,7 +56,8 @@ SECTIONS = (
     ("prep", "Preprocessing", ("b-prep-example", "b-prep-intensity")),
     ("reg", "Registration", ("b-reg-maps", "b-reg-heatmap", "b-reg-example")),
     ("reads", "Readout", ("b-read-totals", "b-read-map", "b-read-distributions", "b-read-table")),
-    ("cells", "Segmentation and assembly", ("b-cells-map", "b-placement", "b-seg-examples", "b-population")),
+    ("cells", "Segmentation and assembly",
+     ("b-cells-map", "b-placement", "b-seg-examples", "b-seg-sizes", "b-population")),
     ("sample", "Sample measurements", ("b-per-cell", "b-markers", "b-mecr", "b-reads-z")),
     ("files", "Files", ("b-files-input", "b-files-configuration", "b-files-output")),
 )
@@ -199,6 +202,14 @@ def _fitted_value(value) -> str:
     return shown(value)
 
 
+def _group(pairs) -> dict:
+    """``{kind: [names]}`` of ``(kind, name)`` pairs, in first-seen order."""
+    grouped = {}
+    for kind, name in pairs:
+        grouped.setdefault(kind, []).append(name)
+    return grouped
+
+
 def _int(value) -> str:
     return f"{int(value):,}"
 
@@ -269,7 +280,23 @@ class PageFigures:
         previews = c.previews if isinstance(c.previews, dict) else {}
         self.segmentation = (_figures.segmentation_figure(previews, quality=quality, reasons=REASON_TEXTS)
                              if any(hasattr(p, "background") for p in previews.values()) else None)
+        self.sizes = self._sizes()
         self.sample = c.measurements.figures()
+
+    def _sizes(self):
+        """The size distributions of the nuclei and the cells: ``(kind, figure)`` per kind with an object, in the
+        order of ``_sizes.OBJECTS``; empty when the sizes could not be made."""
+        from . import _figures
+        from ._sizes import OBJECTS
+        c = self.c
+        c.sizes.compute()
+        limit = c.sizes.limit_um
+        if c.sizes.reason is not None:
+            return []
+        slot = _figures.grid_slot(2)
+        return [(kind, _figures.size_figure(c.sizes.diameters[kind], f"size:{kind}",
+                                            f"{kind} equivalent diameter", PLURAL[kind], limit, slot=slot))
+                for kind, _ in OBJECTS if c.sizes.diameters.get(kind) is not None]
 
     @staticmethod
     def _time(steps, fovs):
@@ -316,6 +343,7 @@ class _Page:
         self.unavailable, self.identity = unavailable, identity
         self.generated_at, self.config_json, self.folder, self.figures = generated_at, config_json, folder, figures
         self.rows = {name: table_rows(frames[name]) for name in DATA_TABLES}
+        self.size_rows = table_rows(frames["sizes"])
         self.named = {(u["table"], u["column"], u["row_key"]): u for u in unavailable if u["table"] is not None}
         self.placed = any(r["centre_x"] is not None and r["centre_y"] is not None for r in self.rows["fovs"])
 
@@ -808,9 +836,56 @@ class _Page:
         f = self.figures
         rows = self.parts("assembly.examples")
         examples = self._figure_or_rows(f.segmentation, "segmentation", "Segmentation examples", rows, "3/1")
+        if f.segmentation is not None:
+            examples += self.background_caption()
         return {"cells_map": self._map(("m-cells", "lg-cells")),
                 "placement": self.review() + self.links() + self._map(("m-place", "lg-place")),
-                "seg_examples": examples, "population": '<div id="t-population"></div>'}
+                "seg_examples": examples, "seg_sizes": self.sizes(), "population": '<div id="t-population"></div>'}
+
+    def background_caption(self) -> str:
+        """The caption of the example FOVs: what the background of each tile is, from its previews: the first channel
+        of the segmentation input of the run, named with its role and file or image, or the reference image or fused
+        image of a sample whose runs have no input."""
+        previews = [p for p in (self.c.previews if isinstance(self.c.previews, dict) else {}).values()
+                    if hasattr(p, "background")]
+        text = {"segmentation_input": "the segmentation input of run {run}, its first channel ({role})",
+                "reference_image": "the reference image (no run has a saved segmentation input)",
+                "fused_image": "the fused image (no run has a segmentation input)"}
+        named = dict.fromkeys((text[p.source].format(run=_e(p.background_run), role=_e(p.background_role)),
+                               p.background_name) for p in previews)
+        lines = [f'{kind}: {", ".join(f"<code>{_e(n)}</code>" for n in names)}'
+                 for kind, names in _group(named).items()]
+        return f'<p class="sp-cap" id="seg-background">Background: {"; ".join(lines)}</p>'
+
+    def sizes(self) -> str:
+        """The object sizes: the equivalent diameter of the nuclei and the cells across the sample as figures with
+        their lower limit, the table of the sample's percentiles, and the reason the sizes are unavailable. A display
+        rule: the fraction of nuclei below the limit marks FOVs under Problematic FOVs, and qualifies nothing."""
+        figures = self.figures.sizes
+        parts = self.parts("assembly.sizes")
+        limit = self.c.config.limits.small_nucleus_diameter_um
+        if not figures:
+            return "".join(unavailable_box(u, ratio="3/1") for u in parts) or ""
+        out = grid([image(fig, f"size:{kind}", f"Equivalent diameter of the {PLURAL[kind]}")
+                    for kind, fig in figures])
+        rows = [r for r in self.size_rows if r["scope"] == "sample"]
+        if rows:
+            head = "".join(f"<th>{h}</th>" for h in ("Object", "Count", "5 %", "25 %", "Median", "75 %", "95 %",
+                                                     f"Below {limit:g} µm"))
+            body = "".join(
+                f"<tr><td>{_e(r['object'])}</td><td>{_int(r['n_objects'])}</td>"
+                + "".join(f"<td>{_number(r[c]) if is_value(r[c]) else '—'}</td>" for c in (
+                    "diameter_p5", "diameter_p25", "diameter_median", "diameter_p75", "diameter_p95"))
+                + f"<td>{_int(r['below_limit'])} ({100 * r['below_fraction']:.1f} %)</td></tr>"
+                if is_value(r["below_fraction"]) else
+                f"<tr><td>{_e(r['object'])}</td><td>{_int(r['n_objects'])}</td><td colspan=\"6\">—</td></tr>"
+                for r in rows)
+            out += (f'<div class="panel tw"><table id="t-sizes"><thead><tr>{head}</tr></thead>'
+                    f'<tbody>{body}</tbody></table></div>'
+                    f'<p class="sp-cap">Equivalent diameter in µm of the label images on the route '
+                    f'{_e(self.c.route or "per_fov")}; the limit is a display rule on the size, not a '
+                    "qualification of the segmentation.</p>")
+        return out + "".join(unavailable_box(u, line=True) for u in parts)
 
     def review(self) -> str:
         """The placement's review (``placement.json`` ``review``) above the placement map: its state, reasons, the

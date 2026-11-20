@@ -43,6 +43,7 @@ from ._parameters import read_resolved
 from ._previews import _Previews
 from ._replay import reference_round, replay_example, round_transform, saved_transforms
 from ._rules import RuleInputs, evaluate_rules
+from ._sizes import _Sizes
 from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS, REPORT_FILE, REPORT_PARTS,
                       REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, ReportRecord, row_key)
 from ._values import (NA, ROLES, Unavailable, _Marker, alignment_score, chain_shift, choose_examples,
@@ -54,7 +55,7 @@ _UNPLACED = ("missing", "failed")
 _WRITTEN = ("written", "reused")
 #: The tables this collection writes, in folder order; the others are written by the parts that make them.
 COLLECTED_TABLES = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
-                    "cells", "mecr", "reads_along_z", "intensity", "unavailable")
+                    "cells", "mecr", "reads_along_z", "intensity", "sizes", "unavailable")
 #: The parts the replay of the main example makes (design/specs/report.md, "The replay").
 REPLAY_PARTS = ("preprocessing.example", "preprocessing.intensity", "registration.example")
 #: The parts of the columns of the collected tables (design/specs/report.md, "Parts, their inputs and their reasons").
@@ -78,6 +79,7 @@ COLUMN_PARTS = {
     "cells": {c: "sample.per_cell" for c in TABLE_DTYPES["cells"]},
     "mecr": {c: "sample.mecr" for c in TABLE_DTYPES["mecr"]},
     "reads_along_z": {c: "sample.reads_along_z" for c in TABLE_DTYPES["reads_along_z"]},
+    "sizes": {c: "assembly.sizes" for c in TABLE_DTYPES["sizes"]},
 }
 # The read levels of a run record: the count's place in counts and the pipeline config that makes it.
 _COUNTS = {"spots": (("spots",), "spot_finding"), "matched": (("call_status", "assigned"), "decoding"),
@@ -400,6 +402,8 @@ class _Collection:
         self._export_frame()
         self.assignments = self._assignments()
         self.measurements = _Measurements(self)
+        self.previewer = _Previews(self)
+        self.sizes = _Sizes(self)
 
     # The sources -------------------------------------------------------------------------------------------
 
@@ -964,7 +968,7 @@ class _Collection:
     def examples_parts(self):
         """The replay, the segmentation previews and the rows of the parts they make."""
         self.replay, rows = self.example_replay()
-        self.previews, preview_rows = _Previews(self).build()
+        self.previews, preview_rows = self.previewer.build()
         return rows + preview_rows
 
     def intensity_rows(self):
@@ -1049,7 +1053,7 @@ class _Collection:
             flags = {fov: ("" if pd.isna(row["flags"]) else row["flags"]) for fov, row in self.p_rows.items()}
         rows, evaluated, part_rows = evaluate_rules(
             fovs, registration, limits, RuleInputs(self.fov_ids, self.records, flags, rounds_reason,
-                                                   self.shift_medians))
+                                                   self.shift_medians, self.sizes.nucleus_fractions()))
         rules = {}
         for rule in PROBLEM_RULES:
             if rule == "spots_near_zero":
@@ -1210,14 +1214,17 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
               "mecr": measurements.mecr_rows()}
     along = measurements.reads_along_z_rows()
     tables["reads_along_z"] = [] if isinstance(along, Unavailable) else along
+    # The examples read their files before the sizes the rules need do, so that ``inputs`` keeps the order of the parts.
+    example_rows = collection.examples_parts()
     tables["problematic_fovs"], rules, rule_rows = collection.rules(
         fovs, registration, None if registration else collection.no_rounds_reason())
-    example_rows = collection.examples_parts()
     tables["intensity"] = collection.intensity_rows()
+    collection.sizes.compute()
+    tables["sizes"] = collection.sizes.rows
     summary = collection.summary(fovs)
     identity, identity_rows = identity_facts(collection)
     unavailable = _unavailable_rows(tables, identity_rows + collection.part_rows_for(registration) + example_rows
-                                    + rule_rows + measurements.part_rows(), summary)
+                                    + rule_rows + measurements.part_rows() + collection.sizes.part_rows, summary)
     tables["unavailable"] = unavailable
     resolved_assignment, resolved_segmentation = collection.resolved_runs()
     frames = {name: _frame(name, tables[name]) for name in COLLECTED_TABLES}

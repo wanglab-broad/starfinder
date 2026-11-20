@@ -1,5 +1,17 @@
 # Expected values of the golden baseline's stitching, export and report
 
+W-884 (2026-11-19) adds the report's object sizes to each route: `<route>-report-sample-tables-sizes.csv` (the cell sizes
+of the per-FOV and after-fusion routes, whose assignments hold no nucleus label image, and a header only for
+`molecules_only`), the rule `small_nucleus_fraction` and part `assembly.sizes` rows of `unavailable.csv` and of the
+`unavailable` entries of `report.json` (`no_segmentation`), the two new keys of `config.limits`, the rule's entry of
+`rules`, the `sizes.csv` entry of `files` and the digests of the two tables. They were taken from a run of the migrated
+invocation D at this change, extracted with the script. The report of the per-FOV route now reads the label image of
+every FOV for the sizes, so its `inputs` list gains the entry of FOV_003's `cell_labels.tif` (the fourth FOV; the
+examples read the other three): its SHA-256 is the one the FOV's `assignment.json` and `export.json` record, and its size
+is not recorded anywhere in this folder, so 2107 bytes is derived: a rebuild of the file from the same fixture is 16 bytes
+shorter than each of the three recorded ones (1934, 1873 and 2079 against 1950, 1889 and 2095), and FOV_003's rebuild is 2091
+bytes. The comparison leaves the label entries' SHA-256 and size out (D6). Nothing else changes.
+
 W-879 (2026-11-19) removes from each route's report the rows of `unavailable.csv` and the `unavailable` entries of
 `report.json` that said no record holds the time of `segment`, `assign_molecules`, `stitch` or the assembly: the
 records now hold `wall_s`, so the report shows those times (`steps.csv` keeps its time column out of the comparison, as

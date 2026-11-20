@@ -1,5 +1,12 @@
 # Expected values of the workflow orchestration golden baseline
 
+W-884 (2026-11-19) adds the report's object sizes: the table `report-sample-tables-sizes.csv` (header only here: the
+migrated report has no assignment, so no label image), its two rows of `unavailable.csv` and of the `unavailable` entries
+of `report.json` (part `assembly.sizes` and rule `small_nucleus_fraction`, `no_segmentation`), the two new keys of
+`config.limits`, the rule's entry of `rules`, the `sizes.csv` entry of `files` and the digests of the two tables. They
+were taken from a run of the migrated invocations at this change, extracted with the script; the script refused
+the update where taking the new items away from the run did not give the stored value. Nothing else changes.
+
 W-790 (2026-11-03) updates only detection-dependent tables and record fields
 after regional-maximum collapse, using the maintained migrated task commands
 and extractor. Existing migration exceptions and unaffected values remain

@@ -54,7 +54,7 @@ SECTIONS = [("summary", "Summary", ["b-facts", "b-key-numbers", "b-problematic"]
             ("reg", "Registration", ["b-reg-maps", "b-reg-heatmap", "b-reg-example"]),
             ("reads", "Readout", ["b-read-totals", "b-read-map", "b-read-distributions", "b-read-table"]),
             ("cells", "Segmentation and assembly", ["b-cells-map", "b-placement", "b-seg-examples",
-                                                    "b-population"]),
+                                                    "b-seg-sizes", "b-population"]),
             ("sample", "Sample measurements", ["b-per-cell", "b-markers", "b-mecr", "b-reads-z"]),
             ("files", "Files", ["b-files-input", "b-files-configuration", "b-files-output"])]
 # The part each block draws (design/specs/report.md, "Parts, their inputs and their reasons").
@@ -67,7 +67,7 @@ BLOCK_PARTS = {"b-facts": "summary.identity", "b-key-numbers": "summary.key_numb
                "b-read-map": "readout.per_fov", "b-read-distributions": "readout.distributions",
                "b-read-table": "readout.table", "b-cells-map": "assembly.cells_per_fov",
                "b-placement": "assembly.placement", "b-seg-examples": "assembly.examples",
-               "b-population": "assembly.accounting", "b-per-cell": "sample.per_cell",
+               "b-seg-sizes": "assembly.sizes", "b-population": "assembly.accounting", "b-per-cell": "sample.per_cell",
                "b-markers": "sample.markers sample.marker_zoom", "b-mecr": "sample.mecr",
                "b-reads-z": "sample.reads_along_z", "b-files-input": "files.input",
                "b-files-configuration": "files.configuration", "b-files-output": "files.output"}
@@ -477,6 +477,8 @@ def check_figures(page, extra=None):
             expected = (HEATMAP_WIDTH, image.size[1])
         if name.startswith("distribution:"):
             expected = DISTRIBUTION_THIRD
+        if name.startswith("size:"):
+            expected = DISTRIBUTION_HALF
         if name.startswith("per_cell:"):
             row = re.findall(r'data-figure="(per_cell:[^"]*)"', page.text)
             k = row.index(name)
@@ -490,7 +492,7 @@ def check_figures(page, extra=None):
         if expected != "checked":
             assert image.size == expected, name
         assert mime == ("image/png" if name in ("time", "heatmap", "reads_along_z", "intensity") or
-                        name.startswith(("distribution:", "per_cell:")) else "image/jpeg"), name
+                        name.startswith(("distribution:", "per_cell:", "size:")) else "image/jpeg"), name
         names.append(name)
     return names
 
@@ -879,7 +881,7 @@ def test_pg7_entry_on_the_dataset(tmp_path, no_processing, maker):
     assert sorted(p.name for p in result.path.iterdir()) == ["report.html", "report.json", "tables"]
     assert sorted(p.name for p in (result.path / "tables").iterdir()) == sorted(
         f"{t}.csv" for t in ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
-                             "cells", "mecr", "reads_along_z", "intensity", "unavailable"))
+                             "cells", "mecr", "reads_along_z", "intensity", "sizes", "unavailable"))
     # No input file changed: the hashes of every file outside the report folder are those before the entry.
     assert input_hashes(case.root) == inputs_before
     # Every file opened under the output root is at a place of "Where each record is looked for", or a file the run
