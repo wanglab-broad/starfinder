@@ -231,7 +231,9 @@ def approve_placement(result: PlacementResult, *, reviewer: str, note: str) -> P
     -----
     The approval holds the reviewer, the UTC time, the note and the SHA-256 of
     the per-FOV and link tables it approves (the bytes ``save_placement``
-    writes). No origin, correction, status or flag changes.
+    writes). No origin, correction, status or flag changes. ``save_placement``
+    writes it to ``approvals.json`` beside ``placement.json``, keyed by those
+    SHA-256, and changes no file of the placement whose tables it approves.
 
     Raises
     ------
@@ -257,8 +259,10 @@ def require_approval(result: PlacementResult) -> None:
     """Raise :class:`PlacementReviewRequiredError` with the reasons when review is required and unapproved.
 
     An approval counts only when its table SHA-256 equal those of the
-    placement's current tables. Sample assembly calls this before it reads any
-    origin.
+    placement's current tables. The approvals are ``record["review"]["approvals"]``:
+    for a saved placement, those of ``approvals.json`` beside ``placement.json``,
+    which ``load_placement`` reads. Sample assembly calls this before it reads
+    any origin.
     """
     review = result.record.get("review") or {}
     if review.get("state") != "required":

@@ -26,6 +26,8 @@ from starfinder.export._record import (
     PARTS,
     SECTIONS,
     ExportRecord,
+    Timer,
+    add_times,
     as_json,
     listed_files,
     pending_section,
@@ -190,7 +192,9 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
     # 4. Assembly: computed in memory (assemble applies its own checks), or the saved one.
     result, status = None, None
     if config.assemble:
+        timer = Timer()
         result = assemble(placement, assembly_inputs(dataset, placement, assignment), config=config.assembly)
+        assembled = timer.record()
     else:
         needed = config.fuse_labels or config.export_spatialdata
         if needed and read_export(output_dir).get("assembly", {}).get("stage") != "assembly":
@@ -234,7 +238,9 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
 
     # Part 1: assemble.
     if config.assemble:
+        timer = Timer()
         result = save_assembly(with_route(result, route, route_source), output_dir, table_format=config.table_format)
+        result = with_times(result, add_times(assembled, timer.record()))
         update_section(output_dir, sample, "assemble", result.record, status="written", fill=False)
     elif status == "reused":
         update_section(output_dir, sample, "assemble", result.record, status="reused", fill=False)
@@ -291,6 +297,15 @@ def with_route(result, route, route_source, **extra):
     from starfinder.assembly._fused import territories_of, with_territories
     return with_territories(replace(result, record=dict(result.record, route=route, route_source=route_source,
                                                         **extra)), territories_of(result))
+
+
+def with_times(result, times):
+    """The assembly with the part's measured ``wall_s``, ``cpu_s`` and ``peak_rss_kib`` in its record, which is then the
+    ``assembly`` section of ``export.json`` that the later parts hash."""
+    from dataclasses import replace
+
+    from starfinder.assembly._fused import territories_of, with_territories
+    return with_territories(replace(result, record=dict(result.record, **times)), territories_of(result))
 
 
 def _input_grids(dataset, placement):
@@ -361,7 +376,7 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
     # every check of assemble runs before anything is written.
     inputs = assembly_inputs(dataset, placement, None)
     if config.assemble:
-        assemble(placement, inputs, config=config.assembly)
+        assemble(placement, inputs, config=config.assembly)   # the check; the part's own run is timed below
     # 5. Fusion inputs.
     fusion = None
     if config.fuse:
@@ -421,6 +436,7 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
         segmentation = SampleSegmentation(saved.grid, saved.runs, as_json(section))
     # Part assemble.
     if config.assemble:
+        timer = Timer()
         if segmentation.status in ("written", "reused"):
             result = with_route(assemble(placement, inputs, config=config.assembly, segmentation=segmentation),
                                 "after_fusion", route_source)
@@ -430,6 +446,7 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
             result = with_route(assemble(placement, inputs, config=config.assembly), "after_fusion", route_source,
                                 reason=f"segment_{segmentation.status}")
         result = save_assembly(result, output_dir, table_format=config.table_format)
+        result = with_times(result, timer.record())
         update_section(output_dir, sample, "assemble", result.record, status="written", fill=False)
     else:
         result = held["assembly"]

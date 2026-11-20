@@ -113,7 +113,7 @@ Statements not in this table follow the settled decisions or the accepted pages.
 | 10 | The format version of `run.json` | V1: stays `1`; the five additions are additive keys | "Format version" |
 | 11 | The shifts of a `run.json` written before R1 | OF1: read `registered/transforms.json` when it exists, otherwise unavailable; the QC records' transform summaries are not read | "Older files" |
 | 12 | The area a FOV owns (cell density) | Amendment 1, with the baseline's G6: the report computes it from the placement, the grids and the assembly configuration | "The two routes" |
-| 13 | The times of stitching, assembly and the per-FOV segmentation and assignment | Unavailable with reason `not_recorded` (baseline, G7); adding `wall_s` to those records is a later choice | "Parts, their inputs and their reasons" |
+| 13 | The times of stitching, assembly and the per-FOV segmentation and assignment | Unavailable with reason `not_recorded` (baseline, G7). W-879 added `wall_s` to `segmentation.json`, `assignment.json` and `placement.json` and to the `assembly` section of `export.json`; the report reads it, and a record written before keeps `not_recorded` | "Parts, their inputs and their reasons" |
 | 14 | The provisional limits of the problematic-FOV rules | The defaults of `ReportLimits` below, from the source-inventory run's candidate limits; Jiahao sets the numbers | "Configuration" |
 | 15 | The pixel width and format of the whole-sample figures | 1600 px, JPEG at quality 85 for figures that draw the fused image; PNG for plots (the source-inventory run's `figure_sizes.csv`) | "Configuration" |
 | 16 | The workflow rule of the report | WR1: rules `report_sample` and `report_dataset`, run when the configuration has a `report` block | "Workflow configuration" |
@@ -339,6 +339,8 @@ class ReportLimits:
     correct_form_fraction: RuleLimit = RuleLimit(k=3.0, floor=0.05)    # low side, fraction
     matched_fraction: RuleLimit = RuleLimit(k=3.0, floor=0.05)         # low side, fraction
     spots_near_zero: float = 0.05                                      # fraction of the sample median
+    small_nucleus_fraction: RuleLimit = RuleLimit(k=3.0, floor=0.05)  # high side, fraction of a FOV's nuclei
+    small_nucleus_diameter_um: float = 3.0                             # the lower limit of a nucleus's diameter, µm
 
 @dataclass(frozen=True)
 class ReportConfig:
@@ -357,7 +359,7 @@ class ReportConfig:
 | `marker_pairs` | `()` | Pairs of two distinct genes for MECR, in the order the table shows them. Empty: MECR is unavailable with reason `no_markers`. |
 | `positive_threshold` | `1` | A cell is positive for a gene when its whole count is at least this (an integer ≥ 1). |
 | `example_fovs` | `None` | Three distinct FOVs of the list, or `None` for the automatic choice ("The example FOVs"). |
-| `limits` | `ReportLimits()` | The limits of the problematic-FOV rules. A `RuleLimit` with `absolute` set uses that limit alone; with `k` and `floor` set it uses a deviation from the sample median larger than `max(k × 1.4826 × MAD, floor)`; with all three `None` the rule is not evaluated and `report.json` says so. `k`, `floor` and `absolute` are ≥ 0. `spots_near_zero` is in (0, 1): a FOV whose spots are below this fraction of the sample median. |
+| `limits` | `ReportLimits()` | The limits of the problematic-FOV rules. A `RuleLimit` with `absolute` set uses that limit alone; with `k` and `floor` set it uses a deviation from the sample median larger than `max(k × 1.4826 × MAD, floor)`; with all three `None` the rule is not evaluated and `report.json` says so. `k`, `floor` and `absolute` are ≥ 0. `spots_near_zero` is in (0, 1): a FOV whose spots are below this fraction of the sample median. `small_nucleus_fraction` is the rule on the high side of the fraction of a FOV's nuclei whose equivalent diameter is below `small_nucleus_diameter_um` (a finite number > 0, µm; strict: a nucleus of exactly that diameter is not below it); both are a display rule on the nucleus size, not a qualification of the segmentation. |
 | `figure_width_px` | `1600` | The pixel width of a figure that draws the whole-sample image; a positive integer. |
 | `jpeg_quality` | `85` | The JPEG quality (1 to 95) of those figures; plots are PNG. |
 
@@ -411,14 +413,16 @@ Every place is fixed under the output root (settled decision 1); nothing is sear
 | Input | Place | Written by, at `dc5fc3c` | Needed for |
 | --- | --- | --- | --- |
 | Run record | `fovs/<fov>/run.json` | `dataset/_run_record.py`: `_RunRecord.write`, `_RunRecord.finish` (`FOV.run` with a `CheckpointConfig`) | Every part up to the readout; the identity, version and times |
+| Workflow configuration | `workflow/resolved.json`, the file `run.json` `workflow_config.path` names (relative to the output root) | `workflow/_plan.py`: `plan` | The parameters of the Workflow overview's cards; the parameters are unavailable (`input_missing`) when it is missing |
 | Saved transforms | `fovs/<fov>/checkpoints/registered/transforms.json`, `<round>_field.npz` | `_checkpoint.py`: `write_registered_header` (stage `registered`) | The shifts of a run record without `transforms`; the dense and B-spline fields of the replay |
 | Reads before the filter | `fovs/<fov>/checkpoints/pre_qc.json` | `_checkpoint.py`: `write_pre_qc` (stage `pre_qc`) | Only the codebook layout's segment ends, for R3 of an older run record |
 | Raw input | the files `run.json` `inputs[*].path` names | the acquisition | The replay of the main example |
 | Supplied statistics | `run.json` `preprocessing.supplied_statistics.path` | the user | The replay of a recipe with `fit="supplied"` |
 | Codebook | `run.json` `codebook.path` (R2) | the user | The gene list of the marker check |
 | Per-FOV segmentation and assignment | `fovs/<fov>/segmentation/<run>/`, `fovs/<fov>/assignment/<assignment>/` | `segmentation/_persist.py`: `write_run`; `assignment/_persist.py`: `write_assignment` | The per-FOV lane on the route per FOV; the segmentation examples on that route |
-| Reference image | `fovs/<fov>/reference.tif`, or the `reference_image` or `reference_image_import` pattern | `dataset/fov.py`: `FOV.save_reference_image` | The background of the segmentation examples on the route per FOV; the Z size when no export exists |
-| Placement | `stitching/<sample>/placement.json`, `fovs.csv` | `stitching/_persist.py`: `save_placement` | The FOV maps, the correction from the stage position, the placement status, the owned area; without an export record, a required review (`review`: state, reasons, flagged FOVs, approvals) above the Placement map |
+| Reference image | `fovs/<fov>/reference.tif`, or the `reference_image` or `reference_image_import` pattern | `dataset/fov.py`: `FOV.save_reference_image` | The background of the segmentation examples on the route per FOV when no run has a saved input; the Z size when no export exists |
+| Segmentation input | `fovs/<fov>/segmentation/<run>/input.ome.tif`, checked against `segmentation.json` `input.file_sha256` | `segmentation/_persist.py`: `write_run` (a computed run saved with checkpoints) | The background of the segmentation examples on the route per FOV: the first channel of the nucleus run's input, else of the cell run's |
+| Placement | `stitching/<sample>/placement.json`, `fovs.csv`, `links.csv` | `stitching/_persist.py`: `save_placement` | The FOV maps, the correction from the stage position, the placement status, the owned area, the link qualities of the Stitching card; without an export record, a required review (`review`: state, reasons, flagged FOVs, approvals) above the Placement map |
 | Export record | `export/<sample>/export.json` | `export/_record.py`: `write_export`, `update_section` (through `dataset/_export.py`: `export_sample`) | The route, the parts, the population accounting, the fused image and label files, the export's software |
 | Sample tables | `export/<sample>/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `sample.h5ad` | `assembly/_persist.py`: `save_assembly`; `assembly/_anndata.py`: `write_sample_h5ad` | Cells per FOV, reads in cells, per-cell distributions, MECR, marker patterns, reads along Z |
 | Fused image | the `fusion.outputs` of `export.json` (`<image>_projection.ome.tif`, `<image>_stack.ome.tif`) | `export/_fuse.py`: `fuse_images` | The marker patterns' image; the XZ zoom (a stack) |
@@ -496,7 +500,7 @@ implementations may give one value different reasons.
 | `run_not_finished` | The run record's `status` is `running`: the run is going on, or it stopped without recording its end. |
 | `step_failed` | The run's `status` is `failed` or `interrupted`, and the failing step (`error.step`) comes at or before the step that makes the value. |
 | `not_configured` | The step or check that makes the value was not part of the run's configuration (its configuration is null, or the filter checked no endpoints), or a rule has no limit. |
-| `not_recorded` | The step ran, but no record holds the value: a run record written before a field of "Records added to run.json", or a time that no record holds (stitching, assembly, the per-FOV segmentation and assignment). |
+| `not_recorded` | The step ran, but no record holds the value: a run record written before a field of "Records added to run.json", or a time that no record holds (a stitching, assembly, segmentation or assignment record written before W-879, or a placement imported from `dataset.xml`). |
 | `no_placement` | `stitching/<sample>/placement.json` does not exist. |
 | `fov_not_placed` | The FOV's placement status is `missing` or `failed`, so it has no position on a map. |
 | `no_export` | `export/<sample>/export.json` does not exist. |
@@ -521,9 +525,9 @@ inputs are in "Where each record is looked for".
 | `summary.identity` | Summary | The `Dataset`'s IDs; `run.json` `channels`, `config`, `code`, `started_at`, `ended_at`; `export.json` `assembly.software` and the fused grid's Z size (`fusion.fovs[*].grid.shape_zyx`), else the reference image's shape | | `no_run_record` (rounds, channels, configuration check), `not_recorded` |
 | `summary.key_numbers` | Summary | `run.json` `status`, `counts.spots`, `counts.call_status.assigned`; `sample.h5ad` `X` | | `no_run_record`, `run_not_finished`, `step_failed`, `not_configured` (no FOV has the count), `no_export`, `part_not_written`, `no_segmentation`, `undefined` |
 | `summary.problematic_fovs` | Summary | The values each rule reads (`PROBLEM_RULES`); `config.limits` | yes | A rule whose value is unavailable for a FOV is not evaluated for it, with that value's reason; `not_configured` for a rule without limit |
-| `workflow.steps` | Workflow overview | `run.json` `config.pipeline`, `steps`, `preprocessing.recipe`, `registration`; on the route per FOV `segmentation.json` `methods` (a computed run `FOV.segment` saved with checkpoints; `segmentation/_persist.py`: `write_run`) and `assignment.json` `inputs.cells`; `placement.json` `method.method`; `export.json` `parts` and `segmentation.runs` | yes | `no_run_record`, `no_placement`, `no_export`; on the route per FOV `input_missing` or `input_changed` for a FOV whose `segmentation.json` or `assignment.json` is missing or differs from the SHA-256 the export records (one row per FOV) |
+| `workflow.steps` | Workflow overview | `run.json` `config.pipeline`, `steps`, `preprocessing.recipe` (`steps`, `post_registration`), `registration`; on the route per FOV `segmentation.json` `methods` (a computed run `FOV.segment` saved with checkpoints; `segmentation/_persist.py`: `write_run`) and `assignment.json` `inputs.cells`; `placement.json` `method.method`; `export.json` `parts` and `segmentation.runs` | yes | `no_run_record`, `no_placement`, `no_export`; on the route per FOV `input_missing` or `input_changed` for a FOV whose `segmentation.json` or `assignment.json` is missing or differs from the SHA-256 the export records (one row per FOV) |
 | `workflow.fov_status` | Workflow overview | `run.json` `status`, `error` | yes | `no_run_record` |
-| `workflow.time` | Workflow overview | `run.json` `steps[*].seconds`; `export.json` `fusion.wall_s`, `labels.wall_s`, `spatialdata.wall_s`, `segmentation.wall_s` | yes | `no_run_record`, `run_not_finished`; `not_recorded` for stitching, assembly and the per-FOV segmentation and assignment |
+| `workflow.time` | Workflow overview | `run.json` `steps[*].seconds`; `segmentation.json`, `assignment.json` and `placement.json` `wall_s`; `export.json` `assembly.wall_s`, `fusion.wall_s`, `labels.wall_s`, `spatialdata.wall_s`, `segmentation.wall_s` | yes | `no_run_record`, `run_not_finished`; `not_recorded` for a record without `wall_s` |
 | `preprocessing.example` | Preprocessing | The main example's `run.json` `inputs`, `config.pipeline.load`, `config.pipeline.rotation_degrees`, `preprocessing`; the raw input; the supplied statistics; for the outputs of a moving round's `post_registration` entries, also the round's transforms as "The replay" step 4 reads them: `run.json` `transforms` (R1), else `registered/transforms.json`, and a dense or B-spline field file `registered/<round>_field.npz` | | `no_run_record`, `step_failed`, `not_configured` (no recipe), `input_missing`, `input_changed`, `replay_differs`; for the outputs of a moving round's `post_registration` entries, per round: `step_failed` (the round's registration failed), `not_recorded` (neither record holds the round's transforms), `field_not_saved` (a dense or B-spline field was not saved), `input_missing` or `input_changed` (the field file); when no example could be chosen, the reason of that choice (`no_run_record`, `run_not_finished`, `step_failed` or `not_configured`; "The example FOVs") |
 | `preprocessing.intensity` | Preprocessing | The replay of `preprocessing.example`; for the distributions after a moving round's `post_registration` entries, also the round's transforms: `run.json` `transforms` (R1), else `registered/transforms.json`, and a dense or B-spline field file `registered/<round>_field.npz` | | as `preprocessing.example`, with the same per-round reasons for the distributions after a moving round's `post_registration` entries |
 | `registration.maps` | Registration | `run.json` `transforms` (R1), else `registered/transforms.json`; `registration.<round>` (outcome, fallback, the application entry's `qc.values.ncc_after`); the placement | yes | `no_run_record`, `step_failed`, `not_configured` (no registration), `not_recorded`, `no_placement`, `fov_not_placed`, `undefined` |
@@ -535,7 +539,8 @@ inputs are in "Where each record is looked for".
 | `readout.table` | Readout | `tables/fovs.csv` of the report | | `no_run_record` (no FOV has one) |
 | `assembly.cells_per_fov` | Segmentation and assembly | `export/…/tables/fovs.csv` `n_cells`, `n_cells_retained`, `n_molecules_retained`; `tables/molecules.csv`; the owned area (placement, grids, `export.json` `assembly.config`) | yes | `no_export`, `part_not_written` (`assemble`), `no_segmentation`, `no_placement` (density), `undefined` |
 | `assembly.placement` | Segmentation and assembly | `stitching/<sample>/fovs.csv` `status`, `correction_z/y/x`; `export/…/tables/fovs.csv` `placement_status` | yes | `no_placement`, `fov_not_placed` |
-| `assembly.examples` | Segmentation and assembly | Route per FOV: the assignment folder's label images (`cell_labels.tif`, `nucleus_labels.tif`, or the linked `segmentation/<run>/labels.tif`) and the reference image; route after fusion: `segmentation_<run>.ome.tif`, the fused image and the FOV's footprint | yes | `no_segmentation`, `no_export` (route after fusion), `part_not_written` (`segment`, `fuse`), `input_missing`, `input_changed`; when no example could be chosen, the reason of that choice (`no_run_record`, `run_not_finished`, `step_failed` or `not_configured`; "The example FOVs") |
+| `assembly.examples` | Segmentation and assembly | Route per FOV: the assignment folder's label images (`cell_labels.tif`, `nucleus_labels.tif`, or the linked `segmentation/<run>/labels.tif`) and the segmentation input of the nucleus run, else of the cell run (`segmentation/<run>/input.ome.tif`), the reference image when neither run has a saved input; route after fusion: `segmentation_<run>.ome.tif`, the fused image `export.json` `segmentation.runs[*].inputs` names for the nucleus run, else the cell run (the first image of `fusion.outputs` when neither has an input), and the FOV's footprint | yes | `no_segmentation`, `no_export` (route after fusion), `part_not_written` (`segment`, `fuse`), `input_missing`, `input_changed`; when no example could be chosen, the reason of that choice (`no_run_record`, `run_not_finished`, `step_failed` or `not_configured`; "The example FOVs") |
+| `assembly.sizes` | Segmentation and assembly | The label images of `assembly.examples` for every FOV (route per FOV) or for the sample (route after fusion), with the grid's spacing; route after fusion, the ownership map of the placement and `export.json` `assembly.config` for the FOV of each object; `config.limits.small_nucleus_diameter_um` | yes | `no_export`, `part_not_written`, `no_segmentation`, `input_missing`, `input_changed`, `no_placement` (route after fusion: no FOV can be told, the sample's rows are written), `not_recorded` (a FOV whose `assignment.json` holds no grid spacing), `undefined` (a FOV with no object: the percentiles and the fraction of that row) |
 | `assembly.accounting` | Segmentation and assembly | `export.json` `assembly.counts` | | `no_export`, `part_not_written`, `no_segmentation` (the cells, and the counted molecules, of an export without cells) |
 | `sample.per_cell` | Sample measurements | `sample.h5ad` `X`, `obs.size_physical`; the size unit of the assignment record | | `no_export`, `part_not_written`, `no_segmentation` |
 | `sample.markers` | Sample measurements | `tables/molecules.csv` (`gene_id`, `sample_x`, `sample_y`, `assembly_status`); the fused image of `export.json` `fusion.outputs` | | `no_export`, `part_not_written` (`fuse`, `assemble`) |
@@ -543,7 +548,7 @@ inputs are in "Where each record is looked for".
 | `sample.mecr` | Sample measurements | `sample.h5ad` `X`, `var`; `marker_pairs`; `positive_threshold` | | `no_markers`, `no_export`, `no_segmentation`, `undefined` (per pair) |
 | `sample.reads_along_z` | Sample measurements | `tables/molecules.csv` `fov_id`, `z`; the grid shape of each FOV, `export.json` `assembly.fovs[*].grid.shape_zyx` | | `no_export`, `part_not_written` |
 | `files.input` | Files | `run.json` `inputs`, `codebook` (R2); `placement.json` `table` | | `no_run_record`, `not_recorded`, `no_placement` |
-| `files.configuration` | Files | `run.json` `workflow_config` (R4); the report's `config` | | `no_run_record`, `not_recorded` |
+| `files.configuration` | Files | `run.json` `workflow_config` (R4); `workflow/resolved.json` (its `configuration.api`: the parameters of the Workflow overview's cards, row `entry=parameters`); the report's `config` | | `no_run_record`, `not_recorded`; `input_missing` (`entry=parameters`: the file `workflow_config.path` names is missing) |
 | `files.output` | Files | The fixed places that exist | | none |
 
 ### Where a reason is shown and recorded
@@ -603,10 +608,10 @@ for a sample that has one and needs its own null rule in `samples.csv`.
 | Cell density (`cell_density_per_mm2`) | `n_cells_retained` / the area the FOV owns | The same formula (amendment 1) |
 | Reads in cells (`reads_in_cells`, its fraction) | The FOV's retained molecules whose cell is counted, over its retained molecules | The same columns; a molecule's FOV is the owner of its position |
 | The region a FOV owns | From the placement, the FOVs' grids and the export's ownership rule (`assembly.config`, `assembly.ownership`), on both routes; the geometry is on the algorithms page | The same |
-| Segmentation examples | The FOV's own label images from its assignment folder, on its own grid, over its reference image | The fused label image of the run cut to the FOV's footprint, over the fused image (amendment 1) |
+| Segmentation examples | The FOV's own label images from its assignment folder, on its own grid, over the first channel of the run's saved segmentation input (W-884; the reference image when no run has one) | The fused label image of the run cut to the FOV's footprint, over the fused image the run's input names (W-884; amendment 1) |
 | Population accounting (`population.csv`) | Cells and molecules: input, retained, excluded `not_owner`, `fov_not_placed`, `duplicate_observation` (with the rule on), molecules also `cell_not_owner`, `cell_duplicate_observation`, `outside_grid` | Cells: input (the run's labels), retained, `not_owner`, `fov_not_placed`; molecules: `not_owner`, `outside_grid`, `fov_not_placed`, `cell_not_owner`; no duplicate rows (null, not applicable) and the flags null (`export.json` `assembly.counts`) |
 | Workflow lanes | The per-FOV lane has segmentation (or the imported mask) and assignment | The per-sample lane has the export's `segment` part with its runs' methods |
-| Time of the segmentation | `not_recorded` | `export.json` `segmentation.wall_s` |
+| Time of the segmentation | `segmentation.json` `wall_s` | `export.json` `segmentation.wall_s` |
 | Rule "reads but no cell" | `n_molecules_retained > 0` and `n_cells_retained = 0` | The same columns |
 
 % A1
@@ -799,6 +804,7 @@ it was verified, the steps rerun, where the transforms came from (`run.json` or
             mecr.csv
             reads_along_z.csv
             intensity.csv
+            sizes.csv
             unavailable.csv
     index.html                 # the comparison page (Dataset.compare_samples)
     samples.csv
@@ -892,7 +898,7 @@ order of `export.json` `parts`).
 | `round` | string | — | `steps[*].round`. | n/a: not a per-round step |
 | `method` | string | — | The step's method: from `steps[*].methods` (detection), the preprocessing step name, the succeeded registration methods, the decoder, `segmentation.json` or `assignment.json` `inputs.cells`, `placement.json` `method.method`. | n/a: the step has none |
 | `status` | string | — | `succeeded`, `failed`, or the export part's status (`written`, `reused`, `off`, `not_run`, `failed`). | never |
-| `seconds` | float64 | s | `steps[*].seconds`; an export part's `wall_s`. | unavailable (`not_recorded`: stitching, an export part without `wall_s`, the per-FOV segmentation and assignment); n/a: an export part that did not run (`off`, `not_run`) |
+| `seconds` | float64 | s | `steps[*].seconds`; an export part's `wall_s`. | unavailable (`not_recorded`: a segmentation, assignment or placement record, or an export part, without `wall_s`); n/a: an export part that did not run (`off`, `not_run`) |
 
 **`readout_totals.csv`**: one row per level, in the order `spots`, `correct_form`, `matched`,
 `merged_by_deduplication`, `passed_filter`, `reads_in_cells`; key `level`.
@@ -927,7 +933,7 @@ list order, then the rule order of `PROBLEM_RULES`, then rounds and axes; key (`
 `rule`, `round`, `axis`). The rules (settled decision 5): `fov_failed`, `fov_not_run`, `shift_residual`,
 `alignment_score`, `registration_rejected`, `registration_fallback`,
 `correct_form_fraction`, `matched_fraction`, `spots_near_zero`, `not_placed`,
-`stage_position_fallback`, `reads_no_cell`.
+`stage_position_fallback`, `reads_no_cell`, `small_nucleus_fraction`.
 
 % D5
 
@@ -1012,6 +1018,18 @@ without `post_registration` entries has no row of that phase and needs no transf
 reference round, and a moving round of a run without a registration, have their rows of
 that phase without a transform.
 
+**`sizes.csv`**: the equivalent diameter of the objects of the label images, in µm ("Object sizes" of the algorithms page): one row per object kind (`nucleus`, then `cell`) of the sample (`scope` `sample`), then, in list order, one per FOV and kind (`scope` `fov`); a kind the label images do not have has no row; key (`scope`, `fov_id`, `object`). Not embedded in the page. W-884.
+
+| Column | Type | Unit | Content | Null when |
+| --- | --- | --- | --- | --- |
+| `scope` | string | — | `sample` or `fov`. | never |
+| `fov_id` | string | — | The FOV of a `fov` row. | n/a: a `sample` row |
+| `object` | string | — | `nucleus` or `cell`. | never |
+| `n_objects` | int64 | objects | The objects of the kind: the nonzero labels of the FOV's image (route per FOV), or those whose centroid the FOV owns under the ownership map (route after fusion; the `sample` row counts every object of the sample's image). | never |
+| `diameter_p5`, `diameter_p25`, `diameter_median`, `diameter_p75`, `diameter_p95` | float64 | µm | NumPy's linear percentiles of the objects' equivalent diameters. | unavailable: `undefined` when there is no object |
+| `below_limit` | int64 | objects | The objects with a diameter strictly below `config.limits.small_nucleus_diameter_um` (also written for the cells, with the nuclei's limit). | never |
+| `below_fraction` | float64 | fraction | `below_limit / n_objects`. | unavailable: `undefined` when there is no object |
+
 **`unavailable.csv`**: one row per unavailable value ("Where a reason is shown and
 recorded"): each unavailable cell of a report table, each unavailable key of `report.json`
 `summary`, and each part, or part of a part, with no cell for what it lacks. Order:
@@ -1067,7 +1085,7 @@ Strict JSON (non-finite numbers as `null`), written last.
 | `software` | `code` and `environment`, as `run.json` records them (`_records.py`: `code`, `environment`). |
 | `config` | The `ReportConfig`, as JSON. |
 | `stages` | What existed: the FOVs with a run record (`run_records`), `version_1_run_records` (those whose run record is of `format_version` 1, read as recorded and not eligible for verified resume; since 2026-10-24), `placement` (boolean), `export` (boolean) and the export's `parts`. |
-| `inputs` | Every file read: `path` (relative to the output root, absolute outside it), `kind` (`run_record`, `transforms`, `field`, `raw_image`, `supplied_statistics`, `codebook`, `segmentation_record`, `assignment_record`, `label_image`, `reference_image`, `placement`, `placement_table`, `export_record`, `export_table`, `anndata`, `fused_image`), `sha256`, `bytes`, and `verified` (whether a record's SHA-256 was compared). |
+| `inputs` | Every file read: `path` (relative to the output root, absolute outside it), `kind` (`run_record`, `transforms`, `field`, `raw_image`, `supplied_statistics`, `codebook`, `segmentation_record`, `segmentation_input`, `assignment_record`, `label_image`, `reference_image`, `placement`, `placement_table`, `export_record`, `export_table`, `anndata`, `fused_image`), `sha256`, `bytes`, and `verified` (whether a record's SHA-256 was compared). |
 | `files` | Every file of the folder but `report.json`: `path` (relative to the folder), `sha256`, `bytes`, and for a table its `dtypes`. The report's own files are `report.json` and the files its `files` list names. An existing output folder is replaced only when it holds no file other than the report's own; a file that is not one of them, which includes every file of a nonempty folder without `report.json`, stops the entry with `FileExistsError` naming that file before anything is written, and an empty folder is used as it is. |
 | `unavailable` | The rows of `tables/unavailable.csv`, each an object of its columns (`part`, `table`, `column`, `row_key`, `reason`, `detail`). |
 | `examples` | "The example FOVs". |

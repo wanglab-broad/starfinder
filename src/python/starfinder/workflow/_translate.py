@@ -42,12 +42,12 @@ def rule_configuration(configuration):
 
     The present sub-blocks spot_finding, reads_extraction and reads_filtration are enabled; the codebook is loaded
     whenever the block decodes (load_codebook always runs); deduplication is on when present; ``scoring: false``
-    is ``{run: false}``; reference_image_view.projection is the rule's maximum_projection; mode, recipe (expanded by
-    the plan), tiled and checkpoints are the plan's (the checkpoints are passed to FOV.run by the fov command, the
-    tiled settings to the tiled commands, ``tiled``).
+    is ``{run: false}``; reference_image_view.projection is the rule's maximum_projection; mode, tiled and
+    checkpoints are the plan's (the checkpoints are passed to FOV.run by the fov command, the tiled settings to the
+    tiled commands, ``tiled``).
     """
     block = configuration["processing"]
-    params = copy.deepcopy({k: v for k, v in block.items() if k not in ("mode", "recipe", "tiled", "checkpoints")})
+    params = copy.deepcopy({k: v for k, v in block.items() if k not in ("mode", "tiled", "checkpoints")})
     for name in _ENABLED:
         if name in params:
             params[name] = {"run": True, **(params[name] or {})}

@@ -23,7 +23,8 @@ from .test_report_collection import (CONTRACT_COLUMNS, CONTRACT_RECORD_KEYS, ann
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
 TOL = 1e-9
-VALUE_RULES = ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction", "spots_near_zero")
+VALUE_RULES = ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction", "spots_near_zero",
+               "small_nucleus_fraction")
 
 
 def rows_of(tables):
@@ -362,7 +363,8 @@ def test_reason_text_of_the_matched_fraction():
 # --- A rule without a limit, through the collection --------------------------------------------------------------
 
 #: The rules whose limit is a RuleLimit, which can be left empty (k, floor and absolute all None).
-LIMIT_RULES = ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction")
+LIMIT_RULES = ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction",
+               "small_nucleus_fraction")
 #: Not applicable here: the categorical rules take no limit, and the limit of spots_near_zero is a fraction in
 #: (0, 1) that cannot be left empty.
 CATEGORICAL_RULES = ("fov_failed", "fov_not_run", "registration_rejected", "registration_fallback", "not_placed",

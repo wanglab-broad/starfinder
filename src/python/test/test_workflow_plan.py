@@ -15,12 +15,15 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 
 import pytest
+import yaml
 
 from starfinder.workflow import TASK_BLOCKS, plan
 
+from . import docs_pages
 from . import workflow_examples as X
 from . import workflow_tasks as W
 
@@ -124,7 +127,7 @@ def test_the_resolved_configuration_writes_the_defaults_and_the_api(work):
 def test_every_task_has_the_contracts_fields(work):
     manifest = _plan(work, "after-fusion", X.variants(work)["after-fusion"])
     assert list(manifest) == ["format", "backend", "configuration", "package", "roots", "membership", "inputs",
-                              "export_route", "groups", "tasks"]
+                              "export_route", "routes", "groups", "tasks"]
     assert manifest["package"] == CODE
     for task in manifest["tasks"]:
         keys = ["id", "kind", "group", "identity", "needs", "inputs", "outputs", "record", "log", "command",
@@ -206,6 +209,11 @@ def _stats(manifest):
     return stats
 
 
+#: The FOV-level task kinds (design/specs/orchestration.md, "The blocks of a task kind"), whose hash leaves out
+#: selected_fovs and output_id; every other kind is sample-level.
+FOV_LEVEL = {"summarize", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment", "assign"}
+
+
 def _fingerprints(manifest, code=None):
     """Each task's fingerprint from its components (design/specs/orchestration-engines.md, "The task fingerprint")."""
     stats, out = _stats(manifest), {}
@@ -250,8 +258,11 @@ def test_each_fingerprint_equals_an_independent_hash_of_its_components(work, cod
     common = {k: v for k, v in c.items() if k not in ("processing", "morphology", "segmentation", "assignment",
                                                       "stitching", "assembly", "export", "report", "execution",
                                                       "root_input_path", "root_output_path", "api")}
+    # A FOV-level kind's hash leaves out the FOV selection and the output id (W-877; no reference_image_import here).
+    fov_common = {k: v for k, v in common.items() if k not in ("selected_fovs", "output_id")}
     for task in manifest["tasks"]:
-        part = {"common": common, "blocks": {b: c.get(b) for b in TASK_BLOCKS[task["kind"]]}}
+        part = {"common": fov_common if task["kind"] in FOV_LEVEL else common,
+                "blocks": {b: c.get(b) for b in TASK_BLOCKS[task["kind"]]}}
         assert task["blocks_sha256"] == _sha(_canonical(part)), task["id"]
 
 
@@ -338,6 +349,75 @@ def test_the_install_route_of_the_same_commit_changes_no_fingerprint(work, monke
     assert _changed(before, after) == set()
 
 
+#: Per variant, the kinds of the tasks that both plans of the extended selection hold and whose fingerprint stays.
+#: per-fov's supplied statistics are merged over the selected FOVs, so its fov tasks, which read the merged file,
+#: and their consumers rerun; its summaries (one FOV each) and morphology tasks stay.
+REUSED = {"molecules-only": {"fov": 2},
+          "after-fusion": {"tile_global": 2, "tile": 8, "tile_merge": 2, "morphology": 2},
+          "per-fov": {"summarize": 2, "morphology": 2}}
+
+
+def _two_stages(work, root, variant, change=None):
+    """Plan ``variant`` with FOV_001 and FOV_002 under output id ``smoke``, then with every FOV under ``full``
+    (``change`` applied to the second configuration), both into ``root``; returns the two manifests."""
+    first = dict(X.variants(work)[variant], output_id="smoke", selected_fovs=["FOV_001", "FOV_002"])
+    second = copy.deepcopy(dict(X.variants(work)[variant], output_id="full", selected_fovs=None))
+    if change is not None:
+        change(second)
+    return (plan(X.write_config(work, "stage1", first), output_root=root),
+            plan(X.write_config(work, "stage2", second), output_root=root))
+
+
+@pytest.mark.parametrize("variant", sorted(REUSED))
+def test_extending_the_selection_keeps_the_fov_tasks_and_reruns_the_sample_level_ones(work, tmp_path, variant):
+    # W-877: the FOV-level kinds' hash leaves out selected_fovs and output_id; the sample-level kinds keep them.
+    before, after = _two_stages(work, tmp_path / "shared", variant)
+    a = {t["id"]: t["fingerprint"] for t in before["tasks"]}
+    b = {t["id"]: t["fingerprint"] for t in after["tasks"]}
+    kind = {t["id"]: t["kind"] for t in after["tasks"]}
+    common = set(a) & set(b)
+    assert set(a) <= set(b) and {t["identity"].get("fov") for t in after["tasks"]} - {None} == set(X.FOVS)
+    changed = {i for i in common if a[i] != b[i]}
+    sample_level = {i for i in common if kind[i] not in FOV_LEVEL}
+    assert sample_level and changed == _downstream(after, sample_level) & common
+    reused = {}
+    for i in sorted(common - changed):
+        reused[kind[i]] = reused.get(kind[i], 0) + 1
+    assert reused == REUSED[variant]
+
+
+#: A FOV-level setting changed with the selection: a key of the processing block and a dataset key.
+FOV_SETTINGS = {
+    "processing": lambda c: c["processing"]["spot_finding"].update(threshold_value=6.0),
+    "voxel_size_xy": lambda c: c.update(voxel_size_xy=0.25),
+}
+
+
+@pytest.mark.parametrize("setting", sorted(FOV_SETTINGS))
+def test_a_changed_fov_level_setting_still_reruns_the_fov_tasks_of_an_extended_selection(work, tmp_path, setting):
+    before, after = _two_stages(work, tmp_path / "shared", "molecules-only", FOV_SETTINGS[setting])
+    a = {t["id"]: t["fingerprint"] for t in before["tasks"]}
+    b = {t["id"]: t["fingerprint"] for t in after["tasks"]}
+    assert {i for i in a if a[i] == b[i]} == set()
+    assert {i for i in a if i.startswith("fov/")} == {"fov/sample/FOV_001", "fov/sample/FOV_002"}
+
+
+@pytest.mark.parametrize("kind", sorted(TASK_BLOCKS))
+def test_only_a_supplied_reference_image_keeps_the_output_id_in_a_fov_level_hash(kind):
+    from starfinder.workflow._shape import blocks_sha256
+    base = {"dataset_id": "d", "output_id": "smoke", "selected_fovs": ["F1"], "reference_image_import": None}
+    selection = dict(base, selected_fovs=None)
+    renamed = dict(base, output_id="full")
+    fov_level = kind in FOV_LEVEL
+    assert (blocks_sha256(selection, kind) == blocks_sha256(base, kind)) is fov_level
+    assert (blocks_sha256(renamed, kind) == blocks_sha256(base, kind)) is fov_level
+    # A supplied reference image without stored metadata takes the frame declared:<dataset_id>/<output_id>/<fov_id>.
+    imported = dict(base, reference_image_import="refs/{fov_id}.tif")
+    assert (blocks_sha256(dict(imported, selected_fovs=None), kind) == blocks_sha256(imported, kind)) is fov_level
+    assert blocks_sha256(dict(imported, output_id="full"), kind) != blocks_sha256(imported, kind)
+    assert blocks_sha256(dict(base, dataset_id="e"), kind) != blocks_sha256(base, kind)
+
+
 def test_a_command_reads_its_configuration_through_the_restricted_view():
     from starfinder.workflow._shape import BlockAccessError, ConfigurationView
     configuration = {"n_rounds": 4, "processing": {"mode": "direct"}, "export": {"previews": False},
@@ -351,50 +431,57 @@ def test_a_command_reads_its_configuration_through_the_restricted_view():
     assert "report" not in ConfigurationView(configuration, "compare")
 
 
-# --- the deep recipe and the tiled settings (W-735) -----------------------------------------------------------------
+# --- the steps of the removed named recipe and the tiled settings (W-735, W-887) -----------------------------------
+
+#: What processing.recipe deep expanded to before W-887 removed it (the former _shape.RECIPES["deep"]), written out
+#: here as the expected value: the YAML of docs/migration.md reproduces it; ``tiled`` applied in mode tiled only.
+DEEP_STEPS = {
+    "preprocessing": {"steps": [
+        {"method": "min_max_normalization", "output_dtype": "uint8", "output_range": [0, 255], "rounding": "truncate"},
+        {"method": "histogram_matching", "reference_channel": 0}],
+        "post_registration": [{"method": "reconstruction", "radius_yx": 3}]},
+    "registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}}
+DEEP_LOCAL_REGISTRATION = {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}
+
 
 def _resolved(work, name, config):
     plan(X.write_config(work, name, config))
     return json.loads((X.output_root(work, config["output_id"]) / "workflow" / "resolved.json").read_text())
 
 
-def test_the_deep_recipe_is_expanded_into_the_resolved_configuration(work):
-    """processing.recipe deep (design/specs/orchestration-tiled.md, "The deep-tissue recipe"): the plan writes the
-    recipe's steps (its name null), a key the block also sets wins, and the hash covers the steps, not the name."""
-    config = X.variants(work)["molecules-only"]
-    deep = dict(config, output_id="deep", processing={k: v for k, v in config["processing"].items()
-                                                       if k not in ("preprocessing", "registration")})
-    deep["processing"]["recipe"] = "deep"
-    p = _resolved(work, "deep", deep)["configuration"]["processing"]
-    assert p["recipe"] is None and "tiled" not in p
-    assert [s["method"] for s in p["preprocessing"]["steps"]] == ["min_max_normalization", "histogram_matching"]
-    assert p["preprocessing"]["post_registration"] == [{"method": "reconstruction", "radius_yx": 3}]
-    assert p["registration"] == {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}
-    # The same run (output_id is part of the hash) with the recipe's steps spelled out and no recipe.
-    spelled = dict(deep, processing=dict(deep["processing"], recipe=None,
-                                                                preprocessing=p["preprocessing"],
-                                                                registration=p["registration"]))
-    hashes = [plan(X.write_config(work, name, c))["configuration"]["configuration_sha256"]
-              for name, c in (("deep", deep), ("spelled", spelled))]
-    assert hashes[0] == hashes[1]
-    # A key the block sets wins over the recipe's.
-    own = dict(deep, output_id="own", processing=dict(deep["processing"], registration={
-        "steps": [{"method": "translation"}], "signal": {"mode": "channel", "reference_channel": 0}}))
-    assert _resolved(work, "own", own)["configuration"]["processing"]["registration"]["signal"] == {
-        "mode": "channel", "reference_channel": 0}
+def _migration_steps():
+    """The processing block the migration guide gives to paste in place of recipe: deep (its one YAML block)."""
+    text = docs_pages.section(docs_pages.read("migration.md"), "migration-named-recipe")
+    blocks = re.findall(r"^```yaml\n(.*?)^```$", text, flags=re.MULTILINE | re.DOTALL)
+    assert len(blocks) == 1, blocks
+    return yaml.safe_load(blocks[0])["processing"]
 
 
-def test_tiled_mode_writes_its_defaults_and_the_deep_recipe_s_local_registration(work):
+def test_the_migration_guide_s_steps_reproduce_the_removed_recipe_in_direct_mode(work):
+    """processing.recipe deep is gone (W-887): the steps the migration guide gives in its place, pasted into a
+    configuration without its tiled settings, resolve to what the recipe expanded to, and the plan adds nothing."""
     config = X.variants(work)["molecules-only"]
-    tiled = dict(config, output_id="tiled-deep", processing=dict(
-        {k: v for k, v in config["processing"].items() if k not in ("preprocessing", "registration")},
-        recipe="deep", mode="tiled", tiled={"tile_size_yx": 18}))
+    given = {k: v for k, v in _migration_steps().items() if k != "tiled"}
+    spelled = dict(config, output_id="spelled", processing={
+        **{k: v for k, v in config["processing"].items() if k not in ("preprocessing", "registration")}, **given})
+    p = _resolved(work, "spelled", spelled)["configuration"]["processing"]
+    assert {k: p[k] for k in DEEP_STEPS} == DEEP_STEPS
+    assert "recipe" not in p and "tiled" not in p
+
+
+def test_tiled_mode_writes_its_defaults_and_the_removed_recipe_s_local_registration(work):
+    config = X.variants(work)["molecules-only"]
+    given = _migration_steps()
+    tiled = dict(config, output_id="tiled-deep", processing={
+        **{k: v for k, v in config["processing"].items() if k not in ("preprocessing", "registration")},
+        **given, "mode": "tiled", "tiled": dict(given["tiled"], tile_size_yx=18)})
     resolved = _resolved(work, "tiled-deep", tiled)["configuration"]
+    assert {k: resolved["processing"][k] for k in DEEP_STEPS} == DEEP_STEPS
     t = resolved["processing"]["tiled"]
     # The halo is the plan's minimum: the local registration's margin (30 voxels for a translation step) exceeds
     # the extraction ring (6) and the detection's distance (1).
     assert t == {"tile_size_yx": 18, "halo": 30, "exact": True, "post_local_registration": None,
-                 "local_registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}}
+                 "local_registration": DEEP_LOCAL_REGISTRATION}
     assert resolved["api"]["processing"]["tiled"]["local_registration"]["type"] == "RegistrationRecipe"
 
 
@@ -441,7 +528,7 @@ def test_selected_fovs_restricts_every_task(tmp_path):
     assert manifest["membership"]["fovs"] == ["F10", "F3"] and manifest["membership"]["samples"] == {"s2": ["F10", "F3"]}
     assert [t["identity"]["fov"] for t in _of_kind(manifest, "fov")] == ["F10", "F3"]
     assert [t["id"] for t in manifest["tasks"] if t["kind"] in ("stitch", "export", "report", "compare")] == [
-        "stitch/s2", "export/s2", "report/s2", "compare"]
+        "stitch/s2", "export/s2/molecules_only", "report/s2/molecules_only", "compare"]
     (export,) = _of_kind(manifest, "export")
     assert {"stitching/s2/placement.json", "fovs/F10/molecules.csv", "fovs/F3/molecules.csv"} <= set(export["inputs"])
     named = [path for t in manifest["tasks"] for path in t["inputs"] + t["outputs"]]
@@ -470,8 +557,9 @@ def test_without_the_report_block_no_report_task_is_planned(tmp_path, blocks):
     """From test_report_workflow.py, test_wf1_without_the_block_no_rule_and_no_output_is_added and
     test_wf1_with_the_block_the_report_rules_are_requested: without the report block the plan has no report or
     compare task and no output under report/; with it, exactly one report task per sample (in fovs.csv's order) and
-    the compare task are added, and every other task is the same. (No workflow file includes the old report rules,
-    and no MATLAB rule file names a report rule: test_workflow_boundary.py, C8.)"""
+    the compare task are added, and every other task is the same. Each report lies in its route's folder (W-876):
+    report/<sample>/molecules_only/ with the assembly block, report/<sample>/no_export/ without an export. (No workflow
+    file includes the old report rules, and no MATLAB rule file names a report rule: test_workflow_boundary.py, C8.)"""
     config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), **copy.deepcopy(blocks))
     W.write_inputs(config, "sample,fov_id\nsample1,tile_1\nsample2,tile_2\n")
     _, without = W.plan(tmp_path, "without", dict(config, output_id="without"))
@@ -479,8 +567,10 @@ def test_without_the_report_block_no_report_task_is_planned(tmp_path, blocks):
     assert not [p for t in without["tasks"] for p in t["outputs"] if p.startswith("report/")]
     _, with_block = W.plan(tmp_path, "with", dict(config, output_id="with", report={}))
     added = [t for t in with_block["tasks"] if t["kind"] in ("report", "compare")]
-    assert [t["id"] for t in added] == ["report/sample1", "report/sample2", "compare"]
-    assert [o for t in added for o in t["outputs"]] == ["report/sample1/report.json", "report/sample2/report.json",
+    route = "molecules_only" if "assembly" in blocks else "no_export"
+    assert [t["id"] for t in added] == [f"report/sample1/{route}", f"report/sample2/{route}", "compare"]
+    assert [o for t in added for o in t["outputs"]] == [f"report/sample1/{route}/report.json",
+                                                         f"report/sample2/{route}/report.json",
                                                          "report/index.html", "report/samples.csv"]
     assert [t["id"] for t in with_block["tasks"] if t not in added] == [t["id"] for t in without["tasks"]]
 

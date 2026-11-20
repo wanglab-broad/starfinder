@@ -58,7 +58,11 @@ no image content and writes nothing under the input folder.
 `fov_list` names the file, absolute or relative to the input folder. Without
 `fov_list`, the plan reads `fovs.csv` in the input folder. Keep the list outside
 a raw folder, next to the configuration, so that the folder is read in place.
-`selected_fovs` then picks FOVs of the list to run.
+`selected_fovs` then picks FOVs of the list to run. To process a dataset in
+parts, for example the first tiles while the rest are imaged, plan each larger
+selection into the same output root: the finished FOVs' tasks are kept, and the
+new FOVs and the sample-level tasks (stitching, export, report) run
+({ref}`the task kinds <workflow-task-kinds>`).
 
 **The row order.** The rows are read in order: a sample's FOVs keep the order of
 their rows in the manifest, the sample tables and the report. With
@@ -77,7 +81,9 @@ to the input folder. tissue-2D's `genes.csv` is in its raw folder.
 This is the configuration W-870 ran tissue-2D with, end to end, with three
 changes: `fov_list` and the raw folder replace the link tree it built, and the
 package defaults replace its previews, its stitching quality threshold and most
-of its resources. The FOV list is the file of the Quick start.
+of its resources. Its `recipe: deep` is written out as the steps that recipe
+expanded to ({ref}`migration guide <migration-named-recipe>`). The FOV list is
+the file of the Quick start.
 
 ```yaml
 backend: python
@@ -104,7 +110,16 @@ additional_round:
       - {channel: ch03, name: Gfap}
 processing:
   mode: direct
-  recipe: deep
+  preprocessing:
+    steps:
+      - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
+      - {method: histogram_matching, reference_channel: 0}
+    post_registration:
+      - {method: reconstruction, radius_yx: 3}
+  registration:
+    steps:
+      - {method: translation}
+    signal: {mode: max}
   streaming: true
   spot_finding: {}
   reads_extraction: {}

@@ -180,9 +180,10 @@ execution they use the FOV-level statistics of the reference round, and the note
 
 ### Truncated channels
 
-A channel whose low values were clipped to one value, such as the `uint8` output of the
-workflow's `recipe: deep` (min-max normalization with truncation), can have most of its
-voxels at its minimum. Their median is the minimum and their MAD is 0, so the median and
+A channel whose low values were clipped to one value, such as the `uint8` output of a
+`min_max_normalization` step with `rounding: truncate` (the first step of the workflow's
+global examples), can have most of its voxels at its minimum. Their median is the minimum
+and their MAD is 0, so the median and
 MAD of all voxels would make the threshold the minimum and every regional maximum a
 spot. In `noise` mode, a channel with more than half its voxels at its minimum therefore
 takes its median and MAD over the voxels above the minimum, and a `SpotFindingWarning`,

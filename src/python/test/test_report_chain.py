@@ -314,7 +314,8 @@ def stage_rows(chain: Chain, *, placement, assignment, export):
     rows = [collection_checks.ALIGNMENT_RULE]  # the default configuration sets no alignment-score limit
     n_steps = {f: len(chain.run_record(f)["steps"]) for f in fovs}
     if placement:
-        rows.append(collection_checks.STITCH_TIME)  # no record holds the time of stitching
+        # The scene's placement is placement_from_table's (supplied positions): no stitch ran, so no time was recorded.
+        rows.append(collection_checks.STITCH_TIME)
     else:
         # The FOV maps and the placement block; the placement rules; the placement table of Files. The Z size is the
         # reference image's (test_ch1_ch2_ch3_the_report_at_each_stage checks it), so no row names it.
@@ -326,22 +327,44 @@ def stage_rows(chain: Chain, *, placement, assignment, export):
         rows += [("assembly.placement", "fovs", c, f"fov_id={f}", "no_placement")
                  for c in collection_checks.PLACEMENT_COLUMNS for f in fovs]
     if assignment:
-        # The per-FOV lane's segmentation and assignment: steps whose time no record holds.
-        rows += [("workflow.time", "steps", "seconds", f"scope=fov;fov_id={f};index={n_steps[f] + i}", "not_recorded")
-                 for f in fovs for i in (0, 1)]
+        # The per-FOV lane: the cell run is imported_labels' in memory, which no FOV.segment timed; the time of
+        # assign_molecules is in assignment.json.
+        rows += [("workflow.time", "steps", "seconds", f"scope=fov;fov_id={f};index={n_steps[f]}", "not_recorded")
+                 for f in fovs]
     else:
         # The segmentation examples read the assignment folder on the route per FOV; it does not exist yet.
         roles = expected_roles(chain)
         rows += [("assembly.examples", None, None, f"fov_id={roles[r]};role={r}", "input_missing") for r in ROLES]
-    if export:
-        rows.append(("workflow.time", "steps", "seconds", "scope=sample;fov_id=;index=1", "not_recorded"))  # assemble
-    else:
+        # The object sizes read the same label images (W-884): without an assignment folder or an export, no_export.
+        rows += collection_checks.SIZES_ROWS
+    if not export:
         rows.append(collection_checks.READS_NO_CELL_RULE)
         for row in collection_checks.no_export_rows(fovs):
             if not placement and row[2] in ("owned_area_um2", "cell_density_per_mm2"):
                 row = (*row[:4], "no_placement")  # the first reason that applies (P1): no_placement before no_export
             rows.append(row)
     return rows
+
+
+@pytest.mark.slow
+def test_the_step_times_of_the_chain_are_recorded_and_reported(stages):
+    """W-879: ``assign_molecules`` and ``Dataset.export`` record their wall time in ``assignment.json`` and in the
+    assembly section of ``export.json``, and the report's steps table shows each. The scene's cell run is imported in
+    memory and its placement supplied, so those two steps hold no time (the other tests of this module list them)."""
+    chain, pages, _ = stages
+    for fov in chain.fov_ids:
+        record = json.loads((chain.root / "fovs" / fov / "assignment" / "default" / "assignment.json").read_text())
+        assert 0 < record["wall_s"] < 3600, fov
+    export = json.loads((chain.root / "export" / chain.sample / "export.json").read_text())["assembly"]
+    assert 0 < export["wall_s"] < 3600 and export["cpu_s"] >= 0 and export["peak_rss_kib"] > 0
+    steps = pages["ch3"].tables["steps"]
+    for name, count in (("assign_molecules", len(chain.fov_ids)), ("assemble", 1)):
+        rows = steps[steps["name"].eq(name).to_numpy(bool)]
+        assert len(rows) == count and (rows["seconds"] > 0).all(), name
+    unavailable = [u for u in keyed(pages["ch3"]) if u[0] == "workflow.time"]
+    assert sorted(u[3] for u in unavailable) == sorted(
+        [f"scope=fov;fov_id={f};index={len(chain.run_record(f)['steps'])}" for f in chain.fov_ids]
+        + ["scope=sample;fov_id=;index=0"])
 
 
 @pytest.mark.slow

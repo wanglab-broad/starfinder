@@ -788,8 +788,8 @@ configuration without the block runs as before: no report rule and no report out
   (`MarkerGroup`, one to four genes, each group one figure); `marker_pairs`, gene pairs for
   MECR; `positive_threshold`; `example_fovs`, three FOV IDs or null for the automatic
   choice; `limits`, the `ReportLimits` fields, each rule (`shift_residual`,
-  `alignment_score`, `correct_form_fraction`, `matched_fraction`) a mapping of the
-  `RuleLimit` fields `k`, `floor` and `absolute`, and `spots_near_zero`; `figure_width_px`
+  `alignment_score`, `correct_form_fraction`, `matched_fraction`, `small_nucleus_fraction`) a mapping of the
+  `RuleLimit` fields `k`, `floor` and `absolute`, `spots_near_zero`, and `small_nucleus_diameter_um` (W-884); `figure_width_px`
   and `jpeg_quality`. Lists become tuples. An omitted key keeps its default, so `report: {}`
   gives `ReportConfig()`; an omitted rule of `limits` keeps its default limit, and an omitted
   key of a given rule is null. An unknown key, at any level, raises `ValueError` naming it
@@ -836,6 +836,8 @@ report:
     correct_form_fraction: {k: 3, floor: 0.05, absolute: null}
     matched_fraction: {k: 3, floor: 0.05, absolute: null}
     spots_near_zero: 0.05
+    small_nucleus_fraction: {k: 3, floor: 0.05, absolute: null}
+    small_nucleus_diameter_um: 3
   figure_width_px: 1600
   jpeg_quality: 85
 ```

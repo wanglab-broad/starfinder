@@ -10,6 +10,7 @@ rule:alignment_score,<NA>,<NA>,<NA>,not_configured,config.limits.alignment_score
 rule:not_placed,<NA>,<NA>,<NA>,no_placement,stitching/sample/placement.json
 rule:stage_position_fallback,<NA>,<NA>,<NA>,no_placement,stitching/sample/placement.json
 rule:reads_no_cell,<NA>,<NA>,<NA>,no_export,export/sample/export.json
+rule:small_nucleus_fraction,<NA>,<NA>,<NA>,no_segmentation,no assignment
 registration.maps,<NA>,<NA>,<NA>,no_placement,stitching/sample/placement.json
 readout.totals,readout_totals,count,level=reads_in_cells,no_export,export/sample/export.json
 readout.totals,readout_totals,fraction_of_spots,level=reads_in_cells,no_export,export/sample/export.json
@@ -89,6 +90,7 @@ assembly.placement,fovs,centre_x,fov_id=FOV_004,no_placement,stitching/sample/pl
 assembly.examples,<NA>,<NA>,fov_id=FOV_001;role=example_1,no_segmentation,no assignment
 assembly.examples,<NA>,<NA>,fov_id=FOV_002;role=example_2,no_segmentation,no assignment
 assembly.examples,<NA>,<NA>,fov_id=FOV_004;role=example_3,no_segmentation,no assignment
+assembly.sizes,<NA>,<NA>,<NA>,no_segmentation,no assignment
 assembly.accounting,population,cells,population=input,no_export,export/sample/export.json
 assembly.accounting,population,cells,population=retained,no_export,export/sample/export.json
 assembly.accounting,population,cells,population=excluded_not_owner,no_export,export/sample/export.json

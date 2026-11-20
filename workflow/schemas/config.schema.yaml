@@ -2180,6 +2180,12 @@ $defs:
             type: number
             exclusiveMinimum: 0
             exclusiveMaximum: 1
+          small_nucleus_fraction:
+            $ref: "#/$defs/report_rule_limit"
+          small_nucleus_diameter_um:
+            description: "The equivalent diameter in micrometres below which a nucleus counts as small (default 3)"
+            type: number
+            exclusiveMinimum: 0
         additionalProperties: false
       figure_width_px:
         description: "The width of the whole-sample figures (default 1600)"

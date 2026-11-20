@@ -387,9 +387,13 @@
   "compare": "same_environment",
   "value": "bb6894fefddfd7a579ca869613f49e2d90493a893a947052d823334c615b52c3"
  },
+ "file:report/sample/tables/sizes.csv": {
+  "compare": "same_environment",
+  "value": "3e1c7bff1fc68224e5466fdf45c11508c484964240a6bc9cc22ef6aeab7d8a7f"
+ },
  "file:report/sample/tables/unavailable.csv": {
   "compare": "same_environment",
-  "value": "ab643149c230deb5393bfa2c6d3532a50593d9646cb73cb5de4841bd387eec4b"
+  "value": "6fc1c5cf521f0aa9098a553113e89cfba95613f275e9289838ffe193dd60f601"
  },
  "fixture:input/sample-tiny-v1/sample/flamingo/FOV_001/ch04.tif": {
   "compare": "exact",

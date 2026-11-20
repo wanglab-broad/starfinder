@@ -296,7 +296,12 @@ def run_record(root, fov, *, source=None, deduplication=True, registration=True)
     }
 
 
-def placement_result(fov_ids, *, statuses=None, flags=None, supplied=False):
+#: The wall times (s) of the step records of ``report_cells(times=True)`` and ``report_records(times=True)``: the
+#: records of the current package hold them; the others are written as before them (no ``wall_s``).
+STEP_SECONDS = {"segment": 4.5, "assign_molecules": 0.75, "stitch": 2.25, "assemble": 1.5}
+
+
+def placement_result(fov_ids, *, statuses=None, flags=None, supplied=False, times=False):
     """The PlacementResult of the 2 × 2 grid, constructed as the assembly fixtures construct theirs."""
     from starfinder.segmentation import ReferenceGrid
     from starfinder.stitching import PlacementResult
@@ -320,6 +325,8 @@ def placement_result(fov_ids, *, statuses=None, flags=None, supplied=False):
               "table": {}, "inputs": {fov: input_record("constructed", None, grid) for fov in fov_ids},
               "fallback": None,
               "review": {"state": "not_needed", "reasons": [], "policy": None, "flagged": {}, "approvals": []}}
+    if times:
+        record["wall_s"] = STEP_SECONDS["stitch"]
     return PlacementResult(SAMPLE, pd.DataFrame(rows, columns=list(FOV_COLUMNS)), empty_links(), record)
 
 
@@ -333,8 +340,9 @@ def write_transforms_file(root, fov, *, source=None):
     write_registered_header(Path(root) / "fovs" / fov / "checkpoints", {"fov_id": fov}, results, record)
 
 
-def report_records(root, variant=None, *, inputs=False) -> ReportCase:
-    """Write ``report_records`` (or a variant of it) under ``root``; ``inputs`` also writes the raw inputs."""
+def report_records(root, variant=None, *, inputs=False, times=False) -> ReportCase:
+    """Write ``report_records`` (or a variant of it) under ``root``; ``inputs`` also writes the raw inputs, and
+    ``times`` gives the placement record its ``wall_s``."""
     from starfinder.stitching import save_placement
     if variant is not None and variant not in RECORD_VARIANTS:
         raise ValueError(f"unknown report_records variant {variant!r}")
@@ -356,7 +364,7 @@ def report_records(root, variant=None, *, inputs=False) -> ReportCase:
     if variant == "placement_supplied":
         supplied = True
     if variant != "no_placement":
-        save_placement(placement_result(fov_ids, statuses=statuses, flags=flags, supplied=supplied),
+        save_placement(placement_result(fov_ids, statuses=statuses, flags=flags, supplied=supplied, times=times),
                        root / "stitching" / SAMPLE)
     if variant is not None and variant.startswith("failed"):
         _fail_f3(case, variant)
@@ -487,8 +495,9 @@ def _molecule_rows(cells):
     return rows
 
 
-def write_export(case: ReportCase, variant=None) -> None:
-    """The export folder of report_cells, route per_fov, written through the package's writers."""
+def write_export(case: ReportCase, variant=None, *, times=False) -> None:
+    """The export folder of report_cells, route per_fov, written through the package's writers; ``times`` gives the
+    assembly section its ``wall_s``."""
     from starfinder.assembly._assemble import CELL_DTYPES, COUNT_DTYPES, FOV_DTYPES, molecule_dtypes
     from starfinder.assembly import AssemblyConfig, CELL_ASSEMBLY_REASONS, MOLECULE_ASSEMBLY_REASONS
     from starfinder.assignment import write_h5ad
@@ -571,6 +580,8 @@ def write_export(case: ReportCase, variant=None) -> None:
                    "molecules": population(molecule_frame, MOLECULE_ASSEMBLY_REASONS, "n_molecules"),
                    "flags": {}},
         "files": files, "software": {"starfinder": "0.1.0"}})
+    if times:
+        section["wall_s"] = STEP_SECONDS["assemble"]
     update_section(folder, case.sample, "assemble", section, status="written")
 
 
@@ -580,13 +591,13 @@ def cells_config() -> ReportConfig:
                         marker_pairs=(("G1", "G2"), ("G4", "G5")))
 
 
-def write_assignment_folder(case: ReportCase, fov) -> Path:
+def write_assignment_folder(case: ReportCase, fov, *, times=False) -> Path:
     """The saved assignment ``default`` of a FOV and its cell run ``cell``, in the layout of assignment/_persist.py.
 
     Hand-written: ``segmentation/cell/segmentation.json`` (a computed run, method ``watershed``) and
     ``assignment/default/`` with ``cells.csv`` and ``assignment.json``, whose ``inputs.cells`` holds the run's
     record and its record SHA-256 (``assignment/_assign.py``: ``_label_input``) and whose ``files`` the SHA-256
-    of ``cells.csv``.
+    of ``cells.csv``. With ``times`` both records hold their ``wall_s``.
     """
     from . import hash_oracles
     run = case.fov_folder(fov) / "segmentation" / "cell"
@@ -594,6 +605,8 @@ def write_assignment_folder(case: ReportCase, fov) -> Path:
     segmentation = {"format_version": 1, "stage": "segmentation", "run": "cell", "target": "cell",
                     "geometry": "volume", "methods": [{"stage": "segmentation", "method": "watershed"}],
                     "import": None, "operations": [], "outcome": "ok"}
+    if times:
+        segmentation["wall_s"] = STEP_SECONDS["segment"]
     (run / "segmentation.json").write_text(json.dumps(segmentation, indent=2) + "\n")
     folder = case.fov_folder(fov) / "assignment" / "default"
     folder.mkdir(parents=True, exist_ok=True)
@@ -606,6 +619,8 @@ def write_assignment_folder(case: ReportCase, fov) -> Path:
                          "nuclei": None},
               "files": {"cells": {"path": "cells.csv", "sha256": sha256((folder / "cells.csv").read_bytes()),
                                   "dtypes": {}}}}
+    if times:
+        record["wall_s"] = STEP_SECONDS["assign_molecules"]
     (folder / "assignment.json").write_text(json.dumps(record, indent=2) + "\n")
     return folder
 
@@ -621,16 +636,17 @@ def assignment_entry(case: ReportCase, fov) -> dict:
                        if t in record["files"]}}
 
 
-def report_cells(root, variant=None) -> ReportCase:
-    """``report_records`` with the export folder of ``report_cells`` (or a variant); needs the anndata extra."""
+def report_cells(root, variant=None, *, times=False) -> ReportCase:
+    """``report_records`` with the export folder of ``report_cells`` (or a variant); needs the anndata extra. With
+    ``times`` the placement, segmentation, assignment and assembly records hold their step's ``wall_s``."""
     if variant is not None and variant not in CELL_VARIANTS:
         raise ValueError(f"unknown report_cells variant {variant!r}")
-    case = report_records(root)
+    case = report_records(root, times=times)
     if variant != "no_markers":
         case.config = cells_config()
     for fov in case.fov_ids:
-        write_assignment_folder(case, fov)
-    write_export(case, variant)
+        write_assignment_folder(case, fov, times=times)
+    write_export(case, variant, times=times)
     return case
 
 

@@ -224,6 +224,12 @@ class Timer:
                 "peak_rss_kib": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)}
 
 
+def add_times(*records: Mapping) -> dict:
+    """The sum of the wall and CPU times of several :meth:`Timer.record` results, and their largest peak RSS."""
+    return {"wall_s": sum(r["wall_s"] for r in records), "cpu_s": sum(r["cpu_s"] for r in records),
+            "peak_rss_kib": max(r["peak_rss_kib"] for r in records)}
+
+
 @dataclass(frozen=True)
 class ExportRecord:
     """The record ``export.json`` of an export folder, as ``Dataset.export`` wrote it.

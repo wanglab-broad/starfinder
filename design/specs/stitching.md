@@ -980,7 +980,7 @@ The placement is saved at sample level, beside the FOV checkpoints:
 
 | Option | Layout | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **S1. A folder with JSON and CSV (recommended)** | `<OUTPUT>/stitching/<sample>/placement.json` (the record: frame, gauge, method provenance, table record, inputs with SHA-256, review and approvals, the SHA-256 of the two tables, `format_version` 1), `fovs.csv` and `links.csv`; for BigStitcher also `view_map.csv`, the macro and the `dataset.xml` copy's SHA-256 | None. | `output/tile_config_{sample}.csv` is still written by the legacy writer; `images/fused/{sample}/` is unchanged for the legacy rules. pandas and MATLAB read CSV. |
+| **S1. A folder with JSON and CSV (recommended)** | `<OUTPUT>/stitching/<sample>/placement.json` (the record: frame, gauge, method provenance, table record, inputs with SHA-256, review, the SHA-256 of the two tables, `format_version` 1), `fovs.csv` and `links.csv`, and the approvals in `approvals.json` (W-875); for BigStitcher also `view_map.csv`, the macro and the `dataset.xml` copy's SHA-256 | None. | `output/tile_config_{sample}.csv` is still written by the legacy writer; `images/fused/{sample}/` is unchanged for the legacy rules. pandas and MATLAB read CSV. |
 | S2. One JSON file | The record with both tables inline | None. | The same; larger, harder to read in a table tool. |
 | S3. Parquet tables | `fovs.parquet`, `links.parquet` | None. | Needs `pyarrow` (the `checkpoint` extra) for a core result. |
 
@@ -995,6 +995,13 @@ backslash), every line ending in `\n` on every platform, encoded as UTF-8. An ap
 and every record that names a placement's tables hold the SHA-256 of these bytes,
 computed from the tables in memory. A placement from `placement_from_table` is
 saved and loaded the same way ("Supplied placement").
+
+% Amended 2026-11-19 for W-875 (Jiahao, 2026-11-18, "同意 contract"): the approvals leave `placement.json`.
+`save_placement` writes them to `approvals.json` beside it, each keyed by the SHA-256 of the two tables it approves,
+and keeps `placement.json`'s `review.approvals` empty. Saving an approval of a placement whose files are already in the
+folder, byte for byte, changes none of them, so a workflow's placement task stays complete; any other save keeps
+`approvals.json`. `load_placement` puts the approvals of the saved tables into `record["review"]["approvals"]`, which
+`require_approval` reads; approvals that an earlier `placement.json` holds are read too.
 
 ## Dependency plan
 

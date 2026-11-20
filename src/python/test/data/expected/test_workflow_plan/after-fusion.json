@@ -491,6 +491,18 @@
   }
  },
  "export_route": "after_fusion",
+ "routes": {
+  "sample": [
+   {
+    "route": "after_fusion",
+    "planned": true,
+    "tasks": [
+     "export/sample/after_fusion",
+     "report/sample/after_fusion"
+    ]
+   }
+  ]
+ },
  "groups": [
   {
    "name": "tile_global",
@@ -613,10 +625,10 @@
     "sample"
    ],
    "outputs": [
-    "export/{sample}/export.json"
+    "export/{sample}/after_fusion/export.json"
    ],
-   "record": "workflow/tasks/export.{sample}.json",
-   "log": "workflow/logs/export.{sample}.log",
+   "record": "workflow/tasks/export.{sample}.after_fusion.json",
+   "log": "workflow/logs/export.{sample}.after_fusion.log",
    "temporary": []
   },
   {
@@ -626,10 +638,10 @@
     "sample"
    ],
    "outputs": [
-    "report/{sample}/report.json"
+    "report/{sample}/after_fusion/report.json"
    ],
-   "record": "workflow/tasks/report.{sample}.json",
-   "log": "workflow/logs/report.{sample}.log",
+   "record": "workflow/tasks/report.{sample}.after_fusion.json",
+   "log": "workflow/logs/report.{sample}.after_fusion.log",
    "temporary": []
   },
   {
@@ -2196,11 +2208,12 @@
    "fingerprint": "<sha256>"
   },
   {
-   "id": "export/sample",
+   "id": "export/sample/after_fusion",
    "kind": "export",
    "group": "export",
    "identity": {
-    "sample": "sample"
+    "sample": "sample",
+    "route": "after_fusion"
    },
    "needs": [
     "bigstitcher_import/sample",
@@ -2233,10 +2246,10 @@
     "stitching/sample/placement.json"
    ],
    "outputs": [
-    "export/sample/export.json"
+    "export/sample/after_fusion/export.json"
    ],
-   "record": "workflow/tasks/export.sample.json",
-   "log": "workflow/logs/export.sample.log",
+   "record": "workflow/tasks/export.sample.after_fusion.json",
+   "log": "workflow/logs/export.sample.after_fusion.log",
    "command": [
     "starfinder",
     "workflow",
@@ -2244,7 +2257,7 @@
     "--manifest",
     "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
     "--task",
-    "export/sample"
+    "export/sample/after_fusion"
    ],
    "execution": {
     "threads": 1,
@@ -2264,21 +2277,22 @@
    "fingerprint": "<sha256>"
   },
   {
-   "id": "report/sample",
+   "id": "report/sample/after_fusion",
    "kind": "report",
    "group": "report",
    "identity": {
-    "sample": "sample"
+    "sample": "sample",
+    "route": "after_fusion"
    },
    "needs": [
-    "export/sample",
+    "export/sample/after_fusion",
     "tile_merge/sample/FOV_001",
     "tile_merge/sample/FOV_002",
     "tile_merge/sample/FOV_003",
     "tile_merge/sample/FOV_004"
    ],
    "inputs": [
-    "export/sample/export.json",
+    "export/sample/after_fusion/export.json",
     "fovs/FOV_001/checkpoints/candidates.json",
     "fovs/FOV_001/checkpoints/pre_qc.json",
     "fovs/FOV_001/run.json",
@@ -2293,10 +2307,10 @@
     "fovs/FOV_004/run.json"
    ],
    "outputs": [
-    "report/sample/report.json"
+    "report/sample/after_fusion/report.json"
    ],
-   "record": "workflow/tasks/report.sample.json",
-   "log": "workflow/logs/report.sample.log",
+   "record": "workflow/tasks/report.sample.after_fusion.json",
+   "log": "workflow/logs/report.sample.after_fusion.log",
    "command": [
     "starfinder",
     "workflow",
@@ -2304,7 +2318,7 @@
     "--manifest",
     "<work>/output/sample-tiny-v1/example-after-fusion/workflow/manifest.json",
     "--task",
-    "report/sample"
+    "report/sample/after_fusion"
    ],
    "execution": {
     "threads": 1,
@@ -2327,10 +2341,10 @@
    "group": "compare",
    "identity": {},
    "needs": [
-    "report/sample"
+    "report/sample/after_fusion"
    ],
    "inputs": [
-    "report/sample/report.json"
+    "report/sample/after_fusion/report.json"
    ],
    "outputs": [
     "report/index.html",

@@ -20,7 +20,7 @@ import numpy as np
 from starfinder import _layout
 from starfinder.workflow import _translate
 from starfinder.workflow._shape import (CHECKPOINT_STAGES, COMMANDS, EXECUTION_DEFAULTS, ID_FIELDS, KIND_THREADS,
-    LEFT_KEYS, MANIFEST_FORMAT, MATLAB_KEYS, PROCESSING_LEFT, RECIPES, RESOLVED_FORMAT, TASK_BLOCKS, TILED_DEFAULTS,
+    LEFT_KEYS, MANIFEST_FORMAT, MATLAB_KEYS, PROCESSING_LEFT, RESOLVED_FORMAT, TASK_BLOCKS, TILED_DEFAULTS,
     blocks_sha256, canonical, configuration_sha256, sha256)
 
 #: The message of D7: a configuration without backend that holds MATLAB-dialect keys.
@@ -133,26 +133,6 @@ def sequencing_inputs(r):
             for item in run.get("inputs") or [] if item.get("round") in sequencing]
 
 
-def _merged(base, given):
-    """``given`` over ``base``: mappings merged key by key, any other value of ``given`` replacing ``base``'s."""
-    if isinstance(base, dict) and isinstance(given, dict):
-        return {**base, **{k: _merged(base[k], v) if k in base else v for k, v in given.items()}}
-    return given
-
-
-def expand_recipe(processing):
-    """processing.recipe expanded (design/specs/orchestration-tiled.md, "The deep-tissue recipe"): the recipe's keys
-    with the block's own keys over them (a key the user also sets wins), ``tiled`` only in mode tiled; the name is
-    written null, so that the hash covers the steps, not the name."""
-    name = processing.get("recipe")
-    if name is None:
-        return dict(processing, recipe=None)
-    expansion = copy.deepcopy(RECIPES[name])
-    if processing.get("mode", "direct") != "tiled":
-        expansion.pop("tiled", None)
-    return dict(_merged(expansion, {k: v for k, v in processing.items() if k != "recipe"}), recipe=None)
-
-
 def resolve(config, source, output_root=None):
     """The resolved configuration: the given keys with the contract's defaults written out, and ``api``."""
     r = copy.deepcopy(config)
@@ -166,7 +146,7 @@ def resolve(config, source, output_root=None):
     # is not written, so that every task's dataset reads the imported file.
     r.setdefault("reference_image", None if r["reference_image_import"] is not None else _layout.REFERENCE_IMAGE)
     if "processing" in r:
-        p = r["processing"] = expand_recipe(dict(r["processing"] or {}))
+        p = r["processing"] = dict(r["processing"] or {})
         p.setdefault("mode", "direct")
         if p["mode"] == "tiled":
             p["tiled"] = {**TILED_DEFAULTS, **(p.get("tiled") or {})}
@@ -495,6 +475,8 @@ class Graph:
         self.out = Path(out)
         self.manifest_path = Path(manifest_path)
         self.tasks, self.by_id, self.groups = [], {}, {}
+        # The export routes of each sample (W-876): {sample: [route entry]}, the manifest's ``routes``.
+        self.routes = {}
 
     # -- paths ------------------------------------------------------------------------------------------------
 
@@ -557,7 +539,8 @@ class Graph:
         command = ["starfinder", "workflow", COMMANDS[kind], "--manifest", str(self.out / self.manifest_path),
                    "--task", task_id]
         group_name = group or kind
-        wildcards = [k for k in ID_FIELDS if k in identity and k not in ("run", "name")]
+        # A run, an assignment name and the export route are the same for every task of a group: literal parts.
+        wildcards = [k for k in ID_FIELDS if k in identity and k not in ("run", "name", "route")]
         task = {"id": task_id, "kind": kind, "group": group_name, "identity": identity,
                 "needs": sorted(set(n for n in needs if n)), "inputs": sorted(set(inputs)), "outputs": declared,
                 "record": record, "log": log, "command": command}
@@ -825,14 +808,17 @@ class Graph:
                             inputs.append(self.inputs.add_file(f"export.segmentation.{run['name']}",
                                                                str(run["path"]),
                                                                f"export.segmentation run {run['name']!r}"))
-                outputs = [_layout.export_dir(out, sample) / _layout.EXPORT_FILE]
+                # Each route writes its own folder, so that one output root holds every route's export.
+                outputs = [_layout.export_dir(out, sample, way) / _layout.EXPORT_FILE]
                 if r["export"]["previews"] and way == "per_fov" and api["assemble"]:
-                    outputs.append(self.rel(_layout.export_previews_dir(out, sample)) + "/")
+                    outputs.append(self.rel(_layout.export_previews_dir(out, sample, route=way)) + "/")
                 device = ((r.get("export") or {}).get("segmentation") or {}).get("device")
-                export[sample] = self.add("export", {"sample": sample}, needs, inputs, outputs,
+                export[sample] = self.add("export", {"sample": sample, "route": way}, needs, inputs, outputs,
                                           gpu=device == "cuda")
+        report_of, found = {}, {}
         if "report" in r:
             reports = []
+            route = export_route(r) or _layout.NO_EXPORT
             for sample, members in samples.items():
                 needs = [fov_task[f] for f in members if f in fov_task]
                 inputs = [self.rel(_layout.run_record(out, f)) for f in members if f in fov_task]
@@ -848,12 +834,48 @@ class Graph:
                     needs += [assign[f] for f in members]
                     inputs += [o for f in members for o in self.by_id[assign[f]]["outputs"]
                                if o.endswith(_layout.ASSIGNMENT_RECORD)]
-                reports.append(self.add("report", {"sample": sample}, needs, inputs,
-                                        [_layout.report_dir(out, sample) / "report.json"]))
+                report_of[sample] = self.add("report", {"sample": sample, "route": route}, needs, inputs,
+                                             [_layout.report_dir(out, sample, route) / "report.json"])
+                reports.append(report_of[sample])
             root = _layout.report_root(out)
-            self.add("compare", {}, reports, [self.by_id[t]["outputs"][0] for t in reports],
+            # The comparison lists every route's report: this plan's, and those of the routes found in the output
+            # root, whose report another route's run left there (the samples' report.json of the other routes
+            # present when the plan runs).
+            found = {sample: [name for name in _layout.REPORT_ROUTES if name != route
+                              and (_layout.report_dir(out, sample, name) / "report.json").is_file()]
+                     for sample in samples}
+            others = [self.rel(_layout.report_dir(out, sample, name) / "report.json") for sample in samples
+                      for name in found[sample]]
+            self.add("compare", {}, reports, [self.by_id[t]["outputs"][0] for t in reports] + others,
                      [root / "samples.csv", root / "index.html"])
+        self.list_routes(export, report_of, found)
         return self.tasks
+
+    def list_routes(self, export, report_of, found):
+        """The manifest's ``routes``: per sample with an export or report task, the route this plan runs (its tasks'
+        ids) and each route found in the output root (its export and report task ids, records, logs and main
+        outputs), in the order of ``_layout.REPORT_ROUTES``. A found route is no task: no engine runs it, it is in no
+        task list or need and enters no fingerprint; ``verify`` checks its records by the record rule."""
+        r, out = self.r, self.out
+        planned = export_route(r) or _layout.NO_EXPORT
+        for sample in self.membership.samples:
+            mine = [t for t in (export.get(sample), report_of.get(sample)) if t]
+            if not mine:
+                continue
+            entries = [{"route": planned, "planned": True, "tasks": mine}]
+            for name in found.get(sample, []):
+                tasks = []
+                for kind in ("export", "report"):
+                    if kind == "export" and name == _layout.NO_EXPORT:
+                        continue
+                    task_id = f"{kind}/{sample}/{name}"
+                    main = (_layout.export_dir(out, sample, name) / _layout.EXPORT_FILE if kind == "export"
+                            else _layout.report_dir(out, sample, name) / "report.json")
+                    tasks.append({"id": task_id, "kind": kind, "outputs": [self.rel(main)],
+                                  "record": self.rel(_layout.task_record(out, task_id)),
+                                  "log": self.rel(_layout.task_log(out, task_id))})
+                entries.append({"route": name, "planned": False, "tasks": tasks})
+            self.routes[sample] = sorted(entries, key=lambda e: _layout.REPORT_ROUTES.index(e["route"]))
 
     # -- tiled execution --------------------------------------------------------------------------------------
 
@@ -1021,7 +1043,15 @@ def plan(config_path, output_root=None) -> dict:
     contract defines and ``api``, the API configs of each block; its hash leaves out ``execution`` and the roots.
     The manifest lists the inputs (path relative to the input root, or absolute outside it, bytes, modification
     time; no content hash), the rule groups and the tasks in an order that respects ``needs``, each with
-    ``blocks_sha256`` and ``fingerprint``. Each file is rewritten only when its content changes.
+    ``blocks_sha256`` and ``fingerprint``. Each file is rewritten only when its content changes. The export and
+    report tasks have the export route in their identity and id and write the route's folders,
+    ``export/<sample>/<route>/`` and ``report/<sample>/<route>/`` (``no_export`` without an export), so that one
+    output root holds every route; the compare task reads this plan's reports and the other routes' reports that the
+    output root holds when the plan runs. The manifest's ``routes`` names, for each sample with an export or report
+    task, every route: the one this plan runs (``planned`` true, its task ids) and each route found in the output root
+    (``planned`` false, whose ``report.json`` another plan wrote), with that route's export and report task ids, record
+    and log paths and main outputs. A found route is no task: no engine runs it, it is in no task list or need and
+    enters no fingerprint; ``verify`` checks its records (an addition within manifest format version 1).
     """
     import yaml
     config_path = Path(config_path)
@@ -1073,6 +1103,7 @@ def plan(config_path, output_root=None) -> dict:
                        "selected_fovs": r["selected_fovs"]},
         "inputs": {"files": inputs.files, "images": inputs.images},
         "export_route": export_route(r),
+        "routes": graph.routes,
         "groups": list(graph.groups.values()),
         "tasks": tasks}
     # The route that supplied the identity (version_source) is not part of what ran: one commit has one fingerprint.

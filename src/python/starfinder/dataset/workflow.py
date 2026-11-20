@@ -1776,7 +1776,7 @@ def _assembly_block(config) -> _AssemblyBlock:
     table_format (csv or parquet) and previews (default false: on the route
     of a saved assignment, reads_assignment draws the local assignment
     figures into fovs/<fov>/previews/ and export_sample the ownership figures
-    into export/<sample>/previews/<fov>/). It needs backend: python and a
+    into export/<sample>/per_fov/previews/<fov>/). It needs backend: python and a
     stitching block, whose placement it reads.
     """
     from starfinder._registry import check_name
@@ -1936,7 +1936,7 @@ def _report_block(config):
     Its keys are the ReportConfig fields: markers a list of {name, genes}
     (MarkerGroup), marker_pairs a list of gene pairs, limits the ReportLimits
     fields with each rule a mapping of RuleLimit fields (k, floor, absolute; an
-    omitted one is null) and spots_near_zero. Lists become tuples; an empty or
+    omitted one is null), spots_near_zero and small_nucleus_diameter_um. Lists become tuples; an empty or
     null block is ReportConfig(). An unknown key raises ValueError naming it;
     the block needs backend: python.
     """
@@ -1959,7 +1959,7 @@ def _report_block(config):
             raise TypeError('report.limits must be a mapping')
         _known(limits, [f.name for f in fields(ReportLimits) if f.init], 'report.limits')
         options['limits'] = ReportLimits(**{
-            key: (_typed(RuleLimit, value, f'report.limits.{key}') if key != 'spots_near_zero' else value)
+            key: (_typed(RuleLimit, value, f'report.limits.{key}') if key not in ('spots_near_zero', 'small_nucleus_diameter_um') else value)
             for key, value in limits.items()})
     return ReportConfig(**options)
 

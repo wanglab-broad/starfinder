@@ -39,9 +39,11 @@ from starfinder import _layout
 
 from ._config import ReportConfig, marker_genes
 from ._measurements import _Measurements
+from ._parameters import read_resolved
 from ._previews import _Previews
 from ._replay import reference_round, replay_example, round_transform, saved_transforms
 from ._rules import RuleInputs, evaluate_rules
+from ._sizes import _Sizes
 from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS, REPORT_FILE, REPORT_PARTS,
                       REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, ReportRecord, row_key)
 from ._values import (NA, ROLES, Unavailable, _Marker, alignment_score, chain_shift, choose_examples,
@@ -53,7 +55,7 @@ _UNPLACED = ("missing", "failed")
 _WRITTEN = ("written", "reused")
 #: The tables this collection writes, in folder order; the others are written by the parts that make them.
 COLLECTED_TABLES = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
-                    "cells", "mecr", "reads_along_z", "intensity", "unavailable")
+                    "cells", "mecr", "reads_along_z", "intensity", "sizes", "unavailable")
 #: The parts the replay of the main example makes (design/specs/report.md, "The replay").
 REPLAY_PARTS = ("preprocessing.example", "preprocessing.intensity", "registration.example")
 #: The parts of the columns of the collected tables (design/specs/report.md, "Parts, their inputs and their reasons").
@@ -77,6 +79,7 @@ COLUMN_PARTS = {
     "cells": {c: "sample.per_cell" for c in TABLE_DTYPES["cells"]},
     "mecr": {c: "sample.mecr" for c in TABLE_DTYPES["mecr"]},
     "reads_along_z": {c: "sample.reads_along_z" for c in TABLE_DTYPES["reads_along_z"]},
+    "sizes": {c: "assembly.sizes" for c in TABLE_DTYPES["sizes"]},
 }
 # The read levels of a run record: the count's place in counts and the pipeline config that makes it.
 _COUNTS = {"spots": (("spots",), "spot_finding"), "matched": (("call_status", "assigned"), "decoding"),
@@ -95,6 +98,17 @@ _SECTIONS = {"assemble": "assembly", "fuse": "fusion", "segment": "segmentation"
              "export_spatialdata": "spatialdata"}
 # The R1 to R4 keys a run record holds since design/specs/report.md ("Records added to run.json").
 _ADDED_KEYS = ("transforms", "codebook", "workflow_config")
+
+
+_UNREAD = object()
+
+
+def _wall_seconds(record, reason):
+    """The ``wall_s`` of a step's record, or ``not_recorded`` (a record of an older version, an import) with reason."""
+    value = (record or {}).get("wall_s")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return Unavailable("not_recorded", reason)
 
 
 def _sha256(data: bytes) -> str:
@@ -281,6 +295,9 @@ def _check_export(inputs, export_dir, sample, fov_ids, assignment):
 
 
 def _check_placement(inputs, stitching_dir, fov_ids):
+    """placement.json, its ``review.approvals`` those of approvals.json beside it (read as a placement file) whose
+    table SHA-256 equal the tables' it records (stitching.load_placement's rule); None without placement.json."""
+    from starfinder.stitching._persist import APPROVALS_FILE, saved_approvals
     path = stitching_dir / "placement.json"
     if not path.is_file():
         return None
@@ -288,6 +305,12 @@ def _check_placement(inputs, stitching_dir, fov_ids):
     placed = set((record.get("inputs") or {}) if isinstance(record, dict) else ())
     if placed != set(fov_ids):
         raise ValueError(f"{path}: the placement holds the FOVs {sorted(placed)}, the FOV list {sorted(fov_ids)}")
+    review = record.get("review")
+    if isinstance(review, dict) and (stitching_dir / APPROVALS_FILE).is_file():
+        inputs.verify(stitching_dir / APPROVALS_FILE, "placement")
+        approvals = saved_approvals(stitching_dir, record.get("sample"), _get(record, "tables", "fovs", "sha256"),
+                                    _get(record, "tables", "links", "sha256"))
+        record = dict(record, review=dict(review, approvals=approvals))
     return record
 
 
@@ -365,12 +388,13 @@ def own_files(folder: Path) -> list[str]:
 
 class _Collection:
     def __init__(self, inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
-                 config):
+                 config, export_dir):
         self.inputs, self.root, self.sample, self.fov_ids = inputs, root, sample, fov_ids
         self.records, self.export, self.placement = records, export, placement
         self.assignment, self.segmentation, self.config = assignment, segmentation, config
-        self.export_dir = _layout.export_dir(root, sample)
+        self.export_dir = export_dir
         self.stitching_dir = _layout.stitching_dir(root, sample)
+        self._resolved = self._links = _UNREAD
         self._transform_files = {}
         self.assembly = (export or {}).get("assembly") if isinstance((export or {}).get("assembly"), dict) else None
         self.route = None if export is None else ((self.assembly or {}).get("route") or "per_fov")
@@ -378,8 +402,19 @@ class _Collection:
         self._export_frame()
         self.assignments = self._assignments()
         self.measurements = _Measurements(self)
+        self.previewer = _Previews(self)
+        self.sizes = _Sizes(self)
 
     # The sources -------------------------------------------------------------------------------------------
+
+    @property
+    def resolved(self):
+        """The resolved configuration the FOVs ran under (``_parameters.read_resolved``), read once: a ``Resolved``,
+        None without a ``workflow_config`` in the records, or ``Unavailable``."""
+        if self._resolved is _UNREAD:
+            self._resolved = read_resolved(self.inputs, self.root, [r for r in self.records.values()
+                                                                    if r is not None])
+        return self._resolved
 
     def _placement_frame(self):
         self.p_missing = None
@@ -393,6 +428,17 @@ class _Collection:
             self.p_missing = frame
         else:
             self.p_rows = {row["fov_id"]: row for row in frame.to_dict("records")}
+
+    @property
+    def p_links(self):
+        """The placement's links table (``links.csv``), read when the page first needs it, so that the report's list
+        of inputs keeps the order the other parts read them in; None without a placement or when it is unavailable."""
+        if self._links is _UNREAD:
+            entry = _get(self.placement, "tables", "links") or {}
+            links = self.inputs.table(self.stitching_dir / entry.get("path", "links.csv"), "placement_table",
+                                      entry.get("sha256"), entry.get("dtypes") or {}) if entry else None
+            self._links = None if isinstance(links, Unavailable) else links
+        return self._links
 
     def _export_frame(self):
         # The export's state (no_export, part_not_written) and its fovs table's (input_missing, input_changed).
@@ -760,16 +806,17 @@ class _Collection:
                 methods_of = [m.get("method") for m in (segmentation or {}).get("methods") or []
                               if isinstance(m, dict) and m.get("method")]
                 method = ";".join(methods_of) if methods_of else "imported"
-                for offset, (name, step_method) in enumerate((("segment", method),
-                                                              ("assign_molecules", cells.get("run") or NA))):
+                for offset, (name, step_method, source, where) in enumerate((
+                        ("segment", method, segmentation, "segmentation.json"),
+                        ("assign_molecules", cells.get("run") or NA, saved, "assignment.json"))):
                     rows.append({"scope": "fov", "fov_id": fov, "index": len(steps) + offset, "name": name,
                                  "round": NA, "method": step_method, "status": "succeeded",
-                                 "seconds": Unavailable("not_recorded", f"no record holds the time of {name}")})
+                                 "seconds": _wall_seconds(source, f"{where} of {fov} records no wall_s")})
         index = 0
         if self.placement is not None:
             rows.append({"scope": "sample", "fov_id": NA, "index": index, "name": "stitch", "round": NA,
                          "method": _get(self.placement, "method", "method") or NA, "status": "succeeded",
-                         "seconds": Unavailable("not_recorded", "no record holds the time of stitch")})
+                         "seconds": _wall_seconds(self.placement, "placement.json records no wall_s")})
             index += 1
         for part, status in ((self.export or {}).get("parts") or {}).items():
             section = (self.export or {}).get(_SECTIONS.get(part)) or {}
@@ -921,7 +968,7 @@ class _Collection:
     def examples_parts(self):
         """The replay, the segmentation previews and the rows of the parts they make."""
         self.replay, rows = self.example_replay()
-        self.previews, preview_rows = _Previews(self).build()
+        self.previews, preview_rows = self.previewer.build()
         return rows + preview_rows
 
     def intensity_rows(self):
@@ -966,6 +1013,8 @@ class _Collection:
             "workflow_config" in r for r in records) else Unavailable("not_recorded",
                                                                       "no run record holds workflow_config"),
             "entry=workflow"))
+        if isinstance(self.resolved, Unavailable):
+            rows.append(("files.configuration", self.resolved, "entry=parameters"))
         return [(part, value, key) for part, value, key in rows if value is not None]
 
     # report.json --------------------------------------------------------------------------------------------
@@ -1004,7 +1053,7 @@ class _Collection:
             flags = {fov: ("" if pd.isna(row["flags"]) else row["flags"]) for fov, row in self.p_rows.items()}
         rows, evaluated, part_rows = evaluate_rules(
             fovs, registration, limits, RuleInputs(self.fov_ids, self.records, flags, rounds_reason,
-                                                   self.shift_medians))
+                                                   self.shift_medians, self.sizes.nucleus_fractions()))
         rules = {}
         for rule in PROBLEM_RULES:
             if rule == "spots_near_zero":
@@ -1091,7 +1140,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
                    assignment: str | None = "default", segmentation: str | None = None,
                    config: ReportConfig | None = None, output_dir=None,
                    reference_image: str | None = None, reference_image_import: str | None = None,
-                   input_root=None) -> tuple[Path, dict]:
+                   input_root=None, export_dir=None) -> tuple[Path, dict]:
     """Collect one sample's records into its report folder; return the folder and the ``report.json`` content.
 
     The checks 1 to 7 of design/specs/report.md ("Checks before anything is
@@ -1105,7 +1154,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     output_root : str or Path
         The dataset's output root.
     sample : str
-        The sample: ``stitching/<sample>/``, ``export/<sample>/`` and ``report/<sample>/``.
+        The sample: ``stitching/<sample>/``, ``export/<sample>/`` (or ``export_dir``) and ``report/<sample>/``.
     fov_ids : Sequence[str]
         The FOV list, nonempty and unique, in report order.
     dataset_id, sample_id : str
@@ -1126,6 +1175,9 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     input_root : str or Path or None
         The input root the relative source paths of version-2 run records resolve against (the replay's raw
         images, the codebook); None uses each record's ``input_root``. Version-1 records keep their recorded paths.
+    export_dir : str or Path or None
+        The export folder the report reads; None is ``<output_root>/export/<sample>/``. The workflow passes its
+        route's folder, ``<output_root>/export/<sample>/<route>/``.
 
     Raises
     ------
@@ -1147,7 +1199,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     timer = Timer()
     folder, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                                   assignment=assignment, segmentation=segmentation, config=config,
-                                  output_dir=output_dir, input_root=input_root)
+                                  output_dir=output_dir, input_root=input_root, export_dir=export_dir)
     collection.reference_image = reference_image
     collection.reference_image_import = reference_image_import
     inputs, records, placement, export = collection.inputs, collection.records, collection.placement, collection.export
@@ -1162,14 +1214,17 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
               "mecr": measurements.mecr_rows()}
     along = measurements.reads_along_z_rows()
     tables["reads_along_z"] = [] if isinstance(along, Unavailable) else along
+    # The examples read their files before the sizes the rules need do, so that ``inputs`` keeps the order of the parts.
+    example_rows = collection.examples_parts()
     tables["problematic_fovs"], rules, rule_rows = collection.rules(
         fovs, registration, None if registration else collection.no_rounds_reason())
-    example_rows = collection.examples_parts()
     tables["intensity"] = collection.intensity_rows()
+    collection.sizes.compute()
+    tables["sizes"] = collection.sizes.rows
     summary = collection.summary(fovs)
     identity, identity_rows = identity_facts(collection)
     unavailable = _unavailable_rows(tables, identity_rows + collection.part_rows_for(registration) + example_rows
-                                    + rule_rows + measurements.part_rows(), summary)
+                                    + rule_rows + measurements.part_rows() + collection.sizes.part_rows, summary)
     tables["unavailable"] = unavailable
     resolved_assignment, resolved_segmentation = collection.resolved_runs()
     frames = {name: _frame(name, tables[name]) for name in COLLECTED_TABLES}
@@ -1219,27 +1274,27 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
 
 def report_sample(dataset, sample: str, fov_ids: Sequence[str], *, assignment: str | None = "default",
                   segmentation: str | None = None, config: ReportConfig | None = None,
-                  output_dir=None) -> ReportRecord:
+                  output_dir=None, export_dir=None) -> ReportRecord:
     """``Dataset.report``: :func:`collect_report` on the dataset's output root, input root and IDs, as a
     :class:`ReportRecord`."""
     folder, record = collect_report(dataset.output_root, sample, fov_ids, dataset_id=dataset.dataset_id,
                                     sample_id=dataset.sample_id, assignment=assignment, segmentation=segmentation,
                                     config=config, output_dir=output_dir, reference_image=dataset.reference_image,
                                     reference_image_import=dataset.reference_image_import,
-                                    input_root=dataset.input_root)
+                                    input_root=dataset.input_root, export_dir=export_dir)
     return ReportRecord(Path(folder), record)
 
 
 def report_examples(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
                     assignment: str | None = "default", segmentation: str | None = None,
-                    config: ReportConfig | None = None, input_root=None):
+                    config: ReportConfig | None = None, input_root=None, export_dir=None):
     """The images of the examples as :func:`collect_report` makes them, without writing anything: the replay of
     the main example (:class:`._replay.Replay`, or None when there is none to replay) and the segmentation preview
     of each example role (:class:`._previews.Preview`, or :class:`._values.Unavailable`). The checks before
-    anything is written apply, as for the report; ``input_root`` as for :func:`collect_report`."""
+    anything is written apply, as for the report; ``input_root`` and ``export_dir`` as for :func:`collect_report`."""
     _, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                              assignment=assignment, segmentation=segmentation, config=config, output_dir=None,
-                             check_folder=False, input_root=input_root)
+                             check_folder=False, input_root=input_root, export_dir=export_dir)
     collection.fovs_rows()
     collection.registration_rows()
     collection.examples_parts()
@@ -1248,21 +1303,21 @@ def report_examples(output_root, sample: str, fov_ids: Sequence[str], *, dataset
 
 def report_measurements(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
                         assignment: str | None = "default", segmentation: str | None = None,
-                        config: ReportConfig | None = None, input_root=None):
+                        config: ReportConfig | None = None, input_root=None, export_dir=None):
     """The static figures of "Sample measurements" as the report makes them, without writing anything
     (:class:`._measurements.SampleFigures`): the per-cell distributions, the marker figures with the data of the
     group selector, and the reads along Z; a part that cannot be drawn is its :class:`._values.Unavailable`, the
     reason its row of ``unavailable.csv`` holds. The checks before anything is written apply, as for the report;
-    ``input_root`` as for :func:`collect_report`."""
+    ``input_root`` and ``export_dir`` as for :func:`collect_report`."""
     _, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                              assignment=assignment, segmentation=segmentation, config=config, output_dir=None,
-                             check_folder=False, input_root=input_root)
+                             check_folder=False, input_root=input_root, export_dir=export_dir)
     collection.fovs_rows()
     return collection.measurements.figures()
 
 
 def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment, segmentation, config, output_dir,
-             check_folder=True, input_root=None):
+             check_folder=True, input_root=None, export_dir=None):
     """The checks 1 to 7 before anything is written, in order; the report folder and the collection."""
     root = Path(output_root)
     fov_ids, config = _check_arguments(sample, fov_ids, config)
@@ -1271,7 +1326,8 @@ def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment,
     if segmentation is not None and (not isinstance(segmentation, str) or not segmentation):
         raise ValueError(f"segmentation must be a run name or None; got {segmentation!r}")
     inputs = _Inputs(root, input_root)
-    export_dir, stitching_dir = _layout.export_dir(root, sample), _layout.stitching_dir(root, sample)
+    export_dir = _layout.export_dir(root, sample) if export_dir is None else Path(export_dir)
+    stitching_dir = _layout.stitching_dir(root, sample)
     if not any(_layout.run_record(root, f).is_file() for f in fov_ids) and \
             not (export_dir / _layout.EXPORT_FILE).is_file():
         raise FileNotFoundError(f"nothing to report for sample {sample!r}: no FOV of the list has a run record "
@@ -1286,7 +1342,7 @@ def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment,
     if check_folder:
         own_files(folder)
     collection = _Collection(inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
-                             config)
+                             config, export_dir)
     collection.dataset_id = dataset_id
     return folder, collection
 

@@ -111,12 +111,27 @@ def test_the_migration_guide_renders_the_contracts_migration_table(monkeypatch):
     assert "```{workflow-migration}" in docs_pages.section(docs_pages.read("migration.md"), "workflow-python-shape")
 
 
-EXAMPLES = ("minimal", "full", "recipe-2")
+EXAMPLES = ("minimal", "full", "recipe-2", "global", "global-bspline", "global-demons", "global-demons-tiled")
 #: The tasks each downloadable example plans on the placeholder input tree of prepare_workflow.py (one FOV).
 EXAMPLE_KINDS = {
     "minimal": {"fov": 1}, "recipe-2": {"fov": 1},
     "full": {"summarize": 1, "merge": 1, "fov": 1, "morphology": 1, "segment": 2, "assign": 1, "stitch": 1,
-             "export": 1, "report": 1, "compare": 1}}
+             "export": 1, "report": 1, "compare": 1},
+    "global": {"fov": 1}, "global-bspline": {"fov": 1}, "global-demons": {"fov": 1},
+    "global-demons-tiled": {"tile_global": 1, "tile": 1, "tile_merge": 1}}
+#: The steps each example of global processing states (W-887, the examples that replace the named recipe deep): one
+#: preprocessing (min-max to uint8 with truncation, then histogram matching to channel 0, no post_registration), a
+#: translation on the channels' maximum, then B-spline or demons with their config defaults; in mode tiled the whole
+#: FOV gets the translation only and each tile demons.
+GLOBAL_PREPROCESSING = {"steps": [
+    {"method": "min_max_normalization", "output_dtype": "uint8", "output_range": [0, 255], "rounding": "truncate"},
+    {"method": "histogram_matching", "reference_channel": 0}]}
+MAX = {"mode": "max"}
+GLOBAL_STEPS = {
+    "global": ("direct", [{"method": "translation"}], None),
+    "global-bspline": ("direct", [{"method": "translation"}, {"method": "bspline"}], None),
+    "global-demons": ("direct", [{"method": "translation"}, {"method": "demons"}], None),
+    "global-demons-tiled": ("tiled", [{"method": "translation"}], {"steps": [{"method": "demons"}], "signal": MAX})}
 
 
 @pytest.mark.parametrize("name", EXAMPLES)
@@ -139,6 +154,41 @@ def test_each_downloadable_example_plans_as_written(tmp_path, name):
     for task in manifest["tasks"]:
         kinds[task["kind"]] = kinds.get(task["kind"], 0) + 1
     assert kinds == EXAMPLE_KINDS[name]
+
+
+@pytest.mark.parametrize("name", sorted(GLOBAL_STEPS))
+def test_each_global_example_resolves_to_its_stated_steps(tmp_path, name):
+    """The plan resolves each example of global processing (docs/examples/workflow-<name>.yaml) to its stated
+    preprocessing, registration and tiled steps, with nothing added: no post_registration, no other registration step,
+    no tile-level step outside mode tiled; the API objects of those steps, B-spline and demons with their config
+    defaults."""
+    import runpy
+    from starfinder.registration import BSplineConfig, DemonsConfig, TranslationConfig
+    from starfinder.workflow import plan
+    from starfinder.workflow._shape import plain
+    defaults = {"translation": plain(TranslationConfig()), "bspline": plain(BSplineConfig()),
+                "demons": plain(DemonsConfig())}
+    mode, registration, local = GLOBAL_STEPS[name]
+    run = tmp_path / "run"
+    runpy.run_path(str(ROOT / "docs" / "examples" / "prepare_workflow.py"))["main"]([name, str(run)])
+    manifest = plan(run / "config.yaml")
+    resolved = json.loads((run / "output" / "sample-tiny-v1" / name / manifest["configuration"]["path"]).read_text())
+    p = resolved["configuration"]["processing"]
+    assert p["mode"] == mode and "recipe" not in p
+    assert p["preprocessing"] == GLOBAL_PREPROCESSING
+    assert p["registration"] == {"steps": registration, "signal": MAX}
+    api = resolved["configuration"]["api"]["processing"]
+    pipeline = api["pipeline"]
+    assert [s["config"]["type"] for s in pipeline["preprocessing"]["steps"]] == ["MinMaxNormalizationConfig",
+                                                                                 "HistogramMatchingConfig"]
+    assert pipeline["preprocessing"]["post_registration"] == []
+    assert [s["config"] for s in pipeline["registration"]["steps"]] == [defaults[s["method"]] for s in registration]
+    if local is None:
+        assert "tiled" not in p and "tiled" not in api
+    else:
+        assert {k: p["tiled"][k] for k in ("local_registration", "post_local_registration")} == {
+            "local_registration": local, "post_local_registration": None}
+        assert [s["config"] for s in api["tiled"]["local_registration"]["steps"]] == [defaults["demons"]]
 
 
 def _directive_content(page, name, argument=""):

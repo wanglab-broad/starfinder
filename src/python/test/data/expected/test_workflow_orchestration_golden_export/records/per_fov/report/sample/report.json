@@ -67,7 +67,13 @@
     "floor": 0.05,
     "absolute": null
    },
-   "spots_near_zero": 0.05
+   "spots_near_zero": 0.05,
+   "small_nucleus_fraction": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "small_nucleus_diameter_um": 3.0
   },
   "figure_width_px": 1600,
   "jpeg_quality": 85
@@ -278,6 +284,18 @@
    "verified": false
   },
   {
+   "path": "fovs/FOV_003/assignment/default/cell_labels.tif",
+   "kind": "label_image",
+   "sha256": "eb00dedf8576aa19abba2b755b0c587202517848939d9a24261575f9c95447e2",
+   "bytes": 2107,
+   "verified": true
+  },
+  {
+   "path": "workflow/resolved.json",
+   "kind": "workflow_config",
+   "verified": false
+  },
+  {
    "path": "export/sample/reference_merged_projection.ome.tif",
    "kind": "fused_image",
    "sha256": "c0eef016ba79c18edabf5a9eca1e48340fcebf14c61966e3f6efa1ab1118a864",
@@ -456,9 +474,27 @@
    }
   },
   {
+   "path": "tables/sizes.csv",
+   "sha256": "afc6b93e0d19c6561048d948a3e8e63feae13e5da9fecb5b31ea9b7b1d7669a3",
+   "bytes": 747,
+   "dtypes": {
+    "scope": "string",
+    "fov_id": "string",
+    "object": "string",
+    "n_objects": "int64",
+    "diameter_p5": "float64",
+    "diameter_p25": "float64",
+    "diameter_median": "float64",
+    "diameter_p75": "float64",
+    "diameter_p95": "float64",
+    "below_limit": "int64",
+    "below_fraction": "float64"
+   }
+  },
+  {
    "path": "tables/unavailable.csv",
-   "sha256": "8620640460b3e183aa12e5e566b413be0fdac0320c7f742cfbf608d5c08088d4",
-   "bytes": 1728,
+   "sha256": "dfbb36358c421c3e32501312104bec2794e5a2aa6242e1e462cb6b1f9eef8e3a",
+   "bytes": 668,
    "dtypes": {
     "part": "string",
     "table": "string",
@@ -479,84 +515,12 @@
    "detail": "config.limits.alignment_score sets no limit"
   },
   {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=fov;fov_id=FOV_001;index=27",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of segment"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=fov;fov_id=FOV_001;index=28",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of assign_molecules"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=fov;fov_id=FOV_002;index=27",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of segment"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=fov;fov_id=FOV_002;index=28",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of assign_molecules"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=fov;fov_id=FOV_003;index=27",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of segment"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=fov;fov_id=FOV_003;index=28",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of assign_molecules"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=fov;fov_id=FOV_004;index=27",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of segment"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=fov;fov_id=FOV_004;index=28",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of assign_molecules"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=sample;fov_id=;index=0",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of stitch"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=sample;fov_id=;index=1",
-   "reason": "not_recorded",
-   "detail": "export.json assembly records no wall_s"
+   "part": "rule:small_nucleus_fraction",
+   "table": null,
+   "column": null,
+   "row_key": "",
+   "reason": "no_segmentation",
+   "detail": "no nucleus label image"
   },
   {
    "part": "sample.marker_zoom",
@@ -814,6 +778,16 @@
    "unit": null,
    "evaluated": true,
    "fovs_marked": 0
+  },
+  "small_nucleus_fraction": {
+   "limit": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "unit": "fraction",
+   "evaluated": false,
+   "fovs_marked": null
   }
  },
  "summary": {

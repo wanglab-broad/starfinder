@@ -3,8 +3,9 @@
 X3's named workflow token and provenance fields are checked separately before
 normalization. Directory markers are ignored only for Snakemake's declared
 directory outputs; X11's global hashes vary only on tasks outside its rerun set. Its report Hash
-cell varies only when no FOV task reran, and is checked against every FOV
-record of each tree's sample; X11 also compares all file names outside workflow/.
+cell and parameter provenance notices vary only when no FOV task reran, and are
+checked against every FOV record and the resolved input hash of each tree's
+sample; X11 also compares all file names outside workflow/.
 """
 from __future__ import annotations
 
@@ -173,7 +174,8 @@ class EngineRun:
             # A task a person ran by its command (the placement task after an approval, under Snakemake) says manual.
             assert record["workflow"]["execution_context"]["engine"] in (
                 self.engine, *(("manual",) if task_id in getattr(self, "manual", ()) else ())), task_id
-        assert f'<a href="{X.SAMPLE}/report.html">{X.SAMPLE}</a>' in (self.out / "report/index.html").read_text()
+        route = self.data["export_route"] or "no_export"      # each route's report in its own folder (W-876)
+        assert f'<a href="{X.SAMPLE}/{route}/report.html">{X.SAMPLE}</a>' in (self.out / "report/index.html").read_text()
 
     def replan(self, config):
         X.write_config(self.work, "validation", config)
@@ -255,7 +257,7 @@ def report_hash_cell(run, path, text, tree):
 
     The cell holds ``<code>hash</code>`` when every FOV's record holds one hash, and exactly the short text when
     they differ. The returned value is the hash or the short text; the page keeps the placeholder in either case."""
-    sample = Path(path).parent.name
+    sample = Path(path).parts[1]          # report/<sample>/<route>/report.html (W-876)
     hashes = {json.loads(tree[f"fovs/{fov}/run.json"])["workflow_config"]["sha256"]
               for fov in run.data["membership"]["samples"][sample]}
     value = hashes.pop() if len(hashes) == 1 else REPORT_HASH_SEVERAL
@@ -271,6 +273,83 @@ def report_hash_cell(run, path, text, tree):
     return value, text[:start] + "<workflow-config-sha256>" + text[end:]
 
 
+def report_parameter_provenance(run, path, text, tree):
+    """Check W-883's changed-file notices before removing only their provenance suffixes.
+
+    Called under the same no-FOV-reran condition as the Hash cell exception. The
+    current digest comes from this snapshot's report input inventory, not from a
+    page value or a file that a later run may have replaced. All parameter values
+    and source paths remain exact.
+    """
+    sources = list(re.finditer(r'(<p class="sp-src muted">from <code>.*?</code>)(.*?)(</p>)', text, re.S))
+    blocks = list(re.finditer(r'<div\b[^>]*\sid="b-files-configuration"[^>]*>(.*?)</table>', text, re.S))
+    assert len(blocks) == 1, (path, "expected one Configuration table")
+    cells = list(re.finditer(r'(<tr><td>Parameters</td><td>)(.*?)(</td></tr>)', blocks[0][1], re.S))
+    report_payload = tree.get(str(Path(path).with_name("report.json")))
+    report = json.loads(report_payload) if report_payload is not None else {}
+    inputs = [entry for entry in report.get("inputs", []) if entry["kind"] == "workflow_config"]
+    if not sources and not cells:
+        assert not inputs, (path, "missing Parameters cell for resolved configuration")
+        return text  # Reports predating W-883 have neither parameter panels nor this row.
+    assert len(cells) == 1, (path, "expected one Parameters cell")
+    assert len(sources) == text.count('<details class="sp-all">'), (path, "missing parameter source")
+    assert len(inputs) == 1, (path, "expected one resolved configuration input")
+    assert re.fullmatch(r"[0-9a-f]{64}", inputs[0]["sha256"]), (path, "invalid resolved input hash")
+    digest = "sha256:" + inputs[0]["sha256"]
+    sample = Path(path).parts[1]
+    recorded = {json.loads(tree[f"fovs/{fov}/run.json"])["workflow_config"]["sha256"]
+                for fov in run.data["membership"]["samples"][sample]}
+    changed = any(value != digest for value in recorded)
+    message = f'the file has changed since the FOVs ran (hash <code>{digest[:19]}</code>)'
+    suffix = f' <span class="muted">· {message}</span>' if changed else ""
+    replacements = []
+    for source in sources:
+        assert source[2] == suffix, (path, "parameter source provenance differs", source[2], suffix)
+        replacements.append((source.start(2), source.end(2)))
+    cell = cells[0]
+    suffix = f'; <span class="muted">{message}</span>' if changed else ""
+    assert cell[2].endswith(suffix), (path, "Parameters cell provenance differs", cell[2], suffix)
+    assert text.count("the file has changed since the FOVs ran") == (len(sources) + 1 if changed else 0), (
+        path, "unexpected changed-file notice")
+    end = blocks[0].start(1) + cell.end(2)
+    replacements.append((end - len(suffix), end))
+    for start, end in sorted(replacements, reverse=True):
+        text = text[:start] + text[end:]
+    return text
+
+
+def h5ad_content(payload, work, varying, digests):
+    """The content of a ``sample.h5ad`` as bytes: ``X``, every layer and every obsm, varm, obsp and varp entry with
+    its dtype and shape, ``obs`` and ``var`` as CSV, and ``uns`` as a JSON record, its JSON strings parsed and
+    normalized as the export's records are. The file's own bytes hold the SHA-256 of each FOV's ``assignment.json``
+    (``uns.assembly``), and so its ``wall_s`` (W-879); the content leaves out what the records leave out."""
+    import tempfile
+
+    import anndata
+    import numpy as np
+    import scipy.sparse as sparse
+    golden = X.golden()
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "sample.h5ad"
+        path.write_bytes(payload)
+        data = anndata.read_h5ad(path)
+    digest = hashlib.sha256()
+
+    def add(label, value):
+        array = np.ascontiguousarray(value.toarray() if sparse.issparse(value) else np.asarray(value))
+        digest.update(f"{label}|{array.dtype}|{array.shape}|".encode())
+        digest.update(array.tobytes() if array.dtype != object else repr(array.tolist()).encode())
+    add("X", data.X)
+    for group in ("layers", "obsm", "varm", "obsp", "varp"):
+        mapping = getattr(data, group)
+        for key in sorted(mapping.keys()):
+            value = mapping[key]
+            add(f"{group}/{key}", value if not hasattr(value, "to_numpy") else value.to_numpy())
+    digest.update(data.obs.to_csv().encode() + data.var.to_csv().encode())
+    uns = golden._normalized(golden._uns_value(dict(data.uns)), str(work), varying, digests)
+    return digest.hexdigest().encode() + json.dumps(uns, sort_keys=True).encode()
+
+
 def compare(run, left, right, *, name="comparison.json", enforce=True, left_engine=None, right_engine=None, rerun_tasks=None):
     """Compare declared bytes outside X3's named fields and X11's scoped global hashes.
 
@@ -278,8 +357,11 @@ def compare(run, left, right, *, name="comparison.json", enforce=True, left_engi
     directly inside a declared directory is omitted. Cached records retain both
     global hashes when compared with the pre-rerun tree, checked by invoke.
     X11's report Hash cell is validated against each tree's FOV records before
-    normalization, only if no FOV reran. Every other page value stays exact.
-    Every binary file remains byte-equal, including H5AD and TIFF files.
+    normalization, only if no FOV reran. In that case its changed-file notices
+    are also checked against the report input hash and FOV records before removal.
+    Every other page value stays exact.
+    Every binary file remains byte-equal, including TIFF files; an H5AD file is equal in content (``h5ad_content``),
+    because its ``uns`` holds the SHA-256 of each FOV's ``assignment.json``, which holds its ``wall_s``.
     """
     original_left, original_right = left, right
     left_engine = left_engine or getattr(run, "engine", "snakemake")
@@ -332,10 +414,13 @@ def compare(run, left, right, *, name="comparison.json", enforce=True, left_engi
                 return payload.replace(str(run.work).encode(), b"<work>")
             indices = [i for i, key in enumerate(rows[0]) if key not in golden.VARYING_COLUMNS]
             return json.dumps([[row[i].replace(str(run.work), "<work>") for i in indices] for row in rows]).encode()
+        if path.endswith(".h5ad"):
+            return h5ad_content(payload, run.work, varying, golden.VARYING_EXPORT_DIGESTS)
         if path.endswith(".html"):
             text = payload.decode()
             if mask_report_hash and Path(path).name == "report.html":
                 _, text = report_hash_cell(run, path, text, tree)
+                text = report_parameter_provenance(run, path, text, tree)
             text = text.replace(str(run.work), "<work>")
             # The two spans contain only generated_at and run start/end/duration.
             text = re.sub(r'<span id="(?:generated-at|run-span)"[^>]*>.*?</span>',
@@ -380,6 +465,7 @@ def compare(run, left, right, *, name="comparison.json", enforce=True, left_engi
         rows.append(row)
     evidence(run.work, name, {"exceptions": sorted(golden.NORMALIZED | {"workflow.execution_context", "workflow.token"}),
                              "report_hash_cell_exception": mask_report_hash,
+                             "report_parameter_provenance_exception": mask_report_hash,
                              "global_hash_exceptions_tasks": sorted({t["id"] for t in tasks} - set(rerun_tasks)) if rerun_tasks is not None else [],
                              "rows": rows, "passed": all(row["equal"] for row in rows)})
     differences = [row["path"] for row in rows if not row["equal"]]
@@ -405,7 +491,7 @@ def fresh_comparison(run, expected, *, name, rerun_tasks):
         if "export" in run.work.name:
             from starfinder.export._record import PARTS, listed_files
             def unlisted(root):
-                folder = root / "export" / X.SAMPLE
+                folder = root / "export" / X.SAMPLE / run.data["export_route"]
                 record = json.loads((folder / "export.json").read_text())
                 listed = {"export.json", *(p for part in PARTS for p in listed_files(record, part))}
                 return sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*")

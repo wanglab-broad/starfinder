@@ -65,26 +65,24 @@ LEFT_KEYS = {
     "n_random_tests": "selected_fovs",
 }
 #: The processing block's keys (today's processing rule parameters without the run flags, D4) and the new keys.
-PROCESSING_KEYS = ("mode", "recipe", "tiled", "checkpoints", "streaming", "device", "load_codebook", "load_raw_images",
+PROCESSING_KEYS = ("mode", "tiled", "checkpoints", "streaming", "device", "load_codebook", "load_raw_images",
                    "preprocessing", "registration", "reference_image_view", "spot_finding", "reads_extraction",
                    "reads_filtration", "decoding", "scoring", "deduplication")
-#: The keys of the processing block's sub-blocks that left with the run flags or the subtile route.
+#: The keys of the processing block that left: the subtile route's, and the named recipe, whose one value ``deep``
+#: the plan expanded into the explicit steps given here (docs/migration.md, "The named processing recipe").
 PROCESSING_LEFT = {"create_subtiles": "processing.mode: tiled and processing.tiled: the legacy subtile route is "
-                                      "retired for Python (D5)"}
+                                      "retired for Python (D5)",
+                   "recipe": "the explicit steps recipe: deep expanded to, in the processing block: preprocessing: "
+                             "{steps: [{method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], "
+                             "rounding: truncate}, {method: histogram_matching, reference_channel: 0}], "
+                             "post_registration: [{method: reconstruction, radius_yx: 3}]}, registration: {steps: "
+                             "[{method: translation}], signal: {mode: max}}, and in processing.mode tiled also tiled: "
+                             "{local_registration: {steps: [{method: translation}], signal: {mode: max}}}; "
+                             "docs/examples/workflow-global*.yaml are the maintained examples"}
 #: The defaults of processing.tiled (design/specs/orchestration-tiled.md, "Declared files of the tiled task kinds");
 #: the plan writes the halo it computes in place of null.
 TILED_DEFAULTS = {"tile_size_yx": 512, "halo": None, "local_registration": None, "post_local_registration": None,
                   "exact": True}
-#: The named recipes of processing.recipe, which the plan expands into the resolved configuration (a key the user
-#: also sets wins); ``tiled`` applies in mode tiled only (design/specs/orchestration-tiled.md, "The deep-tissue
-#: recipe").
-RECIPES = {"deep": {
-    "preprocessing": {"steps": [
-        {"method": "min_max_normalization", "output_dtype": "uint8", "output_range": [0, 255], "rounding": "truncate"},
-        {"method": "histogram_matching", "reference_channel": 0}],
-        "post_registration": [{"method": "reconstruction", "radius_yx": 3}]},
-    "registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}},
-    "tiled": {"local_registration": {"steps": [{"method": "translation"}], "signal": {"mode": "max"}}}}}
 #: The default checkpoint stages of the fov task (D8) and every stage in order.
 CHECKPOINT_STAGES = ("candidates", "pre_qc")
 STAGES = ("registered", "candidates", "pre_qc")
@@ -106,10 +104,18 @@ TASK_BLOCKS = {
     "report": ("report", "assembly", "assignment"), "compare": ("report",),
 }
 KINDS = tuple(TASK_BLOCKS)
+#: The FOV-level kinds: each task works on one FOV (or one tile of it), whatever other FOVs the run selects. The other
+#: kinds (merge, the placing kinds, export, report, compare) are sample-level: they read every selected FOV.
+FOV_KINDS = ("summarize", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment", "assign")
+#: The keys of the common part that a FOV-level kind's hash leaves out (W-877): the FOV selection and the output id,
+#: so that a run extended by FOVs, or planned under another output id into the same output root, keeps its finished
+#: FOV tasks.
+SELECTION_KEYS = ("selected_fovs", "output_id")
 #: The command of each kind: the kind with ``-``; the Fiji task's record is written by bigstitcher-check.
 COMMANDS = {kind: kind.replace("_", "-") for kind in KINDS} | {"bigstitcher_engine": "bigstitcher-check"}
-#: The identity fields of a task id, in the id's order.
-ID_FIELDS = ("sample", "step", "fov", "tile", "run", "name")
+#: The identity fields of a task id, in the id's order. ``route`` is the export route of the export and report tasks
+#: (``export/<sample>/<route>``), so that the routes' tasks have records of their own in one output root.
+ID_FIELDS = ("sample", "route", "step", "fov", "tile", "run", "name")
 
 
 # --- the canonical serialization -------------------------------------------------------------------------------
@@ -153,9 +159,41 @@ def common_part(configuration) -> dict:
             and k != "api"}
 
 
+def hashed_common_part(configuration, kind) -> dict:
+    """The common part as the hash of ``kind`` covers it (design/specs/orchestration.md, "The blocks of a task kind").
+
+    Parameters
+    ----------
+    configuration : Mapping
+        The resolved configuration.
+    kind : str
+        A task kind of ``TASK_BLOCKS``.
+
+    Returns
+    -------
+    dict
+        ``common_part(configuration)``; for a kind of ``FOV_KINDS`` without ``selected_fovs``, and without
+        ``output_id`` unless ``reference_image_import`` is set.
+
+    Notes
+    -----
+    A FOV-level task's result does not depend on which other FOVs the run selects or on the output id, so these keys
+    leave its hash (W-877); the sample-level kinds keep them. With ``reference_image_import`` the output id stays: a
+    supplied reference image without stored metadata takes the declared frame
+    ``declared:<dataset_id>/<output_id>/<fov_id>``, which the FOV's segmentation and assignment record and the
+    sample-level tasks compare with the frame they declare.
+    """
+    part = common_part(configuration)
+    if kind not in FOV_KINDS:
+        return part
+    left = {"selected_fovs"} if configuration.get("reference_image_import") else set(SELECTION_KEYS)
+    return {k: v for k, v in part.items() if k not in left}
+
+
 def blocks_sha256(configuration, kind) -> str:
-    """The hash of the common part and the blocks ``kind`` reads, an absent block written as null."""
-    part = {"common": common_part(configuration),
+    """The hash of the common part as ``kind``'s hash covers it (``hashed_common_part``) and the blocks ``kind``
+    reads, an absent block written as null."""
+    part = {"common": hashed_common_part(configuration, kind),
             "blocks": {block: configuration.get(block) for block in TASK_BLOCKS[kind]}}
     return sha256(canonical(part))
 

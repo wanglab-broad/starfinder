@@ -610,12 +610,16 @@ def _tissue_runs(monkeypatch, optimizer_sees_original):
 def _record_differences(after, before, path="record"):
     """Compare two records: every float within the tolerance (NaN with NaN), everything else exactly.
 
-    Returns the largest absolute float difference, by path.
+    Returns the largest absolute float difference, by path. ``wall_s``, the call's measured time (W-879), is a
+    number in both and is not compared.
     """
     if isinstance(before, dict):
         assert isinstance(after, dict) and after.keys() == before.keys(), path
         found = {}
         for key in before:
+            if key == "wall_s":
+                assert isinstance(after[key], float) and isinstance(before[key], float), path
+                continue
             found.update(_record_differences(after[key], before[key], f"{path}.{key}"))
         return found
     if isinstance(before, (list, tuple)):
@@ -675,7 +679,8 @@ def test_the_adapter_alone_changes_nothing_when_the_optimization_reads_the_libra
     before, after = _tissue_runs(monkeypatch, optimizer_sees_original=True)
     pd.testing.assert_frame_equal(after.fovs, before.fovs, check_exact=True)
     pd.testing.assert_frame_equal(after.links, before.links, check_exact=True)
-    assert after.record == before.record
+    assert {k: v for k, v in after.record.items() if k != "wall_s"} == \
+        {k: v for k, v in before.record.items() if k != "wall_s"}   # wall_s is measured: two runs never equal
 
 
 @pytest.mark.slow

@@ -274,10 +274,10 @@ def test_the_export_previews_are_written_only_when_their_option_is_on(fixture_wo
         config["assignment"]["previews"] = config["export"]["previews"] = previews
         manifest, planned = _plan(work, name, config)
         export = next(t for t in planned["tasks"] if t["kind"] == "export")
-        assert ("export/sample/previews/" in export["outputs"]) is previews
+        assert ("export/sample/per_fov/previews/" in export["outputs"]) is previews
         _run(manifest, "summarize", "merge", "fov", "morphology", "segment", "assign", "stitch", "export")
         out = manifest.parents[1]
-        folder = _layout.export_previews_dir(out, "sample")
+        folder = _layout.export_previews_dir(out, "sample", route="per_fov")
         assert folder.is_dir() is previews
         for fov in X.FOVS:
             assert _layout.fov_previews_dir(out, fov).is_dir() is previews

@@ -354,7 +354,7 @@ def test_three_processes_segment_and_assign_as_one_process(raw, threshold, tmp_p
         assert same_grid(result.grid, expected.grid) and result.grid.source.startswith("file:")
         record, other = result.record, expected.record
         # The records agree except where they say which grid and which saved files were read.
-        differs = {"grid", "upstream", "input", "labels", "software"}
+        differs = {"grid", "upstream", "input", "labels", "software", "wall_s"}   # wall_s: each run's own time
         assert {k: v for k, v in record.items() if k not in differs} == \
             json.loads(json.dumps({k: v for k, v in other.items() if k not in differs}))
         assert record["input"]["sha256"] == other["input"]["sha256"]

@@ -36,7 +36,7 @@ from .report_fixtures import (CASES, CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FO
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
 COLLECTED = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs", "cells", "mecr",
-             "reads_along_z", "intensity", "unavailable")
+             "reads_along_z", "intensity", "sizes", "unavailable")
 EXPORT_COLUMNS = ("n_cells", "n_cells_retained", "n_molecules", "n_molecules_retained", "reads_in_cells",
                   "reads_in_cells_fraction", "owned_area_um2", "cell_density_per_mm2")
 PLACEMENT_COLUMNS = ("placement_status", "correction_z", "correction_y", "correction_x", "footprint_y0",
@@ -109,6 +109,9 @@ PART_REASONS = {
                                "fov_not_placed", "input_missing", "input_changed"},
     "assembly.placement": {"no_placement", "fov_not_placed", "input_missing", "input_changed"},
     "assembly.accounting": {"no_export", "part_not_written", "no_segmentation"},
+    # The object sizes (W-884).
+    "assembly.sizes": {"no_export", "part_not_written", "no_segmentation", "no_placement", "not_recorded",
+                       "input_missing", "input_changed", "undefined"},
     # The parts of the replay and of the segmentation previews (W-454), with the reasons of the example choice.
     "preprocessing.example": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "not_recorded",
                               "input_missing", "input_changed", "field_not_saved", "replay_differs"},
@@ -127,7 +130,7 @@ PART_REASONS = {
                     "input_changed", "undefined"},
     "sample.reads_along_z": {"no_export", "part_not_written", "input_missing", "input_changed"},
     "files.input": {"no_run_record", "not_recorded", "no_placement"},
-    "files.configuration": {"no_run_record", "not_recorded"},
+    "files.configuration": {"no_run_record", "not_recorded", "input_missing"},
     # "rule:<rule>": a rule not evaluated for the whole sample (summary.problematic_fovs).
     "rule:": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "not_recorded", "no_placement",
               "no_export", "part_not_written", "no_segmentation", "input_missing", "input_changed", "undefined"},
@@ -172,6 +175,10 @@ CONTRACT_COLUMNS = {
     "intensity": [("round", "string", True), ("step_index", "int64", True), ("phase", "string", True),
                   ("step", "string", True), ("channel", "string", True), ("bin", "int64", True),
                   ("bin_low", "float64", True), ("bin_high", "float64", True), ("count", "int64", True)],
+    "sizes": [("scope", "string", True), ("fov_id", "string", False), ("object", "string", True),
+              ("n_objects", "int64", True), *((c, "float64", False) for c in (
+                  "diameter_p5", "diameter_p25", "diameter_median", "diameter_p75", "diameter_p95")),
+              ("below_limit", "int64", True), ("below_fraction", "float64", False)],
     "unavailable": [("part", "string", True), ("table", "string", False), ("column", "string", False),
                     ("row_key", "string", True), ("reason", "string", True), ("detail", "string", False)],
 }
@@ -179,7 +186,7 @@ KEYS = {"fovs": ["fov_id"], "registration": ["fov_id", "round"], "steps": ["scop
         "readout_totals": ["level"], "population": ["population"],
         "problematic_fovs": ["fov_id", "rule", "round", "axis"], "cells": ["obs_name"], "mecr": ["gene_a", "gene_b"],
         "reads_along_z": ["fov_id", "z"], "intensity": ["round", "step_index", "channel", "bin"],
-        "unavailable": ["part", "table", "column", "row_key"]}
+        "sizes": ["scope", "fov_id", "object"], "unavailable": ["part", "table", "column", "row_key"]}
 # "report.json": every key, and the keys of summary.
 CONTRACT_RECORD_KEYS = ["format_version", "stage", "sample", "dataset_id", "sample_id", "fov_ids", "route",
                         "assignment", "segmentation", "generated_at", "software", "config", "stages", "inputs",
@@ -307,6 +314,9 @@ EXAMPLES = {"F1": "example_1", "F2": "example_3", "F3": "example_2", "F4": None}
 FRACTIONS = {"correct_form_fraction": "endpoint_valid", "matched_fraction": "assigned",
              "merged_fraction": "merged_reads", "passed_filter_fraction": "accepted"}
 READS_NO_CELL_RULE = ("rule:reads_no_cell", None, None, "", "no_export")
+# The object sizes and their rule (W-884) need the label images of an export or of the assignment folders.
+SIZES_ROWS = [("assembly.sizes", None, None, "", "no_export"),
+              ("rule:small_nucleus_fraction", None, None, "", "no_export")]
 # The replayed examples of the main example F1 (the fixture writes no image) and the segmentation previews of the three
 # roles (no assignment folder), W-454.
 REPLAY_ROWS = [(part, None, None, "fov_id=F1;role=example_1", "input_missing")
@@ -346,8 +356,8 @@ def test_rc1_normal_sample(records):
         {"fov_id": "F4", "section": "Registration", "rule": "shift_residual", "round": "round3", "axis": "x",
          "measured": 8.0, "sample_median": 0.0, "limit": 5.0, "unit": "voxels",
          "reason": "shift residual above the limit (x, round3)"}]))
-    assert keyed(tables["unavailable"]) == ordered([STITCH_TIME, ALIGNMENT_RULE, READS_NO_CELL_RULE] + REPLAY_ROWS
-                                                   + PREVIEW_ROWS + no_export_rows())
+    assert keyed(tables["unavailable"]) == ordered([STITCH_TIME, ALIGNMENT_RULE, READS_NO_CELL_RULE] + SIZES_ROWS
+                                                   + REPLAY_ROWS + PREVIEW_ROWS + no_export_rows())
     assert all(isinstance(d, str) and d for d in tables["unavailable"]["detail"])
 
 
@@ -551,6 +561,8 @@ def _not_applicable(table, column, row, case, context):
                                     "excluded_outside_grid")
         return (column == "cells" and cells_only) or (column == "molecules" and
                                                        population == "excluded_duplicate_observation")
+    if table == "sizes":
+        return column == "fov_id" and row["scope"] == "sample"      # a sample row has no FOV
     return False
 
 
@@ -573,7 +585,7 @@ def check_null_values(case, record, tables):
     assert len(set(keyed(unavailable))) == len(unavailable)
     context, found = Context(case, record, tables), set()
     present = set(record["stages"]["run_records"])
-    for table in ("fovs", "registration", "steps", "readout_totals", "population"):
+    for table in ("fovs", "registration", "steps", "readout_totals", "population", "sizes"):
         for row in tables[table].to_dict("records"):
             key = key_of(table, row)
             row["run_record_present"] = row.get("fov_id") in present
@@ -987,7 +999,8 @@ def test_pg6_schema(tmp_path, maker, variant):
     assert list(strict["rules"]) == list(PROBLEM_RULES)
     for rule, entry in strict["rules"].items():
         assert list(entry) == ["limit", "unit", "evaluated", "fovs_marked"], rule
-        if rule in ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction"):
+        if rule in ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction",
+                    "small_nucleus_fraction"):
             assert list(entry["limit"]) == ["k", "floor", "absolute"]
     assert list(strict["software"]) == ["code", "environment"]
     assert set(strict["stages"]) == {"run_records", "version_1_run_records", "placement", "export", "parts"}
@@ -1011,15 +1024,15 @@ def test_pg6_schema(tmp_path, maker, variant):
 @pytest.mark.contract
 def test_closed_lists_equal_the_contract():
     assert list(UNAVAILABLE_REASONS) == CONTRACT_REASONS
-    assert len(REPORT_PARTS) == 27 and len(set(REPORT_PARTS)) == 27
+    assert len(REPORT_PARTS) == 28 and len(set(REPORT_PARTS)) == 28
     assert REPORT_PARTS[:3] == ("summary.identity", "summary.key_numbers", "summary.problematic_fovs")
     assert REPORT_PARTS[-3:] == ("files.input", "files.configuration", "files.output")
     assert REPORT_TABLES == ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
-                             "cells", "mecr", "reads_along_z", "intensity", "unavailable")
+                             "cells", "mecr", "reads_along_z", "intensity", "sizes", "unavailable")
     assert PROBLEM_RULES == ("fov_failed", "fov_not_run", "shift_residual", "alignment_score",
                              "registration_rejected", "registration_fallback", "correct_form_fraction",
                              "matched_fraction", "spots_near_zero", "not_placed", "stage_position_fallback",
-                             "reads_no_cell")
+                             "reads_no_cell", "small_nucleus_fraction")
 
 
 # --- Configuration ---------------------------------------------------------------------------------------------
@@ -1110,3 +1123,29 @@ def test_dt1_two_single_thread_processes(tmp_path):
     assert pages[0] != (first["report.html"].decode("utf-8")) and pages[0] == pages[1]
     assert {c: CELLS_RETAINED[c] for c in FOVS} == dict(
         tables_of(case.folder, json.loads(second["report.json"]))["fovs"][["fov_id", "n_cells_retained"]].values)
+
+
+# --- The export folder of a route (W-876) ---------------------------------------------------------------------------
+
+@pytest.mark.contract
+def test_the_report_reads_the_export_folder_it_is_given(tmp_path):
+    """``export_dir`` replaces ``<output_root>/export/<sample>/``: with report_cells' export moved into the folder of
+    the route per FOV, ``export/s1/per_fov/`` (where the workflow writes it), the report given that folder reads it
+    (every export file it lists lies there, the route is the export's and the page names the folder), and the report
+    without it finds no export at ``export/s1/`` (no_export, route null)."""
+    anndata_or_skip()
+    case = report_cells(tmp_path / "root")
+    folder = case.root / "export" / "s1"
+    moved = case.root / "export" / "moved"
+    folder.rename(moved)
+    folder.mkdir()
+    moved.rename(folder / "per_fov")
+    _, record = case.collect(export_dir=folder / "per_fov", output_dir=case.root / "report" / "s1" / "per_fov")
+    exported = [e["path"] for e in record["inputs"] if e["path"].startswith("export/")]
+    assert exported and all(p.startswith("export/s1/per_fov/") for p in exported)
+    assert "export/s1/per_fov/export.json" in exported and record["route"] == "per_fov"
+    page = (case.root / "report" / "s1" / "per_fov" / "report.html").read_text(encoding="utf-8")
+    assert "<td>Sample export</td><td><code>export/s1/per_fov/</code></td>" in page
+    _, record = case.collect(output_dir=case.root / "report" / "s1" / "no_export")
+    assert record["route"] is None and not [e for e in record["inputs"] if e["path"].startswith("export/")]
+    assert any(u["reason"] == "no_export" for u in record["unavailable"])

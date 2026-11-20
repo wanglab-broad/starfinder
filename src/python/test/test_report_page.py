@@ -54,7 +54,7 @@ SECTIONS = [("summary", "Summary", ["b-facts", "b-key-numbers", "b-problematic"]
             ("reg", "Registration", ["b-reg-maps", "b-reg-heatmap", "b-reg-example"]),
             ("reads", "Readout", ["b-read-totals", "b-read-map", "b-read-distributions", "b-read-table"]),
             ("cells", "Segmentation and assembly", ["b-cells-map", "b-placement", "b-seg-examples",
-                                                    "b-population"]),
+                                                    "b-seg-sizes", "b-population"]),
             ("sample", "Sample measurements", ["b-per-cell", "b-markers", "b-mecr", "b-reads-z"]),
             ("files", "Files", ["b-files-input", "b-files-configuration", "b-files-output"])]
 # The part each block draws (design/specs/report.md, "Parts, their inputs and their reasons").
@@ -67,7 +67,7 @@ BLOCK_PARTS = {"b-facts": "summary.identity", "b-key-numbers": "summary.key_numb
                "b-read-map": "readout.per_fov", "b-read-distributions": "readout.distributions",
                "b-read-table": "readout.table", "b-cells-map": "assembly.cells_per_fov",
                "b-placement": "assembly.placement", "b-seg-examples": "assembly.examples",
-               "b-population": "assembly.accounting", "b-per-cell": "sample.per_cell",
+               "b-seg-sizes": "assembly.sizes", "b-population": "assembly.accounting", "b-per-cell": "sample.per_cell",
                "b-markers": "sample.markers sample.marker_zoom", "b-mecr": "sample.mecr",
                "b-reads-z": "sample.reads_along_z", "b-files-input": "files.input",
                "b-files-configuration": "files.configuration", "b-files-output": "files.output"}
@@ -477,6 +477,8 @@ def check_figures(page, extra=None):
             expected = (HEATMAP_WIDTH, image.size[1])
         if name.startswith("distribution:"):
             expected = DISTRIBUTION_THIRD
+        if name.startswith("size:"):
+            expected = DISTRIBUTION_HALF
         if name.startswith("per_cell:"):
             row = re.findall(r'data-figure="(per_cell:[^"]*)"', page.text)
             k = row.index(name)
@@ -490,7 +492,7 @@ def check_figures(page, extra=None):
         if expected != "checked":
             assert image.size == expected, name
         assert mime == ("image/png" if name in ("time", "heatmap", "reads_along_z", "intensity") or
-                        name.startswith(("distribution:", "per_cell:")) else "image/jpeg"), name
+                        name.startswith(("distribution:", "per_cell:", "size:")) else "image/jpeg"), name
         names.append(name)
     return names
 
@@ -568,8 +570,10 @@ def test_files_hash_row_names_the_hash_the_fovs_ran_under(tmp_path, hashes, show
         case.write_run_record(fov, record)
     folder, _ = case.collect()
     rows = _configuration_rows((folder / "report.html").read_text(encoding="utf-8"))
-    assert [label for label, _ in rows] == ["Workflow", "Hash (FOVs ran under)", "Report settings"]
+    # The fixture writes no resolved.json: the Parameters row is the box of the missing file (W-883).
+    assert [label for label, _ in rows] == ["Workflow", "Hash (FOVs ran under)", "Parameters", "Report settings"]
     assert dict(rows)["Workflow"] == "<code>workflow/resolved.json</code>"
+    assert 'data-key="entry=parameters" data-reason="input_missing"' in dict(rows)["Parameters"]
     assert dict(rows)["Hash (FOVs ran under)"] == shown
 
 
@@ -601,7 +605,8 @@ def _required_review(case, approve=False):
 @pytest.mark.contract
 @pytest.mark.parametrize("approve", [False, True])
 def test_placement_section_shows_a_required_review_without_an_export(tmp_path, approve):
-    # W-814: the report of an export held for review shows placement.json's review above the placement map.
+    # W-814: a report without an export shows placement.json's review above the placement map; W-875: with the
+    # approvals of its tables from approvals.json, which report.json lists as a placement input.
     case = report_records(tmp_path / "root", "placement_states")
     review = _required_review(case, approve)
     assert review["state"] == "required" and review["flagged"] == {"unplaced_fovs": ["F3", "F4"]}
@@ -616,6 +621,8 @@ def test_placement_section_shows_a_required_review_without_an_export(tmp_path, a
         "Reasons": "unplaced_fovs", "Flagged FOVs": "unplaced_fovs: F3, F4", "Approvals": approvals}
     # report.json gains no key: the review is the page's alone.
     assert list(load_report(folder)) == CONTRACT_RECORD_KEYS
+    listed = {e["path"]: e["kind"] for e in load_report(folder)["inputs"] if e["path"].startswith("stitching/")}
+    assert listed.get(f"stitching/{SAMPLE}/approvals.json") == ("placement" if approve else None)
 
 
 @pytest.mark.contract
@@ -839,7 +846,7 @@ def _read_only(root, keep):
 
 
 # The places of "Where each record is looked for" under the output root, and the report's own folder.
-PLACES = [r"fovs/[^/]+/run\.json", r"fovs/[^/]+/checkpoints/registered/.+", r"fovs/[^/]+/checkpoints/pre_qc\.json",
+PLACES = [r"fovs/[^/]+/run\.json", r"workflow/resolved\.json", r"fovs/[^/]+/checkpoints/registered/.+", r"fovs/[^/]+/checkpoints/pre_qc\.json",
           r"fovs/[^/]+/segmentation/[^/]+/.+", r"fovs/[^/]+/assignment/[^/]+/.+",
           r"fovs/[^/]+/reference\.tif", rf"stitching/{SAMPLE}/.+", rf"export/{SAMPLE}/.+",
           rf"report/{SAMPLE}/.+", rf"report/\.{SAMPLE}\.[0-9a-f]+\.tmp(/.+)?"]
@@ -874,7 +881,7 @@ def test_pg7_entry_on_the_dataset(tmp_path, no_processing, maker):
     assert sorted(p.name for p in result.path.iterdir()) == ["report.html", "report.json", "tables"]
     assert sorted(p.name for p in (result.path / "tables").iterdir()) == sorted(
         f"{t}.csv" for t in ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
-                             "cells", "mecr", "reads_along_z", "intensity", "unavailable"))
+                             "cells", "mecr", "reads_along_z", "intensity", "sizes", "unavailable"))
     # No input file changed: the hashes of every file outside the report folder are those before the entry.
     assert input_hashes(case.root) == inputs_before
     # Every file opened under the output root is at a place of "Where each record is looked for", or a file the run

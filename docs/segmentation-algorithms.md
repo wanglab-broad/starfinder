@@ -155,6 +155,7 @@ them.
 | `outcome` | `ok`, or `empty` when no label remains |
 | `labels` | The labels' dtype, SHA-256, `n_labels` and `max_label`, with the file's path and SHA-256 when saved |
 | `software` | The software versions |
+| `wall_s` | Runs of `FOV.segment`: the wall time of the run in seconds, from its input to its last label operation; the report's time of the step `segment` |
 | `upstream` | Runs of `FOV.segment`: the SHA-256 of the FOV's preprocessing and registration records |
 
 ## Files

@@ -434,3 +434,62 @@ def test_a_report_root_given_or_absent(tmp_path):
     result = dataset.compare_samples(["s1", "s2"])
     assert result.path == case.root / "report"
     assert list(written(result)[0]["report"]) == ["missing", "missing"]
+
+
+# --- The routes of the workflow (W-876) -----------------------------------------------------------------------------
+
+ROUTES = ["per_fov", "after_fusion", "no_export"]
+
+
+def test_routes_give_a_row_and_a_box_per_sample_and_route(root):
+    """With ``routes`` each sample's report of a route is ``<report_root>/<sample>/<route>/``, as the workflow writes
+    it: one row and one box per sample and route, the routes of a sample in the given order; a present row copies its
+    report (s1's per FOV, s4's without an export, route null) and links ``<sample>/<route>/report.html``; a missing
+    report's row keeps the route it was asked for (null for no_export), its other cells blank but the sample's. Nothing
+    under a sample's folder is written."""
+    routes_root = root / "routes"
+    shutil.copytree(root / "report" / "s1", routes_root / "s1" / "per_fov")
+    shutil.copytree(root / "report" / "s4", routes_root / "s4" / "no_export")
+    before = {name: snapshot(routes_root / name) for name in ("s1", "s4")}
+    result = dataset_at(root).compare_samples(["s1", "s4"], report_root=routes_root, routes=ROUTES)
+    assert result.path == routes_root
+    frame, text, _ = written(result)
+    rows = frame.to_dict("records")
+    keys = [(s, r) for s in ("s1", "s4") for r in ROUTES]
+    assert [row["sample"] for row in rows] == [s for s, _ in keys]
+    assert [row["report"] for row in rows] == ["present", "missing", "missing", "missing", "missing", "present"]
+    assert [None if missing_cell(row["route"]) else row["route"] for row in rows] == [
+        "per_fov", "after_fusion", None, "per_fov", "after_fusion", None]
+    for index, (sample, route) in ((0, ("s1", "per_fov")), (5, ("s4", "no_export"))):
+        path = routes_root / sample / route / "report.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        assert rows[index]["report_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+        for column, _, keys_ in SAMPLES_COLUMNS:
+            if keys_ is not None:
+                assert equal(rows[index][column], key(record, keys_)), (sample, column)
+    for row in (rows[i] for i in (1, 2, 3, 4)):
+        assert all(missing_cell(row[c]) for c, _, _ in SAMPLES_COLUMNS if c not in ("sample", "report", "route"))
+    links = Images(text).links
+    assert "s1/per_fov/report.html" in links and "s4/no_export/report.html" in links
+    assert not [link for link in links if link.endswith("report.html") and link.count("/") != 2]
+    _, data = data_block(text)
+    assert list(data["fovs"]) == ["s1/per_fov", "s4/no_export"]
+    for column in BOX_COLUMNS:
+        slots = result.record["box_plots"][column]
+        assert [s["sample"] for s in slots] == [f"{s}/{r}" for s, r in keys]
+        assert [s["fovs"] for s in slots][:5] == [4, 0, 0, 0, 0]
+    assert {name: snapshot(routes_root / name) for name in ("s1", "s4")} == before
+    assert sorted(p.name for p in routes_root.iterdir()) == ["index.html", "s1", "s4", "samples.csv"]
+
+
+@pytest.mark.parametrize("routes", [[], ["per_fov", "per_fov"], "per_fov", ["per_fov/x"], [".."]],
+                         ids=["empty", "repeated", "string", "path", "parent"])
+def test_routes_argument_checks(tmp_path, routes):
+    """Runs without the anndata extra: routes is a nonempty sequence of unique folder names; nothing is written."""
+    case = report_records(tmp_path / "root")
+    case.collect(output_dir=case.root / "report" / "s1" / "no_export")
+    report = case.root / "report"
+    before = snapshot(report)
+    with pytest.raises(ValueError, match="route"):
+        dataset_at(case.root).compare_samples(["s1"], routes=routes)
+    assert snapshot(report) == before

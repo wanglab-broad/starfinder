@@ -75,7 +75,23 @@ copy of the full configuration or of the
 {download}`minimal configuration <../examples/workflow-minimal.yaml>`, which runs
 the per-FOV processing alone; the
 {download}`recipe 2 example <../examples/workflow-recipe-2.yaml>` shows an explicit
-preprocessing recipe.
+preprocessing recipe. Four examples of global processing run the per-FOV
+processing with explicit steps: each channel min-max normalized to `uint8` with
+truncation, then histogram-matched to channel 0, and no reconstruction after
+registration. Their registration differs:
+
+* {download}`global <../examples/workflow-global.yaml>`: one translation on the
+  channels' maximum;
+* {download}`global with B-spline <../examples/workflow-global-bspline.yaml>`: a
+  translation, then `bspline` with its defaults;
+* {download}`global with demons <../examples/workflow-global-demons.yaml>`: a
+  translation, then `demons` with its defaults, on the whole FOV;
+* {download}`global with demons in tiles <../examples/workflow-global-demons-tiled.yaml>`:
+  `mode: tiled`, a translation of the whole FOV, then `demons` with its defaults
+  in each tile (`processing.tiled.local_registration`).
+
+`prepare_workflow.py` takes each example's name without `workflow-` and `.yaml`,
+for example `global-demons`.
 
 ## What it does
 
@@ -134,48 +150,59 @@ does. To rerun a task it names, remove the task's record,
 when a FOV is not `image_supported`, a correction exceeds half the nominal
 overlap width, a kept link's residual exceeds 1 µm (both bounds are
 `stitching.review`), the optimizer removed a link, or the placement is supplied.
-The `export` task then stops. Once every other task the report needs has
-succeeded, it makes the sample report from the FOVs' records and
-`placement.json`, and the report's Placement section shows the review's reasons,
-the flagged FOVs and any approvals. The task exits 4, the run fails, and
+The `export` task then stops before it reads any origin and writes the held
+page `workflow/held/<sample>/<route>.html`: the review's reasons, the flagged FOVs, a
+summary of the placement (its FOVs by status, its links, the tables' SHA-256)
+and how to approve it. It makes no report: the `report` task makes the full
+report once, after the export. The task exits 4, the run fails, and
 `verify --final` names the export held. Nextflow does not retry it; Snakemake
 retries it only with `--retries`, and it holds again each time.
-
-With an `assignment` block and an `export.route` other than `per_fov`, the
-report also needs the `assign` tasks, which the export does not. If one of them
-has not succeeded when the export is held, no report is made, and the export's
-log names the tasks the report waits for. The review below does not need the
-report, and the run after the approval makes it.
 
 To review the placement, open it with
 `load_placement("<output root>/stitching/<sample>")`. Inspect each FOV's status
 and flags in `result.fovs`, the links in `result.links`, and
 `result.record["review"]`. Record the review with
 `approve_placement(result, reviewer=..., note=...)` and save it into the same
-folder with `save_placement`. Then run the workflow again.
+folder with `save_placement`. The approval goes to `approvals.json` in that
+folder, keyed by the SHA-256 of the two tables it approves; `placement.json`,
+`fovs.csv` and `links.csv` keep their bytes and modification times. Then run
+the workflow again, the same way on both engines: Nextflow with `-resume`, or
+Snakemake. Neither reruns `stitch`, whose outputs are unchanged; the export,
+the report and the comparison run, and the held page is removed.
+`verify --final` then passes. `verify` reads `approvals.json`: it names a held
+export whose placement is now approved, and finds a finished export not
+complete when its placement needs review and `approvals.json` holds no approval
+of its tables.
 
-* **Nextflow** with `-resume` reruns `stitch`, because `placement.json` changed.
-  The rerun keeps the approval, because its tables are unchanged. Then it runs
-  the export, the report and the comparison.
-* **Snakemake** removes a task's outputs before it reruns it, which would remove
-  the approval. So first run the task by its command, where the tasks run (on
-  the cluster, in the image, as `verify` is):
-  `starfinder workflow stitch --manifest <output root>/workflow/manifest.json --task stitch/<sample>`,
-  or for a BigStitcher placement `starfinder workflow bigstitcher-import` with
-  `--task bigstitcher_import/<sample>`.
-  It keeps the approval and records the task again. Then run Snakemake.
-
-In both, `verify --final` then passes. An approval holds only for the tables it
-approved: if the rerun places the FOVs differently, the export is held again.
-The engine tests run this route with a `stitch` task.
+An approval holds only for the tables it approved. A later rerun of `stitch`
+keeps `approvals.json`; if it places the FOVs as before the approval still
+counts, and if it places them differently the export is held again. Remove
+`approvals.json` to withdraw every approval. The engine tests run this route
+with a `stitch` task.
 
 ## What you get
 
 Under the output root, each task writes the files the
 {doc}`reference <reference>` lists for its kind, for example
 `fovs/<fov>/molecules.csv` and `fovs/<fov>/run.json` for a `fov` task, and
-`export/<sample>/` for an `export` task. The workflow's own files are in
-`workflow/`:
+`export/<sample>/<route>/` for an `export` task, whose route is `per_fov`,
+`after_fusion` or `molecules_only`. The report of a sample is in
+`report/<sample>/<route>/` (`report/<sample>/no_export/` without an export), and
+the comparison page `report/index.html` lists every report the output root holds,
+one row per sample and route.
+
+Each route has its own export and report folders and task records, so one output
+root holds several routes. Run the configuration of the first route, then plan and
+run the configuration of the second into the same output root: its FOV-level and
+placement tasks are complete already, so only its export, report and comparison
+run, and no file of the first route changes. Copying a route's outputs aside is not
+needed. The second plan's manifest names both routes, the first as a route found in
+the output root, which no engine runs, and `verify --final` lists both: it checks the
+first route's export and report records too (their outputs at their recorded size,
+and with `--hash` their SHA-256), and fails, naming the file, when one of them is
+missing or changed.
+
+The workflow's own files are in `workflow/`:
 
 * `resolved.json` and `manifest.json`, written by the plan;
 * `tasks/<task>.json`, the record of each task that succeeded, with its outputs
@@ -183,8 +210,10 @@ Under the output root, each task writes the files the
   `tasks/<task>.failed.json` keeps the record of a failed attempt;
 * `logs/<task>.log`, the log of each task;
 * `verify.json`, written by `verify`;
-* `exports/<sample>.json`, a copy of each sample's export record, which lets a
-  rerun of `export` remove the files the earlier export wrote.
+* `exports/<sample>/<route>.json`, a copy of each sample's export record, which lets a
+  rerun of `export` remove the files the earlier export wrote;
+* `held/<sample>/<route>.html`, the held page of an export held for review, until the
+  export runs again.
 
 ## Main options
 
@@ -192,7 +221,8 @@ Under the output root, each task writes the files the
   `ref_round`, `seq_channel_order`, `reference_stains`, `additional_round`,
   the FOV list (`fov_list`), `selected_fovs`, the codebook and the image layout.
 * `processing`: the per-FOV pipeline, with `mode` `direct` (one task per FOV) or
-  `tiled` (tiles of a FOV), `recipe: deep` and the checkpoint stages.
+  `tiled` (tiles of a FOV), the preprocessing and registration steps and the
+  checkpoint stages.
 * `morphology`, `segmentation` and `assignment`: the images for segmentation,
   the segmentation runs and the assignment of molecules to cells.
 * `stitching`, `assembly`, `export` and `report`: the sample outputs.

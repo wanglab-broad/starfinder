@@ -30,10 +30,10 @@ changes what a task does.
 | 1 | The task failed; its declared outputs were removed and `<task>.failed.json` written | Retried up to `--retries` | Retried up to `--max_retries` (default 2); `--max_retries 0` runs the task once and finishes the run |
 | 2 | Refused before any work; nothing was written | Retried like 1 | Not retried; the run finishes |
 | 3 | A verified resume was refused | Retried like 1 | Not retried; the run finishes |
-| 4 | The export was held for review: its placement needs review and holds no approval of its tables; it failed as 1 does, its failed record says `held`, and it made the sample report when every other task the report needs had succeeded ({ref}`the route <workflow-placement-review>`) | Retried like 1 | Not retried; the run finishes |
+| 4 | The export was held for review: its placement needs review and `approvals.json` holds no approval of its tables; it failed as 1 does, its failed record says `held`, and it wrote the held page `workflow/held/<sample>/<route>.html` and no report ({ref}`the route <workflow-placement-review>`) | Retried like 1 | Not retried; the run finishes |
 
 `plan` exits 2 when it refuses a configuration and `verify` exits 1 with `--final`
-when a task is not complete. Each retry multiplies a task's memory and runtime by
+when a task, or a route found in the output root, is not complete. Each retry multiplies a task's memory and runtime by
 the attempt.
 
 (workflow-task-kinds)=
@@ -47,8 +47,50 @@ configuration in tiled mode, with a BigStitcher placement and segmentation runs 
 a method; a configuration that writes less declares less (no checkpoint stages,
 no previews, no nuclei, an imported segmentation without `input.ome.tif`).
 `{fov}`, `{sample}`, `{step}` and `{tile}` stand for the task's identity, `<run>`,
-`<name>` and `<round>` for a segmentation run, an assignment name and another
-round. A temporary output is removed once the tasks that read it have succeeded.
+`<name>`, `<route>` and `<round>` for a segmentation run, an assignment name, the
+export route (`per_fov`, `after_fusion` or `molecules_only`; a report without an
+export is `no_export`) and another round. A temporary output is removed once the
+tasks that read it have succeeded.
+
+Each export route writes its own folders, `export/<sample>/<route>/` and
+`report/<sample>/<route>/`, and its export and report tasks have the route in their
+id (`export/<sample>/<route>`). One output root therefore holds the outputs of
+several routes: plan and run the configuration of each route in turn into the same
+output root. The routes share every other task, so the second route runs only its
+export, report and comparison. A run of one route reads, writes and removes no
+file of another route; `compare` lists the reports of this route and the reports
+of the other routes that the output root holds when the plan runs.
+
+The manifest's `routes` names every route of each sample: the one this plan runs
+(`planned` true, its export and report task ids) and each route found in the output
+root, whose `report.json` another plan wrote (`planned` false, its export and report
+task ids, records, logs and main outputs). A found route is no task: no engine runs
+it, it is in no task list or need and enters no fingerprint. `verify` lists every
+route of each sample in `verify.json` (`routes`: per sample, each route's
+`planned`, `complete` and its tasks' `complete` and `problems`). It checks this
+plan's tasks as before, and a found route's export and report by their records
+without the fingerprint, which another plan made: the record says `succeeded`, lists
+the main output and the log, and every output it lists exists with its recorded
+size, and with `--hash` its SHA-256. A missing or changed file is a problem that
+names the file; the found task ids that are not complete are in `found_incomplete`,
+and with `--final` they fail the check, because this run's comparison page reads
+that route's report. `verify` prints a found route's state to stderr, so that its
+standard output keeps one line per task of the plan. An output root with one route
+lists one route.
+
+The FOV-level kinds, `summarize`, `fov`, `tile_global`, `tile`, `tile_merge`,
+`morphology`, `segment` and `assign`, work on one FOV each, and their fingerprint
+leaves out `selected_fovs` and `output_id`. The sample-level kinds, `merge`, the
+placing kinds, `export`, `report` and `compare`, keep both. A run extended by FOVs,
+or planned under another `output_id` into the same output root (`plan --output-root`),
+therefore keeps its finished FOV tasks and runs the new FOVs and the sample-level
+tasks. Two cases still rerun FOV tasks. With supplied statistics merged by the plan
+(`fit: supplied` without a named file), the merged file covers the selected FOVs, so
+a larger selection reruns `merge`, every `fov` task and their consumers. With
+`reference_image_import`, `output_id` stays in the FOV-level fingerprints, because
+a supplied reference image without stored metadata takes the frame
+`declared:<dataset_id>/<output_id>/<fov_id>`, which the FOV's segmentation and
+assignment record.
 
 ```{workflow-tasks}
 ```
@@ -58,8 +100,8 @@ when it succeeds, `workflow/tasks/<task>.json`, where `<task>` is the task id
 with `/` written `.` (`fov.sample.FOV_001`). A failed attempt writes
 `workflow/tasks/<task>.failed.json`; `verify` writes `workflow/verify.json`; the
 `export` command keeps a copy of each sample's `export.json` in
-`workflow/exports/<sample>.json`, so that a rerun can remove the files of the
-earlier export after an engine removed the declared record.
+`workflow/exports/<sample>/<route>.json`, so that a rerun can remove the files of
+the earlier export after an engine removed the declared record.
 
 (workflow-configuration-keys)=
 ## Configuration keys
@@ -198,7 +240,7 @@ table_format: The format of the sample tables: csv or parquet.
 ### `export`
 
 ```{workflow-keys} export
-previews: true draws the ownership figures into export/<sample>/previews/ on the route per FOV.
+previews: true draws the ownership figures into export/<sample>/per_fov/previews/ on the route per FOV.
 ```
 
 (workflow-keys-report)=

@@ -149,11 +149,11 @@ KIND_REFUSALS = {
                            _set("stitching", "fallback", value=lambda v: "nominal"), "stitching"),
     "bigstitcher_import": ("after-fusion", "bigstitcher_import/sample",
                            _set("stitching", "review", "max_residual_um", value=lambda v: 2.0), "stitching"),
-    "export": ("molecules-only", "export/sample",
+    "export": ("molecules-only", "export/sample/molecules_only",
                _set("processing", "codebook", "encoding", "reverse_bases", value=lambda v: not v), "processing"),
-    "export (its own block)": ("per-fov", "export/sample", _set("export", "route", value=lambda v: "after_fusion"),
+    "export (its own block)": ("per-fov", "export/sample/per_fov", _set("export", "route", value=lambda v: "after_fusion"),
                                "export"),
-    "report": ("per-fov", "report/sample", _set("report", "config", "positive_threshold", value=lambda v: 3), "report"),
+    "report": ("per-fov", "report/sample/per_fov", _set("report", "config", "positive_threshold", value=lambda v: 3), "report"),
     "compare": ("per-fov", "compare", _set("report", "config", "jpeg_quality", value=lambda v: 50), "report"),
 }
 
@@ -178,7 +178,7 @@ def test_the_report_refuses_a_changed_assembly_assignment(work, capsys):
     assert data["configuration"]["assembly"]["assignment"] == "default"
     data["configuration"]["assembly"]["assignment"] = "other"
     resolved.write_text(json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n")
-    _refused(manifest, "report/sample", capsys, 2, "resolved configuration", "plan the run again")
+    _refused(manifest, "report/sample/per_fov", capsys, 2, "resolved configuration", "plan the run again")
 
 
 # --- the refusals of a verified resume (exit 3) ------------------------------------------------------------------

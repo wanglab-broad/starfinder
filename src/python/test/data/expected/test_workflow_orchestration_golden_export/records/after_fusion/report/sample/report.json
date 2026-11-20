@@ -48,7 +48,13 @@
     "floor": 0.05,
     "absolute": null
    },
-   "spots_near_zero": 0.05
+   "spots_near_zero": 0.05,
+   "small_nucleus_fraction": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "small_nucleus_diameter_um": 3.0
   },
   "figure_width_px": 1600,
   "jpeg_quality": 85
@@ -209,6 +215,11 @@
    "sha256": "c0eef016ba79c18edabf5a9eca1e48340fcebf14c61966e3f6efa1ab1118a864",
    "bytes": 3233,
    "verified": true
+  },
+  {
+   "path": "workflow/resolved.json",
+   "kind": "workflow_config",
+   "verified": false
   }
  ],
  "files": [
@@ -382,9 +393,27 @@
    }
   },
   {
+   "path": "tables/sizes.csv",
+   "sha256": "d946a8b6103f2532d7c827a50dfc6771566e84c7db9d3aa25547bd16b33e0bf9",
+   "bytes": 712,
+   "dtypes": {
+    "scope": "string",
+    "fov_id": "string",
+    "object": "string",
+    "n_objects": "int64",
+    "diameter_p5": "float64",
+    "diameter_p25": "float64",
+    "diameter_median": "float64",
+    "diameter_p75": "float64",
+    "diameter_p95": "float64",
+    "below_limit": "int64",
+    "below_fraction": "float64"
+   }
+  },
+  {
    "path": "tables/unavailable.csv",
-   "sha256": "ca6821a95433c1ad028f5b60da7aff3843a0f62c71f90d875bae68d6f3007152",
-   "bytes": 804,
+   "sha256": "dfbb36358c421c3e32501312104bec2794e5a2aa6242e1e462cb6b1f9eef8e3a",
+   "bytes": 668,
    "dtypes": {
     "part": "string",
     "table": "string",
@@ -405,20 +434,12 @@
    "detail": "config.limits.alignment_score sets no limit"
   },
   {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=sample;fov_id=;index=0",
-   "reason": "not_recorded",
-   "detail": "no record holds the time of stitch"
-  },
-  {
-   "part": "workflow.time",
-   "table": "steps",
-   "column": "seconds",
-   "row_key": "scope=sample;fov_id=;index=1",
-   "reason": "not_recorded",
-   "detail": "export.json assembly records no wall_s"
+   "part": "rule:small_nucleus_fraction",
+   "table": null,
+   "column": null,
+   "row_key": "",
+   "reason": "no_segmentation",
+   "detail": "no nucleus label image"
   },
   {
    "part": "sample.marker_zoom",
@@ -676,6 +697,16 @@
    "unit": null,
    "evaluated": true,
    "fovs_marked": 0
+  },
+  "small_nucleus_fraction": {
+   "limit": {
+    "k": 3.0,
+    "floor": 0.05,
+    "absolute": null
+   },
+   "unit": "fraction",
+   "evaluated": false,
+   "fovs_marked": null
   }
  },
  "summary": {
