@@ -51,7 +51,8 @@ def pip_check_problems(output, variant):
     Returns
     -------
     list of str
-        One message per line or condition that fails the check; empty when the output is accepted. The output must hold
+        One message per line or condition that fails the check; empty when the output is accepted. Each line is compared
+        as it is after its terminator (``\\n`` or ``\\r\\n``) is removed; only empty lines are ignored. The output must hold
         a ``Checked N packages`` line (which a failed ``uv`` run would not print) and then either the compatible line
         or a ``Found N incompatibility`` line followed by N findings, all of them the accepted line, with the accepted
         line at most once.
@@ -64,19 +65,23 @@ def pip_check_problems(output, variant):
     if variant not in VARIANTS:
         raise ValueError(f"variant must be one of {VARIANTS}, got {variant!r}")
     accepted = ACCEPTED_LINE if variant in ACCEPTING_VARIANTS else None
-    lines = [line.rstrip() for line in output.splitlines() if line.strip()]
+    # Only the line terminator ("\n" or "\r\n") is removed and only empty lines are dropped: the text of a line is
+    # compared as it is, so a space or a tab before or after it, or a line of spaces, is another line. ``splitlines``
+    # is not used because it also ends a line at a form feed, a vertical tab and some Unicode separators.
+    lines = [line[:-1] if line.endswith("\r") else line for line in output.split("\n")]
+    lines = [line for line in lines if line != ""]
     problems = []
     checked = False
     found = None
     findings = []
     clean = False
     for line in lines:
-        if _STATUS.match(line):
+        if _STATUS.fullmatch(line):
             checked = checked or line.startswith("Checked")
         elif line == _CLEAN:
             clean = True
-        elif _FOUND.match(line):
-            found = int(_FOUND.match(line).group(1))
+        elif _FOUND.fullmatch(line):
+            found = int(_FOUND.fullmatch(line).group(1))
         elif line.startswith(_FINDING):
             findings.append(line)
         else:

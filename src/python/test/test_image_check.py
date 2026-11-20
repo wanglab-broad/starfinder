@@ -74,6 +74,31 @@ def test_a_line_that_differs_in_text_fails(check, line):
     assert check.pip_check_problems(found(line), "learned")
 
 
+@pytest.mark.parametrize(
+    "line",
+    [KNOWN + " ", KNOWN + "\t", " " + KNOWN, "\t" + KNOWN, KNOWN + "\x0c", KNOWN + "\x0b"],
+    ids=["trailing space", "trailing tab", "leading space", "leading tab", "form feed", "vertical tab"],
+)
+def test_the_known_text_with_whitespace_added_is_another_line(check, line):
+    assert check.pip_check_problems(found(line), "learned")
+
+
+@pytest.mark.parametrize("blank", [" ", "\t", "   \t "], ids=["space", "tab", "mixed"])
+def test_a_whitespace_only_line_among_the_findings_fails(check, blank):
+    text = HEADER + "Found 1 incompatibility\n" + blank + "\n" + KNOWN + "\n"
+    assert check.pip_check_problems(text, "learned") == [f"unexpected line: {blank}"]
+
+
+def test_the_known_line_ending_in_a_carriage_return_and_line_feed_passes(check):
+    text = found(KNOWN).replace("\n", "\r\n")
+    assert check.pip_check_problems(text, "learned") == []
+
+
+def test_empty_lines_are_ignored(check):
+    text = "\n" + found(KNOWN).replace("\n", "\n\n")
+    assert check.pip_check_problems(text, "learned") == []
+
+
 def test_the_cpu_image_accepts_no_finding(check):
     assert check.pip_check_problems(found(KNOWN), "cpu") == [f"finding not accepted: {KNOWN}"]
 

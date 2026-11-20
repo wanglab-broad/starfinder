@@ -133,6 +133,20 @@ The build writes the commit and the flag into `starfinder/_build_info.py` and th
 commit and flag with `version_source` `build`, so a run in the image and a run from a clean checkout of the same commit
 record the same `version` and `git_commit`.
 
+The `learned` and `learned-cuda` targets, which hold `piscis`, build with the same arguments and the target and archive
+name changed (build commands only: they need the network and are run on a build host, not by the tests):
+
+```bash
+docker buildx build --builder <docker-container builder> --target learned \
+  --build-arg STARFINDER_VERSION=<version> --build-arg STARFINDER_REVISION=<full commit> \
+  --build-arg STARFINDER_DIRTY=<true|false> \
+  --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
+  --output type=oci,dest=starfinder-learned-<version>.oci.tar .
+```
+
+For `learned-cuda`, use `--target learned-cuda` and `dest=starfinder-learned-cuda-<version>.oci.tar`. The `cpu` target's
+command is in the `Containerfile`'s header and takes the same arguments.
+
 (broad-uger-image-check)=
 ### Checking a built image
 
@@ -163,7 +177,7 @@ The package `piscis` requires `opencv-python`, but it's not installed
 the `cv2` module, so an environment with both keeps whichever installed last, and the GUI build does not import on a
 slim base image without X11 and OpenGL libraries. `uv.lock` therefore holds only `opencv-python-headless`
 (`exclude-dependencies` in `pyproject.toml`), which provides everything `piscis` calls, and the distribution name
-`opencv-python` stays unmet by design. The check accepts this one line by its exact text, once, in the images that hold
+`opencv-python` stays unmet by design. The check accepts this one line by its exact text (a space or a tab before or after it makes another line), once, in the images that hold
 `piscis`; a changed line, a second line or a count that does not match fails. The `cpu` image has no `piscis` and accepts
 no line. The `Containerfile` imports `cv2`, `cellpose` and `piscis` while it builds, which stops a build in which a GUI
 OpenCV has returned.
