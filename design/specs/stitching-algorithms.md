@@ -169,13 +169,23 @@ One call per sample. Steps, as the parity runs ran them (their notes, sections 3
 5. **Link filter (L1).** The library's filter at `quality_threshold`, plus dropping NaN
    links, which the library keeps. The default (`None`, since W-874) is `"auto"` for
    single-plane tiles and 0.7 for tiles with Z > 1 (`method_diagnostics.link_quality.rule`
-   `fixed_default_z_above_1`; the null below cannot see a z error, W-895). With `"auto"` the threshold is
+   `fixed_default_z_above_1`; the null below cannot see a z error, so `"auto"` adds a z check on such tiles, W-895). With `"auto"` the threshold is
    `max(0.2, q99)`, `q99` the 99th percentile (NumPy's linear quantile) of the null qualities:
    each registered pair's quality, measured as the library measures it, at its registered
    shift moved by ⌊w / 2⌋ binned voxels both ways along the overlap axis (the narrower of Y
    and X, `w` its width in the binned overlap); a moved overlap keeping less than a tenth of
    its voxels, or of NaN quality, gives no value. Each pair is then registered on its own
    through the library's `pairwise_executor`, with the same result.
+   **The z check (W-895).** On tiles with Z > 1, `"auto"` also measures each registered
+   link's quality, in the same way, at its registered shift ± `d` planes of the binned overlap
+   along z, `d = max(1, round(1 µm / (z spacing × binning_zyx[0])))` (Python's `round`, half
+   to even). A link is kept only if its quality at the registered shift is at least its quality
+   at each z offset that has a value (a NaN offset does not count against it); a link that
+   passes the threshold and fails the check is not kept, with the reason
+   `quality_higher_at_z_offset`. A pair whose binned overlap has fewer than `2d + 1` planes
+   skips the check. `method_diagnostics.link_quality.z_check` holds `d`, the rule and, per
+   link, the three qualities and the outcome. A given number measures neither the null nor
+   the z check, and the default for Z > 1 stays 0.7.
 6. **Global optimization.** Per component, one reference view fixed; translations solved
    from virtual bead pairs at the overlap corners; while the largest residual exceeds
    `abs_tol`, the link with the largest `(1 − q)² · √residual · log10(degree)` whose

@@ -236,13 +236,111 @@ def test_auto_threshold_is_the_larger_of_the_floor_and_the_null_quantile():
     assert empty == 0.2 and record["null"] == {"pairs": 0, "values": 0}
 
 
+# --- The per-link z check of "auto" on tiles with Z > 1 (W-895) -------------------------------
+# A 3D pair with a known offset, built as ``_known_pair``: a window of an i.i.d. texture and the window the shift
+# maps onto it. The texture is i.i.d., so a shift of one or more planes away from the known one lines nothing up.
+
+KNOWN_SHIFT_3D = (2.0, 3.0, -2.0)
+
+
+def _known_pair_3d(shape=(9, 24, 16), shift=KNOWN_SHIFT_3D):
+    texture = np.random.default_rng(895).random((24, 48, 48))
+    (dz, h, w), (tz, ty, tx), (z0, y0, x0) = shape, map(int, shift), (6, 12, 16)
+    return (texture[z0:z0 + dz, y0:y0 + h, x0:x0 + w],
+            texture[z0 - tz:z0 - tz + dz, y0 - ty:y0 - ty + h, x0 - tx:x0 - tx + w])
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("spacing_z, binning_z, d", [
+    (0.35, 1, 3),       # the contract's example: 1 / 0.35 = 2.86
+    (0.346255, 4, 1),   # LN at the default binning: 1 / 1.385 = 0.72
+    (1.0, 4, 1),        # 0.25 rounds to 0: the minimum of 1
+    (2.0, 1, 1),        # 0.5 rounds to 0 (half to even): the minimum of 1
+    (0.25, 1, 4), (0.1, 2, 5), (0.4, 1, 2)])   # 0.4: 2.5 rounds half to even, to 2
+def test_z_offset_planes_from_spacing_and_binning(spacing_z, binning_z, d):
+    from starfinder.stitching._multiview import Z_OFFSET_UM, _z_offset_planes
+    assert Z_OFFSET_UM == 1.0
+    assert _z_offset_planes(spacing_z, binning_z) == d
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("quality, z, outcome", [
+    (0.5, [0.4, 0.3], "passed"),
+    (0.5, [0.5, 0.5], "passed"),                               # equal is kept: "at least"
+    (0.5, [0.4, 0.6], "quality_higher_at_z_offset"),
+    (0.5, [0.6, 0.4], "quality_higher_at_z_offset"),
+    (0.5, [math.nan, 0.4], "passed"),                          # a NaN side does not count against the link
+    (0.5, [0.6, math.nan], "quality_higher_at_z_offset"),      # the side with a value still counts
+    (0.5, [math.nan, math.nan], "passed"),
+    (math.nan, [0.4, 0.3], "skipped_nan_quality"),
+    (math.nan, None, "skipped_nan_quality"),                   # a constant overlap: the library records nothing
+    (0.5, None, "skipped_thin_overlap")])
+def test_z_keep_rule_with_a_nan_side(quality, z, outcome):
+    from starfinder.stitching._multiview import Z_OUTCOMES, _z_outcome
+    assert _z_outcome(quality, z) == outcome and outcome in Z_OUTCOMES
+
+
+@pytest.mark.contract
+def test_z_qualities_skip_an_overlap_thinner_than_2d_plus_1_planes():
+    from starfinder.stitching._multiview import _quality_at, _z_qualities
+    fixed, moving = _known_pair_3d()   # 9 planes
+    assert _z_qualities(fixed, moving, KNOWN_SHIFT_3D, 5) is None   # 9 < 11
+    assert _z_qualities(fixed[:6], moving[:6], KNOWN_SHIFT_3D, 3) is None   # 6 < 7
+    values = _z_qualities(fixed[:7], moving[:7], KNOWN_SHIFT_3D, 3)   # 7 = 2 d + 1: checked
+    assert values == [_quality_at(fixed[:7], moving[:7], (-1.0, 3.0, -2.0)),
+                      _quality_at(fixed[:7], moving[:7], (5.0, 3.0, -2.0))]
+
+
+@pytest.mark.contract
+def test_a_pair_with_a_known_z_error_is_dropped_and_the_correct_pair_kept():
+    from starfinder.stitching._multiview import _quality_at, _z_outcome, _z_qualities
+    fixed, moving = _known_pair_3d()
+    d = 1
+    # The correct shift: quality 1, and nothing lines up one plane away.
+    correct = _z_qualities(fixed, moving, KNOWN_SHIFT_3D, d)
+    for value, offset in zip(correct, ((1.0, 3.0, -2.0), (3.0, 3.0, -2.0))):
+        expected, n = _sliced_quality(fixed, moving, offset)
+        assert value == pytest.approx(expected, abs=1e-12) and abs(value) <= 5 / math.sqrt(n - 1)
+    quality = _quality_at(fixed, moving, KNOWN_SHIFT_3D)
+    assert quality == pytest.approx(1.0, abs=1e-12)
+    assert _z_outcome(quality, correct) == "passed"
+    # A registered shift one offset off in z: the known shift is at its +d side, which scores higher.
+    wrong = (KNOWN_SHIFT_3D[0] - d, *KNOWN_SHIFT_3D[1:])
+    z = _z_qualities(fixed, moving, wrong, d)
+    assert z[1] == pytest.approx(1.0, abs=1e-12)
+    assert _z_outcome(_quality_at(fixed, moving, wrong), z) == "quality_higher_at_z_offset"
+
+
+@pytest.mark.contract
+def test_the_z_check_record_and_its_reason():
+    from starfinder.stitching._multiview import Z_CHECK_RULE, Z_DROP_REASON, _z_check
+    from starfinder.stitching._placement import LINK_REASONS
+    assert Z_DROP_REASON == "quality_higher_at_z_offset" and Z_DROP_REASON in LINK_REASONS
+
+    def pairs(edges):
+        return [[f"FOV{a}", f"FOV{b}"] for a, b in edges]
+
+    registered = [(0, 1), (1, 2), (2, 3), (3, 4)]
+    zs = {(0, 1): [[0.2, 0.3]], (1, 2): [[math.nan, 0.9]], (2, 3): [None], (3, 4): [[0.1, 0.2]]}
+    quality = {(0, 1): 0.8, (1, 2): 0.6, (2, 3): 0.7, (3, 4): math.nan}
+    outcomes, record = _z_check(2, 0.7, zs, quality, registered, pairs)
+    assert outcomes == {(0, 1): "passed", (1, 2): Z_DROP_REASON, (2, 3): "skipped_thin_overlap",
+                        (3, 4): "skipped_nan_quality"}
+    assert record == {"offset_planes": 2, "offset_um": 1.0, "z_step_um": 0.7, "min_planes": 5, "rule": Z_CHECK_RULE,
+                      "dropped": 1, "links": [["FOV0", "FOV1", 0.2, 0.8, 0.3, "passed"],
+                                              ["FOV1", "FOV2", None, 0.6, 0.9, Z_DROP_REASON],
+                                              ["FOV2", "FOV3", None, 0.7, None, "skipped_thin_overlap"],
+                                              ["FOV3", "FOV4", 0.1, None, 0.2, "skipped_nan_quality"]]}
+    json.dumps(record, allow_nan=False)   # JSON as written: no NaN
+
+
 @pytest.mark.slow
 @needs_library
 def test_the_recording_registration_is_the_library_s_and_measures_its_quality():
     import xarray as xr
     from multiview_stitcher import registration
 
-    from starfinder.stitching._multiview import _null_qualities, _quality_at, _recording
+    from starfinder.stitching._multiview import _null_qualities, _quality_at, _recording, _z_qualities
     fixed, moving = _known_pair()
     null = []
     data = {"fixed_data": xr.DataArray(fixed, dims=("y", "x")), "moving_data": xr.DataArray(moving, dims=("y", "x"))}
@@ -254,11 +352,22 @@ def test_the_recording_registration_is_the_library_s_and_measures_its_quality():
     # The null's measure is the library's: at the library's shift it gives the library's quality.
     assert _quality_at(fixed, moving, shift) == pytest.approx(library["quality"], abs=1e-12)
     assert null == _null_qualities(fixed, moving, shift)
+    # In 3D with ``d``, it also records the pair's z qualities, one entry per pair.
+    fixed, moving = _known_pair_3d()
+    null, z = [], []
+    data = {"fixed_data": xr.DataArray(fixed, dims=("z", "y", "x")),
+            "moving_data": xr.DataArray(moving, dims=("z", "y", "x"))}
+    result = _recording(null, z, 2)(**data)
+    library = registration.phase_correlation_registration(**data)
+    assert np.array_equal(result["affine_matrix"], library["affine_matrix"]) and result["quality"] == library["quality"]
+    shift = np.asarray(result["affine_matrix"])[:3, 3]
+    assert z == [_z_qualities(fixed, moving, shift, 2)] and null == _null_qualities(fixed, moving, shift)
 
 
 @pytest.mark.slow
 @needs_library
 def test_auto_threshold_against_an_explicit_number_on_the_cut_fixture():
+    from starfinder.stitching._multiview import Z_DROP_REASON
     fixture = case("cut_synthetic")   # 3D tiles: an explicit "auto" applies to them too
     auto = run(fixture, quality_threshold="auto")
     quality = auto.record["method_diagnostics"]["link_quality"]
@@ -269,14 +378,31 @@ def test_auto_threshold_against_an_explicit_number_on_the_cut_fixture():
     assert quality["threshold"] == max(0.2, float(np.quantile(values, 0.99)))
     below = registered.quality < quality["threshold"]
     assert (registered.reason[below] == "quality_below_threshold").all()
-    assert registered.reason[~below].isin(["", "optimizer_removed"]).all()
-    # The same number given explicitly: the same placement, bit for bit, and no null measured.
+    assert registered.reason[~below].isin(["", "optimizer_removed", Z_DROP_REASON]).all()
+    # The z check on these 3D tiles: one row per registered link, and the links it drops carry its reason.
+    z_check = quality["z_check"]
+    assert [row[:2] for row in z_check["links"]] == [[a, b] for a, b in zip(registered.fov_a, registered.fov_b)]
+    dropped = {tuple(row[:2]) for row in z_check["links"] if row[-1] == Z_DROP_REASON}
+    assert dropped == _pair_set(registered[registered.reason == Z_DROP_REASON]) == {("tile4", "tile5")}
+    assert z_check["dropped"] == 1
+    # The same number given explicitly: no null and no z check, the same registrations, and the same decisions
+    # except the z check's, whose links pass the threshold and go to the optimizer (here it removes tile4–tile5).
     explicit = run(fixture, quality_threshold=quality["threshold"])
-    pd.testing.assert_frame_equal(explicit.fovs, auto.fovs, check_exact=True)
-    pd.testing.assert_frame_equal(explicit.links, auto.links, check_exact=True)
     assert "link_quality" not in explicit.record["method_diagnostics"]
     assert explicit.record["method"]["config"]["quality_threshold"] == quality["threshold"]
     assert auto.record["method"]["config"]["quality_threshold"] == "auto"
+    columns = ["fov_a", "fov_b", "shift_z", "shift_y", "shift_x", "quality"]
+    pd.testing.assert_frame_equal(explicit.links[columns], auto.links[columns], check_exact=True)
+    changed = explicit.links.reason != auto.links.reason
+    assert _pair_set(auto.links[changed]) == dropped
+    assert explicit.links.reason[changed].isin(["", "optimizer_removed"]).all()
+    # On single-plane tiles "auto" has no z check: the same number given explicitly gives the same placement, bit
+    # for bit.
+    plane = run(case("plane_2d"), quality_threshold="auto")
+    assert "z_check" not in plane.record["method_diagnostics"]["link_quality"]
+    given = run(case("plane_2d"), quality_threshold=plane.record["method_diagnostics"]["link_quality"]["threshold"])
+    pd.testing.assert_frame_equal(given.fovs, plane.fovs, check_exact=True)
+    pd.testing.assert_frame_equal(given.links, plane.links, check_exact=True)
     # The default for these 3D tiles is 0.7, higher: the link tile4–tile5 (0.46) is then dropped by rule L1.
     default = run(fixture)
     assert default.record["method"]["config"]["quality_threshold"] is None
@@ -285,7 +411,7 @@ def test_auto_threshold_against_an_explicit_number_on_the_cut_fixture():
     strict = default.links.set_index(["fov_a", "fov_b"])
     loose = auto.links.set_index(["fov_a", "fov_b"])
     assert strict.loc[("tile4", "tile5"), "reason"] == "quality_below_threshold"
-    assert loose.loc[("tile4", "tile5"), "reason"] != "quality_below_threshold"
+    assert loose.loc[("tile4", "tile5"), "reason"] == Z_DROP_REASON
 
 
 @pytest.mark.slow
@@ -305,6 +431,8 @@ def test_the_record_names_the_rule_that_set_the_threshold(name, given, rule):
         threshold = given
     elif rule == "auto":
         assert quality["rule"] == "auto" and quality["null"]["values"] > 0
+        # The z check is part of "auto" on tiles with Z > 1 only.
+        assert ("z_check" in quality) == (name != "plane_2d")
         threshold = quality["threshold"]
     else:
         assert quality == {"rule": "fixed_default_z_above_1", "threshold": 0.7}
@@ -312,6 +440,19 @@ def test_the_record_names_the_rule_that_set_the_threshold(name, given, rule):
     registered = result.links[(result.links.reason != "pruned") & result.links.quality.notna()]
     assert (registered.reason[registered.quality < threshold] == "quality_below_threshold").all()
     assert (registered.reason[registered.quality >= threshold] != "quality_below_threshold").all()
+
+
+@pytest.mark.slow
+@needs_library
+def test_a_thin_overlap_skips_the_z_check_and_the_record_says_so():
+    # 14 planes binned by 5 in z leave 2 planes, fewer than 2 d + 1 = 3 (d = 1 at 5 × 0.346 µm).
+    result = run(case("two_tiles"), quality_threshold="auto", binning_zyx=(5, 4, 4))
+    z_check = result.record["method_diagnostics"]["link_quality"]["z_check"]
+    assert (z_check["offset_planes"], z_check["min_planes"], z_check["dropped"]) == (1, 3, 0)
+    assert z_check["z_step_um"] == pytest.approx(5 * 0.346255, abs=1e-12)
+    assert [(r[2], r[4], r[5]) for r in z_check["links"]] == [(None, None, "skipped_thin_overlap")]
+    assert z_check["links"][0][3] == pytest.approx(result.links.quality.iloc[0], abs=1e-12)
+    assert "quality_higher_at_z_offset" not in set(result.links.reason)
 
 
 # --- MV3: fractional jitter on the synthetic scene -------------------------------------------
@@ -355,11 +496,14 @@ CASES = ("two_tiles", "z1_3d", "plane_2d", "spacing_1_2_2", "non_square", "no_si
 
 @pytest.mark.slow
 @needs_library
+@pytest.mark.parametrize("threshold", [None, "auto"], ids=["default", "auto"])
 @pytest.mark.parametrize("name", CASES)
-def test_hand_built_cases(name):
+def test_hand_built_cases(name, threshold):
+    # At the default (0.7 for these 3D tiles, "auto" for plane_2d) and at an explicit "auto", with its z check on the
+    # 3D tiles (W-895), against the same bounds.
     fixture = case(name)
     for fallback in (None, "nominal") if name in FAILING_TILE else (None,):
-        result = run(fixture, fallback=fallback)
+        result = run(fixture, fallback=fallback, **({} if threshold is None else {"quality_threshold": threshold}))
         placed = supported(result)
         errors = errors_voxels(result, fixture, placed)
         report(f"{name} fallback={fallback}", result, errors)
@@ -379,6 +523,14 @@ def test_hand_built_cases(name):
                 assert tile.status == "metadata_only" and "fallback" in tile["flags"].split(";")
                 assert [tile[f"origin_{a}"] for a in "zyx"] == [tile[f"nominal_{a}"] for a in "zyx"]
             assert result.record["review"]["state"] == "required"
+        if name == "disconnected" and threshold == "auto":
+            # The link tile4–tile5 registers 4 planes off in z (above the 0.2 floor): the z check drops it.
+            link = result.links.set_index(["fov_a", "fov_b"]).loc[("tile4", "tile5")]
+            truth = {t.fov_id: np.subtract(t.true, t.nominal) for t in fixture.tiles}
+            assert abs(link.shift_z / fixture.spacing[0] - (truth["tile5"] - truth["tile4"])[0]) \
+                == pytest.approx(4.0, abs=1e-6)
+            assert link.reason == "quality_higher_at_z_offset" and not link.kept
+            assert link.quality >= result.record["method_diagnostics"]["link_quality"]["threshold"]
 
 
 # --- MV5: the wrapper rules ------------------------------------------------------------------
@@ -389,9 +541,10 @@ def _pair_set(frame):
 
 @pytest.mark.slow
 @needs_library
-def test_wrapper_rules_on_the_cut_fixture(tmp_path):
+@pytest.mark.parametrize("threshold", [None, "auto"], ids=["default", "auto"])
+def test_wrapper_rules_on_the_cut_fixture(tmp_path, threshold):
     fixture = case("cut_synthetic")
-    result = run(fixture)
+    result = run(fixture, **({} if threshold is None else {"quality_threshold": threshold}))
     links = result.links
     inputs = fixture.inputs()
     pairs = neighbor_pairs(fixture.table(), {item.fov_id: item.grid for item in inputs})
@@ -407,11 +560,21 @@ def test_wrapper_rules_on_the_cut_fixture(tmp_path):
     # The library's overlap graph gives the contract's pairs on this fixture.
     assert {tuple(p) for p in diagnostics["overlap_pairs"]} == expected
     assert diagnostics["overlap_rows_outside_neighbor_pairs"] == []
-    # L1: below 0.7 is not kept with quality_below_threshold; no NaN-quality link is kept.
-    below = registered.quality < 0.7
-    assert below.any()
+    # L1: below the threshold (0.7 at the default) is not kept with quality_below_threshold; with "auto" a link the
+    # z check drops is not kept with quality_higher_at_z_offset; no NaN-quality link is kept.
+    quality = diagnostics["link_quality"]
+    level = 0.7 if threshold is None else quality["threshold"]
+    below = registered.quality < level
     assert list(registered.reason[below]) == ["quality_below_threshold"] * int(below.sum())
-    assert not registered.kept[below].any() and registered.kept[~below & registered.quality.notna()].all()
+    z_dropped = registered.reason == "quality_higher_at_z_offset"
+    if threshold is None:
+        assert below.any() and not z_dropped.any() and "z_check" not in quality
+    else:
+        assert z_dropped.any()
+        assert _pair_set(registered[z_dropped]) == {tuple(r[:2]) for r in quality["z_check"]["links"]
+                                                    if r[-1] == "quality_higher_at_z_offset"}
+    assert not registered.kept[below | z_dropped].any()
+    assert registered.kept[~below & ~z_dropped & registered.quality.notna()].all()
     assert not (links.kept & links.quality.isna()).any()
     # Translations in µm, view to common frame: nominal + translation gives the true offsets up to one shift.
     fovs = result.fovs
@@ -430,18 +593,23 @@ def test_wrapper_rules_on_the_cut_fixture(tmp_path):
 
 @pytest.mark.slow
 @needs_library
-def test_no_nan_quality_link_is_kept_and_nan_is_recorded():
-    result = run(case("no_signal_zero"))
+@pytest.mark.parametrize("threshold", [None, "auto"], ids=["default", "auto"])
+def test_no_nan_quality_link_is_kept_and_nan_is_recorded(threshold):
+    result = run(case("no_signal_zero"), **({} if threshold is None else {"quality_threshold": threshold}))
     links = result.links
     nan = links[(links.reason != "pruned") & links.quality.isna()]
     assert len(nan) and set(nan.reason) == {"nan_quality"} and not nan.kept.any()
     assert "nan_quality_link" in result.fovs.set_index("fov_id").loc["tile4", "flags"].split(";")
+    if threshold == "auto":   # the z check skips a NaN-quality link and records it
+        outcomes = {tuple(r[:2]): r[-1] for r in result.record["method_diagnostics"]["link_quality"]["z_check"]["links"]}
+        assert {outcomes[p] for p in _pair_set(nan)} == {"skipped_nan_quality"}
 
 
 @pytest.mark.slow
 @needs_library
-@pytest.mark.parametrize("name, fields", [("no_overlap", {}), ("two_tiles", {"quality_threshold": 1.0})],
-                         ids=["no_overlap", "every_link_dropped"])
+@pytest.mark.parametrize("name, fields", [("no_overlap", {}), ("no_overlap", {"quality_threshold": "auto"}),
+                                          ("two_tiles", {"quality_threshold": 1.0})],
+                         ids=["no_overlap", "no_overlap_auto", "every_link_dropped"])
 def test_with_no_link_left_every_fov_is_failed_and_the_result_is_saved(tmp_path, name, fields):
     fixture = case(name)
     for fallback in (None, "nominal"):

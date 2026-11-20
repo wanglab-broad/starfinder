@@ -516,7 +516,7 @@ view. The record removes that freedom with a stated gauge:
 | `shift_z`, `shift_y`, `shift_x` | float64, µm | The measured relative shift of `fov_b` against `fov_a` |
 | `quality` | float64 | The method's link quality: Spearman correlation for `multiview_stitcher`, BigStitcher's correlation `r` for the import; NaN when undefined |
 | `kept` | bool | Whether the link entered the global optimization |
-| `reason` | str | Why a link was not kept: `quality_below_threshold`, `nan_quality`, `optimizer_removed`, `pruned` (pair not registered) |
+| `reason` | str | Why a link was not kept: `quality_below_threshold`, `nan_quality`, `quality_higher_at_z_offset` (the z check of `"auto"` on tiles with Z > 1, W-895), `optimizer_removed`, `pruned` (pair not registered) |
 | `residual` | float64, µm | `‖(origin_b − origin_a) − (nominal_b − nominal_a) − shift‖` after placement; NaN for an unkept link |
 
 ### Method record
@@ -898,6 +898,28 @@ placement equals W-870's approved one bit for bit, with no review needed. The ru
 W-895's z-aware null can make `auto` the default for Z > 1.
 
 % Ruling of the §2.14 coordinating session, 2026-11-19, under Jiahao's overnight delegation (R-20261119T072539Z-cb90ce96).
+
+**Amended 2026-11-19 (W-895): a per-link z check is part of `"auto"` on tiles with Z > 1.**
+The threshold stays in-plane: `max(0.2, q99)` of the qualities at the registered shift ± half
+the overlap width along the overlap's narrow axis. A far-wrong offset answers whether a link
+aligns anything, not whether it sits a few planes off, and a global null with a small z offset
+would be set by the best-structured pairs and drop real links on smooth data. So on tiles with
+Z > 1, `"auto"` also measures each registered link's quality, as the null measures it, at the
+registered shift ± `d` planes along z, `d = max(1, round(1 µm / z step))`, the z step being the
+z spacing times the z binning, in the binned overlap's planes (3 planes at 0.35 µm without
+binning). A link is kept only if its quality at the registered shift is at least its quality at
+each z offset that has a value; an offset with too little valid overlap (NaN) does not count
+against it. A link dropped by the check gets the reason `quality_higher_at_z_offset`; a link
+below the threshold keeps `quality_below_threshold`. A pair whose binned overlap has fewer than
+`2d + 1` planes skips the check. `method_diagnostics["link_quality"]["z_check"]` holds `d`, the
+rule and, per link, the three qualities and the outcome (`passed`,
+`quality_higher_at_z_offset`, `skipped_thin_overlap` or `skipped_nan_quality`). A given number
+keeps today's behaviour: no null and no z check. The default for Z > 1 stays 0.7. It becomes
+`"auto"` with the z check only when MV4 and MV5 pass at `"auto"` with no bound widened (this
+issue) and W-904's run on the full LN sample finds no real link lost against W-856's links at
+0.7; Jiahao decides from W-904's report, and the change of default is its own issue.
+
+% Amended 2026-11-19 for W-895 (Jiahao, 2026-11-19, "Yes, adopt it": the coordinating session's proposal, comment afb2f959).
 
 ## Failure policy
 

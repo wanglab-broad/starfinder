@@ -34,8 +34,9 @@ library binning each pair itself, bit for bit.
 
 The default, `quality_threshold=None`, depends on the tiles: `"auto"` when every tile is
 single-plane (Z = 1), and 0.7 when tiles have Z > 1. The wrong offsets below move the overlap
-in Y and X only, so they cannot see a z error, and a weak 3D link can pass a threshold estimated
-this way (W-895 tracks a z-aware null). An explicit `"auto"`, or a number, applies to either kind.
+in Y and X only, so they cannot see a z error; on tiles with Z > 1, `"auto"` adds a z check for
+each link. The default for Z > 1 stays 0.7 until the LN evidence (W-904) shows whether `"auto"`
+with the z check loses real links. An explicit `"auto"`, or a number, applies to either kind.
 
 With `"auto"`, the threshold comes from the sample. For each
 registered pair the method also measures the quality at two deliberately wrong offsets: the
@@ -43,8 +44,19 @@ registered shift moved by half the overlap's width, in binned voxels rounded dow
 along the overlap axis (the narrower of Y and X). There no tissue lines up, so these qualities
 are a null distribution. The threshold is the larger of 0.2 and the null's 99th percentile, or
 0.2 when there is no null value. A link is kept when its quality is at least the threshold and
-not NaN. A number replaces the rule and no null is measured. The global optimization then
-removes links that disagree with the rest, as before.
+not NaN. A number replaces the rule, and no null and no z check are measured. The global
+optimization then removes links that disagree with the rest, as before.
+
+The z check of `"auto"` runs on tiles with Z > 1. The threshold stays the in-plane one; each
+link is also measured, in the same way, at its registered shift moved by `d` planes of the
+binned overlap both ways along z, where `d = max(1, round(1 µm / z step))` and the z step is
+the z spacing times `binning_zyx[0]`. That is 3 planes at 0.35 µm without binning, and 1 plane
+at LN's 0.346 µm with the default binning of 4. `round` is Python's, which rounds a half to the
+even neighbour. A link is kept only if its quality at the registered shift is at least its
+quality at each z offset that has a value. An offset that leaves too little valid overlap gives
+no value and does not count against the link. A link that passes the threshold but scores
+higher at a z offset is not kept, with the reason `quality_higher_at_z_offset`. A pair whose
+binned overlap has fewer than `2 d + 1` planes skips the check.
 
 `placement.json` records the rule that set the threshold. A given number is the method
 config's `quality_threshold`, and `method_diagnostics` has no `link_quality` entry. The default for
@@ -59,6 +71,7 @@ tiles with Z > 1 is recorded as `method_diagnostics.link_quality` =
 | `offsets` | How the wrong offsets were chosen |
 | `null` | `pairs` and `values` counted, and `min`, `median`, `quantile` (the 99th percentile) and `max` when there are values |
 | `null_pairs` | Per registered pair: `fov_a`, `fov_b` and its two null qualities (`null` where there is none) |
+| `z_check` | Tiles with Z > 1 only: `offset_planes` (`d`), `offset_um` (1.0), `z_step_um`, `min_planes` (`2 d + 1`), the `rule`, the number `dropped`, and `links`, per registered pair `fov_a`, `fov_b`, its qualities at −`d`, at the registered shift and at +`d` (`null` for NaN and for a skipped pair's offsets), and the outcome: `passed`, `quality_higher_at_z_offset`, `skipped_thin_overlap` or `skipped_nan_quality` |
 
 ```{config-options} starfinder.stitching.MultiviewStitcherConfig
 ```
