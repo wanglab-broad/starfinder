@@ -65,10 +65,12 @@ Clicking a card opens its parameters, read from `workflow/resolved.json`, the fi
 * the method, then the values that differ from the defaults of the configuration dataclass the block names (the `type`
   of each block in `configuration.api`), which are the only values listed; a step whose values are all defaults says
   so;
-* the fitted values of the example FOV, where the step has them, each with a link to the section and the table that
-  show them: the minimum and maximum per channel of a normalization (Preprocessing), the shifts of each round
-  (Registration, `registration.csv`) and the number and quality of the links (Stitching, `links.csv` of the
-  placement);
+* the fitted values, where the step has them, each with a link to the section that shows them and a relative link to
+  the file that holds them: the minimum and maximum per channel of a normalization (Preprocessing and
+  Post-registration preprocessing, the example FOV's `fovs/<fov>/run.json`), the shifts of each round (Registration,
+  the example FOV's rows of the report's `tables/registration.csv`) and the number and quality of the links (Stitching,
+  `links.csv` of the placement). The example FOV is the report's first example (`example_1` in `report.json`), and
+  the panel names it; a report without an example says so on the per-FOV cards and shows no other FOV's values;
 * the whole block behind "all parameters", and the file the values come from. When the file's hash is not the one the
   FOVs wrote (a task other than a FOV's changed it), the panel says so and shows the file's values.
 

@@ -1010,11 +1010,15 @@ the residual map uses arrows and colour as below.
    every field of a `type` that no `starfinder` module defines), in the order of the dataclass's fields, a nested
    dataclass or list of them under its path (`qc.min_coverage`); a section whose values are all defaults says "no
    value differs from the defaults". A block with no dataclass (the stitching block's keys, the assembly block) lists
-   its values as configured. Then the fitted values of the first succeeded record's FOV, with the link to the section
-   that shows them and the table that holds them: the `fitted` entries of the reference round's `preprocessing.rounds`
-   of the stage (the groups of a normalization as a table of channel, minimum and maximum), the shifts of the FOV's
-   rounds from `registration.csv`, and for the stitching the number of links, those kept and the minimum, median and
-   maximum `quality` of `links.csv` of the placement. Then "all parameters", the node as JSON. The card is a plain card
+   its values as configured. Then the fitted values, with the link to the section that shows them and a link, relative
+   to the page, to the file that holds them. On the per-FOV cards they are the example FOV's, the FOV of the role
+   `example_1` ("The example FOVs"), which the caption names: the `fitted` entries of the reference round's
+   `preprocessing.rounds` of the stage (the groups of a normalization as a table of channel, minimum and maximum),
+   from the FOV's `fovs/<fov>/run.json`, and the shifts of the FOV's rounds, from the report's
+   `tables/registration.csv` (never `intensity.csv`, which holds the replay's histogram bins). Without an example
+   (`report.json` `examples` all null) these cards say that the report has no example FOV and show no other FOV's
+   values. For the stitching they are the number of links, those kept and the minimum, median and maximum `quality`
+   of `links.csv` of the placement, linked there. Then "all parameters", the node as JSON. The card is a plain card
    when `resolved.json` is not recorded, is missing, is not a resolved configuration with an `api` (the part
    `files.configuration`, row `entry=parameters`: `input_missing` or `not_recorded`), or has no block for the card.
    When the hash of `resolved.json` is not one the run records hold, the panel and the Files table say so; the

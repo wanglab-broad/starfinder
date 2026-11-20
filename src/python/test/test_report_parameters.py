@@ -4,7 +4,7 @@
 The overview has a card for every stage the run records, in the order the steps run, among them the post-registration
 preprocessing ("not run" without ``post_registration``). Each card with parameters opens on them: the method, then the
 values of ``workflow/resolved.json`` that differ from the defaults of the dataclass its block names, the fitted values
-of the example FOV with a link to the table that holds them, and the whole block behind "all parameters".
+of the example FOV (``example_1``) with a link to the file that holds them, and the whole block behind "all parameters".
 
 The resolved configuration of these tests is built from the package's own dataclasses with ``plain`` (the form the plan
 writes), so that every ``type`` is a class with defaults; every expected list of values is written here by hand.
@@ -26,6 +26,7 @@ from starfinder.readout import DeduplicationConfig, ReadFilterConfig, ReadScoreC
 from starfinder.readout.decoding import WtaDecoderConfig
 from starfinder.readout.extraction import NeighborhoodSumConfig
 from starfinder.registration import RegistrationQcConfig, RegistrationRecipe, RegistrationStep, TranslationConfig
+from starfinder.report import ReportConfig
 from starfinder.report import _page as page_module
 from starfinder.report._parameters import defaults, differing
 from starfinder.spot_finding import LocalMaximaConfig
@@ -321,7 +322,10 @@ def test_the_fitted_values_of_the_example_fov_are_shown_with_a_link_to_their_tab
     text = page_text(folder)
     preprocessing = text.split('<span class="n">1</span>Preprocessing')[1].split("</details></div>", 1)[0]
     fitted = preprocessing.split('<p class="sp-cap">Fitted values')[1].split('<details class="sp-all">')[0]
-    assert '<a href="#prep">Preprocessing</a> · table <code>tables/intensity.csv</code>' in fitted
+    # The values come from the example FOV's run.json, not from intensity.csv (the replay's histogram bins).
+    assert (' of the example FOV <code>F1</code> · <a href="#prep">Preprocessing</a> · from '
+            '<a href="../../fovs/F1/run.json"><code>fovs/F1/run.json</code></a>') in fitted
+    assert "intensity.csv" not in fitted
     assert "<h4>min_max_normalization · F1, round1</h4>" in fitted
     assert [r for r in fitted.split("<tr>")[1:]] == [
         "<th>channel</th><th>min</th><th>max</th><th>mode</th></tr></thead><tbody>",
@@ -331,7 +335,8 @@ def test_the_fitted_values_of_the_example_fov_are_shown_with_a_link_to_their_tab
     registration = text.split('<span class="n">2</span>Registration')[1].split("</details></div>", 1)[0]
     table = pd.read_csv(folder / "tables" / "registration.csv")
     rows = table[table["fov_id"] == "F1"]
-    assert "table <code>tables/registration.csv</code>" in registration
+    assert (f'from <a href="tables/registration.csv"><code>report/{SAMPLE}/tables/registration.csv</code></a>'
+            in registration)
     for _, row in rows.iterrows():
         cells = "".join(f"<td>{value:,.4g}</td>" for value in (row["shift_z"], row["shift_y"], row["shift_x"]))
         assert f"<tr><td>{row['round']}</td>{cells}</tr>" in registration
@@ -358,6 +363,150 @@ def test_the_stitching_card_shows_the_quality_of_the_links(tmp_path):
     assert ('<tr><td>links</td><td>3, kept 2</td></tr><tr><td>quality</td><td>min 0.5, median 0.7, max 0.9</td></tr>'
             in block)
     assert '<a href="#b-placement">Placement</a>' in block
+
+
+# --- Fitted values of the example FOV, and the files that hold them (W-902) ----------------------------------------
+
+#: The link to the file of a fitted-values caption: its href and the path in the output root it names.
+SOURCE = re.compile(r' · from <a href="([^"]*)"><code>([^<]*)</code></a>$')
+#: The cards whose fitted values are a FOV's.
+FOV_FITTED = ("Preprocessing", "Post-registration preprocessing", "Registration")
+
+
+def fitted_case(tmp_path):
+    """report_records with the stitching block and a placement of three links; on every FOV the round1 normalization
+    fitted two groups whose maxima name the FOV (F3: 203 and 103) and the post-registration reconstruction a radius
+    of the FOV's number (F3: [0, 3, 3])."""
+    from starfinder.stitching import save_placement
+    from starfinder.stitching._placement import LINK_COLUMNS, LINK_DTYPES, PlacementResult
+    from .report_fixtures import placement_result
+    case = report_records(tmp_path / "root")
+    write_resolved(case, api={"processing": {"pipeline": plain(pipeline())},
+                              "stitching": {"method": "multiview_stitcher", "input": "reference_merged"}})
+    for fov in case.fov_ids:
+        n = int(fov[1:])
+        record = case.run_record(fov)
+        rounds = record["preprocessing"]["rounds"]
+        rounds["round1"][0]["fitted"] = {"groups": [{"channel": 0, "min": 0, "max": 200 + n, "mode": "rescale"},
+                                                    {"channel": 1, "min": 2, "max": 100 + n, "mode": "rescale"}]}
+        for name, entries in rounds.items():
+            entries.append({"index": 2, "stage": "post_registration", "step": "reconstruction",
+                            "config": {"radius_yx": 5}, "fitted": {"radius_voxels_zyx": [0, n, n]},
+                            "diagnostics": {}, "input_dtype": "uint8", "output_dtype": "uint8", "save_as": None})
+        case.write_run_record(fov, record)
+    result = placement_result(case.fov_ids)
+    rows = [{c: 0.0 for c in LINK_COLUMNS} | {"fov_a": a, "fov_b": b, "quality": q, "kept": kept, "reason": ""}
+            for a, b, q, kept in (("F1", "F2", 0.9, True), ("F1", "F3", 0.7, True), ("F3", "F4", 0.5, False))]
+    links = pd.DataFrame(rows, columns=list(LINK_COLUMNS)).astype(LINK_DTYPES)
+    save_placement(PlacementResult(result.sample, result.fovs, links, result.record), case.root / "stitching" / SAMPLE)
+    return case
+
+
+def fitted_panel(text, title):
+    """The caption of a card's fitted values (after "Fitted values") and the rest of their section."""
+    block = text.split(f"</span>{title}</b>")[1].split("</details></div>", 1)[0]
+    section = block.split('<p class="sp-cap">Fitted values', 1)[1].split('<details class="sp-all">', 1)[0]
+    caption, body = section.split("</p>", 1)
+    return caption, body
+
+
+def cells(body):
+    """The rows of the tables of a fitted-values section, each a tuple of its cells' text."""
+    return [tuple(re.sub(r"</?code>", "", c) for c in re.findall(r"<td>(.*?)</td>", row))
+            for row in re.findall(r"<tr>(.*?)</tr>", body) if "<td>" in row]
+
+
+def test_the_fitted_values_are_the_example_fovs_when_it_is_not_the_first_succeeded_fov(tmp_path):
+    case = fitted_case(tmp_path)
+    folder, record = case.collect(config=ReportConfig(example_fovs=("F3", "F1", "F2")))
+    assert record["examples"]["example_1"]["fov_id"] == "F3"
+    assert [f for f in case.fov_ids if case.run_record(f)["status"] == "succeeded"][0] == "F1"
+    text = page_text(folder)
+    for title in FOV_FITTED:
+        caption, body = fitted_panel(text, title)
+        assert caption.startswith(" of the example FOV <code>F3</code> · ")
+        assert "F1" not in caption + body
+    _, body = fitted_panel(text, "Preprocessing")
+    assert "<h4>min_max_normalization · F3, round1</h4>" in body
+    assert cells(body) == [("0", "0", "203", "rescale"), ("1", "2", "103", "rescale")]
+    _, body = fitted_panel(text, "Post-registration preprocessing")
+    assert "<h4>reconstruction · F3, round1</h4>" in body and cells(body) == [("radius_voxels_zyx", "[0, 3, 3]")]
+    _, body = fitted_panel(text, "Registration")
+    table = pd.read_csv(folder / "tables" / "registration.csv")
+    assert "<h4>shift in voxels · F3</h4>" in body
+    assert cells(body) == [(r["round"], *(f"{r['shift_' + a]:,.4g}" for a in "zyx"))
+                           for _, r in table[(table["fov_id"] == "F3") & table["shift_z"].notna()].iterrows()]
+
+
+def test_every_fitted_value_link_resolves_to_the_file_that_holds_the_values_shown(tmp_path):
+    case = fitted_case(tmp_path)
+    folder, _ = case.collect(config=ReportConfig(example_fovs=("F3", "F1", "F2")))
+    text = page_text(folder)
+    root = case.root.resolve()
+    found = {}
+    for title in FOV_FITTED + ("Stitching",):
+        caption, body = fitted_panel(text, title)
+        href, name = SOURCE.search(caption).groups()
+        path = (folder / href).resolve()
+        # Relative, inside the output root, the file the link names, and there.
+        assert not Path(href).is_absolute() and "://" not in href
+        assert path.is_relative_to(root) and path == (case.root / name).resolve() and path.is_file()
+        found[title] = (path.relative_to(root).as_posix(), path, body)
+    assert {t: f[0] for t, f in found.items()} == {
+        "Preprocessing": "fovs/F3/run.json", "Post-registration preprocessing": "fovs/F3/run.json",
+        "Registration": f"report/{SAMPLE}/tables/registration.csv", "Stitching": f"stitching/{SAMPLE}/links.csv"}
+    # Each file holds the values its panel shows.
+    _, path, body = found["Preprocessing"]
+    rounds = json.loads(path.read_text())["preprocessing"]["rounds"]
+    assert cells(body) == [(str(g["channel"]), str(g["min"]), str(g["max"]), g["mode"])
+                           for g in rounds["round1"][0]["fitted"]["groups"]]
+    _, path, body = found["Post-registration preprocessing"]
+    radius = next(e for e in json.loads(path.read_text())["preprocessing"]["rounds"]["round1"]
+                  if e["stage"] == "post_registration")["fitted"]["radius_voxels_zyx"]
+    assert cells(body) == [("radius_voxels_zyx", "[" + ", ".join(str(v) for v in radius) + "]")]
+    _, path, body = found["Registration"]
+    table = pd.read_csv(path)
+    rows = table[(table["fov_id"] == "F3") & table["shift_z"].notna()]
+    assert len(rows) and cells(body) == [(r["round"], *(f"{r['shift_' + a]:,.4g}" for a in "zyx"))
+                                         for _, r in rows.iterrows()]
+    _, path, body = found["Stitching"]
+    links = pd.read_csv(path)
+    quality = links["quality"]
+    assert cells(body) == [("links", f"{len(links)}, kept {int(links['kept'].sum())}"),
+                           ("quality", f"min {quality.min():g}, median {quality.median():g}, max {quality.max():g}")]
+
+
+def test_the_preprocessing_panels_do_not_name_the_intensity_table(tmp_path):
+    """``intensity.csv`` holds the replay's histogram bins, not the fitted minimum and maximum."""
+    folder, _ = fitted_case(tmp_path).collect()
+    text = page_text(folder)
+    for title in ("Preprocessing", "Post-registration preprocessing"):
+        caption, body = fitted_panel(text, title)
+        assert "fovs/F1/run.json" in caption
+        assert "intensity" not in caption + body
+    chart = text[text.index('id="b-chart"'):text.index('id="b-fov-status"')]
+    assert "intensity.csv" not in chart
+
+
+def test_a_report_without_an_example_says_so_and_shows_no_other_fovs_values(tmp_path):
+    case = fitted_case(tmp_path)
+    # Without the read filter no FOV has a read count to choose an example from.
+    for fov in case.fov_ids:
+        record = case.run_record(fov)
+        record["config"]["pipeline"]["filtering"] = None
+        del record["counts"]["filtering"]
+        case.write_run_record(fov, record)
+    folder, record = case.collect()
+    assert record["examples"] == {"example_1": None, "example_2": None, "example_3": None}
+    text = page_text(folder)
+    for title in FOV_FITTED:
+        caption, body = fitted_panel(text, title)
+        assert "example FOV <code>" not in caption and SOURCE.search(caption) is None
+        assert "The report has no example FOV" in body and "<table" not in body and "<h4>" not in body
+        assert not re.search(r"\bF[1-4]\b", caption + body)
+    # The stitching's link qualities are the placement's, not a FOV's: still shown, with their file.
+    caption, _ = fitted_panel(text, "Stitching")
+    assert SOURCE.search(caption).group(2) == f"stitching/{SAMPLE}/links.csv"
 
 
 # --- Both routes --------------------------------------------------------------------------------------------------
