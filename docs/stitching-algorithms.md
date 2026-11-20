@@ -35,8 +35,9 @@ library binning each pair itself, bit for bit.
 The default, `quality_threshold=None`, depends on the tiles: `"auto"` when every tile is
 single-plane (Z = 1), and 0.7 when tiles have Z > 1. The wrong offsets below move the overlap
 in Y and X only, so they cannot see a z error; on tiles with Z > 1, `"auto"` adds a z check for
-each link. The default for Z > 1 stays 0.7 until the LN evidence (W-904) shows whether `"auto"`
-with the z check loses real links. An explicit `"auto"`, or a number, applies to either kind.
+each link. On the full LN sample (W-904) the z check passed every link, but LN's in-plane null
+is high (99th percentile 0.91), so `"auto"` dropped 62 real links that 0.7 keeps. The default
+for Z > 1 therefore stays 0.7. An explicit `"auto"`, or a number, applies to either kind.
 
 With `"auto"`, the threshold comes from the sample. For each
 registered pair the method also measures the quality at two deliberately wrong offsets: the

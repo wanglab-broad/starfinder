@@ -150,8 +150,9 @@ one plane get 0.7. On stacks whose tiles share one z range, such as tissue-2D (Z
 and left most FOVs unplaced, while `auto` reproduced the approved placement. The threshold of
 `auto` comes from the quality at wrong offsets in Y and X only, which cannot catch a link that
 is off in z. So on tiles with more than one plane, `auto` also measures each link about 1 µm up
-and down in z and drops a link that scores higher there than at its own shift. The default for
-these tiles stays 0.7 until that check has been tried on the full LN sample (W-904).
+and down in z and drops a link that scores higher there than at its own shift. On the full LN
+sample (W-904) that check passed every link, but `auto`'s in-plane threshold (0.91 there)
+dropped 62 real links that 0.7 keeps, so the default for these tiles stays 0.7.
 
 The reference generates configuration defaults from the code. For the
 [link-quality rule](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md#link-quality-rule)
