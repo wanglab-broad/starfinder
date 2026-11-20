@@ -8,30 +8,22 @@ where it is; nothing is copied, linked or written into it.
 
 ## Quick start
 
-The tissue-2D sample dataset is a raw folder in the layout the workflow reads.
-Write its FOV list outside the folder, name the list in the configuration with
-`fov_list`, and plan:
-
-```python
-import csv
-from pathlib import Path
-
-raw = Path("/stanley/WangLab/Data/Processed/sample-dataset/tissue-2D")
-number = lambda fov: int(fov.rsplit("_", 1)[1])
-fovs = sorted((p.name for p in (raw / "round1").iterdir() if p.is_dir()), key=number)
-with open("fovs.csv", "w", newline="") as handle:
-    writer = csv.writer(handle, lineterminator="\n")
-    writer.writerow(["sample", "fov_id"])
-    writer.writerows(["tissue-2D", fov] for fov in fovs)
-```
+tissue-2D's configuration is `starfinder.yaml` in its folder, beside the FOV
+list `fovs.csv` it names. Append the run's roots and output id to a copy, and
+plan:
 
 ```bash
+cat /stanley/WangLab/Data/Processed/sample-dataset/tissue-2D/starfinder.yaml - > tissue2d.yaml <<'EOF'
+root_input_path: /stanley/WangLab/Data/Processed
+root_output_path: /stanley/WangLab/<user>/tissue-2D/output
+output_id: full
+EOF
 starfinder workflow plan --config tissue2d.yaml
 ```
 
-The list holds `tile_1` to `tile_56` in the order of their numbers, which is
-the scan order of this dataset. The plan prints the manifest's path and its tasks
-by kind; with the configuration below, 228 tasks for 56 FOVs.
+The FOV list holds `tile_1` to `tile_56` in the order of their numbers, which
+is the scan order of this dataset. The plan prints the manifest's path and its
+tasks by kind: 228 tasks for 56 FOVs.
 
 ## What it does
 
@@ -56,12 +48,14 @@ no image content and writes nothing under the input folder.
 `fov_id`, and optionally `position_id`, the stage file's PositionID of each FOV.
 `sample` groups the FOVs that are stitched, exported and reported together.
 `fov_list` names the file, absolute or relative to the input folder. Without
-`fov_list`, the plan reads `fovs.csv` in the input folder. Keep the list outside
-a raw folder, next to the configuration, so that the folder is read in place.
-`selected_fovs` then picks FOVs of the list to run. To process a dataset in
-parts, for example the first tiles while the rest are imaged, plan each larger
-selection into the same output root: the finished FOVs' tasks are kept, and the
-new FOVs and the sample-level tasks (stitching, export, report) run
+`fov_list`, the plan reads `fovs.csv` in the input folder. Keep the list next to
+the configuration: beside the data with a dataset's own configuration (below),
+or outside a raw folder you do not curate. Either way the workflow reads the
+folder in place and writes nothing into it. `selected_fovs` then picks FOVs of
+the list to run. To process a dataset in parts, for example the first tiles
+while the rest are imaged, plan each larger selection into the same output
+root: the finished FOVs' tasks are kept, and the new FOVs and the sample-level
+tasks (stitching, export, report) run
 ({ref}`the task kinds <workflow-task-kinds>`).
 
 **The row order.** The rows are read in order: a sample's FOVs keep the order of
@@ -76,31 +70,88 @@ text order and the numbers in the FOV ids give another order.
 `codebook` names (`direct_panel` in `readout_mode: direct`), absolute or relative
 to the input folder. tissue-2D's `genes.csv` is in its raw folder.
 
-## The configuration
+(preparing-a-dataset-configuration)=
+## A configuration per dataset
 
-This is the configuration W-870 ran tissue-2D with, end to end, with three
-changes: `fov_list` and the raw folder replace the link tree it built, and the
-package defaults replace its previews, its stitching quality threshold and most
-of its resources. Its `recipe: deep` is written out as the steps that recipe
-expanded to ({ref}`migration guide <migration-named-recipe>`). The FOV list is
-the file of the Quick start.
+Each dataset the workflow has run on keeps its configuration beside its data:
+`starfinder.yaml`, and the FOV list `fovs.csv` it names, in the dataset's folder
+under `/stanley/WangLab/Data/Processed/`.
+
+| Dataset | Folder | The run it holds |
+| --- | --- | --- |
+| tissue-2D | `sample-dataset/tissue-2D` | W-870, all 56 FOVs |
+| cell-culture-3D | `sample-dataset/cell-culture-3D` | E14's held-out demons arm (W-773) |
+| Covid_LN | `sample-dataset/LN` | E14's held-out demons arm |
+| mPFC-aging | `2025-04-26-Jiakun-mPFC-aging` | E14's held-out demons arm, tiled |
+
+A dataset's file holds the whole configuration of its last full run, in the
+Python form:
+
+* **The dataset's facts:** the dataset and sample ids, the rounds and colour
+  order, the rotation and voxel size, the reference stains and additional
+  rounds with their channel names, the FOV list, and the stitching positions
+  where the dataset records them. The codebook is the folder's `genes.csv`,
+  the default of `codebook`.
+* **The run's own choices:** its steps and settings as that run set them. A
+  key the run left unset is unset here too, so a later run takes the current
+  default.
+
+Each value carries a comment naming its source. The file holds no root, no
+`output_id` and no `selected_fovs`: give them at run time by appending them, as
+in the Quick start. Since the file holds none of these keys, each appears once.
+
+**A new dataset.** Write its `starfinder.yaml` directly in this form, with
+tissue-2D's as the template. There is no converter from `dataset-info.json`.
+That file is MATLAB-era and the workflow does not read it, and the plan refuses
+two of its keys, `fov_id_pattern` and `maximum_projection`. Check each value
+against the files: the voxel size from the TIFF tags, the channel names from
+the round folders. Then write the FOV list beside it. tissue-2D's list was
+written this way:
+
+```python
+import csv
+from pathlib import Path
+
+raw = Path("/stanley/WangLab/Data/Processed/sample-dataset/tissue-2D")
+number = lambda fov: int(fov.rsplit("_", 1)[1])
+fovs = sorted((p.name for p in (raw / "round1").iterdir() if p.is_dir()), key=number)
+with open("fovs.csv", "w", newline="") as handle:
+    writer = csv.writer(handle, lineterminator="\n")
+    writer.writerow(["sample", "fov_id"])
+    writer.writerows(["tissue-2D", fov] for fov in fovs)
+```
+
+This is tissue-2D's `starfinder.yaml`:
 
 ```yaml
+# tissue-2D: the Python workflow's configuration of /stanley/WangLab/Data/Processed/sample-dataset/tissue-2D (W-873).
+# The whole configuration of the dataset's last full run, W-870's stage 2 on all 56 FOVs, export route per_fov
+# (runs/W-870/20261118T0309Z-tissue2d/configs/stage2-per_fov.yaml, after the placement approval; its base is
+# configs/tissue2d.yaml, whose comments give the decisions D1-D4, Jiahao, 2026-11-17). Its processing.recipe deep is
+# written out as the steps it expanded to (W-887). A key that run left unset stays unset here.
+# Give at run time: root_input_path (the folder that holds sample-dataset/, /stanley/WangLab/Data/Processed),
+# root_output_path and output_id; selected_fovs only to run some FOVs.
 backend: python
-root_input_path: /stanley/WangLab/Data/Processed
-root_output_path: /stanley/WangLab/<user>/tissue-2D/output
+# W-870: the dataset's ids; <root_input_path>/sample-dataset/tissue-2D is this folder
 dataset_id: sample-dataset
 sample_id: tissue-2D
-output_id: full
-fov_list: /stanley/WangLab/<user>/tissue-2D/fovs.csv
+# W-872's key: the FOV list beside this file, tile_1 .. tile_56 in scan order (the order of their numbers; the grid
+# below fills in that order), the same rows as W-870's link-tree fovs.csv
+fov_list: fovs.csv
+# W-870 (E14 datasets.json, tissue2d): four sequencing rounds (codes of 5 bases in genes.csv), reference round1
 n_rounds: 4
 ref_round: round1
+# W-870 (E14 datasets.json): the colour order ch00, ch02, ch01, ch03 (488, 546, 594, 647 nm)
 seq_channel_order: [ch00, ch02, ch01, ch03]
+# W-870 (E14 datasets.json; dataset-info.json rotate_angle)
 rotate_angle: -90
+# W-870 (E14 datasets.json): XY from the TIFF resolution tag (2^32-1 / 406454246 per um), Z the ImageJ spacing tag
 voxel_size_xy: 0.094635
 voxel_size_z: 0.346255
+# W-870 (D3): PI is the shared stain; dataset-info.json ref_channel PI. round1's fifth file, ch04, is PI.
 ref_channel: PI
 reference_stains: [{channel: ch04, name: PI}]
+# W-870 (dataset-info.json additional_round and channel_order): the protein round's four channels
 additional_round:
   - round_name: protein
     channel_order:
@@ -108,8 +159,13 @@ additional_round:
       - {channel: ch01, name: tau}
       - {channel: ch02, name: PI}
       - {channel: ch03, name: Gfap}
+# The codebook is genes.csv in this folder, the default of the key codebook, which W-870 left unset.
 processing:
+  # W-870 (D1: E14's global arm)
   mode: direct
+  # W-870's recipe deep, written out as the steps it expanded to (W-887's migration guide; W-870's fovs/<fov>/run.json
+  # record them): min-max to uint8, histogram matching to channel 0, and a reconstruction of radius 3 after
+  # registration; one global translation on the channels' maximum
   preprocessing:
     steps:
       - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
@@ -120,14 +176,21 @@ processing:
     steps:
       - {method: translation}
     signal: {mode: max}
+  # W-870
   streaming: true
+  # W-870: the package's spot finding and extraction (empty blocks: the current defaults)
   spot_finding: {}
   reads_extraction: {}
+  # W-870 (E14 datasets.json): codes of 5 bases start C and end C
   reads_filtration: {end_base: CC, start_base: C}
+# W-870 (D3): the protein round, registered by one translation on the shared stain (recipe null), and one maximum
+# projection per channel
 morphology:
   rounds: [protein]
   recipe: null
   channel_images: {projection: max}
+# W-870 (D2): StarDist's 2D_versatile_fluo on the PI stain's maximum projection, scaled by 0.25 (a 6-10 um nucleus is
+# about 16-26 px after scaling)
 segmentation:
   device: cpu
   runs:
@@ -138,29 +201,52 @@ segmentation:
       scale: 0.25
       inputs: [{role: nuclear, round: reference_stain, channel: PI}]
       projection: {method: max}
+# W-870 (D2): the cells are the nuclei expanded by 0.7776 um in each plane (W-858's primary territory)
 assignment:
   cells: nucleus
   nuclei: nucleus
+  name: default
   expansion: {distance: 0.7776, unit: um, mode: planar}
+  previews: true
+# W-870: multiview_stitcher (bigstitcher fails on single-plane input, W-856); quality_threshold 0.3 (the coordinator's
+# decision of 2026-11-18: 0.7 rejected every real link, qualities 0.49-0.68). dataset-info.json and grid.csv: 7 columns
+# x 8 rows, column by column, top down then right, overlap 0.1
 stitching:
   method: multiview_stitcher
+  config: {quality_threshold: 0.3}
   positions:
     source: regular_grid
     regular_grid: {columns: 7, rows: 8, order: column_major_down_right, overlap: 0.1}
+# W-870
 assembly: {assignment: default}
+# W-870 (D4, route 1 of 2): per_fov; its route 2 replaced this block by route after_fusion with export.segmentation
 export:
   route: per_fov
   images: [reference_merged, reference_stain]
+  previews: true
+# W-870
 report: {}
+# W-870's stage-2 requests on UGER (scripts/stage2_resources.py from stage 1's measures; stitch, report, export and
+# compare after the placement approval, scripts/stage2_a2.py), one thread per task
 execution:
+  defaults: {threads: 1, memory_mb: 8000, runtime_min: 30, gpu: false}
   tasks:
-    fov: {memory_mb: 64000, runtime_min: 180}
+    fov: {threads: 1, memory_mb: 32000, runtime_min: 105}
+    morphology: {threads: 1, memory_mb: 28000, runtime_min: 15}
+    segment: {threads: 1, memory_mb: 12000, runtime_min: 15}
+    assign: {threads: 1, memory_mb: 12000, runtime_min: 15}
+    report: {threads: 1, memory_mb: 24000, runtime_min: 45}
+    stitch: {threads: 1, memory_mb: 16000, runtime_min: 15}
+    export: {threads: 1, memory_mb: 64000, runtime_min: 120}
+    compare: {threads: 1, memory_mb: 8000, runtime_min: 30}
+  resume_from_checkpoint: false
+  code_version: keep
+  log_level: INFO
 ```
 
-Each value comes from the dataset: the rounds and colour order, the rotation and
-voxel size, `ch04` of `round1` as the PI stain, the protein round's four channels,
-the code's start and end bases, and the 7 × 8 grid filled column by column,
-top down. The {doc}`reference <reference>` lists every key.
+Its `processing` block writes out the steps of the retired `recipe: deep`
+({ref}`migration guide <migration-named-recipe>`). The
+{doc}`reference <reference>` lists every key.
 
 ## Learned methods and the weights folder
 
@@ -211,4 +297,8 @@ by `fov_list` (absolute and relative) and without it, files of no configured
 channel left unread, a label that matches two files refused with both names, and
 the order warning. W-872 planned the raw tissue-2D folder in place with
 `fov_list` and compared the task set and the image list with W-870's plan on
-its link tree.
+its link tree. W-873 planned each dataset's configuration on its folder, read
+in place, with the run's keys appended. tissue-2D's resolved configuration
+equals W-870's, apart from the roots, the output id, the FOV list and two
+defaults changed since: the spot-finding threshold (W-880) and the retired
+recipe key (W-887).
