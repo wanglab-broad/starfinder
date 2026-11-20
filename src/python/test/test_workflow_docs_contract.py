@@ -191,6 +191,33 @@ def test_each_global_example_resolves_to_its_stated_steps(tmp_path, name):
         assert [s["config"] for s in api["tiled"]["local_registration"]["steps"]] == [defaults["demons"]]
 
 
+def test_the_guides_dataset_template_resolves_with_the_quick_starts_run_keys_appended():
+    """docs/workflow/preparing-a-dataset.md shows tissue-2D's starfinder.yaml as the template of a dataset's own
+    configuration (W-873). It holds no root, output_id or selected_fovs; the Quick start appends exactly the run keys
+    as text, and the result passes the plan's shape and schema checks and resolves with the steps of the retired
+    recipe written out."""
+    import re
+    from starfinder.workflow._plan import check_shape, resolve, validate_schema
+    page = docs_pages.read("workflow/preparing-a-dataset.md")
+    (template,) = re.findall(r"```yaml\n(.*?)```", docs_pages.section(page, "preparing-a-dataset-configuration"),
+                             flags=re.S)
+    (appended,) = re.findall(r"<<'EOF'\n(.*?)^EOF$", page, flags=re.S | re.M)
+    keys = yaml.safe_load(appended)
+    assert sorted(keys) == ["output_id", "root_input_path", "root_output_path"]
+    dataset = yaml.safe_load(template)
+    assert template.endswith("\n") and not {*keys, "selected_fovs"} & set(dataset)
+    assert dataset["fov_list"] == "fovs.csv"
+    config = yaml.safe_load(template + appended)
+    assert config == dict(dataset, **keys)
+    check_shape(config)
+    validate_schema(config)
+    processing = resolve(config, {"path": "tissue2d.yaml", "sha256": None})["configuration"]["processing"]
+    assert "recipe" not in processing
+    assert processing["preprocessing"] == dict(GLOBAL_PREPROCESSING, post_registration=[
+        {"method": "reconstruction", "radius_yx": 3}])
+    assert processing["registration"] == {"steps": [{"method": "translation"}], "signal": MAX}
+
+
 def _directive_content(page, name, argument=""):
     """The content lines of the one fenced directive ``{name} argument`` of a page."""
     head = f"```{{{name}}}" + (f" {argument}" if argument else "")
