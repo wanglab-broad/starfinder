@@ -74,12 +74,12 @@ FOV_CARDS = ("Preprocessing", "Registration", "Post-registration preprocessing",
 _PIPELINE_STEPS = {"Registration": ("registration", "register"), "Spot finding": ("spot_finding", "find_spots"),
                    "Read extraction": ("extraction", "extract_round"), "Decoding": ("decoding", "decode_reads"),
                    "Scoring": ("scoring", "score_reads"), "Read QC filter": ("filtering", "filter_reads")}
-#: Where the fitted values of a card are shown on the page (the section or block its link names) and the table of the
-#: report folder or the placement that holds them, when there is one.
-_FITTED_LINKS = {"Preprocessing": ("prep", "Preprocessing", "tables/intensity.csv"),
-                 "Post-registration preprocessing": ("prep", "Preprocessing", "tables/intensity.csv"),
-                 "Registration": ("reg", "Registration", "tables/registration.csv"),
-                 "Stitching": ("b-placement", "Placement", "stitching/<sample>/links.csv")}
+#: Where the fitted values of a card are shown on the page: the section or block its link names. The file that holds
+#: them is linked beside it (``_Page._fitted``).
+_FITTED_LINKS = {"Preprocessing": ("prep", "Preprocessing"),
+                 "Post-registration preprocessing": ("prep", "Preprocessing"),
+                 "Registration": ("reg", "Registration"),
+                 "Stitching": ("b-placement", "Placement")}
 #: The size budget of the page (SB1): 6 MiB + 16 KiB per FOV + 3 MiB per marker figure.
 KIB, MIB = 1024, 1024 * 1024
 _SLOT = re.compile(r"<!--slot:([a-z_]+)-->")
@@ -551,7 +551,7 @@ class _Page:
             dimensionality = "both" if len(kinds) > 1 else (kinds[0] if kinds else None)
             sample_cards.append(card("Export", ", ".join(written) + (f"; {dimensionality}" if dimensionality else "")))
         number = 0
-        self._lead, self._lead_fov = lead, lead_fov
+        self._lead = lead
 
         def lane(label, cards, tooltip):
             nonlocal number
@@ -646,19 +646,40 @@ class _Page:
                 rows.append(((key,), value))
         return [(None, None, rows)]
 
+    def _example(self):
+        """The FOV of the report's first example (role ``example_1``) and its run record (None without one), or
+        ``(None, None, reason)`` when the report has no example."""
+        examples = self.c.examples
+        if isinstance(examples, Unavailable):
+            return None, None, examples
+        fov = next(e.fov_id for e in examples if e.role == "example_1")
+        return fov, self.c.records.get(fov), None
+
+    def _source(self, path) -> str:
+        """A link to a file, relative to the report's folder, named by its path in the output root."""
+        href = os.path.relpath(os.path.abspath(path), os.path.abspath(self.folder)).replace(os.sep, "/")
+        return f'<a href="{_e(href)}"><code>{_e(self._shown(path))}</code></a>'
+
     def _fitted(self, title) -> str:
-        """The values a step fitted on the example FOV, from its records, each with its link to the table they are
-        shown in: the minimum and maximum per channel of a normalization, the shifts of the registration, the
-        quality of the stitching's links. "" when the step has none."""
-        lead, fov = self._lead, self._lead_fov
-        anchor, text, table = _FITTED_LINKS.get(title, (None, None, None))
-        where = ""
-        if anchor is not None:
-            where = f' · <a href="#{anchor}">{_e(text)}</a> · table <code>{_e(table)}</code>'
-        blocks = []
-        if title in ("Preprocessing", "Post-registration preprocessing") and lead is not None:
+        """The values a step fitted, each block with a link to the section that shows them and to the file that holds
+        them: the minimum and maximum per channel of a normalization (the example FOV's ``run.json``), the shifts of
+        the registration (the example FOV's rows of the report's ``tables/registration.csv``), the quality of the
+        stitching's links (the placement's ``links.csv``). The example FOV is the one of ``example_1``; without an
+        example, the per-FOV cards say so and show no other FOV's values. "" when the step has none."""
+        c = self.c
+        anchor, text = _FITTED_LINKS.get(title, (None, None))
+        if anchor is None:
+            return ""
+        fov, record, missing = self._example()
+        if title != "Stitching" and missing is not None:
+            return (f'<div class="sp-sec"><p class="sp-cap">Fitted values · <a href="#{anchor}">{_e(text)}</a></p>'
+                    f'<p class="muted">The report has no example FOV ({_e(REASON_TEXTS[missing.reason])}), so no '
+                    f'FOV\'s fitted values are shown.</p></div>')
+        blocks, source = [], None
+        if title in ("Preprocessing", "Post-registration preprocessing") and record is not None:
             stage = "steps" if title == "Preprocessing" else "post_registration"
-            rounds = _get(lead, "preprocessing", "rounds") or {}
+            source = _layout.run_record(c.root, fov)
+            rounds = _get(record, "preprocessing", "rounds") or {}
             first = next(iter(rounds), None)
             for entry in rounds.get(first) or []:
                 fitted = entry.get("fitted")
@@ -668,6 +689,7 @@ class _Page:
                 blocks.append(heading + self._fitted_table(fitted))
         elif title == "Registration":
             rows = [r for r in self.rows["registration"] if r["fov_id"] == fov and r["shift_z"] is not None]
+            source = self.folder / "tables" / "registration.csv"
             if rows:
                 lines = "".join(f"<tr><td>{_e(r['round'])}</td>"
                                 + "".join(f"<td>{_number(r['shift_' + a])}</td>" for a in "zyx") + "</tr>"
@@ -675,8 +697,9 @@ class _Page:
                 head = "<thead><tr><th>round</th><th>z</th><th>y</th><th>x</th></tr></thead>"
                 blocks.append(f'<h4>shift in voxels · {_e(fov)}</h4>'
                               f'<table class="tl fit">{head}<tbody>{lines}</tbody></table>')
-        elif title == "Stitching" and self.c.p_links is not None and len(self.c.p_links):
-            links = self.c.p_links
+        elif title == "Stitching" and c.p_links is not None and len(c.p_links):
+            links = c.p_links
+            source = c.stitching_dir / ((_get(c.placement, "tables", "links") or {}).get("path") or "links.csv")
             quality = links["quality"].dropna()
             kept = int(links["kept"].sum())
             lines = f"<tr><td>links</td><td>{_int(len(links))}, kept {_int(kept)}</td></tr>"
@@ -686,7 +709,9 @@ class _Page:
             blocks.append(f'<h4>link quality</h4><table class="tl"><tbody>{lines}</tbody></table>')
         if not blocks:
             return ""
-        return f'<div class="sp-sec"><p class="sp-cap">Fitted values{where}</p>{"".join(blocks)}</div>'
+        of = f' of the example FOV <code>{_e(fov)}</code>' if title != "Stitching" else ""
+        where = f' · <a href="#{anchor}">{_e(text)}</a> · from {self._source(source)}'
+        return f'<div class="sp-sec"><p class="sp-cap">Fitted values{of}{where}</p>{"".join(blocks)}</div>'
 
     @staticmethod
     def _fitted_table(fitted) -> str:
