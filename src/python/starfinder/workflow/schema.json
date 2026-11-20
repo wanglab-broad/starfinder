@@ -245,6 +245,13 @@
       ]
      }
     },
+    "spot_finding_input": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "minLength": 1
+    },
     "streaming": {
      "type": "boolean"
     },

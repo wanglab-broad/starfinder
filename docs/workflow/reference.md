@@ -153,7 +153,8 @@ The per-FOV pipeline of the `fov` tasks, or in tiled mode of the `tile_global`,
 ```{workflow-keys} processing
 mode: direct runs one fov task per FOV; tiled runs a FOV in tiles (processing.tiled).
 tiled: The tiled settings below, read in mode tiled only.
-checkpoints: The checkpoint stages the fov task writes; the plan adds registered when a segmentation input reads a sequencing round.
+checkpoints: The checkpoint stages the fov task writes; the plan adds registered when a segmentation input reads a sequencing round. registered holds each round after its post-registration steps, the stack spot finding reads.
+spot_finding_input: The output root of an earlier run whose fov tasks wrote the stage registered, absolute or relative to the input folder; each fov task then loads its FOV's registered stage from there and runs spot finding and the steps after it. Mode direct only, without registered in checkpoints and without resume_from_checkpoint. A FOV whose saved preprocessing, registration, rounds or channels differ from this configuration's is refused (exit 2); another package version is not.
 streaming: true runs FOV.run in streaming execution, false in batch.
 device: cpu, the device of registration and readout; spot_finding.device sets the device of spot finding.
 load_codebook: The codebook settings: split_index and encoding.

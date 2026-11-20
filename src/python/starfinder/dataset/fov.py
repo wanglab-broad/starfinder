@@ -220,6 +220,8 @@ class FOV:
     _reference_file: tuple | None = field(default=None, init=False, repr=False, compare=False)
     # (stage, earlier run.json) while _resume_run continues an earlier run after that stage.
     _resume: tuple | None = field(default=None, init=False, repr=False, compare=False)
+    # {record, pipeline, entry} while _run_from_input runs from a saved spot-finding input.
+    _source: dict | None = field(default=None, init=False, repr=False, compare=False)
     # Tiled execution's global task (dataset/tiled.py): called with each pipeline round's name once FOV.run has
     # processed it (after the post-registration steps), while its image is resident; and the folder of its run.json.
     _round_sink: object | None = field(default=None, init=False, repr=False, compare=False)
@@ -1983,7 +1985,7 @@ class FOV:
             # Stages this run does not rewrite must not survive from an earlier run.
             _checkpoint.clear_stages(directory)
         directory.mkdir(parents=True, exist_ok=True)
-        record = _RunRecord(self, folder, checkpoints, config, execution, resume=resume)
+        record = _RunRecord(self, folder, checkpoints, config, execution, resume=resume, source=self._source)
         record.write()
         return record
 
@@ -2002,6 +2004,23 @@ class FOV:
             return self.run(config, execution=execution, checkpoints=checkpoints)
         finally:
             self._resume = None
+
+    def _run_from_input(self, config, *, execution, checkpoints, source):
+        """Run spot finding and the steps after it on a saved spot-finding input, loaded already.
+
+        For the workflow's ``processing.spot_finding_input``: the registered stage of the saved set is loaded
+        (load_checkpoint with the set's folder), ``config`` is the part of the pipeline after that stage and
+        ``checkpoints`` this run's stages (registered not among them). ``source`` is ``{record, pipeline, entry}``:
+        the set's run.json, checked by the caller, this run's whole pipeline and the ``spot_finding_input`` section.
+        The new run.json records the whole pipeline, the set's inputs, preprocessing, registration and transforms and
+        its steps before its registered stage was written (without the detection and extraction, which this run
+        performs), then this run's steps; it names no registered stage of its own.
+        """
+        self._source = source
+        try:
+            return self.run(config, execution=execution, checkpoints=checkpoints)
+        finally:
+            self._source = None
 
     def _checkpoint_snapshots(self) -> list[str]:
         """Snapshots used downstream besides the detection image: the recorded extraction source."""

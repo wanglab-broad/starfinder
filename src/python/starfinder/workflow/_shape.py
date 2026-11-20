@@ -65,9 +65,9 @@ LEFT_KEYS = {
     "n_random_tests": "selected_fovs",
 }
 #: The processing block's keys (today's processing rule parameters without the run flags, D4) and the new keys.
-PROCESSING_KEYS = ("mode", "tiled", "checkpoints", "streaming", "device", "load_codebook", "load_raw_images",
-                   "preprocessing", "registration", "reference_image_view", "spot_finding", "reads_extraction",
-                   "reads_filtration", "decoding", "scoring", "deduplication")
+PROCESSING_KEYS = ("mode", "tiled", "checkpoints", "spot_finding_input", "streaming", "device", "load_codebook",
+                   "load_raw_images", "preprocessing", "registration", "reference_image_view", "spot_finding",
+                   "reads_extraction", "reads_filtration", "decoding", "scoring", "deduplication")
 #: The keys of the processing block that left: the subtile route's, and the named recipe, whose one value ``deep``
 #: the plan expanded into the explicit steps given here (docs/migration.md, "The named processing recipe").
 PROCESSING_LEFT = {"create_subtiles": "processing.mode: tiled and processing.tiled: the legacy subtile route is "

@@ -232,6 +232,50 @@ The workflow's own files are in `workflow/`:
 
 The {doc}`reference <reference>` lists every key with its default, and the
 {doc}`migration guide <../migration>` maps the keys of earlier configurations.
+
+(workflow-spot-finding-input)=
+### Spot finding from a saved set
+
+The stage `registered` holds each round after its preprocessing, registration
+and post-registration steps (reconstruction, for example): the stack that spot
+finding reads. To try other spot-finding, readout or decoding settings on the
+same FOVs without running preprocessing and registration again, save that stage
+once and point later runs at it:
+
+1. Run the workflow with `registered` among the checkpoint stages, for example
+   `checkpoints: [registered, candidates, pre_qc]`. Its output root is the
+   saved set; each FOV's stage is under
+   `fovs/<fov>/checkpoints/registered/`, and `fovs/<fov>/run.json` records the
+   package version and the steps that made it.
+2. In a later configuration, with its own `output_id`, keep the processing
+   block's `load_raw_images`, `preprocessing` and `registration` as they were,
+   change spot finding or the steps after it, and name the set:
+
+   ```yaml
+   processing:
+     spot_finding_input: /path/to/<dataset_id>/<output_id of the saved set>
+     checkpoints: [candidates, pre_qc]
+   ```
+
+Each `fov` task then declares the set's `run.json` and registered stage record
+of its FOV in place of the raw images, loads the stage (checking every image
+against the SHA-256 the stage record lists) and runs spot finding, extraction,
+decoding, scoring, deduplication and filtering. Its `run.json` records this
+run's whole processing configuration, the set's inputs and steps, and a
+`spot_finding_input` section naming the set's `run.json`, its registered stage
+record with their SHA-256 and the package version that made the set.
+
+The task refuses a set (exit 2, naming every field) whose `run.json` does not
+fit: another dataset, sample or FOV, a run that did not succeed, no registered
+stage, a package version that cannot be established or a tree with uncommitted
+changes, other round roles or channels, or other `load_raw_images`,
+`rotate_angle`, `preprocessing` or `registration` settings, and a supplied
+statistics file with another SHA-256. It reads a set that another package
+version made: a change that leaves preprocessing and registration output
+bit-identical keeps the set valid. A change to that output makes the set stale,
+which the task cannot see from the version, so make the set again at the new
+version. A set is a run's output root: keep it as long as runs read it, and
+copy it with its `run.json` files.
 `backend: matlab` runs the {doc}`MATLAB legacy workflow <matlab-legacy>` instead.
 
 ## Limits
@@ -259,6 +303,11 @@ The {doc}`reference <reference>` lists every key with its default, and the
   exits 0. Only `workflow verify --final` reports it.
 * The MATLAB workflow is frozen: the plan refuses `backend: matlab`, and the
   Snakefile runs the legacy rules for it.
+* `processing.spot_finding_input` works in mode `direct` only, and a run that
+  reads a set writes no `registered` stage of its own, so its segmentation
+  cannot read a registered sequencing round. The package version of a set is
+  recorded, not compared: whether a newer version changed preprocessing or
+  registration output is for its user to know.
 
 ## How it is checked
 
