@@ -934,18 +934,56 @@ the residual map uses arrows and colour as below.
 ### Workflow overview
 
 1. **Workflow chart** (static HTML cards written by the filler from `steps.csv`, the run
-   records' configuration, `placement.json` and `export.json`). Two lanes, "Per FOV" and "Per sample", cards numbered in run order, four per row. Per-FOV cards and the steps they
-   stand for: Preprocessing (`preprocess:*`; method: the recipe's steps joined by " → ");
-   Registration (`register`; the succeeded methods); Spot finding (`find_spots`); Decoding
-   (`decode_reads`; decoder and readout mode); Read QC filter (`filter_reads`);
-   Deduplication; and on the route per FOV Segmentation and Assignment. Per-sample cards:
-   Stitching (`placement.json` `method.method`), Segmentation (route after fusion),
+   records' configuration, `placement.json` and `export.json`). Two lanes, "Per FOV" and "Per sample", cards numbered in run order, four per row. A card for every stage the run records, in the order
+   the steps run (W-883). Per-FOV cards and the steps they
+   stand for: Preprocessing (`preprocess:*` of the recipe's `steps`; method: the recipe's steps joined by " → ");
+   Registration (`register`; the succeeded methods); Post-registration preprocessing (`preprocess:*` of the
+   recipe's `post_registration`, run after the registration; method: its steps joined by " → "; "not run" when the
+   recipe has none); Spot finding (`find_spots`); Read extraction (`extract_round`; the radius of the neighbourhood);
+   Decoding (`decode_reads`; decoder and readout mode); Scoring (`score_reads`; the scoring method); Deduplication
+   (`deduplicate_reads`); Read QC filter (`filter_reads`); and on the route per FOV Segmentation and Assignment.
+   Per-sample cards: Stitching (`placement.json` `method.method`), Segmentation (route after fusion),
    Assembly (the ownership rule of `export.json` `assembly.config`), Export (the export's
    parts written, with `dimensionality`). A step that the configuration leaves out is a
    dashed card "not run" (the mockup's `.st.off`); a step with no record yet is a dashed
    card "not yet run". The cards use the first run record in list order with status
    `succeeded`, else the first run record; FOVs whose step list differs are counted in the
    card's tooltip.
+
+   % W-883: the card for the post-registration step, which the recipe's `steps` leave out, and the cards for the extraction and scoring stages; deduplication before the read filter, as the steps run.
+
+   **The parameters of a card** (W-883). A card with parameters is a `details` element: its summary is the card, and
+   an open card takes the whole row of its lane. The parameters are read from `workflow/resolved.json`, the file
+   named by `workflow_config.path` of the run records (the file whose hash they hold, "Files"); the page has no second
+   parameter table. The block of each card is `configuration.api` at the keys of the table below.
+
+   | Card | `configuration.api` |
+   | --- | --- |
+   | Preprocessing, Post-registration preprocessing | `processing.pipeline.preprocessing.steps`, `.post_registration` |
+   | Registration | `processing.pipeline.registration` |
+   | Spot finding, Read extraction, Decoding, Scoring, Deduplication, Read QC filter | `processing.pipeline.spot_finding`, `.extraction`, `.decoding`, `.scoring`, `.deduplication`, `.filtering` |
+   | Segmentation | `segmentation.plan` |
+   | Assignment | `assignment.config` |
+   | Stitching | `stitching` |
+   | Export | `export.config` |
+   | Assembly | `configuration.assembly`, as configured (the assembly block has no dataclass of its own in `api`) |
+
+   Each node of `api` is a dataclass written by the plan with its `type`. The panel shows, in this order: the method
+   (a step's name from the run record's recipe, else the node's `method`) and the values of each section that differ
+   from the defaults of the dataclass the `type` names (`dataclasses.fields`; a field without a default is listed, and
+   every field of a `type` that no `starfinder` module defines), in the order of the dataclass's fields, a nested
+   dataclass or list of them under its path (`qc.min_coverage`); a section whose values are all defaults says "no
+   value differs from the defaults". A block with no dataclass (the stitching block's keys, the assembly block) lists
+   its values as configured. Then the fitted values of the first succeeded record's FOV, with the link to the section
+   that shows them and the table that holds them: the `fitted` entries of the reference round's `preprocessing.rounds`
+   of the stage (the groups of a normalization as a table of channel, minimum and maximum), the shifts of the FOV's
+   rounds from `registration.csv`, and for the stitching the number of links, those kept and the minimum, median and
+   maximum `quality` of `links.csv` of the placement. Then "all parameters", the node as JSON. The card is a plain card
+   when `resolved.json` is not recorded, is missing, is not a resolved configuration with an `api` (the part
+   `files.configuration`, row `entry=parameters`: `input_missing` or `not_recorded`), or has no block for the card.
+   When the hash of `resolved.json` is not one the run records hold, the panel and the Files table say so; the
+   parameters are those of the file.
+
 2. **FOV status** (SVG map), beside **Time per step** (static PNG): the FOV status
    categories; the time is a horizontal box plot per step name (log scale in seconds,
    whiskers at 1.5 × the interquartile range, every FOV beyond drawn as a point), the sample
@@ -1184,7 +1222,10 @@ Three tables of two columns, as the mockup, without the marker row (settled deci
   `workflow_config.sha256` of the FOVs' `run.json`, which each FOV task wrote when it ended, so it is
   the hash `resolved.json` had when the FOVs ran, not the hash of the file now beside it. When every FOV
   that has the key holds the same hash, the row shows it; when two differ, it shows "several; see each
-  FOV's run.json". Report settings: `report.json` `config`, shown as its JSON in a collapsed element.
+  FOV's run.json". Parameters (W-883; only for a run with `workflow_config`): that the cards of the Workflow overview open
+  on the values of `resolved.json`, with the hash of the file now beside the FOVs' when it differs (the cards say so
+  too), or the box of the part `files.configuration`, row `entry=parameters` (`input_missing`, `not_recorded`) when the
+  file cannot be read. Report settings: `report.json` `config`, shown as its JSON in a collapsed element.
 
 % Amended 2026-11-04 (W-811, Jiahao's decision at the W-653 gate, item D2): the row was labelled "Hash" and showed the
 % first FOV's hash; a rerun with no `fov` task (a changed `export` key) changes `resolved.json` and leaves the FOVs'

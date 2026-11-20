@@ -88,6 +88,22 @@ main{display:flex;flex-direction:column;gap:44px;min-width:0}
 .st:nth-child(4n)::after,.st:nth-child(4n)::before,.st:last-child::after,.st:last-child::before{display:none}
 .st.off{border-style:dashed;background:transparent;color:var(--muted)} .st.off i{color:var(--muted)}
 .lanes-ph{padding:0 16px 12px}
+/* a card with parameters is a details element: its summary is the card, and an open card takes the whole row */
+.st>details{min-width:0}
+.st summary{list-style:none;cursor:pointer;display:flex;flex-direction:column;gap:2px;color:inherit}
+.st summary::-webkit-details-marker{display:none}
+.st summary b::after{content:"\25B8";margin-left:auto;font-weight:400;color:var(--muted)}
+.st details[open] summary b::after{content:"\25BE"}
+.st summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.st:has(details[open]){grid-column:1/-1}
+.st:has(details[open])::after,.st:has(details[open])::before,.st:has(+ .st details[open])::after,.st:has(+ .st details[open])::before{display:none}
+.sp{display:flex;flex-direction:column;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);color:var(--fg);cursor:auto;overflow-x:auto}
+.sp h4{margin:0 0 4px;font-size:13px;font-weight:600}
+.sp-cap,.sp-src{margin:0 0 4px;font-size:12px;color:var(--muted)}
+.sp-sec p.muted{margin:0;font-size:13px}
+.sp table.tl td:first-child{width:260px}
+.sp table.fit td:first-child{width:auto} .sp thead th{text-align:left}
+.sp-all pre{max-height:320px;overflow:auto}
 @media (max-width:900px){
   .lane{grid-template-columns:minmax(0,1fr)} .lane .lab{padding-top:0}
   .lane .cards{grid-template-columns:repeat(2,minmax(0,1fr))}

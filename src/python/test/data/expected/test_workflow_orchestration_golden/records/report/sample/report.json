@@ -145,6 +145,11 @@
    "sha256": "a44227f244b0ff29dcd37abc4b74b7aa4acf46d64351cd59850bcca0ef66a79d",
    "bytes": 7688,
    "verified": false
+  },
+  {
+   "path": "workflow/resolved.json",
+   "kind": "workflow_config",
+   "verified": false
   }
  ],
  "files": [

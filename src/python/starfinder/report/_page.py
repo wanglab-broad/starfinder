@@ -32,6 +32,7 @@ import pandas as pd
 
 from starfinder import _layout
 
+from ._parameters import CARD_NODES, Resolved, differing, path_text, shown, typed
 from ._schema import READOUT_LEVELS
 from ._values import (Unavailable, acquisition, configuration_check, is_value, reference_image_z_size, run_time,
                       software, step_name, time_per_step, z_size)
@@ -63,6 +64,19 @@ _REMOVAL_CHECKS = {"components_unchanged": "the removals split a component",
                    "fovs_keep_links": "a FOV keeps fewer than 2 links and fewer than it had",
                    "residuals_within_tolerance": "a kept link's residual is above the tolerance",
                    "corrections_within_bound": "a correction is above the bound"}
+#: The cards of the "Per FOV" lane, in the order the steps run ("Workflow overview"), and each one's ``pipeline`` key
+#: and run.json step name (Preprocessing, Post-registration preprocessing and Deduplication are read otherwise).
+FOV_CARDS = ("Preprocessing", "Registration", "Post-registration preprocessing", "Spot finding", "Read extraction",
+             "Decoding", "Scoring", "Deduplication", "Read QC filter")
+_PIPELINE_STEPS = {"Registration": ("registration", "register"), "Spot finding": ("spot_finding", "find_spots"),
+                   "Read extraction": ("extraction", "extract_round"), "Decoding": ("decoding", "decode_reads"),
+                   "Scoring": ("scoring", "score_reads"), "Read QC filter": ("filtering", "filter_reads")}
+#: Where the fitted values of a card are shown on the page (the section or block its link names) and the table of the
+#: report folder or the placement that holds them, when there is one.
+_FITTED_LINKS = {"Preprocessing": ("prep", "Preprocessing", "tables/intensity.csv"),
+                 "Post-registration preprocessing": ("prep", "Preprocessing", "tables/intensity.csv"),
+                 "Registration": ("reg", "Registration", "tables/registration.csv"),
+                 "Stitching": ("b-placement", "Placement", "stitching/<sample>/links.csv")}
 #: The size budget of the page (SB1): 6 MiB + 16 KiB per FOV + 3 MiB per marker figure.
 KIB, MIB = 1024, 1024 * 1024
 _SLOT = re.compile(r"<!--slot:([a-z_]+)-->")
@@ -171,6 +185,18 @@ def _derived(reason, what, ratio="1/1") -> str:
     """A box for a figure drawn from table cells that has nothing to draw (its cells' rows explain it)."""
     return (f'<div class="ph" data-cells="{_e(what)}" style="--ar:{ratio}"><span>Unavailable: '
             f'{_e(REASON_TEXTS[reason])}</span></div>')
+
+
+def _fitted_value(value) -> str:
+    """A fitted value in a panel: a number to 4 significant digits (:func:`_number`), a list of them in brackets,
+    anything else as the panels write a value."""
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return shown(value)
+    if isinstance(value, (int, float)):
+        return _number(value)
+    if isinstance(value, list) and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
+        return "[" + ", ".join(_number(v) for v in value) + "]"
+    return shown(value)
 
 
 def _int(value) -> str:
@@ -437,30 +463,38 @@ class _Page:
             return (title, detail, off)
         fov_cards = []
         if lead is None:
-            for title in ("Preprocessing", "Registration", "Spot finding", "Decoding", "Read QC filter",
-                          "Deduplication"):
+            for title in FOV_CARDS:
                 fov_cards.append(card(title, off="no run record"))
         else:
             recipe = _get(lead, "preprocessing", "recipe", "steps") or []
-            fov_cards.append(card("Preprocessing", " → ".join(recipe)) if pipeline.get("preprocessing") and recipe
-                             else card("Preprocessing", off="not run"))
-            for title, key, step, default in (("Registration", "registration", "register", None),
-                                              ("Spot finding", "spot_finding", "find_spots", None),
-                                              ("Decoding", "decoding", "decode_reads", None),
-                                              ("Read QC filter", "filtering", "filter_reads", None)):
-                if pipeline.get(key) is None:
-                    fov_cards.append(card(title, off="not run"))
-                elif step not in lead_names:
-                    fov_cards.append(card(title, off="not yet run"))
+            post = _get(lead, "preprocessing", "recipe", "post_registration") or []
+            for title in FOV_CARDS:
+                if title == "Preprocessing":
+                    fov_cards.append(card(title, " → ".join(recipe)) if pipeline.get("preprocessing") and recipe
+                                     else card(title, off="not run"))
+                elif title == "Post-registration preprocessing":
+                    if not pipeline.get("preprocessing") or not post:
+                        fov_cards.append(card(title, off="not run"))
+                    elif not all(f"preprocess:{name}" in lead_names for name in post):
+                        fov_cards.append(card(title, off="not yet run"))
+                    else:
+                        fov_cards.append(card(title, " → ".join(post)))
+                elif title == "Deduplication":
+                    dedup = pipeline.get("deduplication")
+                    if dedup is None:
+                        fov_cards.append(card(title, off="not run"))
+                    elif "deduplicate_reads" not in lead_names:
+                        fov_cards.append(card(title, off="not yet run"))
+                    else:
+                        fov_cards.append(card(title, f"within {dedup.get('distance_voxels')} voxels"))
                 else:
-                    fov_cards.append(card(title, method(step) or _get(pipeline, key, "method") or ""))
-            dedup = pipeline.get("deduplication")
-            if dedup is None:
-                fov_cards.append(card("Deduplication", off="not run"))
-            elif "deduplicate_reads" not in lead_names:
-                fov_cards.append(card("Deduplication", off="not yet run"))
-            else:
-                fov_cards.append(card("Deduplication", f"within {dedup.get('distance_voxels')} voxels"))
+                    key, step = _PIPELINE_STEPS[title]
+                    if pipeline.get(key) is None:
+                        fov_cards.append(card(title, off="not run"))
+                    elif step not in lead_names:
+                        fov_cards.append(card(title, off="not yet run"))
+                    else:
+                        fov_cards.append(card(title, method(step) or self._stage_detail(key, pipeline) or ""))
         if c.route != "after_fusion":
             if c.assignment is None:
                 fov_cards += [card("Segmentation", off="not run"), card("Assignment", off="not run")]
@@ -489,6 +523,7 @@ class _Page:
             dimensionality = "both" if len(kinds) > 1 else (kinds[0] if kinds else None)
             sample_cards.append(card("Export", ", ".join(written) + (f"; {dimensionality}" if dimensionality else "")))
         number = 0
+        self._lead, self._lead_fov = lead, lead_fov
 
         def lane(label, cards, tooltip):
             nonlocal number
@@ -496,8 +531,14 @@ class _Page:
             for title, detail, off in cards:
                 number += 1
                 attrs = f' data-t="{_tip([title, tooltip])}"' if tooltip else ""
-                html_cards.append(f'<div class="st{" off" if off else ""}"{attrs}><b><span class="n">{number}</span>'
-                                  f'{_e(title)}</b><i>{_e(off or detail)}</i></div>')
+                head = f'<b><span class="n">{number}</span>{_e(title)}</b><i>{_e(off or detail)}</i>'
+                params = "" if off in ("not run", "no run record") else self.parameters(title)
+                if params:
+                    # The card is a ``details`` element: its summary is the card, its body the parameters.
+                    html_cards.append(f'<div class="st{" off" if off else ""}"{attrs}><details><summary>{head}'
+                                      f'</summary>{params}</details></div>')
+                else:
+                    html_cards.append(f'<div class="st{" off" if off else ""}"{attrs}>{head}</div>')
             return (f'<div class="lane"><span class="lab">{_e(label)}</span>'
                     f'<div class="cards">{"".join(html_cards)}</div></div>')
         out = lane("Per FOV", fov_cards, tip) + lane("Per sample", sample_cards, None)
@@ -505,6 +546,136 @@ class _Page:
         if missing:
             out += '<div class="lanes-ph">' + "".join(unavailable_box(u, line=True) for u in missing) + "</div>"
         return out
+
+    @staticmethod
+    def _stage_detail(key, pipeline):
+        """The card text of a stage that records no method of its own: the scoring method, the extraction's radius."""
+        block = pipeline.get(key) or {}
+        if key == "extraction" and block.get("neighborhood_radius_zyx") is not None:
+            return f"radius {', '.join(str(v) for v in block['neighborhood_radius_zyx'])} voxels"
+        return block.get("method")
+
+    # The parameters of a card ----------------------------------------------------------------------------------------
+
+    def parameters(self, title) -> str:
+        """The body of a card's ``details``: its method, the values of ``workflow/resolved.json`` that differ from the
+        defaults of the dataclass the step ran with, the fitted values of the example FOV, the whole block behind
+        "all parameters" and the file they come from; "" when the run holds none for the card."""
+        resolved = self.c.resolved
+        if not isinstance(resolved, Resolved):
+            return ""
+        node = (resolved.configuration.get("assembly") if title == "Assembly" else
+                resolved.node(title) if title in CARD_NODES else None)
+        if node is None or node == []:
+            return ""
+        names = {"Preprocessing": _get(self._lead, "preprocessing", "recipe", "steps"),
+                 "Post-registration preprocessing": _get(self._lead, "preprocessing", "recipe",
+                                                         "post_registration")}.get(title) or []
+        sections = self._sections(node, names)
+        body = []
+        for heading, kind, rows in sections:
+            label = f"<h4>{_e(heading)}</h4>" if heading else ""
+            if rows:
+                lines = "".join(f"<tr><td>{_e(path_text(path))}</td><td><code>{_e(shown(value))}</code></td></tr>"
+                                for path, value in rows)
+                table = f'<table class="tl"><tbody>{lines}</tbody></table>'
+            else:
+                table = f'<p class="muted">{"no value differs from the defaults" if kind else "no values given"}</p>'
+            caption = "Values that differ from the defaults" if kind else "As configured"
+            of = f' <span class="muted">of <code>{_e(kind)}</code></span>' if kind else ""
+            body.append(f'<div class="sp-sec">{label}<p class="sp-cap">{caption}{of}</p>{table}</div>')
+        fitted = self._fitted(title)
+        text = json.dumps(node, indent=2, ensure_ascii=False)
+        changed = (' <span class="muted">· the file has changed since the FOVs ran (hash '
+                   f'<code>{_e(resolved.sha256[:19])}</code>)</span>' if resolved.changed else "")
+        source = f'<p class="sp-src muted">from <code>{_e(resolved.path)}</code>{changed}</p>'
+        return (f'<div class="sp">{"".join(body)}{fitted}<details class="sp-all"><summary>all parameters</summary>'
+                f'<pre>{_e(text)}</pre></details>{source}</div>')
+
+    @staticmethod
+    def _sections(node, names):
+        """The sections of a card's parameters, ``(heading, dataclass name, rows)``: one per step of a list of steps
+        or of a recipe, then the recipe's own values; a dataclass is one section; a block that is no dataclass (the
+        assembly block, the stitching block's keys) lists its values as configured."""
+        def of_step(step, name):
+            config = step.get("config") if typed(step) else None
+            heading = name or (config or {}).get("method") or (config or {}).get("type") or step.get("type")
+            rows = [(path[1:] if path[0] == "config" else path, value) for path, value in differing(step)]
+            return heading, (config or step).get("type"), rows
+        if isinstance(node, list):
+            return [of_step(step, names[i] if i < len(names) else None) for i, step in enumerate(node)]
+        if typed(node) and isinstance(node.get("steps"), list):
+            rest = {k: v for k, v in node.items() if k != "steps"}
+            return ([of_step(step, None) for step in node["steps"]] +
+                    [("Recipe", node["type"], differing(rest))])
+        if typed(node):
+            return [(node.get("method"), node["type"], differing(node))]
+        rows = []
+        for key, value in node.items():
+            if typed(value):
+                rows += differing(value, (key,))
+            elif value is not None:
+                rows.append(((key,), value))
+        return [(None, None, rows)]
+
+    def _fitted(self, title) -> str:
+        """The values a step fitted on the example FOV, from its records, each with its link to the table they are
+        shown in: the minimum and maximum per channel of a normalization, the shifts of the registration, the
+        quality of the stitching's links. "" when the step has none."""
+        lead, fov = self._lead, self._lead_fov
+        anchor, text, table = _FITTED_LINKS.get(title, (None, None, None))
+        where = ""
+        if anchor is not None:
+            where = f' · <a href="#{anchor}">{_e(text)}</a> · table <code>{_e(table)}</code>'
+        blocks = []
+        if title in ("Preprocessing", "Post-registration preprocessing") and lead is not None:
+            stage = "steps" if title == "Preprocessing" else "post_registration"
+            rounds = _get(lead, "preprocessing", "rounds") or {}
+            first = next(iter(rounds), None)
+            for entry in rounds.get(first) or []:
+                fitted = entry.get("fitted")
+                if entry.get("stage") != stage or not isinstance(fitted, dict) or not fitted:
+                    continue
+                heading = f"<h4>{_e(entry.get('step'))} · {_e(fov)}, {_e(first)}</h4>"
+                blocks.append(heading + self._fitted_table(fitted))
+        elif title == "Registration":
+            rows = [r for r in self.rows["registration"] if r["fov_id"] == fov and r["shift_z"] is not None]
+            if rows:
+                lines = "".join(f"<tr><td>{_e(r['round'])}</td>"
+                                + "".join(f"<td>{_number(r['shift_' + a])}</td>" for a in "zyx") + "</tr>"
+                                for r in rows)
+                head = "<thead><tr><th>round</th><th>z</th><th>y</th><th>x</th></tr></thead>"
+                blocks.append(f'<h4>shift in voxels · {_e(fov)}</h4>'
+                              f'<table class="tl fit">{head}<tbody>{lines}</tbody></table>')
+        elif title == "Stitching" and self.c.p_links is not None and len(self.c.p_links):
+            links = self.c.p_links
+            quality = links["quality"].dropna()
+            kept = int(links["kept"].sum())
+            lines = f"<tr><td>links</td><td>{_int(len(links))}, kept {_int(kept)}</td></tr>"
+            if len(quality):
+                lines += (f"<tr><td>quality</td><td>min {_number(quality.min())}, median {_number(quality.median())}, "
+                          f"max {_number(quality.max())}</td></tr>")
+            blocks.append(f'<h4>link quality</h4><table class="tl"><tbody>{lines}</tbody></table>')
+        if not blocks:
+            return ""
+        return f'<div class="sp-sec"><p class="sp-cap">Fitted values{where}</p>{"".join(blocks)}</div>'
+
+    @staticmethod
+    def _fitted_table(fitted) -> str:
+        """A step's fitted values: a list of objects (the groups of channels) as a table of its keys, other values as
+        rows."""
+        out = ""
+        rows = []
+        for key, value in fitted.items():
+            if isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+                columns = list(dict.fromkeys(k for item in value for k in item))
+                head = "".join(f"<th>{_e(c)}</th>" for c in columns)
+                lines = "".join("<tr>" + "".join(f"<td>{_e(_fitted_value(item.get(c)))}</td>" for c in columns)
+                                + "</tr>" for item in value)
+                out += f'<table class="tl fit"><thead><tr>{head}</tr></thead><tbody>{lines}</tbody></table>'
+            else:
+                rows.append(f"<tr><td>{_e(key)}</td><td><code>{_e(_fitted_value(value))}</code></td></tr>")
+        return out + (f'<table class="tl"><tbody>{"".join(rows)}</tbody></table>' if rows else "")
 
     @staticmethod
     def _part_card(title, part, parts, detail):
@@ -753,6 +924,7 @@ class _Page:
     def files(self) -> dict:
         c = self.c
         entries = {u["row_key"]: u for u in self.parts("files.input") + self.parts("files.configuration")}
+        resolved = c.resolved
         records = [c.records[f] for f in c.fov_ids if c.records[f] is not None]
 
         def entry(key, make):
@@ -805,6 +977,17 @@ class _Page:
             if len(hashes) > 1:
                 return "several; see each FOV's run.json"
             return f"<code>{_e(hashes[0])}</code>"
+        def parameters():
+            if "entry=parameters" in entries:
+                return unavailable_box(entries["entry=parameters"], inline=True)
+            if not isinstance(resolved, Resolved):
+                return '<span class="muted">no workflow configuration path recorded</span>'
+            text = ("the cards of the Workflow overview open on them; the values that differ from the defaults, and "
+                    "the whole block")
+            if resolved.changed:
+                text += (f'; <span class="muted">the file has changed since the FOVs ran (hash '
+                         f'<code>{_e(resolved.sha256[:19])}</code>)</span>')
+            return text
         settings = (f'<details><summary>report.json config</summary><pre>'
                     f'{_e(json.dumps(self.config_json, indent=2, ensure_ascii=False))}</pre></details>')
         root = c.root
@@ -828,6 +1011,7 @@ class _Page:
                     ("Workflow", entry("entry=workflow", workflow_path)),
                     ("Hash (FOVs ran under)", "" if "entry=workflow" in entries or workflow is None else
                      workflow_hash()),
+                    *([("Parameters", parameters())] if workflow is not None else []),
                     ("Report settings", settings)]),
                 "files_output": self._table(output)}
 

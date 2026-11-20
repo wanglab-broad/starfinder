@@ -129,6 +129,15 @@ P2: the comparison runs in the `slow` tier.
 % Amended 2026-11-19 for W-875 (Jiahao, 2026-11-18): X12's held page in place of the report, approvals.json, and the
 % rerun without the stitch task on both engines.
 
+W-883 (2026-11-19) extends X11's no-FOV-reran provenance check to the new parameter
+panels and the Configuration table's Parameters row. Before excluding each
+changed-file notice from the comparison, check its presence against every FOV's
+recorded configuration hash and the current resolved input hash in that tree's
+report inventory, and check the displayed hash prefix exactly. A fresh run must
+have no notice; an export-only rerun must have one at every parameter source and
+in the Parameters row. Only those validated suffixes are excluded. Parameter
+values, full configurations, source paths and all scientific outputs stay exact.
+
 ### The human UGER checklist (U)
 
 Run by a person on Broad UGER (task group 4), each item recorded with its job ids, `qacct` records,

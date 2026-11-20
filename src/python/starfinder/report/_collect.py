@@ -39,6 +39,7 @@ from starfinder import _layout
 
 from ._config import ReportConfig, marker_genes
 from ._measurements import _Measurements
+from ._parameters import read_resolved
 from ._previews import _Previews
 from ._replay import reference_round, replay_example, round_transform, saved_transforms
 from ._rules import RuleInputs, evaluate_rules
@@ -95,6 +96,9 @@ _SECTIONS = {"assemble": "assembly", "fuse": "fusion", "segment": "segmentation"
              "export_spatialdata": "spatialdata"}
 # The R1 to R4 keys a run record holds since design/specs/report.md ("Records added to run.json").
 _ADDED_KEYS = ("transforms", "codebook", "workflow_config")
+
+
+_UNREAD = object()
 
 
 def _wall_seconds(record, reason):
@@ -388,6 +392,7 @@ class _Collection:
         self.assignment, self.segmentation, self.config = assignment, segmentation, config
         self.export_dir = export_dir
         self.stitching_dir = _layout.stitching_dir(root, sample)
+        self._resolved = self._links = _UNREAD
         self._transform_files = {}
         self.assembly = (export or {}).get("assembly") if isinstance((export or {}).get("assembly"), dict) else None
         self.route = None if export is None else ((self.assembly or {}).get("route") or "per_fov")
@@ -397,6 +402,15 @@ class _Collection:
         self.measurements = _Measurements(self)
 
     # The sources -------------------------------------------------------------------------------------------
+
+    @property
+    def resolved(self):
+        """The resolved configuration the FOVs ran under (``_parameters.read_resolved``), read once: a ``Resolved``,
+        None without a ``workflow_config`` in the records, or ``Unavailable``."""
+        if self._resolved is _UNREAD:
+            self._resolved = read_resolved(self.inputs, self.root, [r for r in self.records.values()
+                                                                    if r is not None])
+        return self._resolved
 
     def _placement_frame(self):
         self.p_missing = None
@@ -410,6 +424,17 @@ class _Collection:
             self.p_missing = frame
         else:
             self.p_rows = {row["fov_id"]: row for row in frame.to_dict("records")}
+
+    @property
+    def p_links(self):
+        """The placement's links table (``links.csv``), read when the page first needs it, so that the report's list
+        of inputs keeps the order the other parts read them in; None without a placement or when it is unavailable."""
+        if self._links is _UNREAD:
+            entry = _get(self.placement, "tables", "links") or {}
+            links = self.inputs.table(self.stitching_dir / entry.get("path", "links.csv"), "placement_table",
+                                      entry.get("sha256"), entry.get("dtypes") or {}) if entry else None
+            self._links = None if isinstance(links, Unavailable) else links
+        return self._links
 
     def _export_frame(self):
         # The export's state (no_export, part_not_written) and its fovs table's (input_missing, input_changed).
@@ -984,6 +1009,8 @@ class _Collection:
             "workflow_config" in r for r in records) else Unavailable("not_recorded",
                                                                       "no run record holds workflow_config"),
             "entry=workflow"))
+        if isinstance(self.resolved, Unavailable):
+            rows.append(("files.configuration", self.resolved, "entry=parameters"))
         return [(part, value, key) for part, value, key in rows if value is not None]
 
     # report.json --------------------------------------------------------------------------------------------

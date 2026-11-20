@@ -185,6 +185,11 @@
    "verified": true
   },
   {
+   "path": "workflow/resolved.json",
+   "kind": "workflow_config",
+   "verified": false
+  },
+  {
    "path": "export/sample/reference_merged_projection.ome.tif",
    "kind": "fused_image",
    "sha256": "c0eef016ba79c18edabf5a9eca1e48340fcebf14c61966e3f6efa1ab1118a864",

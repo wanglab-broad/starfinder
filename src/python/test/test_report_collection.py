@@ -127,7 +127,7 @@ PART_REASONS = {
                     "input_changed", "undefined"},
     "sample.reads_along_z": {"no_export", "part_not_written", "input_missing", "input_changed"},
     "files.input": {"no_run_record", "not_recorded", "no_placement"},
-    "files.configuration": {"no_run_record", "not_recorded"},
+    "files.configuration": {"no_run_record", "not_recorded", "input_missing"},
     # "rule:<rule>": a rule not evaluated for the whole sample (summary.problematic_fovs).
     "rule:": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "not_recorded", "no_placement",
               "no_export", "part_not_written", "no_segmentation", "input_missing", "input_changed", "undefined"},

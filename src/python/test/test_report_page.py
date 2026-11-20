@@ -568,8 +568,10 @@ def test_files_hash_row_names_the_hash_the_fovs_ran_under(tmp_path, hashes, show
         case.write_run_record(fov, record)
     folder, _ = case.collect()
     rows = _configuration_rows((folder / "report.html").read_text(encoding="utf-8"))
-    assert [label for label, _ in rows] == ["Workflow", "Hash (FOVs ran under)", "Report settings"]
+    # The fixture writes no resolved.json: the Parameters row is the box of the missing file (W-883).
+    assert [label for label, _ in rows] == ["Workflow", "Hash (FOVs ran under)", "Parameters", "Report settings"]
     assert dict(rows)["Workflow"] == "<code>workflow/resolved.json</code>"
+    assert 'data-key="entry=parameters" data-reason="input_missing"' in dict(rows)["Parameters"]
     assert dict(rows)["Hash (FOVs ran under)"] == shown
 
 
@@ -842,7 +844,7 @@ def _read_only(root, keep):
 
 
 # The places of "Where each record is looked for" under the output root, and the report's own folder.
-PLACES = [r"fovs/[^/]+/run\.json", r"fovs/[^/]+/checkpoints/registered/.+", r"fovs/[^/]+/checkpoints/pre_qc\.json",
+PLACES = [r"fovs/[^/]+/run\.json", r"workflow/resolved\.json", r"fovs/[^/]+/checkpoints/registered/.+", r"fovs/[^/]+/checkpoints/pre_qc\.json",
           r"fovs/[^/]+/segmentation/[^/]+/.+", r"fovs/[^/]+/assignment/[^/]+/.+",
           r"fovs/[^/]+/reference\.tif", rf"stitching/{SAMPLE}/.+", rf"export/{SAMPLE}/.+",
           rf"report/{SAMPLE}/.+", rf"report/\.{SAMPLE}\.[0-9a-f]+\.tmp(/.+)?"]
