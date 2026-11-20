@@ -17,6 +17,10 @@
 #     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
 #     --output type=oci,dest=starfinder-cpu-<version>.oci.tar .
 #
+# After a build, `src/python/scripts/image_check.py` checks the image (docs/workflow/broad-uger.md, "Checking a built
+# image"): `uv pip check` may report only the one line that `piscis` requires `opencv-python`, which the lock leaves out
+# on purpose (W-813, W-878), and `cv2`, `cellpose`, `piscis` and `stardist` must import together on the CPU.
+#
 # Every target has `ps` (procps) for Nextflow's trace, report and timeline (W-786), and none has Fiji, MATLAB, Java
 # or Nextflow.
 

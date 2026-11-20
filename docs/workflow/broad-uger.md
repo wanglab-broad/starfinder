@@ -133,6 +133,41 @@ The build writes the commit and the flag into `starfinder/_build_info.py` and th
 commit and flag with `version_source` `build`, so a run in the image and a run from a clean checkout of the same commit
 record the same `version` and `git_commit`.
 
+(broad-uger-image-check)=
+### Checking a built image
+
+After a build, load the image and check it with no network. The check has two parts, both run by the image's own Python
+from `src/python/scripts/image_check.py`, which uses the standard library only. The image has no `uv`, so mount the
+host's binary and the script read-only. `IMAGE` is the loaded image's tag and `VARIANT` is `cpu`, `learned` or
+`learned-cuda`:
+
+```bash
+UV=$(command -v uv); CHECK=src/python/scripts/image_check.py
+run() { docker run --rm --network none --cpuset-cpus 8 --memory 4g \
+          -v "$UV:/usr/local/bin/uv:ro" -v "$PWD/$CHECK:/check/image_check.py:ro" "$@"; }
+run IMAGE sh -c 'uv pip check --python /opt/starfinder/bin/python 2>&1 | python /check/image_check.py pip-check VARIANT'
+run -e CUDA_VISIBLE_DEVICES= IMAGE python /check/image_check.py imports
+```
+
+Each command exits 0 when the check passes. The first prints `uv pip check`'s output and fails on any line it does not
+accept; the second imports `cv2`, `cellpose`, `piscis` and `stardist` together on the CPU and fails if TensorFlow or
+PyTorch sees a GPU. Run the second on `learned` and `learned-cuda` images only.
+
+`uv pip check` reports one line on every `learned` and `learned-cuda` build:
+
+```text
+The package `piscis` requires `opencv-python`, but it's not installed
+```
+
+`piscis` declares `opencv-python`, a GUI build of OpenCV, and `cellpose` declares `opencv-python-headless`. Both write
+the `cv2` module, so an environment with both keeps whichever installed last, and the GUI build does not import on a
+slim base image without X11 and OpenGL libraries. `uv.lock` therefore holds only `opencv-python-headless`
+(`exclude-dependencies` in `pyproject.toml`), which provides everything `piscis` calls, and the distribution name
+`opencv-python` stays unmet by design. The check accepts this one line by its exact text, once, in the images that hold
+`piscis`; a changed line, a second line or a count that does not match fails. The `cpu` image has no `piscis` and accepts
+no line. The `Containerfile` imports `cv2`, `cellpose` and `piscis` while it builds, which stops a build in which a GUI
+OpenCV has returned.
+
 ## What you get
 
 The outputs and records are those of a local run (the
