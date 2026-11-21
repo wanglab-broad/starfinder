@@ -19,8 +19,8 @@ import pytest
 from starfinder.dataset.workflow import _fov_list, _lexical_order, _membership
 from starfinder.workflow._plan import PlanRefused
 
-from . import workflow_examples as X
 from . import workflow_tasks as W
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -64,7 +64,7 @@ def listing(root):
 def raw_config(tmp_path, fovs=("tile_1", "tile_2"), **keys):
     """A configuration on the raw layout (processing, a regular grid's stitch) whose FOV list lies in
     ``<tmp_path>/lists/fovs.csv``; the list is written, the key is not set."""
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), stitching=copy.deepcopy(GRID), **keys)
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING), stitching=copy.deepcopy(GRID), **keys)
     raw_inputs(config, fovs)
     lists = tmp_path / "lists"
     lists.mkdir()
@@ -197,7 +197,7 @@ def test_a_lexical_list_of_numbered_fovs_warns_naming_the_sample(tmp_path):
 def test_no_warning_without_a_lexical_order_that_differs(tmp_path, rows):
     """No order warning for a list in numeric order, in an order of its own, of zero-padded IDs (lexical and numeric
     agree), of IDs that follow no single numeric pattern, or of one FOV."""
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING))
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING))
     W.write_inputs(config, fov_rows(rows))
     assert _lexical_order(config) == {}
     with warnings.catch_warnings():
@@ -209,7 +209,7 @@ def test_the_order_is_checked_per_sample(tmp_path):
     """Each sample's rows are checked on their own: a sample in lexical order is named, one in numeric order is not,
     even when their rows interleave."""
     rows = [("s1", "F1"), ("s2", "F1x"), ("s1", "F10"), ("s2", "F2x"), ("s1", "F2"), ("s2", "F10x")]
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING))
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING))
     W.write_inputs(config, "sample,fov_id\n" + "".join(f"{s},{f}\n" for s, f in rows))
     assert _membership(config).samples == {"s1": ("F1", "F10", "F2"), "s2": ("F1x", "F2x", "F10x")}
     assert _lexical_order(config) == {"s1": (["F1", "F10", "F2"], ["F1", "F2", "F10"])}

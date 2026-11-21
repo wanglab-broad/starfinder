@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+from pathlib import Path
 
 import pytest
 import yaml
@@ -24,8 +25,9 @@ import yaml
 from starfinder.workflow import TASK_BLOCKS, plan
 
 from . import docs_pages
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_tasks as W
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -43,8 +45,8 @@ def fixed_code(monkeypatch):
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
     return work
 
 
@@ -57,7 +59,7 @@ def work(fixture_work, tmp_path):
 
 
 def _plan(work, name, config):
-    return plan(X.write_config(work, name, config))
+    return plan(F.write_config(work, name, config))
 
 
 def _canonical(value):
@@ -68,20 +70,55 @@ def _sha(data):
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
+EXPECTED = Path(__file__).parent / "data" / "expected" / "test_workflow_plan"
+PLACEHOLDERS = {"mtime_ns": "<mtime_ns>", "bytes": "<bytes>"}
+_HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def normalized(manifest, work):
+    """A manifest as its committed expected form: the work folder written ``<work>``, the inputs' sizes and times
+    and every hash (which hold them, or the absolute paths of the configuration) written as placeholders."""
+    def walk(value, key=None):
+        if isinstance(value, dict):
+            return {k: (PLACEHOLDERS[k] if k in PLACEHOLDERS else walk(v, k)) for k, v in value.items()}
+        if isinstance(value, list):
+            return [walk(v) for v in value]
+        if isinstance(value, str):
+            return "<sha256>" if _HASH.match(value) else value.replace(str(work), "<work>")
+        return value
+    return walk(json.loads(json.dumps(manifest)))
+
+
+def write_expected(work, out):
+    """The committed expected manifests of C1 (``data/expected/test_workflow_plan/<variant>.json``): the plan of each
+    variant on a fixture in the new folder ``work``, with test_workflow_plan's package identity, normalized."""
+    from unittest import mock
+    from starfinder.workflow import _plan
+    from .workflow_fixture import golden, write_config, write_supplied
+    from .workflow_variants import VARIANTS, variants
+    golden().write_fixture(work)
+    write_supplied(work)
+    Path(out).mkdir(parents=True, exist_ok=True)
+    with mock.patch.object(_plan, "package_identity", lambda: dict(CODE)):
+        for variant in VARIANTS:
+            manifest = _plan.plan(write_config(work, variant, variants(work)[variant]))
+            (Path(out) / f"{variant}.json").write_text(json.dumps(normalized(manifest, work), indent=1) + "\n")
+
+
 # --- C1 ---------------------------------------------------------------------------------------------------------
 
-@pytest.mark.parametrize("variant", X.VARIANTS)
+@pytest.mark.parametrize("variant", V.VARIANTS)
 def test_the_plan_writes_the_expected_manifest_of_each_variant(work, variant):
-    manifest = _plan(work, variant, X.variants(work)[variant])
-    written = json.loads((X.output_root(work, f"example-{variant}") / "workflow" / "manifest.json").read_text())
+    manifest = _plan(work, variant, V.variants(work)[variant])
+    written = json.loads((F.output_root(work, f"example-{variant}") / "workflow" / "manifest.json").read_text())
     assert written == manifest
-    expected = json.loads((X.EXPECTED / f"{variant}.json").read_text())
-    assert X.normalized(manifest, work) == expected
+    expected = json.loads((EXPECTED / f"{variant}.json").read_text())
+    assert normalized(manifest, work) == expected
 
 
-@pytest.mark.parametrize("variant", X.VARIANTS)
+@pytest.mark.parametrize("variant", V.VARIANTS)
 def test_the_tasks_respect_their_needs_and_the_contracts_counts(work, variant):
-    manifest = _plan(work, variant, X.variants(work)[variant])
+    manifest = _plan(work, variant, V.variants(work)[variant])
     seen = set()
     for task in manifest["tasks"]:
         assert set(task["needs"]) <= seen, task["id"]
@@ -89,16 +126,16 @@ def test_the_tasks_respect_their_needs_and_the_contracts_counts(work, variant):
     counts = {}
     for task in manifest["tasks"]:
         counts[task["kind"]] = counts.get(task["kind"], 0) + 1
-    assert counts == X.KINDS[variant]
+    assert counts == V.KINDS[variant]
     assert len(manifest["tasks"]) == {"per-fov": 29, "after-fusion": 34, "molecules-only": 8, "supplied-xml": 8,
                                       "morphology-only": 8, "reference-only": 16}[variant]
 
 
 def test_the_resolved_configuration_writes_the_defaults_and_the_api(work):
-    config = X.variants(work)["per-fov"]
-    path = X.write_config(work, "per-fov", config)
+    config = V.variants(work)["per-fov"]
+    path = F.write_config(work, "per-fov", config)
     plan(path)
-    resolved = json.loads((X.output_root(work, "example-per-fov") / "workflow" / "resolved.json").read_text())
+    resolved = json.loads((F.output_root(work, "example-per-fov") / "workflow" / "resolved.json").read_text())
     assert resolved["format"] == "starfinder.workflow.resolved/1"
     assert resolved["source"] == {"path": str(path.resolve()), "sha256": _sha(path.read_bytes())}
     c = resolved["configuration"]
@@ -125,7 +162,7 @@ def test_the_resolved_configuration_writes_the_defaults_and_the_api(work):
 
 
 def test_every_task_has_the_contracts_fields(work):
-    manifest = _plan(work, "after-fusion", X.variants(work)["after-fusion"])
+    manifest = _plan(work, "after-fusion", V.variants(work)["after-fusion"])
     assert list(manifest) == ["format", "backend", "configuration", "package", "roots", "membership", "inputs",
                               "export_route", "routes", "groups", "tasks"]
     assert manifest["package"] == CODE
@@ -137,11 +174,11 @@ def test_every_task_has_the_contracts_fields(work):
         assert list(task) == keys
         assert task["command"] == ["starfinder", "workflow", task["kind"].replace("_", "-")
                                    if task["kind"] != "bigstitcher_engine" else "bigstitcher-check", "--manifest",
-                                   str(X.output_root(work, "example-after-fusion") / "workflow" / "manifest.json"),
+                                   str(F.output_root(work, "example-after-fusion") / "workflow" / "manifest.json"),
                                    "--task", task["id"]]
         assert task["blocks"] == list(TASK_BLOCKS[task["kind"]])
     engine = next(t for t in manifest["tasks"] if t["kind"] == "bigstitcher_engine")
-    assert engine["execution"]["tool"] == {"name": "fiji", "path": X.FIJI}
+    assert engine["execution"]["tool"] == {"name": "fiji", "path": V.FIJI}
     assert engine["tool_command"][0] == "{fiji}"
 
 
@@ -153,15 +190,15 @@ def _resolved_hash(configuration):
 
 
 def test_the_manifest_hashes_the_resolved_configuration(work):
-    manifest = _plan(work, "per-fov", X.variants(work)["per-fov"])
-    data = (X.output_root(work, "example-per-fov") / "workflow" / "resolved.json").read_bytes()
+    manifest = _plan(work, "per-fov", V.variants(work)["per-fov"])
+    data = (F.output_root(work, "example-per-fov") / "workflow" / "resolved.json").read_bytes()
     assert data.endswith(b"\n")
     assert manifest["configuration"]["sha256"] == _sha(data)
     assert manifest["configuration"]["configuration_sha256"] == _resolved_hash(json.loads(data)["configuration"])
 
 
 def test_execution_and_the_roots_keep_the_resolved_hash_and_a_scientific_key_changes_it(work):
-    config = X.variants(work)["per-fov"]
+    config = V.variants(work)["per-fov"]
     first = _plan(work, "per-fov", config)["configuration"]["configuration_sha256"]
     resources = dict(config, execution={"defaults": {"threads": 2}, "tasks": {"fov": {"memory_mb": 32000}}})
     assert _plan(work, "per-fov", resources)["configuration"]["configuration_sha256"] == first
@@ -173,9 +210,9 @@ def test_execution_and_the_roots_keep_the_resolved_hash_and_a_scientific_key_cha
 
 
 def test_a_second_plan_on_unchanged_inputs_rewrites_neither_file(work):
-    config = X.variants(work)["per-fov"]
+    config = V.variants(work)["per-fov"]
     _plan(work, "per-fov", config)
-    folder = X.output_root(work, "example-per-fov") / "workflow"
+    folder = F.output_root(work, "example-per-fov") / "workflow"
     times = {name: (folder / name).stat().st_mtime_ns for name in ("resolved.json", "manifest.json")}
     _plan(work, "per-fov", config)
     assert {name: (folder / name).stat().st_mtime_ns for name in times} == times
@@ -184,13 +221,13 @@ def test_a_second_plan_on_unchanged_inputs_rewrites_neither_file(work):
 def test_plan_locate_prints_the_manifest_the_plan_writes_and_writes_nothing(work, capsys):
     # An engine's parse in a cluster job reads the main process's manifest (workflow/rules/tasks.smk).
     from starfinder.__main__ import main
-    path = X.write_config(work, "per-fov", X.variants(work)["per-fov"])
+    path = F.write_config(work, "per-fov", V.variants(work)["per-fov"])
     assert main(["workflow", "plan", "--config", str(path), "--locate"]) == 0
     located = json.loads(capsys.readouterr().out)["manifest"]
-    assert not (X.output_root(work, "example-per-fov") / "workflow").exists()
+    assert not (F.output_root(work, "example-per-fov") / "workflow").exists()
     assert main(["workflow", "plan", "--config", str(path)]) == 0
     assert json.loads(capsys.readouterr().out)["manifest"] == located
-    assert located == str(X.output_root(work, "example-per-fov").absolute() / "workflow" / "manifest.json")
+    assert located == str(F.output_root(work, "example-per-fov").absolute() / "workflow" / "manifest.json")
     (work / "configs" / "empty.yaml").write_text("{}\n")
     assert main(["workflow", "plan", "--config", str(work / "configs" / "empty.yaml"), "--locate"]) == 2
     assert "has no root_output_path, dataset_id, output_id" in capsys.readouterr().err
@@ -248,12 +285,12 @@ def _changed(before, after):
 
 @pytest.mark.parametrize("code_version", ["keep", "rerun"])
 def test_each_fingerprint_equals_an_independent_hash_of_its_components(work, code_version):
-    config = dict(X.variants(work)["per-fov"], execution={"code_version": code_version})
+    config = dict(V.variants(work)["per-fov"], execution={"code_version": code_version})
     manifest = _plan(work, "per-fov", config)
     expected = _fingerprints(manifest, {k: v for k, v in CODE.items() if k != "version_source"}
                              if code_version == "rerun" else None)
     assert {t["id"]: t["fingerprint"] for t in manifest["tasks"]} == expected
-    resolved = json.loads((X.output_root(work, "example-per-fov") / "workflow" / "resolved.json").read_text())
+    resolved = json.loads((F.output_root(work, "example-per-fov") / "workflow" / "resolved.json").read_text())
     c = resolved["configuration"]
     common = {k: v for k, v in c.items() if k not in ("processing", "morphology", "segmentation", "assignment",
                                                       "stitching", "assembly", "export", "report", "execution",
@@ -281,7 +318,7 @@ BLOCK_CHANGES = {
 
 @pytest.mark.parametrize("block", sorted(BLOCK_CHANGES))
 def test_a_key_of_one_block_changes_the_fingerprints_of_its_kinds_and_their_downstream(work, block):
-    config = X.variants(work)["per-fov"]
+    config = V.variants(work)["per-fov"]
     before = _plan(work, "per-fov", config)
     changed = copy.deepcopy(config)
     BLOCK_CHANGES[block](changed)
@@ -293,9 +330,9 @@ def test_a_key_of_one_block_changes_the_fingerprints_of_its_kinds_and_their_down
 
 @pytest.mark.parametrize("replacement", ["another size", "an older modification time"])
 def test_a_replaced_raw_image_changes_the_tasks_that_declare_it_and_their_downstream(work, replacement):
-    config = X.variants(work)["per-fov"]
+    config = V.variants(work)["per-fov"]
     before = _plan(work, "per-fov", config)
-    image = X.input_root(work) / "round2" / "FOV_002" / "ch01.ome.tif"
+    image = F.input_root(work) / "round2" / "FOV_002" / "ch01.ome.tif"
     stat = image.stat()
     if replacement == "another size":
         image.write_bytes(image.read_bytes() + b"\0")
@@ -310,7 +347,7 @@ def test_a_replaced_raw_image_changes_the_tasks_that_declare_it_and_their_downst
 
 
 def test_execution_and_the_roots_change_no_fingerprint_but_code_version_changes_every_one(work, tmp_path):
-    config = X.variants(work)["molecules-only"]
+    config = V.variants(work)["molecules-only"]
     # The positions table relative to the input root (OC4), so that the input tree can move.
     config["stitching"]["positions"]["table"] = "positions.csv"
     before = _plan(work, "molecules-only", config)
@@ -329,7 +366,7 @@ def test_execution_and_the_roots_change_no_fingerprint_but_code_version_changes_
 @pytest.mark.parametrize("code_version", ["keep", "rerun"])
 def test_a_new_package_version_changes_none_under_keep_and_every_one_under_rerun(work, monkeypatch, code_version):
     import starfinder.workflow._plan as P
-    config = dict(X.variants(work)["molecules-only"], execution={"code_version": code_version})
+    config = dict(V.variants(work)["molecules-only"], execution={"code_version": code_version})
     before = _plan(work, "molecules-only", config)
     monkeypatch.setattr(P, "package_identity", lambda: dict(CODE, version="0.0.1+test"))
     after = _plan(work, "molecules-only", config)
@@ -341,7 +378,7 @@ def test_a_new_package_version_changes_none_under_keep_and_every_one_under_rerun
 def test_the_install_route_of_the_same_commit_changes_no_fingerprint(work, monkeypatch):
     # One commit is one identity (W-827): the route that supplied it (version_source) is recorded but not fingerprinted.
     import starfinder.workflow._plan as P
-    config = dict(X.variants(work)["molecules-only"], execution={"code_version": "rerun"})
+    config = dict(V.variants(work)["molecules-only"], execution={"code_version": "rerun"})
     before = _plan(work, "molecules-only", config)
     monkeypatch.setattr(P, "package_identity", lambda: dict(CODE, version_source="build"))
     after = _plan(work, "molecules-only", config)
@@ -360,12 +397,12 @@ REUSED = {"molecules-only": {"fov": 2},
 def _two_stages(work, root, variant, change=None):
     """Plan ``variant`` with FOV_001 and FOV_002 under output id ``smoke``, then with every FOV under ``full``
     (``change`` applied to the second configuration), both into ``root``; returns the two manifests."""
-    first = dict(X.variants(work)[variant], output_id="smoke", selected_fovs=["FOV_001", "FOV_002"])
-    second = copy.deepcopy(dict(X.variants(work)[variant], output_id="full", selected_fovs=None))
+    first = dict(V.variants(work)[variant], output_id="smoke", selected_fovs=["FOV_001", "FOV_002"])
+    second = copy.deepcopy(dict(V.variants(work)[variant], output_id="full", selected_fovs=None))
     if change is not None:
         change(second)
-    return (plan(X.write_config(work, "stage1", first), output_root=root),
-            plan(X.write_config(work, "stage2", second), output_root=root))
+    return (plan(F.write_config(work, "stage1", first), output_root=root),
+            plan(F.write_config(work, "stage2", second), output_root=root))
 
 
 @pytest.mark.parametrize("variant", sorted(REUSED))
@@ -376,7 +413,7 @@ def test_extending_the_selection_keeps_the_fov_tasks_and_reruns_the_sample_level
     b = {t["id"]: t["fingerprint"] for t in after["tasks"]}
     kind = {t["id"]: t["kind"] for t in after["tasks"]}
     common = set(a) & set(b)
-    assert set(a) <= set(b) and {t["identity"].get("fov") for t in after["tasks"]} - {None} == set(X.FOVS)
+    assert set(a) <= set(b) and {t["identity"].get("fov") for t in after["tasks"]} - {None} == set(F.FOVS)
     changed = {i for i in common if a[i] != b[i]}
     sample_level = {i for i in common if kind[i] not in FOV_LEVEL}
     assert sample_level and changed == _downstream(after, sample_level) & common
@@ -445,8 +482,8 @@ DEEP_LOCAL_REGISTRATION = {"steps": [{"method": "translation"}], "signal": {"mod
 
 
 def _resolved(work, name, config):
-    plan(X.write_config(work, name, config))
-    return json.loads((X.output_root(work, config["output_id"]) / "workflow" / "resolved.json").read_text())
+    plan(F.write_config(work, name, config))
+    return json.loads((F.output_root(work, config["output_id"]) / "workflow" / "resolved.json").read_text())
 
 
 def _migration_steps():
@@ -460,7 +497,7 @@ def _migration_steps():
 def test_the_migration_guide_s_steps_reproduce_the_removed_recipe_in_direct_mode(work):
     """processing.recipe deep is gone (W-887): the steps the migration guide gives in its place, pasted into a
     configuration without its tiled settings, resolve to what the recipe expanded to, and the plan adds nothing."""
-    config = X.variants(work)["molecules-only"]
+    config = V.variants(work)["molecules-only"]
     given = {k: v for k, v in _migration_steps().items() if k != "tiled"}
     spelled = dict(config, output_id="spelled", processing={
         **{k: v for k, v in config["processing"].items() if k not in ("preprocessing", "registration")}, **given})
@@ -470,7 +507,7 @@ def test_the_migration_guide_s_steps_reproduce_the_removed_recipe_in_direct_mode
 
 
 def test_tiled_mode_writes_its_defaults_and_the_removed_recipe_s_local_registration(work):
-    config = X.variants(work)["molecules-only"]
+    config = V.variants(work)["molecules-only"]
     given = _migration_steps()
     tiled = dict(config, output_id="tiled-deep", processing={
         **{k: v for k, v in config["processing"].items() if k not in ("preprocessing", "registration")},
@@ -490,7 +527,7 @@ def test_tiled_mode_writes_its_defaults_and_the_removed_recipe_s_local_registrat
 #: Two samples whose rows interleave, so that row order, not sorting, decides both orders (test_fov_membership.py).
 ROWS = [("s2", "F10", 7), ("s1", "F2", 2), ("s2", "F3", 3), ("s1", "F1", 1)]
 FOVS_CSV = "sample,fov_id\n" + "".join(f"{s},{f}\n" for s, f, _ in ROWS)
-MERGED = {"method": "multiview_stitcher", "input": "reference_merged", "positions": X.grid()}
+MERGED = {"method": "multiview_stitcher", "input": "reference_merged", "positions": V.grid()}
 
 
 def _of_kind(manifest, kind):
@@ -501,7 +538,7 @@ def test_the_plan_reads_the_membership_from_fovs_csv(tmp_path):
     """From test_fov_membership.py, test_common_smk_builds_the_python_membership_from_fovs_csv: the FOVs of fovs.csv
     in row order, the samples in the order of their first row, each FOV in its sample's task identity, the file the
     plan declares; the same file gives the same values on every plan, and no sample annotation (documents/) is read."""
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING))
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING))
     W.write_inputs(config, FOVS_CSV)
     _, manifest = W.plan(tmp_path, "membership", config)
     membership = manifest["membership"]
@@ -520,7 +557,7 @@ def test_selected_fovs_restricts_every_task(tmp_path):
     """From test_fov_membership.py, test_selected_fovs_restricts_every_requested_output: with selected_fovs the
     per-FOV tasks and the per-sample ones (stitching, export, report) are planned for the selected FOVs and their
     samples only, and the export task reads the sample's selected FOVs."""
-    config = W.dataset_keys(tmp_path, selected_fovs=["F3", "F10"], processing=copy.deepcopy(X.PROCESSING),
+    config = W.dataset_keys(tmp_path, selected_fovs=["F3", "F10"], processing=copy.deepcopy(V.PROCESSING),
                             stitching=MERGED, assembly={"assignment": None},
                             export={"images": ["reference_merged"]}, report={})
     W.write_inputs(config, FOVS_CSV)
@@ -539,7 +576,7 @@ def test_with_the_blocks_no_legacy_file_is_planned(tmp_path):
     """From test_fov_membership.py, test_with_the_blocks_the_legacy_sample_rules_are_left_out: with the stitching and
     assembly blocks no task declares the legacy sample rules' files (the fused images of stitching_preparation, the
     tile configuration, the sample's raw.h5ad and reads assignment)."""
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), stitching=MERGED,
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING), stitching=MERGED,
                             assembly={"assignment": None}, export={"images": ["reference_merged"]})
     W.write_inputs(config, FOVS_CSV)
     _, manifest = W.plan(tmp_path, "blocks", config)
@@ -560,7 +597,7 @@ def test_without_the_report_block_no_report_task_is_planned(tmp_path, blocks):
     the compare task are added, and every other task is the same. Each report lies in its route's folder (W-876):
     report/<sample>/molecules_only/ with the assembly block, report/<sample>/no_export/ without an export. (No workflow
     file includes the old report rules, and no MATLAB rule file names a report rule: test_workflow_boundary.py, C8.)"""
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), **copy.deepcopy(blocks))
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING), **copy.deepcopy(blocks))
     W.write_inputs(config, "sample,fov_id\nsample1,tile_1\nsample2,tile_2\n")
     _, without = W.plan(tmp_path, "without", dict(config, output_id="without"))
     assert not [t for t in without["tasks"] if t["kind"] in ("report", "compare")]
@@ -581,7 +618,7 @@ def test_the_plan_s_image_inputs_follow_the_template(tmp_path, template):
     channel files of every sequencing round, the morphology task those of its other round and the reference stain
     file of the reference round, each in the folder image_dir_template names; the plan reads the images where the
     template puts them."""
-    config = W.dataset_keys(tmp_path, n_rounds=4, image_dir_template=template, processing=copy.deepcopy(X.PROCESSING),
+    config = W.dataset_keys(tmp_path, n_rounds=4, image_dir_template=template, processing=copy.deepcopy(V.PROCESSING),
                             reference_stains=[{"channel": "ch04", "name": "DAPI"}], morphology={},
                             additional_round=[{"round_name": "morph", "channel_order": [{"channel": "ch00",
                                                                                            "name": "DAPI"}]}])
@@ -602,7 +639,7 @@ def test_the_plan_declares_the_configured_codebook(tmp_path):
     key codebook names (relative to the input root), else <input_root>/genes.csv; the fov and assign tasks declare
     it, and no other codebook."""
     run = {"name": "cell", "target": "cell", "method": "import", "path": str(tmp_path / "{fov_id}.tif")}
-    config = W.dataset_keys(tmp_path, codebook="panels/codebook.csv", processing=copy.deepcopy(X.PROCESSING),
+    config = W.dataset_keys(tmp_path, codebook="panels/codebook.csv", processing=copy.deepcopy(V.PROCESSING),
                             segmentation={"runs": [run]}, assignment={"cells": "cell"})
     W.write_inputs(config, "sample,fov_id\ns1,F1\n", codebook=None)
     (W.input_root(config) / "panels").mkdir()
@@ -626,7 +663,7 @@ def test_the_tasks_read_their_named_inputs_and_no_json_copy(tmp_path):
     Python half): the fov task declares its rounds' image files and the codebook, the morphology task its rounds'
     image files and the reference stain file, each by path; no task declares a JSON copy of the configuration (the
     commands read the resolved configuration the manifest names, D2)."""
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING),
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING),
                             reference_stains=[{"channel": "ch04", "name": "DAPI"}], morphology={},
                             additional_round=[{"round_name": "morph", "channel_order": [{"channel": "ch00",
                                                                                            "name": "DAPI"}]}])
@@ -646,10 +683,15 @@ def test_the_plan_needs_no_fiji_envs_or_dimensions(tmp_path):
     Python half): a configuration without fiji_path, envs_path, img_row and img_col plans, with the BigStitcher route
     too (Fiji is execution.fiji, the engine task's tool); the four keys left the Python configuration (refused, naming
     where each went: test_workflow_plan_refusals.py, test_each_key_that_left_the_python_dialect)."""
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING),
-                            stitching={"positions": X.grid(), "bigstitcher_save_dir": str(tmp_path / "bigstitcher")})
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING),
+                            stitching={"positions": V.grid(), "bigstitcher_save_dir": str(tmp_path / "bigstitcher")})
     assert not {"fiji_path", "envs_path", "img_row", "img_col"} & set(config)
     W.write_inputs(config, "sample,fov_id\ns1,F1\ns1,F2\ns1,F3\ns1,F4\n")
     _, manifest = W.plan(tmp_path, "keys", config)
     assert {t["kind"] for t in manifest["tasks"]} == {"fov", "bigstitcher_macro", "bigstitcher_engine",
                                                       "bigstitcher_import"}
+
+
+if __name__ == "__main__":
+    import sys
+    write_expected(Path(sys.argv[1]), Path(sys.argv[2]))

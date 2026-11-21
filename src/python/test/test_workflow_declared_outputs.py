@@ -21,8 +21,9 @@ import pytest
 from starfinder import _layout
 from starfinder.workflow import plan
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_tasks as W
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -35,9 +36,9 @@ DENSE = ("bspline", "demons", "tps", "cpd")
 @pytest.fixture(scope="module")
 def manifests(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
-    return work, {v: plan(X.write_config(work, v, X.variants(work)[v])) for v in X.VARIANTS}
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
+    return work, {v: plan(F.write_config(work, v, V.variants(work)[v])) for v in V.VARIANTS}
 
 
 def _rel(path, root):
@@ -148,11 +149,11 @@ def expected_outputs(task, config, out):
     return sorted(_rel(str(p).rstrip("/"), out) + ("/" if str(p).endswith("/") else "") for p in paths)
 
 
-@pytest.mark.parametrize("variant", X.VARIANTS)
+@pytest.mark.parametrize("variant", V.VARIANTS)
 def test_the_declared_outputs_are_the_contracts(manifests, variant):
     work, planned = manifests
     manifest = planned[variant]
-    config = X.variants(work)[variant]
+    config = V.variants(work)[variant]
     out = manifest["roots"]["output"]
     checked = 0
     for task in manifest["tasks"]:
@@ -162,10 +163,10 @@ def test_the_declared_outputs_are_the_contracts(manifests, variant):
         assert task["record"] == _rel(_layout.task_record(out, task["id"]), out)
         assert task["log"] == _rel(_layout.task_log(out, task["id"]), out)
         checked += 1
-    assert checked == sum(n for kind, n in X.KINDS[variant].items() if kind in KINDS)
+    assert checked == sum(n for kind, n in V.KINDS[variant].items() if kind in KINDS)
 
 
-@pytest.mark.parametrize("variant", X.VARIANTS)
+@pytest.mark.parametrize("variant", V.VARIANTS)
 def test_every_task_fills_its_groups_templates(manifests, variant):
     _, planned = manifests
     manifest = planned[variant]
@@ -215,14 +216,14 @@ def test_the_tile_merge_declares_the_files_of_direct(manifests):
 
 def _built(work, name, config):
     """The manifest of a configuration built here, on the variants' fixture."""
-    return plan(X.write_config(work, name, config))
+    return plan(F.write_config(work, name, config))
 
 
 @pytest.mark.parametrize("case", ["channel images", "dense recipe", "nuclei and expansion", "no previews"])
 def test_the_options_of_the_cell_kinds_declare_their_files(manifests, case):
     """The options of the contract's table, column "By option", of morphology and assign (W-736)."""
     work, _ = manifests
-    config = X.variants(work)["per-fov"]
+    config = V.variants(work)["per-fov"]
     if case == "channel images":
         config["morphology"] = {"channel_images": {"projection": "max"}}
     elif case == "dense recipe":
@@ -262,7 +263,7 @@ from pathlib import Path  # noqa: E402
 
 from starfinder.workflow._plan import PlanRefused  # noqa: E402
 
-MERGED = {"method": "multiview_stitcher", "input": "reference_merged", "positions": X.grid()}
+MERGED = {"method": "multiview_stitcher", "input": "reference_merged", "positions": V.grid()}
 TWO = "sample,fov_id\nsample,F1\nsample,F2\n"
 
 
@@ -304,7 +305,7 @@ def test_the_reference_image_is_declared_where_reference_image_names_it(tmp_path
     declared = {"default": "fovs/F1/reference.tif", "relative": "refs/F1_ref.tif",
                 "absolute": str(tmp_path / "elsewhere" / "F1.tif"), "imported relative": "imports/F1.tif",
                 "imported absolute": str(tmp_path / "tool" / "F1.tif")}[setting]
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), stitching=MERGED, **_cells(tmp_path),
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING), stitching=MERGED, **_cells(tmp_path),
                             **keys)
     manifest = _planned(tmp_path, "reference", config, **{k: str(v) for k, v in _labels(tmp_path).items()})
     fov, second = _kinds(manifest, "fov")
@@ -335,7 +336,7 @@ def test_the_reference_image_template_is_the_pattern_s_own(tmp_path, pattern, te
     the template by searching each FOV's id in its literal path, and refused such a pattern on two FOVs as "different
     output templates"); each fov task declares its own FOV's file, and the tasks that read it declare the same file;
     the other outputs' templates keep their rule (fovs/{fov}/...)."""
-    config = W.dataset_keys(tmp_path, reference_image=pattern, processing=copy.deepcopy(X.PROCESSING),
+    config = W.dataset_keys(tmp_path, reference_image=pattern, processing=copy.deepcopy(V.PROCESSING),
                             stitching=MERGED, **_cells(tmp_path))
     fovs = ("F1", "F2", "F10")
     manifest = _planned(tmp_path, "pattern", config, fovs="sample,fov_id\n" + "".join(f"sample,{f}\n" for f in fovs),
@@ -359,7 +360,7 @@ def test_a_reference_image_without_fov_id_is_refused_as_before(tmp_path):
     """W-755: a pattern with no {fov_id} is refused by the plan before any task, naming reference_image and the
     default, as at the base (c932349)."""
     from starfinder.workflow._plan import PlanRefused
-    config = W.dataset_keys(tmp_path, reference_image="images/reference.tif", processing=copy.deepcopy(X.PROCESSING))
+    config = W.dataset_keys(tmp_path, reference_image="images/reference.tif", processing=copy.deepcopy(V.PROCESSING))
     W.write_inputs(config, TWO)
     with pytest.raises(PlanRefused) as error:
         W.plan(tmp_path, "nofov", config)
@@ -371,7 +372,7 @@ def test_a_reference_image_without_fov_id_is_refused_as_before(tmp_path):
 #: The position file of each source: the configuration's positions, and the file the placing tasks declare.
 POSITIONS = {"stage_file_path": ({"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}}, "LN.maf"),
              "table": ({"source": "table", "unit": "um"}, "positions.csv"),
-             "regular_grid": (X.grid(), None)}
+             "regular_grid": (V.grid(), None)}
 
 
 def _positions(work, case, method):
@@ -539,7 +540,7 @@ def test_a_configuration_without_the_new_keys_keeps_its_route(tmp_path):
     FOV, an assembly without an assignment the molecules, and a projection with an assignment and no
     export.segmentation is refused, naming export.segmentation and route: per_fov, which then plans the route per FOV.
     (The parse-time check of common.smk is the plan's.)"""
-    base = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), stitching=MERGED, **_cells(tmp_path))
+    base = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING), stitching=MERGED, **_cells(tmp_path))
     for name, (export, assignment, expected) in enumerate((
             (None, "default", None), ({"dimensionality": "stack"}, "default", "per_fov"),
             ({"dimensionality": "both"}, "default", "per_fov"), (None, None, "molecules"))):
@@ -587,7 +588,7 @@ def test_the_export_task_declares_the_ownership_previews_on_request(tmp_path, ca
                                                              "path": str(tmp_path / "fused.tif")}]}
         (tmp_path / "fused.tif").write_bytes(b"")
     assignment = None if case == "molecules" else "default"
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), stitching=MERGED,
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING), stitching=MERGED,
                             assembly={"assignment": assignment}, export=dict(export, images=["reference_merged"]),
                             **({} if assignment is None else _cells(tmp_path)))
     manifest = _planned(tmp_path, case, config, **{k: str(v) for k, v in _labels(tmp_path).items()})
@@ -606,7 +607,7 @@ def test_the_assign_task_declares_the_saved_folder_alone(tmp_path, name, preview
     fovs/<fov>/previews/), never the legacy expr/ files; without an assignment (molecules only) no assign task is
     planned (the reads_assignment rule's molecules-only files are retired with its legacy route, D6)."""
     assignment = {"name": name, **({} if previews is None else {"previews": previews})}
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), stitching=MERGED,
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING), stitching=MERGED,
                             assembly={"assignment": name}, export={"route": "per_fov", "images": ["reference_merged"]},
                             **_cells(tmp_path, **assignment))
     manifest = _planned(tmp_path, name, config, **{k: str(v) for k, v in _labels(tmp_path).items()})
@@ -627,7 +628,7 @@ def test_the_matlab_reads_assignment_rule_keeps_its_legacy_outputs():
     """From test_stitching_workflow.py, test_wf3_reads_assignment_declares_the_saved_folder_alone (its MATLAB rule
     text): MATLAB's reads_assignment rule declares expr/{fovID}/raw.h5ad and reads_assignment.csv of every FOV, no
     preview folder, and its output section is those two lists."""
-    text = (X.ROOT / "workflow" / "rules" / "reads-assignment.smk").read_text()
+    text = (F.ROOT / "workflow" / "rules" / "reads-assignment.smk").read_text()
     head = text[:text.index("rule reads_assignment:")]
     assert 'expand("{output_dir}/expr/{{fovID}}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=FOVS)' in head
     assert 'expand("{output_dir}/expr/{{fovID}}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=FOVS)' in head
@@ -662,7 +663,7 @@ def test_the_report_task_declares_its_inputs(tmp_path, case):
                                export={"route": "per_fov", "fuse": False}, **_cells(tmp_path)),
               "molecules": dict(stitching=MERGED, assembly={"assignment": None}, **STAIN),
               "stitching": dict(stitching=MERGED), "processing": {}}[case]
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), report={}, **blocks)
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING), report={}, **blocks)
     if case == "molecules":
         assert "export" not in config
     members = {"s2": ["F1", "F3"], "s1": ["F2"]}
@@ -702,7 +703,7 @@ def test_the_fov_kinds_declare_their_run_records_and_no_log(tmp_path, case):
     tile_merge task declares run.json and the molecule table (the subtile rules' records are retired, D5); the
     morphology task its registration record; no task declares a log/ file (its record and log are under workflow/,
     D8)."""
-    processing = copy.deepcopy(X.PROCESSING)
+    processing = copy.deepcopy(V.PROCESSING)
     if case == "tiled":
         processing.update(mode="tiled", tiled={"tile_size_yx": 18})
     keys = (dict(processing=processing) if case != "morphology" else dict(
@@ -748,7 +749,7 @@ def test_the_morphology_task_declares_its_rounds_files_and_no_json_copy(tmp_path
                                       "images/morph/ch01/F1.tif"]
                                      + [f"fovs/F1/other_rounds/{n}/{f}" for n in ("morph", "reference_stain")
                                         for f in ("image.ome.tif", "registration.json")])
-    matlab = (X.ROOT / "workflow" / "rules" / "registration.smk").read_text()
+    matlab = (F.ROOT / "workflow" / "rules" / "registration.smk").read_text()
     block = matlab[matlab.index("rule nuclei_registration:"):]
     block = block[:block.index("    resources:")]
     inputs, outputs = block.split("    output:\n")

@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_nextflow as N
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract, pytest.mark.nextflow, pytest.mark.slow]
 
@@ -34,9 +35,9 @@ def test_real_per_fov_commands(tmp_path):
     if any(importlib.util.find_spec(m) is None for m in ("anndata", "multiview_stitcher")):
         pytest.skip("the real per-fov route needs the anndata and multiview-stitcher extras")
     work = tmp_path / "real-per-fov"
-    X.golden().write_fixture(work)
-    config = N.small_resources(X.variants(work)["per-fov"])
-    path = X.write_config(work, "real", config)
+    F.golden().write_fixture(work)
+    config = N.small_resources(V.variants(work)["per-fov"])
+    path = F.write_config(work, "real", config)
     done, rows = N.run(work, path, stub=False)
     assert_completed(path, done, rows, {"summarize", "merge", "fov", "morphology", "segment", "assign", "stitch",
                                         "export", "report", "compare"})
@@ -45,10 +46,10 @@ def test_real_per_fov_commands(tmp_path):
 def test_real_tiled_commands(tmp_path):
     N.executable()
     work = tmp_path / "real-tiled"
-    X.golden().write_fixture(work)
-    config = X.single_fov(work)
+    F.golden().write_fixture(work)
+    config = V.single_fov(work)
     config["processing"].update(mode="tiled", tiled={"tile_size_yx": 18})
-    path = X.write_config(work, "tiled", N.small_resources(config))
+    path = F.write_config(work, "tiled", N.small_resources(config))
     done, rows = N.run(work, path, stub=False)
     assert_completed(path, done, rows, {"tile_global", "tile", "tile_merge"})
     manifest = N.manifest(path)
@@ -82,6 +83,6 @@ def test_real_supplied_bigstitcher_import_command(tmp_path):
     T.write_inputs(config, rows(SAMPLE, LINK_IDS))
     for index, fov in enumerate(LINK_IDS):
         reference(work, fov, np.full(LINK_SHAPE, index + 1, np.uint16), LN_SPACING)
-    path = X.write_config(work, "supplied", N.small_resources(config))
+    path = F.write_config(work, "supplied", N.small_resources(config))
     done, actual = N.run(work, path, stub=False)
     assert_completed(path, done, actual, {"bigstitcher_import"})

@@ -13,8 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_nextflow as N
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract, pytest.mark.nextflow, pytest.mark.slow]
 
@@ -71,7 +72,7 @@ if argv[1] in ("plan", "verify"):
     if "--final" in argv:
         sys.exit(0)
     os.execve(sys.executable, [sys.executable, "-m", "starfinder", *argv],
-              dict(os.environ, PYTHONPATH={str(X.ROOT / "src" / "python")!r}))
+              dict(os.environ, PYTHONPATH={str(F.ROOT / "src" / "python")!r}))
 option = lambda name: argv[argv.index(name) + 1]
 manifest = json.loads(Path(option("--manifest")).read_text())
 task = next(t for t in manifest["tasks"] if t["id"] == option("--task"))
@@ -109,9 +110,9 @@ def render(tmp_path_factory, *arguments, stub=True):
     for ``stub=False``, the work folder and the manifest."""
     N.executable()
     work = tmp_path_factory.mktemp("sge-render")
-    X.golden().write_fixture(work)
-    config = N.small_resources(X.variants(work)["morphology-only"])
-    path = X.write_config(work, "sge", config)
+    F.golden().write_fixture(work)
+    config = N.small_resources(V.variants(work)["morphology-only"])
+    path = F.write_config(work, "sge", config)
     tools = stand_ins(work / "tools")
     done, rows = N.run(work, path, "--container", str(work / "image.sif"), "-work-dir", str(work / "work"),
                        *arguments, environment={"PATH": str(tools) + os.pathsep + os.environ["PATH"],
@@ -161,7 +162,7 @@ def test_without_weights_dir_the_options_are_the_base_revisions(unset, label):
 
 
 def test_the_parameter_is_declared_and_unset_by_default():
-    text = (X.ROOT / "nextflow" / "nextflow.config").read_text()
+    text = (F.ROOT / "nextflow" / "nextflow.config").read_text()
     assert re.search(r"^\s+weights_dir = null$", text, re.MULTILINE)
 
 
@@ -220,10 +221,10 @@ def local_tasks(tmp_path_factory):
     """The same variant under ``local``: no scheduler, so no JOB_ID, and the command is the stand-in ``starfinder``."""
     N.executable()
     work = tmp_path_factory.mktemp("local-render")
-    X.golden().write_fixture(work)
-    config = N.small_resources(X.variants(work)["morphology-only"])
+    F.golden().write_fixture(work)
+    config = N.small_resources(V.variants(work)["morphology-only"])
     config["segmentation"]["device"] = "cpu"  # ``local`` has no accelerator
-    path = X.write_config(work, "local", config)
+    path = F.write_config(work, "local", config)
     tools = stand_ins(work / "tools")
     done, rows = N.run(work, path, "-work-dir", str(work / "work"), stub=False,
                        environment={"PATH": str(tools) + os.pathsep + os.environ["PATH"], "NXF_OFFLINE": "true",
@@ -239,12 +240,12 @@ def test_a_fov_task_of_a_learned_detector_on_cuda_runs_as_a_gpu_job(tmp_path_fac
     ``gpu`` gives its job script the GPU request and ``--nv``; with segmentation on the CPU, no other task does."""
     N.executable()
     work = tmp_path_factory.mktemp("sge-fov-gpu")
-    X.golden().write_fixture(work)
-    config = X.variants(work)["morphology-only"]
+    F.golden().write_fixture(work)
+    config = V.variants(work)["morphology-only"]
     config["segmentation"]["device"] = "cpu"
-    processing = copy.deepcopy(X.PROCESSING)
+    processing = copy.deepcopy(V.PROCESSING)
     processing["spot_finding"] = {"method": "spotiflow", "model": "smfish_3d", "device": "cuda"}
-    path = X.write_config(work, "sge-fov-gpu", N.small_resources(dict(config, processing=processing)))
+    path = F.write_config(work, "sge-fov-gpu", N.small_resources(dict(config, processing=processing)))
     tools = stand_ins(work / "tools")
     done, rows = N.run(work, path, "--container", str(work / "image.sif"), "-work-dir", str(work / "work"),
                        environment={"PATH": str(tools) + os.pathsep + os.environ["PATH"], "NXF_OFFLINE": "true",

@@ -21,8 +21,8 @@ from starfinder import _layout
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
 
-from . import workflow_examples as X
 from . import workflow_tasks as T
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.segmentation, pytest.mark.contract]
 
@@ -274,7 +274,7 @@ def test_the_assign_command_writes_the_saved_folder_alone(tmp_path, previews):
     from .test_assignment_golden import SHAPE_ZYX, label_fixture
     from .test_assignment_workflow import CODEBOOK, KEEP, NAMESPACE
     work = tmp_path / "work"
-    config = T.dataset_keys(work, voxel_size_xy=0.1, voxel_size_z=0.35, processing=dict(X.PROCESSING),
+    config = T.dataset_keys(work, voxel_size_xy=0.1, voxel_size_z=0.35, processing=dict(V.PROCESSING),
                             segmentation={"runs": [{"name": "cell", "target": "cell", "method": "import",
                                                     "path": str(work / "labels" / "{fov_id}.tif")}]},
                             assignment={"cells": "cell", **({} if previews is None else {"previews": previews})})

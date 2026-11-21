@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_nextflow as N
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract, pytest.mark.nextflow, pytest.mark.slow]
 
@@ -18,25 +19,25 @@ pytestmark = [pytest.mark.workflow, pytest.mark.contract, pytest.mark.nextflow, 
 def tiny(tmp_path_factory):
     N.executable()
     work = tmp_path_factory.mktemp("nextflow-stub")
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
     return work
 
 
 def configuration(work, variant):
     if variant == "empty":
-        return N.small_resources(X.dataset(work, "nextflow-empty"))
-    config = X.variants(work)["per-fov" if variant == "two-supplied-steps" else variant]
+        return N.small_resources(V.dataset(work, "nextflow-empty"))
+    config = V.variants(work)["per-fov" if variant == "two-supplied-steps" else variant]
     config["output_id"] = "nextflow-" + variant
     if variant == "two-supplied-steps":
         config["processing"]["preprocessing"]["steps"].insert(
             2, {"method": "histogram_matching", "fit": "supplied", "reference_channel": 0})
     if variant == "after-fusion":
-        config["stitching"] = copy.deepcopy(X.variants(work)["supplied-xml"]["stitching"])
+        config["stitching"] = copy.deepcopy(V.variants(work)["supplied-xml"]["stitching"])
     return N.small_resources(config)
 
 
-@pytest.mark.parametrize("variant", [*X.VARIANTS, "two-supplied-steps", "empty"])
+@pytest.mark.parametrize("variant", [*V.VARIANTS, "two-supplied-steps", "empty"])
 @pytest.mark.parametrize("profile", ["local", "google-batch,local"])
 def test_n1_every_task_runs_once_after_its_needs(tiny, variant, profile):
     settings = configuration(tiny, variant)
@@ -48,7 +49,7 @@ def test_n1_every_task_runs_once_after_its_needs(tiny, variant, profile):
         settings["output_id"] += "-google-batch"
         arguments = ["-work-dir", str(tiny / name / "work")]
         environment = {"NXF_OFFLINE": "true", "NXF_PLUGINS_DEFAULT": "false"}
-    config = X.write_config(tiny, name, settings)
+    config = F.write_config(tiny, name, settings)
     done, rows = N.run(tiny / name, config, *arguments, environment=environment, profile=profile)
     assert done.returncode == 0, done.stdout + done.stderr
     manifest = N.manifest(config)
@@ -82,11 +83,11 @@ def test_n3_only_failures_are_retried(tiny, tmp_path, status):
     config = configuration(tiny, "reference-only")
     config["output_id"] = f"retry-{status}"
     config["selected_fovs"] = ["FOV_001"]
-    config = X.write_config(tmp_path, "retry", config)
+    config = F.write_config(tmp_path, "retry", config)
     stub = tmp_path / "fault.sh"
     stub.write_text('#!/usr/bin/env bash\nset -eu\n'
                     f'if [[ "$2" == "fov/sample/FOV_001" && "$4" == 1 ]]; then exit {status}; fi\n'
-                    f'exec "{X.ROOT / "nextflow/bin/stub_task.sh"}" "$@"\n')
+                    f'exec "{F.ROOT / "nextflow/bin/stub_task.sh"}" "$@"\n')
     stub.chmod(0o755)
     done, rows = N.run(tmp_path, config, "--stub_runner", str(stub))
     attempts = [r for r in N.tasks(rows) if r["tag"] == "fov/sample/FOV_001"]
@@ -101,11 +102,11 @@ def test_n3_max_retries_bounds_the_attempts(tiny, tmp_path, max_retries, attempt
     config = configuration(tiny, "reference-only")
     config["output_id"] = f"max-retries-{max_retries}"
     config["selected_fovs"] = ["FOV_001"]
-    config = X.write_config(tmp_path, "max-retries", config)
+    config = F.write_config(tmp_path, "max-retries", config)
     stub = tmp_path / "fault.sh"
     stub.write_text('#!/usr/bin/env bash\nset -eu\n'
                     'if [[ "$2" == "fov/sample/FOV_001" ]]; then exit 1; fi\n'
-                    f'exec "{X.ROOT / "nextflow/bin/stub_task.sh"}" "$@"\n')
+                    f'exec "{F.ROOT / "nextflow/bin/stub_task.sh"}" "$@"\n')
     stub.chmod(0o755)
     done, rows = N.run(tmp_path, config, "--stub_runner", str(stub), "--max_retries", str(max_retries))
     tries = [r for r in N.tasks(rows) if r["tag"] == "fov/sample/FOV_001"]
@@ -131,7 +132,7 @@ def test_n2_unsupported_graphs_are_refused_before_any_task(tiny, tmp_path, case,
     from starfinder.workflow import plan
 
     variant = "after-fusion" if case == "fiji" else ("reference-only" if case == "seed-chain" else "per-fov")
-    config = X.variants(tiny)[variant]
+    config = V.variants(tiny)[variant]
     config["output_id"] = "refuse-" + case
     if case == "seed-chain":
         runs = config["segmentation"]["runs"]
@@ -140,7 +141,7 @@ def test_n2_unsupported_graphs_are_refused_before_any_task(tiny, tmp_path, case,
         config["segmentation"]["runs"] = [runs[0]]
         for i in range(1, 4):
             config["segmentation"]["runs"].append(dict(template, name=f"seed_{i}", seeds=f"seed_{i - 1}"))
-    config = X.write_config(tmp_path, case, N.small_resources(config))
+    config = F.write_config(tmp_path, case, N.small_resources(config))
     environment = None
     if case in ("four-supplied-steps", "unknown-kind"):
         data = plan(config)

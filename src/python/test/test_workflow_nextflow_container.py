@@ -12,8 +12,9 @@ import stat
 
 import pytest
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_nextflow as N
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract, pytest.mark.nextflow, pytest.mark.slow]
 
@@ -39,16 +40,16 @@ exit 0
 def tiny(tmp_path_factory):
     N.executable()
     work = tmp_path_factory.mktemp("nextflow-container")
-    X.golden().write_fixture(work)
+    F.golden().write_fixture(work)
     return work
 
 
 def configuration(work, name, container=None):
-    settings = N.small_resources(X.variants(work)["morphology-only"])
+    settings = N.small_resources(V.variants(work)["morphology-only"])
     settings["output_id"] = "container-" + name
     if container:
         settings["execution"]["container"] = container
-    return X.write_config(work, name, settings)
+    return F.write_config(work, name, settings)
 
 
 def engine_file(work, name, engine):

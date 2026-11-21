@@ -25,7 +25,8 @@ import pytest
 from starfinder.workflow import plan
 
 from . import expected_values as EV
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.golden, pytest.mark.slow]
 
@@ -37,7 +38,7 @@ STAINS = ("ch04", "ch05")
 def configuration(work):
     """Invocations A and B of W-642 in the Python shape (see the module docstring)."""
     work = Path(work)
-    return dict(X.dataset(work, OUTPUT_ID), processing=copy.deepcopy(X.PROCESSING),
+    return dict(V.dataset(work, OUTPUT_ID), processing=copy.deepcopy(V.PROCESSING),
                 morphology={"channel_images": {"projection": None}},
                 segmentation={"runs": [{"name": "cell", "target": "cell", "method": "import",
                                         "path": str(work / "labels" / "{fov_id}.tif")}]},
@@ -47,21 +48,21 @@ def configuration(work):
 @pytest.fixture(scope="module")
 def golden_run(tmp_path_factory):
     """(workflow_golden, work folder, output root) after every task of the migrated configuration ran."""
-    G = X.golden()
+    G = F.golden()
     work = (tmp_path_factory.mktemp("golden") / "work").resolve()
     G.write_fixture(work)
-    plan(X.write_config(work, "golden", configuration(work)))
-    manifest = X.output_root(work, OUTPUT_ID) / "workflow" / "manifest.json"
+    plan(F.write_config(work, "golden", configuration(work)))
+    manifest = F.output_root(work, OUTPUT_ID) / "workflow" / "manifest.json"
     kinds = [t["kind"] for t in json.loads(manifest.read_text())["tasks"]]
     assert {k: kinds.count(k) for k in set(kinds)} == {"fov": 4, "morphology": 4, "segment": 4, "assign": 4}
     for task in json.loads(manifest.read_text())["tasks"]:
-        assert X.run_task(manifest, task["id"]) == 0, task["id"]
+        assert F.run_task(manifest, task["id"]) == 0, task["id"]
     return G, work, manifest.parents[1]
 
 
 def test_the_morphology_command_reproduces_the_golden_records(golden_run):
     G, work, out = golden_run
-    for fov in X.FOVS:
+    for fov in F.FOVS:
         actual = G._normalized(json.loads((out / "fovs" / fov / "nuclei_registration.json").read_text()), str(work))
         expected = json.loads((EXPECTED / "records" / "fovs" / fov / "nuclei_registration.json").read_text())
         assert G.record_differences(actual, expected) == [], fov
@@ -71,7 +72,7 @@ def test_the_morphology_channel_images_reproduce_the_golden_images(golden_run):
     G, _, out = golden_run
     values = json.loads((EXPECTED / "values.json").read_text())
     compared = 0
-    for fov in X.FOVS:
+    for fov in F.FOVS:
         for label in STAINS:
             name = f"images/flamingo/{label}/{fov}.tif"
             pixels = G._image(out / name)
@@ -81,12 +82,12 @@ def test_the_morphology_channel_images_reproduce_the_golden_images(golden_run):
                 entry = values[f"{name}:{statistic}"]
                 assert G._close(value, entry["value"], entry["compare"]), (name, statistic, value, entry)
                 compared += 1
-    assert compared == len(X.FOVS) * len(STAINS) * 5
+    assert compared == len(F.FOVS) * len(STAINS) * 5
 
 
 def test_the_assign_command_reproduces_the_golden_assignment_tables(golden_run, tmp_path):
     G, _, out = golden_run
-    for fov in X.FOVS:
+    for fov in F.FOVS:
         for table in ("cells", "counts", "molecules"):
             name = f"{fov}-assignment-{table}.csv"
             dtypes = EV.write_csv(G._table(out / "fovs" / fov / "assignment" / "default" / f"{table}.csv"),

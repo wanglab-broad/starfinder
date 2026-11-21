@@ -24,7 +24,8 @@ from starfinder import _layout
 from starfinder.workflow import plan
 from starfinder.workflow._plan import PlanRefused
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 from .coordination_helpers import write_molecules_csv
 from .test_assignment_golden import SHAPE_ZYX, label_fixture
 from .test_assignment_workflow import ASSIGNMENT_READS, CODEBOOK, KEEP, NAMESPACE, run_rule
@@ -37,13 +38,13 @@ STAIN_RUN = {"name": "nucleus", "target": "nucleus", "method": "import"}
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
     return work
 
 
 def _plan(work, name, config):
-    manifest = plan(X.write_config(work, name, config))
+    manifest = plan(F.write_config(work, name, config))
     return Path(manifest["roots"]["output"]) / "workflow" / "manifest.json", manifest
 
 
@@ -59,19 +60,19 @@ def _run(manifest, *kinds):
     """Run every task of the kinds, in the manifest's order."""
     for task in json.loads(Path(manifest).read_text())["tasks"]:
         if task["kind"] in kinds:
-            assert X.run_task(manifest, task["id"]) == 0, task["id"]
+            assert F.run_task(manifest, task["id"]) == 0, task["id"]
 
 
 def _single(work, output_id, **blocks):
     """FOV_001 of the fixture with the dataset keys and the given blocks."""
-    return dict(X.dataset(work, output_id), selected_fovs=["FOV_001"], **blocks)
+    return dict(V.dataset(work, output_id), selected_fovs=["FOV_001"], **blocks)
 
 
 # --- C1 and C3: the GPU of a cuda run and the morphology-only variant -------------------------------------------
 
 @pytest.mark.parametrize("device", ["cuda", "cpu"])
 def test_a_segment_task_of_a_cuda_run_asks_for_a_gpu(fixture_work, device):
-    config = X.variants(fixture_work)["morphology-only"]
+    config = V.variants(fixture_work)["morphology-only"]
     config["segmentation"]["device"] = device
     path, manifest = _plan(fixture_work, f"morphology-only-{device}", config)
     resolved = json.loads((path.parent / "resolved.json").read_text())["configuration"]
@@ -111,7 +112,7 @@ def test_a_seeded_run_reads_its_seeds_from_the_earlier_segment_task(fixture_work
     from starfinder.dataset.workflow import _workflow_dataset
     from starfinder.workflow._translate import _base, segmentation
     work = fixture_work
-    processing = {k: v for k, v in copy.deepcopy(X.PROCESSING).items()
+    processing = {k: v for k, v in copy.deepcopy(V.PROCESSING).items()
                   if k in ("load_codebook", "preprocessing", "registration")}
     runs = [dict(STAIN_RUN, path=str(work / "labels" / "{fov_id}.tif")),
             {"name": "cell", "target": "cell", "method": "seeded_watershed", "seeds": "nucleus",
@@ -124,7 +125,7 @@ def test_a_seeded_run_reads_its_seeds_from_the_earlier_segment_task(fixture_work
     out = manifest.parents[1]
     resolved = json.loads((manifest.parent / "resolved.json").read_text())["configuration"]
     dataset = _workflow_dataset(_base(resolved))
-    dataset.input_root, dataset.output_root = X.input_root(work), out
+    dataset.input_root, dataset.output_root = F.input_root(work), out
     whole = dataset.fov("FOV_001").load_reference_image()
     plan_, _ = segmentation(resolved)
     nucleus = plan_.runs[0]
@@ -156,7 +157,7 @@ def test_the_reference_stain_gives_the_grid_without_the_reference_round(fixture_
     from starfinder.dataset import CheckpointConfig
     from starfinder.dataset.workflow import _workflow_dataset
     from starfinder.workflow._translate import _base
-    dataset = _workflow_dataset(_base(dict(X.dataset(fixture_work, "api"), root_output_path=str(tmp_path))))
+    dataset = _workflow_dataset(_base(dict(V.dataset(fixture_work, "api"), root_output_path=str(tmp_path))))
     with pytest.raises(ValueError, match=r'load_registered_round\("reference_stain"\) first'):
         dataset.fov("FOV_001").reference_grid()
     prepared = dataset.fov("FOV_001").prepare_morphology(checkpoints=CheckpointConfig())
@@ -176,12 +177,12 @@ def test_a_direct_fov_task_asks_for_a_gpu_only_for_a_learned_detector_on_cuda(fi
                                                                                segmentation_device):
     """W-796: processing.spot_finding.device makes each fov task a GPU task (processing.device stays cpu); the segment
     tasks follow segmentation.device and the export task its own block, as before."""
-    config = X.variants(fixture_work)["morphology-only"]
+    config = V.variants(fixture_work)["morphology-only"]
     config["segmentation"]["device"] = segmentation_device
-    processing = copy.deepcopy(X.PROCESSING)
+    processing = copy.deepcopy(V.PROCESSING)
     processing["spot_finding"] = {"method": method, "model": "smfish_3d" if method == "spotiflow" else "20251212",
                                   "device": spot_device}
-    config.update(processing=processing, stitching=X.multiview(fixture_work), assembly={"assignment": None},
+    config.update(processing=processing, stitching=V.multiview(fixture_work), assembly={"assignment": None},
                   export={"images": ["reference_merged"]})
     path, manifest = _plan(fixture_work, f"spot-{method}-{spot_device}-{segmentation_device}", config)
     resolved = json.loads((path.parent / "resolved.json").read_text())["configuration"]
@@ -197,7 +198,7 @@ def test_a_direct_fov_task_asks_for_a_gpu_only_for_a_learned_detector_on_cuda(fi
 def test_tiled_mode_plans_no_gpu_task_and_refuses_spot_finding_on_cuda(fixture_work):
     """W-796: tiled mode detects with local_maxima, which refuses cuda; a learned detector is refused there as before,
     so no tile_global or tile task asks for a GPU."""
-    config = X.variants(fixture_work)["after-fusion"]
+    config = V.variants(fixture_work)["after-fusion"]
     _, manifest = _plan(fixture_work, "tiled-cpu", config)
     gpu = _gpu(manifest)
     assert {"tile_global", "tile", "tile_merge"} <= set(gpu) and "fov" not in gpu
@@ -245,7 +246,7 @@ def test_the_assign_previews_are_written_only_when_their_option_is_on(fixture_wo
     work = fixture_work
     run = {"name": "cell", "target": "cell", "method": "import", "path": str(work / "labels" / "{fov_id}.tif")}
     name = f"assign-previews-{str(previews).lower()}"
-    config = _single(work, name, processing=copy.deepcopy(X.PROCESSING), segmentation={"runs": [run]},
+    config = _single(work, name, processing=copy.deepcopy(V.PROCESSING), segmentation={"runs": [run]},
                      assignment={"cells": "cell", "previews": previews})
     manifest, planned = _plan(work, name, config)
     task = next(t for t in planned["tasks"] if t["kind"] == "assign")
@@ -268,7 +269,7 @@ def test_the_export_previews_are_written_only_when_their_option_is_on(fixture_wo
         pytest.skip("the stitching and the export of this variant need the multiview-stitcher and anndata extras")
     work = fixture_work
     for previews in (True, False):
-        config = X.variants(work)["per-fov"]
+        config = V.variants(work)["per-fov"]
         name = f"export-previews-{str(previews).lower()}"
         config["output_id"] = name
         config["assignment"]["previews"] = config["export"]["previews"] = previews
@@ -279,7 +280,7 @@ def test_the_export_previews_are_written_only_when_their_option_is_on(fixture_wo
         out = manifest.parents[1]
         folder = _layout.export_previews_dir(out, "sample", route="per_fov")
         assert folder.is_dir() is previews
-        for fov in X.FOVS:
+        for fov in F.FOVS:
             assert _layout.fov_previews_dir(out, fov).is_dir() is previews
             if previews:
                 assert sorted(p.name for p in (folder / fov).iterdir()) == ["assignment.png",
@@ -314,7 +315,7 @@ def _assign_by_command(tmp_path, labels, spot_ids):
     config = {"root_input_path": str(work / "input"), "root_output_path": str(work / "output"), "dataset_id": "data",
               "sample_id": "sample", "output_id": "out", "n_rounds": 3, "ref_round": "round1", "rotate_angle": 0,
               "voxel_size_xy": 0.1, "voxel_size_z": 0.35, "seq_channel_order": ["ch00", "ch01", "ch02", "ch03"],
-              "processing": copy.deepcopy(X.PROCESSING), "segmentation": {"runs": [run]},
+              "processing": copy.deepcopy(V.PROCESSING), "segmentation": {"runs": [run]},
               "assignment": {"cells": "cell"}}
     manifest, _ = _plan(work, "python-route", config)
     out = manifest.parents[1]

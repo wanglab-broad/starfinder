@@ -168,8 +168,8 @@ def python_shape(tmp_path, *, stitching=STITCHING, assembly=ASSEMBLY, export=EXP
     """The worked example's dataset keys and processing block in the Python shape with the three blocks (a block None
     is left out); an assignment name of the assembly block gets the assignment block and the segment run it reads (the
     route per FOV, which the export block then names)."""
-    from . import workflow_examples as X
-    config = dict(X.dataset(tmp_path, "blocks"), processing=copy.deepcopy(X.PROCESSING), morphology={})
+    from . import workflow_variants as V
+    config = dict(V.dataset(tmp_path, "blocks"), processing=copy.deepcopy(V.PROCESSING), morphology={})
     for key, block in (("stitching", stitching), ("assembly", assembly), ("export", export)):
         if block is not None:
             config[key] = copy.deepcopy(block)

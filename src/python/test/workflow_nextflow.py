@@ -17,7 +17,7 @@ import pytest
 
 from starfinder._execution import THREAD_VARIABLES
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 
 
 #: The engine tests need Nextflow 26.10.4 or newer, which needs Java 17 or newer (``manifest.nextflowVersion`` of
@@ -95,7 +95,7 @@ def run(work, config, *arguments, stub=True, environment=None, profile="local"):
     if interpreter not in env["PATH"].split(os.pathsep):
         env["PATH"] += os.pathsep + interpreter
     command = [executable_path, "-log", str(prefix.with_suffix(".nextflow.log")), "run",
-               str(X.ROOT / "nextflow" / "main.nf"), "-ansi-log", "false", "-profile", profile,
+               str(F.ROOT / "nextflow" / "main.nf"), "-ansi-log", "false", "-profile", profile,
                "-with-trace", str(trace), "--config", str(config), *(["-stub-run"] if stub else []), *arguments]
     import yaml
     config_data = yaml.safe_load(Path(config).read_text())
@@ -111,7 +111,7 @@ def run(work, config, *arguments, stub=True, environment=None, profile="local"):
             pattern = value.replace("{fov_id}", "*").replace("{sample}", "*")
             return [Path(p) for p in glob.glob(pattern) if Path(p).is_file()]
         return []
-    engine_sources = [p for p in (X.ROOT / "nextflow").rglob("*")
+    engine_sources = [p for p in (F.ROOT / "nextflow").rglob("*")
                       if p.suffix in (".nf", ".config", ".groovy", ".sh")]
     sources = sorted(set([*sources, *named_files(config_data), *engine_sources]))
     inventory = [{"path": str(p), "bytes": p.stat().st_size, "mtime_ns": p.stat().st_mtime_ns,

@@ -19,8 +19,9 @@ from starfinder.report import ReportConfig, load_report
 from starfinder.workflow import plan
 from starfinder.workflow._plan import PlanRefused
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_tasks as T
+from . import workflow_variants as V
 from .test_report_workflow import REPORT, REPORT_CONFIG, SAMPLE
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
@@ -46,7 +47,7 @@ def membership(rows):
 def report_config(work, report, blocks):
     """The processing block, the report block and the blocks of a case; an assignment name of the assembly block gets
     the assignment block and the segment run it reads (the route per FOV)."""
-    config = T.dataset_keys(work, processing=copy.deepcopy(X.PROCESSING), report=report, **copy.deepcopy(blocks))
+    config = T.dataset_keys(work, processing=copy.deepcopy(V.PROCESSING), report=report, **copy.deepcopy(blocks))
     assembly = config.get("assembly")
     if assembly is not None:
         config["export"] = {"fuse": False}           # the export's fusion would need the morphology block
@@ -174,8 +175,8 @@ def test_the_report_of_a_run_without_an_assembly_block_shows_its_cells(tmp_path)
 def tiny_sample(tmp_path_factory):
     """The workflow tests' synthetic fixture (W-642's tiny_sample), as test_workflow_cell_tasks.py builds it."""
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
     return work
 
 
@@ -187,19 +188,19 @@ def test_the_report_task_reads_what_the_fov_segment_and_assign_tasks_wrote(tiny_
     work = tiny_sample
     run = {"name": "cell", "target": "cell", "method": "import", "path": str(work / "labels" / "{fov_id}.tif")}
     fovs = ["FOV_001", "FOV_002"]
-    config = dict(X.dataset(work, "report-without-assembly"), selected_fovs=fovs,
-                  processing=copy.deepcopy(X.PROCESSING), segmentation={"runs": [run]},
+    config = dict(V.dataset(work, "report-without-assembly"), selected_fovs=fovs,
+                  processing=copy.deepcopy(V.PROCESSING), segmentation={"runs": [run]},
                   assignment={"cells": "cell"}, report={})
     assert not {"stitching", "assembly", "export"} & set(config)
-    manifest = plan(X.write_config(work, "report-without-assembly", config))
+    manifest = plan(F.write_config(work, "report-without-assembly", config))
     path = Path(manifest["roots"]["output"]) / "workflow" / "manifest.json"
     planned = [t for t in manifest["tasks"] if t["kind"] in ("fov", "segment", "assign", "report")]
     assert sorted({t["kind"] for t in planned}) == ["assign", "fov", "report", "segment"]
     for kind in ("fov", "segment", "assign", "report"):
         for task in planned:
             if task["kind"] == kind:
-                assert X.run_task(path, task["id"]) == 0, task["id"]
-    folder = Path(manifest["roots"]["output"]) / "report" / X.SAMPLE / "no_export"
+                assert F.run_task(path, task["id"]) == 0, task["id"]
+    folder = Path(manifest["roots"]["output"]) / "report" / F.SAMPLE / "no_export"
     record = load_report(folder)
     assert record["fov_ids"] == fovs
     assert record["assignment"]["name"] == "default"

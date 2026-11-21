@@ -22,8 +22,9 @@ from starfinder.__main__ import main
 from starfinder.dataset import Dataset
 from starfinder.workflow import plan, verify
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_tasks as T
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow]
 
@@ -50,7 +51,7 @@ def _config(work, route):
     """The processing, segmentation (one imported cell run), assignment, stitching, assembly, export and report blocks
     of sample s1 (F1, F2); the route after fusion imports one label image on the fused grid."""
     labels = Path(work) / "labels"
-    config = T.dataset_keys(work, output_id="routes", processing=copy.deepcopy(X.PROCESSING), stitching=MERGED,
+    config = T.dataset_keys(work, output_id="routes", processing=copy.deepcopy(V.PROCESSING), stitching=MERGED,
                             segmentation={"runs": [{"name": "cell", "target": "cell", "method": "import",
                                                     "path": str(labels / "{fov_id}.tif")}]},
                             assignment={"cells": "cell"}, assembly={"assignment": "default"}, report={})
@@ -299,7 +300,7 @@ def _routes_config(work, route):
     images and, on the route per FOV, the cell labels at the fusion's scale; the route after fusion imports the
     per-FOV route's fused cell labels (their Z maximum on the fused projection's grid, as the golden invocation D
     does)."""
-    config = copy.deepcopy(X.variants(work)["per-fov"])
+    config = copy.deepcopy(V.variants(work)["per-fov"])
     config["output_id"] = "routes"
     if route == "per_fov":
         config["export"] = dict(config["export"], fuse_labels=True, labels_scale_yx=0.5, previews=False)
@@ -323,57 +324,57 @@ def test_both_routes_run_end_to_end_in_one_output_root(tmp_path):
     if importlib.util.find_spec("multiview_stitcher") is None or importlib.util.find_spec("anndata") is None:
         pytest.skip("the stitching and the export need the multiview-stitcher and anndata extras")
     work = tmp_path / "work"
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
-    first = plan(X.write_config(work, "per_fov", _routes_config(work, "per_fov")))
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
+    first = plan(F.write_config(work, "per_fov", _routes_config(work, "per_fov")))
     path = Path(first["roots"]["output"]) / "workflow" / "manifest.json"
     out = path.parents[1]
     for task in first["tasks"]:
-        assert X.run_task(path, task["id"]) == 0, task["id"]
+        assert F.run_task(path, task["id"]) == 0, task["id"]
     one = verify(path, hash=True, final=True)
-    assert one["passed"] and [(r["route"], r["planned"]) for r in one["routes"][X.SAMPLE]] == [("per_fov", True)]
-    golden = X.golden()
-    golden._fused_cells(out / "export" / X.SAMPLE / "per_fov", work / "labels" / "fused-cells.ome.tif")
-    per_fov = _tree(out, "per_fov", X.SAMPLE)
-    second = plan(X.write_config(work, "after_fusion", _routes_config(work, "after_fusion")))
+    assert one["passed"] and [(r["route"], r["planned"]) for r in one["routes"][F.SAMPLE]] == [("per_fov", True)]
+    golden = F.golden()
+    golden._fused_cells(out / "export" / F.SAMPLE / "per_fov", work / "labels" / "fused-cells.ome.tif")
+    per_fov = _tree(out, "per_fov", F.SAMPLE)
+    second = plan(F.write_config(work, "after_fusion", _routes_config(work, "after_fusion")))
     stale = verify(path)
-    assert set(stale["incomplete"]) == {f"export/{X.SAMPLE}/after_fusion", f"report/{X.SAMPLE}/after_fusion",
+    assert set(stale["incomplete"]) == {f"export/{F.SAMPLE}/after_fusion", f"report/{F.SAMPLE}/after_fusion",
                                         "compare"}
     for task in second["tasks"]:
         if task["id"] in stale["incomplete"]:
-            assert X.run_task(path, task["id"]) == 0, task["id"]
+            assert F.run_task(path, task["id"]) == 0, task["id"]
     assert main(["workflow", "verify", "--manifest", str(path), "--final", "--hash"]) == 0
     _both_routes_verified(path, "after_fusion")
-    assert _tree(out, "per_fov", X.SAMPLE) == per_fov
+    assert _tree(out, "per_fov", F.SAMPLE) == per_fov
     samples = pd.read_csv(out / "report" / "samples.csv")
     assert list(zip(samples["sample"], samples["route"], samples["report"])) == [
-        (X.SAMPLE, "per_fov", "present"), (X.SAMPLE, "after_fusion", "present")]
+        (F.SAMPLE, "per_fov", "present"), (F.SAMPLE, "after_fusion", "present")]
     page = (out / "report" / "index.html").read_text(encoding="utf-8")
     for route in ROUTES:
-        assert f'<a href="{X.SAMPLE}/{route}/report.html">{X.SAMPLE}</a>' in page
-        record = json.loads((out / "report" / X.SAMPLE / route / "report.json").read_text())
+        assert f'<a href="{F.SAMPLE}/{route}/report.html">{F.SAMPLE}</a>' in page
+        record = json.loads((out / "report" / F.SAMPLE / route / "report.json").read_text())
         assert record["route"] == route
         assert {e["path"] for e in record["inputs"] if e["path"].startswith("export/")} <= {
-            p for p in _tree(out, route, X.SAMPLE) if p.startswith(f"export/{X.SAMPLE}/{route}/")}
+            p for p in _tree(out, route, F.SAMPLE) if p.startswith(f"export/{F.SAMPLE}/{route}/")}
     # The route per FOV again: its export, report and compare commands, whether complete or not.
-    after_fusion = _tree(out, "after_fusion", X.SAMPLE)
-    again = plan(X.write_config(work, "per_fov", _routes_config(work, "per_fov")))
+    after_fusion = _tree(out, "after_fusion", F.SAMPLE)
+    again = plan(F.write_config(work, "per_fov", _routes_config(work, "per_fov")))
     assert verify(path)["incomplete"] == ["compare"]
-    for task_id in (f"export/{X.SAMPLE}/per_fov", f"report/{X.SAMPLE}/per_fov", "compare"):
-        assert X.run_task(path, task_id) == 0, task_id
+    for task_id in (f"export/{F.SAMPLE}/per_fov", f"report/{F.SAMPLE}/per_fov", "compare"):
+        assert F.run_task(path, task_id) == 0, task_id
     assert [t["id"] for t in again["tasks"]] == [t["id"] for t in first["tasks"]]
     assert main(["workflow", "verify", "--manifest", str(path), "--final", "--hash"]) == 0
     _both_routes_verified(path, "per_fov")
-    assert _tree(out, "after_fusion", X.SAMPLE) == after_fusion
-    report = out / "report" / X.SAMPLE / "after_fusion" / "report.json"
+    assert _tree(out, "after_fusion", F.SAMPLE) == after_fusion
+    report = out / "report" / F.SAMPLE / "after_fusion" / "report.json"
     data = report.read_bytes()
     report.write_bytes(data[:-1] + bytes([data[-1] ^ 1]))
     broken = verify(path, hash=True, final=True)
     assert not broken["passed"] and broken["incomplete"] == []
-    assert broken["found_incomplete"] == [f"report/{X.SAMPLE}/after_fusion"]
-    (found,) = [r for r in broken["routes"][X.SAMPLE] if not r["planned"]]
-    assert found["tasks"][f"report/{X.SAMPLE}/after_fusion"]["problems"] == [
-        f"report/{X.SAMPLE}/after_fusion/report.json has another SHA-256 than the record's"]
+    assert broken["found_incomplete"] == [f"report/{F.SAMPLE}/after_fusion"]
+    (found,) = [r for r in broken["routes"][F.SAMPLE] if not r["planned"]]
+    assert found["tasks"][f"report/{F.SAMPLE}/after_fusion"]["problems"] == [
+        f"report/{F.SAMPLE}/after_fusion/report.json has another SHA-256 than the record's"]
     report.write_bytes(data)
     assert main(["workflow", "verify", "--manifest", str(path), "--final", "--hash"]) == 0
 
@@ -384,13 +385,13 @@ def _both_routes_verified(manifest, planned):
     the manifest names both, the found route's tasks being none of the plan's."""
     data = json.loads(Path(manifest).read_text())
     other = next(r for r in ROUTES if r != planned)
-    found = [f"export/{X.SAMPLE}/{other}", f"report/{X.SAMPLE}/{other}"]
-    assert [(r["route"], r["planned"]) for r in data["routes"][X.SAMPLE]] == [
+    found = [f"export/{F.SAMPLE}/{other}", f"report/{F.SAMPLE}/{other}"]
+    assert [(r["route"], r["planned"]) for r in data["routes"][F.SAMPLE]] == [
         ("per_fov", planned == "per_fov"), ("after_fusion", planned == "after_fusion")]
     assert not set(found) & {t["id"] for t in data["tasks"]}
     result = verify(manifest, hash=True, final=True)
     assert result["passed"] and result["found_incomplete"] == [] and result["incomplete"] == []
-    listed = {r["route"]: r for r in result["routes"][X.SAMPLE]}
+    listed = {r["route"]: r for r in result["routes"][F.SAMPLE]}
     assert sorted(listed) == sorted(ROUTES) and all(r["complete"] for r in listed.values())
     assert sorted(listed[other]["tasks"]) == found and not listed[other]["planned"]
     return result
@@ -417,14 +418,14 @@ def _engine_routes(tmp_path, engine):
     run.replan(_engine_route(run, "per_fov"))
     run.invoke({t["id"] for t in run.data["tasks"]})
     run.check()
-    X.golden()._fused_cells(run.out / "export" / X.SAMPLE / "per_fov", run.work / "labels" / "fused-cells.ome.tif")
-    trees = {"per_fov": _tree(run.out, "per_fov", X.SAMPLE)}
+    F.golden()._fused_cells(run.out / "export" / F.SAMPLE / "per_fov", run.work / "labels" / "fused-cells.ome.tif")
+    trees = {"per_fov": _tree(run.out, "per_fov", F.SAMPLE)}
     run.replan(_engine_route(run, "after_fusion"))
-    ran = run.invoke({f"export/{X.SAMPLE}/after_fusion", f"report/{X.SAMPLE}/after_fusion", "compare"})
+    ran = run.invoke({f"export/{F.SAMPLE}/after_fusion", f"report/{F.SAMPLE}/after_fusion", "compare"})
     run.check()
     _both_routes_verified(run.manifest, "after_fusion")
-    assert _tree(run.out, "per_fov", X.SAMPLE) == trees["per_fov"]
-    trees["after_fusion"] = _tree(run.out, "after_fusion", X.SAMPLE)
+    assert _tree(run.out, "per_fov", F.SAMPLE) == trees["per_fov"]
+    trees["after_fusion"] = _tree(run.out, "after_fusion", F.SAMPLE)
     run.replan(_engine_route(run, "per_fov"))
     again = run.invoke({"compare"})
     run.check()
@@ -432,8 +433,8 @@ def _engine_routes(tmp_path, engine):
     # The engines never ran the found route: neither invocation's own list of the tasks it ran names it, and its
     # records keep their bytes (the trees hold them).
     assert not [t for t in ran if t.endswith("/per_fov")] and not [t for t in again if t.endswith("/after_fusion")]
-    assert _tree(run.out, "after_fusion", X.SAMPLE) == trees["after_fusion"]
-    assert _tree(run.out, "per_fov", X.SAMPLE) == trees["per_fov"]
+    assert _tree(run.out, "after_fusion", F.SAMPLE) == trees["after_fusion"]
+    assert _tree(run.out, "per_fov", F.SAMPLE) == trees["per_fov"]
     samples = pd.read_csv(run.out / "report" / "samples.csv")
     assert list(zip(samples["route"], samples["report"])) == [("per_fov", "present"), ("after_fusion", "present")]
     E.evidence(run.work, "routes.json", {"engine": engine, "second_route_ran": sorted(ran),

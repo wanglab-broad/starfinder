@@ -20,8 +20,8 @@ import yaml
 import starfinder.dataset.workflow as workflow
 from starfinder.report import MarkerGroup, ReportConfig, ReportLimits, RuleLimit
 
-from . import workflow_examples as X
 from . import workflow_tasks as T
+from . import workflow_variants as V
 from .test_fov_membership import MATLAB_RSF
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
@@ -89,7 +89,7 @@ def annotation(output_root, rows):
 
 def python_shape(tmp_path, **blocks):
     """A configuration in the Python shape (the worked example's dataset keys and processing block) with blocks."""
-    return dict(X.dataset(tmp_path, "report"), processing=copy.deepcopy(X.PROCESSING), **copy.deepcopy(blocks))
+    return dict(V.dataset(tmp_path, "report"), processing=copy.deepcopy(V.PROCESSING), **copy.deepcopy(blocks))
 
 
 # --- WF1: the schema equals the configuration ----------------------------------------------------------------

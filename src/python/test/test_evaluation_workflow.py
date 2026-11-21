@@ -14,13 +14,13 @@ import pytest
 from starfinder.evaluation.workflow import (COMPARISON_KINDS, TOLERANCES, array_differences, record_differences,
                                             table_differences, value_differences, values_match)
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 
 pytestmark = [pytest.mark.evaluation, pytest.mark.contract]
 
 
 def test_the_script_calls_the_package_comparison():
-    golden = X.golden()
+    golden = F.golden()
     assert golden.record_differences is record_differences and golden._close is values_match
     assert golden.TOLERANCES is TOLERANCES
     assert COMPARISON_KINDS == ("exact", "same_environment", "float64", "float32")

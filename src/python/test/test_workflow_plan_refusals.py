@@ -19,8 +19,9 @@ from starfinder.__main__ import main
 
 from starfinder.workflow._plan import PlanRefused
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_tasks as W
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -28,8 +29,8 @@ pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
     return work
 
 
@@ -42,7 +43,7 @@ def work(fixture_work, tmp_path):
 
 def _refused(work, config, capsys, *parts):
     """Plan ``config``: exit 2, a message holding every one of ``parts``, and no file under the output root."""
-    path = X.write_config(work, "refused", config)
+    path = F.write_config(work, "refused", config)
     assert main(["workflow", "plan", "--config", str(path)]) == 2
     message = capsys.readouterr().err
     assert message.startswith("plan refused: ")
@@ -53,14 +54,14 @@ def _refused(work, config, capsys, *parts):
 
 
 def test_the_refused_assignment_variant(work, capsys):
-    message = _refused(work, X.variants(work)["refused-assignment"], capsys)
+    message = _refused(work, V.variants(work)["refused-assignment"], capsys)
     assert message.strip() == (
         "plan refused: the assignment block assigns each FOV's molecules, which only the processing block produces "
         "(with spot_finding, reads_extraction and reads_filtration): add a processing block")
 
 
 def test_the_refused_matlab_variant(work, capsys):
-    message = _refused(work, X.variants(work)["refused-matlab"], capsys)
+    message = _refused(work, V.variants(work)["refused-matlab"], capsys)
     assert message.strip() == (
         "plan refused: this configuration has no backend and holds keys of the MATLAB dialect (workflow_mode, rules); "
         "the default backend is python: add backend: matlab to run the MATLAB workflow, or migrate it to the Python "
@@ -68,18 +69,18 @@ def test_the_refused_matlab_variant(work, capsys):
 
 
 def test_backend_matlab(work, capsys):
-    _refused(work, dict(X.variants(work)["molecules-only"], backend="matlab"), capsys, "backend: matlab",
+    _refused(work, dict(V.variants(work)["molecules-only"], backend="matlab"), capsys, "backend: matlab",
              "frozen MATLAB workflow")
 
 
 @pytest.mark.parametrize("section", [None, "regular_grid", "snap_to_grid"])
 def test_unknown_stitching_positions_keys_are_refused_before_tasks(work, capsys, section):
-    config = X.variants(work)["per-fov"]
+    config = V.variants(work)["per-fov"]
     positions = config["stitching"]["positions"]
     if section is None:
         positions["not_a_position_key"] = True
     else:
-        positions[section] = dict(X.grid()["regular_grid"] if section == "regular_grid" else {"overlap": 0.2},
+        positions[section] = dict(V.grid()["regular_grid"] if section == "regular_grid" else {"overlap": 0.2},
                                   not_a_position_key=True)
         if section == "regular_grid":
             positions["source"] = "regular_grid"
@@ -88,21 +89,21 @@ def test_unknown_stitching_positions_keys_are_refused_before_tasks(work, capsys,
 
 
 def test_a_missing_round_folder(work, capsys):
-    shutil.rmtree(X.input_root(work) / "round3" / "FOV_002")
-    _refused(work, X.variants(work)["molecules-only"], capsys, "FOV FOV_002", "round round3", "does not exist")
+    shutil.rmtree(F.input_root(work) / "round3" / "FOV_002")
+    _refused(work, V.variants(work)["molecules-only"], capsys, "FOV FOV_002", "round round3", "does not exist")
 
 
 def test_a_channel_label_that_matches_two_files(work, capsys):
-    folder = X.input_root(work) / "round2" / "FOV_004"
+    folder = F.input_root(work) / "round2" / "FOV_004"
     shutil.copyfile(folder / "ch01.ome.tif", folder / "copy-ch01.tif")
-    message = _refused(work, X.variants(work)["molecules-only"], capsys, "FOV FOV_004", "round round2", "'ch01'",
+    message = _refused(work, V.variants(work)["molecules-only"], capsys, "FOV FOV_004", "round round2", "'ch01'",
                        "found 2")
     # The refusal names both files (test_segmentation_workflow.py's "found 2.*a_ch04.tif.*b_ch04.tif", W-750).
     assert re.search(r"found 2 \(ch01\.ome\.tif, copy-ch01\.tif\)", message), message
 
 
 def test_a_run_name_with_a_slash(work, capsys):
-    config = X.variants(work)["morphology-only"]
+    config = V.variants(work)["morphology-only"]
     config["segmentation"]["runs"][0]["name"] = "nucleus/2d"
     _refused(work, config, capsys, "segmentation run name 'nucleus/2d'", "'/'")
 
@@ -132,7 +133,7 @@ LEFT_VALUES = {"rules": {"rsf_single_fov": {"run": True}}, "workflow_mode": "fre
 
 @pytest.mark.parametrize("key", sorted(LEFT))
 def test_each_key_that_left_the_python_dialect(work, capsys, key):
-    config = dict(X.variants(work)["molecules-only"], **{key: LEFT_VALUES.get(key, "/somewhere")})
+    config = dict(V.variants(work)["molecules-only"], **{key: LEFT_VALUES.get(key, "/somewhere")})
     _refused(work, config, capsys, *LEFT[key])
 
 
@@ -148,7 +149,7 @@ NESTED = {
 
 @pytest.mark.parametrize("key", sorted(NESTED))
 def test_each_nested_key_that_left_the_python_dialect(work, capsys, key):
-    config = copy.deepcopy(X.variants(work)["molecules-only"])
+    config = copy.deepcopy(V.variants(work)["molecules-only"])
     change, named = NESTED[key]
     change(config)
     _refused(work, config, capsys, named)
@@ -158,7 +159,7 @@ def test_each_nested_key_that_left_the_python_dialect(work, capsys, key):
 def test_the_named_recipe_is_refused_with_its_explicit_steps(work, capsys, value):
     """processing.recipe left with W-887, whatever its value: the refusal names the key and gives the steps that
     recipe: deep expanded to, to paste in its place (docs/migration.md, "The named processing recipe")."""
-    config = copy.deepcopy(X.variants(work)["molecules-only"])
+    config = copy.deepcopy(V.variants(work)["molecules-only"])
     config["processing"]["recipe"] = value
     _refused(work, config, capsys, "processing.recipe left the Python configuration: use the explicit steps",
              "{method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}",
@@ -170,12 +171,12 @@ def test_the_named_recipe_is_refused_with_its_explicit_steps(work, capsys, value
 
 
 def test_an_unknown_key_is_named(work, capsys):
-    _refused(work, dict(X.variants(work)["molecules-only"], spot_size=3), capsys, "'spot_size'")
+    _refused(work, dict(V.variants(work)["molecules-only"], spot_size=3), capsys, "'spot_size'")
 
 
 def _tiled(work, **tiled):
     """The molecules-only variant with its processing tiled (a tile size of 18: 2 x 2 tiles of each 36 x 36 FOV)."""
-    config = copy.deepcopy(X.variants(work)["molecules-only"])
+    config = copy.deepcopy(V.variants(work)["molecules-only"])
     config["processing"].update(mode="tiled", tiled=dict({"tile_size_yx": 18}, **tiled))
     return config
 
@@ -209,7 +210,7 @@ def test_exact_false_accepts_a_detector_without_a_finite_footprint(work):
     from starfinder.workflow import plan
     config = _tiled(work, exact=False)
     config["processing"]["spot_finding"].update(min_distance_voxels=2)
-    manifest = plan(X.write_config(work, "inexact", config))
+    manifest = plan(F.write_config(work, "inexact", config))
     assert sum(t["kind"] == "tile" for t in manifest["tasks"]) == 16
 
 
@@ -225,7 +226,7 @@ def test_a_halo_below_the_footprints_names_the_operation(work, capsys):
 
 
 def test_the_tiled_settings_are_refused_in_direct_mode(work, capsys):
-    config = copy.deepcopy(X.variants(work)["molecules-only"])
+    config = copy.deepcopy(V.variants(work)["molecules-only"])
     config["processing"]["tiled"] = {"tile_size_yx": 18}
     _refused(work, config, capsys, "processing.tiled", "processing.mode tiled only")
 
@@ -234,7 +235,7 @@ def test_the_tiled_settings_are_refused_in_direct_mode(work, capsys):
 
 def _one_fov(tmp_path, fovs="sample,fov_id\ns1,P1\n", **keys):
     """The processing block on fovs.csv's FOVs, raw images as empty files."""
-    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(X.PROCESSING), **keys)
+    config = W.dataset_keys(tmp_path, processing=copy.deepcopy(V.PROCESSING), **keys)
     W.write_inputs(config, fovs)
     return config
 
@@ -269,7 +270,7 @@ def test_a_reference_image_without_fov_id_is_refused(tmp_path, value):
 
 LEGACY_SAMPLE_RULES = [
     (["stitching_preparation", "create_tile_config"], {}),
-    (["create_sample_h5ad"], {"stitching": {"method": "multiview_stitcher", "positions": X.grid()}}),
+    (["create_sample_h5ad"], {"stitching": {"method": "multiview_stitcher", "positions": V.grid()}}),
     (["create_sample_reads_assignment"], {}),
     (["reads_assignment"], {}),
 ]

@@ -17,7 +17,8 @@ from starfinder import _layout
 from starfinder.dataset.fov import FOV
 from starfinder.workflow import plan
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.dataset, pytest.mark.contract, pytest.mark.extended]
 
@@ -34,7 +35,7 @@ class Kill(BaseException):
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
+    F.golden().write_fixture(work)
     return work
 
 
@@ -42,17 +43,17 @@ def fixture_work(tmp_path_factory):
 def work(fixture_work, tmp_path, monkeypatch):
     target = tmp_path / "work"
     shutil.copytree(fixture_work, target, symlinks=True)
-    X.fix_code(monkeypatch)
+    F.fix_code(monkeypatch)
     return target
 
 
 def _config(work, **execution):
-    return X.single_fov(work, downstream=True, resume_from_checkpoint=True, **execution)
+    return V.single_fov(work, downstream=True, resume_from_checkpoint=True, **execution)
 
 
 def _plan(work, config):
-    plan(X.write_config(work, "single", config))
-    return X.output_root(work, "single") / "workflow" / "manifest.json"
+    plan(F.write_config(work, "single", config))
+    return F.output_root(work, "single") / "workflow" / "manifest.json"
 
 
 def _folder(manifest):
@@ -82,7 +83,7 @@ def _stop(manifest, monkeypatch, method):
             raise Kill()
         patch.setattr(FOV, method, stop)
         with pytest.raises(Kill):
-            X.run_task(manifest, FOV_TASK)
+            F.run_task(manifest, FOV_TASK)
     record = json.loads((_folder(manifest) / "run.json").read_text())
     assert record["status"] == "interrupted"
     return record
@@ -92,7 +93,7 @@ def _stop(manifest, monkeypatch, method):
 def full(work):
     """A full run of the task: its outputs' digests and its normalized run.json, then the outputs removed."""
     manifest = _plan(work, _config(work))
-    assert X.run_task(manifest, FOV_TASK) == 0
+    assert F.run_task(manifest, FOV_TASK) == 0
     folder = _folder(manifest)
     result = (_digests(folder), _record(folder))
     shutil.rmtree(folder)
@@ -105,7 +106,7 @@ def test_a_resume_after_a_stop_equals_a_full_run(full, monkeypatch, stage, metho
     manifest, (digests, record) = full
     stopped = _stop(manifest, monkeypatch, method)
     assert list(stopped["checkpoints"])[-1] == stage
-    assert X.run_task(manifest, FOV_TASK) == 0
+    assert F.run_task(manifest, FOV_TASK) == 0
     folder = _folder(manifest)
     task_record = json.loads(_layout.task_record(manifest.parents[1], FOV_TASK).read_text())
     assert task_record["workflow"]["resumed_from"] == stage
@@ -125,14 +126,14 @@ def test_a_resume_after_a_changed_export_key_resumes(full, monkeypatch, work):
     manifest = _plan(work, config)
     after = json.loads(manifest.read_text())["tasks"][0]
     assert after["id"] == FOV_TASK and after["blocks_sha256"] == before["blocks_sha256"]
-    assert X.run_task(manifest, FOV_TASK) == 0
+    assert F.run_task(manifest, FOV_TASK) == 0
     assert _digests(_folder(manifest)) == digests and _record(_folder(manifest)) == record
 
 
 def _refused(manifest, capsys, *parts):
     folder = _folder(manifest)
     before = {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob("*") if p.is_file()}
-    assert X.run_task(manifest, FOV_TASK) == 3
+    assert F.run_task(manifest, FOV_TASK) == 3
     message = capsys.readouterr().err
     assert message.startswith(f"resume_from_checkpoint refused for {FOV_TASK}: fovs/FOV_001/run.json does not "
                               "match this task: ")
@@ -153,7 +154,7 @@ def test_a_resume_after_a_changed_processing_key_is_refused(full, monkeypatch, w
 def test_a_resume_after_a_changed_input_is_refused(full, monkeypatch, work, capsys):
     manifest, _ = full
     _stop(manifest, monkeypatch, "filter_reads")
-    image = X.input_root(work) / "round3" / "FOV_001" / "ch02.ome.tif"
+    image = F.input_root(work) / "round3" / "FOV_001" / "ch02.ome.tif"
     data = bytearray(image.read_bytes())
     data[-1] ^= 1
     image.write_bytes(bytes(data))
@@ -165,7 +166,7 @@ def test_a_resume_under_another_package_version_is_refused(work, monkeypatch, ca
     config = _config(work, code_version=code_version)
     manifest = _plan(work, config)
     _stop(manifest, monkeypatch, "filter_reads")
-    X.fix_code(monkeypatch, version="0.3.0")
+    F.fix_code(monkeypatch, version="0.3.0")
     manifest = _plan(work, config)
     _refused(manifest, capsys, "code.version is 0.2.0 (recorded), 0.3.0 (now)")
 
@@ -175,9 +176,9 @@ def test_a_resume_after_changes_names_every_differing_field(full, monkeypatch, w
     _stop(manifest, monkeypatch, "filter_reads")
     config = _config(work)
     config["processing"]["reads_filtration"]["start_base"] = "A"
-    image = X.input_root(work) / "round2" / "FOV_001" / "ch00.ome.tif"
+    image = F.input_root(work) / "round2" / "FOV_001" / "ch00.ome.tif"
     image.write_bytes(image.read_bytes()[::-1])
-    X.fix_code(monkeypatch, version="0.3.0")
+    F.fix_code(monkeypatch, version="0.3.0")
     _refused(_plan(work, config), capsys, "workflow.blocks_sha256", "inputs round2/FOV_001/ch00.ome.tif sha256 differs",
              "code.version is 0.2.0 (recorded), 0.3.0 (now)")
 
@@ -195,8 +196,8 @@ def test_a_version_1_run_record_is_never_resumed(full, monkeypatch, capsys):
 def test_without_resume_from_checkpoint_the_task_reruns_from_scratch(full, monkeypatch, work):
     manifest, (digests, record) = full
     _stop(manifest, monkeypatch, "filter_reads")
-    manifest = _plan(work, X.single_fov(work, downstream=True))
-    assert X.run_task(manifest, FOV_TASK) == 0
+    manifest = _plan(work, V.single_fov(work, downstream=True))
+    assert F.run_task(manifest, FOV_TASK) == 0
     task_record = json.loads(_layout.task_record(manifest.parents[1], FOV_TASK).read_text())
     assert task_record["workflow"]["resumed_from"] is None
     assert _digests(_folder(manifest)) == digests and _record(_folder(manifest)) == record
@@ -215,7 +216,7 @@ def test_a_resume_from_the_registered_stage_equals_a_full_run(work, monkeypatch)
     manifest = _plan(work, config)
     task = json.loads(manifest.read_text())["tasks"][0]
     assert "fovs/FOV_001/checkpoints/registered/round2.ome.tif" in task["outputs"]
-    assert X.run_task(manifest, FOV_TASK) == 0
+    assert F.run_task(manifest, FOV_TASK) == 0
     folder = _folder(manifest)
     names = FILES + REGISTERED_FILES
     digests = {name: hashlib.sha256((folder / name).read_bytes()).hexdigest() for name in names}
@@ -224,7 +225,7 @@ def test_a_resume_from_the_registered_stage_equals_a_full_run(work, monkeypatch)
     _layout.task_record(manifest.parents[1], FOV_TASK).unlink()
     stopped = _stop(manifest, monkeypatch, "_assemble_intensities")
     assert list(stopped["checkpoints"]) == ["registered"]
-    assert X.run_task(manifest, FOV_TASK) == 0
+    assert F.run_task(manifest, FOV_TASK) == 0
     assert {name: hashlib.sha256((folder / name).read_bytes()).hexdigest() for name in names} == digests
     resumed = _record(folder)
     # A resume from registered runs the detection and extraction after the loop of rounds, so its steps come in
@@ -244,14 +245,14 @@ def test_a_resumed_attempt_that_fails_leaves_no_declared_output(full, monkeypatc
             assert json.loads((_folder(manifest) / "run.json").read_text())["workflow"]["resumed_from"] == "pre_qc"
             raise RuntimeError("the molecule table cannot be written")
         patch.setattr(FOV, "export_spots", broken)
-        assert X.run_task(manifest, FOV_TASK) == 1
+        assert F.run_task(manifest, FOV_TASK) == 1
     task = json.loads(manifest.read_text())["tasks"][0]
     assert [o for o in task["outputs"] if (out / o).exists()] == []
     failed = json.loads(_layout.failed_record(out, FOV_TASK).read_text())
     assert {"fovs/FOV_001/run.json", "fovs/FOV_001/checkpoints/candidates.json",
             "fovs/FOV_001/checkpoints/pre_qc.json", "fovs/FOV_001/reference.tif"} <= set(failed["removed"])
     assert _layout.task_log(out, FOV_TASK).is_file() and not _layout.task_record(out, FOV_TASK).exists()
-    assert X.run_task(manifest, FOV_TASK) == 0
+    assert F.run_task(manifest, FOV_TASK) == 0
     task_record = json.loads(_layout.task_record(out, FOV_TASK).read_text())
     assert task_record["workflow"]["resumed_from"] is None
     assert _digests(_folder(manifest)) == digests and _record(_folder(manifest)) == record
@@ -269,11 +270,11 @@ def test_a_record_with_no_stage_runs_from_scratch(full, monkeypatch):
         patch.setattr(FOV, "load_images", stop)
         patch.setattr(_RunRecord, "finish", lambda self, *args, **kwargs: None)
         with pytest.raises(Kill):
-            X.run_task(manifest, FOV_TASK)
+            F.run_task(manifest, FOV_TASK)
     stopped = json.loads((_folder(manifest) / "run.json").read_text())
     assert stopped["status"] == "running" and stopped["checkpoints"] == {} and stopped["preprocessing"] is None
     assert stopped["inputs"] == []
-    assert X.run_task(manifest, FOV_TASK) == 0
+    assert F.run_task(manifest, FOV_TASK) == 0
     task_record = json.loads(_layout.task_record(manifest.parents[1], FOV_TASK).read_text())
     assert task_record["workflow"]["resumed_from"] is None
     assert _digests(_folder(manifest)) == digests and _record(_folder(manifest)) == record
@@ -295,7 +296,7 @@ class Stopped:
         self.manifest = _plan(work, self.config)
         for task in json.loads(self.manifest.read_text())["tasks"]:
             if task["kind"] in ("summarize", "merge"):
-                assert X.run_task(self.manifest, task["id"]) == 0, task["id"]
+                assert F.run_task(self.manifest, task["id"]) == 0, task["id"]
         _stop(self.manifest, monkeypatch, "filter_reads")
         self.path = _folder(self.manifest) / "run.json"
 
@@ -311,11 +312,11 @@ class Stopped:
         return self.manifest
 
     def code(self, **code):
-        X.fix_code(self.monkeypatch, **code)
+        F.fix_code(self.monkeypatch, **code)
         return self.manifest
 
     def touch(self, relative, root=None):
-        path = (root or X.input_root(self.work)) / relative
+        path = (root or F.input_root(self.work)) / relative
         path.write_bytes(path.read_bytes() + b"\n")
         return self.manifest
 
@@ -371,7 +372,7 @@ TABLE = {
                                       "codebook is genes.csv (recorded), none (now)"),
     "a codebook only in the task": (False, lambda s: s.edit(_set_record("codebook", value=None)),
                                     "codebook is not recorded (recorded)"),
-    "the supplied statistics' hash": (True, lambda s: s.touch(SUPPLIED_FILE, X.output_root(s.work, "single")),
+    "the supplied statistics' hash": (True, lambda s: s.touch(SUPPLIED_FILE, F.output_root(s.work, "single")),
                                       "preprocessing.supplied_statistics", ),
     "supplied statistics only in the record": (False, lambda s: s.edit(_set_record(
         "preprocessing", "supplied_statistics", value={"path": "/elsewhere/supplied.json", "sha256": "0" * 64})),
@@ -399,8 +400,8 @@ def test_a_record_without_a_commit_resumes_with_a_package_that_has_one(work, mon
     """code.git_commit is compared when recorded: a record that holds none resumes under a package that has one."""
     stopped = Stopped(work, monkeypatch)
     stopped.edit(_set_record("code", "git_commit", value=None))
-    assert X.CLEAN_CODE["git_commit"]
-    assert X.run_task(stopped.manifest, FOV_TASK) == 0
+    assert F.CLEAN_CODE["git_commit"]
+    assert F.run_task(stopped.manifest, FOV_TASK) == 0
     task_record = json.loads(_layout.task_record(stopped.manifest.parents[1], FOV_TASK).read_text())
     assert task_record["workflow"]["resumed_from"] == "pre_qc"
 
@@ -410,7 +411,7 @@ def test_the_supplied_statistics_case_resumes_when_nothing_differs(work, monkeyp
     stopped = Stopped(work, monkeypatch, supplied=True)
     record = json.loads(stopped.path.read_text())
     assert record["preprocessing"]["supplied_statistics"]["path"].endswith(SUPPLIED_FILE)
-    assert X.run_task(stopped.manifest, FOV_TASK) == 0
+    assert F.run_task(stopped.manifest, FOV_TASK) == 0
 
 
 # X7, X10 and X11 use real engine jobs; the X8 tests above retain their inputs
@@ -523,7 +524,7 @@ def test_x11_stale_results_rerun_only_readers_and_downstream(tmp_path, engine, c
     for iteration, changed in enumerate([True, False, True, False] if case == "restored-twice" else [True]):
         config = copy.deepcopy(original)
         if case.startswith("raw-"):
-            raw = X.input_root(run.work) / "round2/FOV_002/ch01.ome.tif"
+            raw = F.input_root(run.work) / "round2/FOV_002/ch01.ome.tif"
             declaring = {t["id"] for t in run.data["tasks"] if "input:round2/FOV_002/ch01.ome.tif" in t["inputs"]}
             assert declaring == {"summarize/sample/percentile_normalization/FOV_002", "fov/sample/FOV_002"}
             affected = E.downstream(run.data, declaring)

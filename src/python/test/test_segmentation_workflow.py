@@ -298,8 +298,8 @@ def base_config():
 
 def python_shape(tmp_path, **blocks):
     """The worked example's dataset keys and processing block in the Python shape with blocks."""
-    from . import workflow_examples as X
-    return dict(X.dataset(tmp_path, "segmentation"), processing=copy.deepcopy(X.PROCESSING), **copy.deepcopy(blocks))
+    from . import workflow_variants as V
+    return dict(V.dataset(tmp_path, "segmentation"), processing=copy.deepcopy(V.PROCESSING), **copy.deepcopy(blocks))
 
 
 @pytest.mark.parametrize("addition", [

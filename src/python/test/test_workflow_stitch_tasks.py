@@ -329,7 +329,7 @@ def test_the_engine_task_fails_naming_execution_fiji_in_a_real_job(tmp_path):
     import yaml
     from starfinder import _layout
     from starfinder.workflow._commands import _check_dataset_xml, _read_view_map
-    from .test_workflow_snakemake_dryrun import _snakemake, snakemake
+    from .workflow_snakemake import _snakemake, snakemake
     _snakemake()
     save = tmp_path / "bigstitcher"
     for k, fov in enumerate(LINK_IDS):
@@ -516,10 +516,10 @@ def layout_config(dataset, work, **blocks):
     """A configuration whose output root is the dataset's (<root>/data/output), whose input root holds fovs.csv, and
     whose reference_image is the dataset's pattern (the default layout's, or the moved layout's
     images/flamingo/DAPI/{fov_id}_reference.tif), under a processing block, whose fov tasks write the files."""
-    from . import workflow_examples as X
+    from . import workflow_variants as V
     root = dataset.output_root.parent.parent
     config = T.dataset_keys(work, root_output_path=str(root), output_id="output",
-                            reference_image=dataset.reference_image, processing=copy.deepcopy(X.PROCESSING), **blocks)
+                            reference_image=dataset.reference_image, processing=copy.deepcopy(V.PROCESSING), **blocks)
     if dataset.voxel_size_xy is not None:
         config.update(voxel_size_xy=dataset.voxel_size_xy, voxel_size_z=dataset.voxel_size_z)
     return config
@@ -569,7 +569,7 @@ def golden_route(work, form, setups, *, voxel_sizes=True, fallback=None, referen
     Position8 (stored metadata or plain pages; at reference_image's pattern under a processing block when given, else
     supplied), its stage file and fovs.csv (position_id 1 to 8), and the BigStitcher folder with the hand-built
     dataset.xml, view map and macro; (manifest, configuration, folder)."""
-    from . import workflow_examples as X
+    from . import workflow_variants as V
     xml, _, _, table, view_map, _ = setups
     save = work / "bigstitcher"
     stage = work / "stage" / f"{SAMPLE}.maf"
@@ -582,7 +582,7 @@ def golden_route(work, form, setups, *, voxel_sizes=True, fallback=None, referen
         config = imported(work, stitching=block)
         path = lambda fov: work / "refs" / f"{fov}.tif"  # noqa: E731
     else:
-        config = T.dataset_keys(work, reference_image=reference_image, processing=copy.deepcopy(X.PROCESSING),
+        config = T.dataset_keys(work, reference_image=reference_image, processing=copy.deepcopy(V.PROCESSING),
                                 stitching=block)
         path = lambda fov: T.output_root(config) / reference_image.replace("{fov_id}", fov)  # noqa: E731
     if form == "plain" and voxel_sizes:

@@ -16,7 +16,8 @@ from starfinder import _layout
 from starfinder.dataset.fov import FOV
 from starfinder.workflow import plan
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -26,8 +27,8 @@ FOV_TASK = "fov/sample/FOV_001"
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
     return work
 
 
@@ -35,13 +36,13 @@ def fixture_work(tmp_path_factory):
 def work(fixture_work, tmp_path, monkeypatch):
     target = tmp_path / "work"
     shutil.copytree(fixture_work, target, symlinks=True)
-    X.fix_code(monkeypatch)
+    F.fix_code(monkeypatch)
     return target
 
 
 def _plan(work, config):
-    plan(X.write_config(work, "single", config))
-    return X.output_root(work, "single") / "workflow" / "manifest.json"
+    plan(F.write_config(work, "single", config))
+    return F.output_root(work, "single") / "workflow" / "manifest.json"
 
 
 def _tree(root):
@@ -53,7 +54,7 @@ def _tree(root):
 def _refused(manifest, task, capsys, status, *parts):
     root = manifest.parents[1]
     before = _tree(root)
-    assert X.run_task(manifest, task) == status
+    assert F.run_task(manifest, task) == status
     message = capsys.readouterr().err
     for part in parts:
         assert part in message, (part, message)
@@ -63,7 +64,7 @@ def _refused(manifest, task, capsys, status, *parts):
 
 def test_an_unknown_task_is_refused(work, capsys):
     from starfinder.__main__ import main
-    manifest = _plan(work, X.single_fov(work))
+    manifest = _plan(work, V.single_fov(work))
     before = _tree(manifest.parents[1])
     assert main(["workflow", "fov", "--manifest", str(manifest), "--task", "fov/sample/FOV_009"]) == 2
     assert "has no task 'fov/sample/FOV_009'" in capsys.readouterr().err
@@ -71,26 +72,26 @@ def test_an_unknown_task_is_refused(work, capsys):
 
 
 def test_a_resolved_configuration_whose_hash_differs_is_refused(work, capsys):
-    manifest = _plan(work, X.single_fov(work))
+    manifest = _plan(work, V.single_fov(work))
     resolved = manifest.parent / "resolved.json"
     resolved.write_bytes(resolved.read_bytes() + b" ")
     _refused(manifest, FOV_TASK, capsys, 2, "resolved configuration", "plan the run again")
 
 
 def test_a_needs_task_without_a_succeeded_record_is_refused(work, capsys):
-    manifest = _plan(work, X.single_fov(work, downstream=True))
+    manifest = _plan(work, V.single_fov(work, downstream=True))
     _refused(manifest, "stitch/sample", capsys, 2, "needs fov/sample/FOV_001", "no record that says succeeded")
 
 
 def test_a_missing_declared_input_is_refused(work, capsys):
-    manifest = _plan(work, X.single_fov(work))
-    (X.input_root(work) / "round3" / "FOV_001" / "ch02.ome.tif").unlink()
+    manifest = _plan(work, V.single_fov(work))
+    (F.input_root(work) / "round3" / "FOV_001" / "ch02.ome.tif").unlink()
     _refused(manifest, FOV_TASK, capsys, 2, "input:round3/FOV_001/ch02.ome.tif", "do not exist")
 
 
 def test_a_translation_that_differs_from_the_plans_is_refused(work, capsys):
     # The commands carry no default the plan did not resolve: a task translates its block again and compares.
-    manifest = _plan(work, X.single_fov(work))
+    manifest = _plan(work, V.single_fov(work))
     resolved = manifest.parent / "resolved.json"
     data = json.loads(resolved.read_text())
     data["configuration"]["api"]["processing"]["pipeline"]["spot_finding"]["threshold_value"] = 9.0
@@ -161,8 +162,8 @@ KIND_REFUSALS = {
 @pytest.mark.parametrize("case", sorted(KIND_REFUSALS))
 def test_each_kind_refuses_a_translation_that_differs_from_the_plans(work, capsys, case):
     variant, task, change, block = KIND_REFUSALS[case]
-    plan(X.write_config(work, variant, X.variants(work)[variant]))
-    manifest = X.output_root(work, f"example-{variant}") / "workflow" / "manifest.json"
+    plan(F.write_config(work, variant, V.variants(work)[variant]))
+    manifest = F.output_root(work, f"example-{variant}") / "workflow" / "manifest.json"
     _edit_resolved(manifest, change)
     _refused(manifest, task, capsys, 2, f"translates the {block} block differently from the plan",
              f"api.{block} differs in")
@@ -171,8 +172,8 @@ def test_each_kind_refuses_a_translation_that_differs_from_the_plans(work, capsy
 def test_the_report_refuses_a_changed_assembly_assignment(work, capsys):
     """The report reads assembly.assignment from the resolved configuration, which no translator owns: a changed
     value fails the common check of the file's hash."""
-    plan(X.write_config(work, "per-fov", X.variants(work)["per-fov"]))
-    manifest = X.output_root(work, "example-per-fov") / "workflow" / "manifest.json"
+    plan(F.write_config(work, "per-fov", V.variants(work)["per-fov"]))
+    manifest = F.output_root(work, "example-per-fov") / "workflow" / "manifest.json"
     resolved = manifest.parent / "resolved.json"
     data = json.loads(resolved.read_text())
     assert data["configuration"]["assembly"]["assignment"] == "default"
@@ -190,14 +191,14 @@ class Kill(BaseException):
 @pytest.fixture
 def interrupted(work, monkeypatch):
     """A fov task stopped after its pre_qc stage (in filter_reads), planned with resume_from_checkpoint."""
-    config = X.single_fov(work, resume_from_checkpoint=True)
+    config = V.single_fov(work, resume_from_checkpoint=True)
     manifest = _plan(work, config)
     with monkeypatch.context() as patch:
         def stop(self, **kwargs):
             raise Kill()
         patch.setattr(FOV, "filter_reads", stop)
         with pytest.raises(Kill):
-            X.run_task(manifest, FOV_TASK)
+            F.run_task(manifest, FOV_TASK)
     out = manifest.parents[1]
     record = json.loads(_layout.run_record(out, "FOV_001").read_text())
     # FOV.run records an interruption it sees as such; a kill it never sees leaves "running".
@@ -218,7 +219,7 @@ def test_a_resume_after_a_changed_processing_key_is_refused(work, interrupted, c
 
 def test_a_resume_after_a_changed_input_is_refused(work, interrupted, capsys):
     _, manifest = interrupted
-    image = X.input_root(work) / "round2" / "FOV_001" / "ch01.ome.tif"
+    image = F.input_root(work) / "round2" / "FOV_001" / "ch01.ome.tif"
     data = bytearray(image.read_bytes())
     data[-1] ^= 1
     image.write_bytes(bytes(data))
@@ -227,7 +228,7 @@ def test_a_resume_after_a_changed_input_is_refused(work, interrupted, capsys):
 
 def test_a_resume_under_another_package_version_is_refused(work, interrupted, capsys, monkeypatch):
     _, manifest = interrupted
-    X.fix_code(monkeypatch, version="0.2.1")
+    F.fix_code(monkeypatch, version="0.2.1")
     _refused(manifest, FOV_TASK, capsys, 3, "code.version is 0.2.0 (recorded), 0.2.1 (now)")
 
 
@@ -242,7 +243,7 @@ def test_a_resume_of_a_dirty_record_is_refused(work, interrupted, capsys):
 
 def test_a_resume_by_a_dirty_package_is_refused(work, interrupted, capsys, monkeypatch):
     _, manifest = interrupted
-    X.fix_code(monkeypatch, git_dirty=True)
+    F.fix_code(monkeypatch, git_dirty=True)
     _refused(manifest, FOV_TASK, capsys, 3, "code.git_dirty is true (now)")
 
 
@@ -250,6 +251,6 @@ def test_a_refused_resume_names_every_differing_field(work, interrupted, capsys,
     config, _ = interrupted
     config["processing"]["spot_finding"]["threshold_value"] = 6.0
     manifest = _plan(work, config)
-    X.fix_code(monkeypatch, version="0.2.1", git_dirty=True)
+    F.fix_code(monkeypatch, version="0.2.1", git_dirty=True)
     _refused(manifest, FOV_TASK, capsys, 3, "workflow.blocks_sha256", "code.git_dirty is true (now)",
              "code.version is 0.2.0 (recorded), 0.2.1 (now)")

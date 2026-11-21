@@ -20,7 +20,8 @@ from starfinder import _layout
 from starfinder.workflow import plan
 from starfinder.workflow._plan import PlanRefused
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.dataset, pytest.mark.contract]
 
@@ -36,7 +37,7 @@ POST = [{"method": "reconstruction", "radius_yx": 2}]
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
+    F.golden().write_fixture(work)
     return work
 
 
@@ -44,14 +45,14 @@ def fixture_work(tmp_path_factory):
 def work(fixture_work, tmp_path, monkeypatch):
     target = tmp_path / "work"
     shutil.copytree(fixture_work, target, symlinks=True)
-    X.fix_code(monkeypatch)
+    F.fix_code(monkeypatch)
     return target
 
 
 def _config(work, output_id, *, checkpoints=("candidates", "pre_qc"), saved=None, **processing):
     """One FOV with the molecules-only processing block, a reconstruction after registration, ``checkpoints``,
     ``spot_finding_input: <saved>`` when given and the processing keys ``processing`` (merged into mappings)."""
-    config = X.single_fov(work, output_id)
+    config = V.single_fov(work, output_id)
     p = config["processing"]
     p["preprocessing"]["post_registration"] = copy.deepcopy(POST)
     p["checkpoints"] = list(checkpoints)
@@ -64,9 +65,9 @@ def _config(work, output_id, *, checkpoints=("candidates", "pre_qc"), saved=None
 
 def _run(work, name, config):
     """Plan ``config`` and run its fov task; (exit status, manifest, FOV folder)."""
-    plan(X.write_config(work, name, config))
-    manifest = X.output_root(work, config["output_id"]) / "workflow" / "manifest.json"
-    return X.run_task(manifest, FOV_TASK), manifest, _layout.fov_dir(manifest.parents[1], FOV)
+    plan(F.write_config(work, name, config))
+    manifest = F.output_root(work, config["output_id"]) / "workflow" / "manifest.json"
+    return F.run_task(manifest, FOV_TASK), manifest, _layout.fov_dir(manifest.parents[1], FOV)
 
 
 def _digests(folder):
@@ -126,21 +127,21 @@ def test_a_run_from_the_saved_set_with_other_spot_finding_settings_equals_a_run_
 
 def test_a_set_made_by_another_package_version_is_read_and_its_code_identity_recorded(work, monkeypatch):
     root, full = _saved(work)
-    X.fix_code(monkeypatch, version="0.2.1.dev3+gfedcba9", git_commit="fedcba9876543210fedcba9876543210fedcba98")
+    F.fix_code(monkeypatch, version="0.2.1.dev3+gfedcba9", git_commit="fedcba9876543210fedcba9876543210fedcba98")
     status, _, folder = _run(work, "from-set", _config(work, "from-set", saved=root))
     assert status == 0
     assert _digests(folder) == _digests(full)
     record = json.loads((folder / "run.json").read_text())
-    assert record["spot_finding_input"]["code"]["version"] == X.CLEAN_CODE["version"]
+    assert record["spot_finding_input"]["code"]["version"] == F.CLEAN_CODE["version"]
     assert record["code"]["version"] == "0.2.1.dev3+gfedcba9"
 
 
 @pytest.mark.parametrize("case", ["preprocessing", "registration", "dirty"])
 def test_a_set_that_does_not_fit_the_task_is_refused(work, monkeypatch, capsys, case):
     if case == "dirty":
-        X.fix_code(monkeypatch, git_dirty=True)
+        F.fix_code(monkeypatch, git_dirty=True)
     root, full = _saved(work)
-    X.fix_code(monkeypatch)
+    F.fix_code(monkeypatch)
     changes, expected = {
         "preprocessing": ({"preprocessing": {"post_registration": [{"method": "reconstruction", "radius_yx": 1}]}},
                           "config.pipeline.preprocessing.post_registration.0.config.radius_yx is 2 (recorded), "
@@ -159,7 +160,7 @@ def test_a_set_that_does_not_fit_the_task_is_refused(work, monkeypatch, capsys, 
 def test_the_plan_refuses_a_set_without_the_files_of_a_fov(work, tmp_path):
     with pytest.raises(PlanRefused, match=r"processing.spot_finding_input, FOV FOV_001: the file .*run.json does not "
                                           r"exist"):
-        plan(X.write_config(work, "from-set", _config(work, "from-set", saved=tmp_path / "empty")))
+        plan(F.write_config(work, "from-set", _config(work, "from-set", saved=tmp_path / "empty")))
 
 
 @pytest.mark.parametrize("case, expected", [
@@ -187,12 +188,12 @@ def test_the_plan_refuses_the_settings_the_key_excludes(work, case, expected):
     else:
         config["execution"] = {"resume_from_checkpoint": True}
     with pytest.raises(PlanRefused, match="processing.spot_finding_input") as refused:
-        plan(X.write_config(work, "from-set", config))
+        plan(F.write_config(work, "from-set", config))
     assert expected in str(refused.value)
 
 
 def test_without_the_key_the_resolved_processing_block_has_none(work):
     """The key has no default the plan writes, so the hashes of the configurations without it are unchanged."""
-    plan(X.write_config(work, "plain", _config(work, "plain")))
-    resolved = json.loads((X.output_root(work, "plain") / "workflow" / "resolved.json").read_text())
+    plan(F.write_config(work, "plain", _config(work, "plain")))
+    resolved = json.loads((F.output_root(work, "plain") / "workflow" / "resolved.json").read_text())
     assert "spot_finding_input" not in resolved["configuration"]["processing"]
