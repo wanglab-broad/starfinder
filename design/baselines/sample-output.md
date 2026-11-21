@@ -136,8 +136,11 @@ the listing:
 
 | Dataset | Full-size files | `*_05` files | What the sizes show |
 | --- | --- | --- | --- |
-| tissue-2D (7 × 8 tiles of 3072², one plane) | `PI.tif`, `Gfap.tif`, `plaque.tif`, `tau.tif`, `ref_merged.tif`, `overlay.tif`: 444,335,200 bytes each; `PI_label.tif` 888,671,808; `labeled_cells.tif` 888,670,336 | `PI_05.tif`, `Gfap_05.tif`, `plaque_05.tif`, `tau_05.tif`: 111,083,920; `PI_label_05.tif` 222,169,294; `labeled_cells_05.tif` 222,167,935 | uint8 about 22,580 × 19,690 px (the contract's estimate from the placement of the stitching parity runs is 22,582 × 19,691); `_05` is a quarter: Y and X halved. Label images at 2 bytes per pixel. |
+| tissue-2D (7 × 8 tiles of 30 × 3072², fused as one plane) | `PI.tif`, `Gfap.tif`, `plaque.tif`, `tau.tif`, `ref_merged.tif`, `overlay.tif`: 444,335,200 bytes each; `PI_label.tif` 888,671,808; `labeled_cells.tif` 888,670,336 | `PI_05.tif`, `Gfap_05.tif`, `plaque_05.tif`, `tau_05.tif`: 111,083,920; `PI_label_05.tif` 222,169,294; `labeled_cells_05.tif` 222,167,935 | uint8 about 22,580 × 19,690 px (the contract's estimate from the placement of the stitching parity runs is 22,582 × 19,691); `_05` is a quarter: Y and X halved. Label images at 2 bytes per pixel. |
 | cell-culture-3D (7 × 10 tiles of 30 × 1496², volumes) | `DAPI.tif`, `ER.tif`, `Flamingo.tif`, `ref_merged.tif`, `overlay.tif`: 5,493,369,191 to 5,493,370,046; `MAX_DAPI.tif` 130,794,660; `Cell.tif`, `Cyto.tif`, `Nuclei.tif`, `Cell_label.tif`, `DAPI_label.tif` (smaller, Dec 2023) | `DAPI_05.tif`, `ER_05.tif`, `Flamingo_05.tif`, `ref_merged_05.tif`: 1,373,491,604 to 1,373,492,384; `MAX_*_05.tif` 32,702,200; `Cell_05.tif`, `Nuclei_05.tif` 2,746,980,098 and 2,746,980,274 | Full stack about 42 planes of a 130.8 million-pixel uint8 plane (estimate 13,636 × 9,576); `_05` stacks are a quarter: Y and X halved, Z kept. `MAX_` is Fiji's name for a Z maximum projection, projected from the fused stack. |
+
+Corrected 2026-11-21 (W-919): tissue-2D's tiles are 30 × 3072² stacks (W-870's and W-892's
+runs), and its fused files are planes. The row first called the tiles one plane.
 
 % the placement of the stitching parity runs: W-324
 

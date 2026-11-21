@@ -523,8 +523,13 @@ where they list one. Nothing is written into a data directory or an earlier run 
 | Sample | Placement | Source image for fusion | Volumetric | Fused image written | Figures drawn from |
 | --- | --- | --- | --- | --- | --- |
 | LN sample1 (64 FOVs of 50×1496×1496 uint8, DAPI, plus 8 blank grid cells) | The 2024 `dataset.xml` through `import_bigstitcher` (no Fiji rerun), and `multiview_stitcher` in the starting configuration from the grid start | the stitching input tiles, `<name>=file:<pattern>` | yes | the 3D stack alone (`dimensionality: stack`, dense 3D tissue) at `scale_yx` 0.5, from each of the two placements; no projection | the middle plane of its stack, `n_z // 2` ([sample-output-contract](../specs/sample-output.md), "The fused image by dataset"), never a maximum projection; its stack for the seam sections |
-| tissue-2D (56 FOVs of 3072×3072 uint8, `ref_merged`) | `multiview_stitcher`, starting configuration, grid start (no BigStitcher reference exists; the Grid/Collection file is monitored only) | `reference_merged` | no (one plane) | the default: the 2D maximum projection at `scale_yx` 0.5 | its projection |
+| tissue-2D (56 FOVs of 3072×3072 uint8, `ref_merged`, the maximum projection of tiles of 30×3072×3072) | `multiview_stitcher`, starting configuration, grid start (no BigStitcher reference exists; the Grid/Collection file is monitored only) | `reference_merged` | no (one plane: the input is a projection) | the default: the 2D maximum projection at `scale_yx` 0.5 | its projection |
 | cell-culture-3D (70 FOVs of 30×1496×1496 uint8, `ref_merged`) | as tissue-2D | `reference_merged` | yes | the default projection at 0.5; the stack of one 2 × 2 block of FOVs at `scale_yx` 1 | its projection; the block's stack for the seam views |
+
+**Corrected 2026-11-21 (W-919).** tissue-2D's tiles are 30×3072×3072 stacks (W-870's and
+W-892's runs); its stitching input `ref_merged` is their maximum projection, so this table
+and the resource table below give it one plane. Their cells first said "one plane" without
+naming the input as a projection.
 
 **Grids.** The tile files carry no calibration (the input inventory's `inputs.md`), so each FOV's grid is
 declared from the raw-acquisition calibration recorded there (0.194398 µm in x and y for LN
@@ -747,7 +752,7 @@ limit is recorded as `resource_stop` and not retried with a higher limit.
 | --- | --- | --- | --- | --- |
 | LN sample1 | import: one XML parse; `multiview_stitcher`: 145 to 182 s, 7.0 GiB peak RSS, loading 58 to 81 s | molecule rows unknown until step 1: about 1 GB per 10⁷ rows, plus two territory images of 50×1496×1496 uint32 (0.45 GB each) when cells are assembled; time measured | none: LN writes no projection | the stack alone at `scale_yx` 0.5 from each placement. From `multiview_stitcher`: 67 × 6,166 × 5,441 uint8, 241.65 s and 12,946,284 KiB (12.35 GiB) peak RSS with every tile loaded (A1 to verify lazily), 2,247,808,158 bytes written uncompressed (the fusion measurements' `tables/runs.csv`, row `ln-mvs-stack-s05-a2`). From the BigStitcher import, not measured: its grid at 0.5 is 6,167 × 5,435 in Y and X (the fusion measurements' `tables/ln_two_placements_grids.csv`), so 2,245,682,215 bytes of voxels with the same 67 planes (the Z extent depends on the placement's z corrections), and time and memory are expected near the measured run. The store with the stack as one level, written once: 156.48 s, 1,662,724 KiB (1.59 GiB) peak, 678,925,650 bytes (the fusion measurements' `tables/runs.csv`, row `sd-write-ln-stack-single-aszarr`). About 5.2 GB of artifacts before compression in total, 2.9 GB in the larger run |
 | cell-culture-3D | 65 to 78 s, 4.69 GiB | as LN, with territory images of 30×1496×1496 uint32 (0.27 GB each) | 6,818 × 4,788: 22.9 s, 0.62 GiB | the 2 × 2 block's stack at `scale_yx` 1, about 45 × 2,842 × 2,842 (0.34 GiB uncompressed; the Z extent depends on the placement's z corrections); under 0.5 GiB of artifacts |
-| tissue-2D | 44 to 49 s, 0.83 GiB | as LN, with territory images of 3072×3072 uint32 (38 MB each) | 11,291 × 9,845: 24.2 s, 1.42 GiB | none (one plane) |
+| tissue-2D | 44 to 49 s, 0.83 GiB | as LN, with territory images of 3072×3072 uint32 (38 MB each) | 11,291 × 9,845: 24.2 s, 1.42 GiB | none (one plane: the inputs are projections) |
 
 % W-354; W-354 `tables/runs.csv`; W-354 `tables/ln_two_placements_grids.csv`
 
