@@ -8,6 +8,13 @@ from pathlib import Path
 
 import pytest
 
+from starfinder import _records
+
+# One version date for the session (W-914): pytest imports this file while it reads its arguments, before
+# pytest-xdist starts its workers at session start, so the workers and every process a test starts inherit the value.
+# A value the caller set is kept.
+_records.fix_version_date()
+
 # Synthetic images are generated per session under pytest's temporary directory,
 # so the suite never depends on git-ignored files in the checkout. Command:
 #   starfinder synthetic generate --mode e2e --preset small --seed 42 --owner pytest --output <tmp>/small

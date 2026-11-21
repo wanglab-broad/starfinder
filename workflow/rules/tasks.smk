@@ -26,9 +26,16 @@ import os
 import re
 import shlex
 import subprocess
+import time
 
 import snakemake as _engine
 from snakemake.exceptions import WorkflowError
+
+# One version date for the run (W-914): a modified checkout's version takes its .d<date> part from SOURCE_DATE_EPOCH,
+# else from the clock, and the plan and every local job inherit this process's environment, so the run records one
+# version, also across 00:00 UTC (starfinder._records.fix_version_date). A value the caller set is kept. A UGER job runs
+# in the image, whose version is the build's.
+os.environ.setdefault("SOURCE_DATE_EPOCH", str(int(time.time())))
 
 # The plan reads one configuration file: several files or --config overrides would run a configuration that the
 # plan, and so the manifest, never saw (the contract's changed statement of workflow-configuration.md:864-866).

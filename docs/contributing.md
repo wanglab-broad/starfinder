@@ -29,6 +29,12 @@ engines needs the same values in every run. Keep `TMPDIR` on local disk, and kee
 library caches off `HOME` by setting `MPLCONFIGDIR` and `NUMBA_CACHE_DIR` on local
 scratch.
 
+The suite's `conftest.py` sets `SOURCE_DATE_EPOCH` to the session's start time when
+it is unset. pytest imports it before pytest-xdist starts its workers, so the workers
+and every process a test starts record one version for a modified checkout, whose
+`.d<date>` part comes from that variable ({ref}`the code identity <checkpoints-code-identity>`).
+A value you set is kept.
+
 ## Documentation pages
 
 A guide is about 1,500 words at most. Where applicable, use these sections in

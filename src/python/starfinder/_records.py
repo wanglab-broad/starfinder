@@ -259,6 +259,27 @@ def _checkout_version(root, commit, dirty):
     return f"{'.'.join(parts)}.dev{distance}+g{node}" + (f".d{stamp:%Y%m%d}" if dirty else "")
 
 
+def fix_version_date():
+    """Fix the date of a modified checkout's version for this process and every process it starts.
+
+    Sets ``SOURCE_DATE_EPOCH`` to the current time, in whole seconds, when it is unset. ``_checkout_version`` takes the
+    ``.d<YYYYMMDD>`` part of a modified tree's version from that variable, else from the clock in UTC, and a child
+    process inherits it, so that every process of one test session or workflow run records one version, also when it
+    runs across 00:00 UTC (W-914). Call it at the top of a process tree, before the first child starts.
+
+    Returns
+    -------
+    str
+        The value in force: the caller's own, when it was set, else the one written now.
+
+    Notes
+    -----
+    The workflow engines do the same in their own languages: the Snakefile's main process (``rules/tasks.smk``) and
+    Nextflow's ``env`` scope (``nextflow/nextflow.config``).
+    """
+    return os.environ.setdefault("SOURCE_DATE_EPOCH", str(int(time.time())))
+
+
 def _checkout_identity(root):
     """``(commit, dirty, version)`` when ``root`` is ``src/python/starfinder`` of a starfinder checkout, else None."""
     try:

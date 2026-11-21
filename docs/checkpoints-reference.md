@@ -133,6 +133,13 @@ report's Version cell (which shows `version @ commit`, and "modified" for `git_d
 | `git_commit` | The full commit: `HEAD` of the checkout, or the one the image was built from; `null` for `dist` |
 | `git_dirty` | `true` when tracked files differ from that commit (untracked files do not count); `null` for `dist` |
 
+A modified checkout's `version` ends in `.d<YYYYMMDD>`, as hatch-vcs builds it: the UTC date of `SOURCE_DATE_EPOCH`
+when that variable is set, else of the clock. A test session and a workflow run fix that date once, at the top of
+their process tree, when the caller has not set the variable: the test suite's `conftest.py`, the Snakemake workflow's
+main process and Nextflow's `env` scope set it to their start time, and every process they start inherits it, so one
+session or run records one version, also across 00:00 UTC. A value the caller set is kept. A run in the image is not
+affected: its version is the build's.
+
 A clean checkout and an image built from the same commit give the same `version` and `git_commit`. A workflow resume
 compares `version` and `git_commit`, not `version_source`, and refuses a dirty one. The image gets the commit and the flag
 as build arguments ({ref}`the image build <broad-uger-image-build>`).
