@@ -1,0 +1,45 @@
+# Global processing with demons in tiles (mode tiled): the preprocessing of
+# workflow-global.yaml; the whole FOV is registered by one translation on the
+# channels' maximum, and each tile then by demons with its config defaults
+# (processing.tiled.local_registration). Demons does not run on the whole FOV. No
+# reconstruction after registration. Its dataset keys match the synthetic fixture of
+# src/python/scripts/workflow_golden.py (preset sample-tiny-v1); prepare_workflow.py
+# fills in the two roots. For your data, set the roots, the identifiers, the rounds,
+# the channels and the tile size.
+root_input_path: /absolute/input
+root_output_path: /absolute/output
+dataset_id: sample-tiny-v1
+sample_id: sample
+output_id: global-demons-tiled
+# The FOVs are the rows of <root_input_path>/<dataset_id>/<sample_id>/fovs.csv
+# (sample,fov_id); the optional selected_fovs list restricts a run.
+n_rounds: 4
+ref_round: round1
+rotate_angle: 0
+seq_channel_order: [ch00, ch01, ch02, ch03]
+processing:
+  mode: tiled
+  preprocessing:
+    steps:
+      - {method: min_max_normalization, output_dtype: uint8, output_range: [0, 255], rounding: truncate}
+      - {method: histogram_matching, reference_channel: 0}
+  registration:
+    steps:
+      - {method: translation}
+    signal: {mode: max}
+  tiled:
+    tile_size_yx: 512             # the plan computes the halo
+    local_registration:
+      steps:
+        - {method: demons}
+      signal: {mode: max}
+  spot_finding: {method: local_maxima, exclude_border: false}
+  reads_extraction: {voxel_size: [1, 2, 2]}
+  reads_filtration: {end_base: CC, start_base: C}
+  decoding: {method: wta, negative_policy: clip_negative}
+execution:
+  # One thread per task (the default is 4 for the tiled kinds): Nextflow's local
+  # executor refuses a task that requests more CPUs than the machine has.
+  tasks:
+    tile_global: {threads: 1}
+    tile: {threads: 1}

@@ -171,10 +171,13 @@ class _RunRecord:
     folder as they are written, and ``registered`` the payload entries of the
     registered rounds written so far (path relative to the stage record's
     folder, SHA-256); run.json names each stage by its record and that record's
-    SHA-256.
+    SHA-256. ``resume`` is (stage, earlier run.json) of a verified resume;
+    ``source`` is ``{record, pipeline, entry}`` of a run from a saved
+    spot-finding input (``FOV._run_from_input``), whose ``entry`` becomes the
+    record's ``spot_finding_input`` section.
     """
 
-    def __init__(self, fov, directory, checkpoints, config, execution, resume=None):
+    def __init__(self, fov, directory, checkpoints, config, execution, resume=None, source=None):
         self.fov = fov
         self.directory = Path(directory)
         self.checkpoint_directory = checkpoint_dir(self.directory)
@@ -233,6 +236,22 @@ class _RunRecord:
                              steps=[step for step in earlier["steps"][:last + 1] if step["name"] not in again])
             self.data[CHECKPOINTS] = {name: entry for name, entry in earlier[CHECKPOINTS].items()
                                       if name in _resumed_stages(stage)}
+            self.kept = {key: earlier[key] for key in ("preprocessing", "registration", "transforms")}
+        if source is not None:
+            # A run from a saved spot-finding input (FOV._run_from_input): the configuration of the whole pipeline,
+            # the saved set's inputs (relative to this run's input root when inside it) and its steps before its
+            # registered stage was written, without that write and the detection and extraction this run performs.
+            earlier = source["record"]
+            names = [step["name"] for step in earlier["steps"]]
+            last = max(i for i, name in enumerate(names) if name == "write_checkpoint:registered")
+            again = (*_REDONE["registered"], "write_checkpoint:registered")
+            inputs = []
+            for entry in earlier["inputs"]:
+                path = resolve_source(earlier, entry["path"])
+                inputs.append(dict(entry, path=entry["path"] if path is None else source_path(path, self.input_root)))
+            self.data.update(config=dict(self.data["config"], pipeline=source["pipeline"]), inputs=inputs,
+                             steps=[step for step in earlier["steps"][:last] if step["name"] not in again],
+                             spot_finding_input=source["entry"])
             self.kept = {key: earlier[key] for key in ("preprocessing", "registration", "transforms")}
 
     @property

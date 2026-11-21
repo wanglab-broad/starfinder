@@ -1,7 +1,7 @@
 """The previews of the assign and export commands (P5): options of their blocks, off by default.
 
 ``assignment.previews`` draws each FOV's assignment figures into ``fovs/<fov>/previews/``; ``export.previews`` draws
-each assembled FOV's figures with its ownership into ``export/<sample>/previews/<fov>/`` on the route per FOV
+each assembled FOV's figures with its ownership into ``export/<sample>/per_fov/previews/<fov>/`` on the route per FOV
 (design/specs/orchestration.md, "Declared outputs"). The figures are those the legacy rules drew
 (``_write_assignment_figures`` and ``_write_ownership_figures`` of the legacy adapters, which the Python workflow does
 not import), over the FOV's reference image in place of the legacy DAPI image, which the Python workflow no longer

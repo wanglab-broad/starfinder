@@ -1,4 +1,5 @@
-"""Command line adapters for synthetic generation, experiments and trials, pretrained weights and the workflow."""
+"""Command line adapters for synthetic generation, experiments and trials, pretrained weights, the preview of
+segmentation input recipes and the workflow."""
 import argparse
 from pathlib import Path
 import sys
@@ -80,6 +81,30 @@ def _parser():
     for command in (fetch, listing, verify):
         command.add_argument('--dir', type=Path, help='Weights cache; default STARFINDER_WEIGHTS_DIR, '
                              'else $XDG_CACHE_HOME/starfinder/weights (~/.cache/starfinder/weights)')
+    segment = groups.add_parser('segment', help='Preview segmentation input recipes before a workflow run')
+    preview = segment.add_subparsers(dest='command', required=True).add_parser(
+        'preview', help='Segment a few FOVs with a few input recipes and draw them (writes only under --output)',
+        description='One run of the workflow configuration, its recipe replaced by each of --recipes, on each of '
+                    '--fovs: overlay.png, sizes.png, sizes.csv, summary.csv and preview.json under --output. It reads '
+                    'the files the workflow would read and runs no preprocessing, registration, detection or '
+                    'assignment. Exit 0 with the preview written, 2 for an invalid configuration, run, recipe or '
+                    'source, or an output folder that is not absent or empty.')
+    preview.add_argument('config', type=Path, help='The workflow configuration (YAML), with its roots')
+    preview.add_argument('--run', required=True,
+                         help='A run of segmentation.runs (with --factor-yx, of export.segmentation.runs when it has it)')
+    preview.add_argument('--fovs', required=True, help='At most 8 FOV ids, comma-separated')
+    preview.add_argument('--recipes', required=True,
+                         help='At most 8 recipe names of segmentation.input_recipes or of --recipe-file, comma-separated')
+    preview.add_argument('--output', type=Path, required=True, help='Absent or empty folder for the preview')
+    preview.add_argument('--recipe-file', type=Path,
+                         help='YAML mapping of recipe names to recipes, in the layout of segmentation.input_recipes')
+    preview.add_argument('--factor-yx', type=int,
+                         help='Preview at the pixel size of the route after fusion with fusion factor K (one view per '
+                              'FOV, no blend)')
+    preview.add_argument('--crop-um', help='Y,X,H,W in micrometres: the window the panels show')
+    preview.add_argument('--device', choices=['cpu', 'cuda'], default='cpu', help='Device of the method (default cpu)')
+    preview.add_argument('--save-inputs', action='store_true',
+                         help='Also write each model input as inputs/<fov>/<recipe>.ome.tif')
     from starfinder.workflow._cli import add_parser
     add_parser(groups)
     return parser
@@ -97,6 +122,8 @@ def main(argv=None):
     try:
         if args.group == 'weights':
             return _weights(args)
+        if args.group == 'segment':
+            return _segment_preview(args)
         if args.group in ('experiment', 'trial'):
             return _experiment(args)
         from starfinder.synthetic import BENCHMARK_PRESETS
@@ -155,6 +182,21 @@ def _experiment(args):
         return int(failed)
     except yaml.YAMLError as exc:
         raise ValueError(f'{args.config}: not YAML or JSON: {exc}') from None
+
+
+def _segment_preview(args):
+    """starfinder segment preview: preview_recipes with the command's options; prints the output folder."""
+    # W-891
+    from starfinder.segmentation import preview_recipes
+
+    def names(value):
+        return [item.strip() for item in value.split(',') if item.strip()]
+    crop = None if args.crop_um is None else tuple(float(v) for v in args.crop_um.split(','))
+    preview_recipes(args.config, run=args.run, fovs=names(args.fovs), recipes=names(args.recipes), output=args.output,
+                    recipe_file=args.recipe_file, factor_yx=args.factor_yx, crop_um=crop, device=args.device,
+                    save_inputs=args.save_inputs)
+    print(args.output.resolve())
+    return 0
 
 
 def _weights(args):

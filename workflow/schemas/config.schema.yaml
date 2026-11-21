@@ -726,19 +726,49 @@ $defs:
     type: object
     required: [method]
     additionalProperties: false
+    not: {required: [radius_yx, radius_um]}
     properties:
       method: {const: reconstruction}
       save_as: {$ref: "#/$defs/snapshot_name"}
       radius_yx: {type: integer, minimum: 1}
+      radius_um: {type: number, minimum: 0}
 
   preprocessing_step_white_tophat:
     type: object
     required: [method]
     additionalProperties: false
+    not: {required: [radius_yx, radius_um]}
     properties:
       method: {const: white_tophat}
       save_as: {$ref: "#/$defs/snapshot_name"}
       radius_yx: {type: integer, minimum: 1}
+      radius_um: {type: number, minimum: 0}
+
+  lengths_um_zyx:
+    description: "A length in micrometres for every axis, or a ZYX list of three"
+    oneOf:
+      - {type: number, exclusiveMinimum: 0}
+      - {type: array, items: {type: number, exclusiveMinimum: 0}, minItems: 3, maxItems: 3}
+
+  preprocessing_step_gaussian:
+    type: object
+    required: [method, sigma_um]
+    additionalProperties: false
+    properties:
+      method: {const: gaussian}
+      save_as: {$ref: "#/$defs/snapshot_name"}
+      sigma_um: {$ref: "#/$defs/lengths_um_zyx"}
+
+  preprocessing_step_clahe:
+    type: object
+    required: [method, kernel_um]
+    additionalProperties: false
+    properties:
+      method: {const: clahe}
+      save_as: {$ref: "#/$defs/snapshot_name"}
+      kernel_um: {$ref: "#/$defs/lengths_um_zyx"}
+      clip_limit: {type: number, exclusiveMinimum: 0, maximum: 1}
+      nbins: {type: integer, minimum: 2}
 
   preprocessing_step_scalar_background:
     type: object
@@ -801,6 +831,8 @@ $defs:
             - $ref: "#/$defs/preprocessing_step_white_tophat"
             - $ref: "#/$defs/preprocessing_step_scalar_background"
             - $ref: "#/$defs/preprocessing_step_background_3d"
+            - $ref: "#/$defs/preprocessing_step_gaussian"
+            - $ref: "#/$defs/preprocessing_step_clahe"
             - $ref: "#/$defs/preprocessing_step_percentile_normalization"
       extraction_source:
         oneOf: [{$ref: "#/$defs/snapshot_name"}, {type: "null"}]
@@ -1756,19 +1788,162 @@ $defs:
   # ==================== Segmentation and assignment blocks (Python only) ====================
   # design/specs/segmentation.md and design/specs/assignment.md, "Workflow configuration".
   segmentation_block:
-    description: "Python named per-FOV segmentation plan for API use; not connected to a workflow rule."
+    description: "Python named per-FOV segmentation plan and the named input recipes of both routes."
     type: object
-    required: [runs]
+    anyOf:
+      - required: [runs]
+      - required: [input_recipes]
     properties:
       device:
         description: "The device of the segment calls: cpu (default) or cuda"
         enum: ["cpu", "cuda"]
+      input_recipes:
+        description: "Named input recipes (design/specs/segmentation-input-recipe.md), referred to by a run's input_recipe"
+        type: object
+        minProperties: 1
+        propertyNames: {pattern: "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"}
+        additionalProperties:
+          $ref: "#/$defs/input_recipe"
       runs:
+        description: "The per-FOV runs; without runs the block names recipes for export.segmentation only"
         type: array
         minItems: 1
         items:
           $ref: "#/$defs/segmentation_run"
     additionalProperties: false
+
+  input_recipe:
+    description: "How a run turns its source channels into the image its method receives: five fixed stages."
+    type: object
+    properties:
+      channels:
+        type: array
+        items: {$ref: "#/$defs/recipe_step"}
+      combine: {$ref: "#/$defs/recipe_combine"}
+      projection: {$ref: "#/$defs/recipe_projection"}
+      after_projection:
+        type: array
+        items: {$ref: "#/$defs/recipe_step"}
+      model_input: {$ref: "#/$defs/recipe_model_input"}
+    additionalProperties: false
+
+  run_input_recipe:
+    description: "A name of segmentation.input_recipes, or a full recipe inline (never a name plus overrides)"
+    oneOf:
+      - {type: string}
+      - {$ref: "#/$defs/input_recipe"}
+
+  recipe_roles:
+    type: array
+    minItems: 1
+    items:
+      enum: ["nuclear", "cytoplasm", "membrane", "amplicon", "composite"]
+
+  recipe_step:
+    description: "A registered preprocessing step the recipe admits: per_channel, not supplied, lengths in micrometres."
+    oneOf:
+      - $ref: "#/$defs/recipe_step_gaussian"
+      - $ref: "#/$defs/recipe_step_clahe"
+      - $ref: "#/$defs/recipe_step_white_tophat"
+      - $ref: "#/$defs/recipe_step_reconstruction"
+      - $ref: "#/$defs/recipe_step_percentile_normalization"
+
+  recipe_step_gaussian:
+    type: object
+    required: [method, sigma_um]
+    additionalProperties: false
+    properties:
+      method: {const: gaussian}
+      roles: {$ref: "#/$defs/recipe_roles"}
+      sigma_um: {$ref: "#/$defs/lengths_um_zyx"}
+
+  recipe_step_clahe:
+    type: object
+    required: [method, kernel_um]
+    additionalProperties: false
+    properties:
+      method: {const: clahe}
+      roles: {$ref: "#/$defs/recipe_roles"}
+      kernel_um: {$ref: "#/$defs/lengths_um_zyx"}
+      clip_limit: {type: number, exclusiveMinimum: 0, maximum: 1}
+      nbins: {type: integer, minimum: 2}
+
+  recipe_step_white_tophat:
+    type: object
+    required: [method, radius_um]
+    additionalProperties: false
+    properties:
+      method: {const: white_tophat}
+      roles: {$ref: "#/$defs/recipe_roles"}
+      radius_um: {type: number, minimum: 0}
+
+  recipe_step_reconstruction:
+    type: object
+    required: [method, radius_um]
+    additionalProperties: false
+    properties:
+      method: {const: reconstruction}
+      roles: {$ref: "#/$defs/recipe_roles"}
+      radius_um: {type: number, minimum: 0}
+
+  recipe_step_percentile_normalization:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: percentile_normalization}
+      roles: {$ref: "#/$defs/recipe_roles"}
+      p_low: {type: number, minimum: 0, maximum: 100}
+      p_high: {type: number, minimum: 0, maximum: 100}
+      fit: {const: fov}
+
+  recipe_combine:
+    description: "The combine method of the recipe's COMBINE_METHODS, with its config fields."
+    oneOf:
+      - type: object
+        required: [method]
+        additionalProperties: false
+        properties:
+          method: {const: single}
+      - type: object
+        required: [method]
+        additionalProperties: false
+        properties:
+          method: {const: composite}
+          nuclear_quantile: {type: number, minimum: 0, exclusiveMaximum: 0.5}
+          amplicon_quantile: {type: number, minimum: 0, exclusiveMaximum: 0.5}
+      - type: object
+        required: [method, median_radius_um]
+        additionalProperties: false
+        properties:
+          method: {const: flamingo_enhance}
+          flamingo_quantile: {type: number, minimum: 0, exclusiveMaximum: 0.5}
+          nuclear_quantile: {type: number, minimum: 0, exclusiveMaximum: 0.5}
+          median_radius_um: {type: number, minimum: 0}
+
+  recipe_projection:
+    description: "The Z projection of the model channels: max keeps the dtype; sum and mean give float32 or float64."
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {enum: ["max", "sum", "mean"]}
+      output_dtype: {enum: ["float32", "float64", null]}
+
+  recipe_model_input:
+    description: "The pixel size the model sees (pixel_size_um), or the factor itself on a grid without spacing."
+    type: object
+    additionalProperties: false
+    oneOf:
+      - required: [pixel_size_um]
+      - required: [factor]
+    properties:
+      pixel_size_um: {$ref: "#/$defs/lengths_um_zyx"}
+      factor:
+        description: "A factor for Y and X (Z factor 1), or a ZYX list of three"
+        oneOf:
+          - {type: number, exclusiveMinimum: 0}
+          - {type: array, items: {type: number, exclusiveMinimum: 0}, minItems: 3, maxItems: 3}
 
   segmentation_run:
     description: "A named segmentation run with inputs and method configuration."
@@ -1786,9 +1961,7 @@ $defs:
       seeds:
         description: "The name of an earlier nucleus run whose labels seed this one"
         type: string
-      projection:
-        description: "true (ProjectionConfig()) or a mapping of ProjectionConfig fields; a Z projection of the input"
-        type: [boolean, object]
+      input_recipe: {$ref: "#/$defs/run_input_recipe"}
       operations:
         type: array
         items:
@@ -1806,7 +1979,7 @@ $defs:
     additionalProperties: true
 
   segmentation_input:
-    description: "InputChannel fields; prepare names composite_nuclei_amplicon or enhance_with_flamingo with its config fields"
+    description: "A source channel of a run (InputChannel fields); the run's input_recipe combines and prepares them"
     type: object
     required: [role]
     properties:
@@ -1818,15 +1991,6 @@ $defs:
         type: [string, integer]
       reference_merged:
         type: boolean
-      prepare:
-        type: object
-        required: [function]
-        properties:
-          function:
-            enum: ["composite_nuclei_amplicon", "enhance_with_flamingo"]
-        additionalProperties: true
-      prepare_channel:
-        type: [string, integer]
     additionalProperties: false
 
   assignment_block:
@@ -2107,6 +2271,7 @@ $defs:
                     additionalProperties: false
                 seeds:
                   type: ["string", "null"]
+                input_recipe: {$ref: "#/$defs/run_input_recipe"}
                 method:
                   description: "Segmentation method name or import."
                   anyOf:
@@ -2180,6 +2345,12 @@ $defs:
             type: number
             exclusiveMinimum: 0
             exclusiveMaximum: 1
+          small_nucleus_fraction:
+            $ref: "#/$defs/report_rule_limit"
+          small_nucleus_diameter_um:
+            description: "The equivalent diameter in micrometres below which a nucleus counts as small (default 3)"
+            type: number
+            exclusiveMinimum: 0
         additionalProperties: false
       figure_width_px:
         description: "The width of the whole-sample figures (default 1600)"

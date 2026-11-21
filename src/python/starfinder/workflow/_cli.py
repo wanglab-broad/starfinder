@@ -3,8 +3,8 @@
 ``plan`` and ``verify``, and one command per API entry, each taking the common arguments ``--manifest`` and
 ``--task`` and the execution context ``--engine``, ``--engine-version``, ``--job-id``, ``--attempt``, ``--image`` and
 ``--cache-token``, which are recorded and never interpreted. Exit status 0 succeeded, 1 failed, 2 refused before any
-work, 3 a refused verified resume, 4 held for review (an export whose placement needs review; the task made the
-sample report when every other task the report needs had succeeded).
+work, 3 a refused verified resume, 4 held for review (an export whose placement needs review and holds no approval;
+the task wrote the held page workflow/held/<sample>/<route>.html and no report).
 """
 from __future__ import annotations
 
@@ -33,7 +33,8 @@ def add_parser(groups):
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--task", help="One task id; default every task")
     verify.add_argument("--hash", action="store_true", help="Compare each output's SHA-256, not only its size")
-    verify.add_argument("--final", action="store_true", help="Exit 1 when a task is not complete")
+    verify.add_argument("--final", action="store_true",
+                        help="Exit 1 when a task, or a route found in the output root, is not complete")
     for kind in sorted(FUNCTIONS, key=COMMANDS.get):
         task = commands.add_parser(COMMANDS[kind], help=f"Run one task of kind {kind}")
         task.add_argument("--manifest", type=Path, required=True, help="The plan's workflow/manifest.json")
@@ -77,21 +78,31 @@ def run(args, argv=None):
         for task_id, entry in result["tasks"].items():
             state = "complete" if entry["complete"] else "not complete: " + "; ".join(entry["problems"])
             print(f"{task_id}\t{entry['token']}\t{state}")
+        # The routes found in the output root (another plan's export and report) are no tasks of this manifest: their
+        # state goes to stderr, so that stdout keeps one line per task (an engine reads its tokens there).
+        for sample, routes in result["routes"].items():
+            for route in (r for r in routes if not r["planned"]):
+                for task_id, entry in route["tasks"].items():
+                    state = "complete" if entry["complete"] else "not complete: " + "; ".join(entry["problems"])
+                    print(f"found route {sample}/{route['route']}: {task_id}\t{state}", file=sys.stderr)
         return 0 if result["passed"] else 1
     from starfinder.workflow._task import Context, execute
     kind = next(k for k in FUNCTIONS if COMMANDS[k] == args.command)
     function = FUNCTIONS[kind]
     context = Context(args.engine, args.engine_version, args.job_id, args.attempt,
                       None if args.image in (None, "none") else args.image, args.cache_token)
-    prepare = {"fov": _prepare_fov, "tile_global": _prepare_tile_global, "stitch": _prepare_placement,
-               "bigstitcher_import": _prepare_placement}.get(kind)
+    prepare = {"fov": _prepare_fov, "tile_global": _prepare_tile_global}.get(kind)
     return execute(args.command, args.manifest, args.task, function, context,
                    argv=["starfinder", "workflow", *(argv or [])], prepare=prepare)
 
 
 def _prepare_fov(run):
-    """The fov task's verified resume: the earlier run.json and its kept stages, or nothing (exit 3 on a mismatch)."""
+    """The fov task's saved spot-finding input (exit 2 on a mismatch), or its verified resume: the earlier run.json
+    and its kept stages, or nothing (exit 3 on a mismatch)."""
     from starfinder.workflow import _resume
+    run.source = _resume.prepare_input(run)
+    if run.source is not None:
+        return ()
     resume = _resume.prepare(run)
     if resume is None:
         return ()
@@ -109,9 +120,3 @@ def _prepare_tile_global(run):
     run.resume = resume
     return [declared for declared, _ in run.outputs()]
 
-
-def _prepare_placement(run):
-    """A placement task's earlier approvals, read before its outputs are removed (_commands.earlier_approvals)."""
-    from starfinder.workflow._commands import earlier_approvals
-    run.approvals = earlier_approvals(run)
-    return ()

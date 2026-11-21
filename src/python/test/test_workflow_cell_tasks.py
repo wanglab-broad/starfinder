@@ -274,10 +274,10 @@ def test_the_export_previews_are_written_only_when_their_option_is_on(fixture_wo
         config["assignment"]["previews"] = config["export"]["previews"] = previews
         manifest, planned = _plan(work, name, config)
         export = next(t for t in planned["tasks"] if t["kind"] == "export")
-        assert ("export/sample/previews/" in export["outputs"]) is previews
+        assert ("export/sample/per_fov/previews/" in export["outputs"]) is previews
         _run(manifest, "summarize", "merge", "fov", "morphology", "segment", "assign", "stitch", "export")
         out = manifest.parents[1]
-        folder = _layout.export_previews_dir(out, "sample")
+        folder = _layout.export_previews_dir(out, "sample", route="per_fov")
         assert folder.is_dir() is previews
         for fov in X.FOVS:
             assert _layout.fov_previews_dir(out, fov).is_dir() is previews
@@ -310,7 +310,7 @@ def _assign_by_command(tmp_path, labels, spot_ids):
     tifffile.imwrite(work / "labels" / "Position001.tif", labels)
     run = {"name": "cell", "target": "cell", "method": "import", "path": str(work / "labels" / "{fov_id}.tif")}
     if labels.ndim == 2:
-        run["projection"] = True
+        run["projection"] = "max"   # the import's projection (W-891)
     config = {"root_input_path": str(work / "input"), "root_output_path": str(work / "output"), "dataset_id": "data",
               "sample_id": "sample", "output_id": "out", "n_rounds": 3, "ref_round": "round1", "rotate_angle": 0,
               "voxel_size_xy": 0.1, "voxel_size_z": 0.35, "seq_channel_order": ["ch00", "ch01", "ch02", "ch03"],

@@ -5,16 +5,21 @@ Route per FOV (and a sample without an export whose assignment folders exist): t
 own label images, the files ``assignment.json`` ``inputs.cells.file`` and
 ``inputs.nuclei.file`` name (``cell_labels.tif``, ``nucleus_labels.tif`` or the linked
 ``segmentation/<run>/labels.tif``), each checked against its recorded SHA-256, on the FOV's
-grid, over its reference image (``fovs/<fov>/reference.tif`` by default). A 3D preview shows the plane
-``z*`` of the cell label image with the most nonzero voxels, over the maximum of the
-reference image over the planes of the slab of 3 µm centred on ``z*``.
+grid, over the segmentation input of the nucleus run, else of the cell run, that has a saved one
+(``fovs/<fov>/segmentation/<run>/input.ome.tif``, checked against the ``segmentation.json``
+``input.file_sha256``), its first channel. When neither run has a saved input (an import) the background is the
+reference image (``fovs/<fov>/reference.tif`` by default), and the caption says so. A 3D preview shows the plane
+``z*`` of the cell label image with the most nonzero voxels, over the maximum of the background over the planes of the
+slab of 3 µm centred on ``z*`` (a projected input has one plane).
 
 Route after fusion: ``segmentation_<run>.ome.tif`` of the cell run (and of the nucleus run
 when the export has one) cut to the FOV's footprint (``fovs.csv`` ``footprint_*``), mapped to
 the label grid by ``floor((q − O) / S + ½)``, the start included and the end excluded; the
-background is the fused image of the marker patterns (the first image of ``export.json``
-``fusion.outputs``, its projection, else the maximum over Z of its stack) cut to the same
-footprint on its own grid.
+background is the first input channel of the nucleus run, else of the cell run, that has an input: the image
+``export.json`` ``segmentation.runs[*].inputs[0].image`` names among ``segmentation.inputs.images`` (its fused
+projection, checked against the recorded SHA-256), cut to the same footprint on its own grid. When no run has an
+input (imports) the background is the first image of ``export.json`` ``fusion.outputs`` (its projection, else
+the maximum over Z of its stack), and the caption says so.
 
 An outline is a pixel of a label image whose label differs from one of its four neighbours
 (inside the image), computed at full resolution.
@@ -36,6 +41,18 @@ SLAB_UM = 3.0
 _WRITTEN = ("written", "reused")
 
 
+def _recipe_label(recipe) -> str | None:
+    """The caption's name of the input recipe a saved segmentation input was made with: ``input recipe <name>`` and
+    ``model pixel size <p> µm`` when the record gives them; None without a recipe (design/specs/report.md, W-891)."""
+    if not isinstance(recipe, dict):
+        return None
+    parts = [f"input recipe {recipe['name']}"] if recipe.get("name") else []
+    size = (recipe.get("model_input") or {}).get("pixel_size_um")
+    if size is not None:
+        parts.append(f"model pixel size {size} µm")
+    return ", ".join(parts) or None
+
+
 @dataclass
 class Preview:
     """One example tile: the background and the label images in the same plane, with their extents.
@@ -43,7 +60,12 @@ class Preview:
     ``extent`` and ``label_extent`` are ``(x0, x1, y1, y0)`` of the pixel edges (matplotlib's ``extent`` with the
     origin at the top), in the FOV's pixels on the route per FOV and in µm of the sample frame after fusion.
     ``window`` is the label image's pixel range ``(y0, y1, x0, x1)`` the tile shows (the footprint's range after
-    fusion; the whole grid per FOV) and ``plane`` its plane.
+    fusion; the whole grid per FOV) and ``plane`` its plane. ``source`` is what the background is
+    (``segmentation_input``, or ``reference_image`` / ``fused_image`` of a sample without a run input) and
+    ``background_name`` the file or image it is, ``background_run`` and ``background_role`` the run and the role
+    of its channel (None for a reference or fused image), and ``background_recipe`` the input recipe the saved
+    input was made with, named for the caption (its name and the pixel size its model sees; None without a
+    recipe, as in a record of version 1).
     """
 
     fov_id: str
@@ -56,6 +78,11 @@ class Preview:
     label_extent: tuple
     window: tuple
     plane: int = 0
+    source: str = "segmentation_input"
+    background_name: str = ""
+    background_run: str | None = None
+    background_role: str | None = None
+    background_recipe: str | None = None
 
     @property
     def cell_outline(self):
@@ -113,6 +140,33 @@ def _zyx(image):
     return image
 
 
+def fov_labels(c, record, folder):
+    """``{"cells", "nuclei"}`` (ZYX label images, ``nuclei`` None for a run without a nucleus file) of the files an
+    assignment record names, each checked against its recorded SHA-256; or the :class:`Unavailable` of the first that
+    cannot be read. ``c`` is the report's ``_Collection``, ``folder`` the assignment folder."""
+    labels = {}
+    for key in ("cells", "nuclei"):
+        entry = _get(record, "inputs", key, "file")
+        if not entry or not entry.get("path"):
+            if key == "cells":
+                return Unavailable("input_missing", f"{c.inputs.relative(folder)}/assignment.json names no "
+                                                    "cell label file")
+            labels[key] = None
+            continue
+        path = Path(os.path.normpath(folder / entry["path"]))
+        image = _read_image(c.inputs, path, "label_image", entry.get("sha256"))
+        if isinstance(image, Unavailable):
+            return image
+        labels[key] = _zyx(image)
+    return labels
+
+
+def _first_channel(path):
+    """The first channel of a saved ZYXC segmentation input, ZYX."""
+    from starfinder.io.tiff import load_volume_zyxc
+    return np.asarray(load_volume_zyxc(path).image)[..., 0]
+
+
 class _Previews:
     """The previews of a collection's example FOVs; ``collection`` is the report's ``_Collection``."""
 
@@ -121,6 +175,50 @@ class _Previews:
 
     def _key(self, fov, role):
         return f"fov_id={fov};role={role}"
+
+    def _run_input(self, fov, record, seg):
+        """The background of a FOV's preview: ``(ZYX image, source, name, run, role)``, or the reason it cannot be
+        read.
+
+        The first channel (the nuclear role) of the saved input of the nucleus run, else of the cell run, checked
+        against the SHA-256 its record holds; the reference image when neither run has a saved input (an import, or a
+        run that was not saved under the FOV)."""
+        c = self.c
+        for key in ("nuclei", "cells"):
+            entry = _get(record, "inputs", key) or {}
+            run = entry.get("run")
+            if run is None:
+                continue
+            directory = _layout.segmentation_dir(_layout.fov_dir(c.root, fov), run)
+            saved = seg if key == "cells" else self._run_record(directory, entry)
+            if isinstance(saved, Unavailable):
+                return saved
+            channels = ((saved or {}).get("input") or {})
+            if not channels.get("path"):
+                continue
+            path = directory / channels["path"]
+            if not (path.is_file() or entry.get("saved_under_run")):
+                continue
+            data = c.inputs.read(path, "segmentation_input", channels.get("file_sha256"))
+            if isinstance(data, Unavailable):
+                return data
+            first = (channels.get("channels") or [{}])[0]
+            return (_first_channel(path), "segmentation_input", c.inputs.relative(path), run, first.get("role"),
+                    _recipe_label(channels.get("recipe")))
+        pattern = getattr(c, "reference_image", None) or _layout.REFERENCE_IMAGE
+        path = _layout.reference_image_path(c.root, fov, pattern, getattr(c, "reference_image_import", None))
+        image = _read_image(c.inputs, path, "reference_image")
+        if isinstance(image, Unavailable):
+            return image
+        return _zyx(image), "reference_image", c.inputs.relative(path), None, None, None
+
+    def _run_record(self, directory, entry):
+        """The record of a nucleus run: its ``segmentation.json`` when the run was saved under the FOV, else the
+        assignment's own copy; the reason when the saved record changed or is missing."""
+        path = directory / "segmentation.json"
+        if path.is_file() or entry.get("saved_under_run"):
+            return self.c.inputs.record(path, "segmentation_record", entry.get("record_sha256"))
+        return entry.get("record")
 
     def per_fov(self, fov, role):
         c = self.c
@@ -131,41 +229,35 @@ class _Previews:
             if fov in c.lane_missing:
                 return c.lane_missing[fov]
             return Unavailable("input_missing", f"{c.inputs.relative(folder)}/{_layout.ASSIGNMENT_RECORD}")
-        record, _ = c.assignments[fov]
-        labels = {}
-        for key in ("cells", "nuclei"):
-            entry = _get(record, "inputs", key, "file")
-            if not entry or not entry.get("path"):
-                if key == "cells":
-                    return Unavailable("input_missing", f"{c.inputs.relative(folder)}/assignment.json names no "
-                                                        "cell label file")
-                labels[key] = None
-                continue
-            path = Path(os.path.normpath(folder / entry["path"]))
-            image = _read_image(c.inputs, path, "label_image", entry.get("sha256"))
-            if isinstance(image, Unavailable):
-                return image
-            labels[key] = _zyx(image)
-        pattern = getattr(c, "reference_image", None) or _layout.REFERENCE_IMAGE
-        path = _layout.reference_image_path(c.root, fov, pattern, getattr(c, "reference_image_import", None))
-        background = _read_image(c.inputs, path, "reference_image")
-        if isinstance(background, Unavailable):
-            return background
-        background = _zyx(background)
+        record, seg = c.assignments[fov]
+        labels = fov_labels(c, record, folder)
+        if isinstance(labels, Unavailable):
+            return labels
+        loaded = self._run_input(fov, record, seg)
+        if isinstance(loaded, Unavailable):
+            return loaded
+        background, source, name, run, role_name, recipe = loaded
         cells, nuclei = labels["cells"], labels["nuclei"]
         plane = int(np.argmax((cells != 0).reshape(cells.shape[0], -1).sum(axis=1)))
-        spacing_z = float(_get(record, "grid", "metadata", "spacing_zyx")[0])
-        offsets = (np.arange(background.shape[0]) - plane) * spacing_z
-        slab = (offsets >= -SLAB_UM / 2) & (offsets < SLAB_UM / 2)
+        if background.shape[0] != cells.shape[0]:  # a projected input: its one plane stands for the volume
+            background = background.max(axis=0, keepdims=True)
+            slab = np.ones(1, dtype=bool)
+        else:
+            spacing_z = float(_get(record, "grid", "metadata", "spacing_zyx")[0])
+            offsets = (np.arange(background.shape[0]) - plane) * spacing_z
+            slab = (offsets >= -SLAB_UM / 2) & (offsets < SLAB_UM / 2)
         ny, nx = cells.shape[1:]
         extent = (-0.5, nx - 0.5, ny - 0.5, -0.5)
         return Preview(fov, "", "per_fov", background[slab].max(axis=0), cells[plane],
-                       None if nuclei is None else nuclei[plane], extent, extent, (0, ny, 0, nx), plane)
+                       None if nuclei is None else nuclei[plane], extent, extent, (0, ny, 0, nx), plane,
+                       source, name, run, role_name, recipe)
 
-    def _after_fusion_sources(self):
-        """The cell and nucleus label files and the fused background of the export, or the reason it lacks one."""
-        if hasattr(self, "_sources"):
-            return self._sources
+    def label_sources(self):
+        """``(files, grid)`` of the export's label images (``files`` the ZYX cell and nucleus images, None for a
+        run the export does not have; ``grid`` the segmentation grid's record), or the reason the export lacks
+        them; read once."""
+        if hasattr(self, "_labels"):
+            return self._labels
         from starfinder.export._record import part_status
         c = self.c
         export, export_dir = c.export, c.export_dir
@@ -173,47 +265,77 @@ class _Previews:
                           for part in ("segment", "fuse") if part_status(export, part) not in _WRITTEN),
                         c.no_cells)
         if missing is not None:
-            self._sources = missing
+            self._labels = missing
             return missing
         section = export.get("segmentation") or {}
         runs = {r.get("name"): r for r in section.get("runs") or []}
-        cell_run = c.segmentation or section.get("cells")
+        self.cell_run = c.segmentation or section.get("cells")
         nucleus_run = None if c.segmentation else section.get("nuclei")
         grid = _get(section, "inputs", "grid") or {}
         files = {}
-        for key, name in (("cells", cell_run), ("nuclei", nucleus_run)):
+        for key, name in (("cells", self.cell_run), ("nuclei", nucleus_run)):
             if name is None:
                 files[key] = None
                 continue
             run = runs.get(name) or {}
             if not run.get("path"):
-                self._sources = Unavailable("input_missing", f"export.json segmentation.runs holds no file of {name}")
-                return self._sources
+                self._labels = Unavailable("input_missing", f"export.json segmentation.runs holds no file of {name}")
+                return self._labels
             image = _read_image(c.inputs, export_dir / run["path"], "label_image", run.get("sha256"))
             if isinstance(image, Unavailable):
-                self._sources = image
+                self._labels = image
                 return image
             files[key] = _zyx(image)
+        # The run whose input is the background: the nucleus run, else the cell run, that has one.
+        self.input_run = next((r for r in (runs.get(nucleus_run), runs.get(self.cell_run))
+                               if r and r.get("inputs")), None)
+        self._labels = (files, grid)
+        return self._labels
+
+    def _after_fusion_background(self):
+        """``(image, entry, source, name, run, role)`` of the background of the route after fusion: the YX image, the
+        grid record of its file (``spacing_zyx``, ``origin_zyx``), what it is, its name, the run and the role of its
+        channel; or the reason it cannot be read; read once.
+
+        The first input channel of the nucleus run, else of the cell run, that has one, named by ``export.json``
+        ``segmentation.runs[*].inputs`` and located by ``segmentation.inputs.images`` (the fused projection of that
+        image); the first image of ``fusion.outputs`` when no run has an input."""
+        if hasattr(self, "_background"):
+            return self._background
+        c = self.c
+        export, export_dir = c.export, c.export_dir
         outputs = _get(export, "fusion", "outputs") or []
-        name = outputs[0].get("image") if outputs else None
+        first = ((self.input_run or {}).get("inputs") or [{}])[0]
+        named = first.get("image")
+        source = "segmentation_input" if named is not None else "fused_image"
+        name = named if named is not None else (outputs[0].get("image") if outputs else None)
         entries = [o for o in outputs if o.get("image") == name and o.get("format", "ome_tiff") == "ome_tiff"]
         entry = next((o for o in entries if o.get("dimensionality") == "projection"), entries[0] if entries else None)
         if entry is None:
-            self._sources = Unavailable("part_not_written", "fuse: export.json fusion.outputs holds no image")
-            return self._sources
-        image = _read_image(c.inputs, export_dir / entry["path"], "fused_image", entry.get("sha256"))
+            self._background = Unavailable("part_not_written", f"fuse: export.json fusion.outputs holds no image "
+                                                               f"{name or ''}".rstrip())
+            return self._background
+        recorded = next((i for i in _get(export, "segmentation", "inputs", "images") or []
+                         if i.get("image") == name), None) if named is not None else None
+        image = _read_image(c.inputs, export_dir / entry["path"], "fused_image",
+                            (recorded or entry).get("sha256"))
         if isinstance(image, Unavailable):
-            self._sources = image
+            self._background = image
             return image
-        self._sources = (files, grid, _zyx(image).max(axis=0), entry)
-        return self._sources
+        self._background = (_zyx(image).max(axis=0), entry, source, name, (self.input_run or {}).get("name"),
+                            first.get("role"))
+        return self._background
 
     def after_fusion(self, fov, role):
         c = self.c
-        sources = self._after_fusion_sources()
+        sources = self.label_sources()
         if isinstance(sources, Unavailable):
             return sources
-        files, grid, fused, entry = sources
+        background = self._after_fusion_background()
+        if isinstance(background, Unavailable):
+            return background
+        files, grid = sources
+        fused, entry, source, name, run, role_name = background
         row = next(r for r in c.fovs if r["fov_id"] == fov)
         footprint = [row[k] for k in ("footprint_y0", "footprint_y1", "footprint_x0", "footprint_x1")]
         missing = first(*footprint)
@@ -237,7 +359,8 @@ class _Previews:
         return Preview(fov, "", "after_fusion", fused[jy0:jy1, jx0:jx1],
                        cells[plane, iy0:iy1, ix0:ix1],
                        None if nuclei is None else nuclei[min(plane, nuclei.shape[0] - 1), iy0:iy1, ix0:ix1],
-                       (bx[0], bx[1], by[1], by[0]), (lx[0], lx[1], ly[1], ly[0]), (iy0, iy1, ix0, ix1), plane)
+                       (bx[0], bx[1], by[1], by[0]), (lx[0], lx[1], ly[1], ly[0]), (iy0, iy1, ix0, ix1), plane,
+                       source, name, run, role_name)
 
     def build(self):
         """``(previews, rows)``: per role its :class:`Preview` or :class:`Unavailable`, and the rows of

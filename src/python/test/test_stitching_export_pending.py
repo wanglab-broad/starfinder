@@ -29,6 +29,8 @@ needs_parts = pytest.mark.skipif(importlib.util.find_spec("multiview_stitcher") 
                                         "extra (starfinder[anndata]) is not installed")
 EXPORT = ExportConfig(route="per_fov", fusion=FusionConfig(images=("reference_merged",)))
 TIMES = ("wall_s", "cpu_s", "peak_rss_kib")
+# The digest of the assembly section, which holds the part's times since W-879, recorded by the parts that read it.
+TIMED_DIGESTS = ("assembly_sha256",)
 PENDING = {"status": "not_run", "reason": "export_not_finished"}
 
 
@@ -50,9 +52,10 @@ def synchronous():
 
 
 def without_times(value):
-    """The record without the recorded times (wall and CPU seconds, peak RSS), keys in their order."""
+    """The record without the recorded times (wall and CPU seconds, peak RSS) and the digests over a section that holds
+    them, keys in their order."""
     if isinstance(value, dict):
-        return {k: without_times(v) for k, v in value.items() if k not in TIMES}
+        return {k: without_times(v) for k, v in value.items() if k not in TIMES + TIMED_DIGESTS}
     if isinstance(value, list):
         return [without_times(v) for v in value]
     return value

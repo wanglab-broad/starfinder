@@ -1088,9 +1088,20 @@ _READS_ASSIGNMENT_KEYS = ('expand_labels', 'dilation_distance')
 # The label namespace run name of the legacy label file, which reads_assignment imports.
 _LEGACY_SEGMENTATION_RUN = 'stardist_segmentation'
 # Keys of a segmentation block run besides the method config's fields.
-_SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'projection', 'operations', 'method')
+_SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'input_recipe', 'operations', 'method')
 # Keys of a run of the export block's segmentation besides its method's config fields.
-_SAMPLE_SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'method')
+_SAMPLE_SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'input_recipe', 'method')
+# The stages of an input recipe (design/specs/segmentation-input-recipe.md, "Configuration").
+_RECIPE_KEYS = ('channels', 'combine', 'projection', 'after_projection', 'model_input')
+# The keys an input recipe replaced, refused and not shimmed: key -> the recipe field that replaces it.
+_MIGRATION_ROW = " (docs/migration.md, 'Segmentation input recipe')"
+_REPLACED_KEYS = {
+    'prepare': "input_recipe.combine (composite or flamingo_enhance), with the extra source channel in inputs",
+    'prepare_channel': "input_recipe.combine flamingo_enhance, with the Flamingo channel as a cytoplasm source in "
+                       "inputs",
+    'projection': "input_recipe.projection",
+    'scale': "input_recipe.model_input (pixel_size_um, or factor on a grid without spacing)",
+    'diameter': "input_recipe.model_input (pixel_size_um, or factor on a grid without spacing)"}
 # Keys of the assignment block besides the AssignmentConfig fields: the FOV.assign_molecules arguments.
 _ASSIGNMENT_CALL_KEYS = ('cells', 'nuclei', 'name', 'population', 'correspondence', _layout.CHECKPOINTS)
 
@@ -1178,7 +1189,7 @@ class _LegacySegmentation:
     target: str
     role: str
     operations: tuple = ()
-    projection: object = None
+    recipe: object = None
     device: str = 'cpu'
     record: dict = field(default_factory=dict)
 
@@ -1200,19 +1211,22 @@ def _segmentation(config) -> _LegacySegmentation:
     the known model of that name when the base path is the weights cache's
     stardist folder; prob_thresh and nms_thresh pass as None (the stored
     thresholds, threshold_source stored) when they equal the model's
-    thresholds.json, else as overrides; rescale true is StarDist scale 0.5 in Y
-    and X on the input grid, false 1.0; expand_labels with distance is one planar
+    thresholds.json, else as overrides; the implicit input recipe has the model
+    input factor 0.5 in Y and X for rescale true and 1.0 for false (the input
+    file may lack spacing); expand_labels with distance is one planar
     pixel expand_labels operation; segmentation_input_folder gives the channel
     role (overlay: composite; DAPI, flamingo/enhanced_DAPI and any other
     folder: nuclear). The Python-only target (default cell for overlay,
     nucleus otherwise, recorded as legacy_default) and device keys need
     backend: python. The maximum projection that made a YX input (the overlay's
-    maximum_projection or the top-level one) is recorded as the run's projection.
+    maximum_projection or the top-level one) is the implicit recipe's
+    projection max, recorded as not applied (the input file is the
+    projection); the recipe is recorded with name null and source legacy.
     rotate_angle and dapi_round are not read. The segmentation block is run by
     FOV.segment, not by this rule, so it raises here.
     """
     from starfinder.preprocessing import ProjectionConfig
-    from starfinder.segmentation import KNOWN_MODELS, ExpandLabelsConfig, StarDistConfig
+    from starfinder.segmentation import KNOWN_MODELS, ExpandLabelsConfig, InputRecipe, ModelInputConfig, StarDistConfig
     from starfinder._weights import weights_directory
     if 'segmentation' in config:
         _python_only(config, ['segmentation'])
@@ -1245,37 +1259,154 @@ def _segmentation(config) -> _LegacySegmentation:
     target, target_source = _legacy_target(config)
     projected = bool(config.get('maximum_projection', False)) or (folder == 'overlay' and bool(
         _rule_parameters(config, 'create_nuclei_amplicon_overlay').get('maximum_projection', False)))
-    stardist = StarDistConfig(scale=0.5 if rescale else 1.0, **model, **thresholds)
+    stardist = StarDistConfig(**model, **thresholds)
+    recipe = InputRecipe(projection=ProjectionConfig() if projected else None,
+                         model_input=ModelInputConfig(factor=0.5 if rescale else 1.0))
     record = {'source': 'rules.stardist_segmentation.parameters',
               'legacy': {k: params[k] for k in _STARDIST_KEYS if k in params},
               'model': 'known' if known else 'path', 'stored_thresholds': stored,
               'threshold_source': 'stored' if all(v is None for v in thresholds.values()) else 'override',
               'segmentation_input_folder': folder, 'target_source': target_source}
     return _LegacySegmentation(stardist, target, _SEGMENTATION_ROLES.get(folder, 'nuclear'), operations,
-                               ProjectionConfig() if projected else None, params.get('device', 'cpu'), record)
+                               recipe, params.get('device', 'cpu'), record)
+
+
+def _replaced(key, context):
+    """ValueError for a key the input recipe replaced, naming the field that replaces it and the migration row."""
+    return ValueError(f'{context}: {key} is replaced by {_REPLACED_KEYS[key]}, not shimmed{_MIGRATION_ROW}')
 
 
 def _input_channel(values):
-    """InputChannel of one segmentation block input; prepare names an input function with its config fields."""
-    from starfinder.segmentation import CompositeConfig, FlamingoEnhancementConfig, InputChannel
+    """InputChannel of one segmentation block input: a source channel (role and round/channel or reference_merged)."""
+    from starfinder.segmentation import InputChannel
     if not isinstance(values, dict):
         raise TypeError('each segmentation input must be a mapping')
-    values = dict(values)
-    prepare = values.pop('prepare', None)
-    if prepare is not None:
-        functions = {'composite_nuclei_amplicon': CompositeConfig, 'enhance_with_flamingo': FlamingoEnhancementConfig}
-        if not isinstance(prepare, dict) or prepare.get('function') not in functions:
-            raise ValueError(f'prepare must be a mapping whose function is one of {sorted(functions)}')
-        prepare = dict(prepare)
-        prepare = _typed(functions[prepare.pop('function')], prepare, 'segmentation input prepare')
-    _known(values, [f.name for f in fields(InputChannel) if f.init and f.name != 'prepare'], 'segmentation input')
-    return InputChannel(**values, prepare=prepare)
+    for key in ('prepare', 'prepare_channel'):
+        if key in values:
+            raise _replaced(key, 'segmentation input')
+    _known(values, [f.name for f in fields(InputChannel) if f.init], 'segmentation input')
+    return InputChannel(**values)
+
+
+def _required(config_type, values, context):
+    missing = [f.name for f in fields(config_type)
+               if f.init and f.default is MISSING and f.default_factory is MISSING and f.name not in values]
+    if missing:
+        raise ValueError(f'{context} requires {", ".join(missing)}')
+
+
+def _recipe_steps(entries, stage, context):
+    """RecipeSteps of one stage: each a mapping of a registered step name (method), its config fields and roles."""
+    from starfinder.segmentation import RecipeStep
+    if entries is None:
+        return ()
+    if not isinstance(entries, list):
+        raise ValueError(f'{context}.{stage} must be a list of steps')
+    steps = []
+    for entry in entries:
+        if not isinstance(entry, dict) or 'method' not in entry:
+            raise ValueError(f'{context}.{stage}: each step is a mapping with a method')
+        entry = dict(entry)
+        name = entry.pop('method')
+        roles = entry.pop('roles', None)
+        config_type = step_config_type(name)
+        what = f'{context}.{stage} step {name!r}'
+        _known(entry, [f.name for f in fields(config_type) if f.init], what)
+        _required(config_type, entry, what)
+        steps.append(RecipeStep(config_type(**{k: _tuples(v) for k, v in entry.items()}),
+                                None if roles is None else _tuples(roles) if isinstance(roles, list) else roles))
+    return tuple(steps)
+
+
+def _input_recipe(values, context, name=None):
+    """InputRecipe of one recipe mapping (design/specs/segmentation-input-recipe.md, "Configuration").
+
+    Its keys are the stages: channels and after_projection (lists of steps, each a
+    registered step name as method, its config fields and an optional roles),
+    combine (method single, composite or flamingo_enhance with its config fields),
+    projection (method and an optional output_dtype) and model_input (pixel_size_um
+    or factor). An unknown key is refused, naming it.
+    """
+    from starfinder.segmentation import COMBINE_METHODS, InputRecipe, ModelInputConfig
+    if not isinstance(values, dict):
+        raise TypeError(f'{context} must be a mapping of the recipe stages')
+    _known(values, _RECIPE_KEYS, context)
+    combine = values.get('combine')
+    if combine is not None:
+        if not isinstance(combine, dict) or 'method' not in combine:
+            raise ValueError(f'{context}.combine must be a mapping with a method')
+        combine = dict(combine)
+        config_type = config_type_for(COMBINE_METHODS, combine.pop('method'), f'{context}.combine method')
+        if config_type is type(None):
+            _known(combine, (), f'{context}.combine (single)')
+            combine = None
+        else:
+            _known(combine, [f.name for f in fields(config_type) if f.init], f'{context}.combine')
+            combine = config_type(**{k: _tuples(v) for k, v in combine.items()})
+    projection = values.get('projection')
+    if projection is not None:
+        if not isinstance(projection, dict) or 'method' not in projection:
+            raise ValueError(f'{context}.projection must be a mapping with a method (max, sum or mean)')
+        _known(projection, ('method', 'output_dtype'), f'{context}.projection')
+        projection = ProjectionConfig(**projection)
+    model_input = values.get('model_input')
+    if model_input is not None:
+        model_input = _typed(ModelInputConfig, model_input, f'{context}.model_input')
+    return InputRecipe(channels=_recipe_steps(values.get('channels'), 'channels', context), combine=combine,
+                       projection=projection,
+                       after_projection=_recipe_steps(values.get('after_projection'), 'after_projection', context),
+                       model_input=model_input, name=name)
+
+
+def _input_recipes(config):
+    """{name: InputRecipe} of segmentation.input_recipes (empty without them); each name is lowercase snake_case."""
+    from starfinder._registry import check_name
+    block = config.get('segmentation')
+    values = block.get('input_recipes') if isinstance(block, dict) else None
+    if values is None:
+        return {}
+    if not isinstance(values, dict):
+        raise TypeError('segmentation.input_recipes must be a mapping of recipe names to recipes')
+    recipes = {}
+    for name, recipe in values.items():
+        check_name(name, 'input recipe')
+        recipes[name] = _input_recipe(recipe, f'segmentation.input_recipes.{name}', name)
+    return recipes
+
+
+def _run_recipe(value, recipes, what):
+    """A run's input_recipe: a name of segmentation.input_recipes, or a full recipe inline (never a name plus
+    overrides); None without one."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if value not in recipes:
+            raise ValueError(f'{what} input_recipe {value!r} is not a recipe of segmentation.input_recipes '
+                             f'{sorted(recipes)}')
+        return recipes[value]
+    if isinstance(value, dict):
+        return _input_recipe(value, f'{what} input_recipe')
+    raise TypeError(f'{what} input_recipe must name a recipe of segmentation.input_recipes or be a recipe mapping')
+
+
+def _check_replaced(values, method, what):
+    """The run keys the input recipe replaced: projection on a method run, scale (stardist), diameter (cellpose)."""
+    if method != 'import' and 'projection' in values:
+        raise _replaced('projection', what)
+    for key, owner in (('scale', 'stardist'), ('diameter', 'cellpose')):
+        if method == owner and key in values:
+            raise _replaced(key, what)
+    if method == 'import' and 'projection' in values and not (values['projection'] is None
+                                                              or isinstance(values['projection'], str)):
+        raise ValueError(f"{what}: the import's projection is max, sum or mean (LabelImportConfig.projection), not "
+                         f"{values['projection']!r}{_MIGRATION_ROW}")
 
 
 def _run_method(values, name, method, target, what='segmentation run'):
     """The method config of one run: import with the LabelImportConfig fields, or a SEGMENTATION_METHODS name whose
     config fields are the run's other keys."""
     from starfinder.segmentation import SEGMENTATION_METHODS, LabelImportConfig
+    _check_replaced(values, method, f'{what} {name!r}')
     if method == 'import':
         names = [f.name for f in fields(LabelImportConfig) if f.init and f.name != 'target']
         _known(values, names, f'{what} {name!r} (import)')
@@ -1289,9 +1420,8 @@ def _run_method(values, name, method, target, what='segmentation run'):
     return config_type(**{k: _tuples(v) for k, v in values.items()})
 
 
-def _segmentation_run(values):
+def _segmentation_run(values, recipes=None):
     """SegmentationRun of one segmentation block run (design/specs/segmentation.md, "Workflow configuration")."""
-    from starfinder.preprocessing import ProjectionConfig
     from starfinder.segmentation import ExpandLabelsConfig, SegmentationRun, ZExtensionConfig
     if not isinstance(values, dict) or 'method' not in values or 'name' not in values:
         raise ValueError('each segmentation run must be a mapping with a name and a method')
@@ -1299,13 +1429,6 @@ def _segmentation_run(values):
     run = {key: values.pop(key) for key in _SEGMENTATION_RUN_KEYS if key in values}
     name, method = run['name'], run['method']
     config = _run_method(values, name, method, run.get('target'))
-    projection = run.get('projection')
-    if projection is True:
-        projection = ProjectionConfig()
-    elif projection is False:
-        projection = None
-    elif projection is not None:
-        projection = _typed(ProjectionConfig, projection, f'segmentation run {name!r} projection')
     operations = []
     for entry in run.get('operations') or []:
         types = {'expand_labels': ExpandLabelsConfig, 'extend_labels_through_z': ZExtensionConfig}
@@ -1317,21 +1440,24 @@ def _segmentation_run(values):
     inputs = run.get('inputs') or []
     if not isinstance(inputs, list):
         raise TypeError(f'segmentation run {name!r}: inputs must be a list')
+    recipe = _run_recipe(run.get('input_recipe'), recipes or {}, f'segmentation run {name!r}')
     return SegmentationRun(name, run.get('target'), tuple(map(_input_channel, inputs)), config, run.get('seeds'),
-                           projection, tuple(operations))
+                           recipe, tuple(operations))
 
 
 def _segmentation_block(config):
-    """(SegmentationPlan, device) of the Python-only top-level segmentation block.
+    """(SegmentationPlan or None, device) of the Python-only top-level segmentation block.
 
-    Each run has name, target, inputs (InputChannel fields; prepare names
-    composite_nuclei_amplicon or enhance_with_flamingo with its config fields),
-    seeds, projection (true or ProjectionConfig fields), operations
-    (expand_labels or extend_labels_through_z with their config fields) and
-    method, a SEGMENTATION_METHODS name whose config fields are the run's other
-    keys, or import with the LabelImportConfig fields. device is cpu (default)
-    or cuda. The block needs backend: python; a workflow-orchestration rule
-    runs it with FOV.segment (design/specs/segmentation.md, "Workflow configuration").
+    Each run has name, target, inputs (the source channels, InputChannel
+    fields), seeds, input_recipe (a name of input_recipes, or a recipe
+    inline), operations (expand_labels or extend_labels_through_z with their
+    config fields) and method, a SEGMENTATION_METHODS name whose config fields
+    are the run's other keys, or import with the LabelImportConfig fields
+    (projection among them). input_recipes names recipes (design/specs/segmentation-input-recipe.md,
+    "Configuration"); without runs the block holds only recipes for
+    export.segmentation, and the plan is None. device is cpu (default) or
+    cuda. The block needs backend: python; a workflow-orchestration rule runs
+    it with FOV.segment (design/specs/segmentation.md, "Workflow configuration").
     """
     # The §2.13 rule
     from starfinder.segmentation import SegmentationPlan
@@ -1339,14 +1465,19 @@ def _segmentation_block(config):
     values = config['segmentation']
     if not isinstance(values, dict):
         raise TypeError('segmentation must be a mapping')
-    _known(values, ('device', 'runs'), 'segmentation')
+    _known(values, ('device', 'runs', 'input_recipes'), 'segmentation')
     runs = values.get('runs')
-    if not isinstance(runs, list) or not runs:
+    if runs is None and not values.get('input_recipes'):
+        raise ValueError('segmentation must hold runs, input_recipes or both; an empty segmentation block is refused')
+    if runs is not None and (not isinstance(runs, list) or not runs):
         raise ValueError('segmentation.runs must be a nonempty list')
     device = values.get('device', 'cpu')
     if device not in ('cpu', 'cuda'):
         raise ValueError(f"segmentation.device must be 'cpu' or 'cuda'; got {device!r}")
-    return SegmentationPlan(tuple(map(_segmentation_run, runs))), device
+    recipes = _input_recipes(config)
+    if runs is None:
+        return None, device
+    return SegmentationPlan(tuple(_segmentation_run(run, recipes) for run in runs)), device
 
 
 def _assignment_block(config):
@@ -1776,7 +1907,7 @@ def _assembly_block(config) -> _AssemblyBlock:
     table_format (csv or parquet) and previews (default false: on the route
     of a saved assignment, reads_assignment draws the local assignment
     figures into fovs/<fov>/previews/ and export_sample the ownership figures
-    into export/<sample>/previews/<fov>/). It needs backend: python and a
+    into export/<sample>/per_fov/previews/<fov>/). It needs backend: python and a
     stitching block, whose placement it reads.
     """
     from starfinder._registry import check_name
@@ -1817,8 +1948,9 @@ def _export_keys():
 def _sample_segmentation_block(values, config):
     """SampleSegmentationConfig of the export block's segmentation (design/specs/sample-segmentation.md, "Where the
     settings live"): device, cells, nuclei and runs, each run with name, target, inputs (a list of {role, image}),
-    seeds and method, whose config fields are the run's other keys (import: the LabelImportConfig fields); the
-    assignment settings are those of the top-level assignment block."""
+    seeds, input_recipe (a name of segmentation.input_recipes, or a recipe inline) and method, whose config fields
+    are the run's other keys (import: the LabelImportConfig fields); the assignment settings are those of the
+    top-level assignment block."""
     from starfinder.assignment import AssignmentConfig
     from starfinder.export import SampleSegmentationConfig, SampleSegmentationRun
     if not isinstance(values, dict):
@@ -1828,6 +1960,7 @@ def _sample_segmentation_block(values, config):
     if not isinstance(runs, list) or not runs:
         raise ValueError('export.segmentation.runs must be a nonempty list')
     parsed = []
+    recipes = _input_recipes(config)
     for entry in runs:
         if not isinstance(entry, dict) or 'method' not in entry or 'name' not in entry:
             raise ValueError('each export.segmentation run must be a mapping with a name and a method')
@@ -1839,9 +1972,10 @@ def _sample_segmentation_block(values, config):
         for item in inputs:
             _known(item, ('role', 'image'), f"export.segmentation run {run['name']!r} input")
         method = _run_method(entry, run['name'], run['method'], run.get('target'), 'export.segmentation run')
+        recipe = _run_recipe(run.get('input_recipe'), recipes, f"export.segmentation run {run['name']!r}")
         parsed.append(SampleSegmentationRun(run['name'], run.get('target'),
                                             tuple((i.get('role'), i.get('image')) for i in inputs), method,
-                                            run.get('seeds')))
+                                            run.get('seeds'), recipe))
     assignment = _assignment_block(config)[0] if config.get('assignment') is not None else AssignmentConfig()
     return SampleSegmentationConfig(tuple(parsed), values.get('cells'), values.get('nuclei'), assignment,
                                     values.get('device', 'cpu'))
@@ -1936,7 +2070,7 @@ def _report_block(config):
     Its keys are the ReportConfig fields: markers a list of {name, genes}
     (MarkerGroup), marker_pairs a list of gene pairs, limits the ReportLimits
     fields with each rule a mapping of RuleLimit fields (k, floor, absolute; an
-    omitted one is null) and spots_near_zero. Lists become tuples; an empty or
+    omitted one is null), spots_near_zero and small_nucleus_diameter_um. Lists become tuples; an empty or
     null block is ReportConfig(). An unknown key raises ValueError naming it;
     the block needs backend: python.
     """
@@ -1959,7 +2093,7 @@ def _report_block(config):
             raise TypeError('report.limits must be a mapping')
         _known(limits, [f.name for f in fields(ReportLimits) if f.init], 'report.limits')
         options['limits'] = ReportLimits(**{
-            key: (_typed(RuleLimit, value, f'report.limits.{key}') if key != 'spots_near_zero' else value)
+            key: (_typed(RuleLimit, value, f'report.limits.{key}') if key not in ('spots_near_zero', 'small_nucleus_diameter_um') else value)
             for key, value in limits.items()})
     return ReportConfig(**options)
 

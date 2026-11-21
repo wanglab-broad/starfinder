@@ -38,7 +38,7 @@ from starfinder.stitching import PlacementResult
 from starfinder.stitching._placement import OWNING, grid_problems, same_frame_grid
 
 from ._config import FusionConfig
-from ._grid import AXES, FusedGrid, _names, fused_grid, included_fovs
+from ._grid import AXES, IDENTITY, FusedGrid, _names, fused_grid, included_fovs
 from ._record import (
     ExportIncompleteWarning,
     Timer,
@@ -655,6 +655,51 @@ def _fuse_file(plan, lazies, name, dimensionality, config, reader=None, stack=No
                         interpolation_order=INTERPOLATION_ORDER, output_stack_properties=properties,
                         output_chunksize=chunks)
     return fused, dims, {"output_stack_properties": properties, "output_chunksize": chunks}
+
+
+def fuse_one_view(image, spacing_zyx, k: int, *, name: str = "view", projection: str = "max"):
+    """One view's fused projection alone, at factor ``k``: ``fuse``'s own library call for one FOV and no blend.
+
+    The view's ZYX image is projected along Z (``projection``) as ``fuse`` projects a FOV, placed at the origin
+    of its frame, reduced to level 1 for ``k`` > 1 (``msi_utils``, Y and X by ``k``), and fused alone with
+    ``weighted_average_fusion`` and interpolation order 1 onto the projection level of its one-FOV grid
+    (:meth:`FusedGrid.level`: spacing ``k·s``, origin ``s·(k − 1)/2``, ``ceil(n/k)`` pixels). It is not the fused
+    sample: neighbours, seams and blends are absent. The preview of input recipes at the pixel size of the route
+    after fusion uses it (``starfinder segment preview --factor-yx``; design/specs/segmentation-input-recipe.md).
+
+    Returns ``(array, metadata)``: the ``(1, Y, X)`` fused plane and its ``ImageMetadata`` (frame
+    ``fused_view:<name>``, µm). Needs the ``multiview-stitcher`` extra.
+    """
+    from multiview_stitcher import fusion, msi_utils
+    from multiview_stitcher import spatial_image_utils as si_utils
+
+    from starfinder.image import ImageMetadata
+    from starfinder.preprocessing.projection import ProjectionConfig, project_image
+    image = np.asarray(image)
+    if image.ndim != 3:
+        raise ValueError(f"a view is a ZYX image; got shape {image.shape}")
+    sz, sy, sx = (float(v) for v in spacing_zyx)
+    nz, ny, nx = image.shape
+    config = ProjectionConfig(method=projection, axis="z", output_dtype="float32" if projection == "sum" else None)
+    plane = project_image(image, config=config)[0]
+    dims = ["y", "x"]
+    sim = si_utils.get_sim_from_array(plane, dims=dims, scale={"y": sy, "x": sx}, translation={"y": 0.0, "x": 0.0},
+                                      transform_key=TRANSFORM_KEY)
+    if k > 1:
+        msim = msi_utils.get_msim_from_sim(sim, scale_factors=[{"y": k, "x": k}])
+        sim = msi_utils.get_sim_from_msim(msim, scale="scale1")
+    one_plane = nz == 1
+    slab = (-sz / 2, sz / 2) if one_plane else (-sz / 2, (nz - 0.5) * sz)
+    grid = FusedGrid(name, (name,), (sz, sy, sx), (0.0, 0.0, 0.0), (1 if one_plane else nz, ny, nx), one_plane, slab,
+                     (0.0,), int(k))
+    properties = output_stack_properties(grid, "projection", dims)
+    fused = fusion.fuse([sim], transform_key=TRANSFORM_KEY, fusion_func=fusion.weighted_average_fusion,
+                        interpolation_order=INTERPOLATION_ORDER, output_stack_properties=properties,
+                        output_chunksize=CHUNKS["plane"])
+    data = fused.data[0, 0]
+    array = np.ascontiguousarray(np.asarray(data.compute() if hasattr(data, "compute") else data))
+    spacing, origin, _ = grid.level("projection")
+    return array[np.newaxis], ImageMetadata(f"fused_view:{name}", spacing, origin, IDENTITY, "µm")
 
 
 def _library_grid(fused):

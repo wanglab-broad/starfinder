@@ -22,6 +22,7 @@ from starfinder.spot_finding._methods import SpotFindingConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig,
     StepContext, load_supplied_statistics, run_step, step_spec)
+from starfinder.preprocessing._lengths import config_record
 from starfinder.preprocessing._rotation import _rotated
 from starfinder.dataset._logging import _log_step
 from starfinder import _checkpoint
@@ -220,6 +221,8 @@ class FOV:
     _reference_file: tuple | None = field(default=None, init=False, repr=False, compare=False)
     # (stage, earlier run.json) while _resume_run continues an earlier run after that stage.
     _resume: tuple | None = field(default=None, init=False, repr=False, compare=False)
+    # {record, pipeline, entry} while _run_from_input runs from a saved spot-finding input.
+    _source: dict | None = field(default=None, init=False, repr=False, compare=False)
     # Tiled execution's global task (dataset/tiled.py): called with each pipeline round's name once FOV.run has
     # processed it (after the post-registration steps), while its image is resident; and the folder of its run.json.
     _round_sink: object | None = field(default=None, init=False, repr=False, compare=False)
@@ -651,7 +654,7 @@ class FOV:
         metadata = self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}"))
         result = run_step(image, config, StepContext(round_name, ref, metadata, reference, section))
         self.preprocessing_record.setdefault('rounds', {}).setdefault(round_name, []).append(dict(
-            index=index, stage=phase, step=stage, config=asdict(config), fitted=dict(result.fitted),
+            index=index, stage=phase, step=stage, config=config_record(config), fitted=dict(result.fitted),
             diagnostics=dict(result.diagnostics), input_dtype=str(np.asarray(image).dtype),
             output_dtype=str(result.image.dtype), save_as=save_as))
         self.images[round_name] = np.asarray(result.image)
@@ -1983,7 +1986,7 @@ class FOV:
             # Stages this run does not rewrite must not survive from an earlier run.
             _checkpoint.clear_stages(directory)
         directory.mkdir(parents=True, exist_ok=True)
-        record = _RunRecord(self, folder, checkpoints, config, execution, resume=resume)
+        record = _RunRecord(self, folder, checkpoints, config, execution, resume=resume, source=self._source)
         record.write()
         return record
 
@@ -2002,6 +2005,23 @@ class FOV:
             return self.run(config, execution=execution, checkpoints=checkpoints)
         finally:
             self._resume = None
+
+    def _run_from_input(self, config, *, execution, checkpoints, source):
+        """Run spot finding and the steps after it on a saved spot-finding input, loaded already.
+
+        For the workflow's ``processing.spot_finding_input``: the registered stage of the saved set is loaded
+        (load_checkpoint with the set's folder), ``config`` is the part of the pipeline after that stage and
+        ``checkpoints`` this run's stages (registered not among them). ``source`` is ``{record, pipeline, entry}``:
+        the set's run.json, checked by the caller, this run's whole pipeline and the ``spot_finding_input`` section.
+        The new run.json records the whole pipeline, the set's inputs, preprocessing, registration and transforms and
+        its steps before its registered stage was written (without the detection and extraction, which this run
+        performs), then this run's steps; it names no registered stage of its own.
+        """
+        self._source = source
+        try:
+            return self.run(config, execution=execution, checkpoints=checkpoints)
+        finally:
+            self._source = None
 
     def _checkpoint_snapshots(self) -> list[str]:
         """Snapshots used downstream besides the detection image: the recorded extraction source."""
@@ -2281,7 +2301,7 @@ class FOV:
         from starfinder.preprocessing import project_image
         ref = self.rounds.reference_round
         expected, metadata = np.asarray(self.images[ref]).max(axis=3), self.metadata[ref]
-        method = next((m for m in ('max', 'sum') if grid.metadata == metadata.projected(method=m)), None)
+        method = next((m for m in ('max', 'sum', 'mean') if grid.metadata == metadata.projected(method=m)), None)
         if method is not None and grid.shape_zyx[0] == 1:
             expected = project_image(expected, config=ProjectionConfig(method=method))
             metadata = metadata.projected(method=method)
@@ -2311,8 +2331,8 @@ class FOV:
         ``voxel_size_xy`` and ``voxel_size_z`` declare (the file's shape, the
         frame ``declared:<dataset_id>/<output_id>/<fov_id>`` in micrometres,
         source ``"declared"`` and no hash). A YX file gives a Z=1 grid.
-        ``InputChannel(reference_merged=True)``, also as the amplicon of a
-        ``CompositeConfig``, reads the image. With
+        ``InputChannel(reference_merged=True)``, also as the amplicon source of
+        a composite input recipe, reads the image. With
         :meth:`load_registered_round`, a process can then segment with no
         sequencing round resident (design/specs/segmentation.md, "Coordination
         per FOV"). A channel of the reference round other than the merged image
@@ -2348,27 +2368,32 @@ class FOV:
                 checkpoints: CheckpointConfig | None = None, run: str | None = None) -> FOV:
         """Run a segmentation plan on this FOV's resident reference-frame images.
 
-        Each run, in order, takes the reference grid (:meth:`reference_grid`, or its
-        Z projection for a run with ``projection``), assembles its
-        :class:`~starfinder.segmentation.SegmentationInput` from the resident images
-        (each :class:`~starfinder.segmentation.InputChannel` from the reference round,
+        Each run, in order, takes the reference grid (:meth:`reference_grid`),
+        takes its source channels from the resident images (each
+        :class:`~starfinder.segmentation.InputChannel` from the reference round,
         its channel maximum (or, without the round, the saved reference image
         restored by :meth:`load_reference_image`), a registered sequencing round,
         or ``reference_stain`` or
         an other round with an entry of ``registration_record["rounds"]`` (prepared by
         :meth:`prepare_morphology` or :meth:`register` in this process, or
-        reloaded by :meth:`load_registered_round`), with its ``prepare`` function
-        applied), calls :func:`~starfinder.segmentation.segment` with the
+        reloaded by :meth:`load_registered_round`)), applies its input recipe
+        with :func:`~starfinder.segmentation.apply_input_recipe` to make its
+        :class:`~starfinder.segmentation.SegmentationInput` (a recipe with a
+        projection puts the run on the grid's Z projection; an import's
+        ``projection`` puts it there), calls :func:`~starfinder.segmentation.segment` with the
         run's seeds (or :func:`~starfinder.segmentation.import_labels` with that
         grid), applies the run's label operations, and keys the result by the run's
         name. The results are stored in ``segmentation_results`` together once every
         run has finished. A label's namespace is the JSON list ``[dataset_id,
         sample_id, fov_id, subtile_id, run name]``. Each record also holds, under
         ``upstream``, the SHA-256 of preprocessing_record and registration_record.
-        The record of an input channel names its round, channel name and
+        The record (``format_version`` 2) holds the recipe record under
+        ``input.recipe`` (design/specs/segmentation-input-recipe.md, "Records")
+        and one entry per source channel under ``input.channels``, which names
+        its role, round, channel name and
         registration entry; for an image reloaded by load_registered_round the
-        entry links the saved file (relative path and SHA-256), and a channel
-        whose reference merged image (its own, or a composite's amplicon) was
+        entry links the saved file (relative path and SHA-256), and a reference
+        merged image (a channel of its own, such as a composite's amplicon) that was
         read from the saved reference image links that file under
         ``reference_image`` (path relative to the dataset output root and
         SHA-256). A process that restores the reference image and the prepared
@@ -2380,8 +2405,10 @@ class FOV:
         ``<FOV folder>/segmentation/<run>/`` (option F1 of
         design/specs/segmentation.md, "Saved format"): ``labels.tif`` (ZYX
         ``uint32``, zlib, with the grid's ImageMetadata), ``input.ome.tif`` (the
-        segmentation input, ZYXC OME-TIFF; not for an import) and
-        ``segmentation.json`` (the run record, with each file's path and SHA-256).
+        model input, the array ``segment`` received after every stage of the
+        recipe, ZYXC OME-TIFF; not for an import) and
+        ``segmentation.json`` (the run record, with each file's path and SHA-256,
+        and ``wall_s``, the run's wall time in seconds).
         The stored results carry that saved record. ``run.json`` and the ``FOV.run``
         stages are not touched; ``stages`` and ``hash_inputs`` are not used.
 
@@ -2458,7 +2485,8 @@ class FOV:
         and ``labels.tif``, checking the label file's SHA-256 and its array's
         SHA-256 against the record, the stored metadata against the recorded
         grid, the input file's SHA-256 when the run has one, and the record's
-        FOV identity against this FOV. The result (its record is the saved
+        FOV identity against this FOV. A record of ``format_version`` 1, written
+        before the input recipe, still loads; its run has no recipe. The result (its record is the saved
         record; diagnostics are not saved) is stored in
         ``segmentation_results[name]``. Like each result :meth:`segment` saved, it
         counts as saved under its run for :meth:`assign_molecules` with the same checkpoint
@@ -2482,8 +2510,9 @@ class FOV:
             The run has no ``segmentation.json``.
         ValueError
             A file that is missing or whose SHA-256 differs from the record
-            (naming the path and both hashes), a record of another version, run
-            or FOV, or stored metadata other than the recorded grid's.
+            (naming the path and both hashes), a record of a version other than 1
+            and 2, of another run or FOV, or stored metadata other than the
+            recorded grid's.
         """
         from starfinder._records import jsonable
         from starfinder.segmentation._persist import read_run, run_directory

@@ -845,6 +845,43 @@ def histogram_figure(values, name, title, unit, *, integer, slot=THIRD_COLUMN) -
     return _finish(figure, "png", slot, tiles=[tile])
 
 
+def size_figure(diameters, name, title, noun, limit_um, *, slot=HALF_COLUMN) -> FigureImage:
+    """The distribution of the equivalent diameters of a sample's objects (PNG twice its slot's width, at 600 : 340):
+    the bins of :func:`histogram_bins`, the objects above ``p99`` in one last bar and counted at the top right, the
+    median as a solid vertical line with its value in the axis label, and the lower limit ``limit_um`` as a dashed
+    one, the number of objects below it written at the top left of the plot. ``noun`` names the objects (the plural
+    on the count axis)."""
+    width, height = plot_size(slot, DISTRIBUTION_RATIO)
+    s = _Scale(width, slot)
+    figure = _figure(width, height)
+    values = np.asarray(diameters, dtype=np.float64)
+    bins = histogram_bins(values, False)
+    centre = median(values) if len(values) else None
+    below = int(np.count_nonzero(values < limit_um))
+    label = f"{title} (µm)" + (f" · median {centre:.4g}" if centre is not None else f" · no {noun}")
+    axes = _plot_axes(figure, s, label, noun)
+    if bins["counts"]:
+        edges, counts = bins["edges"], bins["counts"]
+        step = bins["width"] or 1.0
+        axes.bar([edges[k] for k in range(len(counts))], counts, width=step, align="edge", color="#4c72b0",
+                 edgecolor="white", linewidth=_pt(s(0.5)))
+        if bins["above"]:
+            right = edges[len(counts)] + step * 0.5
+            axes.bar([right], [bins["above"]], width=step, align="edge", color="#999999", edgecolor="white",
+                     linewidth=_pt(s(0.5)))
+            axes.text(0.98, 0.97, f"> p99: {bins['above']} {noun}", transform=axes.transAxes, ha="right", va="top",
+                      fontsize=_pt(s.text), color="#555555")
+        axes.set_ylim(0, max(max(counts), bins["above"]) * 1.25)     # room for the two notes at the top
+        axes.axvline(centre, color="#c44e52", linewidth=_pt(s(1.2)))
+        axes.axvline(limit_um, color="#222222", linewidth=_pt(s(1.0)), linestyle="--")
+        axes.text(0.02, 0.97, f"below {limit_um:g} µm: {below} of {len(values)}", transform=axes.transAxes, ha="left",
+                  va="top", fontsize=_pt(s.text), color="#555555")
+    _plot_axes_refit(axes, s, label)
+    tile = {"name": name, "xlabel": label, "unit": "µm", "median": centre, "limit": limit_um, "below": below,
+            **bins}
+    return _finish(figure, "png", slot, tiles=[tile])
+
+
 def _plot_axes_refit(axes, s, xlabel, integer=False):
     """Fit a small plot again once its data are drawn (the ticks follow the data); the count axis in whole
     numbers, the value axis too with ``integer``."""

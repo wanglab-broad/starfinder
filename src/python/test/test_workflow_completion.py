@@ -201,11 +201,11 @@ def test_a_failure_of_a_kind_that_keeps_its_folder_leaves_no_declared_output(fix
     plan(X.write_config(work, "single", config))
     manifest = X.output_root(work, "single") / "workflow" / "manifest.json"
     out = manifest.parents[1]
-    report = out / "report" / "sample" / "report.json"
+    report = out / "report" / "sample" / "molecules_only" / "report.json"
     report.parent.mkdir(parents=True)
     report.write_text("{}\n")
-    _layout.task_record(out, "report/sample").parent.mkdir(parents=True, exist_ok=True)
-    _layout.task_record(out, "report/sample").write_text(json.dumps({"status": "succeeded"}))
+    _layout.task_record(out, "report/sample/molecules_only").parent.mkdir(parents=True, exist_ok=True)
+    _layout.task_record(out, "report/sample/molecules_only").write_text(json.dumps({"status": "succeeded"}))
     earlier = [out / "report" / "samples.csv", out / "report" / "index.html"]
     for path in earlier:
         path.write_text("an earlier attempt's output\n")

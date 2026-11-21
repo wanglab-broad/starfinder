@@ -15,10 +15,16 @@ A spot_finding method also takes an optional ``device`` (``cpu``) and
 ``spot_namespace`` (``trial``); its ``image`` (ZYX or ZYXC) goes through
 find_spots unchanged, and its outputs are spots.csv and spot_finding.json (the
 diagnostics). A segmentation method also takes ``target``, ``roles`` (one per
-channel), optional ``device`` (``cpu``) and ``label_namespace`` (``trial``); its
-``image`` (ZYX gains one channel) and optional nucleus ``seeds`` label file go
-through segment on a declared grid, and its outputs are labels.npy and
-segmentation.json (the run record and diagnostics). Learned weights are only
+channel), optional ``device`` (``cpu``), ``label_namespace`` (``trial``) and
+``input_recipe`` (a recipe mapping in the layout of
+``segmentation.input_recipes``; without one, the empty recipe, as a run's); its
+``image`` (ZYX gains one channel) is the source channel of each role, its model
+input is built by apply_input_recipe as FOV.segment builds it, and it goes with
+the optional nucleus ``seeds`` label file through segment on a declared grid. A
+method with a model needs the recipe's ``model_input``, and the keys the recipe
+replaced (``scale``, ``diameter``, ``projection``) are refused with their
+migration row. Its outputs are labels.npy and segmentation.json (the run record,
+with the recipe record as ``input.recipe``, and diagnostics). Learned weights are only
 verified in the installed cache, before any input is loaded or output written;
 missing weights fail with MissingModelError. These two modules add the device
 and model identity to record.json as ``execution``.
@@ -106,8 +112,13 @@ def _method(value, seed):
         else:
             from starfinder.segmentation import SEGMENTATION_METHODS as registry
         name = value.pop("method")
+        values = value.pop("config", {})
+        if module == "segmentation":
+            # The keys the input recipe replaced are refused with their migration row, not shimmed.
+            from starfinder.dataset.workflow import _check_replaced
+            _check_replaced(values, name, "segmentation trial")
         # JSON has lists where these frozen configs hold tuples.
-        config = _config(name, tuples(value.pop("config", {})), registry)
+        config = _config(name, tuples(values), registry)
         resolved = {"module": module, "method": name, "config": plain(config), "device": value.pop("device", "cpu")}
         if module == "spot_finding":
             resolved["spot_namespace"] = value.pop("spot_namespace", "trial")
@@ -115,8 +126,16 @@ def _method(value, seed):
             roles = value.pop("roles")
             if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
                 raise ValueError("segmentation roles must be a list of channel roles")
+            for key in ("model_input", "model_scale_zyx"):
+                if key in value:
+                    raise ValueError(f"segmentation trial: {key} is not a method key; the model input is the stage "
+                                     "model_input of input_recipe")
             resolved.update(target=value.pop("target"), roles=roles,
                             label_namespace=value.pop("label_namespace", "trial"))
+            if "input_recipe" in value:
+                recipe = value.pop("input_recipe")
+                _recipe(recipe)
+                resolved["input_recipe"] = recipe
     else:
         raise ValueError(f"unsupported trial module {module!r}")
     if value:
@@ -192,6 +211,15 @@ def _preprocess(image, config, metadata, reference=None):
     return image, records
 
 
+def _recipe(value):
+    """The InputRecipe of a segmentation trial's ``input_recipe`` mapping (the configuration's layout); None
+    without one, the empty recipe."""
+    if value is None:
+        return None
+    from starfinder.dataset.workflow import _input_recipe
+    return _input_recipe(value, "segmentation trial input_recipe")
+
+
 def _check_weights(method, config):
     """Verify a learned method's installed weights before any output; nothing is downloaded."""
     if method["module"] == "spot_finding":
@@ -217,23 +245,44 @@ def _find_spots(image, method, config, metadata, out, paths):
     return {"device": result.diagnostics["execution"]["device"], "model": result.diagnostics.get("model")}
 
 
-def _segment(inputs, method, config, metadata):
-    from starfinder.segmentation import ReferenceGrid, SegmentationInput, SegmentationResult, segment, to_label_dtype
-    image = inputs["image"]
+def _segment(inputs, method, config, metadata, recipe):
+    """segment on the declared grid, with the model input built as FOV.segment builds it: each image channel is
+    the source channel of its role, and apply_input_recipe applies the trial's recipe (None: the empty recipe).
+    The record's ``input.recipe`` is the recipe record, as a run's."""
+    from dataclasses import replace
+
+    from starfinder.segmentation import ReferenceGrid, SegmentationResult, apply_input_recipe, segment, to_label_dtype
+    from starfinder.segmentation._recipe import method_value
+    image = np.asarray(inputs["image"])
     image = image[..., np.newaxis] if image.ndim == 3 else image
+    roles = tuple(method["roles"])
+    if image.ndim != 4 or image.shape[3] != len(roles):
+        raise ValueError(f"segmentation roles {list(roles)} name one role per image channel; the image has shape "
+                         f"{image.shape}")
     grid = ReferenceGrid(tuple(image.shape[:3]), metadata, "declared")
+    sources = [(role, image[..., c], {}) for c, role in enumerate(roles)]
+    segmentation_input, _, record = apply_input_recipe(sources, grid, recipe=recipe, run="trial")
     seeds = None
     if "seeds" in inputs:
         labels = np.ascontiguousarray(to_label_dtype(inputs["seeds"]))
-        seeds = SegmentationResult(labels, grid, "nucleus", "plane" if labels.shape[0] == 1 else "volume",
-                                   method["label_namespace"], {}, {})
-    return segment(SegmentationInput(image, grid, tuple(method["roles"])), config=config, target=method["target"],
-                   seeds=seeds, device=method["device"], label_namespace=method["label_namespace"])
+        seeds = SegmentationResult(labels, segmentation_input.grid, "nucleus",
+                                   "plane" if labels.shape[0] == 1 else "volume", method["label_namespace"], {}, {})
+    result = segment(segmentation_input, config=config, target=method["target"], seeds=seeds,
+                     device=method["device"], label_namespace=method["label_namespace"])
+    if record["model_input"] is not None:
+        record["model_input"]["method_value"] = method_value(result.record)
+    return replace(result, record=dict(result.record, input=dict(result.record["input"], recipe=record)))
 
 
 def _run(configuration, out, execution):
     method, config = _method(configuration["method"], configuration["seed"])
     _check_weights(method, config)
+    recipe = None
+    if method["module"] == "segmentation":
+        # The model input's rules, as a run's are checked when it is built, before any input is loaded.
+        from starfinder.segmentation._recipe import check_model_input
+        recipe = _recipe(method.get("input_recipe"))
+        check_model_input(config, recipe, run="trial")
     scenes = {}
     inputs = {name: _load(entry, scenes) for name, entry in configuration["inputs"].items()}
     metadata = ImageMetadata(**configuration["metadata"])
@@ -264,7 +313,7 @@ def _run(configuration, out, execution):
         execution.update(_find_spots(inputs["image"], method, config, metadata, out, paths))
         return _outputs(paths)
     elif method["module"] == "segmentation":
-        result = _segment(inputs, method, config, metadata)
+        result = _segment(inputs, method, config, metadata, recipe)
         np.save(out / "labels.npy", result.labels, allow_pickle=False)
         write_json(jsonable({"record": result.record, "diagnostics": result.diagnostics}), out / "segmentation.json")
         paths += [out / "labels.npy", out / "segmentation.json"]

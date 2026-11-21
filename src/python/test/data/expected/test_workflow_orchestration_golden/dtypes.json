@@ -327,6 +327,19 @@
   "residual_x": "float64",
   "alignment_score": "float64"
  },
+ "report-sample-tables-sizes.csv": {
+  "scope": "string",
+  "fov_id": "string",
+  "object": "string",
+  "n_objects": "string",
+  "diameter_p5": "string",
+  "diameter_p25": "string",
+  "diameter_median": "string",
+  "diameter_p75": "string",
+  "diameter_p95": "string",
+  "below_limit": "string",
+  "below_fraction": "string"
+ },
  "report-sample-tables-steps.csv": {
   "scope": "string",
   "fov_id": "string",

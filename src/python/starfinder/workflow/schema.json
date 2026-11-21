@@ -194,13 +194,6 @@
       "tiled"
      ]
     },
-    "recipe": {
-     "enum": [
-      null,
-      "deep"
-     ],
-     "description": "A named recipe the plan expands into the resolved configuration (deep: the deep-tissue recipe); a key the block also sets wins."
-    },
     "tiled": {
      "type": [
       "object",
@@ -251,6 +244,13 @@
        "pre_qc"
       ]
      }
+    },
+    "spot_finding_input": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "minLength": 1
     },
     "streaming": {
      "type": "boolean"
@@ -392,6 +392,9 @@
       "cpu",
       "cuda"
      ]
+    },
+    "input_recipes": {
+     "type": "object"
     },
     "runs": {
      "type": "array",

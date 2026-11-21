@@ -64,7 +64,10 @@ See the {doc}`layout table <checkpoints-reference>` for payload files.
 
 #### registered
 
-Processed images let you repeat detection and extraction. The
+Processed images let you repeat detection and extraction: each round is saved
+after its preprocessing, registration and post-registration steps, as spot
+finding reads it. The workflow reads a saved stage with
+{ref}`processing.spot_finding_input <workflow-spot-finding-input>`. The
 [registered reference](checkpoints-reference.md#registered) lists the saved transforms
 and image files.
 

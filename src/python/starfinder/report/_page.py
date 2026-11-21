@@ -32,7 +32,9 @@ import pandas as pd
 
 from starfinder import _layout
 
+from ._parameters import CARD_NODES, Resolved, differing, path_text, shown, typed
 from ._schema import READOUT_LEVELS
+from ._sizes import PLURAL
 from ._values import (Unavailable, acquisition, configuration_check, is_value, reference_image_z_size, run_time,
                       software, step_name, time_per_step, z_size)
 
@@ -40,7 +42,8 @@ TEMPLATE = "report.html"
 #: The slots of the template, in document order; each is filled exactly once.
 SLOTS = ("title", "heading", "facts", "key_numbers", "problematic", "chart", "fov_status", "time", "prep_title",
          "prep_example", "prep_intensity", "reg_maps", "reg_heatmap", "reg_title", "reg_example", "read_totals",
-         "read_map", "read_distributions", "read_table", "cells_map", "placement", "seg_examples", "population",
+         "read_map", "read_distributions", "read_table", "cells_map", "placement", "seg_examples", "seg_sizes",
+         "population",
          "per_cell", "markers", "mecr", "reads_z", "files_input", "files_configuration", "files_output", "data")
 #: The tables of the data block, in the contract's order ("The data embedded in the page"); ``cells`` and
 #: ``intensity`` are saved but not embedded.
@@ -53,7 +56,8 @@ SECTIONS = (
     ("prep", "Preprocessing", ("b-prep-example", "b-prep-intensity")),
     ("reg", "Registration", ("b-reg-maps", "b-reg-heatmap", "b-reg-example")),
     ("reads", "Readout", ("b-read-totals", "b-read-map", "b-read-distributions", "b-read-table")),
-    ("cells", "Segmentation and assembly", ("b-cells-map", "b-placement", "b-seg-examples", "b-population")),
+    ("cells", "Segmentation and assembly",
+     ("b-cells-map", "b-placement", "b-seg-examples", "b-seg-sizes", "b-population")),
     ("sample", "Sample measurements", ("b-per-cell", "b-markers", "b-mecr", "b-reads-z")),
     ("files", "Files", ("b-files-input", "b-files-configuration", "b-files-output")),
 )
@@ -63,6 +67,19 @@ _REMOVAL_CHECKS = {"components_unchanged": "the removals split a component",
                    "fovs_keep_links": "a FOV keeps fewer than 2 links and fewer than it had",
                    "residuals_within_tolerance": "a kept link's residual is above the tolerance",
                    "corrections_within_bound": "a correction is above the bound"}
+#: The cards of the "Per FOV" lane, in the order the steps run ("Workflow overview"), and each one's ``pipeline`` key
+#: and run.json step name (Preprocessing, Post-registration preprocessing and Deduplication are read otherwise).
+FOV_CARDS = ("Preprocessing", "Registration", "Post-registration preprocessing", "Spot finding", "Read extraction",
+             "Decoding", "Scoring", "Deduplication", "Read QC filter")
+_PIPELINE_STEPS = {"Registration": ("registration", "register"), "Spot finding": ("spot_finding", "find_spots"),
+                   "Read extraction": ("extraction", "extract_round"), "Decoding": ("decoding", "decode_reads"),
+                   "Scoring": ("scoring", "score_reads"), "Read QC filter": ("filtering", "filter_reads")}
+#: Where the fitted values of a card are shown on the page: the section or block its link names. The file that holds
+#: them is linked beside it (``_Page._fitted``).
+_FITTED_LINKS = {"Preprocessing": ("prep", "Preprocessing"),
+                 "Post-registration preprocessing": ("prep", "Preprocessing"),
+                 "Registration": ("reg", "Registration"),
+                 "Stitching": ("b-placement", "Placement")}
 #: The size budget of the page (SB1): 6 MiB + 16 KiB per FOV + 3 MiB per marker figure.
 KIB, MIB = 1024, 1024 * 1024
 _SLOT = re.compile(r"<!--slot:([a-z_]+)-->")
@@ -173,6 +190,26 @@ def _derived(reason, what, ratio="1/1") -> str:
             f'{_e(REASON_TEXTS[reason])}</span></div>')
 
 
+def _fitted_value(value) -> str:
+    """A fitted value in a panel: a number to 4 significant digits (:func:`_number`), a list of them in brackets,
+    anything else as the panels write a value."""
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return shown(value)
+    if isinstance(value, (int, float)):
+        return _number(value)
+    if isinstance(value, list) and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
+        return "[" + ", ".join(_number(v) for v in value) + "]"
+    return shown(value)
+
+
+def _group(pairs) -> dict:
+    """``{kind: [names]}`` of ``(kind, name)`` pairs, in first-seen order."""
+    grouped = {}
+    for kind, name in pairs:
+        grouped.setdefault(kind, []).append(name)
+    return grouped
+
+
 def _int(value) -> str:
     return f"{int(value):,}"
 
@@ -243,7 +280,23 @@ class PageFigures:
         previews = c.previews if isinstance(c.previews, dict) else {}
         self.segmentation = (_figures.segmentation_figure(previews, quality=quality, reasons=REASON_TEXTS)
                              if any(hasattr(p, "background") for p in previews.values()) else None)
+        self.sizes = self._sizes()
         self.sample = c.measurements.figures()
+
+    def _sizes(self):
+        """The size distributions of the nuclei and the cells: ``(kind, figure)`` per kind with an object, in the
+        order of ``_sizes.OBJECTS``; empty when the sizes could not be made."""
+        from . import _figures
+        from ._sizes import OBJECTS
+        c = self.c
+        c.sizes.compute()
+        limit = c.sizes.limit_um
+        if c.sizes.reason is not None:
+            return []
+        slot = _figures.grid_slot(2)
+        return [(kind, _figures.size_figure(c.sizes.diameters[kind], f"size:{kind}",
+                                            f"{kind} equivalent diameter", PLURAL[kind], limit, slot=slot))
+                for kind, _ in OBJECTS if c.sizes.diameters.get(kind) is not None]
 
     @staticmethod
     def _time(steps, fovs):
@@ -290,6 +343,7 @@ class _Page:
         self.unavailable, self.identity = unavailable, identity
         self.generated_at, self.config_json, self.folder, self.figures = generated_at, config_json, folder, figures
         self.rows = {name: table_rows(frames[name]) for name in DATA_TABLES}
+        self.size_rows = table_rows(frames["sizes"])
         self.named = {(u["table"], u["column"], u["row_key"]): u for u in unavailable if u["table"] is not None}
         self.placed = any(r["centre_x"] is not None and r["centre_y"] is not None for r in self.rows["fovs"])
 
@@ -437,30 +491,38 @@ class _Page:
             return (title, detail, off)
         fov_cards = []
         if lead is None:
-            for title in ("Preprocessing", "Registration", "Spot finding", "Decoding", "Read QC filter",
-                          "Deduplication"):
+            for title in FOV_CARDS:
                 fov_cards.append(card(title, off="no run record"))
         else:
             recipe = _get(lead, "preprocessing", "recipe", "steps") or []
-            fov_cards.append(card("Preprocessing", " → ".join(recipe)) if pipeline.get("preprocessing") and recipe
-                             else card("Preprocessing", off="not run"))
-            for title, key, step, default in (("Registration", "registration", "register", None),
-                                              ("Spot finding", "spot_finding", "find_spots", None),
-                                              ("Decoding", "decoding", "decode_reads", None),
-                                              ("Read QC filter", "filtering", "filter_reads", None)):
-                if pipeline.get(key) is None:
-                    fov_cards.append(card(title, off="not run"))
-                elif step not in lead_names:
-                    fov_cards.append(card(title, off="not yet run"))
+            post = _get(lead, "preprocessing", "recipe", "post_registration") or []
+            for title in FOV_CARDS:
+                if title == "Preprocessing":
+                    fov_cards.append(card(title, " → ".join(recipe)) if pipeline.get("preprocessing") and recipe
+                                     else card(title, off="not run"))
+                elif title == "Post-registration preprocessing":
+                    if not pipeline.get("preprocessing") or not post:
+                        fov_cards.append(card(title, off="not run"))
+                    elif not all(f"preprocess:{name}" in lead_names for name in post):
+                        fov_cards.append(card(title, off="not yet run"))
+                    else:
+                        fov_cards.append(card(title, " → ".join(post)))
+                elif title == "Deduplication":
+                    dedup = pipeline.get("deduplication")
+                    if dedup is None:
+                        fov_cards.append(card(title, off="not run"))
+                    elif "deduplicate_reads" not in lead_names:
+                        fov_cards.append(card(title, off="not yet run"))
+                    else:
+                        fov_cards.append(card(title, f"within {dedup.get('distance_voxels')} voxels"))
                 else:
-                    fov_cards.append(card(title, method(step) or _get(pipeline, key, "method") or ""))
-            dedup = pipeline.get("deduplication")
-            if dedup is None:
-                fov_cards.append(card("Deduplication", off="not run"))
-            elif "deduplicate_reads" not in lead_names:
-                fov_cards.append(card("Deduplication", off="not yet run"))
-            else:
-                fov_cards.append(card("Deduplication", f"within {dedup.get('distance_voxels')} voxels"))
+                    key, step = _PIPELINE_STEPS[title]
+                    if pipeline.get(key) is None:
+                        fov_cards.append(card(title, off="not run"))
+                    elif step not in lead_names:
+                        fov_cards.append(card(title, off="not yet run"))
+                    else:
+                        fov_cards.append(card(title, method(step) or self._stage_detail(key, pipeline) or ""))
         if c.route != "after_fusion":
             if c.assignment is None:
                 fov_cards += [card("Segmentation", off="not run"), card("Assignment", off="not run")]
@@ -489,6 +551,7 @@ class _Page:
             dimensionality = "both" if len(kinds) > 1 else (kinds[0] if kinds else None)
             sample_cards.append(card("Export", ", ".join(written) + (f"; {dimensionality}" if dimensionality else "")))
         number = 0
+        self._lead = lead
 
         def lane(label, cards, tooltip):
             nonlocal number
@@ -496,8 +559,14 @@ class _Page:
             for title, detail, off in cards:
                 number += 1
                 attrs = f' data-t="{_tip([title, tooltip])}"' if tooltip else ""
-                html_cards.append(f'<div class="st{" off" if off else ""}"{attrs}><b><span class="n">{number}</span>'
-                                  f'{_e(title)}</b><i>{_e(off or detail)}</i></div>')
+                head = f'<b><span class="n">{number}</span>{_e(title)}</b><i>{_e(off or detail)}</i>'
+                params = "" if off in ("not run", "no run record") else self.parameters(title)
+                if params:
+                    # The card is a ``details`` element: its summary is the card, its body the parameters.
+                    html_cards.append(f'<div class="st{" off" if off else ""}"{attrs}><details><summary>{head}'
+                                      f'</summary>{params}</details></div>')
+                else:
+                    html_cards.append(f'<div class="st{" off" if off else ""}"{attrs}>{head}</div>')
             return (f'<div class="lane"><span class="lab">{_e(label)}</span>'
                     f'<div class="cards">{"".join(html_cards)}</div></div>')
         out = lane("Per FOV", fov_cards, tip) + lane("Per sample", sample_cards, None)
@@ -505,6 +574,161 @@ class _Page:
         if missing:
             out += '<div class="lanes-ph">' + "".join(unavailable_box(u, line=True) for u in missing) + "</div>"
         return out
+
+    @staticmethod
+    def _stage_detail(key, pipeline):
+        """The card text of a stage that records no method of its own: the scoring method, the extraction's radius."""
+        block = pipeline.get(key) or {}
+        if key == "extraction" and block.get("neighborhood_radius_zyx") is not None:
+            return f"radius {', '.join(str(v) for v in block['neighborhood_radius_zyx'])} voxels"
+        return block.get("method")
+
+    # The parameters of a card ----------------------------------------------------------------------------------------
+
+    def parameters(self, title) -> str:
+        """The body of a card's ``details``: its method, the values of ``workflow/resolved.json`` that differ from the
+        defaults of the dataclass the step ran with, the fitted values of the example FOV, the whole block behind
+        "all parameters" and the file they come from; "" when the run holds none for the card."""
+        resolved = self.c.resolved
+        if not isinstance(resolved, Resolved):
+            return ""
+        node = (resolved.configuration.get("assembly") if title == "Assembly" else
+                resolved.node(title) if title in CARD_NODES else None)
+        if node is None or node == []:
+            return ""
+        names = {"Preprocessing": _get(self._lead, "preprocessing", "recipe", "steps"),
+                 "Post-registration preprocessing": _get(self._lead, "preprocessing", "recipe",
+                                                         "post_registration")}.get(title) or []
+        sections = self._sections(node, names)
+        body = []
+        for heading, kind, rows in sections:
+            label = f"<h4>{_e(heading)}</h4>" if heading else ""
+            if rows:
+                lines = "".join(f"<tr><td>{_e(path_text(path))}</td><td><code>{_e(shown(value))}</code></td></tr>"
+                                for path, value in rows)
+                table = f'<table class="tl"><tbody>{lines}</tbody></table>'
+            else:
+                table = f'<p class="muted">{"no value differs from the defaults" if kind else "no values given"}</p>'
+            caption = "Values that differ from the defaults" if kind else "As configured"
+            of = f' <span class="muted">of <code>{_e(kind)}</code></span>' if kind else ""
+            body.append(f'<div class="sp-sec">{label}<p class="sp-cap">{caption}{of}</p>{table}</div>')
+        fitted = self._fitted(title)
+        text = json.dumps(node, indent=2, ensure_ascii=False)
+        changed = (' <span class="muted">· the file has changed since the FOVs ran (hash '
+                   f'<code>{_e(resolved.sha256[:19])}</code>)</span>' if resolved.changed else "")
+        source = f'<p class="sp-src muted">from <code>{_e(resolved.path)}</code>{changed}</p>'
+        return (f'<div class="sp">{"".join(body)}{fitted}<details class="sp-all"><summary>all parameters</summary>'
+                f'<pre>{_e(text)}</pre></details>{source}</div>')
+
+    @staticmethod
+    def _sections(node, names):
+        """The sections of a card's parameters, ``(heading, dataclass name, rows)``: one per step of a list of steps
+        or of a recipe, then the recipe's own values; a dataclass is one section; a block that is no dataclass (the
+        assembly block, the stitching block's keys) lists its values as configured."""
+        def of_step(step, name):
+            config = step.get("config") if typed(step) else None
+            heading = name or (config or {}).get("method") or (config or {}).get("type") or step.get("type")
+            rows = [(path[1:] if path[0] == "config" else path, value) for path, value in differing(step)]
+            return heading, (config or step).get("type"), rows
+        if isinstance(node, list):
+            return [of_step(step, names[i] if i < len(names) else None) for i, step in enumerate(node)]
+        if typed(node) and isinstance(node.get("steps"), list):
+            rest = {k: v for k, v in node.items() if k != "steps"}
+            return ([of_step(step, None) for step in node["steps"]] +
+                    [("Recipe", node["type"], differing(rest))])
+        if typed(node):
+            return [(node.get("method"), node["type"], differing(node))]
+        rows = []
+        for key, value in node.items():
+            if typed(value):
+                rows += differing(value, (key,))
+            elif value is not None:
+                rows.append(((key,), value))
+        return [(None, None, rows)]
+
+    def _example(self):
+        """The FOV of the report's first example (role ``example_1``) and its run record (None without one), or
+        ``(None, None, reason)`` when the report has no example."""
+        examples = self.c.examples
+        if isinstance(examples, Unavailable):
+            return None, None, examples
+        fov = next(e.fov_id for e in examples if e.role == "example_1")
+        return fov, self.c.records.get(fov), None
+
+    def _source(self, path) -> str:
+        """A link to a file, relative to the report's folder, named by its path in the output root."""
+        href = os.path.relpath(os.path.abspath(path), os.path.abspath(self.folder)).replace(os.sep, "/")
+        return f'<a href="{_e(href)}"><code>{_e(self._shown(path))}</code></a>'
+
+    def _fitted(self, title) -> str:
+        """The values a step fitted, each block with a link to the section that shows them and to the file that holds
+        them: the minimum and maximum per channel of a normalization (the example FOV's ``run.json``), the shifts of
+        the registration (the example FOV's rows of the report's ``tables/registration.csv``), the quality of the
+        stitching's links (the placement's ``links.csv``). The example FOV is the one of ``example_1``; without an
+        example, the per-FOV cards say so and show no other FOV's values. "" when the step has none."""
+        c = self.c
+        anchor, text = _FITTED_LINKS.get(title, (None, None))
+        if anchor is None:
+            return ""
+        fov, record, missing = self._example()
+        if title != "Stitching" and missing is not None:
+            return (f'<div class="sp-sec"><p class="sp-cap">Fitted values · <a href="#{anchor}">{_e(text)}</a></p>'
+                    f'<p class="muted">The report has no example FOV ({_e(REASON_TEXTS[missing.reason])}), so no '
+                    f'FOV\'s fitted values are shown.</p></div>')
+        blocks, source = [], None
+        if title in ("Preprocessing", "Post-registration preprocessing") and record is not None:
+            stage = "steps" if title == "Preprocessing" else "post_registration"
+            source = _layout.run_record(c.root, fov)
+            rounds = _get(record, "preprocessing", "rounds") or {}
+            first = next(iter(rounds), None)
+            for entry in rounds.get(first) or []:
+                fitted = entry.get("fitted")
+                if entry.get("stage") != stage or not isinstance(fitted, dict) or not fitted:
+                    continue
+                heading = f"<h4>{_e(entry.get('step'))} · {_e(fov)}, {_e(first)}</h4>"
+                blocks.append(heading + self._fitted_table(fitted))
+        elif title == "Registration":
+            rows = [r for r in self.rows["registration"] if r["fov_id"] == fov and r["shift_z"] is not None]
+            source = self.folder / "tables" / "registration.csv"
+            if rows:
+                lines = "".join(f"<tr><td>{_e(r['round'])}</td>"
+                                + "".join(f"<td>{_number(r['shift_' + a])}</td>" for a in "zyx") + "</tr>"
+                                for r in rows)
+                head = "<thead><tr><th>round</th><th>z</th><th>y</th><th>x</th></tr></thead>"
+                blocks.append(f'<h4>shift in voxels · {_e(fov)}</h4>'
+                              f'<table class="tl fit">{head}<tbody>{lines}</tbody></table>')
+        elif title == "Stitching" and c.p_links is not None and len(c.p_links):
+            links = c.p_links
+            source = c.stitching_dir / ((_get(c.placement, "tables", "links") or {}).get("path") or "links.csv")
+            quality = links["quality"].dropna()
+            kept = int(links["kept"].sum())
+            lines = f"<tr><td>links</td><td>{_int(len(links))}, kept {_int(kept)}</td></tr>"
+            if len(quality):
+                lines += (f"<tr><td>quality</td><td>min {_number(quality.min())}, median {_number(quality.median())}, "
+                          f"max {_number(quality.max())}</td></tr>")
+            blocks.append(f'<h4>link quality</h4><table class="tl"><tbody>{lines}</tbody></table>')
+        if not blocks:
+            return ""
+        of = f' of the example FOV <code>{_e(fov)}</code>' if title != "Stitching" else ""
+        where = f' · <a href="#{anchor}">{_e(text)}</a> · from {self._source(source)}'
+        return f'<div class="sp-sec"><p class="sp-cap">Fitted values{of}{where}</p>{"".join(blocks)}</div>'
+
+    @staticmethod
+    def _fitted_table(fitted) -> str:
+        """A step's fitted values: a list of objects (the groups of channels) as a table of its keys, other values as
+        rows."""
+        out = ""
+        rows = []
+        for key, value in fitted.items():
+            if isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+                columns = list(dict.fromkeys(k for item in value for k in item))
+                head = "".join(f"<th>{_e(c)}</th>" for c in columns)
+                lines = "".join("<tr>" + "".join(f"<td>{_e(_fitted_value(item.get(c)))}</td>" for c in columns)
+                                + "</tr>" for item in value)
+                out += f'<table class="tl fit"><thead><tr>{head}</tr></thead><tbody>{lines}</tbody></table>'
+            else:
+                rows.append(f"<tr><td>{_e(key)}</td><td><code>{_e(_fitted_value(value))}</code></td></tr>")
+        return out + (f'<table class="tl"><tbody>{"".join(rows)}</tbody></table>' if rows else "")
 
     @staticmethod
     def _part_card(title, part, parts, detail):
@@ -637,14 +861,64 @@ class _Page:
         f = self.figures
         rows = self.parts("assembly.examples")
         examples = self._figure_or_rows(f.segmentation, "segmentation", "Segmentation examples", rows, "3/1")
+        if f.segmentation is not None:
+            examples += self.background_caption()
         return {"cells_map": self._map(("m-cells", "lg-cells")),
                 "placement": self.review() + self.links() + self._map(("m-place", "lg-place")),
-                "seg_examples": examples, "population": '<div id="t-population"></div>'}
+                "seg_examples": examples, "seg_sizes": self.sizes(), "population": '<div id="t-population"></div>'}
+
+    def background_caption(self) -> str:
+        """The caption of the example FOVs: what the background of each tile is, from its previews: the first channel
+        of the segmentation input of the run, named with its role and file or image (and with the input recipe it
+        was made with and the model's pixel size when its record gives them), or the reference image or fused image
+        of a sample whose runs have no input."""
+        previews = [p for p in (self.c.previews if isinstance(self.c.previews, dict) else {}).values()
+                    if hasattr(p, "background")]
+        text = {"segmentation_input": "the segmentation input of run {run}{recipe}, its first channel ({role})",
+                "reference_image": "the reference image (no run has a saved segmentation input)",
+                "fused_image": "the fused image (no run has a segmentation input)"}
+        named = dict.fromkeys((text[p.source].format(
+            run=_e(p.background_run), role=_e(p.background_role),
+            recipe=f" ({_e(p.background_recipe)})" if getattr(p, "background_recipe", None) else ""),
+            p.background_name) for p in previews)
+        lines = [f'{kind}: {", ".join(f"<code>{_e(n)}</code>" for n in names)}'
+                 for kind, names in _group(named).items()]
+        return f'<p class="sp-cap" id="seg-background">Background: {"; ".join(lines)}</p>'
+
+    def sizes(self) -> str:
+        """The object sizes: the equivalent diameter of the nuclei and the cells across the sample as figures with
+        their lower limit, the table of the sample's percentiles, and the reason the sizes are unavailable. A display
+        rule: the fraction of nuclei below the limit marks FOVs under Problematic FOVs, and qualifies nothing."""
+        figures = self.figures.sizes
+        parts = self.parts("assembly.sizes")
+        limit = self.c.config.limits.small_nucleus_diameter_um
+        if not figures:
+            return "".join(unavailable_box(u, ratio="3/1") for u in parts) or ""
+        out = grid([image(fig, f"size:{kind}", f"Equivalent diameter of the {PLURAL[kind]}")
+                    for kind, fig in figures])
+        rows = [r for r in self.size_rows if r["scope"] == "sample"]
+        if rows:
+            head = "".join(f"<th>{h}</th>" for h in ("Object", "Count", "5 %", "25 %", "Median", "75 %", "95 %",
+                                                     f"Below {limit:g} µm"))
+            body = "".join(
+                f"<tr><td>{_e(r['object'])}</td><td>{_int(r['n_objects'])}</td>"
+                + "".join(f"<td>{_number(r[c]) if is_value(r[c]) else '—'}</td>" for c in (
+                    "diameter_p5", "diameter_p25", "diameter_median", "diameter_p75", "diameter_p95"))
+                + f"<td>{_int(r['below_limit'])} ({100 * r['below_fraction']:.1f} %)</td></tr>"
+                if is_value(r["below_fraction"]) else
+                f"<tr><td>{_e(r['object'])}</td><td>{_int(r['n_objects'])}</td><td colspan=\"6\">—</td></tr>"
+                for r in rows)
+            out += (f'<div class="panel tw"><table id="t-sizes"><thead><tr>{head}</tr></thead>'
+                    f'<tbody>{body}</tbody></table></div>'
+                    f'<p class="sp-cap">Equivalent diameter in µm of the label images on the route '
+                    f'{_e(self.c.route or "per_fov")}; the limit is a display rule on the size, not a '
+                    "qualification of the segmentation.</p>")
+        return out + "".join(unavailable_box(u, line=True) for u in parts)
 
     def review(self) -> str:
         """The placement's review (``placement.json`` ``review``) above the placement map: its state, reasons, the
-        flagged FOVs of each reason and the approvals. Shown only when the sample has no export record and the
-        review is required, as for an export held for review; otherwise nothing."""
+        flagged FOVs of each reason and the approvals of its tables (``approvals.json``). Shown only when the sample
+        has no export record and the review is required, as for a plan without an export; otherwise nothing."""
         c = self.c
         review = (c.placement or {}).get("review") if c.export is None else None
         if not isinstance(review, dict) or review.get("state") != "required":
@@ -753,6 +1027,7 @@ class _Page:
     def files(self) -> dict:
         c = self.c
         entries = {u["row_key"]: u for u in self.parts("files.input") + self.parts("files.configuration")}
+        resolved = c.resolved
         records = [c.records[f] for f in c.fov_ids if c.records[f] is not None]
 
         def entry(key, make):
@@ -805,6 +1080,17 @@ class _Page:
             if len(hashes) > 1:
                 return "several; see each FOV's run.json"
             return f"<code>{_e(hashes[0])}</code>"
+        def parameters():
+            if "entry=parameters" in entries:
+                return unavailable_box(entries["entry=parameters"], inline=True)
+            if not isinstance(resolved, Resolved):
+                return '<span class="muted">no workflow configuration path recorded</span>'
+            text = ("the cards of the Workflow overview open on them; the values that differ from the defaults, and "
+                    "the whole block")
+            if resolved.changed:
+                text += (f'; <span class="muted">the file has changed since the FOVs ran (hash '
+                         f'<code>{_e(resolved.sha256[:19])}</code>)</span>')
+            return text
         settings = (f'<details><summary>report.json config</summary><pre>'
                     f'{_e(json.dumps(self.config_json, indent=2, ensure_ascii=False))}</pre></details>')
         root = c.root
@@ -818,7 +1104,7 @@ class _Page:
                   ("FOV folders", f"<code>{_layout.FOVS}/&lt;fov_id&gt;/</code>" +
                    ("" if folders else ' <span class="muted">not written</span>')),
                   ("Placement", place(_layout.stitching_dir(root, c.sample), f"{_layout.STITCHING}/{c.sample}/")),
-                  ("Sample export", place(_layout.export_dir(root, c.sample), f"{_layout.EXPORT}/{c.sample}/")),
+                  ("Sample export", place(c.export_dir, f"{self._shown(c.export_dir)}/")),
                   ("Report", f"<code>{_e(self._shown(report / 'report.html'))}</code>"),
                   ("Report tables", f"<code>{_e(self._shown(report / 'tables'))}/</code>")]
         return {"files_input": self._table([("Images", entry("entry=images", images)),
@@ -828,6 +1114,7 @@ class _Page:
                     ("Workflow", entry("entry=workflow", workflow_path)),
                     ("Hash (FOVs ran under)", "" if "entry=workflow" in entries or workflow is None else
                      workflow_hash()),
+                    *([("Parameters", parameters())] if workflow is not None else []),
                     ("Report settings", settings)]),
                 "files_output": self._table(output)}
 

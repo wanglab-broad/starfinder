@@ -148,9 +148,13 @@ def _write_inputs(scene, rounds, channels, root):
 
 
 def build_chain(base, *, plane=False, stages=STAGES, registration=None, preprocessing=None, fov_ids=None,
-                export=True) -> Chain:
+                export=True, computed_runs=False) -> Chain:
     """One chain under ``base``: the scene, its inputs, the per-FOV runs and assignments, the truth placement and,
-    with ``export``, the export on the route per FOV (``dimensionality: both``, or ``projection`` on a plane)."""
+    with ``export``, the export on the route per FOV (``dimensionality: both``, or ``projection`` on a plane).
+
+    With ``computed_runs`` the assignments read a ``nucleus`` and a ``cell`` run computed on the saved stain and saved
+    under ``segmentation/<run>/`` with their ``input.ome.tif`` (``report_stain_runs``), not the imported truth
+    labels."""
     from starfinder.dataset import CheckpointConfig, Dataset, RoundState
     from starfinder.io import save_volume
     from starfinder.segmentation import ReferenceGrid, import_labels
@@ -181,9 +185,13 @@ def build_chain(base, *, plane=False, stages=STAGES, registration=None, preproce
         fov.export_spots()
         grid = grids[fov_id] = fov.reference_grid()
         namespace = json.dumps([dataset_id, sample, fov_id, None, "truth"], separators=(",", ":"))
-        labels = {target: import_labels(scene_dir / "fovs" / fov_id / "labels" / file, grid=grid, target=target,
-                                        relabel=False, label_namespace=namespace)
-                  for target, file in (("cell", "cells.tif"), ("nucleus", "nuclei.tif"))}
+        if computed_runs:
+            from .report_stain_runs import save_stain_runs
+            labels = save_stain_runs(root, fov_id, scene.stains[fov_id], grid, dataset_id, sample)
+        else:
+            labels = {target: import_labels(scene_dir / "fovs" / fov_id / "labels" / file, grid=grid, target=target,
+                                            relabel=False, label_namespace=namespace)
+                      for target, file in (("cell", "cells.tif"), ("nucleus", "nuclei.tif"))}
         fov.assign_molecules(cells=labels["cell"], nuclei=labels["nucleus"], checkpoints=checkpoints)
         stain = scene.stains[fov_id]
         save_volume(stain[..., None] if stain.ndim == 3 else stain, root / "fovs" / fov_id / STAIN_FILE,
@@ -267,6 +275,21 @@ def scene_chain(tmp_path_factory) -> Chain:
 def scene_chain_registered(tmp_path_factory) -> Chain:
     require_extras()
     return build_chain(tmp_path_factory.mktemp("scene_chain_registered"), stages=STAGES_REGISTERED)
+
+
+@pytest.fixture(scope="module")
+def scene_chain_stain(tmp_path_factory) -> dict:
+    """``{"per_fov": chain}``: the plane chain of ``scene_chain_plane`` with its cell and nucleus runs computed on the stain
+    and saved with their inputs (W-884); ``scene_chain_stain_merged`` exports a copy of it after fusion."""
+    require_extras()
+    return {"per_fov": build_chain(tmp_path_factory.mktemp("scene_chain_stain"), plane=True, computed_runs=True)}
+
+
+@pytest.fixture(scope="module")
+def scene_chain_stain_merged(scene_chain_stain, tmp_path_factory) -> Chain:
+    """The copy of ``scene_chain_stain``'s chain exported after fusion by ``export_after_fusion`` (the cell run reads the
+    fused ``reference_merged``)."""
+    return export_after_fusion(scene_chain_stain["per_fov"], tmp_path_factory.mktemp("scene_chain_stain_after") / "chain")
 
 
 @pytest.fixture(scope="module")

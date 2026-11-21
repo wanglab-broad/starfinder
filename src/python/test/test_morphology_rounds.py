@@ -31,7 +31,8 @@ from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder._checkpoint import FORMAT_VERSION, STAGES
 from starfinder.registration import (RegistrationSignalConfig, TranslationConfig, WarpConfig, apply_transform)
-from starfinder.segmentation import (SEGMENTATION_METHODS, FlamingoEnhancementConfig, InputChannel, SegmentationPlan,
+from starfinder.segmentation import (SEGMENTATION_METHODS, FlamingoEnhancementConfig, InputChannel, InputRecipe,
+                                     SegmentationPlan,
                                      SegmentationRun, SegmentationSpec, enhance_with_flamingo)
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
@@ -520,41 +521,53 @@ def threshold(monkeypatch):
     monkeypatch.setitem(SEGMENTATION_METHODS, ThresholdConfig, THRESHOLD)
 
 
-def plan(channel, level):
-    return SegmentationPlan((SegmentationRun("nucleus", "nucleus", (channel,), ThresholdConfig(level)),))
+def plan(channels, level, recipe=None):
+    return SegmentationPlan((SegmentationRun("nucleus", "nucleus", channels, ThresholdConfig(level),
+                                             input_recipe=recipe),))
 
 
-STAIN_INPUT = InputChannel("nuclear", round="reference_stain", channel="DAPI")
-ENHANCED_INPUT = InputChannel("nuclear", round="morph", channel="DAPI", prepare=FlamingoEnhancementConfig(),
-                              prepare_channel="Flamingo")
+STAIN_INPUT = (InputChannel("nuclear", round="reference_stain", channel="DAPI"),)
+# W-891: the Flamingo enhancement is the input recipe's combine method on two source channels; its median radius of
+# one pixel is given in µm on the grid of SPACING_XY (the dataset's voxel_size_xy in this test).
+SPACING_XY = 0.1
+ENHANCED_INPUTS = (InputChannel("nuclear", round="morph", channel="DAPI"),
+                   InputChannel("cytoplasm", round="morph", channel="Flamingo"))
+ENHANCED_RECIPE = InputRecipe(combine=FlamingoEnhancementConfig(median_radius_um=1 * SPACING_XY))
 
 
 def test_segment_reads_the_prepared_images_in_one_process_and_after_a_reload(raw, threshold, tmp_path):
     ds = make_dataset(raw)
+    ds.voxel_size_xy, ds.voxel_size_z = SPACING_XY, 0.35   # the spacing the recipe's µm radius needs
     checkpoints = CheckpointConfig(directory=tmp_path / "ck")
     fov = ds.fov("FOV").run(pipeline(rotation=90)).prepare_morphology(MorphologyConfig(rotation_degrees=90),
                                                                       checkpoints=checkpoints)
+    assert fov.reference_grid().metadata.spacing_zyx[1:] == (SPACING_XY, SPACING_XY)
     stain = fov.images["reference_stain"][..., 0]
     enhanced, _ = enhance_with_flamingo(fov.images["morph"][..., 2], fov.images["morph"][..., 0])
     level = float(np.mean(stain))
     results = {}
-    for name, channel, expected in (("stain", STAIN_INPUT, stain), ("enhanced", ENHANCED_INPUT, enhanced)):
+    for name, channels, recipe, expected in (("stain", STAIN_INPUT, None, stain),
+                                             ("enhanced", ENHANCED_INPUTS, ENHANCED_RECIPE, enhanced)):
         threshold_level = float(np.mean(expected))
-        fov.segment(plan(channel, threshold_level))
+        fov.segment(plan(channels, threshold_level, recipe))
         result = fov.segmentation_results["nucleus"]
         results[name] = result
-        (entry,) = result.record["input"]["channels"]
+        entry = result.record["input"]["channels"][0]
         # The input is the prepared channel, or the enhancement of the two prepared channels.
-        assert entry["sha256"] == hash_oracles.array_sha256(expected)
+        assert result.record["input"]["sha256"] == hash_oracles.array_sha256(expected[..., None])
         assert np.array_equal(result.labels, label(expected > threshold_level, connectivity=1))
         assert result.labels.max() > 0
-        assert (entry["round"], entry["channel"], entry["name"]) == (channel.round, "DAPI", "DAPI")
+        assert (entry["round"], entry["channel"], entry["name"]) == (channels[0].round, "DAPI", "DAPI")
     stain_entry = results["stain"].record["input"]["channels"][0]
+    assert stain_entry["sha256"] == hash_oracles.array_sha256(stain)
     assert stain_entry["wavelength"] == 405.0
     assert stain_entry["registration"] == {"reference": "round1", "reference_sha256": None,
                                            "relation": SAME_ACQUISITION}
-    morph_entry = results["enhanced"].record["input"]["channels"][0]
-    assert morph_entry["prepare_channel"] == "Flamingo" and morph_entry["prepare"]["function"] == "enhance_with_flamingo"
+    morph_entry, flamingo_entry = results["enhanced"].record["input"]["channels"]
+    combine = next(s for s in results["enhanced"].record["input"]["recipe"]["stages"] if s["stage"] == "combine")
+    assert (flamingo_entry["role"], flamingo_entry["channel"]) == ("cytoplasm", "Flamingo")
+    assert combine["method"] == "flamingo_enhance" and combine["record"]["function"] == "enhance_with_flamingo"
+    assert combine["used"] == {"median_radius_px": 1} and combine["outputs"] == [hash_oracles.array_sha256(enhanced)]
     assert morph_entry["registration"] == {"reference": "round1:ch04",
                                            "reference_sha256": hashlib.sha256(stain.tobytes()).hexdigest()}
 
@@ -570,7 +583,7 @@ def test_segment_reads_the_prepared_images_in_one_process_and_after_a_reload(raw
     # A round that is loaded but not prepared still raises.
     unprepared = ds.fov("FOV").run(pipeline(rotation=90))
     unprepared.load_images(rounds=["reference_stain", "morph"], rotation_degrees=90)
-    for channel in (STAIN_INPUT, ENHANCED_INPUT):
+    for channels, recipe in ((STAIN_INPUT, None), (ENHANCED_INPUTS, ENHANCED_RECIPE)):
         with pytest.raises(ValueError, match="has no registration entry"):
-            unprepared.segment(plan(channel, level))
+            unprepared.segment(plan(channels, level, recipe))
     assert unprepared.segmentation_results == {}

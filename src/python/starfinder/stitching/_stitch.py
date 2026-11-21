@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -343,7 +344,8 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
         The record holds ``format_version`` 1, ``frame``, ``gauge`` ``G1`` with
         the mean removed, ``method`` (the uniform provenance entry, ``stage``
         ``stitching``), ``method_diagnostics``, ``table``, ``inputs``,
-        ``fallback`` and ``review``.
+        ``fallback``, ``review`` and ``wall_s``, the wall time of this call in
+        seconds.
 
     Raises
     ------
@@ -362,6 +364,7 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
     RuntimeError
         A :class:`TileLoader` raised; the message names the FOV.
     """
+    started = time.perf_counter()
     spec = spec_for(STITCHING_METHODS, config, WHAT, TypeError)
     if not isinstance(review, ReviewPolicy):
         raise TypeError("review must be a ReviewPolicy")
@@ -464,5 +467,5 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
               "method_diagnostics": {"components": [int(c) for c in method_components], **diagnostics},
               "table": table.record,
               "inputs": {item.fov_id: input_record(item.source, item.file_sha256, item.grid) for item in inputs},
-              "fallback": fallback, "review": {"approvals": []}}
+              "fallback": fallback, "review": {"approvals": []}, "wall_s": time.perf_counter() - started}
     return review_placement(PlacementResult(sample, fovs, links, record), review)

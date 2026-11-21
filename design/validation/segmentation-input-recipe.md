@@ -43,6 +43,8 @@ project guidance bounds them. The fixtures marked `slow` are existing ones.
 | `recipes` | The recipes of the specification's example (`pi_max`, `pi_smooth`, `pi_composite`) with lengths chosen for the fixture's spacing, and one recipe per refusal of the rows below. | hand-built |
 | `model_stub` | Model folders written by the test (as `length_configs` does), with a StarDist `config.json` of `n_dim` 2 and one of `n_dim` 3, so that `resolve_model` passes. The library call is replaced by a stub that records the `scale` or `diameter` it receives and returns the `truth_import` labels. No model is loaded. | hand-built |
 
+(segmentation-input-recipe-checks)=
+
 ## Checks
 
 "Needs": **H** hand-built fixtures only; **MV** the `multiview-stitcher` extra; **SD** the
@@ -214,5 +216,75 @@ recipe and makes no quality claim.
 
 ## Implemented checks
 
-Filled in by the implementation issue: one row per check of this page, with the test file
-and test name.
+Filled in by the implementation issue (W-891, 2026-11-20): one row per check of this page,
+with the test file and test name. The rows marked MV skip without the
+`multiview-stitcher` extra (and AF4, AF6, AF8 and RE3 without `anndata`); the stubs of MI3
+and MI4 replace the libraries' calls, so those rows need no extra. RC1 and PF2 hold the base
+revision's (12a8f14) hashes as constants, computed there before the change
+(`src/python/test/data/segmentation_record_v1/README.md`). FU1 to FU3 are W-892's
+(amendment B3).
+
+(segmentation-input-recipe-implemented-checks)=
+
+| Check | File (under `src/python/test/`) | Test |
+| --- | --- | --- |
+| ST1 | `test_segmentation_recipe_steps.py` | `test_st1_gaussian_on_a_delta` |
+| ST2 | `test_segmentation_recipe_steps.py` | `test_st2_gaussian_means_the_same_in_um_on_two_grids` |
+| ST3 | `test_segmentation_recipe_steps.py` | `test_st3_radii_in_um`, `test_st3_a_record_keeps_its_form_without_radius_um` |
+| ST4 | `test_segmentation_recipe_steps.py` | `test_st4_percentile_normalization_with_a_fit_region` |
+| ST5 | `test_segmentation_recipe_steps.py` | `test_st5_clahe`, `test_st5_clahe_fits_its_range_on_the_fit_region` |
+| ST6 | `test_segmentation_recipe_steps.py` | `test_st6_the_steps_keep_an_integer_dtype_inside_a_preprocessing_recipe`, `test_st6_gaussian_and_clahe_run_in_fov_run` |
+| ST7 | `test_segmentation_recipe_steps.py` | `test_st7_refusals`, `test_st7_a_role_the_channels_do_not_have_and_a_grid_without_spacing` |
+| ST8 | `test_segmentation_recipe_steps.py` | `test_st8_the_registry_holds_gaussian_and_clahe` |
+| RC1 | `test_segmentation_recipe.py` | `test_rc1_the_empty_recipe_is_the_input_of_the_base_revision` |
+| RC2 | `test_segmentation_recipe.py` | `test_rc2_the_order_of_the_stages_and_the_roles` |
+| RC3 | `test_segmentation_recipe.py` | `test_rc3_combine` |
+| RC4 | `test_segmentation_recipe.py` | `test_rc4_max_sum_and_mean_of_integers` |
+| RC5 | `test_segmentation_recipe.py` | `test_rc5_the_exact_flag_at_and_above_two_to_the_24` |
+| RC6 | `test_segmentation_recipe.py` | `test_rc6_a_mean_that_is_not_an_integer` |
+| RC7 | `test_segmentation_recipe.py` | `test_rc7_the_overflow_check` |
+| RC8 | `test_segmentation_recipe.py` | `test_rc8_the_extension_reads_the_channel_before_the_projection` |
+| RC9 | `test_segmentation_recipe.py` | `test_rc9_one_recipe_by_name_and_inline_has_one_sha256` |
+| MI1 | `test_segmentation_recipe.py` | `test_mi1_the_factor_from_a_pixel_size` |
+| MI2 | `test_segmentation_recipe.py` | `test_mi2_a_factor_per_route` |
+| MI3a | `test_segmentation_recipe.py` | `test_mi3a_stardist_with_a_2d_model` |
+| MI3b | `test_segmentation_recipe.py` | `test_mi3b_stardist_with_a_3d_model` |
+| MI4b | `test_segmentation_recipe.py` | `test_mi4b_a_3d_cellpose_run`, `test_mi4b_through_fov_segment` |
+| MI4 | `test_segmentation_recipe.py` | `test_mi4_cellpose_receives_the_diameter` |
+| MI5 | `test_segmentation_recipe.py` | `test_mi5_refusals` |
+| MI6 | `test_segmentation_recipe.py`; `test_sample_segmentation_segment.py` | `test_mi6_the_length_table_has_no_model_scale`; `test_sg2_the_table_of_pixel_fields_equals_the_registered_methods` |
+| PF1 | `test_segmentation_recipe.py` | `test_pf1_fov_segment_with_a_recipe` |
+| PF2 | `test_segmentation_recipe.py` | `test_pf2_the_composite_run_in_its_new_form` |
+| PF3 | the controller's check `a19-parity` | the A19 hash lists of `test_assignment.py` (`HASH_SCRIPT`), compared with the base revision's |
+| AF1 | `test_sample_segmentation_recipe.py` | `test_af1_the_recipe_runs_on_the_fused_projection` |
+| AF2 | `test_sample_segmentation_recipe.py` | `test_af2_one_recipe_means_the_same_um_on_both_routes` |
+| AF3 | `test_sample_segmentation_recipe.py` | `test_af3_the_fit_region_is_the_footprints` |
+| AF4 | `test_sample_segmentation_recipe.py` | `test_af4_tiles_of_more_than_one_plane_refuse_before_anything_is_written`, `test_af4_after_projection_steps_pass_and_a_plane_projects_nothing` |
+| AF5 | `test_sample_segmentation_recipe.py` | `test_af5_check_7_refuses_naming_the_key` |
+| AF6 | `test_sample_segmentation_recipe.py` | `test_af6_the_reuse_refuses_another_recipe` |
+| AF7 | `test_sample_segmentation_recipe.py` | `test_af7_the_empty_recipe_writes_no_model_input` |
+| AF8 | `test_sample_segmentation_recipe.py` | `test_af8_a_model_input_cannot_collide_with_a_fused_image` |
+| RE1 | `test_segmentation_recipe.py` | `test_re1_the_record_of_format_version_2` |
+| RE2 | `test_segmentation_recipe.py` | `test_re2_a_version_1_record_still_loads` |
+| RE3 | `test_sample_segmentation_recipe.py` | `test_re3_the_export_record_and_check_export_cover_the_model_inputs` |
+| MG1 | `test_segmentation_recipe.py` | `test_mg1_the_replaced_python_fields_are_unknown` |
+| MG2 | `test_segmentation_recipe_workflow.py`; `test_benchmark_trial.py` | `test_mg2_the_replaced_keys_of_a_segmentation_run_are_refused`, `test_mg2_the_replaced_keys_of_an_export_run_are_refused`, `test_mg2_an_import_keeps_its_own_projection`; `test_learned_segmentation_trial_refuses_the_replaced_keys`, `test_learned_segmentation_trial_reaches_the_model_through_its_recipe` |
+| MG3 | `test_segmentation_workflow.py` | `test_rescale_is_the_implicit_recipes_model_factor`, `test_the_projection_that_made_the_input_is_recorded`, `test_the_rule_writes_uint32_labels_equal_to_the_legacy_pins` |
+| MG4 | `test_segmentation_recipe_docs_contract.py` | `test_mg4_every_migration_row_is_in_the_guide` |
+| MG5 | `test_segmentation_recipe_workflow.py` | `test_mg5_the_schema_keys_equal_the_configs`, `test_mg5_the_schema_validates_the_recipe_layout` |
+| WF1 | `test_segmentation_recipe_workflow.py` | `test_wf1_recipes_without_runs_plan_no_segment_task`, `test_wf1_runs_with_recipes_plan_the_tasks_they_planned_before` |
+| WF2 | `test_workflow_plan.py`; `test_workflow_morphology_tasks.py` | `test_the_plan_writes_the_expected_manifest_of_each_variant`, `test_the_tasks_respect_their_needs_and_the_contracts_counts`; `test_the_segment_command_writes_uint32_labels_equal_to_the_legacy_pins` |
+| PV1 | `test_segmentation_preview.py` | `test_pv1_the_outputs` |
+| PV2 | `test_segmentation_preview.py` | `test_pv2_the_labels_and_the_model_input_are_those_of_fov_segment`, `test_pv2_the_fused_view_is_the_recipe_on_one_view_at_k`, `test_pv2_an_export_run_on_the_raw_reference_stain_needs_no_saved_reference_image`, `test_pv2_a_fused_view_applies_and_records_the_label_operations` |
+| PV3 | `test_segmentation_preview.py` | `test_pv3_nothing_is_written_outside_the_output`, `test_pv3_a_recipe_file_tries_a_recipe_before_it_is_written`, `test_pv3_a_fused_view_refuses_extension_through_z` |
+| PV4 | `test_segmentation_preview.py` | `test_pv4_the_command_lists_the_options_and_runs`, `test_pv4_the_cli_reference_is_generated_from_the_parser` |
+
+W-907 (2026-11-20, from W-891's review) added cases to MG2, PV2 and PV3 without changing a
+check or a tolerance. MG2: a benchmark segmentation trial builds its model input with its
+`input_recipe` (none is the empty recipe), so StarDist and Cellpose trials reach the model,
+and it refuses `scale`, `diameter` and `projection` with the migration row. PV2: a run of
+`export.segmentation.runs` whose source is the raw reference stain, without a saved
+reference image, takes the grid of the reference stain prepared in memory and records its
+source (`fov_grids`); with `--factor-yx` a run's `expand_labels` is applied and recorded, and
+at `K` 1 its labels equal those of the preview without `--factor-yx`. PV3: with
+`--factor-yx`, a run that extends its labels through Z is refused before anything runs.

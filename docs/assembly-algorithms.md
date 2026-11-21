@@ -106,7 +106,7 @@ are in µm. Local coordinates remain in voxel indices.
 | --- | --- |
 | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>` | Sample tables; CSV or Parquet |
 | `sample.h5ad` | Sample AnnData |
-| `export.json`, section `assembly` | Assembly record and file hashes |
+| `export.json`, section `assembly` | Assembly record and file hashes; `Dataset.export` adds `wall_s`, `cpu_s` and `peak_rss_kib` of the part (`assemble` and its save) |
 | `territories.ome.tif` | Expanded territories from an assignment after fusion, when present |
 
 ## AnnData

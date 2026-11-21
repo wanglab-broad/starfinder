@@ -40,19 +40,25 @@ class MethodContext:
         Execution device: ``cpu`` or ``cuda``.
     model : pathlib.Path or None
         Resolved model folder or file; ``None`` means no model.
+    model_scale_zyx : tuple[float, float, float] or None
+        The input's model scale factor ZYX (``SegmentationInput.model_scale_zyx``);
+        ``None`` for a method that does not scale its input.
 
     Notes
     -----
     roles are the channel roles in channel order; seeds is the seed run's
     ``uint32`` label array on the input grid, or None; grid is the input's
     ReferenceGrid; device is the checked device; model is the resolved model
-    folder or file (None for a method without a model).
+    folder or file (None for a method without a model); model_scale_zyx is
+    the factor at which the method's model sees the input, which the method
+    applies internally (StarDist ``scale``, Cellpose ``diameter``).
     """
     roles: tuple[str, ...]
     seeds: np.ndarray | None
     grid: ReferenceGrid
     device: str = "cpu"
     model: Path | None = None
+    model_scale_zyx: tuple[float, float, float] | None = None
 
 
 def _subset(value, allowed, name, spec_name):
@@ -90,6 +96,10 @@ class SegmentationSpec:
         Whether the method uses a model named by its config.
     devices : frozenset of str
         Supported execution devices from ``cpu`` and ``cuda``.
+    scales : bool
+        Whether the method scales its input for its model by the input's
+        ``model_scale_zyx`` (an input recipe's ``model_input``); the default
+        False refuses a model scale.
 
     Notes
     -----
@@ -104,7 +114,9 @@ class SegmentationSpec:
     present; seeds ``none``, ``optional`` or ``required``; dimensions holds 2
     when a Z=1 input runs as a plane and 3 when Z>1 runs as a volume; models is
     True when the config names a model (``model`` or ``model_path``); devices
-    the subset of ``cpu`` and ``cuda`` it runs on. requires lists optional
+    the subset of ``cpu`` and ``cuda`` it runs on; scales is True when the
+    method resamples its input internally by ``model_scale_zyx`` and returns
+    labels on the input grid (``stardist``, ``cellpose``). requires lists optional
     dependencies, imported when the method runs; min_shape_zyx is the smallest
     accepted size of each axis (a Z=1 input is checked against its last two
     entries).
@@ -122,6 +134,7 @@ class SegmentationSpec:
     dimensions: frozenset[int]
     models: bool
     devices: frozenset[str]
+    scales: bool = False
 
     def __post_init__(self):
         check_shared(self, "segmentation method")
@@ -133,8 +146,8 @@ class SegmentationSpec:
         if self.seeds not in SEEDS:
             raise ValueError(f"seeds of {self.name!r} must be none, optional or required")
         _subset(self.dimensions, (2, 3), "dimensions", self.name)
-        if not isinstance(self.models, bool):
-            raise TypeError(f"models of {self.name!r} must be Boolean")
+        if not isinstance(self.models, bool) or not isinstance(self.scales, bool):
+            raise TypeError(f"models and scales of {self.name!r} must be Boolean")
         _subset(self.devices, DEVICES, "devices", self.name)
 
 
@@ -242,13 +255,13 @@ SEGMENTATION_METHODS: dict[type, SegmentationSpec] = {
                   Dependency("tensorflow", "tensorflow", "stardist")),
         targets=frozenset({"nucleus", "cell"}), roles=frozenset({"nuclear", "composite"}),
         required_roles=(frozenset({"nuclear", "composite"}),), seeds="none", dimensions=frozenset({2, 3}),
-        models=True, devices=frozenset({"cpu", "cuda"})),
+        models=True, devices=frozenset({"cpu", "cuda"}), scales=True),
     CellposeConfig: SegmentationSpec(
         "cellpose", _cellpose,
         requires=(Dependency("cellpose", "cellpose", "cellpose"), Dependency("torch", "torch", "cellpose")),
         targets=frozenset({"nucleus", "cell"}), roles=frozenset({"cytoplasm", "nuclear"}),
         required_roles=(frozenset({"cytoplasm", "nuclear"}),), seeds="none", dimensions=frozenset({2, 3}),
-        models=True, devices=frozenset({"cpu", "cuda"})),
+        models=True, devices=frozenset({"cpu", "cuda"}), scales=True),
     SeededWatershedConfig: SegmentationSpec(
         "seeded_watershed", _seeded_watershed, targets=frozenset({"cell"}),
         roles=frozenset({"cytoplasm", "membrane", "amplicon", "composite"}),

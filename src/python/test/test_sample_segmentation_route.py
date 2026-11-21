@@ -32,7 +32,8 @@ from starfinder.export import (
     segment_fused,
 )
 from starfinder.dataset._export import assembly_inputs
-from starfinder.segmentation import CellposeConfig, ExpandLabelsConfig, LabelImportConfig, ReferenceGrid
+from starfinder.segmentation import (CellposeConfig, ExpandLabelsConfig, InputRecipe, LabelImportConfig, ModelInputConfig,
+                                     ReferenceGrid)
 from starfinder.stitching import PlacementResult, approve_placement, save_placement
 
 from . import hash_oracles
@@ -501,7 +502,8 @@ def test_sg5_the_method_backend_cannot_run(tmp_path, monkeypatch):
     nuclei = truth_import(folder, grid, "nucleus", labels=scene_truth_labels(folder, grid, "nucleus"))
     runs = (SampleSegmentationRun("nucleus", "nucleus", (), LabelImportConfig(str(nuclei), "nucleus")),
             SampleSegmentationRun("cell", "cell", (("cytoplasm", "flamingo"), ("nuclear", "dapi")),
-                                  CellposeConfig(diameter=24.0, model_path=str(cellpose))))
+                                  CellposeConfig(model_path=str(cellpose)),
+                                  input_recipe=InputRecipe(model_input=ModelInputConfig(factor=1.25))))
     monkeypatch.setitem(sys.modules, "cellpose", None)
     with pytest.warns(ExportIncompleteWarning, match="extra_missing"):
         record = export(folder, route_config(segmentation=SampleSegmentationConfig(runs, "cell", "nucleus")))

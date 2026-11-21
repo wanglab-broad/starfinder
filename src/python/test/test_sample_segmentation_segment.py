@@ -27,15 +27,16 @@ from starfinder.export import (ROUTES, ExportConfig, SampleSegmentationConfig, S
 from starfinder.export._check import TOLERANCE_TIFF_UM, _check_tiff
 from starfinder.export._segment import LENGTH_FIELDS, check_route, scale_lengths
 from starfinder.io._ome import read_ome_layout
-from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, LabelImportConfig, MissingModelError,
-                                     ModelHashMismatchError, SampleSegmentation, SeededWatershedConfig,
-                                     SegmentationResult, StarDistConfig)
+from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, InputRecipe, LabelImportConfig,
+                                     MissingModelError, ModelHashMismatchError, ModelInputConfig, SampleSegmentation,
+                                     SeededWatershedConfig, SegmentationResult, StarDistConfig)
+from starfinder.segmentation._recipe import check_model_input, model_factor
 
 from . import hash_oracles
 from .assembly_fixtures import SAMPLE as GOLDEN_SAMPLE
 from .fusion_fixtures import export_folder, listing
-from .sample_segmentation_fixtures import (BIG, DS, SAMPLE, SCENES, fuse_scene, length_configs, model_files,
-                                           route_config, seeded_runs, segmentation_grid, truth_import, truth_labels,
+from .sample_segmentation_fixtures import (BIG, DS, SAMPLE, SCENES, fuse_scene, length_configs, length_recipes,
+                                           model_files, route_config, seeded_runs, segmentation_grid, truth_import, truth_labels,
                                            truth_runs, write_scene)
 
 EXTRA = "the multiview-stitcher extra (starfinder[multiview-stitcher]) is not installed"
@@ -80,6 +81,11 @@ def export(folder, config, assignment="default"):
                                  output_dir=folder.export_dir)
 
 
+#: W-891: the Cellpose diameter of 24 pixels on the acquired grid, as a model input: the factor 30 / 24 = 1.25, which
+#: the route multiplies by k (diameter 24 / k, LS2's rule for the old diameter).
+CELLPOSE_24 = InputRecipe(model_input=ModelInputConfig(factor=1.25))
+
+
 def valid_segmentation(tmp_path):
     """The runs of check 7's valid configuration: a nucleus import, and Cellpose on flamingo with dapi (a model
     file written by the test)."""
@@ -87,7 +93,7 @@ def valid_segmentation(tmp_path):
     nuclei = tmp_path / "truth" / "nucleus.ome.tif"
     runs = (SampleSegmentationRun("nucleus", "nucleus", (), LabelImportConfig(str(nuclei), "nucleus")),
             SampleSegmentationRun("cell", "cell", (("cytoplasm", "flamingo"), ("nuclear", "dapi")),
-                                  CellposeConfig(diameter=24.0, model_path=str(cellpose))))
+                                  CellposeConfig(model_path=str(cellpose)), input_recipe=CELLPOSE_24))
     return SampleSegmentationConfig(runs, "cell", "nucleus")
 
 
@@ -229,13 +235,15 @@ def test_rs4_check_7_unknown_method_key_in_the_workflow_block():
               "export": {"images": ["dapi=file:images/dapi/{fov_id}.tif"],
                          "segmentation": {"cells": "cell", "runs": [
                              {"name": "cell", "target": "cell", "inputs": [{"role": "cytoplasm", "image": "dapi"}],
-                              "method": "cellpose", "diameter": 24, "model_path": "m", "diamter": 30}]}}}
+                              "method": "cellpose", "input_recipe": {"model_input": {"factor": 1.25}},
+                              "model_path": "m", "diamter": 30}]}}}
     with pytest.raises(ValueError, match="diamter"):
         workflow._export_config(config)
     del config["export"]["segmentation"]["runs"][0]["diamter"]
     export_config, _ = workflow._export_config(config)
     run = export_config.segmentation.runs[0]
-    assert run.inputs == (("cytoplasm", "dapi"),) and run.method == CellposeConfig(diameter=24, model_path="m")
+    assert run.inputs == (("cytoplasm", "dapi"),) and run.method == CellposeConfig(model_path="m")
+    assert run.input_recipe == CELLPOSE_24
     assert export_config.route is None and export_config.segment is True
 
 
@@ -352,32 +360,38 @@ def test_the_route_per_fov_is_untouched(tmp_path, case):
 
 @pytest.mark.parametrize("k", [1, 2, 4])
 def test_sg2_lengths_in_pixels(tmp_path, k):
-    configs = length_configs(tmp_path)
+    configs, recipes = length_configs(tmp_path), length_recipes()
     used, lengths = scale_lengths(configs["cellpose"], k)
-    assert used.diameter == 240 / k and used.min_size == max(1, round(15 / k ** 2))
-    assert lengths["diameter"] == {"given": 240, "used": 240 / k, "rule": "length"}
-    assert lengths["min_size"] == {"given": 15, "used": max(1, round(15 / k ** 2)), "rule": "area"}
-    assert {f.name: getattr(used, f.name) for f in dataclasses.fields(used) if f.name not in ("diameter", "min_size")} \
-        == {f.name: getattr(configs["cellpose"], f.name) for f in dataclasses.fields(used)
-            if f.name not in ("diameter", "min_size")}
+    assert used.min_size == max(1, round(15 / k ** 2))
+    assert lengths == {"min_size": {"given": 15, "used": max(1, round(15 / k ** 2)), "rule": "area"}}
+    assert {f.name: getattr(used, f.name) for f in dataclasses.fields(used) if f.name != "min_size"} \
+        == {f.name: getattr(configs["cellpose"], f.name) for f in dataclasses.fields(used) if f.name != "min_size"}
     used, lengths = scale_lengths(configs["stardist"], k)
-    assert used.scale == 0.25 * k and isinstance(used, StarDistConfig)
-    assert lengths["scale"] == {"given": 0.25, "used": 0.25 * k, "rule": "factor_yx"}
+    assert used == configs["stardist"] and isinstance(used, StarDistConfig)
     assert lengths["n_tiles"] == {"given": None, "used": None, "rule": "unchanged"}
-    used, _ = scale_lengths(dataclasses.replace(configs["stardist"], scale=(1.0, 0.5, 0.5), n_tiles=(2, 2)), k)
-    assert used.scale == (1.0, 0.5 * k, 0.5 * k) and used.n_tiles == (2, 2)
+    used, _ = scale_lengths(dataclasses.replace(configs["stardist"], n_tiles=(2, 2)), k)
+    assert used.n_tiles == (2, 2)
+    # W-891: the model scale is the run's model input; a factor is used as given per FOV and times k in Y and X
+    # after fusion (MI2, LS2's rule for the old scale and diameter).
+    for name, factor in (("cellpose", 0.125), ("stardist", 0.25)):
+        assert model_factor(recipes[name].model_input, None, k=k)["factor_zyx"] == [1.0, factor * k, factor * k]
+    assert model_factor(ModelInputConfig(factor=(1.0, 0.5, 0.5)), None, k=k)["factor_zyx"] == [1.0, 0.5 * k, 0.5 * k]
     used, lengths = scale_lengths(configs["seeded_watershed"], k)
     assert used == configs["seeded_watershed"] and lengths == {"sigma_um": {"given": 1.5, "used": 1.5,
                                                                            "rule": "unchanged"}}
     blocks = configs["stardist_blocks"]
+    factor = model_factor(recipes["stardist_blocks"].model_input, None, k=k)["factor_zyx"]
+    used, lengths = scale_lengths(blocks, k)
+    assert lengths["block_size"] == {"given": [1, 256, 256], "used": [1, -(-256 // k), -(-256 // k)],
+                                     "rule": "length_yx"}
     if k == 1:
-        used, lengths = scale_lengths(blocks, k)
         assert used == blocks
-        assert lengths["block_size"] == {"given": [1, 256, 256], "used": [1, 256, 256], "rule": "length_yx"}
+        check_model_input(blocks, recipes["stardist_blocks"], run="nucleus", factor_zyx=factor)
     else:
-        # The used scale k is not 1, which StarDistConfig refuses together with block fields.
-        with pytest.raises(ValueError, match="block fields together with a scale other than 1"):
-            scale_lengths(blocks, k)
+        # The factor at k is not 1, which block-wise prediction refuses.
+        with pytest.raises(ValueError, match="block-wise prediction \\(block_size\\) together with a model input factor "
+                                             "other than 1"):
+            check_model_input(blocks, recipes["stardist_blocks"], run="nucleus", factor_zyx=factor)
     # The conversion of the block lengths themselves: ceil(value / k) in Y and X, Z unchanged.
     assert segment_module._scaled((1, 256, 256), "length_yx", k) == (1, -(-256 // k), -(-256 // k))
     assert segment_module._scaled((0, 52, 52), "length_yx", k) == (0, -(-52 // k), -(-52 // k))
@@ -464,7 +478,7 @@ def test_sg1_channels_in_the_run_s_role_order(tmp_path, monkeypatch):
     cellpose, _ = model_files(tmp_path)
     runs = (SampleSegmentationRun("nucleus", "nucleus", (), LabelImportConfig(str(nuclei), "nucleus")),
             SampleSegmentationRun("cell", "cell", (("cytoplasm", "flamingo"), ("nuclear", "dapi")),
-                                  CellposeConfig(diameter=24.0, min_size=15, model_path=str(cellpose))))
+                                  CellposeConfig(min_size=15, model_path=str(cellpose)), input_recipe=CELLPOSE_24))
 
     def stub(segmentation_input, *, config, target, seeds, device, label_namespace):
         labels = truth_labels(folder.scene, segmentation_input.grid, "nucleus")
@@ -479,17 +493,18 @@ def test_sg1_channels_in_the_run_s_role_order(tmp_path, monkeypatch):
     np.testing.assert_array_equal(segmentation_input.image, np.stack([flamingo, dapi], axis=-1)[np.newaxis])
     assert segmentation_input.roles == ("cytoplasm", "nuclear")
     assert [s["image"] for s in segmentation_input.sources] == ["flamingo", "dapi"]
-    # The lengths at k = 2 (LS2).
-    assert kwargs["config"].diameter == 12.0 and kwargs["config"].min_size == 4
-    assert result.record["runs"][1]["lengths"]["diameter"] == {"given": 24.0, "used": 12.0, "rule": "length"}
+    # The lengths at k = 2 (LS2), and the model input's factor 1.25 · k (Cellpose diameter 30 / 2.5 = 12, W-891).
+    assert kwargs["config"].min_size == 4 and segmentation_input.model_scale_zyx == (1.0, 2.5, 2.5)
+    assert result.record["runs"][1]["lengths"] == {"min_size": {"given": 15, "used": 4, "rule": "area"}}
+    assert result.record["runs"][1]["recipe"]["model_input"]["factor_zyx"] == [1.0, 2.5, 2.5]
 
 
 # --- SG3: label files and the section ----------------------------------------------------------------------------
 
 RECORD_KEYS = {"status", "route", "inputs", "runs", "cells", "nuclei", "device", "outputs", "software", "wall_s",
                "cpu_s", "peak_rss_kib"}
-RUN_KEYS = {"name", "target", "geometry", "label_namespace", "inputs", "seeds", "method", "import", "lengths", "path",
-            "sha256", "n_labels", "max_label", "outcome"}
+RUN_KEYS = {"name", "target", "geometry", "label_namespace", "inputs", "seeds", "method", "import", "recipe", "input",
+            "lengths", "path", "sha256", "n_labels", "max_label", "outcome"}
 
 
 def _t1(folder, section, record):

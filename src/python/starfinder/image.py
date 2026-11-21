@@ -211,7 +211,7 @@ class ImageMetadata:
         Parameters
         ----------
         method : str
-            Z reduction used for the projection: ``max`` or ``sum``.
+            Z reduction used for the projection: ``max``, ``sum`` or ``mean``.
 
         Returns
         -------
@@ -224,6 +224,6 @@ class ImageMetadata:
         are unknown in the derived frame; source frame and reduction appear in
         its identifier. The source metadata must be retained by the caller.
         """
-        if method not in ("max", "sum"):
-            raise IncompatibleGeometryError("projection method must be max or sum")
+        if method not in ("max", "sum", "mean"):
+            raise IncompatibleGeometryError("projection method must be max, sum or mean")
         return ImageMetadata(f"{self.frame_id}/projection:{method}")

@@ -12,7 +12,9 @@ key of the sample's ``report.json``, and the three box plots draw the columns ``
 (``_page.fill``), with the CSS of ``report.html``; it embeds ``samples.csv`` and the per-FOV
 values of the box plots as one data block. Everything is read and checked before
 ``index.html`` and then ``samples.csv`` replace earlier ones under the report root; nothing
-is written under a sample's folder.
+is written under a sample's folder. With ``routes`` (the workflow's comparison), each sample has
+one report per export route, ``<report_root>/<sample>/<route>/``, and the page has one row and
+one box per sample and route.
 """
 from __future__ import annotations
 
@@ -53,19 +55,20 @@ _COLUMN_HEADS = ("Sample", "Report", "Generated", "Route", "FOVs expected", "FOV
 _SEPARATORS = re.compile(r"[/\\]")
 
 
-def _check_samples(samples) -> list[str]:
-    """``samples`` is a nonempty sequence of unique sample names, each a nonempty string naming one folder."""
+def _check_samples(samples, what="sample") -> list[str]:
+    """``samples`` is a nonempty sequence of unique sample names (or route names, ``what``), each a nonempty string
+    naming one folder."""
     if isinstance(samples, (str, bytes)) or not isinstance(samples, Sequence):
-        raise ValueError(f"samples must be a sequence of sample names; got {samples!r}")
+        raise ValueError(f"{what}s must be a sequence of {what} names; got {samples!r}")
     samples = list(samples)
     if not samples:
-        raise ValueError("samples must name at least one sample")
+        raise ValueError(f"{what}s must name at least one {what}")
     for sample in samples:
         if not isinstance(sample, str) or not sample or sample in (".", "..") or _SEPARATORS.search(sample):
-            raise ValueError(f"each sample must be a nonempty name of one folder; got {sample!r}")
+            raise ValueError(f"each {what} must be a nonempty name of one folder; got {sample!r}")
     repeated = sorted({s for s in samples if samples.count(s) > 1})
     if repeated:
-        raise ValueError(f"samples must be unique; repeated: {repeated}")
+        raise ValueError(f"{what}s must be unique; repeated: {repeated}")
     return samples
 
 
@@ -112,21 +115,25 @@ def _cell(value, show, tip=None) -> str:
     return f"<td>{_e(show(value))}</td>"
 
 
-def _samples_table(rows, records) -> str:
-    """The samples table, from the rows of ``samples.csv``: a present sample links its ``report.html``; a missing
-    sample says "missing" and its other cells are blank; a key the sample's report holds as unavailable is "—" with
-    its reason in the tooltip."""
+def _samples_table(rows, records, folders) -> str:
+    """The samples table, from the rows of ``samples.csv`` and their report folders ``folders`` (relative to the
+    report root): a present sample links its ``report.html``; a missing sample says "missing" and its other cells are blank
+    but the route it was asked for; a key the sample's report holds as unavailable is "—" with its reason in the
+    tooltip."""
     from ._page import REASON_TEXTS, _int, _number
     shows = {"fovs_expected": _int, "fovs_succeeded": _int, "spots_median_per_fov": _number,
              "matched_fraction": lambda v: f"{100 * v:.1f} %", "counted_cells": _int, "cells_median_per_fov": _number}
     body = []
-    for row in rows:
+    for row, folder in zip(rows, folders):
         sample = row["sample"]
         if row["report"] != "present":
-            body.append(f'<tr><td>{_e(sample)}</td><td class="miss">missing</td>' + "<td></td>" * 8 + "</tr>")
+            route = "<td></td>" if row["route"] is None else f"<td>{_e(row['route'])}</td>"
+            body.append(f'<tr><td>{_e(sample)}</td><td class="miss">missing</td>' + "<td></td>" + route
+                        + "<td></td>" * 6 + "</tr>")
             continue
-        named = {u["column"]: u for u in records[sample]["unavailable"] if u.get("table") == "summary"}
-        cells = [f'<td><a href="{_e(quote(sample, safe=""))}/report.html">{_e(sample)}</a></td>', "<td>present</td>",
+        named = {u["column"]: u for u in records[folder]["unavailable"] if u.get("table") == "summary"}
+        link = "/".join(quote(part, safe="") for part in folder.split("/"))
+        cells = [f'<td><a href="{_e(link)}/report.html">{_e(sample)}</a></td>', "<td>present</td>",
                  f"<td><code>{_e(row['generated_at'])}</code></td>",
                  f"<td>{_e(row['route'] if row['route'] is not None else 'no export')}</td>"]
         for key in SUMMARY_COLUMNS:
@@ -147,7 +154,8 @@ def _data_block(rows, fovs) -> str:
     return text.replace("</", "<\\/").replace("<!--", "\\u003c!--")
 
 
-def compare_samples(report_root, samples: Sequence[str], *, dataset_id: str | None = None) -> ComparisonRecord:
+def compare_samples(report_root, samples: Sequence[str], *, dataset_id: str | None = None,
+                    routes: Sequence[str] | None = None) -> ComparisonRecord:
     """Write the comparison page ``index.html`` and ``samples.csv`` of finished sample reports.
 
     Parameters
@@ -159,6 +167,12 @@ def compare_samples(report_root, samples: Sequence[str], *, dataset_id: str | No
         The samples, nonempty and unique, in the order of the table and the box plots.
     dataset_id : str or None
         The dataset the page names in its heading.
+    routes : Sequence[str] or None
+        None reads one report per sample. Otherwise the export routes, nonempty and unique, each the name of one
+        folder: each sample's report of a route is ``<report_root>/<sample>/<route>/``, as the workflow writes it,
+        and the page has one row and one box per sample and route, the routes of a sample in this order. The box
+        of a route is labelled ``<sample>/<route>``; a missing report's row keeps the route it was asked for
+        (null for ``no_export``, the folder of a workflow run without an export).
 
     Returns
     -------
@@ -168,22 +182,30 @@ def compare_samples(report_root, samples: Sequence[str], *, dataset_id: str | No
     Raises
     ------
     ValueError
-        ``samples`` is empty, repeats a sample or holds a name that is not one folder's; or a present report whose
-        ``report.json`` is not a version 1 report record, or one of whose listed files is missing or differs from its
-        recorded SHA-256 (naming the file). Nothing is written then.
+        ``samples`` or ``routes`` is empty, repeats a name or holds a name that is not one folder's; or a present
+        report whose ``report.json`` is not a version 1 report record, or one of whose listed files is missing or
+        differs from its recorded SHA-256 (naming the file). Nothing is written then.
     """
+    from starfinder import _layout
     from starfinder._records import _write_table, atomic_file
     from ._figures import sample_box_figure
     from ._page import fill, image, table_rows, template_text
     samples = _check_samples(samples)
+    if routes is not None:
+        routes = _check_samples(routes, "route")
     root = Path(report_root)
+    # (sample, route, the report folder relative to the root): one per sample, or per sample and route.
+    entries = [(sample, None, sample) for sample in samples] if routes is None else \
+        [(sample, route, f"{sample}/{route}") for sample in samples for route in routes]
     rows, records, fovs = [], {}, {}
-    for sample in samples:
-        folder = root / sample
+    for sample, route, name in entries:
+        folder = root / name
         row = {column: None for column in SAMPLES_DTYPES} | {"sample": sample, "report": "missing"}
+        if route is not None and route != _layout.NO_EXPORT:
+            row["route"] = route
         if (folder / REPORT_FILE).is_file():
             record, digest, table = _read_sample(folder)
-            records[sample], fovs[sample] = record, table_rows(table)
+            records[name], fovs[name] = record, table_rows(table)
             row |= {"report": "present", "report_sha256": digest, "generated_at": record["generated_at"],
                     "route": record["route"], **{key: record["summary"][key] for key in SUMMARY_COLUMNS}}
         rows.append(row)
@@ -192,12 +214,13 @@ def compare_samples(report_root, samples: Sequence[str], *, dataset_id: str | No
     rows = table_rows(frame)
 
     values, box_plots = {}, {}
+    keys = [name for _, _, name in entries]
     for slot, column, title, label in BOX_PLOTS:
         slots = []
-        for sample in samples:
-            found = [r[column] for r in fovs[sample] if r[column] is not None] if sample in fovs else []
-            slots.append({"sample": sample, "values": found,
-                          "label": None if found else (_slot_label(records[sample], column) if sample in records
+        for key in keys:
+            found = [r[column] for r in fovs[key] if r[column] is not None] if key in fovs else []
+            slots.append({"sample": key, "values": found,
+                          "label": None if found else (_slot_label(records[key], column) if key in records
                                                        else MISSING_LABEL)})
         figure = sample_box_figure(column, label, slots)
         box_plots[column] = figure.tiles[0]["slots"]
@@ -210,7 +233,7 @@ def compare_samples(report_root, samples: Sequence[str], *, dataset_id: str | No
     values |= {"title": _e("Sample comparison" + (f" · {dataset_id}" if dataset_id else "")),
                "heading": f'<h1>Sample comparison</h1><span class="sub">{named}{len(samples)} '
                           f'sample{"" if len(samples) == 1 else "s"}</span>',
-               "style": style, "samples": _samples_table(rows, records), "data": _data_block(rows, fovs)}
+               "style": style, "samples": _samples_table(rows, records, keys), "data": _data_block(rows, fovs)}
     page = fill(template_text(INDEX_TEMPLATE), values, INDEX_SLOTS).encode("utf-8")
 
     # Written last, in this order, so that samples.csv (the workflow's declared output) implies index.html.

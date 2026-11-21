@@ -189,3 +189,58 @@ def test_x11_file_names_include_unwalked_files_with_only_the_declared_marker_exc
         assert compare(common | {path}, common) == [{"path": path, "side": "right" if reverse else "left"}]
     path = "export/sample/current/.snakemake_timestamp"
     assert compare(common | {path}, common, False) == [{"path": path, "side": "right" if reverse else "left"}]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_x11_parameter_provenance_is_checked_without_masking_parameters(tmp_path, reverse):
+    import json
+    run = SimpleNamespace(work=tmp_path, engine="snakemake", data={
+        "membership": {"samples": {"sample": ["F1", "F2"]}}, "tasks": [
+            {"id": "fov/F1", "kind": "fov", "record": "task.json", "outputs": []},
+            {"id": "report/sample", "kind": "report", "record": "report-task.json", "outputs": []}]})
+    page = "report/sample/per_fov/report.html"
+    current, old = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+    message = f'the file has changed since the FOVs ran (hash <code>{current[:19]}</code>)'
+    notice = f'<span class="muted">{message}</span>'
+    source_notice = f'<span class="muted">· {message}</span>'
+
+    def tree(recorded):
+        changed = any(value != current for value in recorded)
+        value = recorded[0] if len(set(recorded)) == 1 else E.REPORT_HASH_SEVERAL
+        text = _hash_page(value).decode().replace(
+            '</tbody>', '<tr><td>Parameters</td><td>open the cards' +
+            (f'; {notice}' if changed else '') + '</td></tr></tbody>')
+        text += ('<details class="sp-all"><summary>all parameters</summary><pre>{"radius": 3}</pre></details>'
+                 '<p class="sp-src muted">from <code>workflow/resolved.json</code>' +
+                 (f' {source_notice}' if changed else '') + '</p>')
+        return {page: text.encode(),
+                "report/sample/per_fov/report.json": json.dumps({"inputs": [
+                    {"path": "workflow/resolved.json", "kind": "workflow_config", "sha256": current[7:]}]}).encode(),
+                **{f"fovs/{fov}/run.json": json.dumps({"workflow_config": {"sha256": digest}}).encode()
+                   for fov, digest in zip(("F1", "F2"), recorded)}}
+
+    def compare(a, b, rerun_tasks={"report/sample"}):
+        return E.compare(run, b if reverse else a, a if reverse else b,
+                         enforce=False, rerun_tasks=rerun_tasks)
+
+    fresh = tree([current, current])
+    for cached in (tree([old, old]), tree([old, current])):
+        assert compare(cached, fresh) == []
+        assert compare(cached, fresh, None) == [page]
+        assert compare(cached, fresh, {"fov/F1", "report/sample"}) == [page]
+        for original, replacement in ((notice, ""), (source_notice, ""),
+                                      (current[:19], old[:19])):
+            invalid = dict(cached, **{page: cached[page].replace(original.encode(), replacement.encode())})
+            with pytest.raises(AssertionError, match="provenance differs"):
+                compare(invalid, fresh)
+        for original, replacement in ((b'"radius": 3', b'"radius": 4'),
+                                      (b"workflow/resolved.json", b"wrong.json"),
+                                      (b"science", b"changed science")):
+            altered = dict(cached, **{page: cached[page].replace(original, replacement)})
+            assert compare(altered, fresh) == [page]
+    invalid = dict(fresh, **{page: fresh[page] + notice.encode()})
+    with pytest.raises(AssertionError, match="unexpected changed-file notice"):
+        compare(invalid, fresh)
+    missing = dict(fresh, **{page: _hash_page(current)})
+    with pytest.raises(AssertionError, match="missing Parameters cell"):
+        compare(missing, fresh)

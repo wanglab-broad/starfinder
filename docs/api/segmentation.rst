@@ -31,6 +31,20 @@ Plans and mask import
    SegmentationPlan
    SegmentationRun
 
+Input recipes
+-------------
+
+.. autosummary::
+   :toctree: generated
+
+   apply_input_recipe
+   COMBINE_METHODS
+   CombineSpec
+   InputRecipe
+   ModelInputConfig
+   preview_recipes
+   RecipeStep
+
 Methods and registry
 --------------------
 

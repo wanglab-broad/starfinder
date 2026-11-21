@@ -5,7 +5,7 @@ plan's manifest) on W-642's fixture and A to D migrated to the Python shape (``s
 ``migrated_configurations``) reproduces the expected values that W-642 (invocations A, A2, B and C, G1) and W-643
 (invocation D, G2) recorded with the workflow before the dispatcher, except the contract's exceptions
 (design/specs/orchestration.md, "The exception of the golden comparison"), each difference named by its decision
-(``workflow_golden.compare_migrated``: OC3, D6, D8). G1 and G2 ran that workflow, which no longer exists for
+(``workflow_golden.compare_migrated``: OC3, D6, D8, IR). G1 and G2 ran that workflow, which no longer exists for
 ``backend: python``; G3 compares with the same two expected folders, updated only for W-790's removed spots
 using the maintained task commands and extractors, with a per-file ledger and independent audit in that issue. The
 runs use Snakemake 9 from the ``workflow`` dependency group, the one beside the interpreter, and skip with a stated
@@ -31,7 +31,7 @@ EXPECTED_CORE = Path(__file__).parent / "data" / "expected" / "test_workflow_cor
 NO_SNAKEMAKE = "the golden comparison runs the workflow with Snakemake 9, which this environment does not have"
 #: The decisions that may explain a difference (the contract's exceptions; OC4 explains none here: the records'
 #: absolute paths under the work folder are written <work> on both sides).
-DECISIONS = {"OC3", "OC4", "D6", "D8"}
+DECISIONS = {"OC3", "OC4", "D6", "D8", "IR"}
 
 
 def _snakemake():
@@ -82,6 +82,11 @@ def test_the_refactored_workflow_reproduces_the_golden_values_of_the_export(tmp_
     G.run_migrated(work, snakemake, ROOT, names=("D-per-fov", "D-molecules-only", "D-after-fusion"))
     G.extract_export(work, tmp_path / "actual")
     _explained(*G.compare_migrated(EXPECTED_EXPORT, tmp_path / "actual", tmp_path / "expected"))
+    # W-879: the segment, assign_molecules, stitch and assembly records hold their wall time on every route, so the
+    # report of the 4-FOV run names no unavailable step time (the expected tables hold no such row either).
+    for route in ("per_fov", "molecules_only", "after_fusion"):
+        table = tmp_path / "actual" / f"{route}-report-sample-tables-unavailable.csv"
+        assert "workflow.time" not in table.read_text(), route
 
 
 def _set_json(path, change):
@@ -228,6 +233,21 @@ MIGRATED_CASES = {
     "another FOV's imported label file": (EXPECTED, _record(
         "fovs/FOV_001/assignment/default/assignment.json",
         _set("inputs", "cells", "record", "import", "path", value=lambda _: "<work>/labels/FOV_002.tif")), None),
+    "the cell run's record of format version 2": (EXPECTED, _record(
+        "fovs/FOV_001/assignment/default/assignment.json",
+        _set("inputs", "cells", "record", "format_version", value=lambda _: 2)), "IR"),
+    "the cell run's record of another format version": (EXPECTED, _record(
+        "fovs/FOV_001/assignment/default/assignment.json",
+        _set("inputs", "cells", "record", "format_version", value=lambda _: 3)), None),
+    "the export's cell record of format version 2": (EXPECTED_EXPORT, _record(
+        "after_fusion/export/sample/export.json",
+        _set("assembly", "assignment", "inputs", "cells", "record", "format_version", value=lambda _: 2)), "IR"),
+    "the export run's recipe": (EXPECTED_EXPORT, _record(
+        "after_fusion/export/sample/export.json",
+        lambda r: r["segmentation"]["runs"][0].update(recipe=None)), "IR"),
+    "another key of the export run": (EXPECTED_EXPORT, _record(
+        "after_fusion/export/sample/export.json",
+        lambda r: r["segmentation"]["runs"][0].update(colour="red")), None),
 }
 
 
@@ -274,27 +294,27 @@ def _exchange(inputs):
 
 #: case: (change of the swapped inputs, the unexplained lines, the explained lines by decision).
 REPORT_INPUT_CASES = {
-    "the label swap alone": (lambda i: None, 0, {"D6": 10}),
-    "a raw image's digest": (lambda i: _entry(i, "round1/FOV_001/ch00.ome.tif").update(sha256="0" * 64), 1, {"D6": 10}),
-    "a retained input's size": (lambda i: _entry(i, "stitching/sample/fovs.csv").update(bytes=1), 1, {"D6": 10}),
+    "the label swap alone": (lambda i: None, 0, {"D6": 12}),
+    "a raw image's digest": (lambda i: _entry(i, "round1/FOV_001/ch00.ome.tif").update(sha256="0" * 64), 1, {"D6": 12}),
+    "a retained input's size": (lambda i: _entry(i, "stitching/sample/fovs.csv").update(bytes=1), 1, {"D6": 12}),
     "a retained input's kind": (lambda i: _entry(i, "export/sample/tables/fovs.csv").update(kind="placement_table"),
-                                1, {"D6": 10}),
-    "a retained input's verified flag": (lambda i: _entry(i, "tables/cells.csv").update(verified=False), 1, {"D6": 10}),
-    "a retained input removed": (lambda i: i.remove(_entry(i, "stitching/sample/links.csv")), 1, {"D6": 10}),
+                                1, {"D6": 12}),
+    "a retained input's verified flag": (lambda i: _entry(i, "tables/cells.csv").update(verified=False), 1, {"D6": 12}),
+    "a retained input removed": (lambda i: i.remove(_entry(i, "stitching/sample/links.csv")), 1, {"D6": 12}),
     "a new input that is no label entry": (lambda i: i.append({"path": "fovs/FOV_001/other.tif", "kind": "label_image",
-                                                               "verified": True}), 1, {"D6": 10}),
-    "two retained inputs exchanged": (_exchange, 6, {"D6": 10}),
+                                                               "verified": True}), 1, {"D6": 12}),
+    "two retained inputs exchanged": (_exchange, 6, {"D6": 12}),
     "a labels.tif of a FOV without copied labels": (lambda i: i.append(dict(
         _entry(i, "FOV_001/segmentation/stardist_segmentation/labels.tif"),
-        path=SAVED_RUN.format(fov="FOV_003", name="labels.tif"))), 1, {"D6": 11}),
+        path=SAVED_RUN.format(fov="FOV_005", name="labels.tif"))), 1, {"D6": 13}),
     "copied labels without a labels.tif": (lambda i: i.remove(_entry(i, "FOV_002/segmentation/stardist_segmentation/"
-                                                                        "labels.tif")), 1, {"D6": 9}),
+                                                                        "labels.tif")), 1, {"D6": 11}),
     "a label entry not verified": (lambda i: _entry(i, "FOV_001/segmentation/stardist_segmentation/labels.tif").update(
-        verified=False), 1, {"D6": 9}),
+        verified=False), 1, {"D6": 11}),
     "a reference image's digest": (lambda i: _entry(i, "FOV_001/reference.tif").update(sha256="0" * 64), 0,
-                                   {"D6": 10, "OC3": 1}),
+                                   {"D6": 12, "OC3": 1}),
     "a reference image's size": (lambda i: _entry(i, "FOV_002/reference.tif").update(bytes=7672), 0,
-                                 {"D6": 10, "OC3": 1}),
+                                 {"D6": 12, "OC3": 1}),
 }
 
 
@@ -314,8 +334,8 @@ def test_the_migrated_comparison_compares_the_report_inputs_entry_by_entry(tmp_p
     assert all(line.startswith(f"records/{REPORT}.inputs") for found in decided.values() for line in found)
     if case == "the label swap alone":
         named = sorted(re.search(r": (\S+) only in", line)[1] for line in decided["D6"])
-        assert named == sorted([f"fovs/FOV_00{n}/assignment/default/cell_labels.tif" for n in (1, 2, 4)]
-                               + [SAVED_RUN.format(fov=f"FOV_00{n}", name="labels.tif") for n in (1, 2, 4)]
+        assert named == sorted([f"fovs/FOV_00{n}/assignment/default/cell_labels.tif" for n in range(1, 5)]
+                               + [SAVED_RUN.format(fov=f"FOV_00{n}", name="labels.tif") for n in range(1, 5)]
                                + [SAVED_RUN.format(fov=f"FOV_00{n}", name="segmentation.json") for n in range(1, 5)])
 
 

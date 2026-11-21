@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -97,7 +98,7 @@ def _projection_method(cells):
     if isinstance(projection, Mapping) and projection.get("method"):
         return projection["method"]
     frame = cells.grid.metadata.frame_id
-    for method in ("max", "sum"):
+    for method in ("max", "sum", "mean"):
         if frame.endswith(f"/projection:{method}"):
             return method
     return None
@@ -437,6 +438,8 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
     Returns
     -------
     AssignmentResult
+        The tables and the run record, whose ``wall_s`` is the wall time of
+        this call in seconds.
 
     Raises
     ------
@@ -450,6 +453,7 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
         Cells not on the molecule grid (or its projection), or nuclei not on
         the cell grid.
     """
+    started = time.perf_counter()
     check, calibration, calibration_source, pairs = _check_inputs(molecules, cells, grid, nuclei, correspondence,
                                                                    config)
     cell_labels = cells.labels
@@ -640,6 +644,7 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
                    "assigned_by_compartment": by_compartment},
         "outcome": "ok" if len(cell_ids) else "empty",
         "files": {},
+        "wall_s": time.perf_counter() - started,
         "software": software(),
     }
     return AssignmentResult(molecule_table, cell_table, counts, nucleus_table, cell_labels, territories,

@@ -44,14 +44,17 @@ def stub(monkeypatch):
     monkeypatch.setitem(STITCHING_METHODS, StubConfig, STUB_SPEC)
 
 
-def moved_approved():
+def moved():
     table = stub_table()
     frame = table.positions.drop(columns=["grid_column", "grid_row"])
     frame.loc[5, "nominal_x"] += 12.0
     moved = positions_from_table(frame)
-    result = stitch(inputs_for(moved, grids_for(moved)), moved, config=StubConfig(FRACTIONAL), sample="s1",
-                    fallback="nominal")
-    return approve_placement(result, reviewer="jiahao", note="FOV5 has no overlap")
+    return stitch(inputs_for(moved, grids_for(moved)), moved, config=StubConfig(FRACTIONAL), sample="s1",
+                  fallback="nominal")
+
+
+def moved_approved():
+    return approve_placement(moved(), reviewer="jiahao", note="FOV5 has no overlap")
 
 
 def supplied_approved():
@@ -73,7 +76,8 @@ def test_save_and_load_round_trip(stub, tmp_path, case):
                                            sample="s1"),
               "moved_approved": moved_approved, "supplied_approved": supplied_approved}[case]()
     folder = save_placement(result, tmp_path / "stitching" / "s1")
-    assert sorted(p.name for p in folder.iterdir()) == ["fovs.csv", "links.csv", "placement.json"]
+    approved = ["approvals.json"] if case != "fractional" else []
+    assert sorted(p.name for p in folder.iterdir()) == [*approved, "fovs.csv", "links.csv", "placement.json"]
     loaded = load_placement(folder)
     check_components(result)
     check_components(loaded)
@@ -90,10 +94,101 @@ def test_save_and_load_round_trip(stub, tmp_path, case):
     for name in ("fovs", "links"):
         data = (folder / f"{name}.csv").read_bytes()
         assert saved["tables"][name]["sha256"] == hashlib.sha256(data).hexdigest()
+    # W-875: placement.json keeps review.approvals empty; approvals.json holds the approval, keyed by the tables.
+    assert saved["review"]["approvals"] == []
     if case != "fractional":
-        (approval,) = saved["review"]["approvals"]
+        approvals = json.loads((folder / "approvals.json").read_text())
+        assert {k: approvals[k] for k in ("format_version", "stage", "sample")} == {
+            "format_version": 1, "stage": "placement_approvals", "sample": "s1"}
+        (approval,) = approvals["approvals"]
+        assert approval == result.record["review"]["approvals"][0]
         assert approval["fovs_sha256"] == saved["tables"]["fovs"]["sha256"]
         assert approval["links_sha256"] == saved["tables"]["links"]["sha256"]
+
+
+def _files(folder):
+    """name → (bytes, inode, mtime_ns) of the placement's own files, approvals.json aside."""
+    return {p.name: (p.read_bytes(), p.stat().st_ino, p.stat().st_mtime_ns) for p in sorted(folder.iterdir())
+            if p.name != "approvals.json"}
+
+
+def test_an_approval_is_saved_beside_the_placement_and_changes_none_of_its_files(stub, tmp_path):
+    """W-875: load_placement, approve_placement and save_placement write approvals.json alone; placement.json and
+    the tables keep their bytes, inodes and modification times, and the approval counts after load_placement."""
+    from starfinder.stitching._review import require_approval
+    folder = save_placement(moved(), tmp_path / "stitching" / "s1")
+    before = _files(folder)
+    result = load_placement(folder)
+    assert result.record["review"]["state"] == "required" and result.record["review"]["approvals"] == []
+    with pytest.raises(starfinder.stitching.PlacementReviewRequiredError):
+        require_approval(result)
+    approved = approve_placement(result, reviewer="jiahao", note="checked")
+    save_placement(approved, folder)
+    assert _files(folder) == before
+    loaded = load_placement(folder)
+    assert loaded.record["review"]["approvals"] == approved.record["review"]["approvals"]
+    require_approval(loaded)
+    # Saving the loaded placement again adds nothing: each approval is kept once.
+    text = (folder / "approvals.json").read_bytes()
+    save_placement(loaded, folder)
+    assert (folder / "approvals.json").read_bytes() == text and _files(folder) == before
+
+
+def test_approvals_outlive_a_new_save_and_count_only_for_their_tables(stub, tmp_path):
+    """W-875: a save after the placement's files were removed (the placement task's rerun) keeps approvals.json; an
+    approval counts again when the tables are the approved ones, and never for other tables."""
+    from starfinder.stitching._review import require_approval
+    folder = save_placement(moved_approved(), tmp_path / "stitching" / "s1")
+    (approval,) = load_placement(folder).record["review"]["approvals"]
+    for name in ("placement.json", "fovs.csv", "links.csv"):
+        (folder / name).unlink()
+    save_placement(moved(), folder)
+    assert load_placement(folder).record["review"]["approvals"] == [approval]
+    other = stitch(inputs_for(stub_table(), grids_for(stub_table())), stub_table(),
+                   config=StubConfig(zero(6)), sample="s1", fallback="nominal")
+    other = type(other)(other.sample, other.fovs, other.links,
+                        dict(other.record, review=dict(other.record["review"], state="required")))
+    save_placement(other, folder)
+    loaded = load_placement(folder)
+    assert loaded.record["review"]["approvals"] == []
+    with pytest.raises(starfinder.stitching.PlacementReviewRequiredError):
+        require_approval(loaded)
+    assert json.loads((folder / "approvals.json").read_text())["approvals"] == [approval]
+    save_placement(moved(), folder)
+    require_approval(load_placement(folder))
+
+
+def test_approvals_an_earlier_placement_json_holds_are_read_and_moved(stub, tmp_path):
+    """W-875: before W-875 save_placement wrote the approvals into placement.json; load_placement reads them, and
+    the next save_placement writes them to approvals.json."""
+    result = moved_approved()
+    folder = save_placement(moved(), tmp_path / "s1")
+    record = json.loads((folder / "placement.json").read_text())
+    record["review"]["approvals"] = result.record["review"]["approvals"]
+    (folder / "placement.json").write_text(json.dumps(record, indent=2) + "\n")
+    loaded = load_placement(folder)
+    assert loaded.record["review"]["approvals"] == result.record["review"]["approvals"]
+    save_placement(loaded, folder)
+    assert json.loads((folder / "placement.json").read_text())["review"]["approvals"] == []
+    assert json.loads((folder / "approvals.json").read_text())["approvals"] == result.record["review"]["approvals"]
+
+
+@pytest.mark.parametrize("change, match", [
+    (lambda d: "not json", "is not a JSON file"),
+    (lambda d: dict(d, stage="stitching"), "is not a version 1 approvals file"),
+    (lambda d: dict(d, sample="s2"), "holds the approvals of sample 's2', not 's1'"),
+    (lambda d: dict(d, approvals=[{k: v for k, v in d["approvals"][0].items() if k != "links_sha256"}]),
+     "lacks the string keys links_sha256"),
+])
+def test_an_approvals_file_of_another_kind_is_refused(stub, tmp_path, change, match):
+    folder = save_placement(moved_approved(), tmp_path / "s1")
+    path = folder / "approvals.json"
+    changed = change(json.loads(path.read_text()))
+    path.write_text(changed if isinstance(changed, str) else json.dumps(changed))
+    with pytest.raises(ValueError, match=match):
+        load_placement(folder)
+    with pytest.raises(ValueError, match=match):
+        save_placement(moved(), folder)
 
 
 def test_a_changed_table_is_refused_naming_it(tmp_path):

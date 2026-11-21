@@ -18,8 +18,10 @@ from starfinder._registry import Dependency, check_shared, config_type_for, requ
 from starfinder.image import ImageMetadata, _validate_image
 from starfinder.preprocessing.background import (Background3DConfig, ScalarBackgroundConfig, _background_3d,
     _check_scalar_params, _fit_scalar, _scalar_background, _validate_scalar)
+from starfinder.preprocessing.contrast import ClaheConfig, GaussianConfig, _clahe, _gaussian
 from starfinder.preprocessing.histograms import HistogramSummary
-from starfinder.preprocessing.morphology import ReconstructionConfig, TophatConfig, filter_tophat, correct_background
+from starfinder.preprocessing.morphology import (ReconstructionConfig, TophatConfig, _pixel_config, filter_tophat,
+    correct_background)
 from starfinder.preprocessing.normalization import (HistogramMatchingConfig, MinMaxNormalizationConfig,
     PercentileNormalizationConfig, _check_histogram_params, _check_percentile_params, _fit_histogram,
     _fit_percentile, _match_counts, _normalize, _percentile_normalize, _validate_histogram, _validate_percentile,
@@ -47,6 +49,9 @@ class StepContext:
     supplied : Mapping[str, Any] or None
         Supplied-statistics section for this step; ``None`` leaves supplied statistics
         unset.
+    fit_mask : numpy.ndarray or None
+        Boolean ZYX mask of the fit region, the pixels a step's global statistics
+        are taken from; ``None`` fits over the whole image.
 
     Notes
     -----
@@ -54,13 +59,18 @@ class StepContext:
     configured channel (ZYX); it is set only for needs_reference steps with
     fit="fov". supplied is this step's section of the supplied-statistics
     file ({"summarized_after", "params", "fitted"}); it is set only for
-    steps with fit="supplied".
+    steps with fit="supplied". fit_mask is read by the steps that fit a
+    global statistic (``percentile_normalization`` with fit="fov" and
+    ``clahe``) and ignored by every other step; ``FOV.run`` passes None, and a
+    segmentation input recipe after fusion passes the FOV footprints
+    (design/specs/segmentation-input-recipe.md).
     """
     round_name: str
     reference_round: str
     metadata: ImageMetadata
     reference: np.ndarray | None = None
     supplied: Mapping[str, Any] | None = None
+    fit_mask: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -182,7 +192,7 @@ def _histogram(volume, config, context):
 
 def _percentile(volume, config, context):
     fitted = _supplied_round(context, context.round_name) if config.fit == "supplied" else None
-    image, fitted, diagnostics = _percentile_normalize(volume, config, fitted)
+    image, fitted, diagnostics = _percentile_normalize(volume, config, fitted, mask=context.fit_mask)
     return StepResult(image, fitted, diagnostics)
 
 
@@ -198,11 +208,19 @@ def _volumetric(volume, config, context):
 
 
 def _reconstruction(volume, config, context):
-    return StepResult(correct_background(volume, config=config), {}, {})
+    return StepResult(correct_background(volume, config=_pixel_config(config, context.metadata)), {}, {})
 
 
 def _tophat(volume, config, context):
-    return StepResult(filter_tophat(volume, config=config), {}, {})
+    return StepResult(filter_tophat(volume, config=_pixel_config(config, context.metadata)), {}, {})
+
+
+def _smooth(volume, config, context):
+    return StepResult(*_gaussian(volume, config, context))
+
+
+def _equalize(volume, config, context):
+    return StepResult(*_clahe(volume, config, context))
 
 
 PREPROCESSING_METHODS: dict[type, PreprocessingSpec] = {
@@ -218,6 +236,8 @@ PREPROCESSING_METHODS: dict[type, PreprocessingSpec] = {
     Background3DConfig: PreprocessingSpec("background_3d", _volumetric, "background", "per_channel"),
     PercentileNormalizationConfig: PreprocessingSpec("percentile_normalization", _percentile, "intensity",
         "per_channel", supplied=SuppliedSpec(True, _fit_percentile, _validate_percentile, _check_percentile_params)),
+    GaussianConfig: PreprocessingSpec("gaussian", _smooth, "contrast", "per_channel"),
+    ClaheConfig: PreprocessingSpec("clahe", _equalize, "contrast", "per_channel"),
 }
 
 
@@ -305,7 +325,8 @@ def run_step(volume: np.ndarray, config, context: StepContext) -> StepResult:
     before the step runs. needs_reference steps with fit="fov" require
     context.reference; other steps must not receive one. Steps with
     fit="supplied" require context.supplied (their validated section); other
-    steps must not receive one.
+    steps must not receive one. context.fit_mask, when given, must be a
+    boolean array of the image's ZYX shape.
 
     Raises
     ------
@@ -328,6 +349,11 @@ def run_step(volume: np.ndarray, config, context: StepContext) -> StepResult:
         raise ValueError(f"step {spec.name!r} {'requires' if wants_reference else 'does not take'} a reference image")
     if (context.supplied is not None) != _supplied(config):
         raise ValueError(f"step {spec.name!r} {'requires' if _supplied(config) else 'does not take'} supplied statistics")
+    if context.fit_mask is not None:
+        mask = np.asarray(context.fit_mask)
+        if mask.dtype != bool or mask.shape != volume.shape[:3]:
+            raise ValueError(f"step {spec.name!r}: fit_mask must be a boolean array of the image's ZYX shape "
+                             f"{volume.shape[:3]}; got {mask.dtype} of shape {mask.shape}")
     metadata = copy.deepcopy(context.metadata)
     result = spec.run(volume, config, context)
     if not isinstance(result, StepResult):

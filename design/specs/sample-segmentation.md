@@ -48,6 +48,14 @@ baseline: its rules are on this page, which cites its measurements from
 
 ## Amendments after acceptance
 
+* 2026-11-20 (W-891, the input recipe; [segmentation-input-recipe](segmentation-input-recipe.md),
+  approved by Jiahao on 2026-11-18): a run of `export.segmentation` gains `input_recipe`, a
+  name of `segmentation.input_recipes` or a recipe inline, which runs on the fused
+  projections with the footprints as its fit region (AF1); `scale` and `diameter` leave
+  "Lengths in pixels"; check 7 gains the recipe checks; the section's run entry gains
+  `recipe` and `input`, and `model_inputs/<run>.ome.tif` joins the folder (SI1); T1 and R2
+  cover it; the reuse rule compares the recipe's SHA-256. The sections below say each change.
+
 * 2026-10-09: `segment_fused` gains the keyword-only `identity=None`, the pair
   `(dataset_id, sample_id)` of its label namespaces ("Names", "The parts on each route"),
   because nothing the function was given holds the dataset's identity; without it the
@@ -331,7 +339,7 @@ read-back checks (T1 and T5 of "The record") and the validation (SG4) follow:
 
 | Setting | Route after fusion |
 | --- | --- |
-| `segment: false` | The saved sample segmentation is loaded with `load_sample_segmentation` and recorded `reused`. It is refused before anything is written (`ValueError` naming the folder and the reason) when the folder holds no saved segmentation, when a label file is missing or its SHA-256 differs from the record, when the recorded placement SHA-256 differs from the placement's, when the recorded grid differs from the grid `fused_grid` gives for this export's placement and `scale_yx` (it is known before any fusion, call C22), or when an input image name is not in `images`. `fuse` may be on or off. |
+| `segment: false` | The saved sample segmentation is loaded with `load_sample_segmentation` and recorded `reused`. It is refused before anything is written (`ValueError` naming the folder and the reason) when the folder holds no saved segmentation, when a label file is missing or its SHA-256 differs from the record, when the recorded placement SHA-256 differs from the placement's, when the recorded grid differs from the grid `fused_grid` gives for this export's placement and `scale_yx` (it is known before any fusion, call C22), when an input image name is not in `images`, or when a run's input recipe differs from the one its record holds (naming the run and both SHA-256 values; W-891). `fuse` may be on or off. |
 | `segment: false` with `fuse: true` | After `fuse` has written, each fused input file's SHA-256 is compared with the recorded one; a difference records the part `segment` as `failed`, reason `fused_input_changed` with the image name and both SHA-256 values, and raises; the files of `fuse` stay, as for any error inside a part ([sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "When a part cannot run"). |
 | `segment: false` with `fuse: false` | `fuse` removes the fused files the previous record lists ([sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "How the folder is kept equal to its record"; call C11d), so the reused segmentation's inputs are no longer in the folder; its recorded input SHA-256 values stay as provenance. |
 | `assemble: false` | Allowed only with `segment: false`: the saved tables are loaded with `load_assembly` and recorded `reused` when the `assembly` section's `segmentation_files` equal the reused segmentation's label files; otherwise refused before anything is written. With `segment: true` the cells may change, so the tables are made again. |
@@ -363,7 +371,10 @@ of `ROUTES` or null; `route: after_fusion` with `dimensionality: stack` or with
 given, each run's input images are names of `images`, `dimensionality` writes the
 projection, `fuse` is on unless `segment` is off, `assemble` is on unless `segment` is
 off, the reuse conditions of the table above hold when `segment` is off, the runs' configs
-validate, their
+validate (each run's source roles are those of its input recipe's combine method, its recipe
+names a recipe of `segmentation.input_recipes` or is inline, a method with a model has a
+`model_input` and `seeded_watershed` none; amended 2026-11-20 W-891), with tiles of Z > 1 a
+recipe has no `channels` step and no projection other than `max` (W-891), their
 seeds name earlier runs, `cells` and `nuclei` name runs of the targets `cell` (or
 `nucleus` as territories) and `nucleus` (`cells` may name a run of either target, `nuclei`
 only a run of the target `nucleus`), and every model resolves with its SHA-256
@@ -431,10 +442,8 @@ configs (call C14), and what `StarDistConfig` accepts (call C14b):
 
 | Method | Field | Unit | Value used at factor `k` |
 | --- | --- | --- | --- |
-| `cellpose` | `diameter` | pixels | `diameter / k` |
 | `cellpose` | `min_size` | pixels (an area) | `max(1, round(min_size / k²))` |
-| `stardist` | `scale` | a factor of Y and X | `scale · k` in Y and X, Z unchanged; `StarDistConfig` accepts any positive finite scale (it refused 0 and −1 and accepted 8.0), so the product is always accepted |
-| `stardist` | `block_size`, `min_overlap`, `context` | pixels | `ceil(value / k)` in Y and X. `StarDistConfig` refuses block fields with a scale other than 1 at construction; a block run is given with `scale` 1, so at `k > 1` its used scale `k` is refused, and block runs are possible at `k = 1` only |
+| `stardist` | `block_size`, `min_overlap`, `context` | pixels | `ceil(value / k)` in Y and X. Block fields are refused with a model input factor other than 1; a block run is given with the factor 1, so at `k > 1` its factor `k` is refused, and block runs are possible at `k = 1` only |
 | `stardist` | `n_tiles` | a count | unchanged |
 | `seeded_watershed` | `sigma_um` | µm | unchanged: `segment` converts it with the grid's spacing (call C6) |
 | `import` | — | — | the file must be on the segmentation grid |
@@ -446,6 +455,12 @@ configs (call C14), and what `StarDistConfig` accepts (call C14b):
 | **LS2. Given at the acquired pixel, divided by the route (recommended)** | The settings are those of the acquired grid, as for the route per FOV; the route computes the values of the table above and records both. | One table of pixel fields per method, kept equal to the registry by a test. | One method setting serves both routes, so the consistency check compares two routes with the same model settings. |
 
 **Recommendation: LS2.**
+
+Amended 2026-11-20 W-891: Cellpose `diameter` and StarDist `scale` left this table (and
+`LENGTH_FIELDS`). The input recipe's `model_input` gives each route's factor: a
+`pixel_size_um` means the same on both grids, and a `factor` is multiplied by `k` in Y and X
+after fusion, the rule `scale` had ([segmentation-input-recipe](segmentation-input-recipe.md),
+"The model input").
 
 ### Where the settings live
 
@@ -466,6 +481,7 @@ class SampleSegmentationRun:
     inputs: tuple[tuple[str, str], ...]  # (role, image name of FusionConfig.images), in channel order
     method: object                       # a SEGMENTATION_METHODS config or a LabelImportConfig; lengths as LS2
     seeds: str | None = None             # an earlier run of the same config
+    input_recipe: InputRecipe | None = None   # the input recipe on the fused projections (W-891)
 
 @dataclass(frozen=True)
 class SampleSegmentationConfig:
@@ -495,13 +511,15 @@ export:
         inputs: [{role: nuclear, image: dapi}]
         method: cellpose
         model: cpsam_v2
-        diameter: 60           # pixels of the acquired grid (LS2): 15 at 1/4
+        input_recipe:
+          model_input: {factor: 0.5}     # Cellpose diameter 30 / 0.5 = 60 pixels of the acquired grid: 15 at 1/4
       - name: cell
         target: cell
         inputs: [{role: cytoplasm, image: flamingo}, {role: nuclear, image: dapi}]
         method: cellpose
         model: cpsam_v2
-        diameter: 240          # 60 at 1/4
+        input_recipe:
+          model_input: {factor: 0.125}   # diameter 240: 60 at 1/4
 ```
 
 The values illustrate the layout (the diameters of the culture's real-example segmentation, which the two-FOV cell measurement used);
@@ -785,8 +803,11 @@ The `segmentation` section of `export.json`, written by `segment_fused`:
 * per run: `name`, `target`, `geometry` (`plane`), `label_namespace`, the inputs (role,
   image name), the seeds' run, the method record `segment` returns (the uniform
   provenance entry with `artifacts`, `execution` and `effective`; the import record for an
-  import), `lengths` (each pixel field as given and as used, LS2), the label file's path
-  and SHA-256, `n_labels`, `max_label` and the outcome;
+  import), `recipe` (the input recipe record, with the segmentation grid's spacing, the
+  fit region `footprints` and its pixel count, and the factor rule's `k`; W-891), `input`
+  (`path`, `sha256`, `dtype`, `shape_zyxc` and `written`, false when the path is the fused
+  file; W-891), `lengths` (each pixel field as given and as used, LS2, without `scale` and
+  `diameter`), the label file's path and SHA-256, `n_labels`, `max_label` and the outcome;
 * `cells`, `nuclei`, `device`;
 * `assignment`: the assignment settings (the `AssignmentConfig` of
   `SampleSegmentationConfig`) that the sample's tables are made with, which `assemble`
@@ -815,6 +836,9 @@ compares the section hashes it compares today.
   fusion. When the `fusion` section is `off`, `not_run` or `empty`, the fused files are
   absent and the recorded input SHA-256 values are provenance only; T1 checks the label
   files alone. This is the rule of "What is reused when a part has already run".
+  Amended 2026-11-20 W-891: each listed `model_inputs/<run>.ome.tif` exists with its
+  recorded SHA-256 and the segmentation grid's shape and geometry, is the `input` of its
+  run, and names a run of the section.
 * T2. **Each cell once.** The positive values of the cell run's label image are exactly
   the `cell_id`s of the sample cell table, one row each, all with the run's namespace.
 * T3. **Assigned where it lies.** For every retained molecule, the territory image at the
@@ -826,7 +850,8 @@ compares the section hashes it compares today.
   and SHA-256 values of the `segmentation` section (and of `territories.ome.tif`), so a
   table made from another segmentation is found.
 
-R2 lists the new files, and R3 loads the tables with the identities as restated.
+R2 lists the new files (the files under `model_inputs/` among them, W-891), and R3 loads the
+tables with the identities as restated.
 
 ## The route setting
 

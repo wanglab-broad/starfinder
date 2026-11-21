@@ -20,7 +20,7 @@ import numpy as np
 import tifffile
 import yaml
 
-TEMPLATES = ("minimal", "full", "recipe-2")
+TEMPLATES = ("minimal", "full", "recipe-2", "global", "global-bspline", "global-demons", "global-demons-tiled")
 PLACEHOLDER_FOV = "FOV_001"
 
 

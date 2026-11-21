@@ -238,7 +238,8 @@ def _probes(save_dir):
     tiled["stitching"] = {"method": "bigstitcher", "bigstitcher_save_dir": str(save_dir),
                           "positions": full["stitching"]["positions"]}
     tiled["segmentation"]["runs"] = [
-        {"name": "nucleus", "target": "nucleus", "method": "stardist", "model_path": str(save_dir), "scale": 1.0,
+        {"name": "nucleus", "target": "nucleus", "method": "stardist", "model_path": str(save_dir),
+         "input_recipe": {"model_input": {"factor": 1.0}},
          "inputs": [{"role": "nuclear", "round": "reference_stain", "channel": "DAPI"}]},
         {"name": "cell", "target": "cell", "seeds": "nucleus", "method": "seeded_watershed",
          "inputs": [{"role": "amplicon", "reference_merged": True}]}]
@@ -261,12 +262,14 @@ def task_rows():
             path.write_text(yaml.safe_dump(config, sort_keys=False))
             manifest = plan(path)
             groups = {group["name"]: group for group in manifest["groups"]}
-            # A run, an assignment name and another round are literal parts of the templates: written as such.
+            # A run, an assignment name, an export route and another round are literal parts of the templates:
+            # written as such.
             names = {f"/{e['round_name']}/": "/<round>/" for e in config.get("additional_round") or []}
             for task in manifest["tasks"]:
                 kind, identity, group = task["kind"], task["identity"], groups[task["group"]]
                 identities.setdefault(kind, [k for k in ID_FIELDS if k in identity])
-                literal = dict(names, **{f"/{identity[k]}/": f"/<{k}>/" for k in ("run", "name") if k in identity})
+                literal = dict(names, **{f"/{identity[k]}/": f"/<{k}>/" for k in ("run", "name", "route")
+                                         if k in identity})
                 for template in group["outputs"]:
                     text = template.replace(str(save_dir), "<bigstitcher_save_dir>")
                     for value, name in literal.items():

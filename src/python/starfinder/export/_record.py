@@ -193,8 +193,16 @@ def listed_file_hashes(record: Mapping) -> dict[str, str]:
     return hashes
 
 
+#: The subfolder of a sample export folder that only segmentation model inputs use; removed when it is empty.
+MODEL_INPUTS = "model_inputs"
+
+
 def remove_listed(folder, paths) -> None:
-    """Remove the listed files or folders of an earlier record; a path the record does not list is never touched."""
+    """Remove the listed files or folders of an earlier record; a path the record does not list is never touched.
+
+    The ``model_inputs/`` subfolder, which only the listed model inputs of the
+    route after fusion use, is removed when that leaves it empty.
+    """
     folder = Path(folder).resolve()
     for relative in paths:
         path = (folder / relative).resolve()
@@ -204,6 +212,9 @@ def remove_listed(folder, paths) -> None:
             shutil.rmtree(path)
         elif path.exists():
             path.unlink()
+    subfolder = folder / MODEL_INPUTS
+    if subfolder.is_dir() and not any(subfolder.iterdir()):
+        subfolder.rmdir()
 
 
 def directory_files(path) -> dict[str, str]:
@@ -222,6 +233,12 @@ class Timer:
     def record(self) -> dict:
         return {"wall_s": time.perf_counter() - self.wall, "cpu_s": time.process_time() - self.cpu,
                 "peak_rss_kib": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)}
+
+
+def add_times(*records: Mapping) -> dict:
+    """The sum of the wall and CPU times of several :meth:`Timer.record` results, and their largest peak RSS."""
+    return {"wall_s": sum(r["wall_s"] for r in records), "cpu_s": sum(r["cpu_s"] for r in records),
+            "peak_rss_kib": max(r["peak_rss_kib"] for r in records)}
 
 
 @dataclass(frozen=True)

@@ -73,9 +73,11 @@ channel 0.
 The {doc}`spot-finding reference <spot-finding-algorithms>` links the config
 classes. Choose a threshold for its mode rather than copying a value between modes.
 
-The workflow's `recipe: deep` normalizes each channel to `uint8` with truncation, which
-leaves most voxels at 0. On such a channel, `noise` mode takes the median and MAD over the
-voxels above the minimum and notes this in a `SpotFindingWarning`; on an integer image such
+A `min_max_normalization` step with `output_dtype: uint8` and `rounding: truncate`, the
+first step of the workflow's {download}`global example <examples/workflow-global.yaml>`,
+normalizes each channel to `uint8` with truncation, which leaves most voxels at 0. On such
+a channel, `noise` mode takes the median and MAD over the voxels above the minimum and notes
+this in a `SpotFindingWarning`; on an integer image such
 as this one, a MAD below one grey level there is floored at one grey level, with a second
 `SpotFindingWarning`, instead of stopping the pipeline. A floating-point channel whose MAD
 there is still 0 raises `SpotFindingError`. The guide's

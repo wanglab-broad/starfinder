@@ -10,7 +10,9 @@ rounds, its reference image and the folders ``other_rounds/``,
 ``segmentation/`` and ``assignment/``; the restart material of ``FOV.run``
 goes in its ``checkpoints/`` folder (design/specs/checkpoints.md, "Layout"). The
 workflow's opt-in assignment previews (``assembly.previews``) go in the FOV
-folder's ``previews/`` and the export folder's ``previews/<fov_id>/``.
+folder's ``previews/`` and the export folder's ``previews/<fov_id>/``. The
+workflow writes each export route's sample outputs into folders of their own,
+``export/<sample>/<route>/`` and ``report/<sample>/<route>/``.
 """
 
 from __future__ import annotations
@@ -23,6 +25,11 @@ FOVS = "fovs"
 STITCHING = "stitching"
 EXPORT = "export"
 REPORT = "report"
+#: The workflow's export routes, in the order of the comparison page; each writes ``export/<sample>/<route>/`` and
+#: ``report/<sample>/<route>/``. A workflow run without an export writes its report into ``report/<sample>/no_export/``.
+EXPORT_ROUTES = ("per_fov", "after_fusion", "molecules_only")
+NO_EXPORT = "no_export"
+REPORT_ROUTES = EXPORT_ROUTES + (NO_EXPORT,)
 #: Inside a FOV's folder: the restart folder of FOV.run's checkpoint stages. It is also the key under which
 #: run.json lists the stage files and the configuration names the stages.
 CHECKPOINTS = "checkpoints"
@@ -159,9 +166,11 @@ def stitching_dir(output_root, sample) -> Path:
     return Path(output_root) / STITCHING / sample
 
 
-def export_dir(output_root, sample) -> Path:
-    """``export/<sample>``, the export folder of a sample."""
-    return Path(output_root) / EXPORT / sample
+def export_dir(output_root, sample, route=None) -> Path:
+    """``export/<sample>``, the export folder of a sample; with ``route``, ``export/<sample>/<route>``, the folder of
+    that export route, where the workflow writes (each route its own, so one output root holds every route)."""
+    folder = Path(output_root) / EXPORT / sample
+    return folder if route is None else folder / route
 
 
 def fov_previews_dir(output_root, fov_id) -> Path:
@@ -169,9 +178,10 @@ def fov_previews_dir(output_root, fov_id) -> Path:
     return fov_dir(output_root, fov_id) / PREVIEWS
 
 
-def export_previews_dir(output_root, sample, fov_id=None) -> Path:
-    """``export/<sample>/previews`` (a FOV's: ``export/<sample>/previews/<fov_id>``), the ownership previews."""
-    folder = export_dir(output_root, sample) / PREVIEWS
+def export_previews_dir(output_root, sample, fov_id=None, *, route=None) -> Path:
+    """``previews`` in the export folder ``export_dir(output_root, sample, route)`` (a FOV's: ``previews/<fov_id>``),
+    the ownership previews."""
+    folder = export_dir(output_root, sample, route) / PREVIEWS
     return folder if fov_id is None else folder / fov_id
 
 
@@ -180,9 +190,11 @@ def report_root(output_root) -> Path:
     return Path(output_root) / REPORT
 
 
-def report_dir(output_root, sample) -> Path:
-    """``report/<sample>``, the report folder of a sample."""
-    return report_root(output_root) / sample
+def report_dir(output_root, sample, route=None) -> Path:
+    """``report/<sample>``, the report folder of a sample; with ``route``, ``report/<sample>/<route>``, the folder of
+    the workflow's report of that export route (``NO_EXPORT`` for a run without an export)."""
+    folder = report_root(output_root) / sample
+    return folder if route is None else folder / route
 
 
 def image_file(output_root, fov_id, *folders) -> Path:
@@ -231,9 +243,15 @@ def workflow_dir(output_root) -> Path:
     return Path(output_root) / WORKFLOW
 
 
-def workflow_export_record(output_root, sample) -> Path:
-    """``workflow/exports/<sample>.json``, the export record kept across engine output removal."""
-    return workflow_dir(output_root) / "exports" / f"{sample}.json"
+def workflow_export_record(output_root, sample, route) -> Path:
+    """``workflow/exports/<sample>/<route>.json``, the export record of a route kept across engine output removal."""
+    return workflow_dir(output_root) / "exports" / sample / f"{route}.json"
+
+
+def workflow_held_page(output_root, sample, route) -> Path:
+    """``workflow/held/<sample>/<route>.html``, the page of a route's export held for review, until that export runs
+    again."""
+    return workflow_dir(output_root) / "held" / sample / f"{route}.html"
 
 
 def resolved_file(output_root) -> Path:

@@ -230,25 +230,32 @@ class SampleSegmentationRun:
     target : str
         Label target: ``nucleus`` or ``cell``.
     inputs : tuple of (str, str)
-        Channel-ordered ``(role, image)`` pairs naming fused projections from ``FusionConfig.images``.
+        Source-ordered ``(role, image)`` pairs naming fused projections from ``FusionConfig.images``.
     method : object
         Registered segmentation configuration or ``LabelImportConfig``; pixel lengths use acquired-grid pixels.
     seeds : str or None
         Earlier nucleus run supplying seed labels; ``None`` supplies no seeds.
+    input_recipe : InputRecipe or None
+        How the fused source channels become the image the method receives;
+        ``None`` is the empty recipe.
 
     Notes
     -----
     ``name`` (snake_case) names the label file ``segmentation_<name>.ome.tif``
     and the run of the label namespace; ``target`` is ``nucleus`` or
-    ``cell``; ``inputs`` are ``(role, image)`` pairs in channel order, each
-    image a name of ``FusionConfig.images`` whose fused projection is read
+    ``cell``; ``inputs`` are the source channels as ``(role, image)`` pairs,
+    each image a name of ``FusionConfig.images`` whose fused projection is read
     (none for an import); ``method`` is a ``SEGMENTATION_METHODS`` config or a
     :class:`~starfinder.segmentation.LabelImportConfig` whose target equals the
     run's, with its pixel lengths given for the acquired grid (LS2: the route
     converts them to the segmentation grid by the table "Lengths in pixels" of
     design/specs/sample-segmentation.md and records both values); ``seeds``
-    names an earlier run of the same config. See
-    design/specs/sample-segmentation.md ("Where the settings live").
+    names an earlier run of the same config; ``input_recipe`` is the run's
+    :class:`~starfinder.segmentation.InputRecipe`, which runs on the fused
+    projections (its lengths in µm mean the same as per FOV, and a method with
+    a model needs its ``model_input``). See
+    design/specs/sample-segmentation.md ("Where the settings live") and
+    design/specs/segmentation-input-recipe.md.
 
     Raises
     ------
@@ -256,7 +263,9 @@ class SampleSegmentationRun:
         A name that is not snake_case, an unknown target, a role or image name
         that is not valid, repeated roles, inputs missing or given to an
         import, a target, role or seed requirement the method does not
-        accept, or seeds on an import.
+        accept, seeds or a recipe on an import, source roles that differ from
+        the recipe's combine method, or a model input missing for a method
+        with a model or given to one without.
     TypeError
         A field of the wrong type or an unregistered method config.
     """
@@ -266,11 +275,14 @@ class SampleSegmentationRun:
     inputs: tuple[tuple[str, str], ...]
     method: object
     seeds: str | None = None
+    input_recipe: object | None = None
 
     def __post_init__(self):
         from starfinder._registry import check_name
+        from starfinder.segmentation import InputRecipe
         from starfinder.segmentation._labels import _check_target
         from starfinder.segmentation._methods import ROLES
+        from starfinder.segmentation._recipe import check_model_input, model_roles
         check_name(self.name, "sample segmentation run")
         _check_target(self.target)
         if isinstance(self.inputs, str) or not isinstance(self.inputs, (tuple, list)):
@@ -293,6 +305,8 @@ class SampleSegmentationRun:
             raise ValueError(f"run {self.name!r} repeats a channel role: {roles}")
         if self.seeds is not None and (not isinstance(self.seeds, str) or not self.seeds):
             raise TypeError(f"run {self.name!r}: seeds must name an earlier run or be None")
+        if self.input_recipe is not None and not isinstance(self.input_recipe, InputRecipe):
+            raise TypeError(f"run {self.name!r}: input_recipe must be an InputRecipe or None")
         spec = _segmentation_spec(self.method)
         if spec is None:
             if self.inputs:
@@ -301,19 +315,23 @@ class SampleSegmentationRun:
                 raise ValueError(f"run {self.name!r} has target {self.target!r}, its import {self.method.target!r}")
             if self.seeds is not None:
                 raise ValueError(f"run {self.name!r} imports a mask and takes no seeds")
+            if self.input_recipe is not None:
+                raise ValueError(f"run {self.name!r} imports a mask and takes no input_recipe")
             return
         if not self.inputs:
             raise ValueError(f"run {self.name!r} needs at least one input")
         if self.target not in spec.targets:
             raise ValueError(f"run {self.name!r}: method {spec.name!r} produces "
                              f"{', '.join(sorted(spec.targets))}, not {self.target!r}")
-        refused = [role for role in roles if role not in spec.roles]
+        modelled = model_roles(self.input_recipe, roles, run=self.name)
+        refused = [role for role in modelled if role not in spec.roles]
         if refused:
             raise ValueError(f"run {self.name!r}: method {spec.name!r} does not accept the roles {refused}")
         for required in spec.required_roles:
-            if not required & set(roles):
+            if not required & set(modelled):
                 raise ValueError(f"run {self.name!r}: method {spec.name!r} needs one of the roles "
                                  f"{sorted(required)}")
+        check_model_input(self.method, self.input_recipe, run=self.name)
         if spec.seeds == "required" and self.seeds is None:
             raise ValueError(f"run {self.name!r}: method {spec.name!r} needs seeds, an earlier nucleus run")
         if spec.seeds == "none" and self.seeds is not None:

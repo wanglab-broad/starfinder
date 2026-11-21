@@ -45,6 +45,20 @@ def _rel(path, root):
     return os.path.relpath(path, root).replace(os.sep, "/") if os.path.commonpath([path, root]) == root else path
 
 
+def _route(config):
+    """The export route of a configuration, from its keys (design/specs/sample-segmentation.md, "The route setting"):
+    molecules_only without an assignment name, else export.route, else after_fusion for the default dimensionality
+    projection and per_fov for stack or both; without an assembly block there is no export (no_export)."""
+    if "assembly" not in config:
+        return _layout.NO_EXPORT
+    if (config["assembly"] or {}).get("assignment", "default") is None:
+        return "molecules_only"
+    export = config.get("export") or {}
+    if export.get("route") is not None:
+        return export["route"]
+    return "after_fusion" if export.get("dimensionality", "projection") == "projection" else "per_fov"
+
+
 def expected_outputs(task, config, out):
     """The contract's declared outputs of a task (its table's row for the task's kind), through _layout."""
     kind, identity = task["kind"], task["identity"]
@@ -122,11 +136,13 @@ def expected_outputs(task, config, out):
     elif kind in ("bigstitcher_import", "stitch"):
         paths = [_layout.stitching_dir(out, sample) / name for name in ("placement.json", "fovs.csv", "links.csv")]
     elif kind == "export":
-        paths = [_layout.export_dir(out, sample) / _layout.EXPORT_FILE]
+        # W-876: each route writes its own folder, export/<sample>/<route>/.
+        folder = Path(out) / "export" / sample / _route(config)
+        paths = [folder / _layout.EXPORT_FILE]
         if (config.get("export") or {}).get("previews") and (config.get("export") or {}).get("route") == "per_fov":
-            paths.append(str(_layout.export_previews_dir(out, sample)) + "/")
+            paths.append(str(folder / "previews") + "/")
     elif kind == "report":
-        paths = [_layout.report_dir(out, sample) / "report.json"]
+        paths = [Path(out) / "report" / sample / _route(config) / "report.json"]
     else:
         paths = [_layout.report_root(out) / "samples.csv", _layout.report_root(out) / "index.html"]
     return sorted(_rel(str(p).rstrip("/"), out) + ("/" if str(p).endswith("/") else "") for p in paths)
@@ -486,7 +502,7 @@ def test_the_export_task_declares_its_inputs_by_route(tmp_path, combination):
         return
     _, manifest = W.plan(tmp_path, "route", config)
     (export,) = _kinds(manifest, "export")
-    assert export["outputs"] == ["export/sample/export.json"]
+    assert export["outputs"] == [f"export/sample/{_route(config)}/export.json"]
     assert set(export["inputs"]) == _route_inputs(manifest, config, combination)
     assert not [i for i in export["inputs"] if "/expr/" in i or i.endswith(("raw.h5ad", "reads_assignment.csv"))]
 
@@ -557,7 +573,8 @@ def test_a_configuration_without_the_new_keys_keeps_its_route(tmp_path):
 def test_the_export_task_declares_the_ownership_previews_on_request(tmp_path, case, declared):
     """From test_stitching_workflow.py, test_wf3_export_sample_declares_the_ownership_previews_on_request: with
     export.previews on (P5; the old rule read assembly.previews), an assignment name, the route per FOV and assemble
-    on, the export task declares export/<sample>/previews/ (a folder) beside export.json; by default, with assignment
+    on, the export task declares previews/ (a folder) beside export.json in its route's folder export/<sample>/<route>/
+    (W-876); by default, with assignment
     null, after fusion (the route set, or the default of dimensionality projection) and with assemble off, nothing
     more."""
     export = {"default": {"route": "per_fov"}, "previews": {"route": "per_fov", "previews": True},
@@ -575,7 +592,11 @@ def test_the_export_task_declares_the_ownership_previews_on_request(tmp_path, ca
                             **({} if assignment is None else _cells(tmp_path)))
     manifest = _planned(tmp_path, case, config, **{k: str(v) for k, v in _labels(tmp_path).items()})
     (task,) = _kinds(manifest, "export")
-    assert task["outputs"] == ["export/sample/export.json"] + (["export/sample/previews/"] if declared else [])
+    route = {"molecules": "molecules_only", "after fusion": "after_fusion", "projection": "after_fusion"}.get(
+        case, "per_fov")
+    assert task["identity"] == {"sample": "sample", "route": route}
+    assert task["outputs"] == [f"export/sample/{route}/export.json"] + (
+        [f"export/sample/{route}/previews/"] if declared else [])
 
 
 @pytest.mark.parametrize("name, previews", [("default", None), ("nuclei", True)])
@@ -635,7 +656,8 @@ def test_the_report_task_declares_its_inputs(tmp_path, case):
     reference_stain, needs): the molecule route, whose export task declares the placement, the FOVs' molecule tables
     and export.json, which the report reads. The compare task
     reads every sample's report.json, sorted as every task's declared inputs are (the command takes fovs.csv's order,
-    test_workflow_report_tasks.py), and declares samples.csv and index.html."""
+    test_workflow_report_tasks.py), and declares samples.csv and index.html. Each report and export lies in the
+    folder of its route (W-876), report/<sample>/no_export/ without an export."""
     blocks = {"assembly": dict(stitching=MERGED, assembly={"assignment": "default"},
                                export={"route": "per_fov", "fuse": False}, **_cells(tmp_path)),
               "molecules": dict(stitching=MERGED, assembly={"assignment": None}, **STAIN),
@@ -647,10 +669,12 @@ def test_the_report_task_declares_its_inputs(tmp_path, case):
     manifest = _planned(tmp_path, case, config, fovs="sample,fov_id\ns2,F1\ns1,F2\ns2,F3\n",
                         **{k: str(v) for k, v in _labels(tmp_path, ("F1", "F2", "F3")).items()})
     reports = _kinds(manifest, "report")
-    assert [t["outputs"] for t in reports] == [["report/s2/report.json"], ["report/s1/report.json"]]
+    route = {"assembly": "per_fov", "molecules": "molecules_only"}.get(case, "no_export")
+    assert [t["outputs"] for t in reports] == [[f"report/s2/{route}/report.json"], [f"report/s1/{route}/report.json"]]
     for task in reports:
         sample = task["identity"]["sample"]
-        last = {"assembly": f"export/{sample}/export.json", "molecules": f"export/{sample}/export.json",
+        assert task["id"] == f"report/{sample}/{route}"
+        last = {"assembly": f"export/{sample}/per_fov/export.json", "molecules": f"export/{sample}/{route}/export.json",
                 "stitching": f"stitching/{sample}/placement.json", "processing": None}[case]
         assert {f"fovs/{fov}/run.json" for fov in members[sample]} <= set(task["inputs"])
         assert {i.split("/")[1] for i in task["inputs"] if i.startswith("fovs/")} == set(members[sample])
@@ -661,13 +685,13 @@ def test_the_report_task_declares_its_inputs(tmp_path, case):
         assert manifest["export_route"] == "molecules_only" and _kinds(manifest, "assign") == []
         for task in _kinds(manifest, "export"):
             sample = task["identity"]["sample"]
-            assert task["outputs"] == [f"export/{sample}/export.json"]
+            assert task["outputs"] == [f"export/{sample}/molecules_only/export.json"]
             assert {f"stitching/{sample}/placement.json"} | {f"fovs/{fov}/molecules.csv" for fov in members[sample]} \
                 <= set(task["inputs"])
             assert not [i for i in task["inputs"] if i.endswith("assignment.json")]
     (compare,) = _kinds(manifest, "compare")
-    assert compare["inputs"] == ["report/s1/report.json", "report/s2/report.json"]
-    assert compare["needs"] == ["report/s1", "report/s2"]
+    assert compare["inputs"] == [f"report/s1/{route}/report.json", f"report/s2/{route}/report.json"]
+    assert compare["needs"] == [f"report/s1/{route}", f"report/s2/{route}"]
     assert compare["outputs"] == ["report/index.html", "report/samples.csv"]
 
 

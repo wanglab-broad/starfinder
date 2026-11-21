@@ -349,12 +349,13 @@ def _step_spleen(a):
     base = Path(a["base"])
     summary = _read_json(base / "generate.json")
     root = _work_root(base, summary)
-    config = StarDistConfig(model_path=str(_model_path("3D_spleen")), scale=1.0)
+    config = StarDistConfig(model_path=str(_model_path("3D_spleen")))
     out = {}
     for fov in summary["fov_ids"]:
         grid = _grid(root, fov)
         stain = _image(root, "DAPI", fov)
-        result = segment(SegmentationInput(stain[..., np.newaxis], grid, ("nuclear",), ({},)), config=config,
+        result = segment(SegmentationInput(stain[..., np.newaxis], grid, ("nuclear",), ({},),
+                                           model_scale_zyx=(1.0, 1.0, 1.0)), config=config,
                          target="nucleus", device="cpu",
                          label_namespace=_ns(summary["dataset_id"], summary["sample"], fov, None, "nucleus_spleen"))
         labels = np.asarray(result.labels, dtype=np.uint32)
@@ -382,7 +383,8 @@ def _step_cellpose(a):
     root = _work_root(base, summary)
     spacing = summary["spacing_zyx"]
     diameter = round(CELLPOSE_DIAMETERS_PX[target] * W382_PIXEL_UM / spacing[1], 1)
-    config = CellposeConfig(diameter=diameter, model_path=str(_model_path("cpsam_v2")))
+    config = CellposeConfig(model_path=str(_model_path("cpsam_v2")))
+    factor = 30.0 / diameter   # W-891: the model scale whose Cellpose diameter is 30 / factor
     out = dict(diameter_px=diameter, fovs={})
     for fov in summary["fov_ids"]:
         grid = _grid(root, fov)
@@ -395,7 +397,8 @@ def _step_cellpose(a):
             image = dapi.max(axis=0)[np.newaxis, ..., np.newaxis]
             roles, stain = ("nuclear",), dapi
         result = segment(SegmentationInput(np.ascontiguousarray(image), grid.projected(method="max"), roles,
-                                           tuple({} for _ in roles)), config=config, target=target, device="cpu",
+                                           tuple({} for _ in roles), model_scale_zyx=(1.0, factor, factor)),
+                         config=config, target=target, device="cpu",
                          label_namespace=_ns(summary["dataset_id"], summary["sample"], fov, None,
                                              f"{target}_cellpose_2d"))
         labels, record = extend_labels_through_z(result.labels, stain, grid.metadata, config=_extension(target))
@@ -484,7 +487,8 @@ def _step_assign_export(a):
     from starfinder.assignment._persist import assignment_directory, write_assignment
     from starfinder.dataset import Dataset
     from starfinder.export import ExportConfig, FusionConfig, SampleSegmentationConfig, SampleSegmentationRun
-    from starfinder.segmentation import ExpandLabelsConfig, SeededWatershedConfig, StarDistConfig, import_labels
+    from starfinder.segmentation import (ExpandLabelsConfig, InputRecipe, ModelInputConfig, SeededWatershedConfig,
+                                         StarDistConfig, import_labels)
     from .sample_segmentation_fixtures import truth_runs
     base, variant, context = Path(a["base"]), a["variant"], a["context"]
     summary = _read_json(base / "generate.json")
@@ -530,8 +534,8 @@ def _step_assign_export(a):
             out["stardist_scale"] = scale
             segmentation = SampleSegmentationConfig(
                 runs=(SampleSegmentationRun("nucleus", "nucleus", (("nuclear", a["stain"]),),
-                                            StarDistConfig(scale=scale, model_path=str(_model_path(
-                                                "2D_versatile_fluo")))),
+                                            StarDistConfig(model_path=str(_model_path("2D_versatile_fluo"))),
+                                            input_recipe=InputRecipe(model_input=ModelInputConfig(factor=scale))),
                       SampleSegmentationRun("cell", "cell", (("composite", "composite"),), SeededWatershedConfig(),
                                             seeds="nucleus")),
                 cells="cell", nuclei="nucleus", device="cpu")

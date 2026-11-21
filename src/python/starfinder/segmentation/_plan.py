@@ -1,13 +1,15 @@
 """The per-FOV segmentation plan and its coordination (design/specs/segmentation.md, "Coordination per FOV").
 
-A plan is not a recipe engine: each run names one method or one import, at most one
-input function per channel and an ordered tuple of label functions.
+Each run names one method or one import, its source channels, an optional input recipe
+(design/specs/segmentation-input-recipe.md: the input recipe is the one chain, fixed
+stages of registered steps) and an ordered tuple of label functions.
 """
 from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, replace
+import time
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -17,11 +19,11 @@ from starfinder._registry import check_name, spec_for
 from starfinder.image import IncompatibleGeometryError
 
 from ._import import LabelImportConfig, import_labels
-from ._inputs import CompositeConfig, FlamingoEnhancementConfig, composite_nuclei_amplicon, enhance_with_flamingo
 from ._labels import SegmentationResult, _check_target, _grid_record, _json, array_sha256
 from ._methods import DEVICES, ROLES, SEGMENTATION_METHODS, SeededWatershedConfig
 from ._operations import ExpandLabelsConfig, ZExtensionConfig, expand_labels, extend_labels_through_z
-from ._segment import SegmentationInput, segment
+from ._recipe import InputRecipe, apply_input_recipe, check_model_input, method_value, model_factor, model_roles
+from ._segment import segment
 
 _OPERATIONS = (ZExtensionConfig, ExpandLabelsConfig)
 
@@ -35,45 +37,38 @@ def _channel_key(value, name):
 
 @dataclass(frozen=True)
 class InputChannel:
-    """One channel of a run's segmentation input, taken from the FOV's reference-frame images.
+    """One source channel of a run, taken from the FOV's reference-frame images.
 
     Parameters
     ----------
     role : str
-        Channel role: ``nuclear``, ``cytoplasm``, ``membrane``, ``amplicon`` or ``composite``.
+        Source role: ``nuclear``, ``cytoplasm``, ``membrane``, ``amplicon`` or ``composite``.
     round : str or None
         Name of the loaded round supplying the channel.
     channel : str or int or None
         Channel pattern, name or zero-based index within the round.
     reference_merged : bool
         Select the reference round's channel-maximum image.
-    prepare : CompositeConfig or FlamingoEnhancementConfig or None
-        Input preparation settings; ``None`` leaves the channel unprepared.
-    prepare_channel : str or int or None
-        Flamingo channel pattern, name or zero-based index for Flamingo enhancement.
 
     Notes
     -----
-    ``role`` is ``nuclear``, ``cytoplasm``, ``membrane``, ``amplicon`` or
-    ``composite``. Either ``round`` and ``channel`` name a loaded round in the
-    reference frame and one of its channels (a pattern or a name, resolved by
-    ``Dataset.channel_index(round, channel)``, or an index), or ``reference_merged`` is
-    True and both are None: the reference round's channel maximum, as
-    ``FOV.save_reference_image(reference_image="merged")`` writes it.
-    ``prepare`` applies one input function to the channel: a
-    :class:`CompositeConfig` combines it (the nuclear stain) with the reference
-    merged image (the amplicon) through :func:`composite_nuclei_amplicon`; a
-    :class:`FlamingoEnhancementConfig` combines it with the Flamingo channel
-    ``prepare_channel`` of the same round (looked up as ``channel``) through
-    :func:`enhance_with_flamingo`.
+    Either ``round`` and ``channel`` name a loaded round in the reference frame
+    and one of its channels (a pattern or a name, resolved by
+    ``Dataset.channel_index(round, channel)``, or an index), or
+    ``reference_merged`` is True and both are None: the reference round's
+    channel maximum, as ``FOV.save_reference_image(reference_image="merged")``
+    writes it. How the source channels become the model's channels is the
+    run's input recipe (:class:`InputRecipe`): the DAPI–amplicon composite is
+    two sources, ``nuclear`` and ``amplicon`` (the reference merged image),
+    with ``combine`` a :class:`CompositeConfig`; the Flamingo enhancement is
+    ``nuclear`` and ``cytoplasm`` (the Flamingo channel) with a
+    :class:`FlamingoEnhancementConfig`.
 
     Raises
     ------
     ValueError
-        An unknown role, round or channel given with reference_merged, a missing
-        round or channel without it, a prepare function on the reference merged
-        image, or prepare_channel without a Flamingo enhancement (or missing
-        with one).
+        An unknown role, round or channel given with reference_merged, or a
+        missing round or channel without it.
     TypeError
         A field of the wrong type.
     """
@@ -82,8 +77,6 @@ class InputChannel:
     round: str | None = None
     channel: str | int | None = None
     reference_merged: bool = False
-    prepare: CompositeConfig | FlamingoEnhancementConfig | None = None
-    prepare_channel: str | int | None = None
 
     def __post_init__(self):
         if self.role not in ROLES:
@@ -93,22 +86,12 @@ class InputChannel:
         if self.reference_merged:
             if self.round is not None or self.channel is not None:
                 raise ValueError("the reference merged image takes no round and no channel")
-            if self.prepare is not None:
-                raise ValueError("prepare applies to a round's channel, not to the reference merged image")
         else:
             if not isinstance(self.round, str) or not self.round:
                 raise ValueError("an input channel names a round and a channel, or sets reference_merged")
             if self.channel is None:
                 raise ValueError(f"an input channel of round {self.round!r} needs a channel")
             _channel_key(self.channel, "channel")
-        if self.prepare is not None and not isinstance(self.prepare, (CompositeConfig, FlamingoEnhancementConfig)):
-            raise TypeError("prepare must be a CompositeConfig, a FlamingoEnhancementConfig or None")
-        if isinstance(self.prepare, FlamingoEnhancementConfig):
-            if self.prepare_channel is None:
-                raise ValueError("a Flamingo enhancement needs prepare_channel, the round's Flamingo channel")
-            _channel_key(self.prepare_channel, "prepare_channel")
-        elif self.prepare_channel is not None:
-            raise ValueError("prepare_channel names the Flamingo channel of a FlamingoEnhancementConfig")
 
 
 @dataclass(frozen=True)
@@ -122,39 +105,43 @@ class SegmentationRun:
     target : str
         Label target: ``nucleus`` or ``cell``.
     inputs : tuple[InputChannel, ...]
-        Segmentation input channels in channel order.
+        Source channels in the order of the run's inputs.
     method : object
         Segmentation method config or ``LabelImportConfig`` for a mask import.
     seeds : str or None
         Name of an earlier run supplying seed labels; ``None`` selects no seed run.
-    projection : ProjectionConfig or None
-        Z-projection settings for the computed input and the run's reference grid;
-        ``None`` leaves them unprojected.
+    input_recipe : InputRecipe or None
+        How the source channels become the image the method receives; ``None``
+        is the empty recipe (the sources stacked as ZYXC in their dtype).
     operations : tuple
         Label operations in application order, using ``ExpandLabelsConfig`` and ``ZExtensionConfig``.
 
     Notes
     -----
     ``name`` (snake_case) keys ``FOV.segmentation_results``; ``target`` is
-    ``nucleus`` or ``cell``; ``inputs`` are the channels of the segmentation
-    input, in channel order (none for an import); ``method`` is a config
-    registered in ``SEGMENTATION_METHODS``, or a :class:`LabelImportConfig`
-    whose target equals the run's; ``seeds`` names an earlier run of the same
-    plan; ``projection`` is an optional Z projection (``ProjectionConfig`` with
-    axis ``z``) of the input, which puts the run (an import too) on the
-    projected reference grid; ``operations`` are label functions applied in order after the
+    ``nucleus`` or ``cell``; ``inputs`` are the source channels (none for an
+    import); ``method`` is a config registered in ``SEGMENTATION_METHODS``, or
+    a :class:`LabelImportConfig` whose target equals the run's (its
+    ``projection`` puts the import on the projected reference grid);
+    ``seeds`` names an earlier run of the same plan; ``input_recipe`` is
+    applied by :func:`apply_input_recipe` (its ``projection`` puts the run on
+    the projected reference grid, and a method with a model needs its
+    ``model_input``); ``operations`` are label functions applied in order after the
     method: :class:`ExpandLabelsConfig` (:func:`expand_labels` on the run's grid) and
-    :class:`ZExtensionConfig` (which needs a projected run with one input channel
-    and extends the plane labels through the unprojected channel). An import
-    takes no operations.
+    :class:`ZExtensionConfig` (which needs a recipe with a projection and one
+    model channel, and extends the plane labels through that model channel
+    before the projection). An import takes no recipe and no operations.
 
     Raises
     ------
     ValueError
         A name that is not snake_case, an unknown target, inputs missing or
         given to an import, repeated roles, a target that differs from the
-        import's, seeds or operations on an import, a projection along the
-        channels, or an extension without a projection and one input.
+        import's, seeds, a recipe or operations on an import, source roles
+        that differ from the recipe's combine method, a step role the channels
+        do not have, a model input missing for a method with a model or given
+        to one without, or an extension without a projection and one model
+        channel.
     TypeError
         A field of the wrong type or an unregistered method config.
     """
@@ -164,11 +151,10 @@ class SegmentationRun:
     inputs: tuple[InputChannel, ...]
     method: object
     seeds: str | None = None
-    projection: object | None = None
+    input_recipe: InputRecipe | None = None
     operations: tuple = ()
 
     def __post_init__(self):
-        from starfinder.preprocessing import ProjectionConfig
         check_name(self.name, "segmentation run")
         _check_target(self.target)
         if not isinstance(self.inputs, tuple) or not all(isinstance(i, InputChannel) for i in self.inputs):
@@ -178,6 +164,8 @@ class SegmentationRun:
             spec_for(SEGMENTATION_METHODS, self.method, "segmentation method", TypeError,
                      f"no segmentation method is registered for {type(self.method).__qualname__}; "
                      "a run's method is a SEGMENTATION_METHODS config or a LabelImportConfig")
+        if self.input_recipe is not None and not isinstance(self.input_recipe, InputRecipe):
+            raise TypeError("input_recipe must be an InputRecipe or None")
         if imported:
             if self.inputs:
                 raise ValueError(f"run {self.name!r} imports a mask and takes no inputs")
@@ -185,6 +173,9 @@ class SegmentationRun:
                 raise ValueError(f"run {self.name!r} has target {self.target!r}, its import {self.method.target!r}")
             if self.seeds is not None:
                 raise ValueError(f"run {self.name!r} imports a mask and takes no seeds")
+            if self.input_recipe is not None:
+                raise ValueError(f"run {self.name!r} imports a mask and takes no input_recipe; the import's "
+                                 "projection (LabelImportConfig.projection) puts it on a projected grid")
         elif not self.inputs:
             raise ValueError(f"run {self.name!r} needs at least one input channel")
         roles = [i.role for i in self.inputs]
@@ -192,19 +183,19 @@ class SegmentationRun:
             raise ValueError(f"run {self.name!r} repeats a channel role: {roles}")
         if self.seeds is not None and (not isinstance(self.seeds, str) or not self.seeds):
             raise TypeError("seeds must name an earlier run or be None")
-        if self.projection is not None:
-            if not isinstance(self.projection, ProjectionConfig):
-                raise TypeError("projection must be a ProjectionConfig or None")
-            if self.projection.axis != "z":
-                raise ValueError("a run's projection is along z")
         if not isinstance(self.operations, tuple) or not all(type(o) in _OPERATIONS for o in self.operations):
             raise TypeError("operations must be a tuple of ExpandLabelsConfig and ZExtensionConfig")
-        if imported and self.operations:
-            raise ValueError(f"run {self.name!r} imports a mask and takes no operations")
+        if imported:
+            if self.operations:
+                raise ValueError(f"run {self.name!r} imports a mask and takes no operations")
+            return
+        modelled = model_roles(self.input_recipe, roles, run=self.name)
+        check_model_input(self.method, self.input_recipe, run=self.name)
         extends = any(type(o) is ZExtensionConfig for o in self.operations)
-        if extends and (self.projection is None or len(self.inputs) != 1):
-            raise ValueError(f"run {self.name!r}: extend_labels_through_z needs a projected run with one input "
-                             "channel, whose unprojected channel is the stain")
+        projection = None if self.input_recipe is None else self.input_recipe.projection
+        if extends and (projection is None or len(modelled) != 1):
+            raise ValueError(f"run {self.name!r}: extend_labels_through_z needs an input recipe with a projection "
+                             "and one model channel, whose channel before the projection is the stain")
 
 
 @dataclass(frozen=True)
@@ -251,16 +242,15 @@ def _check_rounds(fov, runs, grid):
     """Every round an input of ``runs`` reads is resident, registered into the reference frame and on the reference
     grid.
 
-    The reference merged image (an input's own, or the amplicon of a composite)
-    is the resident reference round's, else the saved reference image of
-    FOV.load_reference_image, which is the grid itself.
+    The reference merged image (an input's own, such as the amplicon of a
+    composite) is the resident reference round's, else the saved reference
+    image of FOV.load_reference_image, which is the grid itself.
     """
     ref = fov.rounds.reference_round
     registered = fov.registration_record.get("rounds", {})
     restored = fov._reference_file is not None and not fov._reference_resident()
     for run in runs:
         names = [ref if i.reference_merged else i.round for i in run.inputs]
-        names += [ref for i in run.inputs if isinstance(i.prepare, CompositeConfig)]
         # Only the merged image of the reference round is read: the restored file serves it.
         merged_only = all(i.reference_merged or i.round != ref for i in run.inputs)
         for name in dict.fromkeys(names):
@@ -316,7 +306,7 @@ def _reference_merged(fov):
 
 
 def _channel(fov, item):
-    """One input channel (ZYX) and its source record."""
+    """One source channel (ZYX) and its source record."""
     ref = fov.rounds.reference_round
     if item.reference_merged:
         image, round_name = _reference_merged(fov), ref
@@ -326,25 +316,17 @@ def _channel(fov, item):
         index = _channel_index(fov, round_name, item.channel)
         image = np.asarray(fov.images[round_name])[..., index]
         details = _channel_details(fov, round_name, index)
-    prepared = None
-    if isinstance(item.prepare, CompositeConfig):
-        image, prepared = composite_nuclei_amplicon(image, _reference_merged(fov), config=item.prepare)
-    elif isinstance(item.prepare, FlamingoEnhancementConfig):
-        flamingo = np.asarray(fov.images[round_name])[..., _channel_index(fov, round_name, item.prepare_channel)]
-        image, prepared = enhance_with_flamingo(image, flamingo, config=item.prepare)
     entry = fov.registration_record.get("rounds", {}).get(round_name) if round_name != ref else None
     source = {"round": item.round, "channel": item.channel, **details, "reference_merged": item.reference_merged,
-              "prepare": prepared, "prepare_channel": item.prepare_channel,
               "registration": None if entry is None else {
                   "reference": entry.get("reference"), "reference_sha256": entry.get("reference_sha256"),
                   # The reference stain's relation, and the saved file of an image reloaded by load_registered_round.
                   **{key: entry[key] for key in ("relation", "saved") if key in entry}},
               "sha256": array_sha256(image)}
-    path = fov._merged_reference()[1] if item.reference_merged or isinstance(item.prepare, CompositeConfig) else None
+    path = fov._merged_reference()[1] if item.reference_merged else None
     if path is not None:
-        # The reference merged image (the channel, or the composite's amplicon) was read from the saved
-        # reference image of FOV.load_reference_image: its path below the output root (an imported or configured
-        # file outside it: its absolute path) and its file SHA-256.
+        # The reference merged image was read from the saved reference image of FOV.load_reference_image: its path
+        # below the output root (an imported or configured file outside it: its absolute path) and its file SHA-256.
         root = Path(fov.dataset.output_root).absolute()
         absolute = Path(path).absolute()
         recorded = (absolute.relative_to(root).as_posix() if absolute.is_relative_to(root) else str(absolute))
@@ -353,20 +335,17 @@ def _channel(fov, item):
 
 
 def assemble_input(fov, run, grid):
-    """The run's segmentation input from the FOV's resident images, and the unprojected ZYXC stack.
+    """The run's segmentation input from the FOV's resident images, the unprojected model channels, the recipe
+    record and the source channels' records.
 
-    Each channel is taken (and prepared) in order and stacked as ZYXC (NumPy's
-    type promotion gives the dtype); a run with a projection is projected along
-    z onto ``grid.projected(method=…)``.
+    Each source channel is taken in order and the run's input recipe is applied
+    by :func:`apply_input_recipe` on the reference grid (a projection puts the
+    input on ``grid.projected(method=…)``). The source records are the
+    ``input.channels`` of the run record: one per source channel, its role first.
     """
-    from starfinder.preprocessing import project_image
-    channels, sources = zip(*(_channel(fov, item) for item in run.inputs))
-    stack = np.ascontiguousarray(np.stack(channels, axis=-1))
-    image, run_grid = stack, grid
-    if run.projection is not None:
-        image = np.ascontiguousarray(project_image(stack, config=run.projection))
-        run_grid = grid.projected(method=run.projection.method)
-    return SegmentationInput(image, run_grid, tuple(i.role for i in run.inputs), tuple(sources)), stack
+    sources = [(item.role, *_channel(fov, item)) for item in run.inputs]
+    segmentation_input, unprojected, recipe = apply_input_recipe(sources, grid, recipe=run.input_recipe, run=run.name)
+    return segmentation_input, unprojected, recipe, _json([{"role": role, **record} for role, _, record in sources])
 
 
 def _extend(result, stain, grid, run, config):
@@ -415,6 +394,8 @@ def segment_fov(fov, plan, *, device="cpu", inputs=None, only=None):
     (the saved format writes it); an import has none. ``only`` names the one run to
     compute (None: every run); the seeds of a run that this call does not compute are
     the FOV's ``segmentation_results`` (a saved run restored by FOV.load_segmentation).
+    Each run's record holds ``wall_s``, the wall time of the run in seconds: its input,
+    method (or import) and label operations.
     """
     if not isinstance(plan, SegmentationPlan):
         raise TypeError("plan must be a SegmentationPlan")
@@ -433,16 +414,23 @@ def segment_fov(fov, plan, *, device="cpu", inputs=None, only=None):
                 "registration_record_sha256": _record_sha256(fov.registration_record)}
     results = {}
     for run in runs:
+        started = time.perf_counter()
         namespace = json.dumps([fov.dataset.dataset_id, fov.dataset.sample_id, fov.fov_id, fov.tile,
                                 run.name], separators=(",", ":"))
         if isinstance(run.method, LabelImportConfig):
             config = run.method
-            run_grid = grid if run.projection is None else grid.projected(method=run.projection.method)
+            run_grid = grid if config.projection is None else grid.projected(method=config.projection)
             result = import_labels(config.path, grid=run_grid, target=config.target, geometry=config.geometry,
                                    relabel=config.relabel, label_namespace=namespace)
             record = dict(result.record)
+            if config.projection is not None:
+                record["import"] = dict(record["import"], projection=config.projection)
         else:
-            segmentation_input, stack = assemble_input(fov, run, grid)
+            if run.input_recipe is not None and run.input_recipe.model_input is not None:
+                # Amendment A and the factor checks, on this grid, before any step runs.
+                factor = model_factor(run.input_recipe.model_input, grid.metadata)["factor_zyx"]
+                check_model_input(run.method, run.input_recipe, run=run.name, factor_zyx=factor)
+            segmentation_input, stack, recipe, channels = assemble_input(fov, run, grid)
             if isinstance(run.method, SeededWatershedConfig) and segmentation_input.grid.metadata.spacing_zyx is None:
                 raise ValueError("seeded_watershed needs a spacing: set voxel_size_xy and voxel_size_z "
                                  "(micrometres) before loading raw images, or supply a reference image with "
@@ -452,14 +440,17 @@ def segment_fov(fov, plan, *, device="cpu", inputs=None, only=None):
             seeds = None if run.seeds is None else results.get(run.seeds, fov.segmentation_results.get(run.seeds))
             result = segment(segmentation_input, config=run.method, target=run.target, seeds=seeds, device=device,
                              label_namespace=namespace)
+            if recipe["model_input"] is not None:
+                recipe["model_input"]["method_value"] = method_value(result.record)
+            result = replace(result, record=dict(result.record, input=dict(result.record["input"], channels=channels,
+                                                                            recipe=recipe)))
             for operation in run.operations:
                 if type(operation) is ExpandLabelsConfig:
                     result = _expand(result, operation)
                 else:
                     result = _extend(result, stack[..., 0], grid, run, operation)
             record = dict(result.record)
-            if run.projection is not None:
-                record["input"] = dict(record["input"], projection=_json(asdict(run.projection)))
-        results[run.name] = replace(result, record=dict(record, upstream=upstream))
+        results[run.name] = replace(result, record=dict(record, upstream=upstream,
+                                                        wall_s=time.perf_counter() - started))
     return results
 

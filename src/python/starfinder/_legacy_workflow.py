@@ -13,7 +13,7 @@ four scripts and the tests that pin the legacy outputs (``test_assignment_workfl
 """
 # §2.13
 import json
-from dataclasses import asdict, replace
+from dataclasses import replace
 from pathlib import Path
 
 from starfinder import _layout
@@ -66,7 +66,10 @@ def _run_stardist_segmentation(snakemake):
     The input is read with load_volume; its grid is reference_grid_from_file,
     whose metadata is the file's own or, for a file without one, declared from
     voxel_size_z and voxel_size_xy (the projection of it for a YX file with a
-    translated projection). The labels are segment's uint32 result after the
+    translated projection). The translated implicit input recipe is applied by
+    apply_input_recipe (its projection is recorded as not applied, reason
+    input_file: the file is the projection) and recorded with name null and
+    source legacy. The labels are segment's uint32 result after the
     translated operations, written to the rule's output in the file's
     dimensionality (zlib), with the run record beside it as {fovID}.json. There
     is no foreground gate: an image without objects gives an all-zero image
@@ -75,7 +78,8 @@ def _run_stardist_segmentation(snakemake):
     import tifffile
     from starfinder.io import load_volume
     from starfinder._records import jsonable
-    from starfinder.segmentation import SegmentationInput, reference_grid_from_file, segment
+    from starfinder.segmentation import apply_input_recipe, reference_grid_from_file, segment
+    from starfinder.segmentation._recipe import method_value
     from starfinder._records import file_sha256
     from starfinder.segmentation._plan import _expand
     config, fov_id = snakemake.config, snakemake.wildcards.fovID
@@ -85,16 +89,20 @@ def _run_stardist_segmentation(snakemake):
     declared = loaded.diagnostics['metadata_source'] != 'stored'
     with tifffile.TiffFile(path) as tif:
         plane = len(tif.series[0].shape) == 2
+    projection = legacy.recipe.projection
     metadata = None
     if declared:
         metadata = _declared_metadata(config, fov_id)
-        if plane and legacy.projection is not None:
-            metadata = metadata.projected(method=legacy.projection.method)
+        if plane and projection is not None:
+            metadata = metadata.projected(method=projection.method)
     grid = reference_grid_from_file(path, metadata=metadata)
     source = {'path': str(path), 'segmentation_input_folder': legacy.record['segmentation_input_folder']}
-    result = segment(SegmentationInput(loaded.image[..., None], grid, (legacy.role,), (source,)),
-                     config=legacy.config, target=legacy.target, device=legacy.device,
+    segmentation_input, _, recipe = apply_input_recipe(
+        [(legacy.role, loaded.image, source)], grid, recipe=legacy.recipe, run=_LEGACY_SEGMENTATION_RUN,
+        projected=None if projection is None else 'input_file', source='legacy')
+    result = segment(segmentation_input, config=legacy.config, target=legacy.target, device=legacy.device,
                      label_namespace=_label_namespace(config, fov_id, _LEGACY_SEGMENTATION_RUN))
+    recipe['model_input']['method_value'] = method_value(result.record)
     for operation in legacy.operations:
         result = _expand(result, operation)
     output = Path(snakemake.output[0])
@@ -102,8 +110,7 @@ def _run_stardist_segmentation(snakemake):
     tifffile.imwrite(output, result.labels[0] if plane else result.labels, compression='zlib',
                      photometric='minisblack')
     record = dict(result.record, run=_LEGACY_SEGMENTATION_RUN,
-                  input=dict(result.record['input'], path=str(path), file_sha256=file_sha256(path),
-                             projection=None if legacy.projection is None else asdict(legacy.projection)),
+                  input=dict(result.record['input'], path=str(path), file_sha256=file_sha256(path), recipe=recipe),
                   workflow=dict(legacy.record, metadata_source='declared' if declared else 'stored',
                                 output=str(output), output_sha256=file_sha256(output)))
     output.with_suffix('.json').write_text(json.dumps(jsonable(record), indent=2, default=str))

@@ -25,7 +25,7 @@ from .report_sizes import COMPARISON, FIGURES, FULL, HALF, THIRD
 pytestmark = [pytest.mark.report, pytest.mark.contract]
 
 PAGE = "specs/report-algorithms.md"
-ROW = r"(?:RC|DF|PR|EF|RP|PG|CH|RT|Z|A|CP|RR|WF|DT)\d+"
+ROW = r"(?:RC|DF|PR|EF|RP|PG|CH|RT|Z|A|CP|RR|WF|SZ|DT)\d+"
 TIERS = {"default": (False,), "slow": (True,), "default and slow": (False, True)}
 
 
@@ -75,7 +75,7 @@ def test_every_check_names_collected_tests(request):
     """Every row of the table "Checks" has a row in "Implemented checks", in the same order, naming tests that
     pytest collects, none an expected failure, each with a subsystem marker and the tier the row states."""
     rows, expected = implemented_checks(), design_rows()
-    assert len(expected) == len(set(expected)) == 54
+    assert len(expected) == len(set(expected)) == 57
     assert list(rows) == expected
     modules = sorted({module for names, _ in rows.values() for module, _ in named_tests(names)})
     items_of = {module: collected(request.session, module) for module in modules}

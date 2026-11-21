@@ -112,12 +112,15 @@ placement; otherwise `reason` says why it was not:
 * `quality_below_threshold`: the pair was registered, but its `quality`, the rank correlation
   of the two overlaps after the shift, is below the threshold.
 * `nan_quality`: one overlap is constant, so the quality is undefined.
+* `quality_higher_at_z_offset`: with `quality_threshold` `"auto"` on tiles with more than one
+  plane, the link passed the threshold, but its quality is higher a few planes up or down than
+  at its registered shift, so the link is probably off in z.
 * `optimizer_removed`: the link passed the threshold, but the global optimization dropped it
   because it disagreed with the other links.
 
 `residual` (µm) is the disagreement between a kept link's shift and the final positions. With
-the default threshold, `placement.json` holds the threshold and the qualities at wrong offsets
-under `method_diagnostics.link_quality`. Links the optimizer removed stay in the table, and
+`"auto"`, `placement.json` holds the threshold, the qualities at wrong offsets and, for tiles
+with more than one plane, each link's z check under `method_diagnostics.link_quality`. Links the optimizer removed stay in the table, and
 their FOVs carry the flag `optimizer_removed_link`. They make the review `required` only when
 the removals leave the placement less well supported: a component splits, a FOV keeps fewer
 than 2 links (and fewer than it had), or a residual or correction check fails.
@@ -144,9 +147,12 @@ than 2 links (and fewer than it had), or a residual or correction check fails.
 Without `quality_threshold`, single-plane tiles (Z = 1) get `"auto"` and tiles with more than
 one plane get 0.7. On stacks whose tiles share one z range, such as tissue-2D (Z = 30), name
 `quality_threshold: auto` in the configuration: on tissue-2D the fixed 0.7 rejected real links
-and left most FOVs unplaced, while `auto` reproduced the approved placement. `auto` compares
-each link with the quality at wrong offsets in Y and X only, so it cannot catch a link that is
-off in z; W-895 tracks a null that can.
+and left most FOVs unplaced, while `auto` reproduced the approved placement. The threshold of
+`auto` comes from the quality at wrong offsets in Y and X only, which cannot catch a link that
+is off in z. So on tiles with more than one plane, `auto` also measures each link about 1 µm up
+and down in z and drops a link that scores higher there than at its own shift. On the full LN
+sample (W-904) that check passed every link, but `auto`'s in-plane threshold (0.91 there)
+dropped 62 real links that 0.7 keeps, so the default for these tiles stays 0.7.
 
 The reference generates configuration defaults from the code. For the
 [link-quality rule](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/stitching.md#link-quality-rule)
