@@ -31,7 +31,8 @@ new code.
 
 ## Fixtures
 
-Every routine fixture is at most 32 × 64 × 64 voxels with at most four channels and four rounds,
+No check of this page needs a plane of a dataset's real size. The strip layout at 3,072 and 1,496 pixels is evidence
+outside the suite (the repair run's `codec-check`). Every routine fixture is at most 32 × 64 × 64 voxels with at most four channels and four rounds,
 as the project guidance bounds them.
 
 | Fixture | Construction | Needs |
@@ -54,7 +55,7 @@ environment (extras `dev`, `local-registration`, `checkpoint`).
 
 | # | Check | Fixture | Expected | Tolerance | Needs |
 | --- | --- | --- | --- | --- | --- |
-| CW1 | Each writer of the inventory writes its codec | `volumes`; `session_dataset` | With the default, I1, I2, I3 (ZYX and the YX projection) and I4 have, on every page, TIFF Compression 8 and Predictor 1 (or no Predictor tag). With `none`, Compression 1. I6–I9 and I11 are Compression 8 in both settings. I10, I12 (HDF5 filters: none) and I13 are uncompressed in both settings. I14 stays uncompressed. I18 and I19 keep their Zarr codec in both settings: the codec recorded in `export.json` (`levels[].codec`) and the store's `zarr.json` equal those of `70edc72` for the same input. | exact (integers, strings) | H; for I18 and I19 the `multiview-stitcher` and `spatialdata` extras, skipped with the extra named |
+| CW1 | Each writer of the inventory writes its codec | `volumes`; `session_dataset` | With the default, I1, I2, I3 (ZYX and the YX projection) and I4 have, on every page, TIFF Compression 8 and Predictor 1 (or no Predictor tag). With `none`, Compression 1. I6–I9 and I11 are Compression 8 in both settings. I10, I12 (HDF5 filters: none) and I13 are uncompressed in both settings. I14 stays uncompressed. I18 and I19 keep their Zarr codec in both settings, each compared with `70edc72` for the same input. I18: the `fusion` output entry of format `ome_zarr` in `export.json`, its `levels[].codec` and `compression` (`export/_fuse.py:777`–`:779`, `:789`), and the codecs of each level's `zarr.json` in the store are equal. I19: `export.json` records no codec. In its `spatialdata` section, each raster element's `levels` (the integer 1, `export/_spatialdata.py:437`), `array_metadata` (the path of the level's `zarr.json` or `.zarray`) and `array_metadata_sha256` (`:523`–`:525`) are equal, and so are the codecs that this array metadata of the store names. | exact (integers, strings) | H; for I18 and I19 the `multiview-stitcher` and `spatialdata` extras, skipped with the extra named |
 | CW2 | Round trip | `volumes` through `write_registered_round`, `save_reference_image`, `_prepared.write_image` and their readers | Each read returns the decoded identity of the array written (dtype, shape, C-order SHA-256), every dtype of the fixture, and the `ImageMetadata` written. | exact (hashes; dtype strings; metadata equality) | H |
 | CW3 | The opt-out reproduces `70edc72` | `volumes`; `base_reader` | With `image_compression: none`, the bytes of I1, I3 and I4 for the same array and metadata equal the base revision's files. The hashes are taken from the base revision in a subprocess, in the same environment. | exact (hashes) | H, B |
 | CW4 | The writers that compress today keep their bytes | `volumes`; `base_reader` | `save_volume(compress=True)` with its explicit level 6 writes the same bytes as at `70edc72` (tifffile's default level is 6 with the locked imagecodecs), for ZYX and ZYXC. So do `write_labels` and the segmentation input. | exact (hashes) | H, B |
