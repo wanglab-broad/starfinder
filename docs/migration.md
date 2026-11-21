@@ -377,6 +377,7 @@ blocks changed.
 | `checkpoints/<fov>/run.json` | `fovs/<fov>/run.json`; stage files are under `checkpoints/` below that FOV folder |
 | Reference file under `images/ref_merged/` | `fovs/<fov>/reference.tif`, or configured reference file/import |
 | Number-only channel folders | Channel labels in saved prepared-image folders |
+| `starfinder workflow plan` of a tiled configuration opened each FOV's reference file twice: once unbuffered for the shape, once buffered through `tifffile` for the dtype alone, which read most of the file (73 MB of a 151 MB file per FOV on an SMB share, 62 GB over the 848 FOVs of mPFC-aging) | The plan opens each reference file once, unbuffered, and takes the shape and the dtype from that one header read (`io.tiff._volume_header_dtype`; about 85 KB per file). The grid, the bytes per voxel (the file's dtype, or a preprocessing step's `output_dtype`), the rotation rule and the manifest are unchanged, byte for byte. No configuration changes |
 
 ### Molecule and read tables
 

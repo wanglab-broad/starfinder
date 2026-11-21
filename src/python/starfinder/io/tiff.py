@@ -286,7 +286,49 @@ def _volume_header(path: Path | str, *, floating: bool = False) -> tuple[tuple[i
     Missing paths raise FileNotFoundError as load_volume does. The file is
     read without a buffer, so that only the bytes tifffile asks for are read:
     a buffered file reads a whole block (st_blksize, 1 MiB on an SMB share)
-    at each seek to a page's header.
+    at each seek to a page's header. :func:`_volume_header_dtype` gives the
+    same result with the series' dtype, from the same one read.
+    """
+    header = _volume_header_dtype(path, floating=floating)
+    return None if header is None else header[:2]
+
+
+def _volume_header_dtype(path: Path | str, *, floating: bool = False) \
+        -> tuple[tuple[int, int, int] | None, bool, np.dtype] | None:
+    """(ZYX shape, whether metadata is stored, dtype) of a TIFF from one unbuffered read of its header, or None.
+
+    The first two items and the None cases are those of :func:`_volume_header`
+    (the same ``floating`` rule); the file is opened once, so a caller that
+    needs the dtype too does not open it a second time. The dtype is the one
+    series' stored dtype, in the file's own byte order (``numpy.dtype`` of
+    tifffile's series dtype), whether or not the shape is settled; a file of
+    several series gives None as a whole.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The TIFF file.
+    floating : bool, default False
+        As in :func:`_volume_header`: with True a floating-point file gets its
+        shape by the same rules; the default gives ``None`` for its shape.
+
+    Returns
+    -------
+    tuple or None
+        ``(shape, stored, dtype)``: the ZYX shape or None where the header
+        does not settle it, whether ``starfinder_metadata`` is stored, and the
+        series' ``numpy.dtype``; None for a file of several series.
+
+    Raises
+    ------
+    FileNotFoundError
+        ``path`` is not a file, as :func:`_volume_header` raises it.
+
+    Notes
+    -----
+    The file is opened once, without a buffer: only the bytes tifffile asks for
+    are read (about 85 KB of a 151 MB, 36-page file on the share), where a
+    buffered ``tifffile.TiffFile(path)`` reads a block (1 MiB) at each page.
     """
     path = Path(path)
     if not path.is_file():
@@ -302,7 +344,7 @@ def _volume_header(path: Path | str, *, floating: bool = False) -> tuple[tuple[i
                 if axis in axes:
                     pos = axes.index(axis)
                     if shape[pos] != 1:
-                        return None, "starfinder_metadata" in stored
+                        return None, "starfinder_metadata" in stored, np.dtype(series.dtype)
                     shape, axes = shape[:pos] + shape[pos + 1:], axes[:pos] + axes[pos + 1:]
             if axes not in ("YX", "ZYX"):
                 shape = None
@@ -311,7 +353,7 @@ def _volume_header(path: Path | str, *, floating: bool = False) -> tuple[tuple[i
         if shape is None or len(shape) != 3 or 0 in shape or \
                 np.dtype(series.dtype).kind not in ("uif" if floating else "ui"):
             shape = None
-        return shape, "starfinder_metadata" in stored
+        return shape, "starfinder_metadata" in stored, np.dtype(series.dtype)
 
 
 def _volume_dtype(path: Path | str) -> np.dtype:

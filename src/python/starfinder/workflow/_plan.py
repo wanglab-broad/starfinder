@@ -889,15 +889,15 @@ class Graph:
 
     def image_geometry(self, fov):
         """(Z, Y, X) of a FOV's pipeline rounds after rotation, and the bytes per voxel of its chunked checkpoint,
-        from the reference round's first channel file (its header alone, as _volume_header reads it)."""
-        import tifffile
-        from starfinder.io.tiff import _volume_header
+        from the reference round's first channel file (its header alone, one unbuffered open, as
+        _volume_header_dtype reads it)."""
+        from starfinder.io.tiff import _volume_header_dtype
         r = self.r
         rounds = self.inputs.images[fov]
         name = r["ref_round"] if r["ref_round"] in rounds else sequencing_rounds(r)[0]
         entry = next(iter(rounds[name].values()))
         path = self.inputs.root / entry["path"]
-        header = _volume_header(path, floating=True)
+        header = _volume_header_dtype(path, floating=True)
         if header is None or header[0] is None:
             raise PlanRefused(f"FOV {fov}: the image shape of {path} cannot be read from its header, which tiled "
                               "execution's grid needs")
@@ -905,8 +905,7 @@ class Graph:
         angle = r.get("rotate_angle") or 0
         if float(angle) % 180 == 90:
             y, x = x, y
-        with tifffile.TiffFile(path) as tif:
-            dtype = np.dtype(tif.series[0].dtype)
+        dtype = header[2]
         pipeline = _translate.processing(r).workflow.pipeline
         for step in (pipeline.preprocessing.steps if pipeline.preprocessing is not None else ()):
             if getattr(step.config, "output_dtype", None) is not None:

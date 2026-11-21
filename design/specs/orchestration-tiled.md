@@ -113,8 +113,9 @@ rows, no tiles.
    the checkpoint stages as direct writes them.
 
 The plan computes the tile list and the halo from the resolved configuration and the image shape
-(read from the TIFF headers without the pixels, as `_volume_header`, `starfinder/io/tiff.py:215`,
-does), and writes one `tile` task per tile into the manifest, so an engine fans out over the
+(read from the TIFF headers without the pixels, as `_volume_header` and `_volume_header_dtype`,
+`starfinder/io/tiff.py`, do: one unbuffered open of each FOV's reference file gives its shape and
+dtype), and writes one `tile` task per tile into the manifest, so an engine fans out over the
 manifest's tiles and never computes a tile itself (D2).
 
 ## The global task
