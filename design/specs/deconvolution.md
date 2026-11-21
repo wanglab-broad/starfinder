@@ -1,6 +1,6 @@
 # Deconvolution stage: a deconvolved TIFF + zlib copy of the images, made by deconwolf before the FOV tasks
 
-% Status: Draft for Jiahao's review, written against `70edc72` (v0.3.0). W-918, 2026-11-21. The branch head `2a301f3` changes design records only, so every code reference on this page holds at `70edc72`.
+% Status: Approved (Jiahao, 2026-11-21, W-918), with decision 3 changed: uint8 with one stretch factor per (FOV, round) by default, as Huygens' exports, and uint16 with an adjustable scale on request ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`.
 
 This page specifies deconvolution as a workflow stage of its own. Jiahao decided on 2026-11-20
 (W-855, comment 70988672) to make deconwolf the primary deconvolution and to arrange a rule for
@@ -10,14 +10,14 @@ deconvolution be a stage and not a step inside the FOV tasks.
 
 * **What the stage does.** A new `deconvolution` block makes the plan add one `deconvolve` task per
   (FOV, round) and one `psf` task per run. Each `deconvolve` task runs deconwolf on every channel
-  of its round and writes a deconvolved copy of the round's folder. The copy is TIFF + zlib, uint16 with one fixed scale,
+  of its round and writes a deconvolved copy of the round's folder. The copy is TIFF + zlib: by default uint8 with one stretch factor per (FOV, round), as Huygens' exports, or uint16 with one fixed scale,
   in the input's folder layout. The FOV tasks (`summarize`, `fov`, `tile_global`, `morphology`) then
   read the copy in place of the raw images.
 * **What does not change.** A run without a `deconvolution` block plans exactly the manifest it
   plans today: no hash, fingerprint, task or record changes. Nothing MATLAB reads or writes changes.
   The raw images are never written.
 * **Keys.** The `deconvolution` block holds what changes the result: the rounds, iterations,
-  method, border, tiling, PSF and scale. `execution` holds what does not: the device, the threads,
+  method, border, tiling, PSF and storage form (`dtype`, `scale`). `execution` holds what does not: the device, the threads,
   the binary and the wisdom store. That line follows W-916: deconwolf's CPU and GPU outputs agree
   within 1.6 × 10⁻⁵ of the maximum, and so do its two FFT planning modes, while tiling changes
   values by up to 1.3 % of the maximum.
@@ -38,36 +38,47 @@ This is a software design. It makes no data claim. The times, sizes and agreemen
 the measurements of W-855, W-915 and W-916 on 9735seqA1 (Leica SP8, three positions), named where
 they are used. Similarity to Huygens is not accuracy (W-855).
 
-## Questions for Jiahao
+## Jiahao's answers (2026-11-21)
+
+Jiahao answered the nine questions on 2026-11-21 (in the coordinating session's chat; W-918 comments e7c633e9, 548f0af9 and 64bc1b3f; the review page's `decisions`): "W918-2 用 psfmodels，同意进 lock，其他按推荐"; for question 3, "记两个形式吧，先默认 uint8 和之前 huygens 保持一致，可选uint16 with 可以调整的 scale", and for its factor, "Per FOV, as Huygens". The questions stay as they were asked, each with its answer.
 
 1. **Accept the recommendations** of the twelve decisions in the table below?
+   **Answer:** accepted, except decision 3, which question 3 changed.
 2. **psfmodels as a dependency (decision 4).** Generating the PSF from configuration needs
    psfmodels 0.3.3 (W-855's version) in the lock, as a new optional extra `deconvolution`. W-855
    installed it by building its source distribution, so the image's build stage may need a C++
    compiler. The alternative is to accept only a supplied PSF file and keep the lock unchanged.
    Add the extra, or start with supplied files only?
+   **Answer:** add the extra. psfmodels 0.3.3 enters the lock as the optional extra `deconvolution`.
 3. **The scale (decision 3).** The recommendation stores the deconvolved values as uint16 with
    one fixed scale, 64 by default, so that a stored value is 64 × the deconvolved grey level.
    On W-915's twelve channel volumes, the largest deconvolved value is 521–638 raw grey levels,
    inside the range of 0–1,023.98 that scale 64 can hold. The alternative closest to Huygens' exports is the raw
    dtype (uint8) with one recorded scale, as Huygens writes them (W-855 records its stretch factors 0.284–0.296).
    Is uint16 at 64 right?
+   **Answer:** changed. Two storage forms: by default uint8 with one stretch factor per (FOV, round),
+   255 / the round's maximum over its channels, as Huygens' exports; on request uint16 with an adjustable scale.
+   [The scaling](#the-scaling) holds the rule and the measurements shown before the answer.
 4. **Iterations (decision 5).** The recommendation makes `iterations` a required key with no
    default: 5 was frozen on one SP8 dataset (W-915), at the low edge of its grid. Each dataset
    chooses its count by W-855's development-position rule against a comparator, recorded in
    "Preparing a dataset". Should 5 be the default instead?
+   **Answer:** accepted: required, with no default.
 5. **The device and the planning mode outside the hash (decisions 6 and 7).** Switching between
    CPU and GPU, or between planned and `--noplan` FFTs, reruns nothing, although each changes
    values by up to 1.6 × 10⁻⁵ of the maximum (W-916). Tiling, which changes values by up to 1.3 %,
    is in the hash. Is that the right line?
+   **Answer:** accepted.
 6. **deconwolf in every image target (decision 6).** The recommendation builds deconwolf v0.4.5
    from source in a build stage of its own and copies it into the runtime stage that `cpu`,
    `learned` and `learned-cuda` all start from. No new target is needed, because a run has one
    image for all its tasks (`execution.container`). Accept?
+   **Answer:** accepted.
 7. **The real-data check.** Running the stage on Position022 is more than a batch may run on raw
    images (W-889 D3). The recommendation is a separate evidence issue on the implementation
    branch's commit, run by the coordinating session before the merge: on the host's RTX A5000,
    the card of W-915, and once on a UGER RedHat 8 node in the image. Accept?
+   **Answer:** accepted.
 8. **The plan reads supplied PSF files (decision 9).** With `psf.source: file`, the copy id holds
    each file's SHA-256, so the plan reads those files. That is an exception to the rule that the
    plan reads only the sizes and times of its inputs. The files are small: W-855's PSFs are
@@ -75,22 +86,26 @@ they are used. Similarity to Huygens is not accuracy (W-855).
    PSF gives a new copy and never rewrites an existing one. The alternative leaves the content
    out of the id, finds a changed file at task time, and rewrites that copy's PSF and rounds in
    place, under records that other runs name. Accept the exception?
+   **Answer:** accepted.
 9. **A supplied PSF's declared spacing (decision 4).** The recommendation refuses at plan time a
    `psf.voxel_size_um` that differs from `voxel_size_xy` or `voxel_size_z` by more than 1 part in
    10⁶. The alternative is to warn and run. A PSF sampled on another grid than the images
    deconvolves them wrongly, so refuse?
+   **Answer:** accepted: refuse.
 
 ## Decisions
 
-The options and the evidence of each choice are in its section.
+Jiahao approved these on 2026-11-21: every recommendation, except decision 3, which the answer to
+question 3 changed. The column "Decision" holds what was approved. The options and the evidence of each
+choice are in its section.
 
 (deconvolution-decisions)=
 
-| # | Choice | Recommendation | Alternatives | Evidence | Section |
+| # | Choice | Decision | Alternatives | Evidence | Section |
 | --- | --- | --- | --- | --- | --- |
 | 1 | The stage and its task kinds | TK1: a `deconvolve` task per (FOV, round), and one `psf` task per run, before every task that reads a deconvolved round; a `deconvolution` block enables them | TK2: per (FOV, round, channel); TK3: per FOV; TK4: a step inside `fov` | The unit of `load_round` is a round folder (`io/tiff.py:394`); the plan's image discovery is per (FOV, round, label) (`workflow/_plan.py:325`–`:341`); W-916: about 35 s per channel volume on the GPU, 74–575 s on the CPU | [The stage](#the-stage-and-its-task-kinds) |
 | 2 | The output and where it lives | OU1: a copy of each deconvolved round folder, TIFF + zlib, one `<label>.tif` per channel in the input's `image_dir_template` layout, under `<copy base>/dw-<copy id>/`; `copy_root: output` (default, under the output root), `beside` (`<dataset_id>-dw/` beside the dataset's folder, as W-910's `-zlib/` copies) or an absolute path | OU2: under the output root only; OU3: beside the data only; OU4: the raw file names | W-909 and W-881 (TIFF + zlib, no predictor); W-910's sibling `-zlib/` copies; the plan's group templates (`workflow/_plan.py:552`–`:561`) | [The output](#the-output) |
-| 3 | The scaling | SC1: deconwolf's float32 output, its kept offset removed (5 untiled, 0 tiled, v0.4.5), clipped at 0, stored as uint16 = rint(value × scale) with one fixed scale (default 64, a number or per round and label), saturation counted | SC2: deconwolf's own uint16 with a per-volume scale; SC3: the raw dtype with a recorded scale; SC4: float32 | W-915: per-volume scalings 101.9–124.5 differ by channel and position; maxima 521–638 after the offset; `src/dw.c` 2661–2665 and 2012–2024 (W-915, W-916) | [The scaling](#the-scaling) |
+| 3 | The scaling | deconwolf's float32 output, its kept offset removed (5 untiled, 0 tiled, v0.4.5), clipped at 0; SC3 by default: uint8 = rint(value × f) with one stretch factor f = 255 / the maximum over the round's channels per (FOV, round), as Huygens' exports, recorded; SC1 with `dtype: uint16`: uint16 = rint(value × scale) with one fixed scale (default 64, a number or per round and label), saturation counted | SC1 alone at scale 64 (the draft's recommendation); SC2: deconwolf's own uint16 with a per-volume scale; SC4: float32 | W-915: per-volume scalings 101.9–124.5 differ by channel and position; maxima 521–638 after the offset; Huygens' history files: one factor per position for all its channels, 0.284–0.296 (W-855); the coordinating session's size and spot measurements of 2026-11-21; `src/dw.c` 2661–2665 and 2012–2024 (W-915, W-916) | [The scaling](#the-scaling) |
 | 4 | The PSF | PS1: generated by the `psf` task with psfmodels `confocal_psf(model="vectorial")` from the block's optics and the dataset's voxel size, centred on its peak; or PS2, a supplied file per label with its declared spacing, refused when that differs from the dataset's; both recorded with their SHA-256 and spacing, and the spacing in the copy id | PS2 only (no dependency); a PSF per task | W-855 amendments 1 and 2; its PSF records | [The PSF](#the-psf) |
 | 5 | deconwolf's settings | DS1: SHB (`--gpu` runs it as SHBCL2), `iterations` required, border quality 2, background automatic, offset 5, untiled by default with `tile_size` optional | DS2: a default of 5 iterations; DS3: deconwolf's automatic stopping | W-915's frozen choice (5 on 022, at the grid's edge; auto 0.9675 outside the tolerance); W-916's tiling | [deconwolf's settings](#deconwolfs-settings) |
 | 6 | Execution | EX1: CPU with threads by default, the GPU by `execution.tasks.deconvolve.gpu`; resources per task from W-916; deconwolf v0.4.5 built from source in the image's shared runtime stage | EX2: GPU by default; EX3: a new image target; EX4: a host binary by path | W-916: the mode table, the projection, the RedHat 8 failure; `Containerfile:111`–`:133`; one image per run (`workflow/_plan.py:522`) | [Execution](#execution) |
@@ -257,7 +272,8 @@ rounds; both may share an image folder, with different label files.
 * two labels that could be confused in one image folder of the copy (above);
 * `tile_size` smaller than the PSF's lateral size plus deconwolf's padding of 20 pixels on each
   side;
-* `scale` that is not positive, or a mapping that misses a deconvolved (round, label);
+* `dtype` other than `uint8` or `uint16`; `scale` with `dtype: uint8`; with `dtype: uint16`, a `scale`
+  that is not positive, or a mapping that misses a deconvolved (round, label);
 * `copy_root` that is relative but not `output` or `beside`.
 
 **Completion and staleness.** Both kinds follow the success rule of D8 unchanged (orchestration,
@@ -291,7 +307,8 @@ deconvolution:
   method: shb               # the one method offered
   border_quality: 2
   tile_size: null           # null: untiled; or deconwolf's --tilesize in pixels (padding 20)
-  scale: 64                 # a number, or {<round>: {<label>: number}}
+  dtype: uint8              # uint8 (default): one stretch factor per (FOV, round), as Huygens; or uint16
+  scale: null               # uint16 only: a number (default 64), or {<round>: {<label>: number}}
   psf:
     source: generate        # generate or file
     files: null             # with file: {<label>: path}, relative to the input root or absolute
@@ -316,7 +333,7 @@ execution:
 ```
 
 The example values are 9735seqA1's, from Huygens' settings (W-855's `psf.py`); they are not
-defaults. Only `rounds`, `copy_root`, `method`, `border_quality`, `tile_size`, `scale`,
+defaults. Only `rounds`, `copy_root`, `method`, `border_quality`, `tile_size`, `dtype` (uint8), `scale` (64, with uint16 only),
 `psf.source`, `psf.depth_um` and `psf.shape_zyx` have defaults. The optics have none, because
 they belong to the microscope. The voxel spacing is not in the block: it is the dataset's
 `voxel_size_xy` and `voxel_size_z`, which the block requires ([The PSF](#the-psf), "The PSF's
@@ -352,7 +369,7 @@ dw-<copy id>/
 
 * A folder that `load_round` reads holds only channel images. `load_round` finds `<label>.tif` by
   its `*<label>*.tif` pattern (`io/tiff.py:425`), as it finds a raw file.
-* Each image is ZYX uint16, written by `save_volume` with W-909's codec (zlib level 6, no
+* Each image is ZYX uint8 by default, or uint16 with `dtype: uint16`, written by `save_volume` with W-909's codec (zlib level 6, no
   predictor; `compressed-image-outputs.md`, decision 4). Its metadata is described in the next bullet.
 * **Metadata: the copy stores exactly what the raw file stores.** The `deconvolve` command reads
   each raw channel with `load_volume` and the default configuration. It passes the result's
@@ -381,10 +398,16 @@ dw-<copy id>/
     round loads.
 * The codec is not optional here: the copy is a kept image output from the start, so
   `execution.image_compression` (W-909) also applies to it when it lands. Until then it is zlib.
-* **Size.** W-915 kept deconwolf's uint16 outputs with zlib: 310–425 MB per channel volume,
-  1.33–1.64 GB per position, against 1.13 GB for the raw position (uint8, uncompressed). So a copy
-  is about 1.2–1.5 times its raw images. This is an inference: W-915's values used a per-volume
-  scale of 101.9–124.5, not 64.
+* **Size.** The coordinating session measured it on 2026-11-21 on Position022's four channel
+  volumes (30 × 3072 × 3072; 283 MB each as raw uint8), written by `save_volume` with zlib
+  (`runs/W-918/20261121T2036Z-coordinator-storage-size/`):
+  * uint8 stretched to 255 / the volume's maximum: 100–113 MB per channel, about 0.43 GB per
+    position, 0.38 times the raw position (1.13 GB uncompressed). SC3's factor is per round, so
+    its files are close to these;
+  * uint16 at scale 64: 382–401 MB per channel, about 1.55 GB per position, 1.4 times the raw
+    position;
+  * for comparison, Huygens' uint8 exports with zlib are 54–69 MB per channel, and W-915's
+    deconwolf uint16 files 310–425 MB.
 * `beside` writes into the data share. The plan checks nothing about access; the first
   `deconvolve` task fails if it cannot write.
 
@@ -397,20 +420,65 @@ uint16 with a scale of 65,535 / the volume's maximum, written in its log (W-915,
 
 | Option | Stored value | Consequence |
 | --- | --- | --- |
-| **SC1. Float output, offset removed, one fixed scale, uint16 (recommended)** | rint((y − o) × s), clipped to 0–65,535, where y is deconwolf's float32 output, o the kept offset of the mode and s the scale of the (round, label) | Every FOV of a round and channel has one intensity scale, so thresholds and the two-pass statistics compare FOVs. One quantization, of at most 0.5 / s grey levels. |
+| **SC3. The raw dtype with one stretch factor per (FOV, round), as Huygens' exports (default)** | rint((y − o) × f), clipped to 0–255, as uint8, where y is deconwolf's float32 output, o the kept offset of the mode, and f = 255 / M, with M the maximum of (y − o), clipped at 0, over every channel of the (FOV, round) | The copy is uint8, as Huygens' exports, whatever the raw dtype: Huygens' history files give one factor per position for all its channels (Position022 0.284422, 028 0.295786, 037 0.294713; W-855). It never saturates. Its step is 1 / f grey levels, about 2.5 on W-915, and f differs by FOV: by 4 % across W-915's three positions. |
+| **SC1. One fixed scale, uint16 (`dtype: uint16`)** | rint((y − o) × s), clipped to 0–65,535, where s is the scale of the (round, label) | Every FOV of a round and channel has one intensity scale. One quantization, of at most 0.5 / s grey levels. |
 | SC2. deconwolf's own uint16 output | stored / (65,535 / max) | Each volume has its own scale: on W-915 101.9–124.5 across channels and positions. Intensities are not comparable across FOVs without the logged scale, and the offset stays in. |
-| SC3. The raw dtype with a recorded scale | uint8, value × s with s ≈ 0.4 | Huygens' form (one stretch factor for all channels). 256 levels for values that reach 638: steps of about 2.5 raw grey levels. Half SC1's bytes. |
 | SC4. float32 | y − o | No quantization; four bytes per voxel and poor zlib compression. A float raw image is a new case for every consumer. |
 
-**Recommendation: SC1.**
+**Decision (Jiahao, 2026-11-21): SC3 by default, SC1 on request.** Jiahao: "记两个形式吧，先默认 uint8 和之前
+huygens 保持一致，可选uint16 with 可以调整的 scale", and for the factor, "Per FOV, as Huygens". The
+draft had recommended SC1 alone, at scale 64.
 
-* **The output dtype is uint16.** A deconvolved value exceeds the raw range: W-915's maxima after
-  the offset are 521–638 grey levels on all twelve channel volumes of a uint8 dataset.
-* **The default scale is 64.** It holds 0–1,023.98 grey levels, 1.6 times the largest value seen.
-  Its step is 1/64 of a grey level. A dataset whose raw images are not uint8 sets its own scale.
-  "Preparing a dataset" states the rule: s × (largest expected value) ≤ 65,535.
-* **The scale is one number by default.** A mapping `{<round>: {<label>: s}}` sets it per round and channel, as the issue asks.
-  A plan refuses a mapping that misses a deconvolved (round, label).
+* **The measurements shown before the decision.** The coordinating session made them on 2026-11-21, on
+  Position022's four channels of W-915's deconwolf output, with the package's `save_volume` and
+  `find_spots` (`runs/W-918/20261121T2036Z-coordinator-storage-size/`,
+  `runs/W-918/20261121T2056Z-coordinator-scale-spots/`). Spots are matched to those of the float32
+  values by W-915's rule:
+
+  | Form | MB per channel, zlib | Spot F1, adaptive 0.2 | Spot F1, noise 5.0 |
+  | --- | --- | --- | --- |
+  | uint8, 255 / max | 100–113 | 0.982–0.983 (3.5 % fewer spots) | 0.83–0.91 (up to 21 % more spots) |
+  | uint16, scale 64 | 382–401 | 0.9999 | 0.999–1.000 |
+  | uint16, scale 16 | 323–340 | 0.9996–0.9997 | 0.996–0.998 |
+  | uint16, scale 4 | 247–265 | 0.998–0.999 | 0.974–0.994 |
+
+  The uint8 row used one factor per channel volume; SC3's factor is per round. The noise mode is
+  the sensitive one. Its threshold is the median plus 5 × 1.4826 × the MAD, and the MAD is counted in
+  stored units, so a coarse step rounds it. W-848's integer floor of one unit applied only to the
+  uint8 row. A dataset that relies on the noise mode can set `dtype: uint16`.
+* **The dtype is a key.** `dtype` is `uint8` (default) or `uint16`. Both keys are in the block, so in
+  the copy id; the plan resolves their defaults before hashing, so `scale: null` and `scale: 64` give
+  one copy id under uint16, and under uint8 the resolved block holds no `scale`. `scale` belongs to uint16 only: a
+  number, 64 by default, or a mapping `{<round>: {<label>: s}}`, as the issue asks. A plan refuses
+  `scale` with uint8, and a mapping that misses a deconvolved (round, label). With uint16,
+  "Preparing a dataset" states the rule s × (largest expected value) ≤ 65,535. Scale 64 holds
+  0–1,023.98 grey levels, 1.6 times the largest value W-915 saw. The measurements above show what a
+  smaller scale gives. The default suits 8-bit raw data; a dataset whose raw images are not uint8
+  would lose their depth at uint8, and sets `dtype: uint16`.
+* **The factor is per (FOV, round).** The task deconvolves every channel of its round to float32 in
+  its temporary folder, takes M over all of them, and only then writes the copy's files. So the
+  round's channels share one factor, as Huygens' do, and their relative intensities are kept. A
+  round whose M is 0 stores zeros, with f = 1.
+  * **Two passes, one channel in memory.** The task takes each channel's maximum of (y − o),
+    clipped at 0, when deconwolf has written that channel, keeps the float32 output in its
+    temporary folder, and after the last channel reads each output back to write its uint8 file.
+  * **The arithmetic** is float64: o is subtracted from float64(y), the result clipped at 0;
+    f = 255 / M; stored = rint(value × f), clipped to 0–255. uint16 uses the same arithmetic with s.
+  * **The record** holds f and M, and each channel's maximum after the offset is removed.
+  * **The factor couples the round's channels.** A channel is never redone alone: a change to any
+    channel's input redoes the round, as reuse is per round ([Reuse and staleness](#reuse-and-staleness)).
+* **Intensities across FOVs.** With SC3 each FOV has its own factor, as with Huygens' exports. The FOV
+  tasks read the stored uint8 values unchanged, and no consumer divides by f.
+  * The thresholds of spot finding that scale with the image do not depend on f in principle:
+    `adaptive`, a fraction of each channel's maximum; `adaptive_round`, of the round's; and `noise`,
+    a multiple of the MAD. The `noise` threshold is still sensitive to the uint8 step, because the MAD
+    is counted in stored units: the table above gives F1 0.83–0.91 at uint8.
+  * What compares intensities across FOVs sees each FOV at its own factor. That is the two-pass
+    statistics (a preprocessing step with `fit: supplied`, `orchestration.md`) and spot finding's
+    `global` and `absolute` thresholds.
+  * The plan warns, without refusing, when a deconvolved uint8 round feeds a two-pass statistic or a
+    `global` or `absolute` threshold, and names `dtype: uint16`.
+  * The record keeps f, so an analysis can return to grey levels.
 * **The kept offset is removed by mode.** The command subtracts 5 untiled and 0 tiled, the rule
   of v0.4.5, and clips at 0. The rule is known for v0.4.5 only, so a binary whose `--version`
   names another version fails the task, naming it: a new version must re-establish the rule
@@ -423,8 +491,9 @@ uint16 with a scale of 65,535 / the volume's maximum, written in its log (W-915,
   quantization is the stage's own. Validation check DW1 confirms that v0.4.5's `--help` lists the
   option. If it does not, the command reads deconwolf's uint16 output and its logged scale, and
   the stage's error bound gains one step of that scale (validation RD1).
-* **Saturation** is counted, not refused. The record holds the number of voxels clipped at 65,535
-  and at 0 and the float maximum, and the task log warns when the first count is not 0.
+* **Saturation** is counted, not refused. With uint16 the record holds the number of voxels
+  clipped at 65,535 and at 0 and the float maximum, and the task log warns when the first count is
+  not 0. uint8 cannot saturate by construction; its record holds the count clipped at 0.
 
 ## The PSF
 
@@ -529,6 +598,11 @@ have about a third of the job's voxels):
 | UGER | `h_vmem` is per slot: 14,000 / 4 = 3,500 MB × 4 slots covers the 10.4 GiB VmPeak (W-916); 4 × 166 s with `--noplan`, about 11 min, or 5 min with wisdom at 6 threads | `-l gpu=TRUE,operating_system=RedHat8`; `h_vmem` 26,000 MB covers the 21.4 GiB VmPeak, which UGER counts |
 | Google Batch | `n2-highmem-4` (32 GB) | `g2-standard-4` with one L4, the GPU label's machine; not measured on Google |
 
+**Temporary disk per task.** The round's float32 outputs, kept for the second pass of the uint8 copy:
+about 4.5 GB for a Position022 round (4 × 30 × 3,072² × 4 B), and one channel's float32 input,
+1.1 GB, which the command deletes when deconwolf has read it. About 5.7 GB in the task's local
+temporary folder; the uint16 copy needs the same, as it writes each channel from its float output.
+
 The runtimes double on a retry (orchestration-engines, "Resources of a retried task"). These
 figures are W-916's, on GP099-29C; UGER's and Google's CPUs were not measured.
 
@@ -626,8 +700,9 @@ it into the steps' shared working directory).
 | `deconwolf` | `version`, `dw --version` text, the binary's path and SHA-256, the FFT backend |
 | `device` | `cpu` with the CPU model and threads, or `gpu` with the OpenCL device name and `CUDA_VISIBLE_DEVICES` |
 | `options` | Iterations, method, border quality, tile size and padding, offset, background, and the argument list passed |
+| `storage` | `{dtype: uint8, stretch_factor, round_max}`: the one factor and maximum the round's channels share; or `{dtype: uint16}`, each channel's scale then in `channels[]` |
 | `planning` | `{mode: measure, wisdom_key, wisdom_sha256}`, or `{mode: estimate}` with the reason (`no store` or `no matching key`), or `{mode: gpu}` |
-| `channels[]` | Per label: the input `path`, `file_sha256`, and decoded `dtype`, `shape` and `sha256`; the PSF `path` and `file_sha256`; deconwolf's `iterations_done`; the float output's minimum and maximum; the kept offset removed; the scale; the counts clipped at 0 and at 65,535; the output `path`, `file_sha256` and decoded `sha256`; the log's path and SHA-256; the wall and CPU seconds |
+| `channels[]` | Per label: the input `path`, `file_sha256`, and decoded `dtype`, `shape` and `sha256`; the PSF `path` and `file_sha256`; deconwolf's `iterations_done`; the float output's minimum and maximum; the kept offset removed; the scale (uint16); the counts clipped at 0 and at the dtype's maximum; the output `path`, `file_sha256` and decoded `sha256`; the log's path and SHA-256; the wall and CPU seconds |
 | `code` | The package's code identity (`orchestration.md`, "The code identity") |
 | `started_at`, `ended_at`, `host`, `job_id` | Where and when |
 
@@ -723,11 +798,11 @@ both for every input and output image, as `_prepared.py`'s record does.
 | Option | Consequence |
 | --- | --- |
 | **MT1. MATLAB unchanged; the block is refused with `backend: matlab` (recommended)** | AGENTS.md: the files, keys and conventions MATLAB reads or writes stay unchanged. |
-| MT2. Write a copy for MATLAB | A copy in MATLAB's naming and dtype; MATLAB's pipeline was never checked on deconvolved uint16. |
+| MT2. Write a copy for MATLAB | A copy in MATLAB's naming and dtype; MATLAB's pipeline was never checked on a deconvolved copy. |
 
 **Recommendation: MT1.** The copy is in the input's folder layout and its files are TIFF + zlib,
 which MATLAB R2023b reads (W-910). A user could point a MATLAB run's input root at a copy by hand,
-but the file names (`<label>.tif`) and the dtype differ from what MATLAB's datasets use, so the
+but the file names (`<label>.tif`), and with `dtype: uint16` the dtype, differ from what MATLAB's datasets use, so the
 stage does not offer it, and no MATLAB file or key changes.
 
 ## Docs
@@ -737,8 +812,8 @@ When the implementation lands, it writes:
 * `docs/workflow/index.md`: a section on the deconvolution stage: when to use it, the copy,
   reuse, the GPU and the wisdom store.
 * `docs/workflow/preparing-a-dataset.md`: when a dataset needs the block, which optics to take
-  from the microscope's records, how to choose the iterations (W-855's rule), and how to choose
-  the scale.
+  from the microscope's records, how to choose the iterations (W-855's rule), and when to choose
+  `dtype: uint16` and its scale.
 * `docs/workflow-configuration.md`: the `deconvolution` block and the two `execution` keys, in its
   tables.
 * `docs/workflow/broad-uger.md`: the GPU and CPU resources, and how to make the wisdom store.

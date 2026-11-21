@@ -1,6 +1,6 @@
 # Compressed image outputs: TIFF + zlib by default for FOV checkpoints and saved sets
 
-% Status: Draft for Jiahao's review, written against `70edc72` (v0.3.0). W-909, 2026-11-21. The branch head `339269b` changes design records only, so every code reference on this page holds at `70edc72`.
+% Status: Approved (Jiahao, 2026-11-21, W-909): every recommendation ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`.
 
 This page specifies how the package compresses the image files it keeps. Jiahao decided on
 2026-11-20 (W-881) that TIFF + zlib is the recommended way to store image data
@@ -33,43 +33,53 @@ section, the hashes, verified resume, the saved spot-finding input of W-889),
 This is a software design. It makes no data claim. The sizes and times it quotes are the
 measurements of W-881, W-908, W-910 and W-903, named where they are used.
 
-## Questions for Jiahao
+## Jiahao's answers (2026-11-21)
+
+Jiahao answered on 2026-11-21 (W-909 comment a38e3ab1; the review page's `decisions`): question 1 "agree", and the others "其他按推荐". The questions stay as they were asked, each with its answer.
 
 1. **Accept the recommendations** of the eleven decisions in the table below?
+   **Answer:** accepted.
 2. **The scope of the default (decision 2).** The recommendation covers the stage `registered`,
    the reference image and the prepared morphology images. The reference image is included
    although it is small beside the stage (about 6 % of a tissue-2D FOV's stage): it is a
    declared output of every `fov` task and is kept. Include it, or keep the default to the
    checkpoint stages and saved sets only?
+   **Answer:** include it (CO1).
 3. **The key (decision 6).** `execution.image_compression` puts the codec beside the other
    settings that say how a run runs and not what it computes. The alternative,
    `processing.checkpoints` as a mapping, would put it inside the `fov` task's hash, so that
    switching the codec reruns every `fov` task. Is the name and the place right?
+   **Answer:** accepted (K1).
 4. **The kept chunked checkpoint (decision 9).** The recommendation keeps the HDF5 checkpoint
    of tiled execution uncompressed, also when the stage `registered` keeps it. A kept tiled
    checkpoint is then the one large image output left uncompressed. Accept, or map
    `image_compression: zlib` to its gzip option when it is kept?
+   **Answer:** accepted: uncompressed (HC1).
 5. **The BigStitcher tiles (decision 3).** `bigstitcher_save_dir/<sample>/tiles/tile_<j>.tif`
    are a declared output of the `bigstitcher_macro` task and are kept, although Fiji re-saves
    them as deflate HDF5 at once. The recommendation leaves them uncompressed, because
    BigStitcher's loader has not been shown to read deflate TIFF. Should a follow-up issue make
    them temporary, or check the loader and compress them?
+   **Answer:** a follow-up issue, as recommended. Its direction was not chosen, so the follow-up carries both.
 6. **The dense fields (decision 5).** LN's dataset configuration is E14's demons arm: a
    translation, then demons (`sample-dataset/LN/starfinder.yaml`; `docs/workflow/preparing-a-dataset.md`,
    "A configuration per dataset"). A stage `registered` written with it holds one float64 field
    per moving round, about 2.7 GB each by the shape (computed). That is more than the round images, 1.8 GB per FOV. The recommendation leaves the
    `.npz` fields as they are and reports their sizes in the validation (RD1). Should a follow-up
    issue measure `np.savez_compressed` for them?
+   **Answer:** yes, a follow-up issue measures it; the fields stay as they are here.
 7. **The real-data validation.** Its runs (sizes on six FOVs, paired times on two, the run from
    W-903's set) are larger than a batch may run (W-889 D3; W-903's tasks reached about 16 GB
    maxvmem each). The recommendation is a separate evidence issue on UGER, run by the
    coordinating session before the implementation merges. Accept?
+   **Answer:** accepted.
 
 ## Decisions
 
-The options and the evidence of each choice are in its section.
+Jiahao approved every recommendation on 2026-11-21. The column "Decision" holds what was approved. The
+options and the evidence of each choice are in its section.
 
-| # | Choice | Recommendation | Alternatives | Evidence | Section |
+| # | Choice | Decision | Alternatives | Evidence | Section |
 | --- | --- | --- | --- | --- | --- |
 | 1 | The inventory | The table of every image file the package writes, with dtype, size per FOV, lifetime, MATLAB reader and codec | — | The recorded searches of the package's writers and their classification (repair run); W-903's set; shapes of W-910's inventories | [The inventory](#the-inventory) |
 | 2 | Which outputs compress by default | CO1: every kept image output the package writes uncompressed today, except the files MATLAB reads or writes, the chunked checkpoint and the BigStitcher tiles: the stage `registered`, the reference image, the prepared morphology images. The Zarr outputs (I18, I19) keep their own lossless codec (ZA1) | CO2: the checkpoint stages only; CO3: every image file, short-lived ones included; ZA2: Zarr outputs to zlib | W-903's set: the stage is 18.1 of its 19.9 GB; W-908: the stage of tile_27 compresses to 0.063; I18 and I19 are Zstd-compressed already | [Which outputs compress](#which-outputs-compress), [The Zarr outputs](#the-zarr-outputs) |

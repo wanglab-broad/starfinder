@@ -1,6 +1,6 @@
 # Validation design: compressed image outputs
 
-% Status: Draft for Jiahao's review, written against `70edc72` (v0.3.0). W-909, 2026-11-21.
+% Status: Approved with the specification (Jiahao, 2026-11-21, W-909). Written against `70edc72` (v0.3.0).
 
 This is the validation plan for implementing
 [compressed-image-outputs](../specs/compressed-image-outputs.md). It has two parts:
