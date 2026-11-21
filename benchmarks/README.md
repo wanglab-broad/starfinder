@@ -10,6 +10,26 @@ its report `preprocessing_report.py`. Their source stays in Git at
 [`8094b30`](https://github.com/wanglab-broad/starfinder/tree/8094b30c6c57486f307aa6198dfb5e33b86c5241/benchmarks) and
 [the migration guide](../docs/migration.md#removed-benchmark-lifecycle) names each replacement.
 
+## Evidence scripts
+
+Tests that left the suite run here, on request. Each evidence script runs at the end of a batch whose
+changes touch its subsystem, and all of them run before a tag or a release (Jiahao, 2026-11-19). They run
+on UGER, through the coordinating session, in the image with the commit's code laid over it. Each runs as
+one command from `src/python`; the only host paths are the environment variables below, and the scripts
+that need none of them generate all their inputs.
+
+| Script | Protects | Needs | Runs after a batch that changes |
+| --- | --- | --- | --- |
+| `appearance_evidence.py` | GA23, GA24 (`slow` presets, acquired variants, bank builds), GA26 and GA27: the real-bank appearance scenes and the banks' rebuilds (W-536) | the real banks through `STARFINDER_APPEARANCE_BANKS`; up to 3,600 s and 16 GiB per step | the synthetic generator (`src/python/starfinder/synthetic/`) or the appearance banks |
+| `cellular_evidence.py` | GN23 and the `slow` and acquired cases of GN24: the cellular scene's `slow` presets in their target ranges and resource bound (W-536) | no extra, no real data; within C26's bound per step | the synthetic generator |
+| `cellular_chain_evidence.py` | CD, CT and CU on the appearance `slow` presets: the whole cellular chain (W-603) | the banks, `STARFINDER_WEIGHTS_DIR` and `STARFINDER_STARDIST_3D_SPLEEN`; about 2 h and up to 13 GiB per step | a stage of the chain: synthetic generation, stitching, segmentation, assignment, export or the report |
+| `workflow_engine_evidence.py` | the engines' reruns after a changed configuration or a replaced raw image, compared with a fresh run; the grids of an uncalibrated run on Nextflow (W-898: K1, O2, K2, K3) | Snakemake 9, Nextflow 26.10.4 or newer on Java 17 or newer, the `anndata` and `multiview-stitcher` extras; about 40 minutes | the workflow package or `nextflow/` |
+| `orchestration_golden_evidence.py` | G3: the refactored workflow against the values of the workflow before the dispatcher (W-898: K7) | Snakemake 9, the `anndata` and `multiview-stitcher` extras; about 2.5 minutes | what the engine script runs after, `workflow/` or `scripts/workflow_golden.py` |
+| `spot_finding_evidence.py` | the spot-finding validation rows on seeds 101 and 102 and on Piscis `20230905` (W-899: K4, O3) | the `spotiflow` and `piscis` extras, the six models through `STARFINDER_WEIGHTS_DIR`; about 35 minutes and 1.7 GB | spot finding, its evaluation or these tests' helpers |
+| `synthetic_scene_evidence.py` | GN7, GN5 and GA1's digests on the three `slow` context presets (W-899: K5, O1) | no extra, no weights, no bank; about 13 minutes | the synthetic generator or these tests' helpers |
+
+The scripts and the other files here:
+
 - `image_statistics.py`: intensity, puncta and noise statistics of one real TIFF or synthetic channel
   volume, and the read-only real-data measurement behind the synthetic calibration targets (W-238);
   see [image statistics](../design/notes/image-statistics.md).
