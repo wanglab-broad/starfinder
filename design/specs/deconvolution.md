@@ -353,8 +353,33 @@ dw-<copy id>/
 * A folder that `load_round` reads holds only channel images. `load_round` finds `<label>.tif` by
   its `*<label>*.tif` pattern (`io/tiff.py:425`), as it finds a raw file.
 * Each image is ZYX uint16, written by `save_volume` with W-909's codec (zlib level 6, no
-  predictor; `compressed-image-outputs.md`, decision 4) and the raw file's `ImageMetadata`.
-  The codec is not optional here: the copy is a kept image output from the start, so
+  predictor; `compressed-image-outputs.md`, decision 4). Its metadata is described in the next bullet.
+* **Metadata: the copy stores exactly what the raw file stores.** The `deconvolve` command reads
+  each raw channel with `load_volume` and the default configuration. It passes the result's
+  `ImageMetadata` to `save_volume` only when `diagnostics["metadata_source"]` is `stored`, that
+  is, when the raw file holds STARfinder metadata (`io/tiff.py:260`, `:268`). Otherwise it passes
+  `metadata=None`, and `save_volume` writes no `starfinder_metadata` (`io/tiff.py:545`–`:546`).
+  * **A raw file without stored geometry.** This is the plain TIFF or a microscope's OME-TIFF.
+    `load_volume` gives it a frame built from its own path and marks the source `unknown`
+    (`:260`, `:268`). Storing that `ImageMetadata` in the copy would turn every channel's source
+    into `stored`, each with a different frame id. `load_round` would then refuse the copy with
+    "channel frames differ" (`:439`–`:441`), although it accepts the raw round. With nothing
+    stored, the copy's channels stay `unknown`. `load_round` combines them as it combines the raw
+    ones: it checks that the geometry agrees (`:438`) and gives the round the frame of its folder
+    (`:449`). The geometry (spacing, origin, direction, unit) is the unknown default in both. The
+    frame is the folder's path in both, which is the copy's folder for the copy. Raw rounds
+    already have one such frame per folder.
+  * **A raw file with stored metadata.** The copy stores the same `ImageMetadata`, field for
+    field. A raw round loads only when its channels' frames agree (`:439`–`:441`), so the copy's
+    frames agree too. `load_round` returns the same metadata for both (`:449`).
+  * **The rule.** A raw round that `load_round` accepts gives a copy that it accepts, with the
+    same `metadata_source`, the same geometry and, where metadata is stored, the same frame. The
+    alternative, one consistent round frame stored in every channel of the copy, was not chosen.
+    It would store metadata that the raw images never declared. The channels' source would
+    change from `unknown` to `stored`, so `load_round` would take the round's metadata from the
+    files and not from the folder (`:449`). The copy would then no longer load exactly as the raw
+    round loads.
+* The codec is not optional here: the copy is a kept image output from the start, so
   `execution.image_compression` (W-909) also applies to it when it lands. Until then it is zlib.
 * **Size.** W-915 kept deconwolf's uint16 outputs with zlib: 310–425 MB per channel volume,
   1.33–1.64 GB per position, against 1.13 GB for the raw position (uint8, uncompressed). So a copy
@@ -431,7 +456,9 @@ uint16 with a scale of 65,535 / the volume's maximum, written in its log (W-915,
   fill and Huygens' own PSF, which Huygens Essential does not export.
 * **Centring** (W-855 amendment 2). An off-centre PSF shifts the result along z. The `psf` task
   moves the PSF by whole voxels so that its peak is at the centre index: `np.roll`, then the
-  wrapped planes set to 0, then normalised to sum 1 again. The record holds the shift, the share
+  slices the roll wrapped around (planes, rows or columns, in each axis it shifts) set to 0, then
+  normalised to sum 1 again. A PSF with non-zero values in those slices therefore loses them: the
+  result is not the shifted PSF, but the shifted PSF truncated and renormalised. The record holds the shift, the share
   of the sum dropped and the peak's offset before the shift. At depth 0 W-855's PSFs needed no
   shift; at 5.2 µm they moved −2 planes and lost 0.23–0.24 % of their sum.
 * **The size.** The default 21 × 33 × 33 is W-855's: it holds 96.6–96.8 % of the sum of a
