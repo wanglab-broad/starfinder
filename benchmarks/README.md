@@ -44,10 +44,31 @@ its report `preprocessing_report.py`. Their source stays in Git at
   W-647's refactor; the expected folders stay in `src/python/test/data/expected/`. Needs Snakemake 9 and, for G2's
   part, the `anndata` and `multiview-stitcher` extras; writes its own fixture, reads no real data, about 2.5 minutes on
   one CPU. It runs when the engine script does, and also after a change to `workflow/` or `scripts/workflow_golden.py`.
-- `evidence_runner.py`: the runner of the two workflow evidence scripts, which hold their moved tests as pytest
-  tests: it runs pytest on the script with the suite's configuration and writes `results.json` (each case's former
-  node ID, outcome and time, the revision and the engines' versions) and `junit.xml` to `--output`; `--list` collects
-  the cases without running them.
+- `spot_finding_evidence.py`: the spot-finding validation rows that W-899 moved out of the test suite (W-893's
+  categories K4 and O3): seeds 101 and 102 of S1 to S8, S10 and S16 for every method (S10's Piscis seed 102 stays in
+  the suite), and every row of Piscis `20230905` in S1 to S15, of
+  [the spot-finding specification](../design/specs/spot-finding-algorithms.md) ("Implemented checks", "Where the rows
+  run"). It protects the engineering validation on the seeds and the model the suite no longer runs (the suite keeps
+  seed 100 and Piscis `20251212`); the cases are the test functions of `test_spot_finding_validation.py` called with
+  those rows, strict expected failures included. Needs the `spotiflow` and `piscis` extras and the six models' weights
+  through `STARFINDER_WEIGHTS_DIR`; no appearance bank, no real data, no network. About 35 minutes on one CPU and
+  1.7 GB. It runs at the end of a batch whose changes touch spot finding (`src/python/starfinder/spot_finding/`, the
+  evaluation of spot finding or these tests' helpers), and with every evidence script before a tag or a release
+  (Jiahao, 2026-11-19), on UGER by the coordinating session.
+- `synthetic_scene_evidence.py`: the synthetic scene's checks on the three `slow` context presets that W-899 moved
+  out of the test suite: GN7 and GN5 (W-893's category K5) of
+  [the cellular validation page](../design/validation/synthetic-cellular-scene.md) and GA1's digests (option O1) of
+  [the appearance validation page](../design/validation/synthetic-real-appearance-scene.md). It protects the packing
+  and lobes of the `slow` presets and their identity contract (the digests and assertions unchanged; the routine
+  presets' checks and pins stay in the suite). Needs no extra, no `STARFINDER_WEIGHTS_DIR` and no appearance bank;
+  every case generates its preset, and it reads no real data. About 13 minutes on one CPU. It runs at the end of a
+  batch whose changes touch the synthetic generator (`src/python/starfinder/synthetic/`) or these tests' helpers, and
+  with every evidence script before a tag or a release (Jiahao, 2026-11-19), on UGER by the coordinating session.
+- `evidence_runner.py`: the runner of the four evidence scripts that hold their moved tests as pytest tests (the two
+  workflow scripts, the spot-finding and the synthetic scene scripts): it runs pytest on the script with the suite's
+  configuration and writes `results.json` (each case's former node ID, outcome and time, the revision, the engines'
+  versions and the evidence variables as set) and `junit.xml` to `--output`; `--list` collects the cases without
+  running them. A strict expected failure that fails as expected counts as passed.
 - `revision.py`: the source revision record that `image_statistics.py` writes into its manifest
   (W-288; the retired `preprocessing_synthetic.py` wrote it too): HEAD, dirty state, the untracked
   paths and the sha256 of `git diff HEAD --binary` followed by each untracked path's name and bytes;

@@ -1,21 +1,26 @@
-"""The runner of the workflow evidence scripts: pytest on the script's own tests, and a record of their outcomes (W-898).
+"""The runner of the evidence scripts that hold pytest tests: pytest on the script's own tests, and a record of their
+outcomes (W-898; W-899).
 
-``workflow_engine_evidence.py`` and ``orchestration_golden_evidence.py`` hold tests that W-898 moved out of the suite
-as pytest tests, with their markers, fixtures and assertions as they were. Each script's ``main`` calls ``run`` here,
+``workflow_engine_evidence.py`` and ``orchestration_golden_evidence.py`` (W-898), and ``spot_finding_evidence.py`` and
+``synthetic_scene_evidence.py`` (W-899), hold tests moved out of the suite as pytest tests, with their markers, fixtures
+and assertions as they were. Each script's ``main`` calls ``run`` here,
 which runs pytest on that file with the suite's configuration (``src/python/pyproject.toml``: its markers and warning
 filters; not its ``addopts``, whose ``-m 'not extended'`` would deselect the moved extended tests) from the checkout
 root, so that a case's node ID is ``benchmarks/<script>.py::<test>[<parameter>]``. The scripts load this file by its
 location, as the other scripts load ``revision.py``.
 
 ``--output`` (new or empty, outside the repository) receives ``results.json`` (the revision of the checkout and its
-dirty state, the Python, pytest, Snakemake and Nextflow it ran with, and per case its former node ID in the suite, its
-group of W-893's proposal, its outcome, its time and the message of a failure or skip), pytest's ``junit.xml``, and the
-evidence the engine helpers keep (``STARFINDER_WORKFLOW_EVIDENCE`` and ``STARFINDER_NEXTFLOW_EVIDENCE``, unless the
-caller sets them). pytest's temporary folders go where ``--basetemp`` names, else under the system's temporary
-directory (``TMPDIR``), never in the output folder: the engines' work folders hold symlinks. Exit status 0 when every
-selected case passed, 1 when one failed or raised, 2 when none failed but one was skipped (a missing engine or extra,
-named in the message), 3 when nothing was selected. ``--list`` collects the cases without running them and prints
-each with its former node ID; it exits 1 if the collection differs from the script's list of moved tests.
+dirty state, the Python, pytest, Snakemake and Nextflow it ran with, the evidence variables ``VARIABLES`` as set, and
+per case its former node ID in the suite, its group of W-893's proposal, its outcome, its time and the message of a
+failure or skip), pytest's ``junit.xml`` (``xunit1``, which keeps the values a case records with ``record_property``),
+and the evidence the engine helpers keep (``STARFINDER_WORKFLOW_EVIDENCE`` and ``STARFINDER_NEXTFLOW_EVIDENCE``,
+unless the caller sets them). pytest's temporary folders go where ``--basetemp`` names, else under the system's
+temporary directory (``TMPDIR``), never in the output folder: the engines' work folders hold symlinks. A strict
+expected failure that fails as expected is ``xfailed`` and counts as passed; one that passes is ``failed``, as pytest
+reports it. Exit status 0 when every selected case passed (or failed as expected), 1 when one failed or raised, 2 when
+none failed but one was skipped (a missing engine or extra, named in the message), 3 when nothing was selected.
+``--list`` collects the cases without running them and prints each with its former node ID; it exits 1 if the
+collection differs from the script's list of moved tests.
 """
 from __future__ import annotations
 
@@ -33,6 +38,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "python"
 CONFIGURATION = PACKAGE / "pyproject.toml"
+#: The variables through which an evidence script finds what lies outside the checkout, recorded as set (W-899).
+VARIABLES = ("STARFINDER_WEIGHTS_DIR", "STARFINDER_APPEARANCE_BANKS")
 
 
 def parse(argv, description, epilog):
@@ -93,7 +100,10 @@ class Recorder:
     def pytest_runtest_logreport(self, report):
         case = self.cases.setdefault(report.nodeid, dict(outcome="passed", seconds=0.0, message=""))
         case["seconds"] += report.duration
-        if report.skipped and case["outcome"] == "passed":
+        if report.skipped and hasattr(report, "wasxfail"):
+            case["outcome"] = "xfailed"
+            case["message"] = report.wasxfail
+        elif report.skipped and case["outcome"] == "passed":
             case["outcome"] = "skipped"
             case["message"] = str(report.longrepr[2] if isinstance(report.longrepr, tuple) else report.longrepr)
         elif report.failed:
@@ -110,7 +120,8 @@ def _arguments(script, args, output=None):
     if args.basetemp:
         arguments += ["--basetemp", str(args.basetemp)]
     if output is not None:
-        arguments += ["--junitxml", str(output / "junit.xml")]
+        # xunit1 keeps the values a case records with record_property (the spot-finding checks' gated values, W-899).
+        arguments += ["--junitxml", str(output / "junit.xml"), "-o", "junit_family=xunit1"]
     return arguments
 
 
@@ -143,6 +154,7 @@ def run(script, moved, origin_revision, argv, description, epilog):
     os.environ.setdefault("STARFINDER_WORKFLOW_EVIDENCE", str(output / "workflow-evidence"))
     os.environ.setdefault("STARFINDER_NEXTFLOW_EVIDENCE", str(output / "nextflow-evidence"))
     identity = dict(script=script.relative_to(ROOT).as_posix(), software=_revision(), environment=software(),
+                    variables={name: os.environ.get(name) for name in VARIABLES},
                     origin=dict(revision=origin_revision), selection=dict(keyword=args.keyword, cases=args.case),
                     evidence=dict(workflow=os.environ["STARFINDER_WORKFLOW_EVIDENCE"],
                                   nextflow=os.environ["STARFINDER_NEXTFLOW_EVIDENCE"]))
@@ -154,7 +166,7 @@ def run(script, moved, origin_revision, argv, description, epilog):
                                                     indent=1) + "\n", encoding="utf-8")
     outcomes = {case["outcome"] for case in cases}
     print(f"{len(cases)} cases: " + ", ".join(f"{sum(c['outcome'] == o for c in cases)} {o}"
-                                               for o in ("passed", "failed", "error", "skipped", "not run")))
+                                               for o in ("passed", "xfailed", "failed", "error", "skipped", "not run")))
     if not cases:
         return 3
-    return 1 if outcomes - {"passed", "skipped"} else 2 if "skipped" in outcomes else 0
+    return 1 if outcomes - {"passed", "xfailed", "skipped"} else 2 if "skipped" in outcomes else 0

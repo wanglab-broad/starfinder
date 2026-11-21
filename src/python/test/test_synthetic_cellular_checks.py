@@ -5,21 +5,32 @@
 that no named test is skipped or expected to fail; that each carries the listed subsystem
 and kind markers; and that its tier matches the tests' ``slow`` markers. A row whose tier is
 ``evidence project`` names its script under ``benchmarks/`` and no test (W-536); every
-script a row names exists.
+script a row names exists. A row whose cases are split names, after the script, the tests the
+script defines for them (W-899), which the check reads from the script without importing it.
 
 ``test_every_chain_row_names_its_routine_tests_and_its_evidence_check`` reads the table "Implemented chain checks"
 (W-603): its rows are the chain checks ``CD0`` to ``CU5``, in order; each names collected tests of
 ``test_integration_cellular_chain.py``, every parameter of which is the routine tier, and the check of the same name
 in ``benchmarks/cellular_chain_evidence.py``, whose cases are those tests; and every chain test is in the table.
 
+``test_the_slow_preset_evidence_script_collects_exactly_its_moved_tests`` (W-899) collects
+``benchmarks/synthetic_scene_evidence.py`` (``--list``, in a process of its own): exactly GN7 and GN5 on the three
+``slow`` presets and GA1's digests of them, each with the node ID it had in the suite.
+
 A docs-contract module (docs/contributing.md, "Test markers"; W-602): it finds the two tables by their
 labels (``docs_pages``), not by their headings: ``(synthetic-cellular-scene-validation-generator-checks)=`` and
 ``(synthetic-cellular-scene-validation-implemented-checks)=`` and
 ``(synthetic-cellular-scene-validation-implemented-chain-checks)=``.
 """
+import ast
+import functools
 import importlib.util
+import json
+import os
 from pathlib import Path
 import re
+import subprocess
+import sys
 
 import pytest
 
@@ -62,18 +73,25 @@ def implemented_checks():
     return rows
 
 
-def named_tests(names):
-    """(module, test name) of a row, each test under the module named before it."""
+def named_tests(names, scripts=False):
+    """(module, test name) of a row, each test under the module named before it; a test named after a script under
+    benchmarks/ is that script's (W-899), and is listed instead of the suite's when scripts is true."""
     module, named = None, []
     for name in names:
-        if name.startswith("benchmarks/"):
-            continue
         if name.endswith(".py"):
             module = name
         elif name.startswith("test_"):
             assert module is not None, name
-            named.append((module, name))
+            if module.startswith("benchmarks/") == scripts:
+                named.append((module, name))
     return named
+
+
+@functools.cache
+def script_tests(script):
+    """The test functions an evidence script under benchmarks/ defines at its top level (read, not imported)."""
+    tree = ast.parse((REPOSITORY / script).read_text())
+    return {node.name for node in tree.body if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")}
 
 
 def collected(session, module):
@@ -96,6 +114,9 @@ def test_every_gn_row_names_collected_tests(request):
         named = named_tests(names)
         scripts = [name for name in names if name.startswith("benchmarks/")]
         assert all((REPOSITORY / script).is_file() for script in scripts), (row, scripts)
+        # A row's part in an evidence script names tests that the script defines (W-899).
+        for script, name in named_tests(names, scripts=True):
+            assert name in script_tests(script), (row, script, name)
         if tier == EVIDENCE:
             assert scripts and not named, row
             continue
@@ -171,3 +192,28 @@ def test_every_chain_row_names_its_routine_tests_and_its_evidence_check(request)
     assert named_all == chain_tests
     # One case per former slow node ID: 23 tests at [slow], four culture tests at [slow-42] and [slow-43].
     assert len({script.node_id(test, seed) for _, test, seed in script.CASES}) == len(script.CASES) == 31
+
+
+# --- The slow presets' evidence script (W-899) ------------------------------------------------------------------------
+
+SLOW_PRESETS_SCRIPT = "benchmarks/synthetic_scene_evidence.py"
+
+
+def test_the_slow_preset_evidence_script_collects_exactly_its_moved_tests():
+    """``--list`` exits 1 unless the script collects exactly its MOVED cases, each with its former node ID."""
+    done = subprocess.run([sys.executable, str(REPOSITORY / SLOW_PRESETS_SCRIPT), "--list"],
+                          cwd=REPOSITORY / "src/python",
+                          env=dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1"),
+                          capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0, done.stdout + done.stderr
+    listing = json.loads(done.stdout)
+    assert listing["complete"], listing
+    presets = ["context-dense3d-slow-v1", "context-tissue2d-slow-v1", "context-culture-slow-v1"]
+    expected = {**{f"src/python/test/test_synthetic_cellular_presets.py::{test}[{name}]": "K5" for name in presets
+                   for test in ("test_gn7_slow_preset_reaches_its_floor", "test_gn5_lobes_on_the_slow_presets")},
+                **{"src/python/test/test_synthetic_appearance_golden.py::"
+                   f"test_saved_context_preset_outputs_equal_the_base_revision_pins[{name}]": "O1" for name in presets}}
+    assert {case["origin_node_id"]: case["group"] for case in listing["cases"]} == expected
+    assert len(listing["cases"]) == len(expected) == 9
+    assert {case["node_id"].split("::", 1)[1].split("[", 1)[0] for case in listing["cases"]} == \
+        script_tests(SLOW_PRESETS_SCRIPT)

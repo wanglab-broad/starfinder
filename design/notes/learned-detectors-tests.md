@@ -55,6 +55,18 @@ limits of each method.
 
 % W-274
 
+Since W-899 (2026-11-21) the validation module keeps seed 100 and Piscis `20251212`: the
+seeds 101 and 102 and every `20230905` row run in `benchmarks/spot_finding_evidence.py`
+([spot-finding-algorithms](../specs/spot-finding-algorithms.md#implemented-checks), "Where the
+rows run"), so the `20230905` selection above collects none of its cases and the times
+below are those of the full rows, as recorded before the move:
+
+```bash
+STARFINDER_WEIGHTS_DIR=<weights> uv run python ../../benchmarks/spot_finding_evidence.py --output <run dir>
+```
+
+% W-899
+
 Approximate run times:
 
 | Selection | Approximate time | Recorded run |

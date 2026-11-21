@@ -1,9 +1,11 @@
 """Generator checks of the six context presets (design/validation/synthetic-cellular-scene.md).
 
-GN7 on the presets (``context_routine``, ``context_slow``): K1 for every pair of sites recomputed by the test oracle,
+GN7 on the routine presets (``context_routine``): K1 for every pair of sites recomputed by the test oracle,
 the placement record, and F2's floor reached, with the reached density read back from the saved ``context.json``.
-GN5 on ``context_slow`` (W-486): the lobes and LB1 by ``cellular_checks.check_lobes``, on the module's slow scenes.
 GN24 on the routine presets: each generated in its own process under ``/usr/bin/time -v``, within the project's 4 GiB.
+GN7 and GN5 (W-486) on ``context_slow`` were moved by W-899 (W-893's K5) to ``benchmarks/synthetic_scene_evidence.py``,
+which imports ``generate`` and ``check_packing`` from here; GN5 on the routine presets is
+``test_synthetic_cellular_routine.py``'s.
 GN23 (W-393's target ranges on ``context_slow`` and ``context_slow_acquired``) and GN24's ``slow`` and acquired-pixel
 cases (RG1: one CPU, 16 GiB and 3,600 s per step) were moved by W-536 to ``benchmarks/cellular_evidence.py``, run by
 the Chapter II evidence project.
@@ -23,13 +25,11 @@ import pytest
 
 from starfinder.synthetic import cellular_scene_preset, generate_cellular_scene, save_cellular_scene
 
-from .cellular_checks import check_lobes
 from .cellular_oracle import Oracle
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.validation]
 
 ROUTINE = ["context-dense3d-v1", "context-tissue2d-v1", "context-culture-v1"]
-SLOW = ["context-dense3d-slow-v1", "context-tissue2d-slow-v1", "context-culture-slow-v1"]
 # RG1 (C26), granted at W-396: one CPU, 16 GiB and 3,600 s per step (benchmarks/cellular_evidence.py); the project's
 # 4 GiB for a routine step.
 BOUND_S, BOUND_KIB, ROUTINE_KIB = 3600.0, 16 * 1024 * 1024, 4 * 1024 * 1024
@@ -107,27 +107,6 @@ def check_packing(name, config, scene, tmp_path):
 def test_gn7_routine_preset_reaches_its_floor(name, tmp_path):
     config, scene = generate(name)
     check_packing(name, config, scene, tmp_path)
-
-
-@pytest.fixture(scope="module", params=SLOW)
-def slow_scene(request):
-    config, scene = generate(request.param)
-    yield request.param, config, scene
-    del scene
-
-
-@pytest.mark.slow
-def test_gn7_slow_preset_reaches_its_floor(slow_scene, tmp_path):
-    name, config, scene = slow_scene
-    check_packing(name, config, scene, tmp_path)
-
-
-# ---------------------------------------------------------------- GN5 on the slow presets (W-486)
-
-@pytest.mark.slow
-def test_gn5_lobes_on_the_slow_presets(slow_scene):
-    name, config, scene = slow_scene
-    check_lobes(name, config, scene)
 
 
 # ---------------------------------------------------------------- GN24: generation cost, one process per scene
