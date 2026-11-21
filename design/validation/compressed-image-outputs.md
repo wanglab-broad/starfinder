@@ -54,7 +54,7 @@ environment (extras `dev`, `local-registration`, `checkpoint`).
 
 | # | Check | Fixture | Expected | Tolerance | Needs |
 | --- | --- | --- | --- | --- | --- |
-| CW1 | Each writer of the inventory writes its codec | `volumes`; `session_dataset` | With the default, I1, I2, I3 (ZYX and the YX projection) and I4 have, on every page, TIFF Compression 8 and Predictor 1 (or no Predictor tag). With `none`, Compression 1. I6–I9 and I11 are Compression 8 in both settings. I10, I12 (HDF5 filters: none) and I13 are uncompressed in both settings. I14 stays uncompressed. | exact (integers, strings) | H |
+| CW1 | Each writer of the inventory writes its codec | `volumes`; `session_dataset` | With the default, I1, I2, I3 (ZYX and the YX projection) and I4 have, on every page, TIFF Compression 8 and Predictor 1 (or no Predictor tag). With `none`, Compression 1. I6–I9 and I11 are Compression 8 in both settings. I10, I12 (HDF5 filters: none) and I13 are uncompressed in both settings. I14 stays uncompressed. I18 and I19 keep their Zarr codec in both settings: the codec recorded in `export.json` (`levels[].codec`) and the store's `zarr.json` equal those of `70edc72` for the same input. | exact (integers, strings) | H; for I18 and I19 the `multiview-stitcher` and `spatialdata` extras, skipped with the extra named |
 | CW2 | Round trip | `volumes` through `write_registered_round`, `save_reference_image`, `_prepared.write_image` and their readers | Each read returns the decoded identity of the array written (dtype, shape, C-order SHA-256), every dtype of the fixture, and the `ImageMetadata` written. | exact (hashes; dtype strings; metadata equality) | H |
 | CW3 | The opt-out reproduces `70edc72` | `volumes`; `base_reader` | With `image_compression: none`, the bytes of I1, I3 and I4 for the same array and metadata equal the base revision's files. The hashes are taken from the base revision in a subprocess, in the same environment. | exact (hashes) | H, B |
 | CW4 | The writers that compress today keep their bytes | `volumes`; `base_reader` | `save_volume(compress=True)` with its explicit level 6 writes the same bytes as at `70edc72` (tifffile's default level is 6 with the locked imagecodecs), for ZYX and ZYXC. So do `write_labels` and the segmentation input. | exact (hashes) | H, B |
@@ -87,7 +87,8 @@ environment (extras `dev`, `local-registration`, `checkpoint`).
 | ID1 | M1 | `test_report_records_golden.py` passes with `image_compression: "zlib"` added to its expected `config.checkpoints`, and no other change. | H |
 | ID2 | M2 | X4 (`test_workflow_core_golden.py`) reports only the two new keys, each explained by the "W-909" exception; nothing unexplained. | WF |
 | ID3 | M3, M4 | G3 (`test_workflow_orchestration_golden.py`) reports only the new keys under "W-909" and the reference image digests under OC3 with its amended reason. | WF |
-| ID4 | Unchanged contracts | GN1, GA1, the array goldens, A19's in-process repeatability and every test the specification lists under "Tests that stay" pass unchanged. The controller's `a19-parity` is not triggered: no assignment or segmentation code changes. | H, WF |
+| ID4 | Unchanged contracts | GN1, GA1, the array goldens, A19's in-process repeatability and every test the specification lists under "Other tests that stay" pass unchanged. The controller's `a19-parity` is not triggered: no assignment or segmentation code changes. | H, WF |
+| ID5 | The tests that hash an I1–I4 file | Every test of the specification's table "The tests that hash a file this page changes" (`compressed-image-outputs-tests`) passes unchanged with the default `zlib`, and again with `image_compression: none`. The table comes from the recorded classification of the repair run (`results/classification/tests.tsv`, rows of class `image-file` with codec change `yes` or `both`). The pinned G3 cases pass with M4's amended reason. | H, WF |
 
 ### MATLAB (MT)
 
@@ -98,7 +99,7 @@ environment (extras `dev`, `local-registration`, `checkpoint`).
 ### What the default tier covers
 
 CW1–CW6, CR1, CR2, CR4, WF1, WF4 and ID1 run in the routine tier. CR3, WF2 and WF3 are `slow`
-if they take 5 s or more on one CPU. ID2, ID3 and WF5 run in their existing selections (the
+if they take 5 s or more on one CPU. ID2, ID3, ID5 and WF5 run in their existing selections (the
 golden and workflow tests). The implementation reports the measured time of every new test that
 takes 1 s or more.
 

@@ -71,8 +71,8 @@ The options and the evidence of each choice are in its section.
 
 | # | Choice | Recommendation | Alternatives | Evidence | Section |
 | --- | --- | --- | --- | --- | --- |
-| 1 | The inventory | The table of every image file the package writes, with dtype, size per FOV, lifetime, MATLAB reader and codec | — | The writers at `70edc72`; W-903's set; shapes of W-910's inventories | [The inventory](#the-inventory) |
-| 2 | Which outputs compress by default | CO1: every kept image output the package writes uncompressed today, except the files MATLAB reads or writes, the chunked checkpoint and the BigStitcher tiles: the stage `registered`, the reference image, the prepared morphology images | CO2: the checkpoint stages only; CO3: every image file, short-lived ones included | W-903's set: the stage is 18.1 of its 19.9 GB; W-908: the stage of tile_27 compresses to 0.063 | [Which outputs compress](#which-outputs-compress) |
+| 1 | The inventory | The table of every image file the package writes, with dtype, size per FOV, lifetime, MATLAB reader and codec | — | The recorded searches of the package's writers and their classification (repair run); W-903's set; shapes of W-910's inventories | [The inventory](#the-inventory) |
+| 2 | Which outputs compress by default | CO1: every kept image output the package writes uncompressed today, except the files MATLAB reads or writes, the chunked checkpoint and the BigStitcher tiles: the stage `registered`, the reference image, the prepared morphology images. The Zarr outputs (I18, I19) keep their own lossless codec (ZA1) | CO2: the checkpoint stages only; CO3: every image file, short-lived ones included; ZA2: Zarr outputs to zlib | W-903's set: the stage is 18.1 of its 19.9 GB; W-908: the stage of tile_27 compresses to 0.063; I18 and I19 are Zstd-compressed already | [Which outputs compress](#which-outputs-compress), [The Zarr outputs](#the-zarr-outputs) |
 | 3 | Short-lived local intermediates | SL1: stay uncompressed | SL2: compress them too | W-881: a warm read on UGER is faster uncompressed (tissue-2D 3.85 s against 6.60 s; LN 1.66 s against 2.29 s) | [Short-lived files](#short-lived-files) |
 | 4 | The codec and its options | CD1: zlib (deflate) level 6, no predictor, through tifffile, as `save_volume(compress=True)` writes today | CD2: zlib with predictor 2; CD3: zstd level 3; CD4: another zlib level | W-881 (Tzlib against Tzstd and HDF5 gzip); W-908's verdict: predictor 2 does not join | [The codec](#the-codec) |
 | 5 | Float data | FL1: float images take the same codec, without predictor 3; dense fields (`.npz`) are excluded and stated | FL2: predictor 3 for float images; FL3: float images uncompressed | No float output among the measured workloads; the float writers that compress today use zlib without a predictor | [Float data](#float-data) |
@@ -133,7 +133,13 @@ saved set of four tissue-2D tiles is 19.9 GB, of which the stage is 18.1 GB.
 
 ## The inventory
 
-Every image file the package writes at `70edc72`. Sizes are per FOV, uncompressed:
+Every image file the package writes at `70edc72`. The list comes from a recorded search of
+`src/python/starfinder` for TIFF, Zarr, HDF5 and other array-to-file writes. Every hit of that search is in a table
+of the repair run, either as a row below or as a write that is not an image, with the reason
+(`runs/W-909/20261121T053747Z-71136cee/results/searches/` and `results/classification/package.tsv`). The writes that
+are not images are tables (CSV, Parquet, H5AD), records (JSON), `.npz` archives, model files and rendered figures
+(PNG, JPEG). A rendered figure is a picture of results, written in a format that is compressed already, and not
+image data. Sizes are per FOV, uncompressed:
 
 * "measured" sizes are files of W-903's set;
 * "computed" sizes are the shape times the itemsize, without the TIFF header (W-910's
@@ -142,7 +148,10 @@ Every image file the package writes at `70edc72`. Sizes are per FOV, uncompresse
   its raw folders hold `ch00`–`ch03` in every round (W-881's LN workload of 17 TIFFs adds round 4's
   `ch04`).
 
-"MATLAB" says whether MATLAB code reads or writes the file.
+"MATLAB" says whether MATLAB code reads or writes the file. For I6 to I9 the size is given by its formula,
+because the shape depends on the run. Z is the run grid's planes, 30 (tissue-2D) or 50 (LN), or 1 after a Z projection,
+as W-870's tissue-2D runs project. C is the model channels (1 to 3). A run's grid is its FOV's reference grid, 3,072 ×
+3,072 or 1,496 × 1,496 pixels. The values are computed and were never measured, compressed or not.
 
 (compressed-image-outputs-inventory)=
 
@@ -153,19 +162,22 @@ Every image file the package writes at `70edc72`. Sizes are per FOV, uncompresse
 | I3 | Reference image | `fovs/<fov>/reference.tif` (`reference_image`) | `FOV.save_reference_image` (`dataset/fov.py:2776` ZYX, `:2780` YX with a projection) | the reference round's (uint8) | 283,120,910 B (measured) | 111,900,800 B (computed) | kept: a declared output of `fov` and `tile_global` | no (MATLAB writes `images/ref_merged/`) | none | **zlib** |
 | I4 | Prepared morphology image | `fovs/<fov>/other_rounds/<name>/image.ome.tif` | `_prepared.write_image` (`dataset/_prepared.py:70`) | as produced | 1,132,462,080 B for the protein round of four channels (computed) | 335,702,400 B for the flamingo round of three channels (computed) | kept | no | none | **zlib** |
 | I5 | Dense field | `…/registered/<round>_field.npz`, `other_rounds/<name>/field.npz` | `np.savez` (`_checkpoint.py:390`, `_prepared.py:83`) | float64, ZYX × 3 | 6,794,772,480 B per moving round with a dense step (computed); none with translation, as W-903 | 2,685,619,200 B per moving round (computed) | kept | no | none (`.npz`) | unchanged ([Float data](#float-data)) |
-| I6 | Segmentation labels | `segmentation/<run>/labels.tif` | `segmentation._persist.write_labels` (`:57`) | uint32 | — | — | kept | no | zlib | unchanged |
-| I7 | Segmentation input | `segmentation/<run>/input.ome.tif` | `segmentation/_persist.py:96` | the model input's (float32 with a recipe step) | — | — | kept | no | zlib | unchanged |
-| I8 | Assignment labels | `assignment/<name>/{territories,cell_labels,nucleus_labels}.tif` | `write_labels` (`assignment/_persist.py:82`, `:98`) | uint32 | — | — | kept | no | zlib | unchanged |
-| I9 | Preview model inputs | `<preview output>/inputs/<fov>/<recipe>.ome.tif` | `segmentation/_preview.py:631` | the model input's | — | — | kept (opt-in) | no | zlib | unchanged |
+| I6 | Segmentation labels | `segmentation/<run>/labels.tif` | `segmentation._persist.write_labels` (`:57`) | uint32 | Z × 3,072 × 3,072 × 4 B: 37,748,736 B projected, 1,132,462,080 B in 3D (computed) | Z × 1,496 × 1,496 × 4 B: 8,952,064 B projected, 447,603,200 B in 3D (computed) | kept | no | zlib | unchanged |
+| I7 | Segmentation input | `segmentation/<run>/input.ome.tif` | `segmentation/_persist.py:96` | the model input's: float32 (4 B) once a recipe step has run, else the source's (uint8, 1 B, on both datasets) | Z × 3,072 × 3,072 × C × itemsize: 37,748,736 B × C projected float32, 9,437,184 B × C projected uint8 (computed) | Z × 1,496 × 1,496 × C × itemsize: 8,952,064 B × C projected float32, 2,238,016 B × C projected uint8 (computed) | kept | no | zlib | unchanged |
+| I8 | Assignment labels | `assignment/<name>/{territories,cell_labels,nucleus_labels}.tif` | `write_labels` (`assignment/_persist.py:82`, `:98`) | uint32 | per file as I6: `territories.tif` with an expansion; `cell_labels.tif` and `nucleus_labels.tif` only when the run is not saved under its own folder (computed) | as I6 (computed) | kept | no | zlib | unchanged |
+| I9 | Preview model inputs | `<preview output>/inputs/<fov>/<recipe>.ome.tif` | `segmentation/_preview.py:631` | the model input's | as I7, per previewed FOV and recipe (the whole model input; `crop_um` only crops the figures) (computed) | as I7 (computed) | kept (opt-in, `save_inputs`) | no | zlib | unchanged |
 | I10 | Morphology channel images | `images/<round>/<label>/<fov>.tif` (`morphology.channel_images`, off by default) | `workflow/_commands.py:378`, `:382` | as produced | one ZYX channel 283,115,520 B (computed) | 111,900,800 B (computed) | kept | yes: the MATLAB layout | none | unchanged ([MATLAB](#matlab)) |
-| I11 | Export OME-TIFFs | `export/<sample>/<route>/…ome.tif`: fused images, `segmentation_<run>`, `cell_labels`, `territories`, `model_inputs/<run>` | `io/_ome.write_ome_tiff` (`export/_fuse.py:750`, `export/_segment.py:411`, `:596`, `export/_labels.py:549`, `:645`, `assembly/_persist.py:103`) | the image's | — | — | kept | no | zlib, 512 × 512 tiles | unchanged |
+| I11 | Export OME-TIFFs | `export/<sample>/<route>/…ome.tif`: fused images, `segmentation_<run>`, `cell_labels`, `territories`, `model_inputs/<run>` | `io/_ome.write_ome_tiff` (`export/_fuse.py:750`, `export/_segment.py:411`, `:596`, `export/_labels.py:549`, `:645`, `assembly/_persist.py:103`) | the image's | per sample on the fused grid, not per FOV | per sample on the fused grid, not per FOV | kept | no | zlib, 512 × 512 tiles | unchanged |
 | I12 | Chunked checkpoint | `fovs/<fov>/tiled/registered.h5` | `io.chunked.ChunkedCheckpointWriter` (`io/chunked.py:119`; `dataset/tiled.py:373`) | as produced | about the stage's size | about the stage's size | until the merge; kept when `processing.checkpoints` holds `registered` | no | none; gzip 1 by option | unchanged ([The chunked checkpoint](#the-chunked-checkpoint)) |
 | I13 | BigStitcher tiles | `<bigstitcher_save_dir>/<sample>/tiles/tile_<j>.tif` | `stitching/_bigstitcher.py:473` | the reference image's | one reference image per view | one reference image per view | kept: a declared output of `bigstitcher_macro`; Fiji re-saves them as deflate HDF5 | no (Fiji reads them) | none | unchanged ([Short-lived files](#short-lived-files)) |
-| I14 | Synthetic scenes | `synthetic/_storage.py:60`, `synthetic/_context.py:1701`, `:1703`, `:1777`, `:1786`, `synthetic/_sample.py:1249`, `:1256`, `:1259` | `save_volume` | as generated | — | — | kept: inputs and fixtures | no | none | unchanged |
-| I15 | Legacy workflow outputs | `_legacy_workflow.py:50`, `:60`, `:110` | `tifffile.imwrite` | — | — | — | kept | the legacy route's layout | none; zlib for labels | unchanged |
-| I16 | Benchmark trial arrays | `image.npy`, `labels.npy` (`benchmark/_trial.py:317`, `:336`) | `np.save` | — | — | — | kept | no | none (`.npy`) | unchanged: not TIFF, benchmark records |
-| I17 | Temporary siblings | `.<uuid>.tmp.<name>` and `atomic_file` names | every writer above | — | — | — | renamed into place | — | the final file's | the final file's |
+| I14 | Synthetic scenes | `synthetic/_storage.py:60`, `:128`, `:361`, `:334` (a raw float32 field), `synthetic/_context.py:1701`, `:1703`, `:1777`, `:1786`, `synthetic/_sample.py:1249`, `:1256`, `:1259` | `save_volume`; `tifffile.imwrite` (ImageJ); raw bytes | as generated | not a dataset output: test-sized scenes | not a dataset output: test-sized scenes | kept: inputs and fixtures | no | none | unchanged |
+| I15 | Legacy workflow outputs | `_legacy_workflow.py:50`, `:60`, `:110` | `tifffile.imwrite` | the legacy route's | not sized: the legacy route's outputs, which this page leaves unchanged | not sized, as tissue-2D | kept | the legacy route's layout | none; zlib for labels | unchanged |
+| I16 | Benchmark trial arrays | `image.npy`, `labels.npy` (`benchmark/_trial.py:317`, `:336`) | `np.save` | the trial's | not sized: a benchmark trial's crop, not a FOV | not sized, as tissue-2D | kept | no | none (`.npy`) | unchanged: not TIFF, benchmark records |
+| I17 | Temporary siblings | `.<uuid>.tmp.<name>` and `atomic_file` names | every writer above | the final file's | the final file's size | the final file's size | renamed into place | — | the final file's | the final file's |
+| I18 | Standalone OME-Zarr of a fused image | `export/<sample>/<route>/<image>_{projection,stack}.ome.zarr` (`FusionConfig.ome_zarr`, off by default; refused with the SpatialData export) | `export/_fuse.py:755` → `multiview_stitcher.ngff_utils.write_sim_to_ome_zarr` (`:765`) | the fused image's | the fused grid's, per sample | the fused grid's, per sample | kept (opt-in) | no | Zarr: Zstd level 0 (sample-output, W-354), chunks t, c, (z), y, x of (1, 1, 1024, 1024) or (1, 1, 16, 512, 512) (`export/_fuse.py:65`); the codec is recorded per level in `export.json` | unchanged ([The Zarr outputs](#the-zarr-outputs)) |
+| I19 | SpatialData store | `export/<sample>/<route>/sample.zarr` (`export_spatialdata`) | `export/_spatialdata.py:710` → `SpatialData.write` (spatialdata 0.6.1) → ome-zarr 0.12.2's writer | the fused images' and labels' | the fused grid's, per sample | the fused grid's, per sample | kept | no | Zarr format 3 (the default `zarr_format`): zarr-python 3.1.5's default ZstdCodec, level 0 (`zarr/core/array.py:5086`); format 2: Blosc zstd level 5 with shuffle (`ome_zarr/writer.py:175`, `:277`) | unchanged ([The Zarr outputs](#the-zarr-outputs)) |
 
+* I12's HDF5 is the only HDF5 the package writes with images (search p3); `sample.h5ad` (AnnData) holds tables.
 * W-903's set holds, per tile, four I1 files (18.12 GB for the four tiles), one I3 file and the
   tables. Its other kept files (`candidates.csv`, `pre_qc.csv`, `molecules.csv`, the records)
   are tables and JSON, outside this page.
@@ -181,7 +193,7 @@ Every image file the package writes at `70edc72`. Sizes are per FOV, uncompresse
 
 | Option | Rule | Consequence |
 | --- | --- | --- |
-| **CO1. Every kept image output the package writes uncompressed, with three exceptions (recommended)** | I1–I4 compress by default: I1, I2, I3 and I4 when the image is an integer or float TIFF (I5 is `.npz`, see "Float data"). The exceptions: the files MATLAB reads or writes (I10, I15), the chunked checkpoint (I12) and the BigStitcher tiles (I13). | The stage shrinks about 16-fold on tissue-2D tile_27 (W-908). W-903's set of 19.9 GB would come to at most about 3 GB if every tile's stage compressed like tile_27's, counting the reference images uncompressed (an inference, not a measure). Every kept image the Python route writes is then deflate except I12 and I13, each with its reason. |
+| **CO1. Every kept image output the package writes uncompressed, with three exceptions (recommended)** | I1–I4 compress by default: I1, I2, I3 and I4 when the image is an integer or float TIFF (I5 is `.npz`, see "Float data"). The exceptions: the files MATLAB reads or writes (I10, I15), the chunked checkpoint (I12) and the BigStitcher tiles (I13). The Zarr outputs (I18, I19) are compressed already and keep their codec ("The Zarr outputs"). | The stage shrinks about 16-fold on tissue-2D tile_27 (W-908). W-903's set of 19.9 GB would come to at most about 3 GB if every tile's stage compressed like tile_27's, counting the reference images uncompressed (an inference, not a measure). Every kept image the Python route writes is then deflate except I12 and I13, each with its reason. |
 | CO2. The checkpoint stages only | I1, I2 compress; I3 and I4 stay uncompressed | The reference image (about 6 % of the stage on tissue-2D) and the morphology images stay large. The rule is narrower than "every persisted image output". |
 | CO3. Every image file | CO1 plus I10, I12, I13 and the short-lived files | Changes MATLAB's files (decision 10), the chunked checkpoint's window reads (decision 9) and the BigStitcher input; adds decode time to files read once. |
 
@@ -194,8 +206,22 @@ Every image file the package writes at `70edc72`. Sizes are per FOV, uncompresse
 * `save_volume`'s default stays `compress=False`. It is a public function that users and the
   synthetic writers call. The package's writers I1–I4 pass the codec setting explicitly.
   `compress=True` writes zlib with `compressionargs={"level": 6}` given explicitly. tifffile's
-  default level is 6 with the locked imagecodecs, so the files that writers I6–I9 write today keep
+  default level is 6 with the locked imagecodecs (the repair run's `codec-check`), so the files that writers I6–I9 write today keep
   their bytes (validation CW4).
+
+### The Zarr outputs
+
+The export writes two Zarr outputs (I18, I19). Both are chunked stores whose chunks are compressed by the Zarr codec
+the writing library chooses, and both are read by Zarr readers (napari, spatialdata), not as TIFFs.
+
+| Option | Rule | Consequence |
+| --- | --- | --- |
+| **ZA1. This specification does not govern them; each keeps its writer's codec (recommended)** | I18: Zstd level 0, as `multiview_stitcher` writes it, recorded per level in `export.json` (`compression`, `levels[].codec`) and checked by the export's read-back (F1, `export/_check.py:315`). I19: zarr-python's default ZstdCodec (level 0) at Zarr format 3, the default, or Blosc zstd level 5 with shuffle at format 2, as spatialdata and ome-zarr write it. | Both are lossless and compressed already. `image_compression` does not apply to them. |
+| ZA2. Write them with a zlib (gzip) codec too | Pass a compressor to both writers | One codec name for every output, but a change to libraries' own writers that sample-output decided not to edit ("no file of the library is edited"), no evidence that zlib beats Zstd on Zarr chunks, and a new read-back rule. |
+
+**Recommendation: ZA1.** "TIFF + zlib" is a decision about TIFF files. A Zarr store's chunks are already compressed
+with Zstd, a codec that W-881 and W-908 found 5 to 9 % larger and 2.5 to 3.6 times faster to write than zlib on TIFF. The store is
+written once per sample by the export and is not a checkpoint or a saved set. I18 is off by default.
 
 ## Short-lived files
 
@@ -232,7 +258,14 @@ differencing breaks the long zero runs that deflate already compresses well.
 * The level is fixed at 6 and not a key: the evidence covers level 6 only.
 * The writer is tifffile with the imagecodecs of the lock (tifffile 2026.1.28, imagecodecs
   2026.1.14 in W-881 and W-908). The strips are about 256 KiB (tifffile's `262144 // rowsize`
-  rows; 85 rows of a 3,072-pixel tissue-2D plane), as in W-910's copies.
+  rows; 85 rows of a 3,072-pixel tissue-2D plane, 175 of a 1,496-pixel LN plane), as in W-910's copies.
+* The repair run's step `codec-check` checked these facts in the locked environment (tifffile 2026.1.28, imagecodecs
+  2026.1.14 with zlib 1.3.1):
+  * imagecodecs' default zlib level and tifffile's `compression="zlib"` both write the bytes of level 6;
+  * the strips hold 85 and 175 rows;
+  * the files carry Compression 8 and no Predictor tag.
+
+  The results are in `runs/W-909/20261121T053747Z-71136cee/results/codec/codec_check.json`.
 
 ## Float data
 
@@ -373,30 +406,83 @@ made by the implementation, with the reason in the test.
 | M3 | `test_workflow_orchestration_golden.py` (G3), `scripts/workflow_golden.py` `EXCEPTIONS` | — | A "W-909" exception: the same two keys only in actual | As M2 |
 | M4 | `scripts/workflow_golden.py` `EXCEPTIONS`, the three OC3 rows on reference image digests (`run.json` `outputs.reference_image.sha256`, `placement.json` `file_sha256`, `export.json` `reference_merged.sha256`) | Reason: "its stored metadata holds the frame id" | Reason: the frame id and, since W-909, the codec | The pattern already explains the difference; its reason gains the second cause |
 
-**Tests that stay, and why.**
+**The tests and records, by a recorded search.** Three searches of `src/python/test` were run and kept in the
+repair run (`runs/W-909/20261121T053747Z-71136cee/results/searches/`):
 
-* Byte equality of one writer, one setting, one environment:
-  * `test_morphology_rounds.py:148`: the registered OME-TIFFs of two datasets;
-  * `test_workflow_tiled_tasks.py:97`: `reference.tif` of direct and tiled;
-  * `test_workflow_spot_finding_input.py:91`, `:122`, `:132`: a run from a set against a run from
-    raw images;
-  * `test_workflow_engine_comparison.py`: Snakemake against Nextflow;
-  * `test_ome_tiff.py:211`, `:287`, `:301` and `test_stitching_ome_uuid.py`: process
-    determinism and the content UUID.
+* t1: every line with `hashlib`, `sha256` or `digest`, 1,221 lines;
+* t2: every byte comparison of files (`read_bytes() ==`, `filecmp`), 58 lines;
+* t3: every file under `test/data` that holds a SHA-256, 49 files.
 
-  They hold when both sides take the same setting, which is the default. They are the checks that
-  both routes pass it.
-* A record against the file it names, both from one run: `test_checkpoints.py:378`, `:487`,
-  `test_run_record_version_2.py:115`–`116`, `test_dataset_fov_layout.py:105`,
-  `test_morphology_rounds.py:397`, `:424`–`427`, `test_report_chain.py:407`, `:824`,
-  `test_segmentation_saved_images.py:247`, `test_stitching_reference_image.py:225`,
-  `test_sample_segmentation_route.py:323`, `test_stitching_labels.py:491`, `:500`.
+Every line and every hash value is classified in `results/classification/` (`tests.tsv` and
+`expected-records.tsv`). It is the hash of an image file, the hash of a record or a non-image file, the digest of a
+decoded or in-memory array, or no hash value (imports, helper definitions, docstrings, messages, key names,
+placeholders). Lines inside a string that a test runs as code in a second process count as code (the
+classification's second attempt, `scripts/classify_v2.py`). For an image file, the table gives three more things. First, whether this page changes the codec of
+its writer, I1–I4 or another writer. Second, how the test compares. Third, the effect.
+
+| Class (t1 and t2, 1,279 hits) | Hits |
+| --- | --- |
+| Hash or bytes of an image file | 179 (54 of a file whose writer this page changes, 13 of folders holding both kinds, 112 of other writers' files) |
+| Hash of a record or a non-image file | 446 |
+| Digest of a decoded or in-memory array or table | 220 |
+| No hash value | 434 |
+
+**The tests that hash a file this page changes (I1–I4), and why each passes unchanged.**
+
+(compressed-image-outputs-tests)=
+
+| How the test compares | Tests (file: lines) | Why it holds |
+| --- | --- | --- |
+| A record against the file it names, written together (`self`) | `test_workflow_fov_tasks.py:248`; `test_workflow_completion.py:100`; `test_run_record_version_2.py:116`, `:129`; `test_report_chain.py:406`, `:407`, `:822`, `:824`; `test_report_collection.py:660`; `test_dataset_fov_layout.py:192`; `test_morphology_rounds.py:397`, `:424`, `:425`, `:427`, `:581`; `test_segmentation_saved_images.py:206`, `:247`, `:375`, `:378`, `:397` | The test hashes the file it reads and the record holds the hash the writer took of that file. Both values change with the codec, together. |
+| One file before and after an operation that must not rewrite it (`same-file`) | `test_dataset_fov_layout.py:50` (with `:126`–`:136`); `test_report_page.py:823`; `test_workflow_commands.py:49`; `test_workflow_declared_grids.py:139`, `:280`, `:296`; `test_sample_segmentation_compare.py:90`, `:295`, `:304`, `:320`, `:429`, `:435` | The same file on both sides |
+| Two writes by one writer and one setting in one environment (`two-writes`) | `test_workflow_recovery.py:63`, `:97`, `:105`, `:114`, `:120`, `:129`, `:196`, `:202`, `:221`, `:228`, `:239`, `:257`, `:265`, `:279` (`:221` and `:228` include the registered rounds, a full run against a stop and a resume from the stage registered); `test_workflow_spot_finding_input.py:73`, `:91`, `:122`, `:132`; `test_workflow_tiled_tasks.py:97`; `test_morphology_rounds.py:148`; `test_workflow_declared_grids.py:159`; `workflow_engine_validation.py:212`, `:441`, `:442` (Snakemake against Nextflow) | Both sides take the default setting, and zlib at level 6 writes equal bytes for equal input in one environment (validation CW4, CW6). These are the checks that every route passes the setting (decision 6). |
+| A value fixed before the run (`pinned`) | `test_workflow_orchestration_golden.py:207`, `:209`, `:210` (the cases "reference image digest" and "report input digest of a reference image"); `:314` (a fixture edit of a reference image's digest, which tests the report's verification and compares no file) | G3 compares across environments, where OC3 already explains a difference of these digests. Migration M4 adds the codec to OC3's reason. |
+
+The review's examples are in the classification:
+
+* `test_workflow_fov_tasks.py:248` compares run.json's `outputs` with their files. `reference.tif` (I3) is one of them,
+  so the row is `self` and the effect `unchanged`.
+* `test_sample_segmentation_recipe.py:141` compares a model input OME-TIFF of the export (I11, writer unchanged) with
+  `export.json` and the run record (`self`).
+* `test_segmentation_persistence.py:81` and `:115` compare `labels.tif` (I6) and `input.ome.tif` (I7) with their
+  record. Both writers compress already and do not change.
+
+**The expected records (t3).** The walk of every JSON file under `test/data` found 1,010 hash values:
+
+* 547 hash an image file;
+* 395 hash records or tables;
+* 66 are decoded `sha256` values of grids and records;
+* 2 are not hash values.
+
+Of the image-file hashes, 24 name a file this page changes. Each is the reference image (I3) in G3's expected folders:
+
+* `values.json` `file:fovs/<fov>/reference.tif`, 4, `same_environment`: skipped across environments
+  (`evaluation/workflow.py:114`);
+* `run.json` `outputs.reference_image.sha256`, 4;
+* `export.json` `fusion.fovs[].images.reference_merged.sha256`, 12, three routes of four FOVs;
+* `report.json` inputs of kind `reference_image`, 4.
+
+OC3 explains the last three groups across environments (M4). X4's expected folder holds no file hash of an I1–I4 file.
+
+Of the other 523, 522 are hash values of files whose writer does not change:
+
+* 444 are the fixture's raw inputs, written by the synthetic writers (I14). G3 and X4 compare them exactly in one
+  environment and skip them across environments. This is one more reason why the synthetic writers stay as they are
+  (decision 2).
+* 78 are export and label TIFFs (I6, I8, I11).
+
+The last one is X4's recorder script (`record_core_values.py`), which writes both kinds.
+
+**Other tests that stay.**
+
 * Uncompressed raw inputs, which the synthetic writers keep: `test_workflow_nextflow_cache.py:94`,
-  `test_workflow_recovery.py:537`.
+  `test_workflow_recovery.py:537`. These two assert Compression 1 and are not hash comparisons, so the searches
+  did not find them.
 * `test_io.py::test_save_with_compression`: `save_volume`'s default is unchanged.
-* The C1 plan manifests (`data/expected/test_workflow_plan/`): a task's `execution` entry holds its
-  resources only, and the resolved configuration's hash is masked there. Validation WF1 confirms
-  that they do not change.
+* `test_ome_tiff.py:211`, `:261`–`:301` and `test_stitching_ome_uuid.py`: process determinism and the content UUID of
+  `save_volume`'s and `write_ome_tiff`'s files. Their writers' defaults do not change.
+* The C1 plan manifests (`data/expected/test_workflow_plan/`): a task's `execution` entry holds its resources only,
+  and the resolved configuration's hash is masked there. Validation WF1 confirms that they do not change.
 
 ## Compatibility
 
