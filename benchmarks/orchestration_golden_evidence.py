@@ -21,9 +21,10 @@ Software: Snakemake 9 beside the interpreter (the ``workflow`` dependency group)
 write W-642's fixture into their temporary folder. About 2.5 minutes on one CPU for the two runs (W-880's measured
 times), a few seconds for the comparison tests; under 4 GiB.
 
-When it runs: at the end of a batch whose changes touch the workflow package (``src/python/starfinder/workflow/``),
-``workflow/`` or ``scripts/workflow_golden.py``, and with every evidence script before a tag or a release (Jiahao,
-2026-11-19); the coordinating session runs it on UGER, in the image with the commit's code laid over it.
+When it runs: when the engine script does, that is, at the end of a batch whose changes touch the workflow package
+(``src/python/starfinder/workflow/``) or ``nextflow/``; also after a change to ``workflow/`` or
+``scripts/workflow_golden.py``; and with every evidence script before a tag or a release (Jiahao, 2026-11-19). The
+coordinating session runs it on UGER, in the image with the commit's code laid over it.
 
     cd src/python
     uv run python ../../benchmarks/orchestration_golden_evidence.py --output <run dir>/orchestration-golden
