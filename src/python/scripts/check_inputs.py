@@ -11,7 +11,9 @@ names each check's inputs by its import closure instead. This script computes th
 * the closure: the test files, ``test/conftest.py`` and ``test/__init__.py``, and every module of
   ``starfinder`` and of the test package they import, directly or through another module, read from the
   syntax tree of each file by ``scripts/learned_closure.py`` (imports at the top, in functions and in code
-  strings, the packages' ``__init__.py`` files, and files loaded by their path);
+  strings, the packages' ``__init__.py`` files, and files loaded by their path), and the modules a file imports by
+  top-level name from a folder it puts on ``sys.path`` (a loaded script's own folder, as ``check_inputs.py`` imports
+  ``learned_closure.py``; ``test/``, ``scripts/``, ``docs/_ext/``), followed in turn;
 * the named files: the data files and documentation pages the test modules name by a string constant;
 * the loads by a path that cannot be evaluated (``runpy.run_path`` of a command read from a page), named by
   file and line, so that the check's inputs can name what they load by hand.
@@ -36,6 +38,7 @@ A check whose collection fails stops the script with an error.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import subprocess
 import sys
@@ -119,6 +122,63 @@ def repo_path(path: str) -> str:
     return lc._repo_path(PACKAGE_ROOT / path)
 
 
+def _sys_path_folders(tree: ast.AST, file: Path) -> list[Path]:
+    """The folders the file puts on sys.path (``sys.path.insert(i, <folder>)``, ``sys.path.append(<folder>)``) whose
+    expression ``learned_closure`` evaluates (``__file__``, ``Path``, ``.parent``, ``.parents[i]``, ``/``, ``str`` and
+    the simple assignments before it, in the module or the enclosing function)."""
+    module_env = lc._bind(tree.body, {}, file)
+    scopes = [(tree, module_env)] + [(node, lc._bind(ast.walk(node), module_env, file)) for node in ast.walk(tree)
+                                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    innermost = {}
+    for scope, env in scopes:  # later scopes are nested deeper or are siblings; the innermost wins
+        for node in ast.walk(scope):
+            if isinstance(node, ast.Call):
+                innermost[id(node)] = (node, env)
+    folders = []
+    for node, env in innermost.values():
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr in ("insert", "append")
+                and isinstance(func.value, ast.Attribute) and func.value.attr == "path"
+                and isinstance(func.value.value, ast.Name) and func.value.value.id == "sys"):
+            continue
+        arguments = node.args[1:2] if func.attr == "insert" else node.args[:1]
+        value = lc._value(arguments[0], env, file) if arguments else None
+        if value is not None and Path(value).is_dir() and Path(value).resolve() not in folders:
+            folders.append(Path(value).resolve())
+    return folders
+
+
+def path_imports(source: Path) -> list[str]:
+    """The closure keys of the modules a file imports by top-level name from a folder it puts on sys.path: a module
+    of the package root (``starfinder``, ``test``) by its name, any other file by its repository path."""
+    text = source.read_text()
+    if "sys.path" not in text:
+        return []
+    tree = ast.parse(text, filename=str(source))
+    folders = _sys_path_folders(tree, source.resolve())
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names |= {alias.name for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            names.add(node.module)
+    found = []
+    for folder in folders:
+        for name in sorted(names):
+            parts = name.split(".")
+            for depth in range(1, len(parts) + 1):
+                base = folder.joinpath(*parts[:depth])
+                for path in (base.with_suffix(".py"), base / "__init__.py"):
+                    if not path.is_file() or not path.resolve().is_relative_to(lc.REPO_ROOT):
+                        continue
+                    path = path.resolve()
+                    module = lc.module_name(path) if path.is_relative_to(PACKAGE_ROOT) else None
+                    key = module if module and lc.module_file(module) == path else lc._repo_path(path)
+                    if key not in found:
+                        found.append(key)
+    return found
+
+
 class ImportGraph:
     """The modules each file imports, read once per file (``learned_closure.imports_of`` and ``path_loads``)."""
 
@@ -140,6 +200,9 @@ class ImportGraph:
                     where = f"{lc._repo_path(source)}:{load['line']} {load['call']}"
                     self.unresolved.setdefault(key, []).append(where)
                 found += [loaded for loaded in load["files"] if loaded not in found]
+            # A file that puts a folder on sys.path imports by top-level name the modules of that folder
+            # (check_inputs.py imports learned_closure.py from its own folder).
+            found += [other for other in path_imports(source) if other not in found and other != key]
             self.edges[key] = found
         return self.edges[key]
 

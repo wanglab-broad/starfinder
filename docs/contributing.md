@@ -209,9 +209,10 @@ change touches. W-893's phase 2 set three rules for them:
 
 A check's inputs are the test files it runs and the modules they import (H3).
 `scripts/check_inputs.py` collects each check's selection and computes the import
-closure of its test files; it writes them to `test/check_inputs.json`, which
-`test/test_check_inputs.py` keeps equal to the import graph. Run it again after you add,
-move or re-mark tests:
+closure of its test files, following the scripts a test loads by path and, for a file
+that puts a folder on `sys.path`, the modules it imports from that folder. It writes them
+to `test/check_inputs.json`, which `test/test_check_inputs.py` keeps equal to the import
+graph. Run it again after you add, move or re-mark tests:
 
 ```bash
 uv run python scripts/check_inputs.py            # writes test/check_inputs.json
