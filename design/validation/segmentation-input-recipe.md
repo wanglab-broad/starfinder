@@ -1,6 +1,6 @@
 # Validation design: the segmentation input recipe
 
-% Status: Approved with its specification (Jiahao, 2026-11-18, W-885), with amendments A and B3; written against 76cd058
+% Status: Approved with its specification (Jiahao, 2026-11-18, W-885), with amendments A and B3; written against 76cd058; FU2 and FU3 amended 2026-11-21 (W-919, from W-892)
 
 This is the validation plan for implementing
 [segmentation-input-recipe](../specs/segmentation-input-recipe.md). It covers unit tests
@@ -37,7 +37,7 @@ project guidance bounds them. The fixtures marked `slow` are existing ones.
 | `stacks` | A uint16 stack of 32 × 4 × 4 with every value 65,535 (sum 2,097,120). Two uint32 stacks of 2 × 4 × 4: planes 8,388,608 and 8,388,608, which sum to 2²⁴ = 16,777,216 (float32 holds it), and planes 8,388,608 and 8,388,609, which sum to 2²⁴ + 1 (float32 does not hold it). Two int32 stacks of 2 × 4 × 4: planes −8,388,608 and −8,388,608, which sum to −2²⁴ = −16,777,216 (float32 holds it), and planes −8,388,608 and −8,388,609, which sum to −2²⁴ − 1 = −16,777,217 (float32 rounds it to −16,777,216). A uint8 stack of 3 × 4 × 4 with planes 0, 1 and 1 (mean 2/3). A float32 stack of 2 × 4 × 4 with both planes 2 × 10³⁸ (sum 4 × 10³⁸, beyond float32's largest finite value 3.4028235 × 10³⁸). | hand-built |
 | `seg_golden` | The fixture of `test_segmentation_golden.py` (`fixture()`: DAPI, amplicon and Flamingo, uint8 of 16 × 64 × 64), with its pinned composite and Flamingo digests. | existing |
 | `morphology_fov` | The FOV of `test_segmentation_inputs.py`: a sequencing round and a morphology round registered by `FOV.register`, and the reference merged image. | existing |
-| `scene_plane_small` | The single-plane sample of [sample-segmentation validation](sample-segmentation.md) ("Fixtures"): 3 × 3 FOVs of 1 × 96 × 96, written by `write_scene_plane`, with the stain as `dapi` and `flamingo`. This is the tissue-2D case (Z = 1). | existing; `multiview-stitcher` extra; `slow` |
+| `scene_plane_small` | The single-plane sample of [sample-segmentation validation](sample-segmentation.md) ("Fixtures"): 3 × 3 FOVs of 1 × 96 × 96, written by `write_scene_plane`, with the stain as `dapi` and `flamingo`. This is the case of tiles of one plane (Z = 1). It is not tissue-2D, whose tiles have Z = 30 (corrected 2026-11-21, W-919; see "First use on W-870's stage 1"). | existing; `multiview-stitcher` extra; `slow` |
 | `scene_plane` | The same on `sample-tiny-v1` (FOVs of 1 × 36 × 36), for the routine tier. | existing; `multiview-stitcher` extra |
 | `fused_pair` | Two FOVs of 3 × 24 × 24 at spacing (1.0, 0.5, 0.5) µm, fused at `k` 1 and 2 (Z > 1). | existing; `multiview-stitcher` extra |
 | `recipes` | The recipes of the specification's example (`pi_max`, `pi_smooth`, `pi_composite`) with lengths chosen for the fixture's spacing, and one recipe per refusal of the rows below. | hand-built |
@@ -170,7 +170,8 @@ recipe and makes no quality claim.
 * The implementation batch runs every other check of this page.
 
 * **Data.** W-870's stage 1: the four FOVs tile_28, tile_29, tile_36 and tile_37 of the
-  tissue-2D dataset (single-plane tiles of 3072 × 3072 uint8, 0.094635 µm per pixel), the
+  tissue-2D dataset (tiles of 30 × 3072 × 3072 uint8, 0.094635 µm per pixel in Y and X;
+  2D only after the Z maximum), the
   PI stain as `reference_stain`, configurations `configs/stage1-per_fov.yaml` and
   `configs/stage1-after_fusion.yaml` of
   `runs/W-870/20261118T0309Z-tissue2d/`. The inputs are read only.
@@ -178,8 +179,14 @@ recipe and makes no quality claim.
   * R0 `pi_max`: projection `max`, `pixel_size_um` 0.37854, W-870's run as a recipe;
   * R1: R0 with `channels: [gaussian, sigma_um 0.3]`;
   * R2: R1 with `after_projection: [clahe, kernel_um 6.0]`;
-  * R3: R0 with `pixel_size_um` 0.30.
-  The values are chosen to exercise the stages, not as candidates for a default.
+  * R3: R0 with `pixel_size_um` 0.30;
+  * r1a: R0 with `after_projection: [gaussian, sigma_um 0.3]`, R1's step after the
+    projection;
+  * r2a: R0 with `after_projection: [gaussian, sigma_um 0.3; clahe, kernel_um 6.0]`, R2's
+    steps after the projection.
+  The values are chosen to exercise the stages, not as candidates for a default. In the
+  configurations the names are lowercase snake_case: `pi_max`, `r1`, `r2`, `r3`, `r1a` and
+  `r2a`.
 * **FU1. Reproduction (exact).** R0 per FOV gives labels whose array SHA-256 equals that
   of W-870's stage-1 nucleus labels on each of the four FOVs
   (`output/sample-dataset/smoke/fovs/<tile>/segmentation/nucleus/labels.tif`, the
@@ -193,19 +200,36 @@ recipe and makes no quality claim.
   first use and is reported, with both hashes, as a defect of the implementation.
   Tolerance: exact (hashes of labels).
 * **FU2. Preview.** `starfinder segment preview` with `--run nucleus`, the four FOVs and
-  R0 to R3 per FOV, and again with `--factor-yx 2`. The deliverables are the overlay grid,
+  R0 to R3, r1a and r2a per FOV, and again with `--factor-yx 2` for R0, R3, r1a and r2a.
+  R1 at `--factor-yx 2` is an expected refusal and is kept as a recorded case: the tiles
+  have more than one plane, so on the fused view its `channels` step cannot run before the
+  Z maximum (the rule of check 7 after fusion, as in AF4), and the preview exits 2 with the
+  message that names the run and `after_projection`. R2 has the same step and is not run
+  at `--factor-yx 2`. The deliverables are the overlay grid,
   the size figure and tables, and `preview.json`. R0's per-FOV diameter percentiles are
   compared with W-870's `stats.json` for the same FOVs, as a check of the size code and not
   of the recipe. `stats.json` gives them rounded to 0.01 µm, so they agree within 0.005 µm
   (half the rounding step) when the size definitions agree. If they do not, the difference
   is explained, for example by border labels. The overlay and size figures are looked at,
   not compared.
-* **FU3. Both routes.** R1 through the workflow on stage 1's per-FOV and after-fusion
-  configurations with `input_recipe: R1`. The checks are the records (the recipe and its
-  `sha256` equal on both routes, exact as hashes; `used.sigma_px` equal to 0.3 / 0.094635
-  and 0.3 / 0.18927, about 3.17 and 1.59, and `factor_zyx` 0.25 and 0.5, both at f64) and
-  `check_export` passing. `compare_routes` runs and its report is kept, as a
-  report only.
+* **FU3. Both routes.** r1a through the workflow on stage 1's per-FOV and after-fusion
+  configurations with `input_recipe: r1a`. The checks are the records (the recipe and its
+  `sha256` equal on both routes, exact as hashes; the gaussian's `used.sigma_px_zyx` in Y
+  and X equal to 0.3 / 0.094635 per FOV and 0.3 / 0.18927 after fusion, about 3.17 and
+  1.59, and `factor_zyx` 0.25 and 0.5 in Y and X, both at f64) and `check_export` passing
+  on both routes. `compare_routes` runs and its report is kept, as a report only.
+* **Amended 2026-11-21 (W-919), from W-892's run.** This section first called tissue-2D's
+  tiles single-plane, and ran R1 through both routes (FU3) and R1 and R2 at
+  `--factor-yx 2` (FU2). The tiles are 30 × 3072 × 3072: W-870's `reference.tif` and
+  W-892's runs (`runs/W-892/20261121T0015Z-recipe-first-use`) show it, and tissue-2D is
+  2D only after the maximum projection. After fusion, check 7 refuses a recipe's
+  `channels` steps on tiles of more than one plane, so R1 and R2 cannot run there as
+  written. W-892 ran r1a and r2a in their place, the same steps in `after_projection`, and
+  kept R1's refusal at `--factor-yx 2` as a recorded case (exit 2). FU2 and FU3 above now
+  say what W-892 ran. The record key is `used.sigma_px_zyx`, as the specification's record
+  layout names it; this page first wrote `used.sigma_px`. FU1, the tolerances and the rule
+  are unchanged. Jiahao approved the substitutes on 2026-11-20 (W-892's plan); W-892's
+  finding and results are its comments e09879a7 and bb70c227.
 * **Records.** Records as the project guidance defines them ("Records of a run with
   steps"), with the resource table per step. Resource bounds come from the evidence
   issue's UGER requests. Stage 1's segment tasks ran with 32,000 MB and the export with

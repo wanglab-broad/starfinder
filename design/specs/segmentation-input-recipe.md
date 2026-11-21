@@ -1,6 +1,6 @@
 # Segmentation input recipe: dataset-tunable input preparation on both routes
 
-% Status: Approved (Jiahao, 2026-11-18, W-885), with amendments A and B1–B3; written against 76cd058. Implemented by W-891 (2026-11-20) and W-907 (2026-11-20); their implementation notes are under "Implementation (W-891)" at the end.
+% Status: Approved (Jiahao, 2026-11-18, W-885), with amendments A and B1–B3; written against 76cd058. Implemented by W-891 (2026-11-20) and W-907 (2026-11-20); their implementation notes are under "Implementation (W-891)" at the end. Its tissue-2D description was corrected on 2026-11-21 (W-919: the tiles have Z = 30).
 
 This page specifies the **input recipe**: a named, dataset-level description of how a
 segmentation run turns its source channels into the image the model receives. One recipe
@@ -407,7 +407,7 @@ def apply_input_recipe(sources: Sequence[tuple[str, np.ndarray, Mapping]], grid:
 
 Only fused images exist after fusion. The two ways to give a recipe what it needs:
 
-| Option | Rule | Cost on tissue-2D (56 tiles of 3072 × 3072 uint8 at 0.094635 µm; fused 11,291 × 9,848 at 0.18927 µm) | Consequence |
+| Option | Rule | Cost on tissue-2D (56 tiles of 30 × 3072 × 3072 uint8 at 0.094635 µm in Y and X; fused projection 11,291 × 9,848 at 0.18927 µm) | Consequence |
 | --- | --- | --- | --- |
 | **AF1. Fused channels (recommended)** | Every source channel of a recipe is an image of `export.images` (checked by check 7 before anything is written). `segment_fused` reads the fused projections and runs the recipe on them, on the segmentation grid, with the fit region of the footprints. | No new fused file for the recipes of W-870. `reference_stain` (PI) and `reference_merged` are already fused, so a PI recipe and the PI–amplicon composite need nothing more. Each further channel adds one fused projection, 111.2 MB as uint8 (11,291 × 9,848 = 111,193,768 pixels). A recipe that changes the image writes `model_inputs/<run>.ome.tif`, 444.8 MB as uncompressed float32. One float32 copy of the fused plane is 444.8 MB in memory, so a Gaussian (input and output) holds about 0.9 GB. These figures are arithmetic and not measured. | One fit over the whole sample: one percentile range and one CLAHE mapping, so no step makes a seam. Steps run after fusion's own resampling to `k`. The recipe's `channels` stage runs on a plane that is already the Z maximum (see below). |
 | AF2. Fused prepared inputs | Each FOV's prepared input (stages `channels` to `after_projection`) is written per FOV and fused as a new image. | 56 prepared files, 56 × 37.7 MB = 2.11 GB as float32, plus their fused projection, 444.8 MB as float32, plus a preparation task per FOV on a route that has none today. | Steps fitted per FOV (percentiles, CLAHE) differ between neighbouring tiles. The blend then mixes two different mappings in every overlap (10 % of each tile's side), and the seams show in the model input. It is the only way to run 3D steps before the projection on a fused 3D sample. |
@@ -415,11 +415,11 @@ Only fused images exist after fusion. The two ways to give a recipe what it need
 **Recommendation: AF1.** On tissue-2D it needs no new fused image, and it fits each
 statistic once over the sample.
 
-**Z.** The fused images are Z maxima of the tiles. When the tiles have one plane (tissue-2D),
+**Z.** The fused images are Z maxima of the tiles. When the tiles have one plane (Z = 1),
 the projection of a plane is the plane for `max`, `sum` and `mean` alike, and the recipe
-means what it means per FOV. When the tiles have more than one plane, a step before the Z
-maximum cannot be applied after it, and `sum` or `mean` cannot be recovered from a
-maximum. Check 7 therefore refuses, on the route after fusion with tiles of Z > 1, a recipe
+means what it means per FOV. When the tiles have more than one plane (tissue-2D's have
+30), a step before the Z maximum cannot be applied after it, and `sum` or `mean` cannot be
+recovered from a maximum. Check 7 therefore refuses, on the route after fusion with tiles of Z > 1, a recipe
 with a `channels` step or with a `projection` other than `max` (`ValueError` naming the
 recipe, the stage and `after_projection` as the stage for 2D steps). There is either an
 exact meaning or a refusal, never a silent difference. A projection of `max`, or no
@@ -427,6 +427,13 @@ projection, is the fused maximum itself, recorded `applied: false, reason: fused
 The tiles' Z is known before any fusion from their reference grids, the `grids` that
 `fused_grid` takes. With Z = 1, the recipe's projection is recorded `applied: false,
 reason: single_plane`, and its output dtype rule still applies.
+
+**Corrected 2026-11-21 (W-919).** This section first named tissue-2D as the case of tiles
+of one plane. Its tiles are 30 × 3072 × 3072 (W-870's `reference.tif`; W-892's runs); it is
+2D only after the maximum projection. On tissue-2D's route after fusion, check 7 therefore
+refuses a recipe with a `channels` step or a `projection` other than `max`, and 2D steps go in
+`after_projection`, as W-892 ran them (`r1a`, `r2a`). The rule and the recommendation are
+unchanged; the cost column's figures are those of the fused projection and stand.
 
 **Filter scale on the fused grid.** Steps take µm, and the fused grid's spacing is `k·s`.
 `sigma_um` 0.3 is therefore 3.17 pixels per FOV and 1.59 pixels on the fused grid at
@@ -682,7 +689,10 @@ export:
         input_recipe: pi_smooth               # the same recipe: 0.25 per FOV, 0.5 at k = 2
 ```
 
-The values illustrate the layout and are not recommended settings.
+The values illustrate the layout and are not recommended settings. On the route after
+fusion, `pi_smooth` runs only when the tiles have one plane: on tiles of more than one
+plane, tissue-2D's included, check 7 refuses its `channels` step and its `sum` projection
+("The route after fusion", "Z"; corrected 2026-11-21, W-919).
 
 * A step is a mapping with `method` (the registered step name), its config fields and an
   optional `roles`. `combine` is a mapping with `method` and its config fields.

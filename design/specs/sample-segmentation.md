@@ -207,7 +207,9 @@ beyond the one column of choice 7, a model call or a real-data run in the valida
   is recorded as `per_fov` or `after_fusion`.
 * A **projection sample** is a sample whose export writes the 2D projection
   (`dimensionality` `projection` or `both`, [sample-output specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/sample-output.md), "The fused image
-  by dataset"). Its tiles may be stacks (cell-culture-3D) or planes (tissue-2D).
+  by dataset"). Its tiles may be stacks (cell-culture-3D, and tissue-2D, whose tiles are
+  30 × 3072 × 3072) or planes (Z = 1). Corrected 2026-11-21 (W-919): this term first named
+  tissue-2D's tiles as planes; W-870's and W-892's runs show Z = 30.
 * The **segmentation grid** is the grid of the fused projection file the route segments:
   shape `(1, N_y, N_x)`, frame `sample:<sample>`, Y and X spacing `k·s` and origin
   `o + s·(k − 1)/2` of the output level at factor `k`, and in Z the slab
