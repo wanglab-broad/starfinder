@@ -28,6 +28,26 @@ its report `preprocessing_report.py`. Their source stays in Git at
   the `slow` tier. Reads the real
   banks through `STARFINDER_APPEARANCE_BANKS` and the models through `STARFINDER_WEIGHTS_DIR` and
   `STARFINDER_STARDIST_3D_SPLEEN`; about 2 h on one CPU and up to 13 GiB per step.
+- `workflow_engine_evidence.py`: the workflow engine checks that W-898 moved out of the test suite
+  (W-893's categories K1, O2, K2 and K3): X11's `restored-twice` case on both engines and its `raw-size` and `raw-older`
+  cases on Nextflow of [the orchestration validation page](../design/validation/orchestration.md), the Nextflow cache
+  test on real tasks, and the uncalibrated run on Nextflow. It protects the engines' reruns after a changed
+  configuration or a replaced raw image, compared with a fresh run, and the declared spacing of an uncalibrated run's
+  grids. Needs Snakemake 9 (the `workflow` group), Nextflow 26.10.4 or newer on Java 17 or newer, and the `anndata`
+  and `multiview-stitcher` extras; a case whose engine is missing skips with the reason. It writes its own inputs
+  (`tiny_sample`) and reads no real data; about 40 minutes on one CPU, under 1 GiB beside Nextflow's JVM. It runs at
+  the end of a batch whose changes touch the workflow package or `nextflow/`, and with every evidence script before a
+  tag or a release (Jiahao, 2026-11-19), on UGER by the coordinating session.
+- `orchestration_golden_evidence.py`: G3 of [the orchestration validation page](../design/validation/orchestration.md),
+  the refactored workflow against the golden values that W-642 and W-643 recorded with the workflow before the
+  dispatcher, with the tests of its comparison `compare_migrated` (W-893's category K7, moved by W-898). It protects
+  W-647's refactor; the expected folders stay in `src/python/test/data/expected/`. Needs Snakemake 9 and, for G2's
+  part, the `anndata` and `multiview-stitcher` extras; writes its own fixture, reads no real data, about 2.5 minutes on
+  one CPU. It runs when the engine script does, and also after a change to `workflow/` or `scripts/workflow_golden.py`.
+- `evidence_runner.py`: the runner of the two workflow evidence scripts, which hold their moved tests as pytest
+  tests: it runs pytest on the script with the suite's configuration and writes `results.json` (each case's former
+  node ID, outcome and time, the revision and the engines' versions) and `junit.xml` to `--output`; `--list` collects
+  the cases without running them.
 - `revision.py`: the source revision record that `image_statistics.py` writes into its manifest
   (W-288; the retired `preprocessing_synthetic.py` wrote it too): HEAD, dirty state, the untracked
   paths and the sha256 of `git diff HEAD --binary` followed by each untracked path's name and bytes;

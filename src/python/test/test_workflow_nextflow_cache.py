@@ -1,4 +1,8 @@
-"""W-650 cache regressions on the real engine; full X11 fresh-output comparisons belong to W-652."""
+"""W-650 cache regressions on the real engine; full X11 fresh-output comparisons belong to W-652.
+
+The suite runs the stub variant; W-898 moved the real one (the same sequence on the scientific commands) to
+``benchmarks/workflow_engine_evidence.py``.
+"""
 from __future__ import annotations
 
 import copy
@@ -24,7 +28,7 @@ def downstream(manifest, selected):
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize("stub", [True, False], ids=["stub", "real"])
+@pytest.mark.parametrize("stub", [True], ids=["stub"])
 def test_fingerprints_and_fresh_tokens_rerun_only_affected_tasks(tmp_path, stub):
     """A,B,A,B,A for two independent blocks, two raw replacements, and a memory-only cache hit.
 

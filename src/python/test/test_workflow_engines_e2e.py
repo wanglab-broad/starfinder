@@ -1,4 +1,10 @@
-"""X1–X3: real engines on tiny_sample, completion hashes and strict output comparison."""
+"""X1–X3: real engines on tiny_sample, completion hashes and strict output comparison.
+
+X3 runs per-fov and molecules-only on Snakemake, then on Nextflow, through the same ``EngineRun.invoke`` with the same
+completion checks, and compares the two trees; so W-898 retired X1's runs of those variants and X2's, and X2 keeps
+``supplied-xml``, which X3 does not run. The uncalibrated run on Nextflow moved to
+``benchmarks/workflow_engine_evidence.py``; the Snakemake run asserts the same grids on the same commands.
+"""
 import pytest
 
 from . import workflow_engine_validation as E
@@ -89,14 +95,6 @@ def test_uncalibrated_tiny_sample_snakemake(tmp_path):
     _assert_declared_grids(run)
 
 
-@pytest.mark.nextflow
-def test_uncalibrated_tiny_sample_nextflow(tmp_path):
-    run = _uncalibrated_run(tmp_path, "nextflow")
-    assert len(run.data["tasks"]) == 29
-    run.invoke({t["id"] for t in run.data["tasks"]})
-    _assert_declared_grids(run)
-
-
 def test_uncalibrated_tiny_sample_tiled_snakemake(tmp_path):
     run = _uncalibrated_run(tmp_path, "snakemake", tiled=True)
     assert len(run.data["tasks"]) == 49
@@ -104,14 +102,8 @@ def test_uncalibrated_tiny_sample_tiled_snakemake(tmp_path):
     _assert_declared_grids(run)
 
 
-@pytest.mark.parametrize("variant", ["per-fov", "molecules-only"])
-def test_x1_snakemake_end_to_end(tmp_path, variant):
-    run = E.EngineRun(tmp_path / variant, "snakemake", variant)
-    run.invoke({t["id"] for t in run.data["tasks"]})
-
-
 @pytest.mark.nextflow
-@pytest.mark.parametrize("variant", ["per-fov", "molecules-only", "supplied-xml"])
+@pytest.mark.parametrize("variant", ["supplied-xml"])
 def test_x2_nextflow_end_to_end(tmp_path, variant):
     run = E.EngineRun(tmp_path / variant, "nextflow", variant)
     run.invoke({t["id"] for t in run.data["tasks"]})

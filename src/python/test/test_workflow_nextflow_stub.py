@@ -37,8 +37,14 @@ def configuration(work, variant):
     return N.small_resources(config)
 
 
-@pytest.mark.parametrize("variant", [*V.VARIANTS, "two-supplied-steps", "empty"])
-@pytest.mark.parametrize("profile", ["local", "google-batch,local"])
+#: N1's runs: every variant under ``local``, and per-fov under ``google-batch,local``. W-898 retired the other seven
+#: variants under that profile: the same assertions on the same stub tasks as under ``local``, and
+#: test_workflow_nextflow_google_batch.py checks the profile offline.
+N1_RUNS = [*(("local", variant) for variant in [*V.VARIANTS, "two-supplied-steps", "empty"]),
+           ("google-batch,local", "per-fov")]
+
+
+@pytest.mark.parametrize("profile, variant", N1_RUNS)
 def test_n1_every_task_runs_once_after_its_needs(tiny, variant, profile):
     settings = configuration(tiny, variant)
     name = variant

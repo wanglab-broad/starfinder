@@ -6,6 +6,10 @@ a changed input or another package version (whichever way ``execution.code_versi
 naming every differing field; with a changed ``export`` key, a block the fov task does not read, it resumes; a
 version-1 ``run.json`` is never resumed. The code identity is patched (``starfinder._records.code``), so that the
 tests do not depend on the state of the checkout.
+
+X7, X10 on Nextflow and X11 start each case from one complete run per engine, kept by the module and restored at the
+same path (``CompleteRuns``, W-898). X11's ``restored-twice`` on both engines and its ``raw-size`` and ``raw-older`` on
+Nextflow run in ``benchmarks/workflow_engine_evidence.py``, each from a complete run of its own.
 """
 import hashlib
 import json
@@ -421,16 +425,55 @@ from . import workflow_engine_validation as E
 ENGINES = ["snakemake", pytest.param("nextflow", marks=pytest.mark.nextflow)]
 
 
+class CompleteRuns:
+    """W-898 (K1): one complete per-fov run per engine, made by the first case that needs it and kept by the module.
+
+    ``restored`` puts the saved copy of the whole work folder back at the same path (the fixture's inputs, the
+    configuration, the output tree and the engine's metadata or cache, with their modification times), so each case of
+    X7, X10 (Nextflow) and X11 runs only its damage or change, the rerun and the comparison, as the W-758 and W-760
+    fixtures below do. A run that fails or skips is not made again: each later case of its engine raises the same."""
+
+    def __init__(self, root):
+        self.root, self.runs = root, {}
+
+    def restored(self, engine, case):
+        import copy
+        if engine not in self.runs:
+            try:
+                run = E.EngineRun(self.root / engine / "work", engine)
+                run.invoke({t["id"] for t in run.data["tasks"]})
+                saved = run.work.with_name("complete")
+                shutil.copytree(run.work, saved, symlinks=True)
+                self.runs[engine] = (run, saved, copy.deepcopy(run.config))
+            except (Exception, pytest.skip.Exception, pytest.fail.Exception) as error:
+                self.runs[engine] = error
+                raise
+        if isinstance(self.runs[engine], BaseException):
+            raise self.runs[engine]
+        run, saved, config = self.runs[engine]
+        shutil.rmtree(run.work)
+        shutil.copytree(saved, run.work, symlinks=True)
+        run.config = copy.deepcopy(config)
+        run.data = json.loads(run.manifest.read_text())
+        # The case's name stands in for the work folder's name that each case had (E.fresh_comparison reads it).
+        run.case = case
+        return run
+
+
+@pytest.fixture(scope="module")
+def complete_runs(tmp_path_factory):
+    return CompleteRuns(tmp_path_factory.mktemp("complete-run"))
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 @pytest.mark.parametrize("engine", ENGINES)
-def test_x7_sigkill_partial_task_recovers_with_only_its_downstream(tmp_path, engine):
+def test_x7_sigkill_partial_task_recovers_with_only_its_downstream(tmp_path, complete_runs, engine):
     """Kill a real CLI task with SIGKILL immediately after its molecule table is written."""
     import os
     import subprocess
     import sys
-    run = E.EngineRun(tmp_path / "kill", engine)
-    run.invoke({t["id"] for t in run.data["tasks"]})
+    run = complete_runs.restored(engine, "kill")
     uninterrupted = E.snapshot(run)
     task = next(t for t in run.data["tasks"] if t["id"] == FOV_TASK)
     for name in [*task["outputs"], task["record"]]:
@@ -469,9 +512,8 @@ def test_x7_sigkill_partial_task_recovers_with_only_its_downstream(tmp_path, eng
 @pytest.mark.slow
 @pytest.mark.nextflow
 @pytest.mark.parametrize("damage", ["deleted-molecules", "truncated-molecules", "deleted-index", "deleted-task"])
-def test_x10_nextflow_repairs_only_damaged_tasks_and_their_downstream(tmp_path, damage):
-    run = E.EngineRun(tmp_path / damage, "nextflow")
-    run.invoke({t["id"] for t in run.data["tasks"]})
+def test_x10_nextflow_repairs_only_damaged_tasks_and_their_downstream(complete_runs, damage):
+    run = complete_runs.restored("nextflow", damage)
     uninterrupted = E.snapshot(run)
     before = run.records()
     run.invoke(set())
@@ -496,17 +538,23 @@ def test_x10_nextflow_repairs_only_damaged_tasks_and_their_downstream(tmp_path, 
     E.compare(run, uninterrupted, E.snapshot(run), name=f"x10-{damage}.json")
 
 
+#: X11's cases in the suite. W-898 moved restored-twice on both engines, and raw-size and raw-older on Nextflow, to
+#: benchmarks/workflow_engine_evidence.py: the stub cache test makes the same sequence on Nextflow (K1, O2).
+X11_CASES = [("processing", "snakemake"), ("export", "snakemake"), ("raw-size", "snakemake"),
+             ("raw-older", "snakemake"), ("fingerprint", "snakemake"),
+             *(pytest.param(case, "nextflow", marks=pytest.mark.nextflow)
+               for case in ("processing", "export", "fingerprint"))]
+
+
 @pytest.mark.integration
 @pytest.mark.slow
-@pytest.mark.parametrize("engine", ENGINES)
-@pytest.mark.parametrize("case", ["processing", "export", "restored-twice", "raw-size", "raw-older", "fingerprint"])
-def test_x11_stale_results_rerun_only_readers_and_downstream(tmp_path, engine, case):
+@pytest.mark.parametrize("case, engine", X11_CASES)
+def test_x11_stale_results_rerun_only_readers_and_downstream(complete_runs, engine, case):
     import copy
     import os
     from starfinder.__main__ import main
     from starfinder.workflow import verify
-    run = E.EngineRun(tmp_path / case, engine)
-    run.invoke({t["id"] for t in run.data["tasks"]})
+    run = complete_runs.restored(engine, case)
     if case == "fingerprint":
         task = next(t for t in run.data["tasks"] if t["id"] == FOV_TASK)
         path = run.out / task["record"]

@@ -1,4 +1,5 @@
-"""Real-engine fixtures, completion checks and retained evidence for X1–X3 and X7/X10/X11.
+"""Real-engine fixtures, completion checks and retained evidence for X1–X3 and X7/X10/X11, and for the cases of them
+that ``benchmarks/workflow_engine_evidence.py`` runs.
 
 X3's named workflow token and provenance fields are checked separately before
 normalization. Directory markers are ignored only for Snakemake's declared
@@ -489,7 +490,8 @@ def fresh_comparison(run, expected, *, name, rerun_tasks):
         run.engine_work = run.work / f"fresh-{run.invocations:02d}"
         run.engine_work.mkdir()
         run.invoke({t["id"] for t in data["tasks"]})
-        if "export" in run.work.name:
+        # A case restored on a shared work folder names itself in ``case`` (test_workflow_recovery.py, W-898).
+        if "export" in getattr(run, "case", run.work.name):
             from starfinder.export._record import PARTS, listed_files
             def unlisted(root):
                 folder = root / "export" / F.SAMPLE / run.data["export_route"]
