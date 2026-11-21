@@ -40,7 +40,9 @@ they are used. Similarity to Huygens is not accuracy (W-855).
 
 ## Jiahao's answers (2026-11-21)
 
-Jiahao answered the nine questions on 2026-11-21 (in the coordinating session's chat; W-918 comments e7c633e9, 548f0af9 and 64bc1b3f; the review page's `decisions`): "W918-2 用 psfmodels，同意进 lock，其他按推荐"; for question 3, "记两个形式吧，先默认 uint8 和之前 huygens 保持一致，可选uint16 with 可以调整的 scale", and for its factor, "Per FOV, as Huygens". The questions stay as they were asked, each with its answer.
+Jiahao answered the nine questions on 2026-11-21 (in the coordinating session's chat; W-918 comments e7c633e9, 548f0af9 and 64bc1b3f; the review page's `decisions`): "W918-2 用 psfmodels，同意进 lock，其他按推荐"; for question 3, "记两个形式吧，先默认 uint8 和之前 huygens 保持一致，可选uint16 with 可以调整的 scale", for its factor, "Per FOV, as Huygens"; and for how the copy is read, "原样读取吧" (the uint8 values are read
+unchanged; [The scaling](#the-scaling), "Intensities across FOVs"). The questions stay as they were asked, each
+with its answer.
 
 1. **Accept the recommendations** of the twelve decisions in the table below?
    **Answer:** accepted, except decision 3, which question 3 changed.
@@ -468,7 +470,8 @@ draft had recommended SC1 alone, at scale 64.
   * **The factor couples the round's channels.** A channel is never redone alone: a change to any
     channel's input redoes the round, as reuse is per round ([Reuse and staleness](#reuse-and-staleness)).
 * **Intensities across FOVs.** With SC3 each FOV has its own factor, as with Huygens' exports. The FOV
-  tasks read the stored uint8 values unchanged, and no consumer divides by f.
+  tasks read the stored uint8 values unchanged, and no consumer divides by f (Jiahao, 2026-11-21:
+  "原样读取吧"; the alternative, dividing by f on load, would give every consumer float32 input).
   * The thresholds of spot finding that scale with the image do not depend on f in principle:
     `adaptive`, a fraction of each channel's maximum; `adaptive_round`, of the round's; and `noise`,
     a multiple of the MAD. The `noise` threshold is still sensitive to the uint8 step, because the MAD
