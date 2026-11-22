@@ -11,15 +11,19 @@ import pytest
 pytestmark = [pytest.mark.core, pytest.mark.contract]
 
 # Loads scripts/check_inputs.py as the fixture `script` does, in a fresh interpreter, and prints the files under
-# src/python of the modules then loaded (repository paths).
+# src/python of the modules then loaded (repository paths). Files of the interpreter's environment are not the
+# repository's, even where the environment lies under src/python (CI's src/python/.venv, whose site-packages holds
+# the `_virtualenv` and `_distutils_hack` modules its .pth files load at start-up).
 LOADED = """
 import importlib.util, json, sys
 from pathlib import Path
 path, root = Path(sys.argv[1]), Path(sys.argv[2])
 spec = importlib.util.spec_from_file_location("check_inputs", path)
 spec.loader.exec_module(importlib.util.module_from_spec(spec))
+environment = {Path(p).resolve() for p in (sys.prefix, sys.base_prefix, sys.exec_prefix)}
 files = {Path(m.__file__).resolve() for m in list(sys.modules.values()) if getattr(m, "__file__", None)}
-print(json.dumps(sorted(str(f.relative_to(root.parents[1])) for f in files if f.is_relative_to(root))))
+files = {f for f in files if f.is_relative_to(root) and not any(f.is_relative_to(p) for p in environment)}
+print(json.dumps(sorted(str(f.relative_to(root.parents[1])) for f in files)))
 """
 
 # The checks of the workflow recovery and engine tests (W-893's H1 and H2 took the task, plan and dry-run helpers out
