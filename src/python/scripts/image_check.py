@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The checks that run inside a built learned image (W-878).
+"""The checks that run inside a built image (W-878, W-923).
 
-Two checks, both with the standard library only, so that the image's own Python runs them:
+Three checks, all with the standard library only, so that the image's own Python runs them:
 
 * ``pip-check <variant>`` reads the output of ``uv pip check`` on standard input. The image has no ``uv``; the host's
   binary is mounted into the container. The ``cpu`` image must report no incompatibility. The ``learned`` and
@@ -10,11 +10,15 @@ Two checks, both with the standard library only, so that the image's own Python 
   requirement for the distribution ``opencv-python`` is never met by name. The line is matched by its exact text;
   any other line fails the check.
 * ``imports`` imports ``cv2``, ``cellpose``, ``piscis`` and ``stardist`` together on the CPU and prints their versions.
+* ``deconwolf`` checks the deconvolution stage's binary in every target (design/validation/deconvolution.md, IM1):
+  ``dw --version`` names 0.4.5 with OpenMP, OpenCL and VkFFT, ``ldd`` finds every library, the binary's SHA-256 equals
+  the image's label ``org.starfinder.deconwolf-sha256`` (given with ``--sha256``), and ``psfmodels`` imports.
 
 Usage, with the image already loaded (``docs/workflow/broad-uger.md``, "Checking a built image")::
 
     uv pip check --python /opt/starfinder/bin/python 2>&1 | python image_check.py pip-check learned
     CUDA_VISIBLE_DEVICES= python image_check.py imports
+    python image_check.py deconwolf --sha256 <the image's org.starfinder.deconwolf-sha256 label>
 
 The exit status is 0 when the check passes and 1 when it does not.
 """
@@ -138,6 +142,59 @@ def import_versions():
     return {name: importlib.metadata.version(distribution) for name, distribution in distributions.items()}
 
 
+#: What ``dw --version`` must say in the image: the version and the three back ends (design/specs/deconvolution.md).
+DECONWOLF_LINES = ("deconwolf: '0.4.5'", "OpenMP: YES", "OpenCL: YES", "VkFFT: YES")
+
+
+def deconwolf_problems(version_text, ldd_text, binary_sha256, expected_sha256):
+    """List what the image's deconwolf lacks.
+
+    Parameters
+    ----------
+    version_text : str
+        The output of ``dw --version``.
+    ldd_text : str
+        The output of ``ldd`` on the binary.
+    binary_sha256 : str
+        The binary's SHA-256 (hexadecimal).
+    expected_sha256 : str or None
+        The image's label ``org.starfinder.deconwolf-sha256``; None skips the comparison.
+
+    Returns
+    -------
+    list of str
+        One message per missing line of :data:`DECONWOLF_LINES`, per library ``ldd`` does not find, and for a SHA-256
+        that differs from the label; empty when the binary passes.
+    """
+    problems = [f"dw --version does not say {line}" for line in DECONWOLF_LINES if line not in version_text]
+    problems += [f"ldd: {line.strip()}" for line in ldd_text.splitlines() if "not found" in line]
+    if expected_sha256 is not None and binary_sha256 != expected_sha256:
+        problems.append(f"the binary's SHA-256 {binary_sha256} differs from the label's {expected_sha256}")
+    return problems
+
+
+def check_deconwolf(binary, expected_sha256):
+    """Run ``dw --version`` and ``ldd`` on ``binary``, hash it and import ``psfmodels``; the problems found."""
+    import hashlib
+    import importlib.metadata
+    import shutil
+    import subprocess
+    path = shutil.which(binary) or binary
+    version = subprocess.run([path, "--version"], capture_output=True, text=True)
+    ldd = subprocess.run(["ldd", path], capture_output=True, text=True)
+    with open(path, "rb") as handle:
+        digest = hashlib.sha256(handle.read()).hexdigest()
+    problems = deconwolf_problems(version.stdout + version.stderr, ldd.stdout + ldd.stderr, digest, expected_sha256)
+    try:
+        import psfmodels  # noqa: F401
+        print("psfmodels", importlib.metadata.version("psfmodels"))
+    except ImportError as error:
+        problems.append(f"psfmodels does not import: {error}")
+    print(version.stdout.strip())
+    print(f"{path} sha256 {digest}")
+    return problems
+
+
 def main(argv=None):
     """Run one check from the command line.
 
@@ -156,7 +213,17 @@ def main(argv=None):
     pip = commands.add_parser("pip-check", help="filter the uv pip check output on standard input")
     pip.add_argument("variant", choices=VARIANTS)
     commands.add_parser("imports", help="import cv2, cellpose, piscis and stardist on the CPU")
+    dw = commands.add_parser("deconwolf", help="dw --version, ldd, the binary's SHA-256 and the psfmodels import")
+    dw.add_argument("--binary", default="dw", help="The deconwolf executable (default dw on PATH)")
+    dw.add_argument("--sha256", help="The image's org.starfinder.deconwolf-sha256 label")
     args = parser.parse_args(argv)
+    if args.command == "deconwolf":
+        problems = check_deconwolf(args.binary, args.sha256)
+        for problem in problems:
+            print(f"deconwolf: {problem}")
+        if not problems:
+            print("deconwolf ok")
+        return 1 if problems else 0
     if args.command == "pip-check":
         output = sys.stdin.read()
         print(output, end="" if output.endswith("\n") else "\n")

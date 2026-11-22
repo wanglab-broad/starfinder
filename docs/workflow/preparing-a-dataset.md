@@ -254,6 +254,40 @@ Its `processing` block writes out the steps of the retired `recipe: deep`
 ({ref}`migration guide <migration-named-recipe>`). The
 {doc}`reference <reference>` lists every key.
 
+(preparing-a-dataset-deconvolution)=
+## Deconvolved images
+
+A dataset whose images are raw confocal stacks can be deconvolved by the workflow
+({ref}`the deconvolution stage <workflow-deconvolution>`). A dataset that another
+program already deconvolved, such as the Huygens exports of the catalog datasets,
+is an input like any other and has no `deconvolution` block.
+
+* **The optics** come from the microscope's records of the acquisition (a Leica
+  `.lif` or Huygens' `.hgsb` settings): the objective's numerical aperture, the
+  immersion medium's and the sample's refractive indices, the pinhole radius
+  back-projected into the sample, and each channel's excitation and emission
+  wavelengths. The block holds them under `psf`; none has a default. The voxel size
+  is the dataset's `voxel_size_xy` and `voxel_size_z`. A measured PSF can be given
+  as files instead (`psf.source: file`, with their declared spacing
+  `psf.voxel_size_um`, which must equal the dataset's).
+* **The iterations** have no default. Choose them on one development position that
+  has a comparator, such as a Huygens result of the same position: run 5, 10, 20, 40
+  and 80 iterations, take the count with the highest whole-volume normalised
+  cross-correlation to the comparator averaged over the channels, and among the
+  counts within 0.005 of the best take the fewest. Freeze the count before the other
+  positions run. 9735seqA1 chose 5 this way (W-915), at the low edge of the grid. A
+  dataset without a comparator states its count and its reason in a comment of its
+  configuration.
+* **The storage.** The default copy is uint8 with one stretch factor per FOV and
+  round, as Huygens' exports are; it is about 0.4 times the size of an 8-bit raw
+  position with zlib. A dataset whose raw images are not uint8, or that compares
+  intensities across FOVs (supplied statistics, or a `global` or `absolute` spot
+  threshold), or that relies on spot finding's `noise` threshold, sets
+  `dtype: uint16`: one fixed `scale` for every FOV, 64 by default, so that a stored
+  value is 64 × the deconvolved grey level. Choose the scale so that
+  scale × the largest expected value stays within 65,535; 64 holds grey levels up to
+  1,023.98. The record of each round counts the voxels that saturate.
+
 ## Learned methods and the weights folder
 
 Four methods run a trained model: the segmentation methods `stardist` and

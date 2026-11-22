@@ -179,7 +179,7 @@ no insignificant whitespace) of an object with:
 | --- | --- |
 | `entry`: the task entry without `fingerprint`, `execution` and `command` | A change of its kind, identity, `needs`, declared inputs or outputs, record, log, group or Fiji command line |
 | `blocks_sha256`: the hash of the common part and the blocks the kind reads (`orchestration.md`, "The blocks of a task kind"); a FOV-level kind's common part leaves out `selected_fovs` and `output_id` (W-877) | A change of a setting this task reads; a change of another block reaches it only through `needs`; a FOV-level task keeps its result when the selection grows or the output id changes |
-| `inputs`: for every declared input outside the output root (each `input:` path and each absolute path: the raw images, the codebook, the supplied files), its `path`, `bytes` and `mtime_ns` from `manifest.inputs` | An input replaced at the same path with another size or another modification time, older included |
+| `inputs`: for every declared input outside the output root (each `input:` path and each absolute path: the raw images, the codebook, the supplied files), its `path`, `bytes` and `mtime_ns` from `manifest.inputs`; a declared output of another task is left out even when it is absolute (a deconvolved copy outside the output root, which does not exist when the plan runs) and reaches the fingerprint through `needs` (W-923) | An input replaced at the same path with another size or another modification time, older included |
 | `package`: only with `execution.code_version: rerun`, the code identity (`orchestration.md`, "The code identity"); with `keep`, the default, nothing | With `rerun`, a new code version; with `keep`, a finished task is kept across versions |
 | `needs`: the fingerprints of the tasks in `needs`, in their order | Any of the above upstream: staleness is transitive, so `verify` and a person find the consumers of a stale task as well as the engines do |
 
@@ -216,6 +216,7 @@ and in `VERIFY_BEFORE`'s token, both part of the process's cache hash.
 
 % Amended 2026-11-01 for W-760: distinguish Snakemake's triggers from the record-based completion check.
 % Amended 2026-11-19 for W-877: the FOV-level kinds' `blocks_sha256` leaves out the FOV selection and the output id.
+% Amended 2026-11-22 for W-923: the `inputs` component leaves out other tasks' declared outputs (design/specs/deconvolution.md, "The graph", step 4); the plan already did, by the `produced` set of `fingerprint_components`.
 
 #### Choice: what the fingerprint covers
 
@@ -406,6 +407,8 @@ group and its Nextflow process, or the reason it is not covered:
 
 | Task kind | Command | Snakemake | Nextflow | Reason when not covered |
 | --- | --- | --- | --- | --- |
+| `psf` | `psf` | group `psf` (no wildcard) | `PSF` | — |
+| `deconvolve` | `deconvolve` | group `deconvolve.<round>` (`fov`, and `round` for a sequencing or additional round), split by `sample`, one per round name; the copy's own folder is literal in its templates | `DECONVOLVE` (and its `gpu` alias `DECONVOLVE_GPU`), before `SUMMARIZE_0` | — |
 | `summarize` | `summarize` | group `summarize.<step>` (wildcards `sample`, `step`, `fov`) | `SUMMARIZE_<p>`, one alias per supplied-step position up to 3 ([below](#choice-repeated-summarize-and-merge-stages)) | — |
 | `merge` | `merge` | group `merge.<step>` (`sample`, `step`), local rule | `MERGE_<p>`, as `SUMMARIZE_<p>` | — |
 | `fov` | `fov` | group `fov` (`sample`, `fov`) | `FOV` | — |
@@ -485,7 +488,9 @@ Recommendation: A.
 
 The `segment` task of a run whose `device` is `cuda` has `execution.gpu: true`; so has the `export`
 task on the route after fusion with `export.segmentation.device: cuda` (the contract, "What an engine
-needs"). Today the device is one key of the segmentation block (`segmentation.device`,
+needs"), and a `deconvolve` task with `execution.tasks.deconvolve.gpu: true`, whose resources then default to 1
+thread, 26,000 MB and 30 minutes (W-923; deconwolf takes the first OpenCL device the job sees, and the NVIDIA OpenCL
+driver honours `CUDA_VISIBLE_DEVICES`). Today the device is one key of the segmentation block (`segmentation.device`,
 `_segmentation_block`, `starfinder/dataset/workflow.py:1262-1287`) and of the export's segmentation
 (`_sample_segmentation_block`, `:1687-1717`); the learned backends use the first visible GPU (`_tensorflow_device`, `_torch_device`,
 `starfinder/segmentation/_learned.py:274`, `:296`: `"cuda"` is device 0 of the visible devices, and
@@ -560,9 +565,11 @@ process FOV {
 }
 ```
 
-A process label is static, so the kinds that may request a GPU (`segment`, `export`, and `fov`
-since W-796) are included twice, as `SEGMENT` (label `cpu`) and `SEGMENT_GPU` (label `gpu`), and
-`main.nf` routes each task by its `execution.gpu` with the `branch` operator.
+A process label is static, so the kinds that may request a GPU (`segment`, `export`, `fov`
+since W-796, and `deconvolve` since W-923) are included twice, as `SEGMENT` (label `cpu`) and `SEGMENT_GPU` (label
+`gpu`), and `main.nf` routes each task by its `execution.gpu` with the `branch` operator. `modules/psf.nf` holds `PSF`
+and `modules/deconvolve.nf` holds `DECONVOLVE` and `DECONVOLVE_GPU`; `main.nf` runs them before `SUMMARIZE_0`, and the
+`google-batch` profile gives `DECONVOLVE` the `n2-highmem-4` machine of `FOV` and `TILE_GLOBAL`.
 
 % Amended 2026-11-05 (W-796, Jiahao's decision of 2026-11-04, option (b) of design/specs/spot-finding.md, "Execution device"): `fov` joins the kinds that may request a GPU, as `FOV` and `FOV_GPU`; a direct `fov` task does when Spotiflow or Piscis runs with `processing.spot_finding.device: cuda`. The Snakemake rules and the `broad-uger` submit script read `execution.gpu` for every kind and are unchanged.
 
@@ -870,6 +877,16 @@ workflow`, so the contract tests run a real Snakemake dry run (D10); the `pytest
 follows. A third job installs Java 17 and Nextflow 26.10.4 for the stub-run (TG5).
 
 ### The image
+
+**deconwolf (W-923).** The committed `Containerfile` has a stage `build-deconwolf` on the same bookworm base: deconwolf
+v0.4.5 from its Git tag, pinned by its commit `ca062c49` (`ADD --checksum=<commit>` of the Git URL, checked again with
+`git rev-parse`), built with CMake, `-DENABLE_GPU=ON` and `-include inttypes.h`. The `runtime` stage, which `cpu`,
+`learned` and `learned-cuda` start from, installs its libraries (FFTW, libtiff, GSL, libpng, the OpenCL ICD loader,
+libgomp), copies `dw` and `libtrafo.so`, names `libnvidia-opencl.so.1` for the ICD loader, and checks the binary's
+SHA-256 against the build argument `DECONWOLF_SHA256`, which the label `org.starfinder.deconwolf-sha256` holds besides
+`org.starfinder.deconwolf=0.4.5`. The CPU extras gain `deconvolution` (psfmodels 0.3.3), whose lock has no Python 3.12
+wheel for Linux, so the `build` stage has a C++ compiler. `image_check.py deconwolf` checks the binary in every target
+(design/specs/deconvolution.md, "deconwolf in the image").
 
 **A Containerfile from `uv.lock`.** The sketch below matches W-648's committed
 `Containerfile`, including the two targets and the learned target's headless OpenCV reinstall:

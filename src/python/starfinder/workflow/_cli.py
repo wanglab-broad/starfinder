@@ -91,7 +91,8 @@ def run(args, argv=None):
     function = FUNCTIONS[kind]
     context = Context(args.engine, args.engine_version, args.job_id, args.attempt,
                       None if args.image in (None, "none") else args.image, args.cache_token)
-    prepare = {"fov": _prepare_fov, "tile_global": _prepare_tile_global}.get(kind)
+    from starfinder.workflow._deconvolve import prepare_psf
+    prepare = {"fov": _prepare_fov, "tile_global": _prepare_tile_global, "psf": prepare_psf}.get(kind)
     return execute(args.command, args.manifest, args.task, function, context,
                    argv=["starfinder", "workflow", *(argv or [])], prepare=prepare)
 

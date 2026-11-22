@@ -1,4 +1,6 @@
 
+include { PSF } from './modules/psf'
+include { DECONVOLVE ; DECONVOLVE_GPU } from './modules/deconvolve'
 include { SUMMARIZE as SUMMARIZE_0 } from './modules/summarize'
 include { SUMMARIZE as SUMMARIZE_1 } from './modules/summarize'
 include { SUMMARIZE as SUMMARIZE_2 } from './modules/summarize'
@@ -76,7 +78,7 @@ process VERIFY_AFTER {
 
 // Refuse unsupported graphs before fan-out; depth computation is engine ordering only.
 def checkedTasks(manifest) {
-    def allowed = ['summarize','merge','fov','tile_global','tile','tile_merge','morphology',
+    def allowed = ['psf','deconvolve','summarize','merge','fov','tile_global','tile','tile_merge','morphology',
                    'segment','assign','bigstitcher_import','stitch','export','report','compare']
     def positions = [:]
     manifest.tasks.each { t ->
@@ -156,6 +158,17 @@ workflow {
         }
     }
     done = Channel.empty()
+    // The deconvolution stage first: its copy is what the summarize, fov, tile_global and morphology tasks read.
+    PSF(ready(tasks.filter { id, t -> t.kind == 'psf' }, done))
+    done = done.mix(PSF.out.done)
+    route_DECONVOLVE = tasks.filter { id, t -> t.kind == 'deconvolve' }.branch { id, t ->
+        gpu: t.execution.gpu
+        cpu: true
+    }
+    DECONVOLVE(ready(route_DECONVOLVE.cpu, done))
+    done = done.mix(DECONVOLVE.out.done)
+    DECONVOLVE_GPU(ready(route_DECONVOLVE.gpu, done))
+    done = done.mix(DECONVOLVE_GPU.out.done)
     SUMMARIZE_0(ready(tasks.filter { id, t -> t.kind == 'summarize' && t.depth == 0 }, done))
     done = done.mix(SUMMARIZE_0.out.done)
     MERGE_0(ready(tasks.filter { id, t -> t.kind == 'merge' && t.depth == 0 }, done))

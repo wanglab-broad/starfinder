@@ -151,6 +151,10 @@ class Run:
         self.resume = None
         # The saved spot-finding input of the fov task ({root, record, path}), set by the command's preparation.
         self.source = None
+        # Keys a command adds to its task record (the deconvolution stage's ``reused``), and the run.json entry
+        # ``deconvolution`` of a consumer of a deconvolved copy, set by its check before work.
+        self.record_extra = {}
+        self.deconvolution = None
         self.started = time.perf_counter()
         path = self.out / self.manifest["configuration"]["path"]
         try:
@@ -184,6 +188,8 @@ class Run:
             from starfinder.workflow._translate import _base
             dataset = _workflow_dataset(_base(self.configuration.plain()))
         dataset.input_root, dataset.output_root = self.root, self.out
+        # The rounds a consumer reads from a deconvolved copy, each from its image folder there (FOV.load_images).
+        dataset._deconvolved = {name: self.path(folder) for name, folder in (self.task.get("deconvolved") or {}).items()}
         return dataset
 
     # --- the checks before work ----------------------------------------------------------------------------------
@@ -334,6 +340,12 @@ def execute(command, manifest_path, task_id, function, context=Context(), argv=N
                     f"{run.task['blocks_sha256']}, fingerprint {run.task['fingerprint']}")
         if run.kept:
             logger.info(f"kept from the earlier attempt: {', '.join(sorted(run.kept))}")
+        if run.task.get("deconvolved"):
+            # A consumer of a deconvolved copy checks the copy's files against their records before it reads them.
+            from starfinder.workflow._deconvolve import check_consumer
+            run.deconvolution = check_consumer(run)
+            logger.info(f"reads the deconvolved copy {run.deconvolution['copy']} (copy id "
+                        f"{run.deconvolution['copy_id']}): {', '.join(run.deconvolution['rounds'])}")
         function(run)
         missing = [declared for declared, path in run.outputs()
                    if not (path.is_dir() if declared.endswith("/") else path.is_file())]
@@ -345,6 +357,14 @@ def execute(command, manifest_path, task_id, function, context=Context(), argv=N
             set_workflow((_layout.tiled_dir(folder) if run.kind == "tile_global" else folder) / _layout.RUN_RECORD,
                          run.workflow_section(), {"path": run.manifest["configuration"]["path"],
                                                   "sha256": run.manifest["configuration"]["sha256"]})
+            if run.deconvolution is not None:
+                from starfinder.workflow._deconvolve import set_deconvolution
+                set_deconvolution((_layout.tiled_dir(folder) if run.kind == "tile_global" else folder)
+                                  / _layout.RUN_RECORD, run.deconvolution)
+        if run.kind == "morphology" and run.deconvolution is not None:
+            # The morphology task has no run.json: its registration record names the copy it read.
+            from starfinder.workflow._deconvolve import set_deconvolution
+            set_deconvolution(_layout.nuclei_registration_record(out, run.identity["fov"]), run.deconvolution)
         outputs = run.output_entries()
         section = run.workflow_section()
         logger.info(f"succeeded in {section['wall_s']:.2f}s; {len(outputs)} declared outputs")
@@ -353,7 +373,7 @@ def execute(command, manifest_path, task_id, function, context=Context(), argv=N
                      "bytes": log_path.stat().st_size}
         _write(record_path, {"format": TASK_FORMAT, "id": task_id, "kind": run.kind, "identity": run.identity,
                              "status": "succeeded", "started_at": started_at, "ended_at": _now(),
-                             "outputs": [*outputs, log_entry], "workflow": section})
+                             "outputs": [*outputs, log_entry], "workflow": section, **run.record_extra})
         return 0
     except Exception as error:
         logger.error(f"failed: {type(error).__name__}: {error}\n{traceback.format_exc()}")

@@ -181,6 +181,183 @@
     "null"
    ]
   },
+  "deconvolution": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "iterations"
+   ],
+   "description": "The deconvolution stage (design/specs/deconvolution.md): a present block makes the plan deconvolve the rounds it names with deconwolf into a TIFF copy that the FOV tasks read.",
+   "properties": {
+    "rounds": {
+     "type": [
+      "array",
+      "null"
+     ],
+     "items": {
+      "type": "string",
+      "minLength": 1
+     },
+     "description": "The rounds to deconvolve: round names and reference_stain; null deconvolves the sequencing rounds."
+    },
+    "copy_root": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Where the copy lies: output (under the output root), beside (beside the dataset's folder) or an absolute path."
+    },
+    "iterations": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "deconwolf's iterations; required, no default."
+    },
+    "method": {
+     "enum": [
+      "shb"
+     ],
+     "description": "deconwolf's method: shb, the one offered (SHBCL2 on the GPU)."
+    },
+    "border_quality": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 2,
+     "description": "deconwolf's border quality."
+    },
+    "tile_size": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 1,
+     "description": "deconwolf's --tilesize in pixels; null runs untiled."
+    },
+    "dtype": {
+     "enum": [
+      "uint8",
+      "uint16"
+     ],
+     "description": "The copy's dtype: uint8 with one stretch factor per (FOV, round), or uint16 with a fixed scale."
+    },
+    "scale": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "number",
+       "exclusiveMinimum": 0
+      },
+      {
+       "type": "object",
+       "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+         "type": "number",
+         "exclusiveMinimum": 0
+        }
+       }
+      }
+     ],
+     "description": "With dtype uint16: the stored value per grey level, a number (default 64) or {<round>: {<label>: number}}."
+    },
+    "psf": {
+     "type": "object",
+     "additionalProperties": false,
+     "description": "The point spread function: generated from the optics, or supplied files.",
+     "properties": {
+      "source": {
+       "enum": [
+        "generate",
+        "file"
+       ]
+      },
+      "files": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+       }
+      },
+      "voxel_size_um": {
+       "anyOf": [
+        {
+         "type": "null"
+        },
+        {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "xy",
+          "z"
+         ],
+         "properties": {
+          "xy": {
+           "type": "number",
+           "exclusiveMinimum": 0
+          },
+          "z": {
+           "type": "number",
+           "exclusiveMinimum": 0
+          }
+         }
+        }
+       ]
+      },
+      "na": {
+       "type": "number",
+       "exclusiveMinimum": 0
+      },
+      "immersion_ri": {
+       "type": "number",
+       "exclusiveMinimum": 0
+      },
+      "sample_ri": {
+       "type": "number",
+       "exclusiveMinimum": 0
+      },
+      "pinhole_radius_nm": {
+       "type": "number",
+       "exclusiveMinimum": 0
+      },
+      "depth_um": {
+       "type": "number",
+       "minimum": 0
+      },
+      "shape_zyx": {
+       "type": "array",
+       "items": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "minItems": 3,
+       "maxItems": 3
+      },
+      "channels": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "excitation_nm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+         },
+         "emission_nm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "processing": {
    "type": [
     "object",
@@ -489,6 +666,8 @@
      "type": "object",
      "propertyNames": {
       "enum": [
+       "psf",
+       "deconvolve",
        "summarize",
        "merge",
        "fov",
@@ -560,6 +739,18 @@
      "enum": [
       "zlib",
       "none"
+     ]
+    },
+    "deconwolf": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "deconwolf_wisdom": {
+     "type": [
+      "string",
+      "null"
      ]
     }
    }

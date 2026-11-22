@@ -223,6 +223,8 @@ The workflow's own files are in `workflow/`:
 * `processing`: the per-FOV pipeline, with `mode` `direct` (one task per FOV) or
   `tiled` (tiles of a FOV), the preprocessing and registration steps and the
   checkpoint stages.
+* `deconvolution`: a deconvolved copy of the raw images, made by deconwolf before
+  the FOV tasks ({ref}`below <workflow-deconvolution>`).
 * `morphology`, `segmentation` and `assignment`: the images for segmentation,
   the segmentation runs and the assignment of molecules to cells.
 * `stitching`, `assembly`, `export` and `report`: the sample outputs.
@@ -288,6 +290,70 @@ SHA-256 of every file, and the task refuses a set whose files differ from them.
 To get a compressed set, make the set again.
 `backend: matlab` runs the {doc}`MATLAB legacy workflow <matlab-legacy>` instead.
 
+(workflow-deconvolution)=
+### Deconvolution
+
+Raw confocal images can be deconvolved by the workflow itself, as a stage before
+the FOV tasks, in place of a deconvolution by another program before the run. A
+`deconvolution` block makes the plan add one `psf` task per run and one
+`deconvolve` task per FOV and deconvolved round. Each runs
+[deconwolf](https://github.com/elgw/deconwolf) v0.4.5 on every channel of its round
+and writes a deconvolved copy of the round's folder. The `summarize`, `fov`,
+`tile_global` and `morphology` tasks then read the copy in place of the raw images.
+A dataset without the block runs no stage, and its plan does not change.
+
+```yaml
+deconvolution:
+  rounds: null                # the sequencing rounds; or names, and reference_stain
+  iterations: 5               # required: chosen per dataset ("Preparing a dataset")
+  psf:
+    na: 1.30
+    immersion_ri: 1.518
+    sample_ri: 1.338
+    pinhole_radius_nm: 307
+    channels:
+      ch00: {excitation_nm: 499, emission_nm: 529}
+      ch01: {excitation_nm: 598, emission_nm: 634}
+```
+
+The optics above are an example (9735seqA1's Leica SP8); they have no default.
+The block needs `voxel_size_xy` and `voxel_size_z`. A generated PSF needs the
+`deconvolution` extra (psfmodels, `uv sync --extra deconvolution`); with
+`psf.source: file` the PSFs are supplied files and the extra is not needed.
+
+* **The copy.** By default it lies under the output root, in
+  `deconvolved/<sample_id>/dw-<copy id>/`: the input's folder layout with one
+  `<label>.tif` per channel, its PSFs in `psf/`, `copy.json`, and one record per
+  FOV and round in `records/<round>/<fov>/deconvolution.json`. `copy_root: beside`
+  puts it beside the dataset's folder (`<dataset_id>-dw/`), and an absolute path
+  under that path, where later output roots reuse it. The copy id hashes every
+  setting of the block but `copy_root`, the voxel size and any supplied PSF's
+  content, so another setting writes another copy and never changes this one.
+* **The values.** By default each file is uint8, as Huygens' exports are: one
+  stretch factor per FOV and round, f = 255 / the round's maximum after
+  deconvolution, which the record keeps. The FOV tasks read the values as stored;
+  each FOV has its own factor, so the plan warns when such a copy feeds a two-pass
+  statistic (`fit: supplied`) or a `global` or `absolute` spot threshold.
+  `dtype: uint16` stores rint(value × scale) instead, with one `scale` (64 by
+  default, or one per round and label) for every FOV. The files are TIFF with the
+  codec of `execution.image_compression` (zlib by default).
+* **Reuse.** A `deconvolve` task whose round is already in the copy reuses it when
+  the raw files, the PSFs and the outputs have the SHA-256 that its record holds,
+  and runs no deconwolf. A changed raw file redoes its round only. A FOV task checks
+  every copy file it reads against its record and names the copy in its
+  `run.json` (`deconvolution`).
+* **CPU or GPU.** A task runs on the CPU with 4 threads by default.
+  `execution.tasks.deconvolve.gpu: true` runs deconwolf with `--gpu` on one GPU;
+  the device changes no hash and reruns nothing. `deconvolution.tile_size` splits a
+  volume into tiles for a smaller GPU; it is in the hash, because tiles change
+  values near their seams.
+* **FFTW wisdom.** A CPU task plans its FFTs with `--noplan` unless
+  `execution.deconwolf_wisdom` names a store that holds a plan for its key (image
+  and PSF shape, threads, CPU model, FFTW and deconwolf). Make one with
+  `starfinder deconvolve wisdom --store <dir> --shape <z y x> --psf-shape <z y x>
+  --threads <n>` once per node type, shape and thread count; tasks only read the
+  store. The {doc}`UGER guide <broad-uger>` gives the resources.
+
 ## Limits
 
 * Only Snakemake runs Fiji, so the BigStitcher placement's Fiji task needs
@@ -312,7 +378,11 @@ To get a compressed set, make the set again.
   rerun on the changed file when its modification time is newer, and the run
   exits 0. Only `workflow verify --final` reports it.
 * The MATLAB workflow is frozen: the plan refuses `backend: matlab`, and the
-  Snakefile runs the legacy rules for it.
+  Snakefile runs the legacy rules for it. It refuses a `deconvolution` block too.
+* Snakemake removes a job's existing outputs before it runs the job, so a
+  deconvolved copy outside the output root (`copy_root: beside` or a path) that a
+  new output root's run plans is written again under Snakemake, not reused;
+  Nextflow and a task run by its command reuse it.
 * `processing.spot_finding_input` works in mode `direct` only, and a run that
   reads a set writes no `registered` stage of its own, so its segmentation
   cannot read a registered sequencing round. The package version of a set is

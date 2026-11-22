@@ -225,5 +225,89 @@ evidence issue states its grant from these figures.
 
 ## Implemented checks
 
-The implementation issue adds the table that maps each row above to its test, with the measured
-time of each test that takes 1 s or more.
+% Added 2026-11-22 by W-923, the implementation.
+
+The table maps each check above to its tests. Files are under `src/python/test/`. "Time" is the
+measured call time in seconds of the row's new tests together, on one CPU and one numerical thread,
+all their parameters, where it is 1 s or more; "—" is below 1 s (a test written before W-923, such as
+PL1's C1 and X4, is not counted). The times were measured under the records' tracer, which inflates
+them somewhat (W-923's run folder, `results/tables/new-tests-1s.csv`). No test but EN2, EN3 and WI6
+takes 5 s or more in one parameter, and those three are marked `slow`.
+`test_workflow_deconvolution_docs_contract.py` checks that every row names tests that exist.
+
+* **Fixtures.** `deconvolution_cases.py` holds `stand_in_dw` (`stand_in`), `input_root` and
+  `input_root_stored` (`input_root`, with the additional round `other` that a morphology block
+  registers by its shared stain), `psf_small`, `psf_core` and the PSF files. `wisdom_store` is
+  `store_for` of `test_workflow_deconvolution_tasks.py`. `workflow_examples` are the worked
+  examples of `workflow_variants.py`, whose `fov` task PL1 and SC7 run; the tests of the tasks plan
+  `input_root` with a processing block that registers and finds spots.
+* **Where they run.** EN1 runs in the routine tier (Snakemake's dry run, under 5 s). EN2 and EN3 are
+  `nextflow` and `slow`, in the engine selections. RU5 runs in the routine tier (3.7 s). WI6 is
+  `slow` (6.5 s under the tracer: two concurrent `starfinder deconvolve wisdom` processes and a stand-in
+  that waits 1 s). PS3, PS4 and RU11 skip without
+  psfmodels, naming the extra; DW1 to DW3 skip without `dw` on PATH or `STARFINDER_TEST_DECONWOLF`.
+  X4 (PL1) is `extended`; G3 runs in `benchmarks/orchestration_golden_evidence.py`, which the
+  coordinating session runs.
+* **What differs from the rows above.** PL3's stain label equal to a sequencing label is refused
+  before the stage, by the translation's own rule ("reference_stains share the patterns"), which
+  names `reference_stains`; the stage's own check refuses the label `ch0` beside `ch00`. RU10's
+  damaged copy is refused with exit 2 before any work (the `psf` command's preparation), so that it
+  writes and removes nothing. SC6 also checks that the copy follows `execution.image_compression`
+  (`none` writes Compression 1, W-923's reading of the specification).
+
+(deconvolution-implemented-checks)=
+
+| Check | File | Tests | Time (s, one CPU) |
+| --- | --- | --- | --- |
+| PL1 | `test_workflow_deconvolution_plan.py`; `test_workflow_plan.py`; `test_workflow_core_golden.py` | `test_pl1_a_plan_without_the_block_has_no_stage`; `test_the_plan_writes_the_expected_manifest_of_each_variant`; `test_the_fov_command_reproduces_the_core_values` | — |
+| PL2 | `test_workflow_deconvolution_plan.py` | `test_pl2_the_graph` | — |
+| PL2b | `test_workflow_deconvolution_plan.py` | `test_pl2b_the_reference_round_and_its_stains` | — |
+| PL3 | `test_workflow_deconvolution_plan.py` | `test_pl3_refusals`, `test_pl3_refusals_of_supplied_files`, `test_pl3_labels_confused_in_one_image_folder` | — |
+| PL4 | `test_workflow_deconvolution_plan.py` | `test_pl4_what_is_hashed`, `test_pl4_a_rewritten_psf_file_changes_the_copy_id` | — |
+| PL5 | `test_workflow_deconvolution_plan.py` | `test_pl5_selection_growth_keeps_the_first_fovs_tasks` | — |
+| PL6 | `test_workflow_deconvolution_plan.py` | `test_pl6_the_copys_place` | — |
+| PL7 | `test_workflow_deconvolution_plan.py` | `test_pl7_a_saved_set_needs_no_sequencing_copy` | — |
+| PL8 | `test_workflow_deconvolution_plan.py` | `test_pl8_the_fingerprints_inputs` | — |
+| EN1 | `test_workflow_deconvolution_plan.py` | `test_en1_snakemake` | 4.4 |
+| EN2 | `test_workflow_deconvolution_engines.py` | `test_en2_nextflow` | 42.8 |
+| EN3 | `test_workflow_deconvolution_engines.py` | `test_en3_the_engines_agree` | 60.0 |
+| SC1 | `test_workflow_deconvolution_tasks.py` | `test_sc1_sc2_offset_and_stretch_factor`, `test_sc1_a_round_of_zeros_stores_zeros` | 1.1 |
+| SC1b | `test_workflow_deconvolution_tasks.py` | `test_sc1b_sc2_offset_and_scale_uint16` | — |
+| SC2 | `test_workflow_deconvolution_tasks.py` | `test_sc1_sc2_offset_and_stretch_factor`, `test_sc1b_sc2_offset_and_scale_uint16` | 1.5 |
+| SC3 | `test_workflow_deconvolution_tasks.py` | `test_sc3_the_offset_rule_is_checked`, `test_sc3_a_tiled_minimum_of_5_does_not_fail` | — |
+| SC4 | `test_workflow_deconvolution_tasks.py` | `test_sc4_saturation_and_negatives` | 1.1 |
+| SC5 | `test_workflow_deconvolution_tasks.py`; `test_workflow_deconvolution_plan.py` | `test_sc5_a_scale_per_round_and_label`; `test_pl3_refusals` | — |
+| SC6 | `test_workflow_deconvolution_tasks.py` | `test_sc6_the_file_and_its_metadata`, `test_sc6_the_copy_follows_image_compression` | 2.7 |
+| SC7 | `test_workflow_deconvolution_tasks.py` | `test_sc7_the_copy_loads_as_the_raw_round_loads` | 2.0 |
+| SC8 | `test_workflow_deconvolution_plan.py` | `test_sc8_the_warning_for_intensities_across_fovs`, `test_sc8_no_warning_without_a_feed` | — |
+| PS1 | `test_workflow_deconvolution_tasks.py` | `test_ps1_centring` | — |
+| PS2 | `test_workflow_deconvolution_tasks.py` | `test_ps2_a_supplied_file` | — |
+| PS3 | `test_workflow_deconvolution_tasks.py` | `test_ps3_generation` | skips here (P) |
+| PS4 | `test_workflow_deconvolution_tasks.py` | `test_ps4_the_spacing_reaches_the_psf` | skips here (P) |
+| WI1 | `test_workflow_deconvolution_tasks.py` | `test_wi1_the_key` | — |
+| WI2 | `test_workflow_deconvolution_tasks.py` | `test_wi2_a_matching_key` | — |
+| WI3 | `test_workflow_deconvolution_tasks.py` | `test_wi3_no_match_or_no_store` | — |
+| WI4 | `test_workflow_deconvolution_tasks.py` | `test_wi4_a_damaged_store` | — |
+| WI5 | `test_workflow_deconvolution_tasks.py` | `test_wi5_nothing_written_outside_the_task` | — |
+| WI6 | `test_workflow_deconvolution_tasks.py` | `test_wi6_one_generating_job_per_key` | 6.5 |
+| WI7 | `test_workflow_deconvolution_tasks.py` | `test_wi7_gpu_tasks` | — |
+| RC1 | `test_workflow_deconvolution_tasks.py` | `test_rc1_rc2_the_round_record_and_copy_json` | — |
+| RC2 | `test_workflow_deconvolution_tasks.py` | `test_rc1_rc2_the_round_record_and_copy_json` | — |
+| RC3 | `test_workflow_deconvolution_tasks.py` | `test_rc3_run_json_names_the_copy` | 1.1 |
+| RC4 | `test_workflow_deconvolution_tasks.py` | `test_rc4_completion_and_failure` | — |
+| RC5 | `test_workflow_deconvolution_tasks.py` | `test_rc5_a_shared_image_folder_keeps_two_records`, `test_rc5_a_rewritten_raw_file_redoes_its_round_only` | 5.9 |
+| RU1 | `test_workflow_deconvolution_tasks.py` | `test_ru1_ru2_ru3_verified_reuse` | 1.8 |
+| RU2 | `test_workflow_deconvolution_tasks.py` | `test_ru1_ru2_ru3_verified_reuse` | 1.8 |
+| RU3 | `test_workflow_deconvolution_tasks.py` | `test_ru1_ru2_ru3_verified_reuse` | 1.8 |
+| RU4 | `test_workflow_deconvolution_tasks.py` | `test_ru4_a_consumer_checks` | — |
+| RU5 | `test_workflow_deconvolution_tasks.py` | `test_ru5_resume_and_saved_sets` | 3.7 |
+| RU6 | `test_workflow_deconvolution_tasks.py` | `test_ru6_one_writer_per_round` | 3.4 |
+| RU7 | `test_workflow_deconvolution_tasks.py` | `test_ru7_code_version_rerun` | 1.4 |
+| RU8 | `test_workflow_deconvolution_tasks.py` | `test_ru8_a_change_of_spacing_alone` | 3.0 |
+| RU9 | `test_workflow_deconvolution_tasks.py` | `test_ru9_a_changed_supplied_psf` | 1.4 |
+| RU10 | `test_workflow_deconvolution_tasks.py` | `test_ru10_a_damaged_copys_psf` | 1.5 |
+| RU11 | `test_workflow_deconvolution_tasks.py` | `test_ru11_the_spacing_reaches_a_generated_psf` | skips here (P) |
+| DW1 | `test_workflow_deconvolution_tasks.py` | `test_dw1_the_options_exist` | skips here (D) |
+| DW2 | `test_workflow_deconvolution_tasks.py` | `test_dw2_the_offset_rule_and_determinism` | skips here (D) |
+| DW3 | `test_workflow_deconvolution_tasks.py` | `test_dw3_the_stage_on_the_real_binary` | skips here (D) |
+| MT1 | `test_workflow_deconvolution_plan.py` | `test_mt1_matlab_is_untouched` | — |

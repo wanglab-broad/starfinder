@@ -117,6 +117,33 @@ local maxima, the Starfish LoG, registration and readout run on the CPU. The
 image is 4.4 GB as an OCI archive and 9.5 GB unpacked, against 1.5 and 4.8 GB for
 `learned`.
 
+**Deconvolution.** Every image holds deconwolf v0.4.5 (`dw`), built from its tagged
+source with OpenMP, OpenCL and VkFFT, and the NVIDIA OpenCL driver's name for the ICD
+loader, so a `deconvolve` task runs in the same image as the other tasks. The
+defaults of a `deconvolve` task are for four channels of 30 × 3,072 × 3,072:
+
+| Task | Threads | `memory_mb` | `runtime_min` | On UGER |
+| --- | --- | --- | --- | --- |
+| CPU (default) | 4 | 14,000 | 60 | `h_vmem` 3,500 MB per slot × 4 slots covers deconwolf's 10.4 GiB virtual peak; about 11 minutes with `--noplan`, or 5 with wisdom at 6 threads |
+| GPU (`execution.tasks.deconvolve.gpu: true`) | 1 | 26,000 | 30 | `gpu=TRUE,operating_system=RedHat8` and `--nv`, as every GPU task; untiled it needs 14 GiB of the card, and `deconvolution.tile_size` 2,048 fits 4 GiB |
+
+These figures were measured on GP099-29C (W-916); UGER's CPUs were not measured, and
+a retry doubles the memory and runtime. A CPU task without FFTW wisdom plans with
+`--noplan`, about twice the time of a planned run. To make wisdom for a node type,
+run once per (CPU model, image shape, PSF shape, threads), as a job on that node type
+and in the image:
+
+```bash
+starfinder deconvolve wisdom --store /stanley/WangLab/<user>/dw-wisdom \
+  --shape 30 3072 3072 --psf-shape 21 33 33 --threads 4
+```
+
+It plans for about half an hour at six threads (W-916: 1,617 s), adds one file and
+its entry to the store's `manifest.json` under the store's lock, and refuses a key
+the store already holds. Then set `execution.deconwolf_wisdom` to the store: each CPU
+task copies the file of its key into a private folder and never writes the store, and
+a task on another CPU model, whose key the store lacks, runs with `--noplan`.
+
 (broad-uger-image-build)=
 The `Containerfile`'s build context has no `.git`, so the build takes the code identity as build arguments, and the image
 records it ({ref}`checkpoints-code-identity`):
@@ -127,6 +154,7 @@ records it ({ref}`checkpoints-code-identity`):
 | `STARFINDER_REVISION` | The full 40-digit commit; the build stops on anything else |
 | `STARFINDER_DIRTY` | `true` or `false`: whether the build host's tracked files differ from that commit; the build stops on anything else |
 | `UV_LOCK_SHA256` | The SHA-256 of `src/python/uv.lock`; the build stops if the file differs |
+| `DECONWOLF_SHA256` | The SHA-256 of `/opt/deconwolf/bin/dw` that the stage `build-deconwolf` built (build that target first); the build stops if the binary differs, and the label `org.starfinder.deconwolf-sha256` holds it |
 
 The build writes the commit and the flag into `starfinder/_build_info.py` and the image's labels
 (`org.opencontainers.image.revision`, `org.starfinder.dirty`). In the image, `starfinder._records.code()` returns that
@@ -162,11 +190,14 @@ run() { docker run --rm --network none --cpuset-cpus 8 --memory 4g \
           -v "$UV:/usr/local/bin/uv:ro" -v "$PWD/$CHECK:/check/image_check.py:ro" "$@"; }
 run IMAGE sh -c 'uv pip check --python /opt/starfinder/bin/python 2>&1 | python /check/image_check.py pip-check VARIANT'
 run -e CUDA_VISIBLE_DEVICES= IMAGE python /check/image_check.py imports
+run IMAGE python /check/image_check.py deconwolf --sha256 <the label org.starfinder.deconwolf-sha256>
 ```
 
 Each command exits 0 when the check passes. The first prints `uv pip check`'s output and fails on any line it does not
 accept; the second imports `cv2`, `cellpose`, `piscis` and `stardist` together on the CPU and fails if TensorFlow or
-PyTorch sees a GPU. Run the second on `learned` and `learned-cuda` images only.
+PyTorch sees a GPU. Run the second on `learned` and `learned-cuda` images only. The third, on every image, checks that
+`dw --version` names 0.4.5 with OpenMP, OpenCL and VkFFT, that `ldd` finds every library of `dw`, that its SHA-256 equals
+the label, and that `psfmodels` imports.
 
 `uv pip check` reports one line on every `learned` and `learned-cuda` build:
 

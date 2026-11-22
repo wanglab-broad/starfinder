@@ -255,7 +255,8 @@ def check_api(view, api_view, blocks, kind):
     keys, which the configuration's hash covers. A block present on one side only differs."""
     configuration = view.plain()
     for block in blocks:
-        if block == "assembly":
+        # The deconvolution block has no API translation: its resolved keys are what its commands read.
+        if block == "assembly" or block not in TRANSLATORS:
             continue
         present = configuration.get("assembly" if block == "export" else block) is not None
         if not present and block not in api_view:
