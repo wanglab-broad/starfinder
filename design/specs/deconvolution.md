@@ -281,7 +281,11 @@ rounds; both may share an image folder, with different label files.
 **Completion and staleness.** Both kinds follow the success rule of D8 unchanged (orchestration,
 "Completion"): the task record lists every declared output with its SHA-256, and a failed
 attempt removes the outputs it wrote. A `deconvolve` task that reuses a verified copy writes no
-image and so removes none when it fails ([Reuse and staleness](#reuse-and-staleness)). A task's
+image and so removes none when it fails ([Reuse and staleness](#reuse-and-staleness)). (W-928: the
+task runner removes, for these two kinds only, the declared outputs the attempt marked before writing
+them: a `psf` task each file it writes; a `deconvolve` task its round's label files, logs and record
+once it redoes the round under the lock, and nothing after a reuse, a lock that is not released or a
+failure before that.) A task's
 declared outputs are its own label files and its own record folder, so a failure or a rerun of the
 `reference_stain` task removes or rewrites nothing of the reference round's task, and the reverse.
 Each task's record is the completion of its own deconvolved round only.

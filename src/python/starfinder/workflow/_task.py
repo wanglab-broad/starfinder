@@ -7,7 +7,10 @@ translate as the plan translated them (exit 2, nothing written; a refused verifi
 its earlier record, writes its log, runs one API entry, checks that every declared output exists, closes the log and
 writes its task record last (exit 0). A failure writes the traceback to the log, removes every declared output (those
 a verified resume kept included), so that no declared output but the log remains, and writes ``<task>.failed.json``
-(exit 1). A task held for review (TaskHeld: an export whose placement needs review) fails the same way, writes what
+(exit 1). The deconvolution stage's kinds (``OWN_WRITES``: ``psf`` and ``deconvolve``) are the exception: their declared
+outputs are files of a copy that other attempts and other output roots wrote or reuse, so a failure removes only those
+this attempt wrote (``Run.wrote``), none after a reuse (design/specs/deconvolution.md, "Completion and staleness").
+A task held for review (TaskHeld: an export whose placement needs review) fails the same way, writes what
 the reviewer reads after its outputs are removed (the held page), and exits 4.
 """
 from __future__ import annotations
@@ -39,6 +42,9 @@ logger = logging.getLogger("starfinder.workflow")
 #: removed; the Fiji task's dataset.xml is the tool's, written in the same job before the check).
 PRE_REMOVE = frozenset({"summarize", "merge", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment",
                         "assign", "bigstitcher_macro", "bigstitcher_import", "stitch"})
+#: The kinds whose failed attempt removes only the declared outputs it wrote (``Run.written``), not every declared
+#: output: the deconvolution stage's, whose outputs are files of a shared copy (W-928).
+OWN_WRITES = frozenset({"psf", "deconvolve"})
 
 
 class TaskRefused(Exception):
@@ -147,6 +153,9 @@ class Run:
         self.device = "cpu"
         self.fallback = None
         self.kept = set()
+        # The declared outputs this attempt wrote, which are all a failure removes (the OWN_WRITES kinds), or None: a
+        # failure removes every declared output.
+        self.written = set() if self.kind in OWN_WRITES else None
         # A verified resume of the fov task: (stage, earlier run.json), set by the command's preparation.
         self.resume = None
         # The saved spot-finding input of the fov task ({root, record, path}), set by the command's preparation.
@@ -222,11 +231,20 @@ class Run:
         """The declared outputs (without the record and the log) as (declared, path)."""
         return [(o, self.path(o)) for o in self.task["outputs"]]
 
-    def remove_outputs(self, keep=()):
-        """Remove the declared outputs but those in ``keep``; return the declared paths removed."""
+    def wrote(self, *paths):
+        """Mark the declared outputs at ``paths`` (all of them when none is given) as written by this attempt, before
+        it writes them: a failure of an OWN_WRITES kind removes these only."""
+        if self.written is None:
+            return
+        wanted = {Path(p) for p in paths}
+        self.written.update(declared for declared, path in self.outputs() if not paths or Path(path) in wanted)
+
+    def remove_outputs(self, keep=(), only=None):
+        """Remove the declared outputs but those in ``keep``, and when ``only`` is given those not in it; return the
+        declared paths removed."""
         removed = []
         for declared, path in self.outputs():
-            if declared in keep:
+            if declared in keep or (only is not None and declared not in only):
                 continue
             if path.is_dir() and declared.endswith("/"):
                 shutil.rmtree(path)
@@ -379,8 +397,11 @@ def execute(command, manifest_path, task_id, function, context=Context(), argv=N
         logger.error(f"failed: {type(error).__name__}: {error}\n{traceback.format_exc()}")
         # A failed attempt leaves no declared output but its log, resumed or not: what a verified resume kept and what
         # an earlier attempt of a kind that does not remove its outputs first left go too, so that the next attempt
-        # runs from scratch. An interruption (below) leaves the files as they are.
-        removed = run.remove_outputs()
+        # runs from scratch. The deconvolution stage's kinds (OWN_WRITES) remove only what this attempt wrote: their
+        # outputs are files of a copy that other attempts and output roots wrote or reuse, so a task that reused the
+        # copy, waited on a round's lock or failed before writing removes none. An interruption (below) leaves the files
+        # as they are.
+        removed = run.remove_outputs(only=run.written)
         logger.error(f"removed the declared outputs: {', '.join(removed) or 'none'}")
         held = isinstance(error, TaskHeld)
         if held and error.then is not None:

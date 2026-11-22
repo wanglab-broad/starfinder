@@ -341,7 +341,8 @@ def prepare_psf(run):
 
 def psf(run):
     """The psf task: each label's PSF, generated (psfmodels, centred) or supplied (checked), written float32 into
-    ``<copy>/psf/<label>.tif``, then ``psf/psf.json`` and ``copy.json`` last; nothing when the copy is verified."""
+    ``<copy>/psf/<label>.tif``, then ``psf/psf.json`` and ``copy.json`` last; nothing when the copy is verified. Each
+    file is marked written (``run.wrote``) just before it is written, so that a failure removes only those."""
     import tifffile
     entry = run.task["deconvolution"]
     copy = run.path(entry["copy"])
@@ -370,12 +371,14 @@ def psf(run):
         records[label] = record
     for label, array in labels.items():
         target = copy / PSF_DIR / f"{label}.tif"
+        run.wrote(target)
         with atomic_file(target) as tmp:
             tifffile.imwrite(tmp, array, photometric="minisblack", metadata={"axes": "ZYX"})
         records[label]["copy"] = {"path": f"{PSF_DIR}/{label}.tif", "file_sha256": file_sha256(target),
                                   "sha256": image_sha256(array)}
     from starfinder.workflow._plan import package_identity
     # No time: the copy's PSF records are the same whichever engine or run writes them (copy.json holds their hash).
+    run.wrote(copy / PSF_DIR / PSF_FILE, copy / COPY_FILE)
     _write_json(copy / PSF_DIR / PSF_FILE, {"format": PSF_FORMAT, "copy_id": entry["copy_id"], "labels": records,
                                             "code": package_identity()})
     fields = copy_fields(r, entry["labels"])
@@ -427,7 +430,12 @@ def _reusable(run, record_path, inputs, psfs, copy):
 
 def deconvolve(run):
     """The deconvolve task of one (FOV, round name): under the lock of its record folder, reuse the verified round or
-    deconvolve each channel, then write the copy's files and the round's record last."""
+    deconvolve each channel, then write the copy's files and the round's record last.
+
+    A failure removes only what this attempt took over (``run.wrote``): nothing when it reused the round, timed out on
+    the lock or failed before it decided to redo the round; on a redo, its round's label files, logs and record, which
+    it takes over under the lock when it removes the old record (an unrecorded file of the round is stale for every
+    reader), never the other round's files in a shared image folder."""
     entry = run.task["deconvolution"]
     copy = run.path(entry["copy"])
     fov, name = run.identity["fov"], entry["round"]
@@ -448,6 +456,7 @@ def deconvolve(run):
             return
         run.record_extra["reused"] = False
         logger.info(f"deconvolving round {name} of FOV {fov} into {copy} ({reason})")
+        run.wrote()
         record_path.unlink(missing_ok=True)
         _deconvolve_round(run, entry, copy, records, inputs, psfs)
 

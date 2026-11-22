@@ -232,7 +232,8 @@ measured call time in seconds of the row's new tests together, on one CPU and on
 all their parameters, where it is 1 s or more; "—" is below 1 s (a test written before W-923, such as
 PL1's C1 and X4, is not counted). The times were measured under the records' tracer, which inflates
 them somewhat (W-923's run folder, `results/tables/new-tests-1s.csv`). W-928, the repair of W-923's review,
-measured the RU1 and RU4 rows again with the tests it added (W-928's run folder, the same table). No test but EN2, EN3,
+measured the RU1 and RU4 rows again with the tests it added, and its repair the RC4 and RU6 rows (W-928's run folder,
+the same table). No test but EN2, EN3,
 WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are marked `slow`.
 `test_workflow_deconvolution_docs_contract.py` checks that every row names tests that exist.
 
@@ -258,7 +259,11 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
   writes and removes nothing. SC6 also checks that the copy follows `execution.image_compression`
   (`none` writes Compression 1, W-923's reading of the specification). RU4 also checks a round record whose
   `channels` list is empty or lacks a channel: the `fov` task fails, naming the round and the file the record does
-  not name (W-928).
+  not name (W-928). RC4 also checks that a `psf` or `deconvolve` task that reused the copy and then failed (its task
+  record's write made to fail) removes no copy file, and that a redo failing at its round record removes exactly
+  the label files and logs it wrote; RU6 checks that a task whose round lock is never released fails, naming the
+  lock, and removes no copy file (its wait shortened to 0.5 s in the test, as `runtime_min` is at least a minute)
+  (W-928's repair).
 
 (deconvolution-implemented-checks)=
 
@@ -299,14 +304,14 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
 | RC1 | `test_workflow_deconvolution_tasks.py` | `test_rc1_rc2_the_round_record_and_copy_json` | — |
 | RC2 | `test_workflow_deconvolution_tasks.py` | `test_rc1_rc2_the_round_record_and_copy_json` | — |
 | RC3 | `test_workflow_deconvolution_tasks.py` | `test_rc3_run_json_names_the_copy` | 1.1 |
-| RC4 | `test_workflow_deconvolution_tasks.py` | `test_rc4_completion_and_failure` | — |
+| RC4 | `test_workflow_deconvolution_tasks.py` | `test_rc4_completion_and_failure`, `test_rc4_a_failure_after_reuse_removes_no_copy_file`, `test_rc4_a_failed_redo_removes_what_it_wrote` | 2.6 |
 | RC5 | `test_workflow_deconvolution_tasks.py` | `test_rc5_a_shared_image_folder_keeps_two_records`, `test_rc5_a_rewritten_raw_file_redoes_its_round_only` | 5.9 |
-| RU1 | `test_workflow_deconvolution_tasks.py`; `test_workflow_deconvolution_engines.py` | `test_ru1_ru2_ru3_verified_reuse`; `test_ru1_snakemake_reuses_a_shared_copy`, `test_ru1_nextflow_reuses_a_shared_copy` | 70.6 |
+| RU1 | `test_workflow_deconvolution_tasks.py`; `test_workflow_deconvolution_engines.py` | `test_ru1_ru2_ru3_verified_reuse`; `test_ru1_snakemake_reuses_a_shared_copy`, `test_ru1_nextflow_reuses_a_shared_copy` | 67.4 |
 | RU2 | `test_workflow_deconvolution_tasks.py` | `test_ru1_ru2_ru3_verified_reuse` | 1.8 |
 | RU3 | `test_workflow_deconvolution_tasks.py` | `test_ru1_ru2_ru3_verified_reuse` | 1.8 |
 | RU4 | `test_workflow_deconvolution_tasks.py` | `test_ru4_a_consumer_checks`, `test_ru4_a_record_that_names_too_few_files` | 2.1 |
 | RU5 | `test_workflow_deconvolution_tasks.py` | `test_ru5_resume_and_saved_sets` | 3.7 |
-| RU6 | `test_workflow_deconvolution_tasks.py` | `test_ru6_one_writer_per_round` | 3.4 |
+| RU6 | `test_workflow_deconvolution_tasks.py` | `test_ru6_one_writer_per_round`, `test_ru6_a_lock_that_is_not_released_removes_nothing` | 4.6 |
 | RU7 | `test_workflow_deconvolution_tasks.py` | `test_ru7_code_version_rerun` | 1.4 |
 | RU8 | `test_workflow_deconvolution_tasks.py` | `test_ru8_a_change_of_spacing_alone` | 3.0 |
 | RU9 | `test_workflow_deconvolution_tasks.py` | `test_ru9_a_changed_supplied_psf` | 1.4 |

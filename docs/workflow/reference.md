@@ -27,7 +27,7 @@ changes what a task does.
 | Status | Meaning | Snakemake | Nextflow |
 | --- | --- | --- | --- |
 | 0 | The task succeeded; its record was written last | Done | Done |
-| 1 | The task failed; its declared outputs were removed and `<task>.failed.json` written | Retried up to `--retries` | Retried up to `--max_retries` (default 2); `--max_retries 0` runs the task once and finishes the run |
+| 1 | The task failed; its declared outputs were removed (a `psf` or `deconvolve` task removes only the copy's files this attempt wrote: none after a reuse or a wait on a round's lock) and `<task>.failed.json` written | Retried up to `--retries` | Retried up to `--max_retries` (default 2); `--max_retries 0` runs the task once and finishes the run |
 | 2 | Refused before any work; nothing was written | Retried like 1 | Not retried; the run finishes |
 | 3 | A verified resume was refused | Retried like 1 | Not retried; the run finishes |
 | 4 | The export was held for review: its placement needs review and `approvals.json` holds no approval of its tables; it failed as 1 does, its failed record says `held`, and it wrote the held page `workflow/held/<sample>/<route>.html` and no report ({ref}`the route <workflow-placement-review>`) | Retried like 1 | Not retried; the run finishes |

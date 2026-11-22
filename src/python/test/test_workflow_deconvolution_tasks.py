@@ -609,6 +609,7 @@ def test_rc4_completion_and_failure(work):
     assert statuses[task] == 1
     failed = failed_record(path, task)
     assert failed["status"] == "failed" and (path.parents[1] / failed["log"]["path"]).is_file()
+    assert failed["removed"] == []  # the stand-in failed in the first pass: the attempt wrote no declared output
     assert not list(copy.glob("round1/**/*.tif")) and not (copy / "records" / "round1" / FOV / "deconvolution.json").exists()
     assert not (path.parents[1] / "workflow" / "tasks" / f"{task.replace('/', '.')}.json").exists()
     good, _ = D.stand_in(work / "good")
@@ -618,6 +619,61 @@ def test_rc4_completion_and_failure(work):
     for output in declared:
         assert listed[output] == "sha256:" + D.sha256(Path(output) if Path(output).is_absolute()
                                                       else path.parents[1] / output)
+
+
+def fail_task_record(monkeypatch):
+    """Make the write of a task's success record raise PermissionError (the failed record is still written)."""
+    from starfinder.workflow import _task
+    real = _task._write
+
+    def write(path, data):
+        if not Path(path).name.endswith(".failed.json"):
+            raise PermissionError(f"injected: cannot write {path}")
+        real(path, data)
+    monkeypatch.setattr(_task, "_write", write)
+
+
+@pytest.mark.parametrize("kind", ["psf", "deconvolve"])
+def test_rc4_a_failure_after_reuse_removes_no_copy_file(work, monkeypatch, kind):
+    """A psf or deconvolve task of a second output root reuses the verified copy, then fails writing its task record:
+    the failed record removed nothing, and every copy file keeps its bytes and modification time (W-928)."""
+    dw, calls = D.stand_in(work / "bin")
+    run_stage(work, "rc4r-a", ru_config(work, "rc4r-a", dw))
+    manifest, path = D.plan(work, "rc4r-b", ru_config(work, "rc4r-b", dw))
+    copy = D.copy_folder(manifest)
+    if kind == "deconvolve":
+        assert D.run(path, "psf") == 0
+    before, made = D.tree(copy), len(D.calls(calls))
+    fail_task_record(monkeypatch)
+    task = "psf" if kind == "psf" else deconvolve_id("round1")
+    assert D.run(path, task) == 1
+    failed = failed_record(path, task)
+    assert "PermissionError" == failed["error"]["type"] and failed["removed"] == []
+    assert D.tree(copy) == before and len(D.calls(calls)) == made
+
+
+def test_rc4_a_failed_redo_removes_what_it_wrote(work, monkeypatch):
+    """A deconvolve task that redoes its round and fails writing the round's record removes the label files and logs
+    of its round, which it wrote, and lists them; the failed record names no other file (W-928)."""
+    from starfinder.workflow import _deconvolve
+    dw, _ = D.stand_in(work / "bin")
+    real = _deconvolve._write_json
+
+    def write(path, data):
+        if Path(path).name == "deconvolution.json":
+            raise PermissionError(f"injected: cannot write {path}")
+        real(path, data)
+    monkeypatch.setattr(_deconvolve, "_write_json", write)
+    manifest, path, copy, statuses = stage(work, "rc4w", block(work, rounds=["round1"]), dw)
+    task = deconvolve_id("round1")
+    assert statuses == {"psf": 0, task: 1}
+    declared = next(t for t in manifest["tasks"] if t["id"] == task)["outputs"]
+    expected = [o for o in declared if o.endswith((".tif", ".dw.log"))]
+    assert len(expected) == 2 * len(D.LABELS)
+    assert sorted(failed_record(path, task)["removed"]) == sorted(expected)
+    assert not list(copy.glob("round1/**/*.tif")) and not list((copy / "records" / "round1").rglob("*.*"))
+    assert sorted(p.relative_to(copy).as_posix() for p in copy.rglob("*") if p.is_file()) == [
+        "copy.json", "psf/ch00.tif", "psf/ch01.tif", "psf/psf.json"]
 
 
 def run_together(path, tasks):
@@ -806,6 +862,25 @@ def test_ru6_one_writer_per_round(work):
     assert len(D.calls(calls)) == len(D.LABELS)
     reused = sorted(task_record(p, deconvolve_id("round1"))["reused"] for p in paths)
     assert reused == [False, True]
+
+
+def test_ru6_a_lock_that_is_not_released_removes_nothing(work, monkeypatch):
+    """A deconvolve task whose round lock is held fails, naming the lock, and removes no copy file: the files of the
+    task holding the lock keep their bytes and modification times (W-928). The wait is the task's runtime; the test
+    passes the lock 0.5 s in its place (runtime_min is at least one minute)."""
+    from starfinder.workflow import _deconvolve
+    dw, calls = D.stand_in(work / "bin")
+    manifest, path, copy = run_stage(work, "ru6l", ru_config(work, "ru6l", dw))
+    lock = copy / "records" / "round1" / FOV / ".lock"
+    lock.write_text("another task\n")
+    before, made = D.tree(copy), len(D.calls(calls))
+    real = _deconvolve.exclusive
+    monkeypatch.setattr(_deconvolve, "exclusive", lambda target, timeout, what: real(target, 0.5, what))
+    task = deconvolve_id("round1")
+    assert D.run(path, task) == 1
+    failed = failed_record(path, task)
+    assert failed["error"]["type"] == "TimeoutError" and str(lock) in failed["error"]["message"]
+    assert failed["removed"] == [] and D.tree(copy) == before and len(D.calls(calls)) == made
 
 
 def test_ru7_code_version_rerun(work):

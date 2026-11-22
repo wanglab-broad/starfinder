@@ -342,7 +342,9 @@ The block needs `voxel_size_xy` and `voxel_size_z`. A generated PSF needs the
   and runs no deconwolf, under Snakemake and Nextflow alike; the copy's files keep
   their bytes and modification times. A changed raw file redoes its round only. A
   FOV task checks that the record names every copy file it reads, with that
-  file's SHA-256, and names the copy in its `run.json` (`deconvolution`).
+  file's SHA-256, and names the copy in its `run.json` (`deconvolution`). A failed
+  `psf` or `deconvolve` task removes only the copy's files it wrote: none when it
+  reused the copy, waited too long on a round's lock or failed before writing.
 * **CPU or GPU.** A task runs on the CPU with 4 threads by default.
   `execution.tasks.deconvolve.gpu: true` runs deconwolf with `--gpu` on one GPU;
   the device changes no hash and reruns nothing. `deconvolution.tile_size` splits a
