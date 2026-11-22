@@ -19,8 +19,9 @@ Repeatability is that of the formed model (design/specs/synthetic/amplicon-scene
 build on one CPU. NumPy's vectorised functions differ in the last bit between CPUs, so the floating-point values of the
 CSV files and the JSON records are compared to 6 significant digits, with magnitudes below 1e-9 taken as 0
 (amendment of 2026-10-19 to GA1: a GitHub runner differed from the lab machine only there). Integers, strings and
-pixel arrays stay exact. The three routine presets run in the routine tier, the three ``slow`` presets in the ``slow``
-tier.
+pixel arrays stay exact. The three routine presets run here, in the routine tier. The three ``slow`` presets' digests
+were moved by W-899 (option O1 of W-893, Jiahao's decision of 2026-11-19) to ``benchmarks/synthetic_scene_evidence.py``,
+which calls this test with them; their pins stay in ``PINNED``, where the test reads them.
 """
 import csv
 import hashlib
@@ -287,9 +288,6 @@ def saved_digests(root: Path) -> dict[str, str]:
     "context-dense3d-v1",
     "context-tissue2d-v1",
     "context-culture-v1",
-    pytest.param("context-dense3d-slow-v1", marks=pytest.mark.slow),
-    pytest.param("context-tissue2d-slow-v1", marks=pytest.mark.slow),
-    pytest.param("context-culture-slow-v1", marks=pytest.mark.slow),
 ])
 def test_saved_context_preset_outputs_equal_the_base_revision_pins(tmp_path, name):
     book, config = cellular_scene_preset(name)

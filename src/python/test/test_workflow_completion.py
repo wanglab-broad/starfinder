@@ -18,7 +18,8 @@ from starfinder import _layout
 from starfinder.dataset.fov import FOV
 from starfinder.workflow import plan, verify
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -30,7 +31,7 @@ OUTPUTS = ["fovs/FOV_001/checkpoints/candidates.json", "fovs/FOV_001/checkpoints
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
+    F.golden().write_fixture(work)
     return work
 
 
@@ -38,14 +39,14 @@ def fixture_work(tmp_path_factory):
 def manifest(fixture_work, tmp_path, monkeypatch):
     work = tmp_path / "work"
     shutil.copytree(fixture_work, work, symlinks=True)
-    X.fix_code(monkeypatch)
-    plan(X.write_config(work, "single", X.single_fov(work)))
-    return X.output_root(work, "single") / "workflow" / "manifest.json"
+    F.fix_code(monkeypatch)
+    plan(F.write_config(work, "single", V.single_fov(work)))
+    return F.output_root(work, "single") / "workflow" / "manifest.json"
 
 
 @pytest.fixture
 def done(manifest):
-    assert X.run_task(manifest, FOV_TASK, "--cache-token", "token-1") == 0
+    assert F.run_task(manifest, FOV_TASK, "--cache-token", "token-1") == 0
     return manifest
 
 
@@ -66,7 +67,7 @@ def test_an_api_call_that_raises_removes_the_attempts_outputs_and_writes_a_faile
         raise RuntimeError("the export broke")
     monkeypatch.setattr(FOV, "export_spots", broken)
     out = manifest.parents[1]
-    assert X.run_task(manifest, FOV_TASK) == 1
+    assert F.run_task(manifest, FOV_TASK) == 1
     assert not _layout.task_record(out, FOV_TASK).exists()
     assert [o for o in OUTPUTS if (out / o).exists()] == []
     failed = json.loads(_layout.failed_record(out, FOV_TASK).read_text())
@@ -81,7 +82,7 @@ def test_an_api_call_that_raises_removes_the_attempts_outputs_and_writes_a_faile
 def test_a_declared_output_missing_after_the_call_fails_the_task(manifest, monkeypatch, capsys):
     monkeypatch.setattr(FOV, "export_spots", lambda self, *args, **kwargs: None)
     out = manifest.parents[1]
-    assert X.run_task(manifest, FOV_TASK) == 1
+    assert F.run_task(manifest, FOV_TASK) == 1
     assert "without the declared outputs fovs/FOV_001/molecules.csv" in capsys.readouterr().err
     assert not _layout.task_record(out, FOV_TASK).exists()
     assert [o for o in OUTPUTS if (out / o).exists()] == []
@@ -103,7 +104,7 @@ def test_a_success_writes_the_record_last_listing_every_output_and_the_closed_lo
     task = _task(done)
     workflow = record["workflow"]
     assert workflow["fingerprint"] == task["fingerprint"] and workflow["blocks_sha256"] == task["blocks_sha256"]
-    assert workflow["token"] == "token-1" and workflow["code"] == X.CLEAN_CODE
+    assert workflow["token"] == "token-1" and workflow["code"] == F.CLEAN_CODE
     assert workflow["manifest_sha256"] == _sha(done)
     assert workflow["execution_context"]["engine"] == "manual" and workflow["execution_context"]["attempt"] == 1
     assert workflow["backend"] == {"name": "python", "device": "cpu"} and workflow["fallback"] is None
@@ -128,7 +129,7 @@ def test_a_complete_task_whose_record_holds_no_token_stays_complete(manifest, ca
     """Run as Snakemake runs it, without --cache-token: the record's token is null; verify reports the task complete
     with no problem, gives it a rerun: token that differs between invocations, and --final passes."""
     from starfinder.__main__ import main
-    assert X.run_task(manifest, FOV_TASK) == 0
+    assert F.run_task(manifest, FOV_TASK) == 0
     record = json.loads(_layout.task_record(manifest.parents[1], FOV_TASK).read_text())
     assert record["workflow"]["token"] is None
     first, second = verify(manifest, hash=True, final=True), verify(manifest, hash=True, final=True)
@@ -185,7 +186,7 @@ def test_a_command_that_reads_a_block_outside_its_map_fails(manifest, monkeypatc
     from starfinder.workflow import _commands
     monkeypatch.setitem(_commands.FUNCTIONS, "fov", lambda run: run.configuration.get("export"))
     out = manifest.parents[1]
-    assert X.run_task(manifest, FOV_TASK) == 1
+    assert F.run_task(manifest, FOV_TASK) == 1
     failed = json.loads(_layout.failed_record(out, FOV_TASK).read_text())
     assert failed["error"]["type"] == "BlockAccessError"
     assert "the fov command read the export block" in failed["error"]["message"]
@@ -196,10 +197,10 @@ def test_a_failure_of_a_kind_that_keeps_its_folder_leaves_no_declared_output(fix
     fails, every declared output goes, an earlier one included, and the failed record lists them."""
     work = tmp_path / "work"
     shutil.copytree(fixture_work, work, symlinks=True)
-    X.fix_code(monkeypatch)
-    config = dict(X.single_fov(work, downstream=True))
-    plan(X.write_config(work, "single", config))
-    manifest = X.output_root(work, "single") / "workflow" / "manifest.json"
+    F.fix_code(monkeypatch)
+    config = dict(V.single_fov(work, downstream=True))
+    plan(F.write_config(work, "single", config))
+    manifest = F.output_root(work, "single") / "workflow" / "manifest.json"
     out = manifest.parents[1]
     report = out / "report" / "sample" / "molecules_only" / "report.json"
     report.parent.mkdir(parents=True)
@@ -209,7 +210,7 @@ def test_a_failure_of_a_kind_that_keeps_its_folder_leaves_no_declared_output(fix
     earlier = [out / "report" / "samples.csv", out / "report" / "index.html"]
     for path in earlier:
         path.write_text("an earlier attempt's output\n")
-    assert X.run_task(manifest, "compare") == 1
+    assert F.run_task(manifest, "compare") == 1
     assert [path for path in earlier if path.exists()] == []
     failed = json.loads(_layout.failed_record(out, "compare").read_text())
     assert sorted(failed["removed"]) == ["report/index.html", "report/samples.csv"]
@@ -220,6 +221,6 @@ def test_a_failure_of_a_kind_that_keeps_its_folder_leaves_no_declared_output(fix
 def test_the_record_names_the_image_the_task_ran_in_and_none_on_the_host(manifest, given, recorded):
     """W-831: Nextflow gives ``--image none`` to a task it runs on the host and the container's image otherwise; the
     record's ``execution_context.image`` is then null or that image."""
-    assert X.run_task(manifest, FOV_TASK, "--image", given) == 0
+    assert F.run_task(manifest, FOV_TASK, "--image", given) == 0
     record = json.loads(_layout.task_record(manifest.parents[1], FOV_TASK).read_text())
     assert record["workflow"]["execution_context"]["image"] == recorded

@@ -141,8 +141,8 @@ def test_the_schema_refuses_the_matlab_fov_keys_for_python_and_requires_them_for
     FOV key in a Python configuration, accepts selected_fovs and refuses an empty or repeated selection."""
     import jsonschema
     from starfinder.workflow._plan import PlanRefused
-    from . import workflow_examples as X
     from . import workflow_tasks as T
+    from . import workflow_variants as V
     schema = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
     validator = jsonschema.validators.validator_for(schema)(schema)
     config = yaml.safe_load((ROOT / "src/python/test/data/workflow_examples/workflow-minimal.yaml").read_text())
@@ -152,7 +152,7 @@ def test_the_schema_refuses_the_matlab_fov_keys_for_python_and_requires_them_for
     validator.validate(matlab)
     for invalid in ({k: v for k, v in matlab.items() if k != "n_fovs"}, dict(matlab, selected_fovs=["tile_1"])):
         assert not validator.is_valid(invalid)
-    python = T.dataset_keys(tmp_path, processing=X.PROCESSING)
+    python = T.dataset_keys(tmp_path, processing=V.PROCESSING)
     assert T.validation_error(dict(python, selected_fovs=["tile_1"])) is None
     for key, value in MATLAB_FOV_KEYS:
         assert f"{key} left the Python configuration" in T.validation_error(dict(python, **{key: value})), key

@@ -1,8 +1,8 @@
 """``starfinder experiment evaluate``: saved workflow outputs, checkpoints and trial outputs, read without processing.
 
 design/specs/benchmark.md, "Proposed evaluate-only contract"; design/validation/benchmark.md, "Evaluation, records and
-retirement checks". One FOV of W-642's fixture (``workflow_examples.tiny_sample``: 5 × 36 × 36, four rounds of four
-channels) is run once by the workflow with the ``registered``, ``candidates`` and ``pre_qc`` checkpoints, and one
+retirement checks". One FOV of W-642's fixture (``workflow_fixture``'s ``tiny_sample``: 5 × 36 × 36, four rounds of
+four channels) is run once by the workflow with the ``registered``, ``candidates`` and ``pre_qc`` checkpoints, and one
 translation trial on an 8 × 24 × 24 pair. Every evaluation runs with the processing entry points patched to raise; the
 bytes of every source file are hashed before and after. Corrupt, missing and version-2 sources, a failed trial, an
 incomplete task, a metric that raises and an undefined metric keep their distinct outcomes.
@@ -19,7 +19,8 @@ import yaml
 
 from starfinder.__main__ import main
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.benchmark, pytest.mark.contract]
 
@@ -71,15 +72,15 @@ def _no_processing(monkeypatch):
 def workflow_run(tmp_path_factory):
     """One FOV run by the workflow with every checkpoint stage, once for the module."""
     work = tmp_path_factory.mktemp("evaluate") / "work"
-    X.golden().write_fixture(work)
+    F.golden().write_fixture(work)
     with pytest.MonkeyPatch.context() as patch:
-        X.fix_code(patch)
-        config = X.single_fov(work)
+        F.fix_code(patch)
+        config = V.single_fov(work)
         config["processing"]["checkpoints"] = ["registered", "candidates", "pre_qc"]
         from starfinder.workflow import plan
-        plan(X.write_config(work, "single", config))
-        manifest = X.output_root(work, "single") / "workflow" / "manifest.json"
-        assert X.run_task(manifest, FOV_TASK) == 0
+        plan(F.write_config(work, "single", config))
+        manifest = F.output_root(work, "single") / "workflow" / "manifest.json"
+        assert F.run_task(manifest, FOV_TASK) == 0
     return work
 
 
@@ -88,13 +89,13 @@ def work(workflow_run, tmp_path):
     """A copy of the module's run in this test's folder, the manifest's roots moved with it."""
     copy = tmp_path / "work"
     shutil.copytree(workflow_run, copy, symlinks=True)
-    manifest = X.output_root(copy, "single") / "workflow" / "manifest.json"
+    manifest = F.output_root(copy, "single") / "workflow" / "manifest.json"
     manifest.write_text(manifest.read_text().replace(str(workflow_run), str(copy)))
     return copy
 
 
 def _output(work):
-    return X.output_root(work, "single")
+    return F.output_root(work, "single")
 
 
 @pytest.fixture
@@ -701,15 +702,15 @@ def test_canonical_image_metrics_and_policy(trial, tmp_path, monkeypatch):
 def batch_and_streaming(tmp_path_factory):
     """One FOV run by the workflow twice: batch (``single``) and streaming round residency (``streaming``)."""
     work = tmp_path_factory.mktemp("residency") / "work"
-    X.golden().write_fixture(work)
+    F.golden().write_fixture(work)
     with pytest.MonkeyPatch.context() as patch:
-        X.fix_code(patch)
+        F.fix_code(patch)
         from starfinder.workflow import plan
         for output_id, streaming in (("single", False), ("streaming", True)):
-            config = X.single_fov(work, output_id)
+            config = V.single_fov(work, output_id)
             config["processing"]["streaming"] = streaming
-            plan(X.write_config(work, output_id, config))
-            assert X.run_task(X.output_root(work, output_id) / "workflow" / "manifest.json", FOV_TASK) == 0
+            plan(F.write_config(work, output_id, config))
+            assert F.run_task(F.output_root(work, output_id) / "workflow" / "manifest.json", FOV_TASK) == 0
     return work
 
 
@@ -720,12 +721,12 @@ def test_workflow_batch_streaming_saved_only(batch_and_streaming, tmp_path, monk
     work = tmp_path / "work"
     shutil.copytree(batch_and_streaming, work, symlinks=True)
     for output_id in ("single", "streaming"):
-        manifest = X.output_root(work, output_id) / "workflow" / "manifest.json"
+        manifest = F.output_root(work, output_id) / "workflow" / "manifest.json"
         manifest.write_text(manifest.read_text().replace(str(batch_and_streaming), str(work)))
     sources = {"sources": [
-        *({"name": name, "kind": "workflow", "manifest": str(X.output_root(work, name) / "workflow" / "manifest.json")}
+        *({"name": name, "kind": "workflow", "manifest": str(F.output_root(work, name) / "workflow" / "manifest.json")}
           for name in ("single", "streaming")),
-        *({"name": f"pre_qc-{name}", "kind": "checkpoint", "path": str(X.output_root(work, name) / CHECKPOINTS),
+        *({"name": f"pre_qc-{name}", "kind": "checkpoint", "path": str(F.output_root(work, name) / CHECKPOINTS),
            "stage": "pre_qc"} for name in ("single", "streaming"))]}
     molecules = {name: {"source": name, "task": FOV_TASK, "output": MOLECULES} for name in ("single", "streaming")}
     metrics = {"metrics": [
@@ -735,13 +736,13 @@ def test_workflow_batch_streaming_saved_only(batch_and_streaming, tmp_path, monk
         *({"name": f"reads-{name}", "metric": "M17", "function": "readout.read_status_summary",
            "arguments": {"reads": {"source": f"pre_qc-{name}", "key": "decoding_result.table"}}}
           for name in ("single", "streaming"))]}
-    batch = pd.read_csv(X.output_root(work, "single") / MOLECULES)
-    pd.testing.assert_frame_equal(batch, pd.read_csv(X.output_root(work, "streaming") / MOLECULES))
+    batch = pd.read_csv(F.output_root(work, "single") / MOLECULES)
+    pd.testing.assert_frame_equal(batch, pd.read_csv(F.output_root(work, "streaming") / MOLECULES))
     before = _tree(work)
     _no_processing(monkeypatch)
     status, record, by_name = _evaluate(tmp_path, sources, metrics)
     assert _tree(work) == before
-    assert not any((X.output_root(work, n) / "workflow" / "verify.json").exists() for n in ("single", "streaming"))
+    assert not any((F.output_root(work, n) / "workflow" / "verify.json").exists() for n in ("single", "streaming"))
     parity = by_name["parity"]
     assert parity["outcome"] == "computed", parity
     assert parity["values"]["reference_fraction"] == parity["values"]["observed_fraction"] == 1.0
@@ -751,7 +752,7 @@ def test_workflow_batch_streaming_saved_only(batch_and_streaming, tmp_path, monk
     assert reads["single"]["values"] == reads["streaming"]["values"]
     assert reads["single"]["counts"] == reads["streaming"]["counts"]
     # A missing output of the streaming run: its task is no longer complete, so its metrics are skipped.
-    (X.output_root(work, "streaming") / MOLECULES).unlink()
+    (F.output_root(work, "streaming") / MOLECULES).unlink()
     status, record, by_name = _evaluate(tmp_path, sources, metrics, "missing")
     streaming = next(s for s in record["sources"] if s["name"] == "streaming")
     assert status == 1 and streaming["incomplete"] == [FOV_TASK]
@@ -764,18 +765,18 @@ def recovery_runs(tmp_path_factory):
     """One FOV whose TPS registration fails on the fixture (too few landmarks): ``recovered`` names demons as its
     recovery alternative, ``failed`` names none."""
     work = tmp_path_factory.mktemp("recovery") / "work"
-    X.golden().write_fixture(work)
+    F.golden().write_fixture(work)
     tps = {"method": "tps", "recovery": {"allowed_errors": ["InsufficientLandmarksError"],
                                          "alternatives": [{"method": "demons", "iterations": [1]}]}}
     with pytest.MonkeyPatch.context() as patch:
-        X.fix_code(patch)
+        F.fix_code(patch)
         from starfinder.workflow import plan
         for output_id, step, code in (("recovered", tps, 0), ("failed", {"method": "tps"}, 1)):
-            config = X.single_fov(work, output_id)
+            config = V.single_fov(work, output_id)
             config["processing"]["registration"]["steps"] = [step]
             config["processing"]["checkpoints"] = ["registered", "candidates", "pre_qc"]
-            plan(X.write_config(work, output_id, config))
-            assert X.run_task(X.output_root(work, output_id) / "workflow" / "manifest.json", FOV_TASK) == code
+            plan(F.write_config(work, output_id, config))
+            assert F.run_task(F.output_root(work, output_id) / "workflow" / "manifest.json", FOV_TASK) == code
     return work
 
 
@@ -784,10 +785,10 @@ def test_workflow_recovery_records(recovery_runs, tmp_path, monkeypatch):
     registration, and a failed task's metrics are skipped, not evaluated as zero."""
     sources = {"sources": [
         *({"name": name, "kind": "workflow",
-           "manifest": str(X.output_root(recovery_runs, name) / "workflow" / "manifest.json")}
+           "manifest": str(F.output_root(recovery_runs, name) / "workflow" / "manifest.json")}
           for name in ("recovered", "failed")),
         {"name": "registered", "kind": "checkpoint",
-         "path": str(X.output_root(recovery_runs, "recovered") / CHECKPOINTS), "stage": "registered"}]}
+         "path": str(F.output_root(recovery_runs, "recovered") / CHECKPOINTS), "stage": "registered"}]}
     metrics = {"metrics": [
         *({"name": f"molecules-{name}", "metric": "M70", "function": "matching.evaluate_molecules",
            "parameters": _matching(),
@@ -811,7 +812,7 @@ def test_workflow_recovery_records(recovery_runs, tmp_path, monkeypatch):
     assert by_name["molecules-failed"]["outcome"] == "skipped" and "not complete" in by_name["molecules-failed"][
         "reason"]
     # The recovered task's record names run.json with the SHA-256 the evaluation checks; it holds every attempt.
-    out = X.output_root(recovery_runs, "recovered")
+    out = F.output_root(recovery_runs, "recovered")
     task_record = json.loads(Path(tasks["recovered"]["record"]["path"]).read_text())
     assert _sha(tasks["recovered"]["record"]["path"]) == tasks["recovered"]["record"]["sha256"]
     listed = {o["path"]: o for o in task_record["outputs"]}
@@ -822,7 +823,7 @@ def test_workflow_recovery_records(recovery_runs, tmp_path, monkeypatch):
         assert [(a["requested_method"], a["actual_method"], a["fallback"], a["outcome"]) for a in estimation] == [
             ("tps", "tps", False, "failed"), ("tps", "demons", True, "succeeded")]
         assert estimation[0]["failure"]["type"] == "InsufficientLandmarksError"
-    failed = json.loads((X.output_root(recovery_runs, "failed") / "workflow" / "tasks" /
+    failed = json.loads((F.output_root(recovery_runs, "failed") / "workflow" / "tasks" /
                          "fov.sample.FOV_001.failed.json").read_text())
     assert failed["status"] == "failed" and "InsufficientLandmarksError" in json.dumps(failed)
 

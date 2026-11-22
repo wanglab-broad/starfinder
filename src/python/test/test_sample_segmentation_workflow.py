@@ -110,9 +110,9 @@ def route_workflow_config(route, dimensionality, segment, fuse, segmentation, as
 def python_route_config(tmp_path, route, dimensionality, segment, fuse, segmentation, assignment):
     """The route_configs block in the Python shape (the worked example's dataset keys, processing and morphology
     blocks, the stitching block); an assignment name gets the assignment block and the segment run it reads."""
-    from . import workflow_examples as X
+    from . import workflow_variants as V
     block = route_block(route, dimensionality, segment, fuse, segmentation)
-    config = dict(X.dataset(tmp_path, "route"), processing=copy.deepcopy(X.PROCESSING), morphology={},
+    config = dict(V.dataset(tmp_path, "route"), processing=copy.deepcopy(V.PROCESSING), morphology={},
                   stitching=copy.deepcopy(MULTIVIEW), assembly={"assignment": assignment}, export=block)
     if assignment is not None:
         config["segmentation"] = {"runs": [{"name": "cell", "target": "cell", "method": "import",

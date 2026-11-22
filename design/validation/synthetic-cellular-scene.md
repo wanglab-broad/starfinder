@@ -235,9 +235,9 @@ which of these rows applies to it.
 | GN2 | Names, fields and preset registry | none | The fields of `SampleSceneConfig`, `CellsConfig` and `StainConfig`; the keys of `SAMPLE_PRESETS`; the names exported by `starfinder.synthetic`; `CELLULAR_PRESETS`, `CELLULAR_PRESET_VERSION`, `CELLULAR_TRUTH_VERSION`; the fields of `CellTypeConfig`; each context preset's configuration. | The fields and keys as at 943bb6b, written in the test ("Opt-in"); the new names of "Names" exported and on API pages (`docs/check_reference.py`); six presets, `context-presets-v1`, `"1"`; the per-type fields of `CellTypeConfig` are exactly `molecules_per_cell`, `nuclear_fraction` and `size_scale` ("Cell types"); every preset value equals the PS1 tables of "Presets", and no preset uses the `boundary` source (O2). | Exact. | routine; `synthetic`, `contract`. |
 | GN3 | Configuration refusals | none | `ValueError` and its message for: `stains` given with `sample.stain` not None; `harmonic_amplitude · M_Y ≥ 1`; `overlap` outside `[0, 0.5)`; `gap < 0`; `contact` outside `[0, 1]`; `density` outside `(0, 1)`; ordinary and binucleate shares both 0 in density mode; `floor` outside `(0, 1]`; `monolayer` with one plane; a cytoplasm molecule with no room after `max_proposals`; a crowded scene below its floor (`ctx_crowded`). | Each raises `ValueError` naming the field, the seed or the cell, and both densities for the floor ("Names", "Nucleus shape", "Packing", "Molecules"). | Exact (the type; the named values present in the message). | routine; `synthetic`, `contract`. |
 | GN4 | Labels against the truth (identity 2), and identities 1 to 5 of [synthetic sample scene](../specs/synthetic/sample-scene.md) | `ctx_shapes` (each territory rule), `ctx_monolayer`, `ctx_plane`, `ctx_stains` (its fractional and whole-voxel offsets), `context_routine` (42) | `N` and `C` recomputed by the test oracle from `nuclei.csv`, `lobes.csv`, `harmonics.csv`, `cells.csv` and `cell_context.csv` at every voxel centre of every FOV and of the sample grid, and by the generator's point evaluator at the same positions; per grid the voxels that differ; per nucleus the number of connected pieces of its label (26-connected in 3D, 8-connected in a plane); the accepted identities 1 to 5 on `molecules.csv`, `cells.csv`, `cell_fovs.csv` and `molecule_fovs.csv`. | Labels equal the recomputation except at boundary voxels, at any fractional offset and at `Z=1` (identity 2; "Nucleus shape", "Label rule", "Cell territories"); the evaluator equals the oracle; a nucleus whose label has several pieces keeps one ID and is counted once ("A nucleus label with more than one piece"); identities 1 to 5 of [synthetic sample scene](../specs/synthetic/sample-scene.md) hold with the new label functions ("Identities a test can check"). | Exact; boundary voxels within 1e-9 µm counted and reported, expected 0; the number of multi-piece nuclei reported. | routine on the tiny fixtures; `slow` on `context_routine` if it measures 5 s or more; `synthetic`, `validation`. |
-| GN5 | Lobes, harmonics and one connected shape | `ctx_shapes` (with and without N2), `ctx_monolayer`, `ctx_plane`, `context_routine`, `context_slow` (42) | From `lobes.csv`, `nuclei.csv` and `harmonics.csv`: lobe 1's offset and its ellipsoid against `nuclei.csv`; for every lobe `l ≥ 2`, its offset `D_l` against `0.9 · (e_{n,1}(û_l) + ε_l(−û_l))`, the two extents recomputed by the test; `site_radius` against `max_l (‖o_l‖ + max semi-axis)` (with lobe 1's harmonic factor under N2); `Σ abs(a_lm)` against `harmonic_amplitude`; `offset_z` of every lobe in a plane or a monolayer; `D_l / a_l` of every lobe of the monolayer presets. | Lobe 1 has offset 0 and repeats `nuclei.csv`; `D_l ≤ 0.9 · (e + ε)`, so every lobe meets lobe 1 and every drawn nucleus is one connected shape before clipping (LB1, from the scene page's correction); the site sphere contains every lobe and is today's radius for one lobe and no harmonics ("Bounding site"); `Σ abs(a_lm)` equals the amplitude (N2); lobe offsets lie in the YX plane in a plane or a monolayer; in the monolayer presets the bound does not bind, so `D_l / a_l` lies in the support `[0.5, 0.9]` of `lobe_offset` ("Lobe offsets and one connected shape"). | Exact for counts and zeros; floats within 1e-9 µm (1e-9 for the sum of coefficients). | routine on the tiny fixtures; the presets `slow` where measured so; `synthetic`, `validation`. |
+| GN5 | Lobes, harmonics and one connected shape | `ctx_shapes` (with and without N2), `ctx_monolayer`, `ctx_plane`, `context_routine`, `context_slow` (42) | From `lobes.csv`, `nuclei.csv` and `harmonics.csv`: lobe 1's offset and its ellipsoid against `nuclei.csv`; for every lobe `l ≥ 2`, its offset `D_l` against `0.9 · (e_{n,1}(û_l) + ε_l(−û_l))`, the two extents recomputed by the test; `site_radius` against `max_l (‖o_l‖ + max semi-axis)` (with lobe 1's harmonic factor under N2); `Σ abs(a_lm)` against `harmonic_amplitude`; `offset_z` of every lobe in a plane or a monolayer; `D_l / a_l` of every lobe of the monolayer presets. | Lobe 1 has offset 0 and repeats `nuclei.csv`; `D_l ≤ 0.9 · (e + ε)`, so every lobe meets lobe 1 and every drawn nucleus is one connected shape before clipping (LB1, from the scene page's correction); the site sphere contains every lobe and is today's radius for one lobe and no harmonics ("Bounding site"); `Σ abs(a_lm)` equals the amplitude (N2); lobe offsets lie in the YX plane in a plane or a monolayer; in the monolayer presets the bound does not bind, so `D_l / a_l` lies in the support `[0.5, 0.9]` of `lobe_offset` ("Lobe offsets and one connected shape"). | Exact for counts and zeros; floats within 1e-9 µm (1e-9 for the sum of coefficients). | routine on the tiny fixtures and the routine presets; the `slow` presets run by the evidence project; `synthetic`, `validation`. |
 | GN6 | No overlap between nuclei of different cells; a nucleus inside its own cell (identity 3) | `ctx_shapes` (each territory rule; contact 1, overlap 0.2), `ctx_monolayer`, `ctx_plane`, `context_routine` (42) | On every label voxel of every grid: `C` where `N = n > 0`; at every voxel centre where the oracle finds two nuclei's shapes both with `ρ ≤ 1`, the nucleus the label carries; each anchor's own evaluation; each anchor's power distances to every other site. | `N = n > 0` implies `C = cell(n)`, boundary voxels included (identity 3); where two shapes overlap the label is the nucleus of the power-nearest site (ties to the smaller site index) and never the other, so no point carries nuclei of two cells ("Nuclei of different cells do not overlap"); each anchor lies strictly inside its own power cell, in the label function's arithmetic as K1 states, and gives its own cell ("Packing", K1; "Cell territories"). | Exact (labels and IDs); the oracle's decisions (power faces, `ρ ≤ 1`) by float rounding: voxels whose decision quantity lies within 1e-9 µm of 0 reported, expected 0. | routine on the tiny fixtures; `synthetic`, `validation`. |
-| GN7 | Packing | `ctx_shapes`, `ctx_monolayer`, `ctx_crowded`, `context_routine`, `context_slow` (42) | For every pair of accepted sites within reach, the K1 condition recomputed by the test from the truth (the contact distance from the two extents, the two power tests); for the two sites of every binucleate cell, the same; the summed nominal size of the placed nuclei against `φ · ‖Ω‖`; the reached density and the placed seeds that `context.json` records; the result of `ctx_crowded` with each floor. | Every pair satisfies `‖c − c_i‖ ≥ (1 − κ) · t_ik(û) + g` and both power tests (K1, P1); placement stops at the target density, or with `on_crowded="stop"` at the first seed that cannot be placed, recorded, and raises below `floor · φ` (F2, "Density"); every preset reaches its floor (audit A of the scene page's drafting; the amendment's re-run for the two `slow` presets whose pixel changed). | Exact for counts and records; the K1 inequality within 1e-9 µm (the test's float64 arithmetic is not the generator's). | routine on the tiny fixtures; `slow` on the presets; `synthetic`, `validation`. |
+| GN7 | Packing | `ctx_shapes`, `ctx_monolayer`, `ctx_crowded`, `context_routine`, `context_slow` (42) | For every pair of accepted sites within reach, the K1 condition recomputed by the test from the truth (the contact distance from the two extents, the two power tests); for the two sites of every binucleate cell, the same; the summed nominal size of the placed nuclei against `φ · ‖Ω‖`; the reached density and the placed seeds that `context.json` records; the result of `ctx_crowded` with each floor. | Every pair satisfies `‖c − c_i‖ ≥ (1 − κ) · t_ik(û) + g` and both power tests (K1, P1); placement stops at the target density, or with `on_crowded="stop"` at the first seed that cannot be placed, recorded, and raises below `floor · φ` (F2, "Density"); every preset reaches its floor (audit A of the scene page's drafting; the amendment's re-run for the two `slow` presets whose pixel changed). | Exact for counts and records; the K1 inequality within 1e-9 µm (the test's float64 arithmetic is not the generator's). | routine on the tiny fixtures and the routine presets; the `slow` presets run by the evidence project; `synthetic`, `validation`. |
 | GN8 | Cell types and their genes (identity 4) | `ctx_types`, `context_routine` (42) | Rows of `cell_context.csv` per cell; each cell's `region` against the region of its anchor recomputed from `regions.csv`; each cell molecule's gene weight in its cell's type; the genes of ambient molecules; each row of `type_abundances.csv`. | One row per cell; `region` is the Voronoi region of the anchor (ties to the smaller region index, Ty2); every cell molecule's gene has nonzero weight in its type, and with A2 no ambient molecule has a marker gene (identity 4); each abundance row sums to 1 and the presets hold G1's table ("Cell types"). | Exact; anchors within 1e-9 µm of a region boundary reported, expected 0 (rounding of the Voronoi decision); the row sums within 1e-9 (rounding of G1's exact sums). | routine; `synthetic`, `validation`. |
 | GN9 | Counts and the marker answers (identities 5 and 6) | `ctx_types`, `context_routine` (42) | `cell_gene_counts.csv` against `molecules.csv` grouped by `true_cell_id` and `gene_id`, its sums against `cells.csv` `n_molecules`, its `nuclear_count` against the molecules of compartment `nucleus`; `marker_pairs.csv` against MECR recomputed from `cell_gene_counts.csv` by the report's definition ([report-algorithms](../specs/report-algorithms.md), "`mecr.csv`") over the sample cells at `positive_threshold` 1. | Identity 5 and identity 6: equal; the exclusive pair has `both` 0 and `mecr` 0 when `either > 0`; `mecr` null when `either` is 0 ("The known answers"). `ctx_types` holds three sample cells, none of type 1, so there its co-expressed pair has `either` 0 and `mecr` null; the co-expressed answer is exercised by the presets and the chain checks (finding 4 of the geometry and molecules step). | Exact (integers; `mecr` as the float64 ratio of the same two integers). | routine; `synthetic`, `validation`. |
 | GN10 | The realized gene abundance of each cell type | `ctx_types`, `context_routine` (42) | For each type `t` with `n_t` cell molecules and each gene `g`: the realized share `p̂ = count / n_t` against the configured weight `w_tg`. | `p̂` equals `w_tg` within the sampling tolerance of the categorical draw of `context.identity` ("Cell types", G1; "Random streams"); a marker gene of another type has count exactly 0. | 4 SE: `abs(p̂ − w) ≤ 4 · sqrt(w (1 − w) / n_t)`; zeros exact. | routine; `synthetic`, `validation`. |
@@ -265,7 +265,8 @@ The generator checks are in the modules of `src/python/test/` listed below, each
 added most of them with the code they check. The generator-checks step adds
 `test_synthetic_cellular_routine.py`: GN4 to GN6, GN8 to GN12, GN15 and GN19 on
 `context_routine`, and GN4 on `ctx_stains`. It also adds GN5 on `context_slow` in
-`test_synthetic_cellular_presets.py`, and `test_synthetic_cellular_checks.py`, whose
+`test_synthetic_cellular_presets.py` (in `benchmarks/synthetic_scene_evidence.py` since
+W-899), and `test_synthetic_cellular_checks.py`, whose
 `test_every_gn_row_names_collected_tests` keeps this table true.
 
 % W-483; W-485; W-486
@@ -292,10 +293,21 @@ printed rows and bounds as the tests they were at revision `0b9fa8b`. From `src/
 `uv run python ../../benchmarks/cellular_evidence.py --output <run directory>`; `--check`
 selects checks and `--list` lists the cases and seeds. They read no real data. The script
 imports `cellular_measures.py` and the GN24 process runner of
-`test_synthetic_cellular_presets.py` from `src/python/test/`. GN7 and GN5 on the `slow`
-presets and GN24 on the routine presets (within the project's 4 GiB) stay in the suite.
+`test_synthetic_cellular_presets.py` from `src/python/test/`. GN24 on the routine presets
+(within the project's 4 GiB) stays in the suite.
 
-% W-536; Chapter II; TM-14; W-526
+GN7 and GN5 on the `slow` presets moved to the evidence project on 2026-11-21 (Jiahao's
+decision K5 of 2026-11-19 on the test suite's audit, [test-suite slimming](../proposals/test-suite-slimming.md)):
+the same checks run on the three routine presets in the routine tier, and generating the
+`slow` presets is most of their time. They run as `benchmarks/synthetic_scene_evidence.py`,
+the tests as they were at revision `a7f4b8f` with their module fixture, through pytest
+(`uv run python ../../benchmarks/synthetic_scene_evidence.py --output <run directory>`
+from `src/python`; `--list` lists the cases). The same script holds GA1's digests of the
+three `slow` presets ([synthetic real appearance validation](synthetic-real-appearance-scene.md)).
+A row that names the script names its tests after it; `test_synthetic_cellular_checks.py`
+checks that the script defines them.
+
+% W-536; Chapter II; TM-14; W-526; W-899 (K5 of W-893)
 
 A test of these modules that is not named here is an additional check of the code it
 tests. The helpers are:
@@ -303,12 +315,13 @@ tests. The helpers are:
 * `cellular_oracle.py`, the test oracle;
 * `cellular_scenes.py`, the tiny fixtures;
 * `cellular_measures.py`, the context measurements' measures for GN23 (run by `benchmarks/cellular_evidence.py`) and the chain checks;
-* `cellular_checks.py`, the GN5 check that the two preset modules share.
+* `cellular_checks.py`, the GN5 check that the routine presets' module and the `slow` presets'
+  evidence script share.
 
 % W-393
 
 The routine presets are generated once per session in `test_synthetic_cellular_routine.py`,
-and the `slow` presets once per module in `test_synthetic_cellular_presets.py`.
+and the `slow` presets once per module in `benchmarks/synthetic_scene_evidence.py`.
 
 Every tolerance is the one of the table "Generator checks", unchanged, and every float
 comparison states its bound: `rtol=0` with the row's absolute bound, or the row's relative
@@ -368,9 +381,9 @@ Behavioral goldens and shared-fixture checks remain.
 | GN2 | `test_synthetic_cellular_contract.py`, `test_gn2_existing_fields_and_presets_as_at_the_base`, `test_gn2_new_names_and_fields`; `test_synthetic_cellular_stains_contract.py`, `test_gn2_stain_names_and_fields`; `test_synthetic_cellular_presets_contract.py`, `test_registry_names_and_version`, `test_gn2_every_value_equals_the_page_table` | none (the API pages by `docs/check_reference.py`) | routine | preset values within 1e-9 |
 | GN3 | `test_synthetic_cellular_contract.py`, `test_gn3_configuration_refusals`, `test_gn3_generation_refusals`, `test_gn3_a_crowded_scene_below_its_floor`; `test_synthetic_cellular_stains_contract.py`, `test_gn3_stain_refusals`, `test_gn3_stain_generation_refusals` | none; `ctx_crowded` | routine | none compared |
 | GN4 | `test_synthetic_cellular_scene.py`, `test_gn4_labels_against_the_oracle_and_the_evaluator`; `test_synthetic_cellular_routine.py`, `test_gn4_labels_on_the_routine_presets`, `test_gn4_labels_on_ctx_stains` | `ctx_shapes`, `ctx_monolayer`, `ctx_plane`, `ctx_types`, `ctx_stains`, `context_routine` | routine | decisions within 1e-9 µm counted as boundary voxels |
-| GN5 | `test_synthetic_cellular_scene.py`, `test_gn5_harmonic_bound_is_the_largest_value`, `test_gn5_lobes_harmonics_and_one_connected_shape`; `test_synthetic_cellular_routine.py`, `test_gn5_lobes_on_the_routine_presets`; `test_synthetic_cellular_presets.py`, `test_gn5_lobes_on_the_slow_presets` | `ctx_shapes`, `ctx_monolayer`, `ctx_plane`, `context_routine`, `context_slow` | routine and slow | within 1e-9 µm (1e-9 for the sum of coefficients) |
+| GN5 | `test_synthetic_cellular_scene.py`, `test_gn5_harmonic_bound_is_the_largest_value`, `test_gn5_lobes_harmonics_and_one_connected_shape`; `test_synthetic_cellular_routine.py`, `test_gn5_lobes_on_the_routine_presets`; the `slow` presets in `benchmarks/synthetic_scene_evidence.py`, `test_gn5_lobes_on_the_slow_presets` | `ctx_shapes`, `ctx_monolayer`, `ctx_plane`, `context_routine`; `context_slow` in the script | routine | within 1e-9 µm (1e-9 for the sum of coefficients) |
 | GN6 | `test_synthetic_cellular_scene.py`, `test_gn6_no_overlap_and_a_nucleus_inside_its_own_cell`; `test_synthetic_cellular_routine.py`, `test_gn6_no_overlap_on_the_routine_presets` | `ctx_shapes`, `ctx_monolayer`, `ctx_plane`, `context_routine` | routine | decisions within 1e-9 µm counted |
-| GN7 | `test_synthetic_cellular_scene.py`, `test_gn7_k1_for_every_pair_and_the_record`, `test_gn7_crowded_stops_and_records_above_a_low_floor`, `test_gn7_crowded_at_the_page_floor_reaches_it`; `test_synthetic_cellular_presets.py`, `test_gn7_routine_preset_reaches_its_floor`, `test_gn7_slow_preset_reaches_its_floor` | `ctx_shapes`, `ctx_monolayer`, `ctx_crowded`, `context_routine`, `context_slow` | routine and slow | K1 within 1e-9 µm; sizes within 1e-9 |
+| GN7 | `test_synthetic_cellular_scene.py`, `test_gn7_k1_for_every_pair_and_the_record`, `test_gn7_crowded_stops_and_records_above_a_low_floor`, `test_gn7_crowded_at_the_page_floor_reaches_it`; `test_synthetic_cellular_presets.py`, `test_gn7_routine_preset_reaches_its_floor`; the `slow` presets in `benchmarks/synthetic_scene_evidence.py`, `test_gn7_slow_preset_reaches_its_floor` | `ctx_shapes`, `ctx_monolayer`, `ctx_crowded`, `context_routine`; `context_slow` in the script | routine | K1 within 1e-9 µm; sizes within 1e-9 |
 | GN8 | `test_synthetic_cellular_scene.py`, `test_gn8_types_and_genes`; `test_synthetic_cellular_routine.py`, `test_gn8_types_and_genes_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | row sums within 1e-9; anchors within 1e-9 µm counted |
 | GN9 | `test_synthetic_cellular_scene.py`, `test_gn9_counts_and_marker_answers`; `test_synthetic_cellular_routine.py`, `test_gn9_counts_and_marker_answers_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | `mecr` within 1e-9; counts exact |
 | GN10 | `test_synthetic_cellular_scene.py`, `test_gn10_realized_gene_abundance_of_each_type`; `test_synthetic_cellular_routine.py`, `test_gn10_realized_gene_abundance_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | 4 SE |
@@ -792,7 +805,7 @@ script `scripts/execution_costs.py` of the run directory of this page's amendmen
   fixtures. They need no extra beyond the
   base, so the CI environment runs them too.
 * The controller's `slow` selections run the `slow` generator checks (GN1(a) and (b) on
-  `sample-small-v1`, the preset parts of GN4 to GN7, GN24 on the routine presets), which
+  `sample-small-v1`, GN11 on two routine presets, GN24 on the routine presets), which
   carry the subsystem marker `synthetic`, in its `pytest-slow-synthetic` selection, and the
   truth-label chains on the routine presets (`slow`, not `learned`), which carry
   `integration`, in `pytest-slow-other`; each runs when its paths change and at the last
@@ -802,7 +815,9 @@ script `scripts/execution_costs.py` of the run directory of this page's amendmen
   appearance presets.
 * The evidence project runs, outside the test suite since these checks moved there, GN23 and the
   `slow` and acquired cases of GN24 (`benchmarks/cellular_evidence.py`, "Implemented
-  checks"), and GA23, the `slow` part of GA24, GA26 and GA27, which read the real banks
+  checks"), GN5 and GN7 on the `slow` presets with GA1's digests of those presets
+  (`benchmarks/synthetic_scene_evidence.py`, since W-899), and GA23, the `slow` part of GA24,
+  GA26 and GA27, which read the real banks
   through `STARFINDER_APPEARANCE_BANKS` (`benchmarks/appearance_evidence.py`;
   [synthetic real appearance validation](synthetic-real-appearance-scene.md), 'Implemented checks'). Since the slow tier of the chain checks moved there, it also
   runs every chain check on the `slow` presets, with a model and on the truth labels
@@ -1012,7 +1027,8 @@ and listed on the API page `docs/api/synthetic.rst`):
   and `test_synthetic_cellular_checks.py`, with the helpers `cellular_oracle.py`,
   `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
   named in that page's "Implemented checks"; GN23 and the `slow` and acquired cases of GN24
-  run in the evidence project as `benchmarks/cellular_evidence.py`;
+  run in the evidence project as `benchmarks/cellular_evidence.py`, and GN5 and GN7 on the
+  `slow` presets as `benchmarks/synthetic_scene_evidence.py` (W-899);
 * the generator checks GA1 to GA24 and GA26 to GA27 of [synthetic real appearance validation](synthetic-real-appearance-scene.md):
   `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py`,
   `test_synthetic_appearance_scene.py`, `test_synthetic_appearance_stains.py`,
@@ -1022,7 +1038,8 @@ and listed on the API page `docs/api/synthetic.rst`):
   with the helpers `cellular_appearance_oracle.py`, `cellular_appearance_scenes.py` and
   `cellular_appearance_measures.py`; each row's tests are named in that page's "Implemented
   checks"; GA23, GA26, GA27 and the `slow` part of GA24 run in the evidence
-  project as `benchmarks/appearance_evidence.py`;
+  project as `benchmarks/appearance_evidence.py`, and GA1's digests of the `slow` presets
+  as `benchmarks/synthetic_scene_evidence.py` (W-899);
 * the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
   `test_integration_cellular_chain.py`, marked `integration` and `validation`; the
   chains with a model are `slow` and `learned`, the truth-label chains `slow`; the suite

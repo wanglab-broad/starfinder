@@ -1,4 +1,8 @@
-"""W-650 cache regressions on the real engine; full X11 fresh-output comparisons belong to W-652."""
+"""W-650 cache regressions on the real engine; full X11 fresh-output comparisons belong to W-652.
+
+The suite runs the stub variant; W-898 moved the real one (the same sequence on the scientific commands) to
+``benchmarks/workflow_engine_evidence.py``.
+"""
 from __future__ import annotations
 
 import copy
@@ -8,8 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_nextflow as N
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract, pytest.mark.nextflow, pytest.mark.slow]
 
@@ -23,7 +28,7 @@ def downstream(manifest, selected):
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize("stub", [True, False], ids=["stub", "real"])
+@pytest.mark.parametrize("stub", [True], ids=["stub"])
 def test_fingerprints_and_fresh_tokens_rerun_only_affected_tasks(tmp_path, stub):
     """A,B,A,B,A for two independent blocks, two raw replacements, and a memory-only cache hit.
 
@@ -36,9 +41,9 @@ def test_fingerprints_and_fresh_tokens_rerun_only_affected_tasks(tmp_path, stub)
         if any(importlib.util.find_spec(m) is None for m in ("anndata", "multiview_stitcher")):
             pytest.skip("the real per-fov cache checks need the anndata and multiview-stitcher extras")
     work = tmp_path / "cache"
-    X.golden().write_fixture(work)
-    config = N.small_resources(X.variants(work)["per-fov"])
-    path = X.write_config(work, "cache", config)
+    F.golden().write_fixture(work)
+    config = N.small_resources(V.variants(work)["per-fov"])
+    path = F.write_config(work, "cache", config)
 
     def invoke(expected, *, resume=True):
         done, rows = N.run(work, path, *(["-resume"] if resume else []), stub=stub)
@@ -67,7 +72,7 @@ def test_fingerprints_and_fresh_tokens_rerun_only_affected_tasks(tmp_path, stub)
                 edit["processing"]["spot_finding"]["threshold_value"] = 6.0
             if changed and block == "export":
                 edit["export"]["previews"] = False
-            X.write_config(work, "cache", edit)
+            F.write_config(work, "cache", edit)
             _, new_records = invoke(affected)
             for task_id, previous in records.items():
                 if task_id in affected:
@@ -78,13 +83,13 @@ def test_fingerprints_and_fresh_tokens_rerun_only_affected_tasks(tmp_path, stub)
     # Per-kind requests live outside cache inputs and the rendered scientific command.
     edit = copy.deepcopy(config)
     edit["execution"]["tasks"]["fov"]["memory_mb"] = 768
-    X.write_config(work, "cache", edit)
+    F.write_config(work, "cache", edit)
     _, kept = invoke(set())
     assert kept == records
-    X.write_config(work, "cache", config)
+    F.write_config(work, "cache", config)
     for replacement in ("older-time", "another-size"):
-        raw = X.input_root(work) / "round2/FOV_002/ch01.ome.tif"
-        declared = "input:" + raw.relative_to(X.input_root(work)).as_posix()
+        raw = F.input_root(work) / "round2/FOV_002/ch01.ome.tif"
+        declared = "input:" + raw.relative_to(F.input_root(work)).as_posix()
         affected = downstream(data, [t["id"] for t in data["tasks"] if declared in t["inputs"]])
         assert affected and len(affected) < len(data["tasks"])
         if replacement == "older-time":

@@ -171,6 +171,54 @@ per-FOV route skip for want of `anndata` and `multiview-stitcher`.
 The selections are independent: they may run at the same time when each has its
 own core and temporary directory.
 
+### Evidence scripts
+
+Some tests left the suite for evidence scripts under `benchmarks/` (W-893's audit, phase 2).
+Each script holds its moved tests unchanged, generates its own inputs and runs as one
+command. The phase-2 scripts and the subsystem each protects:
+
+| Script | Protects | Runs after a batch that changes |
+| --- | --- | --- |
+| `workflow_engine_evidence.py` | the engines' reruns after a changed configuration or a replaced raw image, compared with a fresh run, and the grids of an uncalibrated run on Nextflow | the workflow package or `nextflow/` |
+| `orchestration_golden_evidence.py` | G3: the refactored workflow against the values of the workflow before the dispatcher | what the engine script runs after, `workflow/` or `scripts/workflow_golden.py` |
+| `spot_finding_evidence.py` | the spot-finding validation rows on seeds 101 and 102 and on the Piscis model `20230905` | spot finding, its evaluation or these tests' helpers |
+| `synthetic_scene_evidence.py` | the `slow` context presets' packing, lobes and GA1 digests | the synthetic generator or these tests' helpers |
+
+Jiahao's rule of 2026-11-19: each evidence script runs at the end of a batch whose changes
+touch its subsystem, and all of them run before a tag or a release. They run on UGER,
+through the coordinating session, with the commit's code laid over the image. The
+[benchmark scripts' README](https://github.com/wanglab-broad/starfinder/blob/dev/benchmarks/README.md)
+lists every evidence script with its needs.
+
+### The runner's checks
+
+The controller runs the selections as checks, each on one CPU, chosen by the paths a
+change touches. W-893's phase 2 set three rules for them:
+
+* **A full validation runs Q once.** A validation that runs the fast tier R does not
+  run Q again, since R holds Q (K9). Q stays the gate of every other change.
+* **The fast tier is two checks (S1).** `pytest-fast-tier-1` runs
+  `not (slow or learned or extended) and (report or segmentation or synthetic or workflow)`
+  and `pytest-fast-tier-2` runs `not (slow or learned or extended) and not (report or
+  segmentation or synthetic or workflow)`: together the fast tier, in two parts of about
+  equal time.
+* **`pytest-extended-recovery` is two checks (S2),** split by test:
+  `pytest-extended-recovery-1` adds `-k "test_x7_sigkill_partial_task_recovers_with_only_its_downstream
+  or test_x11_stale_results_rerun_only_readers_and_downstream"` to its selection, and
+  `pytest-extended-recovery-2` adds the same expression under `not (...)`.
+
+A check's inputs are the test files it runs and the modules they import (H3).
+`scripts/check_inputs.py` collects each check's selection and computes the import
+closure of its test files, following the scripts a test loads by path and, for a file
+that puts a folder on `sys.path`, the modules it imports from that folder. It writes them
+to `test/check_inputs.json`, which `test/test_check_inputs.py` keeps equal to the import
+graph. Run it again after you add, move or re-mark tests:
+
+```bash
+uv run python scripts/check_inputs.py            # writes test/check_inputs.json
+uv run python scripts/check_inputs.py --check    # exit status 1 when the file is out of date
+```
+
 ## Limits
 
 A local HTML build does not execute MATLAB or optional algorithms. Record

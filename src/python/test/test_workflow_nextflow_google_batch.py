@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_nextflow as N
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract, pytest.mark.nextflow, pytest.mark.slow]
@@ -17,7 +17,7 @@ VERIFY = "process.withName:VERIFY_BEFORE|VERIFY_AFTER.executor"
 
 def resolve(tmp_path, profile):
     done = subprocess.run(
-        [N.executable(), "config", "-flat", "-profile", profile, str(X.ROOT / "nextflow/main.nf")],
+        [N.executable(), "config", "-flat", "-profile", profile, str(F.ROOT / "nextflow/main.nf")],
         cwd=tmp_path, capture_output=True, text=True, timeout=60,
         env=dict(os.environ, NXF_OFFLINE="true", NXF_PLUGINS_DEFAULT="false"),
     )

@@ -23,7 +23,7 @@ The proposals:
 | --- | --- | --- |
 | [`proposals/cells-across-fovs.md`](proposals/cells-across-fovs.md) | How a cell seen by two FOVs is kept once, with measurements on two real 2 × 2 blocks | Proposed (W-399); its decisions are recorded under each question |
 | [`proposals/benchmark-drafts/`](proposals/benchmark-drafts/) | Three draft issues for the benchmark: retirement and commands, the report template, the site section | Proposed (W-771) |
-| [`proposals/test-suite-slimming.md`](proposals/test-suite-slimming.md) | Which tests to keep, merge, move to evidence workloads or retire after Chapter II development, the helper splits, and the projected validation time | Proposed (W-893); Jiahao decides by category |
+| [`proposals/test-suite-slimming.md`](proposals/test-suite-slimming.md) | Which tests to keep, merge, move to evidence workloads or retire after Chapter II development, the helper splits, and the projected validation time | Applied (W-893 phase 2: W-897, W-898, W-899, W-900). Jiahao's decisions of 2026-11-19 (W-893 comment 924b6549): K1, K2, K3, K4, K5, K7, K9 and K10, the options O1, O2 and O3 (the suite keeps Piscis `20251212`), the helper splits H1 and H2, the check inputs H3 and the check splits S1 and S2 agreed; K6 rejected, superseded by O1; K8 only with the dry-run cases on K1's shared run, so left unchanged (W-898). K9, S1, S2 and H3's inputs take effect in the runner's configuration (W-901) |
 
 ## Records awaiting approval
 

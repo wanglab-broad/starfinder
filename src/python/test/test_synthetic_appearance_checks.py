@@ -5,12 +5,15 @@
 that no named test is skipped or expected to fail; that each carries the listed subsystem
 and kind markers; and that its tier matches the tests' ``slow`` markers. A row whose tier is
 ``evidence project`` names its script under ``benchmarks/`` and no test (W-536); every
-script a row names exists.
+script a row names exists. A row whose cases are split names, after the script, the tests the
+script defines for them (W-899), which the check reads from the script without importing it.
 
 A docs-contract module (docs/contributing.md, "Test markers"; W-602): it finds the two tables by their
 labels (``docs_pages``), not by their headings: ``(synthetic-real-appearance-validation-generator-checks)=`` and
 ``(synthetic-real-appearance-validation-implemented-checks)=``.
 """
+import ast
+import functools
 from pathlib import Path
 import re
 
@@ -55,18 +58,25 @@ def implemented_checks():
     return rows
 
 
-def named_tests(names):
-    """(module, test name) of a row, each test under the module named before it."""
+def named_tests(names, scripts=False):
+    """(module, test name) of a row, each test under the module named before it; a test named after a script under
+    benchmarks/ is that script's (W-899), and is listed instead of the suite's when scripts is true."""
     module, named = None, []
     for name in names:
-        if name.startswith("benchmarks/"):
-            continue
         if name.endswith(".py"):
             module = name
         elif name.startswith("test_"):
             assert module is not None, name
-            named.append((module, name))
+            if module.startswith("benchmarks/") == scripts:
+                named.append((module, name))
     return named
+
+
+@functools.cache
+def script_tests(script):
+    """The test functions an evidence script under benchmarks/ defines at its top level (read, not imported)."""
+    tree = ast.parse((REPOSITORY / script).read_text())
+    return {node.name for node in tree.body if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")}
 
 
 def collected(session, module):
@@ -90,6 +100,9 @@ def test_every_ga_row_names_collected_tests(request):
         named = named_tests(names)
         scripts = [name for name in names if name.startswith("benchmarks/")]
         assert all((REPOSITORY / script).is_file() for script in scripts), (row, scripts)
+        # A row's part in an evidence script names tests that the script defines (W-899).
+        for script, name in named_tests(names, scripts=True):
+            assert name in script_tests(script), (row, script, name)
         if tier == EVIDENCE:
             assert scripts and not named, row
             continue

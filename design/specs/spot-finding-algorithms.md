@@ -173,7 +173,8 @@ Rules:
 
 * Fixtures are hand-built known answers, with their density stated, except S16,
   which uses the synthetic formed-amplicon generator. Every fixture is at most 32×64×64 voxels, four
-  channels and four rounds, generated in session; seeds are 100, 101 and 102.
+  channels and four rounds, generated in session; seeds are 100, 101 and 102. The test suite
+  runs seed 100 and the evidence script the other seeds ([Implemented checks](#implemented-checks)).
 * Each tolerance is of one of two kinds only. Either it cites the dependency-study
   measurement it is derived from (an exact bound may cite a dependency-study bit-identity or
   parity result), or it is marked **provisional** with a one-line reason. Evidence
@@ -264,7 +265,29 @@ The checks are in `src/python/test/test_spot_finding_validation.py`, one test
 function per check (parametrized by method, model, case and seed 100 to 102).
 Local maxima and the Starfish LoG run in the default tier; every Spotiflow and
 Piscis case is in the extended tier (`-m extended`, CPU, `CUDA_VISIBLE_DEVICES=""`,
-one thread, weights from `STARFINDER_WEIGHTS_DIR`). The dependency study's isolated-spot and
+one thread, weights from `STARFINDER_WEIGHTS_DIR`).
+
+Where the rows run (Jiahao's decisions K4 and O3 of 2026-11-19 on the test suite's audit,
+[test-suite slimming](../proposals/test-suite-slimming.md), "The other categories"):
+
+| Rows | Seeds | Models | Where |
+| --- | --- | --- | --- |
+| S1 to S8, S10, S16 | 100 | every method; Piscis `20251212` | the test suite |
+| S10 | 102 | Piscis `20251212`, the only seed that passes there (100 and 101 are expected failures) | the test suite |
+| S9, S11, S13 to S15 | 100 where a row has a seed | every method; Piscis `20251212` | the test suite |
+| S12 | none | the Starfish LoG | the test suite |
+| S1 to S8, S10, S16 | 101 and 102 (S10's Piscis seed 102 excepted) | every method; Piscis `20230905` and `20251212` | `benchmarks/spot_finding_evidence.py` (K4) |
+| S1 to S15 | every row of the model | Piscis `20230905` | `benchmarks/spot_finding_evidence.py` (O3) |
+
+The evidence script calls the test functions of the module with the rows the module leaves
+to it (its `EVIDENCE`): the same assertions, tolerances and strict expected failures. Both
+Piscis models' weight identity and recorded settings stay in the suite (`test_piscis.py`).
+The script runs on UGER at the end of a batch that changes spot finding and before a tag or
+a release (`benchmarks/README.md`).
+
+% W-899: K4 and O3 of W-893 (Jiahao, 2026-11-19)
+
+The dependency study's isolated-spot and
 seam scenes are the ports in `spot_finding_scenes.py`, `learned_detectors.py` and
 `test_spot_finding_metrics.py`; the hand-built fixtures are in
 `spot_finding_fixtures.py`, and `multiround` is the multi-round detection fixture of
@@ -324,9 +347,11 @@ peak RSS of 1.7 GB: about 1064 s for Piscis `20230905`, 985 s for Piscis
 before the run). Every design case is kept (the validation run's decision, option A): the project checks
 run the Piscis cases of each model as a separate extended check, selected by the
 model name in the test id (`-k "test_spot_finding_validation and 20230905"`, and
-likewise `20251212`), and the rest of the extended tier excludes them.
+likewise `20251212`), and the rest of the extended tier excludes them. Since W-899 the
+suite holds no row of `20230905` and only seed 100 of the seeded checks: the rest run in
+`benchmarks/spot_finding_evidence.py` (about 35 CPU-minutes, W-893's inventory).
 
-% W-266, W-274
+% W-266, W-274; W-899
 
 ## Known limits
 
@@ -372,7 +397,11 @@ reported to Jiahao in the validation notes and are not decided here.
 % W-274
 
 The counts add up to 6 + 1 + 3 + 4 = 14, the number of `strict_xfail` marks the tour
-notebook reads from the module.
+notebook reads from the module. Three of them are rows of the test suite, at seed 100: S4
+and S10 of Piscis `20251212` and S7 of `synth_3d`. The other eleven run, still strict, in
+`benchmarks/spot_finding_evidence.py` (W-899).
+
+% W-899
 
 ### Provisional tolerances
 

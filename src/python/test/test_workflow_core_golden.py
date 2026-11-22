@@ -23,7 +23,8 @@ import pytest
 from starfinder._execution import THREAD_VARIABLES
 from starfinder.workflow import plan
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.dataset, pytest.mark.golden]
 
@@ -45,7 +46,7 @@ def configuration(work):
             "sample_id": "small", "output_id": "core", "n_rounds": 4, "ref_round": "round1", "rotate_angle": 0,
             "voxel_size_xy": 0.5, "voxel_size_z": 1.0, "seq_channel_order": ["ch00", "ch01", "ch02", "ch03"],
             "image_dir_template": "{fov}/{round}", "codebook": "codebook.csv",
-            "processing": dict(X.PROCESSING, checkpoints=["candidates", "pre_qc"])}
+            "processing": dict(V.PROCESSING, checkpoints=["candidates", "pre_qc"])}
 
 
 def write_work(work, dataset):
@@ -105,7 +106,7 @@ def actual_with_exceptions(folder):
 
 def run_core(work, extra_environment=None):
     """Plan the core configuration and run each FOV's fov task in its own process, one numerical thread."""
-    plan(X.write_config(work, "core", configuration(work)))
+    plan(F.write_config(work, "core", configuration(work)))
     manifest = work / "output" / "session" / "core" / "workflow" / "manifest.json"
     environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", **dict.fromkeys(THREAD_VARIABLES, "1"),
                        **(extra_environment or {}))

@@ -1,4 +1,10 @@
-"""X1–X3: real engines on tiny_sample, completion hashes and strict output comparison."""
+"""X1–X3: real engines on tiny_sample, completion hashes and strict output comparison.
+
+X3 runs per-fov and molecules-only on Snakemake, then on Nextflow, through the same ``EngineRun.invoke`` with the same
+completion checks, and compares the two trees; so W-898 retired X1's runs of those variants and X2's, and X2 keeps
+``supplied-xml``, which X3 does not run. The uncalibrated run on Nextflow moved to
+``benchmarks/workflow_engine_evidence.py``; the Snakemake run asserts the same grids on the same commands.
+"""
 import pytest
 
 from . import workflow_engine_validation as E
@@ -9,11 +15,11 @@ pytestmark = [pytest.mark.workflow, pytest.mark.integration, pytest.mark.extende
 def _uncalibrated_run(tmp_path, engine, *, tiled=False):
     """Copy tiny_sample in the session and remove descriptions, keeping pixel arrays unchanged."""
     import tifffile
-    from . import workflow_examples as X
+    from . import workflow_fixture as F
     E.require(engine)
     work = tmp_path / ("uncalibrated-tiled" if tiled else "uncalibrated-direct")
-    X.golden().write_fixture(work)
-    for path in X.input_root(work).rglob("*.tif"):
+    F.golden().write_fixture(work)
+    for path in F.input_root(work).rglob("*.tif"):
         image = tifffile.imread(path)
         # The .ome.tif filename must not make tifffile infer a new OME C axis.
         tifffile.imwrite(path, image, photometric="minisblack", metadata=None, ome=False)
@@ -35,7 +41,7 @@ def _assert_declared_grids(run):
     import subprocess
     import sys
     from starfinder.io import load_volume, load_volume_zyxc
-    from . import workflow_examples as X
+    from . import workflow_fixture as F
     def check(value):
         if isinstance(value, dict):
             if "spacing_zyx" in value:
@@ -50,7 +56,7 @@ def _assert_declared_grids(run):
     for path in (run.out / "fovs").rglob("*.json"):
         check(json.loads(path.read_text()))
         checked.append(str(path.relative_to(run.out)))
-    for fov in X.FOVS:
+    for fov in F.FOVS:
         folder = run.out / "fovs" / fov
         for path, loader in [(folder / "reference.tif", load_volume),
                              (folder / "other_rounds/reference_stain/image.ome.tif", load_volume_zyxc),
@@ -89,14 +95,6 @@ def test_uncalibrated_tiny_sample_snakemake(tmp_path):
     _assert_declared_grids(run)
 
 
-@pytest.mark.nextflow
-def test_uncalibrated_tiny_sample_nextflow(tmp_path):
-    run = _uncalibrated_run(tmp_path, "nextflow")
-    assert len(run.data["tasks"]) == 29
-    run.invoke({t["id"] for t in run.data["tasks"]})
-    _assert_declared_grids(run)
-
-
 def test_uncalibrated_tiny_sample_tiled_snakemake(tmp_path):
     run = _uncalibrated_run(tmp_path, "snakemake", tiled=True)
     assert len(run.data["tasks"]) == 49
@@ -104,14 +102,8 @@ def test_uncalibrated_tiny_sample_tiled_snakemake(tmp_path):
     _assert_declared_grids(run)
 
 
-@pytest.mark.parametrize("variant", ["per-fov", "molecules-only"])
-def test_x1_snakemake_end_to_end(tmp_path, variant):
-    run = E.EngineRun(tmp_path / variant, "snakemake", variant)
-    run.invoke({t["id"] for t in run.data["tasks"]})
-
-
 @pytest.mark.nextflow
-@pytest.mark.parametrize("variant", ["per-fov", "molecules-only", "supplied-xml"])
+@pytest.mark.parametrize("variant", ["supplied-xml"])
 def test_x2_nextflow_end_to_end(tmp_path, variant):
     run = E.EngineRun(tmp_path / variant, "nextflow", variant)
     run.invoke({t["id"] for t in run.data["tasks"]})

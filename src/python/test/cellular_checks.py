@@ -1,8 +1,8 @@
 """Checks of the cellular scene's generator that two test files run (design/validation/synthetic-cellular-scene.md).
 
 ``check_lobes`` is GN5 for a scene whose nucleus shapes come from a configuration with ``lobed_share`` below 1: the
-routine presets (test_synthetic_cellular_routine.py) and the ``slow`` presets (test_synthetic_cellular_presets.py,
-which generates them once per module). The tiny fixtures' GN5 test (test_synthetic_cellular_scene.py) is W-483's.
+routine presets (test_synthetic_cellular_routine.py) and the ``slow`` presets (benchmarks/synthetic_scene_evidence.py,
+which generates them once per module; test_synthetic_cellular_presets.py until W-899). The tiny fixtures' GN5 test (test_synthetic_cellular_scene.py) is W-483's.
 ``check_projection`` is GN19 for a monolayer scene: the tiny monolayers (test_synthetic_cellular_scene.py) and the
 2D tissue and culture routine presets (test_synthetic_cellular_routine.py).
 """

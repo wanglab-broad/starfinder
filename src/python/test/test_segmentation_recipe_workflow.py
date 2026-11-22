@@ -3,7 +3,7 @@
 design/validation/segmentation-input-recipe.md: the replaced keys of the YAML are refused naming the recipe field
 that replaces them (MG2), the schema's recipe keys equal the configs' fields and its steps the admitted subset of
 ``PREPROCESSING_METHODS`` (MG5), and ``segmentation.input_recipes`` without runs plans no segment task while runs
-with recipes plan the tasks they planned before (WF1). WF1 plans on W-642's fixture (``workflow_examples``).
+with recipes plan the tasks they planned before (WF1). WF1 plans on W-642's fixture (``workflow_fixture``).
 """
 import copy
 import shutil
@@ -18,7 +18,8 @@ from starfinder.preprocessing import ProjectionConfig
 from starfinder.segmentation import COMBINE_METHODS, InputRecipe, ModelInputConfig
 from starfinder.segmentation._recipe import ADMITTED_STEPS, admitted_steps, recipe_fields
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.workflow, pytest.mark.validation, pytest.mark.contract]
 
@@ -147,8 +148,8 @@ def test_mg5_the_schema_validates_the_recipe_layout():
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
     return work
 
 
@@ -168,7 +169,7 @@ def kinds(manifest):
 
 def test_wf1_recipes_without_runs_plan_no_segment_task(work):
     from starfinder.workflow import plan
-    config = copy.deepcopy(X.variants(work)["after-fusion"])
+    config = copy.deepcopy(V.variants(work)["after-fusion"])
     config["segmentation"] = {"input_recipes": {"smooth": {"after_projection": [{"method": "gaussian",
                                                                                    "sigma_um": 1.0}]}}}
     export_runs = config["export"]["segmentation"]["runs"]
@@ -176,8 +177,8 @@ def test_wf1_recipes_without_runs_plan_no_segment_task(work):
         dict(export_runs[0], name="nucleus", target="nucleus"),
         {"name": "cell", "target": "cell", "method": "seeded_watershed", "seeds": "nucleus",
          "inputs": [{"role": "amplicon", "image": "reference_merged"}], "input_recipe": "smooth"}])
-    manifest = plan(X.write_config(work, "recipes-only", config))
-    assert "segment" not in kinds(manifest) and kinds(manifest) == X.KINDS["after-fusion"]
+    manifest = plan(F.write_config(work, "recipes-only", config))
+    assert "segment" not in kinds(manifest) and kinds(manifest) == V.KINDS["after-fusion"]
     from starfinder.workflow._plan import resolve
     resolved = resolve(config, {"path": "<test>", "sha256": None})["configuration"]
     from starfinder.workflow import _translate
@@ -189,12 +190,12 @@ def test_wf1_recipes_without_runs_plan_no_segment_task(work):
 def test_wf1_runs_with_recipes_plan_the_tasks_they_planned_before(work):
     from starfinder.workflow import plan
     from starfinder.workflow._plan import _reference_inputs, resolve
-    config = copy.deepcopy(X.variants(work)["per-fov"])
+    config = copy.deepcopy(V.variants(work)["per-fov"])
     config["segmentation"]["input_recipes"] = {"smooth": {"channels": [{"method": "gaussian", "sigma_um": 1.0}]}}
-    manifest = plan(X.write_config(work, "per-fov-recipes", config))
-    assert kinds(manifest) == X.KINDS["per-fov"]
-    reference_only = X.variants(work)["reference-only"]
+    manifest = plan(F.write_config(work, "per-fov-recipes", config))
+    assert kinds(manifest) == V.KINDS["per-fov"]
+    reference_only = V.variants(work)["reference-only"]
     assert reference_only["segmentation"]["runs"][1]["inputs"][1] == {"role": "amplicon", "reference_merged": True}
     resolved = resolve(reference_only, {"path": "<test>", "sha256": None})["configuration"]
     assert _reference_inputs(resolved) == ["cell"]
-    assert kinds(plan(X.write_config(work, "reference-only", reference_only))) == X.KINDS["reference-only"]
+    assert kinds(plan(F.write_config(work, "reference-only", reference_only))) == V.KINDS["reference-only"]

@@ -1,27 +1,18 @@
-"""The worked example of the workflow contract on ``tiny_sample`` (design/validation/orchestration.md, "Fixtures").
+"""The worked example's configurations of the workflow contract on ``tiny_sample`` (``workflow_fixture.py``).
 
-``tiny_sample`` is W-642's fixture (``scripts/workflow_golden.py``, ``write_fixture``: ``sample-tiny-v1``, seed 42,
-one sample of 2 × 2 FOVs of 5 × 36 × 36, four rounds of four channels, the reference stain ``ch04`` and the
-additional round ``flamingo``). ``variants`` gives the contract's eight worked-example configurations
-(design/specs/orchestration.md, "Worked example") in the Python shape, as W-643's prototype wrote them;
-``after-fusion`` runs its processing tiled (``processing.mode: tiled``) with a tile size of 18 voxels, so that each FOV
-of 36 × 36 voxels is the contract's four tiles (W-735 restored it; W-647 had planned it direct). ``write_supplied``
-writes the supplied files the variants name (the BigStitcher result of ``supplied-xml`` and the import file of
-``after-fusion``); their content is never read by the plan.
+``variants`` gives the contract's eight worked-example configurations (design/specs/orchestration.md, "Worked
+example") in the Python shape, as W-643's prototype wrote them; ``after-fusion`` runs its processing tiled
+(``processing.mode: tiled``) with a tile size of 18 voxels, so that each FOV of 36 × 36 voxels is the contract's four
+tiles (W-735 restored it; W-647 had planned it direct). ``single_fov`` is one FOV of the fixture with the
+molecules-only variant's processing block.
 """
 from __future__ import annotations
 
 import copy
-import importlib.util
-import json
-import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-EXPECTED = Path(__file__).parent / "data" / "expected" / "test_workflow_plan"
-DATASET_ID = "sample-tiny-v1"
-SAMPLE = "sample"
-FOVS = ("FOV_001", "FOV_002", "FOV_003", "FOV_004")
+from .workflow_fixture import DATASET_ID, SAMPLE, input_root
+
 VARIANTS = ("per-fov", "after-fusion", "molecules-only", "supplied-xml", "morphology-only", "reference-only")
 REFUSED = ("refused-assignment", "refused-matlab")
 #: The tasks per kind of each variant (the contract's table).
@@ -51,23 +42,6 @@ PROCESSING = {
     "decoding": {"method": "wta", "negative_policy": "clip_negative"},
     "deduplication": {},
     "checkpoints": ["candidates", "pre_qc"]}
-
-
-def golden():
-    """scripts/workflow_golden.py as a module (its fixture writer and comparison)."""
-    spec = importlib.util.spec_from_file_location("workflow_golden", ROOT / "src" / "python" / "scripts" /
-                                                  "workflow_golden.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def input_root(work):
-    return Path(work) / "input" / DATASET_ID / SAMPLE
-
-
-def output_root(work, output_id):
-    return Path(work) / "output" / DATASET_ID / output_id
 
 
 def dataset(work, output_id):
@@ -148,42 +122,6 @@ def variants(work):
     return out
 
 
-def write_supplied(work):
-    """The supplied files the variants name: supplied-xml's dataset.xml and view map, after-fusion's import file."""
-    work = Path(work)
-    folder = work / "supplied" / SAMPLE
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / "dataset.xml").write_text("<SpimData/>\n")
-    (folder / "view_map.csv").write_text("view,grid_column,grid_row,fov_id,kind\n")
-    (work / "labels" / "fused-cells.ome.tif").write_bytes(b"supplied")
-
-
-def write_config(work, name, config):
-    import yaml
-    path = Path(work) / "configs" / f"{name}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(config, sort_keys=False))
-    return path
-
-
-PLACEHOLDERS = {"mtime_ns": "<mtime_ns>", "bytes": "<bytes>"}
-_HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
-
-
-def normalized(manifest, work):
-    """A manifest as its committed expected form: the work folder written ``<work>``, the inputs' sizes and times
-    and every hash (which hold them, or the absolute paths of the configuration) written as placeholders."""
-    def walk(value, key=None):
-        if isinstance(value, dict):
-            return {k: (PLACEHOLDERS[k] if k in PLACEHOLDERS else walk(v, k)) for k, v in value.items()}
-        if isinstance(value, list):
-            return [walk(v) for v in value]
-        if isinstance(value, str):
-            return "<sha256>" if _HASH.match(value) else value.replace(str(work), "<work>")
-        return value
-    return walk(json.loads(json.dumps(manifest)))
-
-
 def single_fov(work, output_id="single", *, downstream=False, **execution):
     """One FOV of the fixture (FOV_001) with the molecules-only variant's processing block; with ``downstream`` the
     stitching, assembly, export and report blocks too (planned, not run); ``execution`` sets execution keys."""
@@ -194,45 +132,3 @@ def single_fov(work, output_id="single", *, downstream=False, **execution):
     if execution:
         config["execution"] = dict(execution)
     return config
-
-
-#: A clean code identity of the package, for the tests of verified resume (a dirty tree refuses a resume).
-CLEAN_CODE = {"version": "0.2.0", "version_source": "checkout", "git_commit": "0123456789abcdef0123456789abcdef01234567", "git_dirty": False}
-
-
-def fix_code(monkeypatch, **code):
-    """Make ``starfinder._records.code`` (the run records' and the plan's code identity) return ``code`` (by default
-    CLEAN_CODE), its cache cleared, as test_workflow_orchestration_golden.py patches it."""
-    import starfinder._records as records
-    if hasattr(records.code, "cache_clear"):
-        records.code.cache_clear()
-    identity = dict(CLEAN_CODE, **code)
-    monkeypatch.setattr(records, "code", lambda: dict(identity))
-
-
-def run_task(manifest, task, *extra):
-    """Run one task's command in this process (``starfinder workflow <command> --manifest M --task T``)."""
-    from starfinder.__main__ import main
-    from starfinder.workflow._shape import COMMANDS
-    kind = next(t["kind"] for t in json.loads(Path(manifest).read_text())["tasks"] if t["id"] == task)
-    return main(["workflow", COMMANDS[kind], "--manifest", str(manifest), "--task", task, *extra])
-
-
-def write_expected(work, out):
-    """The committed expected manifests of C1 (``data/expected/test_workflow_plan/<variant>.json``): the plan of each
-    variant on a fixture in the new folder ``work``, with test_workflow_plan's package identity, normalized."""
-    from unittest import mock
-    from starfinder.workflow import _plan
-    from .test_workflow_plan import CODE
-    golden().write_fixture(work)
-    write_supplied(work)
-    Path(out).mkdir(parents=True, exist_ok=True)
-    with mock.patch.object(_plan, "package_identity", lambda: dict(CODE)):
-        for variant in VARIANTS:
-            manifest = _plan.plan(write_config(work, variant, variants(work)[variant]))
-            (Path(out) / f"{variant}.json").write_text(json.dumps(normalized(manifest, work), indent=1) + "\n")
-
-
-if __name__ == "__main__":
-    import sys
-    write_expected(Path(sys.argv[1]), Path(sys.argv[2]))

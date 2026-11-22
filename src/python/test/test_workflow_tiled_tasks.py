@@ -17,7 +17,8 @@ import pytest
 from starfinder import _layout
 from starfinder.workflow import plan, verify
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
 
 pytestmark = [pytest.mark.workflow, pytest.mark.dataset, pytest.mark.contract]
 
@@ -27,7 +28,7 @@ FOV = "FOV_001"
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
+    F.golden().write_fixture(work)
     return work
 
 
@@ -35,23 +36,23 @@ def fixture_work(tmp_path_factory):
 def work(fixture_work, tmp_path, monkeypatch):
     target = tmp_path / "work"
     shutil.copytree(fixture_work, target, symlinks=True)
-    X.fix_code(monkeypatch)
+    F.fix_code(monkeypatch)
     return target
 
 
 def _plan(work, output_id, *, tiled=True, checkpoints=None, **execution):
-    config = X.single_fov(work, output_id, **execution)
+    config = V.single_fov(work, output_id, **execution)
     if tiled:
         config["processing"].update(mode="tiled", tiled={"tile_size_yx": 18})
     if checkpoints is not None:
         config["processing"]["checkpoints"] = checkpoints
-    manifest = plan(X.write_config(work, output_id, config))
-    return X.output_root(work, output_id) / "workflow" / "manifest.json", manifest
+    manifest = plan(F.write_config(work, output_id, config))
+    return F.output_root(work, output_id) / "workflow" / "manifest.json", manifest
 
 
 def _run_all(path, manifest):
     for task in manifest["tasks"]:
-        assert X.run_task(path, task["id"]) == 0, task["id"]
+        assert F.run_task(path, task["id"]) == 0, task["id"]
 
 
 def _table(path):
@@ -62,7 +63,7 @@ def test_the_tiled_tasks_write_the_declared_files_of_direct(work):
     path, manifest = _plan(work, "tiled")
     assert [t["kind"] for t in manifest["tasks"]] == ["tile_global", "tile", "tile", "tile", "tile", "tile_merge"]
     _run_all(path, manifest)
-    out = X.output_root(work, "tiled")
+    out = F.output_root(work, "tiled")
     folder = _layout.fov_dir(out, FOV)
     for task in manifest["tasks"]:
         record = json.loads(_layout.task_record(out, task["id"]).read_text())
@@ -89,7 +90,7 @@ def test_the_tiled_tasks_write_the_declared_files_of_direct(work):
     # The same FOV direct: the tables equal (this fixture's scores are equal to the last bit, as W-644 measured).
     direct_path, direct = _plan(work, "direct", tiled=False)
     _run_all(direct_path, direct)
-    other = _layout.fov_dir(X.output_root(work, "direct"), FOV)
+    other = _layout.fov_dir(F.output_root(work, "direct"), FOV)
     for name in ("molecules.csv", "checkpoints/candidates.csv", "checkpoints/pre_qc.csv"):
         pd.testing.assert_frame_equal(_table(folder / name), _table(other / name), check_exact=False, rtol=1e-9,
                                       atol=1e-12)
@@ -102,7 +103,7 @@ def test_the_chunked_checkpoint_stays_when_the_stage_registered_is_kept(work):
     group = next(g for g in manifest["groups"] if g["kind"] == "tile_global")
     assert group["temporary"] == []
     _run_all(path, manifest)
-    folder = _layout.fov_dir(X.output_root(work, "kept"), FOV)
+    folder = _layout.fov_dir(F.output_root(work, "kept"), FOV)
     assert (_layout.tiled_dir(folder) / "registered.h5").is_file()
     assert json.loads((folder / "run.json").read_text())["tiled"]["checkpoint"]["kept"] is True
 
@@ -110,19 +111,19 @@ def test_the_chunked_checkpoint_stays_when_the_stage_registered_is_kept(work):
 def test_the_global_task_resumes_from_its_chunked_checkpoint(work):
     path, manifest = _plan(work, "resume", resume_from_checkpoint=True)
     task = manifest["tasks"][0]["id"]
-    assert X.run_task(path, task) == 0
-    folder = _layout.tiled_dir(_layout.fov_dir(X.output_root(work, "resume"), FOV))
+    assert F.run_task(path, task) == 0
+    folder = _layout.tiled_dir(_layout.fov_dir(F.output_root(work, "resume"), FOV))
     before = {name: (folder / name).stat().st_mtime_ns for name in ("registered.h5", "global.json")}
-    assert X.run_task(path, task, "--attempt", "2") == 0
-    record = json.loads(_layout.task_record(X.output_root(work, "resume"), task).read_text())
+    assert F.run_task(path, task, "--attempt", "2") == 0
+    record = json.loads(_layout.task_record(F.output_root(work, "resume"), task).read_text())
     assert record["workflow"]["resumed_from"] == "registered"
     assert {name: (folder / name).stat().st_mtime_ns for name in before} == before
     # A damaged chunked checkpoint is not resumed: the task runs again from scratch.
     with open(folder / "registered.h5", "r+b") as handle:
         handle.seek(-64, 2)
         handle.write(b"\0" * 64)
-    assert X.run_task(path, task, "--attempt", "3") == 0
-    record = json.loads(_layout.task_record(X.output_root(work, "resume"), task).read_text())
+    assert F.run_task(path, task, "--attempt", "3") == 0
+    record = json.loads(_layout.task_record(F.output_root(work, "resume"), task).read_text())
     assert record["workflow"]["resumed_from"] is None
 
 

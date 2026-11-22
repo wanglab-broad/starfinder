@@ -19,7 +19,9 @@ import tifffile
 
 from starfinder.workflow import plan
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
+from . import workflow_variants as V
+from .test_workflow_plan import EXPECTED, normalized
 
 pytestmark = [pytest.mark.workflow, pytest.mark.io, pytest.mark.contract]
 
@@ -29,8 +31,8 @@ CODE = {"version": "0.0.0+test", "version_source": "dist", "git_commit": None, "
 @pytest.fixture(scope="module")
 def fixture_work(tmp_path_factory):
     work = tmp_path_factory.mktemp("tiny") / "work"
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
     return work
 
 
@@ -75,12 +77,12 @@ class Opens:
 def test_each_fov_s_reference_file_is_opened_once_unbuffered(fixture_work, monkeypatch):
     """The plan of the tiled variant (4 FOVs) opens each FOV's reference file (``round1/<fov>/ch00.ome.tif``, float32) once,
     with buffering 0, and decodes no page."""
-    config = X.variants(fixture_work)["after-fusion"]
-    root = X.input_root(fixture_work)
-    references = {root / "round1" / fov / "ch00.ome.tif" for fov in X.FOVS}
+    config = V.variants(fixture_work)["after-fusion"]
+    root = F.input_root(fixture_work)
+    references = {root / "round1" / fov / "ch00.ome.tif" for fov in F.FOVS}
     assert all(p.is_file() for p in references), references
     opens = Opens(monkeypatch, root)
-    plan(X.write_config(fixture_work, "after-fusion-reads", config))
+    plan(F.write_config(fixture_work, "after-fusion-reads", config))
     for path in sorted(references):
         assert [b for p, b in opens.opened if p == path.resolve()] == [0], path
     assert opens.pages == 0
@@ -88,10 +90,10 @@ def test_each_fov_s_reference_file_is_opened_once_unbuffered(fixture_work, monke
 
 def test_the_plan_equals_the_committed_manifest(fixture_work):
     """The manifest of the tiled variant equals its committed expected form, as before the change."""
-    config = X.variants(fixture_work)["after-fusion"]
-    manifest = plan(X.write_config(fixture_work, "after-fusion", config))
-    expected = json.loads((X.EXPECTED / "after-fusion.json").read_text())
-    assert X.normalized(manifest, fixture_work) == expected
+    config = V.variants(fixture_work)["after-fusion"]
+    manifest = plan(F.write_config(fixture_work, "after-fusion", config))
+    expected = json.loads((EXPECTED / "after-fusion.json").read_text())
+    assert normalized(manifest, fixture_work) == expected
 
 
 def _write(path, dtype, shape=(30, 64, 64), **kwargs):
@@ -153,7 +155,7 @@ def test_the_bytes_per_voxel_follow_the_file_and_the_preprocessing_override(fixt
     """image_geometry's second value is the file's itemsize (float32 here), or the output_dtype of a preprocessing
     step that sets one; the shape is the header's (5 x 36 x 36, no rotation)."""
     from starfinder.workflow import _plan
-    config = X.variants(fixture_work)["after-fusion"]
+    config = V.variants(fixture_work)["after-fusion"]
     config["processing"]["preprocessing"] = {"steps": steps}
     seen = {}
     real = _plan.Graph.image_geometry
@@ -163,5 +165,5 @@ def test_the_bytes_per_voxel_follow_the_file_and_the_preprocessing_override(fixt
         return seen[fov]
 
     monkeypatch.setattr(_plan.Graph, "image_geometry", spy)
-    plan(X.write_config(fixture_work, "bytes", config))
+    plan(F.write_config(fixture_work, "bytes", config))
     assert seen["FOV_001"] == ((5, 36, 36), expected)

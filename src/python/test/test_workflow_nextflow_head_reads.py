@@ -10,12 +10,12 @@ import re
 
 import pytest
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
-SOURCES = ["nextflow/main.nf", *(f"nextflow/modules/{p.name}" for p in sorted((X.ROOT / "nextflow/modules").glob("*.nf"))),
-           *(f"nextflow/lib/{p.name}" for p in sorted((X.ROOT / "nextflow/lib").glob("*.groovy")))]
+SOURCES = ["nextflow/main.nf", *(f"nextflow/modules/{p.name}" for p in sorted((F.ROOT / "nextflow/modules").glob("*.nf"))),
+           *(f"nextflow/lib/{p.name}" for p in sorted((F.ROOT / "nextflow/lib").glob("*.groovy")))]
 
 # The only java.io.File sites. Each reads the manifest, whose path is under roots.output, which every host mounts, so a
 # local file is right there; none reads a process output of the work directory. The count is per file.
@@ -26,7 +26,7 @@ TO_FILE = re.compile(r"\.toFile\b|\bjava\.io\.")
 
 def code_lines(relative):
     """Each line of a source with its comments blanked, with the line number and the comment text before it."""
-    lines = (X.ROOT / relative).read_text().splitlines()
+    lines = (F.ROOT / relative).read_text().splitlines()
     for number, line in enumerate(lines, 1):
         yield number, re.sub(r"(^|\s)//.*", "", line), lines[max(0, number - 4):number]
 

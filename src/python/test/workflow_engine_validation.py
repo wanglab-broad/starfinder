@@ -1,4 +1,5 @@
-"""Real-engine fixtures, completion checks and retained evidence for X1–X3 and X7/X10/X11.
+"""Real-engine fixtures, completion checks and retained evidence for X1–X3 and X7/X10/X11, and for the cases of them
+that ``benchmarks/workflow_engine_evidence.py`` runs.
 
 X3's named workflow token and provenance fields are checked separately before
 normalization. Directory markers are ignored only for Snakemake's declared
@@ -24,9 +25,10 @@ import pytest
 
 from starfinder.workflow import plan, verify
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_nextflow as N
-from .test_workflow_snakemake_dryrun import TRIGGERS, _snakemake, downstream, snakemake
+from . import workflow_variants as V
+from .workflow_snakemake import TRIGGERS, _snakemake, downstream, snakemake
 
 
 def evidence(work, name, value):
@@ -61,12 +63,12 @@ def require(engine):
 def supplied(work):
     """A hand-written XML and view map for tiny_sample's four views, without Fiji."""
     import pandas as pd
-    folder = Path(work) / "supplied" / X.SAMPLE
+    folder = Path(work) / "supplied" / F.SAMPLE
     folder.mkdir(parents=True, exist_ok=True)
     registrations = []
     setups = []
     views = []
-    for index, fov in enumerate(X.FOVS):
+    for index, fov in enumerate(F.FOVS):
         column, row = divmod(index, 2)
         setups.append(f'<ViewSetup><id>{index}</id><size>36 36 5</size>'
                       '<voxelSize><unit>µm</unit><size>0.5 0.5 1.0</size></voxelSize>'
@@ -100,11 +102,11 @@ class EngineRun:
         require(engine)
         self.work, self.engine, self.variant = Path(work), engine, variant
         if fixture:
-            X.golden().write_fixture(self.work)
+            F.golden().write_fixture(self.work)
         if variant == "supplied-xml":
             supplied(self.work)
-        self.config = N.small_resources(X.variants(self.work)[variant])
-        self.path = X.write_config(self.work, "validation", self.config)
+        self.config = N.small_resources(V.variants(self.work)[variant])
+        self.path = F.write_config(self.work, "validation", self.config)
         sources = [p for p in self.work.rglob("*") if p.is_file()]
         evidence(self.work, "inputs.json", [{"path": str(p), "bytes": p.stat().st_size,
                   "mtime_ns": p.stat().st_mtime_ns, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
@@ -175,11 +177,11 @@ class EngineRun:
             assert record["workflow"]["execution_context"]["engine"] in (
                 self.engine, *(("manual",) if task_id in getattr(self, "manual", ()) else ())), task_id
         route = self.data["export_route"] or "no_export"      # each route's report in its own folder (W-876)
-        assert f'<a href="{X.SAMPLE}/{route}/report.html">{X.SAMPLE}</a>' in (self.out / "report/index.html").read_text()
+        assert f'<a href="{F.SAMPLE}/{route}/report.html">{F.SAMPLE}</a>' in (self.out / "report/index.html").read_text()
 
     def replan(self, config):
-        X.write_config(self.work, "validation", config)
-        paths = [self.path, *sorted(p for p in X.input_root(self.work).rglob("*") if p.is_file())]
+        F.write_config(self.work, "validation", config)
+        paths = [self.path, *sorted(p for p in F.input_root(self.work).rglob("*") if p.is_file())]
         evidence(self.work, f"replan-{self.invocations:02d}-inputs.json",
                  [{"path": str(p), "bytes": p.stat().st_size, "mtime_ns": p.stat().st_mtime_ns,
                    "sha256": hashlib.sha256(p.read_bytes()).hexdigest()} for p in paths])
@@ -328,7 +330,7 @@ def h5ad_content(payload, work, varying, digests):
     import anndata
     import numpy as np
     import scipy.sparse as sparse
-    golden = X.golden()
+    golden = F.golden()
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / "sample.h5ad"
         path.write_bytes(payload)
@@ -384,7 +386,7 @@ def compare(run, left, right, *, name="comparison.json", enforce=True, left_engi
                     assert "token" in workflow, (path, "missing workflow.token")
                     token = workflow["token"]
                     assert token is None if engine == "snakemake" else isinstance(token, str) and bool(token), (path, engine, token)
-    golden = X.golden()
+    golden = F.golden()
     varying = (*golden.VARYING_EXPORT, "workflow/tasks/", "workflow/logs/")
     def normalize(value, path=""):
         omit_hashes = rerun_tasks is not None and owner(path) is not None and owner(path) not in rerun_tasks
@@ -488,10 +490,11 @@ def fresh_comparison(run, expected, *, name, rerun_tasks):
         run.engine_work = run.work / f"fresh-{run.invocations:02d}"
         run.engine_work.mkdir()
         run.invoke({t["id"] for t in data["tasks"]})
-        if "export" in run.work.name:
+        # A case restored on a shared work folder names itself in ``case`` (test_workflow_recovery.py, W-898).
+        if "export" in getattr(run, "case", run.work.name):
             from starfinder.export._record import PARTS, listed_files
             def unlisted(root):
-                folder = root / "export" / X.SAMPLE / run.data["export_route"]
+                folder = root / "export" / F.SAMPLE / run.data["export_route"]
                 record = json.loads((folder / "export.json").read_text())
                 listed = {"export.json", *(p for part in PARTS for p in listed_files(record, part))}
                 return sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*")

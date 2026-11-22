@@ -20,14 +20,15 @@ import time
 
 import pytest
 
-from . import workflow_examples as X
+from . import workflow_fixture as F
 from . import workflow_nextflow as N
+from . import workflow_variants as V
 from .test_core_code_identity import EPOCH
-from .test_workflow_snakemake_dryrun import SNAKEFILE, _snakemake
+from .workflow_snakemake import SNAKEFILE, _snakemake
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract, pytest.mark.slow]
 
-STUB = X.ROOT / "nextflow" / "bin" / "stub_task.sh"
+STUB = F.ROOT / "nextflow" / "bin" / "stub_task.sh"
 # The stand-in `starfinder`: logs the value and what it runs, then the real command for the plan and verify, or the stub
 # runner for a task command (manifest, task id, token, attempt).
 STARFINDER = """#!{python}
@@ -54,8 +55,8 @@ os.execv("{stub}", ["{stub}", *sys.argv[1:]])
 @pytest.fixture(scope="module")
 def tiny(tmp_path_factory):
     work = tmp_path_factory.mktemp("version-date")
-    X.golden().write_fixture(work)
-    X.write_supplied(work)
+    F.golden().write_fixture(work)
+    F.write_supplied(work)
     return work
 
 
@@ -70,9 +71,9 @@ def stand_ins(folder):
 
 
 def configuration(work, name):
-    config = N.small_resources(X.variants(work)["reference-only"])
+    config = N.small_resources(V.variants(work)["reference-only"])
     config.update(output_id=name, selected_fovs=["FOV_001"])
-    return X.write_config(work, name, config)
+    return F.write_config(work, name, config)
 
 
 def values(log):
@@ -113,7 +114,7 @@ def test_every_process_of_a_snakemake_run_sees_one_value(tiny, tmp_path, monkeyp
     done = subprocess.run(command, capture_output=True, text=True, env=env)
     ended = int(time.time())
     assert done.returncode == 0, done.stdout[-5000:] + done.stderr[-5000:]
-    manifest = json.loads((X.output_root(tiny, name) / "workflow" / "manifest.json").read_text())
+    manifest = json.loads((F.output_root(tiny, name) / "workflow" / "manifest.json").read_text())
     check(values(log), manifest, caller, started, ended)
 
 

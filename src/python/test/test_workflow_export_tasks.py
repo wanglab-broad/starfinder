@@ -33,8 +33,8 @@ from starfinder.export import ExportConfig, ExportIncompleteWarning, check_expor
 from starfinder.io import save_volume  # noqa: E402
 from starfinder.stitching import load_placement, save_placement  # noqa: E402
 
-from . import workflow_examples as X  # noqa: E402
 from . import workflow_tasks as T  # noqa: E402
+from . import workflow_variants as V  # noqa: E402
 from .assembly_fixtures import GOLDEN_IDS, golden_placement, unit_grid  # noqa: E402
 from .assembly_fixtures import SAMPLE as GOLDEN_SAMPLE  # noqa: E402
 from .fusion_fixtures import export_folder, golden_codebook  # noqa: E402
@@ -74,7 +74,7 @@ def plan_sample(work, sample, fovs, *, export, assembly, cells=True, labels=None
     the stitching block, the given assembly and export blocks, and with ``stain`` the morphology block; the codebook
     ``codebook_table`` (entry_id, gene_id, color_sequence) is written first when given; ``previews`` None leaves
     assignment.previews out. Returns (manifest, configuration)."""
-    config = T.dataset_keys(work, output_id=output_id, processing=copy.deepcopy(X.PROCESSING), stitching=MERGED,
+    config = T.dataset_keys(work, output_id=output_id, processing=copy.deepcopy(V.PROCESSING), stitching=MERGED,
                             assembly=assembly, export=export, **(STAIN if stain else {}), **keys)
     if cells:
         if labels is None:

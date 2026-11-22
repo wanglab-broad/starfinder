@@ -1,7 +1,7 @@
 # Test-suite slimming: an audit of the suite at v0.2.1 and a proposal
 
-% Status: Proposed (W-893, 2026-11-19). Phase 1 of W-893: the audit. Jiahao decides by category; phase 2 applies the
-% approved categories.
+% Status: Applied (W-893 phase 2: W-897, W-898, W-899, W-900; 2026-11-21). Proposed by W-893's phase 1, the audit
+% (2026-11-19); Jiahao decided by category on 2026-11-19 (W-893 comment 924b6549). The decisions are below.
 
 This page proposes which tests of the suite to keep, merge, move to an evidence workload or retire now that Chapter II
 development has tripled the suite, and how to split the shared test helpers. It changes no test and no package code
@@ -9,6 +9,24 @@ development has tripled the suite, and how to split the shared test helpers. It 
 are recorded under each category when they are made. **Move** means moving a test into an evidence workload that runs
 on request, as W-536 and W-603 did, not deleting it. **Retire** is used only for a test whose assertion a faster test
 of the suite makes on the same run or the same input.
+
+## Decisions and phase 2
+
+Jiahao's decisions of 2026-11-19 (W-893 comment 924b6549, the review page's `decisions`), and the issue of phase 2 that
+applied each:
+
+| Category | Decision | Applied by |
+| --- | --- | --- |
+| H1, H2: the helper splits | agreed | W-897 |
+| K1, K2, K3, K7, K10 and option O2 | agreed | W-898 |
+| K8 | only if the dry-run cases of `test_workflow_snakemake_dryrun.py` move onto K1's shared run too; they are `slow` contract tests on another configuration, so K8 is left unchanged and its saving dropped | W-898 |
+| K4 (with the six S16 cases at seeds 101 and 102), K5, options O1 and O3 (the suite keeps Piscis `20251212`) | agreed | W-899 |
+| K6 | rejected, superseded by O1 | W-899 (O1) |
+| K9, S1, S2 and H3 | agreed: the rules in `docs/contributing.md` ("Test selections"), H3's `scripts/check_inputs.py` and `test/check_inputs.json`; the runner's configuration is the coordinating session's (W-901) | W-900 |
+| `phase2-conditions` | each evidence script runs at the end of a batch whose changes touch its subsystem, and all of them before a tag or a release, on UGER through the coordinating session | W-898, W-899, W-900 |
+
+The sections below are the proposal as phase 1 wrote it; its figures are projections. The measured figures of a full
+validation after phase 2 are W-901's.
 
 ## What was measured
 

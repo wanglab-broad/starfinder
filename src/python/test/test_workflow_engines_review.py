@@ -16,7 +16,7 @@ import pytest
 from starfinder import _layout
 
 from . import workflow_engine_validation as E
-from . import workflow_examples as X
+from . import workflow_fixture as F
 
 pytestmark = [pytest.mark.workflow, pytest.mark.integration, pytest.mark.extended, pytest.mark.slow]
 
@@ -37,7 +37,7 @@ def _held_run(tmp_path, engine):
 
 def _placement_files(run):
     """name → (bytes, inode, mtime_ns) of the stitch task's declared outputs."""
-    folder = run.out / "stitching" / X.SAMPLE
+    folder = run.out / "stitching" / F.SAMPLE
     return {n: ((folder / n).read_bytes(), (folder / n).stat().st_ino, (folder / n).stat().st_mtime_ns)
             for n in PLACEMENT_FILES}
 
@@ -52,15 +52,15 @@ def _check_held(run, ran):
     failed = json.loads(_layout.failed_record(run.out, export_id).read_text())
     assert failed["status"] == "held" and failed["error"]["type"] == "TaskHeld", failed
     assert not _layout.task_record(run.out, export_id).exists()
-    assert not (run.out / "export" / X.SAMPLE / "molecules_only" / "export.json").exists()
-    review = json.loads((run.out / "stitching" / X.SAMPLE / "placement.json").read_text())["review"]
+    assert not (run.out / "export" / F.SAMPLE / "molecules_only" / "export.json").exists()
+    review = json.loads((run.out / "stitching" / F.SAMPLE / "placement.json").read_text())["review"]
     assert review["state"] == "required" and review["flagged"] and review["approvals"] == [], review
-    assert not (run.out / "stitching" / X.SAMPLE / "approvals.json").exists()
-    page = _layout.workflow_held_page(run.out, X.SAMPLE, "molecules_only").read_text(encoding="utf-8")
+    assert not (run.out / "stitching" / F.SAMPLE / "approvals.json").exists()
+    page = _layout.workflow_held_page(run.out, F.SAMPLE, "molecules_only").read_text(encoding="utf-8")
     flagged = "<br>".join(f"{reason}: {', '.join(fovs)}" for reason, fovs in review["flagged"].items())
     assert f"<tr><td>Reasons</td><td>{', '.join(review['reasons'])}</td></tr>" in page
     assert f"<tr><td>Flagged FOVs</td><td>{flagged}</td></tr>" in page
-    assert not (run.out / "report" / X.SAMPLE).exists()
+    assert not (run.out / "report" / F.SAMPLE).exists()
     assert not _layout.task_record(run.out, report_id).exists()
     result = verify(run.manifest, hash=True, final=True)
     assert not result["passed"] and export_id in result["incomplete"]
@@ -77,7 +77,7 @@ def _approve(run):
     writes approvals.json and changes none of the placement task's outputs."""
     from starfinder.stitching import approve_placement, load_placement, save_placement
     from starfinder.workflow import verify
-    folder = run.out / "stitching" / X.SAMPLE
+    folder = run.out / "stitching" / F.SAMPLE
     before = _placement_files(run)
     result = load_placement(folder)
     assert result.record["review"]["state"] == "required" and len(result.links) > 0
@@ -97,14 +97,14 @@ def _check_final(run, review, held, ran):
     (stitch_id,), (report_id,) = _ids(run, "stitch"), _ids(run, "report")
     assert stitch_id not in ran and report_id in ran, ran
     assert _layout.task_record(run.out, stitch_id).read_bytes() == held
-    placement = json.loads((run.out / "stitching" / X.SAMPLE / "placement.json").read_text())
+    placement = json.loads((run.out / "stitching" / F.SAMPLE / "placement.json").read_text())
     assert placement["review"]["approvals"] == [] and placement["review"]["flagged"] == review["flagged"]
-    approvals = json.loads((run.out / "stitching" / X.SAMPLE / "approvals.json").read_text())["approvals"]
+    approvals = json.loads((run.out / "stitching" / F.SAMPLE / "approvals.json").read_text())["approvals"]
     assert [a["reviewer"] for a in approvals] == ["W-814 test"]
     assert approvals[0]["fovs_sha256"] == placement["tables"]["fovs"]["sha256"]
-    assert (run.out / "export" / X.SAMPLE / "molecules_only" / "export.json").is_file()
-    assert not _layout.workflow_held_page(run.out, X.SAMPLE, "molecules_only").exists()
-    page = (run.out / "report" / X.SAMPLE / "molecules_only" / "report.html").read_text(encoding="utf-8")
+    assert (run.out / "export" / F.SAMPLE / "molecules_only" / "export.json").is_file()
+    assert not _layout.workflow_held_page(run.out, F.SAMPLE, "molecules_only").exists()
+    page = (run.out / "report" / F.SAMPLE / "molecules_only" / "report.html").read_text(encoding="utf-8")
     assert 'id="place-review"' not in page
     command = [sys.executable, "-m", "starfinder", "workflow", "verify", "--manifest", str(run.manifest), "--hash",
                "--final"]
