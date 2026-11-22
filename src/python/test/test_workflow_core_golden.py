@@ -8,7 +8,9 @@ host. Each command runs in its own process with every variable of ``_execution.T
 contract's exceptions (design/specs/orchestration.md, "The exception of the golden comparison") are applied to the
 values, each named by its decision: OC3, the rotation by 0 is skipped (no ``rotate_round`` steps, frame ids without
 ``/rotate:0``, ``rotation_degrees`` null); OC4, the paths recorded under the work folder (written ``<work>`` on both
-sides); D8, the new ``workflow`` section of ``run.json``.
+sides); D8, the new ``workflow`` section of ``run.json``; W-909, the codec of the saved images that ``run.json`` records
+since (``config.checkpoints.image_compression`` and ``outputs.reference_image.compression``; migration M2 of
+design/specs/compressed-image-outputs.md).
 """
 import importlib.util
 import json
@@ -93,13 +95,17 @@ def expected_with_exceptions(target):
 
 def actual_with_exceptions(folder):
     """D2 and D8 on the refactored values: the plan's files, the task records and logs (workflow/) and the new
-    workflow section of run.json are left out."""
+    workflow section of run.json are left out; W-909: the two codec keys of run.json, which must be present, are
+    left out."""
     values = json.loads((folder / "values.json").read_text())
     values = {k: v for k, v in values.items() if not k.startswith("file:workflow/")}
     (folder / "values.json").write_text(json.dumps(values, indent=1, sort_keys=True) + "\n")
     for path in (folder / "records").rglob("run.json"):
         record = json.loads(path.read_text())
         record.pop("workflow")
+        # W-909 (migration M2): the codec of the saved images, the default zlib.
+        assert record["config"]["checkpoints"].pop("image_compression") == "zlib"
+        assert record["outputs"]["reference_image"].pop("compression") == "zlib"
         path.write_text(json.dumps(record, indent=1) + "\n")
     return folder
 

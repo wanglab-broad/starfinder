@@ -779,8 +779,8 @@ class FOV:
             ``<FOV folder>/other_rounds/<round>/``
             (``image.ome.tif`` and ``registration.json``; see
             :doc:`/checkpoints`, "Prepared morphology images"), which
-            :meth:`load_registered_round` reads. Only directory and overwrite
-            are used.
+            :meth:`load_registered_round` reads. Only directory, overwrite and
+            image_compression (the codec of ``image.ome.tif``) are used.
 
         Returns
         -------
@@ -914,7 +914,7 @@ class FOV:
                                                             reference_sha256=described[1])
         if checkpoints is not None:
             for name in rounds:
-                self._save_prepared(root, name)
+                self._save_prepared(root, name, checkpoints.image_compression)
         return self
 
     def _register_round(self, recipe, name, source, references, described=None):
@@ -1405,7 +1405,8 @@ class FOV:
         execution : ExecutionConfig
             Image residency and execution device settings.
         checkpoints : CheckpointConfig or None
-            Checkpoint and run-record persistence settings. None disables these
+            Checkpoint and run-record persistence settings, with the codec of the
+            registered round images (image_compression). None disables these
             writes.
 
         Returns
@@ -1625,7 +1626,8 @@ class FOV:
                                          stage=step_spec(step.config).name, references=references)
                 if 'registered' in stages:
                     self._write_checkpoint(stage='registered', directory=record.checkpoint_directory,
-                                           table_format=checkpoints.table_format, round_name=name)
+                                           table_format=checkpoints.table_format, round_name=name,
+                                           image_compression=checkpoints.image_compression)
                 if self._round_sink is not None:
                     self._round_sink(name)
                 if name == ref and config.spot_finding and detection_plan is None:
@@ -1648,7 +1650,8 @@ class FOV:
             current = None
             if 'registered' in stages and record.written.get('registered'):
                 self._write_checkpoint(stage='registered', directory=record.checkpoint_directory,
-                                       table_format=checkpoints.table_format, image_rounds=pipeline_rounds)
+                                       table_format=checkpoints.table_format, image_rounds=pipeline_rounds,
+                                       image_compression=checkpoints.image_compression)
             if detection_plan is not None:
                 from starfinder.spot_finding import _combine_rounds
                 self.spot_result = _combine_rounds(round_detections, detection_plan)
@@ -1744,8 +1747,9 @@ class FOV:
             check_writable(image_directory(root, name), checkpoints.overwrite)
         return root
 
-    def _save_prepared(self, root, name):
-        """Write the saved form of the prepared image name under root/other_rounds/name/."""
+    def _save_prepared(self, root, name, image_compression):
+        """Write the saved form of the prepared image name under root/other_rounds/name/, its image with the codec
+        image_compression."""
         from starfinder.dataset._prepared import image_directory, write_image
         from starfinder._records import jsonable
         entry = self.registration_record['rounds'][name]
@@ -1759,7 +1763,8 @@ class FOV:
                     entry={k: v for k, v in entry.items() if k != 'saved'},
                     chain_results=self.registration_results[name] if registered else None,
                     application=self.registration_record['application'][name] if registered else None,
-                    attempts=self.registration_attempts.get(name) if registered else None)
+                    attempts=self.registration_attempts.get(name) if registered else None,
+                    image_compression=image_compression)
 
     @_log_step
     def prepare_morphology(self, config: MorphologyConfig = MorphologyConfig(), *,
@@ -1802,7 +1807,8 @@ class FOV:
             rotation_degrees, recipe and rounds.
         checkpoints : CheckpointConfig, optional
             None (default) writes nothing; otherwise its directory and
-            overwrite place the folders.
+            overwrite place the folders, and image_compression is the codec
+            of each ``image.ome.tif``.
 
         Returns
         -------
@@ -1866,7 +1872,7 @@ class FOV:
             self.register(recipe, rounds=[name], reference=reference)
         if root is not None:
             for name in names:
-                self._save_prepared(root, name)
+                self._save_prepared(root, name, checkpoints.image_compression)
         return self
 
     @_log_step
@@ -2028,30 +2034,34 @@ class FOV:
         source = self.preprocessing_record.get('recipe', {}).get('extraction_source')
         return [] if source is None else [source]
 
-    def _write_registered_round(self, directory, round_name):
-        """Write a round's image and its downstream snapshots; return their relative paths."""
+    def _write_registered_round(self, directory, round_name, image_compression):
+        """Write a round's image and its downstream snapshots with the codec image_compression; return their relative
+        paths."""
         missing = [s for s in self._checkpoint_snapshots() if s not in self.snapshots.get(round_name, {})]
         if missing:
             raise ValueError(f'registered checkpoint requires snapshots {missing} of round {round_name!r}')
         paths = [_checkpoint.write_registered_round(directory, round_name, self.images[round_name],
-                                                    self.metadata[round_name])]
+                                                    self.metadata[round_name], image_compression=image_compression)]
         paths += [_checkpoint.write_registered_round(directory, round_name, self.snapshots[round_name][s],
-                                                     self.metadata[round_name], snapshot=s)
+                                                     self.metadata[round_name], snapshot=s,
+                                                     image_compression=image_compression)
                   for s in self._checkpoint_snapshots()]
         return [path.relative_to(directory).as_posix() for path in paths]
 
     @_log_step
-    def _write_checkpoint(self, stage, directory, table_format, *, round_name=None, image_rounds=None):
+    def _write_checkpoint(self, stage, directory, table_format, *, round_name=None, image_rounds=None,
+                          image_compression='zlib'):
         """Write one stage (or one registered round) and record its files.
 
         A registered round's images are hashed as they are written; the
-        registered header names them with the field files (``files``).
+        registered header names them with the field files (``files``) and
+        records their codec, image_compression (CheckpointConfig).
         """
         directory = Path(directory)
         header = self._checkpoint_header()
         registered = directory / _layout.REGISTERED
         if stage == 'registered' and round_name is not None:
-            files = self._write_registered_round(directory, round_name)
+            files = self._write_registered_round(directory, round_name, image_compression)
             self._run_record.registered += _checkpoint.payload(
                 registered, [Path(f).relative_to(_layout.REGISTERED).as_posix() for f in files])
         elif stage == 'registered':
@@ -2060,7 +2070,7 @@ class FOV:
                 missing = [r for r in image_rounds if r not in self.images or r not in self.metadata]
                 if missing:
                     raise ValueError(f'registered checkpoint requires resident images for {missing}')
-                files = [f for r in image_rounds for f in self._write_registered_round(directory, r)]
+                files = [f for r in image_rounds for f in self._write_registered_round(directory, r, image_compression)]
                 images = _checkpoint.payload(registered, [Path(f).relative_to(_layout.REGISTERED).as_posix()
                                                           for f in files])
             else:
@@ -2079,7 +2089,8 @@ class FOV:
             files += [f'registered/{name}' for name in
                       _checkpoint.write_registered_header(directory, header,
                                                           {k: v for k, v in self.registration_results.items()
-                                                           if k in kept}, record, images)]
+                                                           if k in kept}, record, images,
+                                                          image_compression=image_compression)]
         elif stage == 'candidates':
             if self.spot_result is None:
                 raise ValueError('candidates checkpoint requires spot_result')
@@ -2141,7 +2152,8 @@ class FOV:
             raise FileExistsError(f'{stage} checkpoint exists in {directory}; pass overwrite=True')
         if checkpoints.table_format == 'parquet':
             _require_parquet()
-        self._write_checkpoint(stage=stage, directory=directory, table_format=checkpoints.table_format)
+        self._write_checkpoint(stage=stage, directory=directory, table_format=checkpoints.table_format,
+                               image_compression=checkpoints.image_compression)
         return directory
 
     @_log_step
@@ -2702,7 +2714,8 @@ class FOV:
     # --- Output ---
 
     def save_reference_image(self, *, projection: ProjectionConfig | None = None,
-                             reference_image: str = 'merged', reference_channel: int = 0) -> Path:
+                             reference_image: str = 'merged', reference_channel: int = 0,
+                             image_compression: str = 'zlib') -> Path:
         """Save the reference merged image to the file of the dataset's ``reference_image``.
 
         Parameters
@@ -2715,6 +2728,8 @@ class FOV:
             ``"single-channel"`` for reference_channel.
         reference_channel : int
             Zero-based channel index for the ``"single-channel"`` reference view.
+        image_compression : str
+            Codec of the file: ``"zlib"`` (deflate, level 6, no predictor) or ``"none"``.
 
         Returns
         -------
@@ -2736,22 +2751,25 @@ class FOV:
 
         The dtype is kept. ZYX is a tifffile TIFF written by save_volume; YX is
         one page with the same JSON axes and metadata description, so
-        load_volume reads either. After a checkpointed run that succeeded,
-        the FOV's run.json gains ``outputs.reference_image`` (path relative to
-        the FOV folder and SHA-256).
+        load_volume reads either. Both take the codec image_compression. After
+        a checkpointed run that succeeded, the FOV's run.json gains
+        ``outputs.reference_image`` (path relative to the FOV folder, SHA-256
+        and ``compression``, the codec).
 
         Raises
         ------
         ValueError
-            An unknown reference_image, a channel outside the image, a
-            projection that is not along z, or a dataset whose reference image
-            is imported (``reference_image_import``).
+            An unknown reference_image or image_compression, a channel outside
+            the image, a projection that is not along z, or a dataset whose
+            reference image is imported (``reference_image_import``).
         """
         import tifffile
         from starfinder.io import save_volume
+        from starfinder.io.tiff import _compression_options
         from starfinder.preprocessing import project_image
         if reference_image not in ('merged', 'single-channel'):
             raise ValueError('reference_image must be merged or single-channel')
+        options = _compression_options(image_compression)
         if self.dataset.reference_image_import is not None:
             raise ValueError(f'the reference image of this dataset is imported from '
                              f'{self.dataset.reference_image_import!r} ({_layout.REFERENCE_IMAGE_IMPORT_KEY}), which '
@@ -2773,16 +2791,16 @@ class FOV:
         tmp = path.with_name(f'.{uuid.uuid4().hex}.tmp.{path.name}')
         try:
             if projection is None:
-                save_volume(image, tmp, metadata=metadata)
+                save_volume(image, tmp, compress=image_compression == 'zlib', metadata=metadata)
             else:
                 image = project_image(image, config=projection)[0]
                 metadata = metadata.projected(method=projection.method)
                 tifffile.imwrite(tmp, image, photometric='minisblack',
-                                 metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)})
+                                 metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)}, **options)
             os.replace(tmp, path)
         finally:
             tmp.unlink(missing_ok=True)
-        self._record_output('reference_image', path)
+        self._record_output('reference_image', path, compression=image_compression)
         return path
 
     def export_spots(self, slot='molecules', columns=None, *, path=None):

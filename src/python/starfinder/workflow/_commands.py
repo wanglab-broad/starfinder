@@ -84,6 +84,13 @@ def supplied_input(run):
     return run.path(found[-1]) if found else None
 
 
+def image_compression(run):
+    """The codec of the images a task keeps (the stage registered, the reference image, the prepared images):
+    execution.image_compression, which the plan writes with its default zlib (design/specs/
+    compressed-image-outputs.md, "Configuration"); zlib for a resolved configuration planned before the key."""
+    return run.configuration["execution"].get("image_compression", "zlib")
+
+
 def _codebook(run):
     path = codebook_input(run)
     if path is None:
@@ -108,15 +115,17 @@ def fov(run):
     dataset._workflow = run.workflow_section()
     fov_ = dataset.fov(run.identity["fov"])
     execution = adapted.execution
+    codec = image_compression(run)
     if run.source is not None:
         _from_input(run, fov_, adapted, pipeline, stages)
     elif run.resume is None:
-        fov_.run(pipeline, execution=execution, checkpoints=CheckpointConfig(stages=stages, overwrite=True))
+        fov_.run(pipeline, execution=execution,
+                 checkpoints=CheckpointConfig(stages=stages, overwrite=True, image_compression=codec))
     else:
         _resume(run, fov_, adapted, pipeline, stages)
     if dataset.reference_image_import is None:
         fov_.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
-                                  reference_channel=adapted.reference_channel)
+                                  reference_channel=adapted.reference_channel, image_compression=codec)
     if pipeline.filtering is not None:
         fov_.export_spots()
 
@@ -142,7 +151,10 @@ def _resume(run, fov_, adapted, pipeline, stages):
                              for f in fields(PipelineConfig) if f.init})
     later = tuple(s for s in stages if ("registered", "candidates", "pre_qc").index(s)
                   > ("registered", "candidates", "pre_qc").index(stage))
-    fov_._resume_run(rest, execution=adapted.execution, checkpoints=CheckpointConfig(stages=later, overwrite=True),
+    # The kept stages keep their codec; the later ones take this attempt's (design/specs/compressed-image-outputs.md,
+    # "Compatibility").
+    fov_._resume_run(rest, execution=adapted.execution,
+                     checkpoints=CheckpointConfig(stages=later, overwrite=True, image_compression=image_compression(run)),
                      stage=stage, record=record)
     if adapted.dataset.reference_image_import is None and stage != "registered":
         # No stage but registered holds the reference round's processed image: it is rebuilt from the raw images
@@ -178,7 +190,8 @@ def _from_input(run, fov_, adapted, pipeline, stages):
     rest = PipelineConfig(**{f.name: getattr(pipeline, f.name) if f.name in _AFTER["registered"] else None
                              for f in fields(PipelineConfig) if f.init})
     fov_._run_from_input(rest, execution=adapted.execution,
-                         checkpoints=CheckpointConfig(stages=stages, overwrite=True),
+                         checkpoints=CheckpointConfig(stages=stages, overwrite=True,
+                                                      image_compression=image_compression(run)),
                          source={"record": record, "pipeline": pipeline, "entry": entry})
 
 
@@ -214,11 +227,14 @@ def tile_global(run):
     adapted, pipeline, _, grid, folder = _tiled(run)
     if run.resume is not None:
         return
+    from starfinder.dataset.config import CheckpointConfig
     fov_ = adapted.dataset.fov(run.identity["fov"])
-    run_tile_global(fov_, pipeline, execution=adapted.execution, directory=_layout.tiled_dir(folder))
+    codec = image_compression(run)
+    run_tile_global(fov_, pipeline, execution=adapted.execution, directory=_layout.tiled_dir(folder),
+                    checkpoints=CheckpointConfig(image_compression=codec))
     if adapted.dataset.reference_image_import is None:
         fov_.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
-                                  reference_channel=adapted.reference_channel)
+                                  reference_channel=adapted.reference_channel, image_compression=codec)
 
 
 def tile(run):
@@ -272,9 +288,15 @@ def tile_merge(run):
                               "image_background": record["statistics"]["image_background"]}}
     fov_ = adapted.dataset.fov(run.identity["fov"])
     merge_tiles(fov_, pipeline, tiles, tile_directories=directories, global_record=record, global_run_record=run_record,
-                execution=adapted.execution, checkpoints=CheckpointConfig(stages=stages, overwrite=True), tiled=section)
+                execution=adapted.execution,
+                checkpoints=CheckpointConfig(stages=stages, overwrite=True, image_compression=image_compression(run)),
+                tiled=section)
     if adapted.dataset.reference_image_import is None:
-        fov_._record_output("reference_image", fov_._reference_image_path())
+        # The global task wrote the reference image; its codec is read from the file, which a verified resume of
+        # that task keeps as an earlier attempt wrote it.
+        from starfinder.io.tiff import _tiff_compression
+        path = fov_._reference_image_path()
+        fov_._record_output("reference_image", path, compression=_tiff_compression(path))
     fov_.export_spots()
     if not kept:
         (tiled / _layout.CHUNKED_CHECKPOINT).unlink(missing_ok=True)
@@ -394,7 +416,7 @@ def morphology(run):
     configuration = run.configuration.plain()
     config = _translate.morphology(configuration)
     fov_ = run.dataset().fov(run.identity["fov"])
-    checkpoints = CheckpointConfig(overwrite=True)
+    checkpoints = CheckpointConfig(overwrite=True, image_compression=image_compression(run))
     if config.recipe is None:
         _prepare_by_stain(fov_, configuration, config, checkpoints)
     else:

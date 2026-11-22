@@ -20,14 +20,40 @@ tile's in `tiles/<tile>/`; its merge writes the FOV folder's records as a direct
 | --- | --- |
 | `run.json` | `FOV.run` with checkpoints; processing record |
 | `molecules.csv`, `reads.csv` | `FOV.export_spots`; molecule or read table |
-| `reference.tif` | `FOV.save_reference_image`; default reference-image path |
+| `reference.tif` | `FOV.save_reference_image`; default reference-image path; zlib by default |
 | `nuclei_registration.json` | `FOV.save_registration_record`; other-round registration attempts |
-| `checkpoints/registered/` | Processed images and transforms |
+| `checkpoints/registered/` | Processed images (zlib by default) and transforms |
 | `checkpoints/candidates.csv` or `.parquet`, `candidates.json` | Spots, signals and header |
 | `checkpoints/pre_qc.csv` or `.parquet`, `pre_qc.json` | Reads and header |
-| `other_rounds/<name>/image.ome.tif`, `registration.json`, optional `field.npz` | Prepared morphology image and its record |
+| `other_rounds/<name>/image.ome.tif`, `registration.json`, optional `field.npz` | Prepared morphology image (zlib by default) and its record |
 | `segmentation/<run>/labels.tif`, `segmentation.json` | Saved segmentation; computed runs also have `input.ome.tif` |
 | `assignment/<name>/` | Assignment tables, label files and `assignment.json`; see the {doc}`assignment reference <assignment-algorithms>` |
+
+## Image codec
+
+The registered rounds and their snapshots, the prepared images and the
+reference image are TIFF with zlib (deflate, level 6, no predictor; TIFF
+Compression 8) by default, and uncompressed (Compression 1) with
+`CheckpointConfig(image_compression="none")`,
+`FOV.save_reference_image(image_compression="none")` or the workflow's
+`execution.image_compression: none`. Every reader takes either codec. The
+records name it:
+
+| Record | Key | Value |
+| --- | --- | --- |
+| `run.json` | `config.checkpoints.image_compression` | The `CheckpointConfig` field |
+| `run.json` | `outputs.reference_image.compression` | `zlib` or `none` |
+| `checkpoints/registered/transforms.json` | `image_compression` | `zlib` or `none`, for every round image and snapshot it lists |
+| `other_rounds/<name>/registration.json` | `image.compression` | `zlib` or `none` |
+
+A record without the key was written uncompressed. The keys are additive: the
+stage record's format version stays 3, its `files` entries stay
+`{path, sha256}`, and the prepared image record's version stays 1. The
+SHA-256 values are of the files' bytes and change with the codec; compare
+two images by their decoded arrays. A verified resume keeps the stage it
+resumes from with that stage's codec. The segmentation and assignment label
+images and the segmentation input were zlib before; the dense fields
+(`.npz`) are not compressed.
 
 ## Payload hashes
 
@@ -50,7 +76,7 @@ load without the check.
 | `<round>.ome.tif` | Processed round, ZYXC with metadata |
 | `<snapshot>/<round>.ome.tif` | Saved extraction-source snapshot |
 | `<round>_field.npz` | Dense displacement or B-spline coefficient arrays, when present |
-| `transforms.json` | Header with grids, configs, registration results, chains, applications and payload hashes |
+| `transforms.json` | Header with grids, configs, registration results, chains, applications, the images' codec (`image_compression`) and payload hashes |
 
 ## candidates
 
@@ -100,7 +126,7 @@ The run record's format version is 2. Fields are grouped below for lookup.
 | `error` | Failure information, or null |
 | `code` | Code identity: `version`, `version_source` (`checkout`, `build` or `dist`), `git_commit` and `git_dirty` ({ref}`how each is found <checkpoints-code-identity>`) |
 | `environment` | Python, platform and package versions |
-| `config` | Pipeline, execution, checkpoints, readout mode and encoding |
+| `config` | Pipeline, execution, checkpoints (with `image_compression`), readout mode and encoding |
 | `workflow_config` | Workflow configuration path and hash, or null |
 | `channels` | Channel pattern, name and wavelength per round |
 | `rounds` | Sequencing rounds, other rounds and reference round |
@@ -113,7 +139,7 @@ The run record's format version is 2. Fields are grouped below for lookup.
 | `counts` | Spot/read counts, read summaries and filter fractions |
 | `checkpoint_directory` | Checkpoint folder path |
 | `checkpoints` | Stage record paths and hashes |
-| `outputs` | Files added by output writers, with paths, hashes and table details where applicable |
+| `outputs` | Files added by output writers, with paths, hashes and table details where applicable; `reference_image` also has `compression` |
 | `spot_finding_input` | Only in a workflow `fov` task run from a saved set ({ref}`processing.spot_finding_input <workflow-spot-finding-input>`): the set's output root (`path`), its `run.json` and registered stage record of the FOV (`run_record`, `registered`, each `{path, sha256}`), the set's `code` and its `ended_at`. `inputs`, `steps` before the registered stage was written, `preprocessing`, `registration` and `transforms` are the set's; `config.pipeline` is this run's whole pipeline, and `checkpoints` names no registered stage |
 
 The [run-record specification](https://github.com/wanglab-broad/starfinder/blob/dev/design/specs/checkpoints.md#runjson)

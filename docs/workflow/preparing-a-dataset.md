@@ -37,7 +37,9 @@ In a round's folder, each configured channel label matches one file,
 `*<label>*.tif` or `*<label>*.tiff`. For tissue-2D the label `ch00` matches
 `9919seqA1_TileScan_005_Tile 1_cmle_ch00.tif`. A file that matches no label is
 never read: the microscope's `.hgsb` and `_history.txt` files can stay where they
-are. The plan refuses a label that matches no file or two, naming the FOV, the
+are. The images may be uncompressed or compressed TIFF, for example TIFF with zlib
+(deflate): the reader decodes any codec that tifffile reads, so a copy of a raw folder
+compressed with zlib to save space is read as the original. The plan refuses a label that matches no file or two, naming the FOV, the
 round, the label and the files it found, before any task runs. The image reader
 of the tasks (`starfinder.io.load_round`) finds the files with the same pattern
 and raises `ValueError` with the count when a label does not match exactly one

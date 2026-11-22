@@ -406,6 +406,10 @@ records `files` for every payload file. The rule is in the
 [payload hashes](checkpoints-reference.md#payload-hashes) section of the
 reference.
 
+| Before | After |
+| --- | --- |
+| `FOV.run(..., checkpoints=CheckpointConfig())`, `FOV.prepare_morphology` and `FOV.register` with checkpoints, and `FOV.save_reference_image` wrote the registered rounds and their snapshots, the prepared images and the reference image uncompressed | They write TIFF with zlib (deflate, level 6, no predictor) by default (W-922). Pass `CheckpointConfig(image_compression="none")`, `FOV.save_reference_image(image_compression="none")` or the workflow's `execution.image_compression: none` for uncompressed files, byte-equal to the earlier ones. The decoded images are unchanged and every reader takes either codec; a file's SHA-256 in the records changes with the codec. `run.json` gains `config.checkpoints.image_compression` and `outputs.reference_image.compression`, the stage record `image_compression` and the prepared image record `image.compression`; records without them were written uncompressed. `save_volume`'s default stays uncompressed |
+
 ### One Python configuration dialect
 
 For `backend: python`, replace MATLAB-style blocks with native stage settings:

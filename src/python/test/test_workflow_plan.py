@@ -147,7 +147,9 @@ def test_the_resolved_configuration_writes_the_defaults_and_the_api(work):
     assert c["assignment"]["previews"] is True and c["export"]["previews"] is True
     assert c["execution"] == {"defaults": {"threads": 1, "memory_mb": 8000, "runtime_min": 30, "gpu": False},
                               "tasks": {"fov": {"memory_mb": 16000}}, "container": None, "fiji": None,
-                              "resume_from_checkpoint": False, "code_version": "keep", "log_level": "INFO"}
+                              "resume_from_checkpoint": False, "code_version": "keep", "log_level": "INFO",
+                              # The codec of the kept images, written with its default (W-909)
+                              "image_compression": "zlib"}
     api = c["api"]
     assert set(api) == {"processing", "morphology", "segmentation", "assignment", "stitching", "export", "report"}
     assert api["processing"]["pipeline"]["type"] == "PipelineConfig"

@@ -283,8 +283,10 @@ def pinned_record(stages):
                 "scoring": {"method": "bgcorr_probability"},
                 "deduplication": {"distance_voxels": 1.0, "compatibility": "same_sequence"}},
             "execution": {"mode": "batch", "retain_images": False, "device": "cpu"},
+            # image_compression: the codec of the saved images, added by W-909 (design/specs/
+            # compressed-image-outputs.md, migration M1)
             "checkpoints": {"stages": list(stages), "directory": None, "table_format": "csv", "hash_inputs": True,
-                            "overwrite": False},
+                            "overwrite": False, "image_compression": "zlib"},
             "readout_mode": "multiplexed",
             "encoding": {"method": "two_base", "reverse_bases": True, "pair_to_color": {
                 "AA": "1", "AC": "2", "AG": "3", "AT": "4", "CA": "2", "CC": "1", "CG": "4", "CT": "3",

@@ -95,8 +95,10 @@ loaded when its turn comes (`fov.py:1337`), and a moving round's image is droppe
 detection and extraction (`fov.py:1375-1383`), so that one moving round and the reference round are
 resident at once. The `registered` checkpoint stage writes each round as it is produced
 (`fov.py:1366`) with `_checkpoint.write_registered_round` (`starfinder/_checkpoint.py:254`): one
-uncompressed ZYXC OME-TIFF per round (`save_volume`, `starfinder/io/tiff.py:339`), strips of whole
-rows, no tiles.
+ZYXC OME-TIFF per round (`save_volume`, `starfinder/io/tiff.py:339`), strips of whole rows, no tiles.
+This page measured it uncompressed. Since W-922 (2026-11-22; [compressed-image-outputs](compressed-image-outputs.md))
+the stage is written with zlib (deflate, level 6, no predictor) by default, or uncompressed with
+`execution.image_compression: none`; the chunked checkpoint below stays uncompressed in either setting (HC1).
 
 ## The flow
 

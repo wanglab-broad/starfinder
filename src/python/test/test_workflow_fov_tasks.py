@@ -190,7 +190,7 @@ def test_r4_r5_the_fov_task_writes_run_json_and_no_log_in_the_fov_folder(scene):
     assert files == ["run.json"]
     assert record["status"] == "succeeded"
     assert record["config"]["checkpoints"] == {"stages": [], "directory": None, "table_format": "csv",
-                                               "hash_inputs": True, "overwrite": True}
+                                               "hash_inputs": True, "overwrite": True, "image_compression": "zlib"}
     resolved = out / "workflow" / "resolved.json"
     assert record["workflow_config"] == {"path": "workflow/resolved.json", "sha256": f"sha256:{sha256(resolved)}"}
     assert record["codebook"] == {"kind": "codebook", "path": str(codebook), "sha256": sha256(codebook),

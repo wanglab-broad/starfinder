@@ -268,6 +268,7 @@ fiji: The Fiji executable of the bigstitcher_engine task.
 resume_from_checkpoint: true lets a fov task resume from its checkpoints after it checks run.json; a mismatch exits 3.
 code_version: keep, or rerun to rerun finished tasks after the package version changes.
 log_level: The level of the task logs.
+image_compression: The TIFF codec of the images the tasks keep, the stage registered, the reference image and the prepared images: zlib (deflate, level 6, no predictor) or none; outside every hash, so a change reruns no task and refuses no resume, and the records name each file's codec.
 ```
 
 ```{workflow-keys} execution.defaults

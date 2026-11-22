@@ -232,7 +232,12 @@ class _RunRecord:
             # The steps up to the stage's write, but those this run performs again: after registered, the
             # detection and the extraction, which a full run does inside the loop of rounds, before that write.
             again = _REDONE.get(stage, ())
-            self.data.update(config=earlier["config"], inputs=list(earlier["inputs"]),
+            # The codec is a storage detail outside the configuration a resume keeps: the record names this attempt's,
+            # which the files it writes take; a kept registered stage names its own (design/specs/
+            # compressed-image-outputs.md, "Compatibility").
+            config = dict(earlier["config"])
+            config[CHECKPOINTS] = dict(config.get(CHECKPOINTS) or {}, image_compression=checkpoints.image_compression)
+            self.data.update(config=config, inputs=list(earlier["inputs"]),
                              steps=[step for step in earlier["steps"][:last + 1] if step["name"] not in again])
             self.data[CHECKPOINTS] = {name: entry for name, entry in earlier[CHECKPOINTS].items()
                                       if name in _resumed_stages(stage)}

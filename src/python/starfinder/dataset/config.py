@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from starfinder.io import ImageLoadConfig
+from starfinder.io.tiff import _check_compression
 from starfinder.preprocessing import PreprocessingRecipe
 from starfinder.registration import RegistrationRecipe
 from starfinder._execution import check_device
@@ -64,6 +65,8 @@ class CheckpointConfig:
         Record SHA-256 hashes of loaded TIFF inputs.
     overwrite : bool
         Allow replacement of existing output files guarded by the checkpointed call.
+    image_compression : str
+        Codec of the saved images: ``zlib`` (deflate, level 6, no predictor) or ``none``.
 
     Notes
     -----
@@ -77,13 +80,18 @@ class CheckpointConfig:
     run.json or ``checkpoints/`` folder is an error before processing; with it,
     run first removes the earlier files of ``checkpoints/`` only. The other
     folders of the FOV folder, which other calls and rules write, are left as
-    they are.
+    they are. image_compression is the TIFF codec of the images the
+    checkpointed calls write: the registered rounds and their snapshots, and
+    the prepared morphology images of prepare_morphology and register. It is
+    recorded in run.json, in the registered stage record and in each prepared
+    image's record; every reader takes either codec.
     """
     stages: tuple[str, ...] = ('registered', 'candidates', 'pre_qc')
     directory: Path | str | None = None
     table_format: str = 'csv'
     hash_inputs: bool = True
     overwrite: bool = False
+    image_compression: str = 'zlib'
 
     def __post_init__(self):
         stages = tuple(self.stages)
@@ -96,6 +104,7 @@ class CheckpointConfig:
             raise ValueError('table_format must be csv or parquet')
         if not isinstance(self.hash_inputs, bool) or not isinstance(self.overwrite, bool):
             raise ValueError('hash_inputs and overwrite must be Boolean')
+        _check_compression(self.image_compression)
 
 
 def _check_rotation(value):
