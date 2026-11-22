@@ -339,9 +339,10 @@ The block needs `voxel_size_xy` and `voxel_size_z`. A generated PSF needs the
   codec of `execution.image_compression` (zlib by default).
 * **Reuse.** A `deconvolve` task whose round is already in the copy reuses it when
   the raw files, the PSFs and the outputs have the SHA-256 that its record holds,
-  and runs no deconwolf. A changed raw file redoes its round only. A FOV task checks
-  every copy file it reads against its record and names the copy in its
-  `run.json` (`deconvolution`).
+  and runs no deconwolf, under Snakemake and Nextflow alike; the copy's files keep
+  their bytes and modification times. A changed raw file redoes its round only. A
+  FOV task checks that the record names every copy file it reads, with that
+  file's SHA-256, and names the copy in its `run.json` (`deconvolution`).
 * **CPU or GPU.** A task runs on the CPU with 4 threads by default.
   `execution.tasks.deconvolve.gpu: true` runs deconwolf with `--gpu` on one GPU;
   the device changes no hash and reruns nothing. `deconvolution.tile_size` splits a
@@ -379,10 +380,13 @@ The block needs `voxel_size_xy` and `voxel_size_z`. A generated PSF needs the
   exits 0. Only `workflow verify --final` reports it.
 * The MATLAB workflow is frozen: the plan refuses `backend: matlab`, and the
   Snakefile runs the legacy rules for it. It refuses a `deconvolution` block too.
-* Snakemake removes a job's existing outputs before it runs the job, so a
-  deconvolved copy outside the output root (`copy_root: beside` or a path) that a
-  new output root's run plans is written again under Snakemake, not reused;
-  Nextflow and a task run by its command reuse it.
+* A deconvolved copy outside the output root (`copy_root: beside` or a path) is
+  not one of Snakemake's outputs, so that Snakemake neither removes nor touches
+  the files that another output root reuses. Snakemake does not rerun a task for a
+  file of that copy removed or changed after the task ran: the FOV task that reads
+  it fails, naming the file. Remove the output root's record of that round's
+  `deconvolve` task (`workflow/tasks/deconvolve.<sample>.<fov>.<round>.json`) to
+  redo the round.
 * `processing.spot_finding_input` works in mode `direct` only, and a run that
   reads a set writes no `registered` stage of its own, so its segmentation
   cannot read a registered sequencing round. The package version of a set is

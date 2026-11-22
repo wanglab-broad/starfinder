@@ -156,6 +156,10 @@ records it ({ref}`checkpoints-code-identity`):
 | `UV_LOCK_SHA256` | The SHA-256 of `src/python/uv.lock`; the build stops if the file differs |
 | `DECONWOLF_SHA256` | The SHA-256 of `/opt/deconwolf/bin/dw` that the stage `build-deconwolf` built (build that target first); the build stops if the binary differs, and the label `org.starfinder.deconwolf-sha256` holds it |
 
+The stage `build-deconwolf` fetches deconwolf's source, the archive of its tag v0.4.5, by `ADD --checksum=sha256:…`, so
+the build stops if the archive's SHA-256 differs; that form of `ADD` needs a builder whose Dockerfile frontend is 1.6 or
+newer.
+
 The build writes the commit and the flag into `starfinder/_build_info.py` and the image's labels
 (`org.opencontainers.image.revision`, `org.starfinder.dirty`). In the image, `starfinder._records.code()` returns that
 commit and flag with `version_source` `build`, so a run in the image and a run from a clean checkout of the same commit

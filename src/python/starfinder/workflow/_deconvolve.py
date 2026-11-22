@@ -615,10 +615,23 @@ def _planning(execution, gpu, shape, psf_path, block, threads, identity, home):
 
 # --- a consumer's check -------------------------------------------------------------------------------------------
 
+def consumer_files(run, name):
+    """The copy's image files that a consumer declares for the deconvolved round ``name`` of its FOV: the ``.tif``
+    outputs of the round's ``deconvolve`` task among its needs that are among its declared inputs, as paths."""
+    inputs = set(run.task["inputs"])
+    for need in run.task["needs"]:
+        task = run.tasks.get(need)
+        if (task is not None and task["kind"] == "deconvolve" and task["deconvolution"]["round"] == name
+                and task["identity"]["fov"] == run.identity["fov"]):
+            return [Path(run.path(o)).absolute() for o in task["outputs"] if o.endswith(".tif") and o in inputs]
+    return []
+
+
 def check_consumer(run):
     """A consumer's check of the copy it reads (design/specs/deconvolution.md, "A consumer checks the copy"): each
-    deconvolved round's record exists and names the files, and each file's SHA-256 equals the record's; ValueError
-    naming the file and both hashes. Returns the ``run.json`` entry ``deconvolution``."""
+    deconvolved round's record exists and names every copy file the consumer declares for that round, and each file
+    the record names has its SHA-256; ValueError naming the round and the file (and both hashes on a mismatch).
+    Returns the ``run.json`` entry ``deconvolution``."""
     stage = run.manifest["deconvolution"]
     copy = Path(run.path(stage["copy"])).absolute()
     entry = {"copy": str(copy), "copy_id": stage["copy_id"], "rounds": {}}
@@ -627,12 +640,17 @@ def check_consumer(run):
         if not path.is_file():
             raise ValueError(f"the copy {copy} has no record of round {name} of FOV {run.identity['fov']} ({path})")
         record = json.loads(path.read_text())
-        for channel in record.get("channels") or []:
-            file = copy / channel["output"]["path"]
+        named = {copy / channel["output"]["path"]: channel["output"]["file_sha256"]
+                 for channel in record.get("channels") or []}
+        for file in consumer_files(run, name):
+            if file not in named:
+                raise ValueError(f"the record {path} of round {name} of FOV {run.identity['fov']} names no file "
+                                 f"{file}, which the task reads: the copy is stale or damaged")
+        for file, recorded in named.items():
             digest = file_sha256(file) if file.is_file() else None
-            if digest != channel["output"]["file_sha256"]:
+            if digest != recorded:
                 raise ValueError(f"the copy's file {file} has SHA-256 {digest}; its record {path} names "
-                                 f"{channel['output']['file_sha256']}: the copy is stale or damaged")
+                                 f"{recorded}: the copy is stale or damaged")
         entry["rounds"][name] = {"record": str(path), "record_sha256": file_sha256(path)}
     return entry
 

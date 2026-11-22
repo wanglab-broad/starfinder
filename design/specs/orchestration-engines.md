@@ -310,6 +310,16 @@ fields as wildcards:
 `rule all` takes every task's record. Targets are task records, so `snakemake <record path>` runs one
 task and its upstream.
 
+**A deconvolved copy outside the output root** (W-928). With `deconvolution.copy_root` `beside` or an absolute path,
+the copy's files are neither outputs nor inputs of any rule, nor targets of `rule all`: the `psf` and `deconvolve`
+rules declare their records, and every rule that reads the copy takes the records of the tasks it needs, as option B
+of the next choice does for every file. Another output root reuses that copy, and Snakemake 9.27.1 would remove a
+job's existing outputs before the job (`snakemake/jobs.py:797-809`; `update()` skips only this), touch them after
+it succeeds (`dag.py:848-853`) and remove them after it fails (`jobs.py:955-958`, called at `:1322-1323`). The
+manifest is unchanged; `tasks.smk` reads the copy's folder from its `deconvolution` entry. The commands check the
+copy's files (the `deconvolve` task before it reuses a round, a consumer before it reads one), so a file removed or
+changed after its task ran fails the consumer, naming the file, and is not rerun by Snakemake.
+
 #### Choice: how Snakemake knows each task's files
 
 | Option | Cost | Consequence |
@@ -879,9 +889,9 @@ follows. A third job installs Java 17 and Nextflow 26.10.4 for the stub-run (TG5
 ### The image
 
 **deconwolf (W-923).** The committed `Containerfile` has a stage `build-deconwolf` on the same bookworm base: deconwolf
-v0.4.5 from its Git tag, pinned by its commit `ca062c49` (`ADD --checksum=<commit>` of the Git URL, checked again with
-`git rev-parse`), built with CMake, `-DENABLE_GPU=ON` and `-include inttypes.h`. The `runtime` stage, which `cpu`,
-`learned` and `learned-cuda` start from, installs its libraries (FFTW, libtiff, GSL, libpng, the OpenCL ICD loader,
+v0.4.5 from its tag's archive (`archive/refs/tags/v0.4.5.tar.gz`, commit `ca062c49`), pinned by
+`ADD --checksum=sha256:b9ff86f3…` and unpacked in a `RUN` step (W-928), built with CMake, `-DENABLE_GPU=ON` and
+`-include inttypes.h`. The `runtime` stage, which `cpu`, `learned` and `learned-cuda` start from, installs its libraries (FFTW, libtiff, GSL, libpng, the OpenCL ICD loader,
 libgomp), copies `dw` and `libtrafo.so`, names `libnvidia-opencl.so.1` for the ICD loader, and checks the binary's
 SHA-256 against the build argument `DECONWOLF_SHA256`, which the label `org.starfinder.deconwolf-sha256` holds besides
 `org.starfinder.deconwolf=0.4.5`. The CPU extras gain `deconvolution` (psfmodels 0.3.3), whose lock has no Python 3.12

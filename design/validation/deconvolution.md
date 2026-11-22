@@ -231,8 +231,9 @@ The table maps each check above to its tests. Files are under `src/python/test/`
 measured call time in seconds of the row's new tests together, on one CPU and one numerical thread,
 all their parameters, where it is 1 s or more; "—" is below 1 s (a test written before W-923, such as
 PL1's C1 and X4, is not counted). The times were measured under the records' tracer, which inflates
-them somewhat (W-923's run folder, `results/tables/new-tests-1s.csv`). No test but EN2, EN3 and WI6
-takes 5 s or more in one parameter, and those three are marked `slow`.
+them somewhat (W-923's run folder, `results/tables/new-tests-1s.csv`). W-928, the repair of W-923's review,
+measured the RU1 and RU4 rows again with the tests it added (W-928's run folder, the same table). No test but EN2, EN3,
+WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are marked `slow`.
 `test_workflow_deconvolution_docs_contract.py` checks that every row names tests that exist.
 
 * **Fixtures.** `deconvolution_cases.py` holds `stand_in_dw` (`stand_in`), `input_root` and
@@ -242,8 +243,10 @@ takes 5 s or more in one parameter, and those three are marked `slow`.
   examples of `workflow_variants.py`, whose `fov` task PL1 and SC7 run; the tests of the tasks plan
   `input_root` with a processing block that registers and finds spots.
 * **Where they run.** EN1 runs in the routine tier (Snakemake's dry run, under 5 s). EN2 and EN3 are
-  `nextflow` and `slow`, in the engine selections. RU5 runs in the routine tier (3.7 s). WI6 is
-  `slow` (6.5 s under the tracer: two concurrent `starfinder deconvolve wisdom` processes and a stand-in
+  `nextflow` and `slow`, in the engine selections. RU1's engine tests (W-928) run two output roots one after the
+  other with an absolute `copy_root`: the Snakemake one is `slow` and runs in the slow selection, the Nextflow one is
+  `nextflow` and `slow`. `test_ru1_ru2_ru3_verified_reuse` runs the same reuse by the task commands. RU5 runs in the
+  routine tier (3.7 s). WI6 is `slow` (6.5 s under the tracer: two concurrent `starfinder deconvolve wisdom` processes and a stand-in
   that waits 1 s). PS3, PS4 and RU11 skip without
   psfmodels, naming the extra; DW1 to DW3 skip without `dw` on PATH or `STARFINDER_TEST_DECONWOLF`.
   X4 (PL1) is `extended`; G3 runs in `benchmarks/orchestration_golden_evidence.py`, which the
@@ -253,7 +256,9 @@ takes 5 s or more in one parameter, and those three are marked `slow`.
   names `reference_stains`; the stage's own check refuses the label `ch0` beside `ch00`. RU10's
   damaged copy is refused with exit 2 before any work (the `psf` command's preparation), so that it
   writes and removes nothing. SC6 also checks that the copy follows `execution.image_compression`
-  (`none` writes Compression 1, W-923's reading of the specification).
+  (`none` writes Compression 1, W-923's reading of the specification). RU4 also checks a round record whose
+  `channels` list is empty or lacks a channel: the `fov` task fails, naming the round and the file the record does
+  not name (W-928).
 
 (deconvolution-implemented-checks)=
 
@@ -296,10 +301,10 @@ takes 5 s or more in one parameter, and those three are marked `slow`.
 | RC3 | `test_workflow_deconvolution_tasks.py` | `test_rc3_run_json_names_the_copy` | 1.1 |
 | RC4 | `test_workflow_deconvolution_tasks.py` | `test_rc4_completion_and_failure` | — |
 | RC5 | `test_workflow_deconvolution_tasks.py` | `test_rc5_a_shared_image_folder_keeps_two_records`, `test_rc5_a_rewritten_raw_file_redoes_its_round_only` | 5.9 |
-| RU1 | `test_workflow_deconvolution_tasks.py` | `test_ru1_ru2_ru3_verified_reuse` | 1.8 |
+| RU1 | `test_workflow_deconvolution_tasks.py`; `test_workflow_deconvolution_engines.py` | `test_ru1_ru2_ru3_verified_reuse`; `test_ru1_snakemake_reuses_a_shared_copy`, `test_ru1_nextflow_reuses_a_shared_copy` | 70.6 |
 | RU2 | `test_workflow_deconvolution_tasks.py` | `test_ru1_ru2_ru3_verified_reuse` | 1.8 |
 | RU3 | `test_workflow_deconvolution_tasks.py` | `test_ru1_ru2_ru3_verified_reuse` | 1.8 |
-| RU4 | `test_workflow_deconvolution_tasks.py` | `test_ru4_a_consumer_checks` | — |
+| RU4 | `test_workflow_deconvolution_tasks.py` | `test_ru4_a_consumer_checks`, `test_ru4_a_record_that_names_too_few_files` | 2.1 |
 | RU5 | `test_workflow_deconvolution_tasks.py` | `test_ru5_resume_and_saved_sets` | 3.7 |
 | RU6 | `test_workflow_deconvolution_tasks.py` | `test_ru6_one_writer_per_round` | 3.4 |
 | RU7 | `test_workflow_deconvolution_tasks.py` | `test_ru7_code_version_rerun` | 1.4 |

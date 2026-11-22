@@ -34,16 +34,19 @@
 #     --output type=oci,dest=starfinder-learned-cuda-<version>.oci.tar .
 #
 # deconwolf v0.4.5 (the deconvolution stage, design/specs/deconvolution.md, decision 6) is built from source in the
-# stage `build-deconwolf`, from the Git tag pinned by its commit, and copied with its libraries into `runtime`, so that
-# `cpu`, `learned` and `learned-cuda` all have `dw`. Its SHA-256 is a label: build that stage first, take the binary's
-# SHA-256 and pass it in, and the build stops if the binary differs:
+# stage `build-deconwolf`, from the tag's archive pinned by its SHA-256, and copied with its libraries into
+# `runtime`, so that `cpu`, `learned` and `learned-cuda` all have `dw`. Its SHA-256 is a label: build that stage first,
+# take the binary's SHA-256 and pass it in, and the build stops if the binary differs:
 #
 #   docker buildx build --file Containerfile --builder <docker-container builder> --target build-deconwolf \
 #     --output type=local,dest=<folder> .            # then: sha256sum <folder>/opt/deconwolf/bin/dw
 #   ... --build-arg DECONWOLF_SHA256=<that SHA-256> (with the other build arguments, every target)
 #
-# The source is pinned by its commit (`ADD --checksum=<commit>` of the Git URL, checked again with `git rev-parse`):
-# the SHA-256 of the tag's archive could not be taken offline when the stage was written (W-923).
+# The source is the tag's archive, https://github.com/elgw/deconwolf/archive/refs/tags/v0.4.5.tar.gz, fetched by
+# `ADD --checksum=sha256:<its SHA-256>` as the base images are pinned by digest (W-928: the archive's pax header names
+# the commit ca062c49eedd6bf60fcd9804df467e64cfc3c113; CMakeLists.txt sets the version, so the build needs no Git). A
+# remote ADD does not unpack: a RUN step does. `ADD --checksum` for an HTTP source needs a builder whose Dockerfile
+# frontend is 1.6 or newer; the file names no `# syntax=` line, so the builder's own frontend parses it.
 # psfmodels 0.3.3 (the `deconvolution` extra) has no wheel for Python 3.12 on Linux in the lock, so the CPU extras build
 # it from its source distribution: the build stage has a C++ compiler.
 #
@@ -62,12 +65,13 @@ FROM ghcr.io/astral-sh/uv:0.9.28@sha256:59240a65d6b57e6c507429b45f01b8f2c7c0bbee
 
 FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS build-deconwolf
 # bookworm's CMake 3.25 and the libraries deconwolf links: FFTW (single and double precision, with OpenMP), libtiff,
-# GSL, libpng, the OpenCL ICD loader and headers; git checks the commit.
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake pkg-config git ca-certificates \
+# GSL, libpng, the OpenCL ICD loader and headers.
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake pkg-config ca-certificates \
       libfftw3-dev libtiff-dev libgsl-dev libpng-dev ocl-icd-opencl-dev opencl-headers \
     && rm -rf /var/lib/apt/lists/*
-ADD --keep-git-dir=true --checksum=ca062c49eedd6bf60fcd9804df467e64cfc3c113 https://github.com/elgw/deconwolf.git#v0.4.5 /src/deconwolf
-RUN test "$(git -C /src/deconwolf rev-parse HEAD)" = ca062c49eedd6bf60fcd9804df467e64cfc3c113
+ADD --checksum=sha256:b9ff86f3ebb9d4b3c907d131ff018302a9eb0f5ebfb978cae29d40f75599ef67 https://github.com/elgw/deconwolf/archive/refs/tags/v0.4.5.tar.gz /src/deconwolf-0.4.5.tar.gz
+RUN mkdir /src/deconwolf && tar -xzf /src/deconwolf-0.4.5.tar.gz -C /src/deconwolf --strip-components=1 \
+    && rm /src/deconwolf-0.4.5.tar.gz
 # -include inttypes.h: src/dw_imshift.c uses PRId64 without the header (W-915). The build folder is fixed, so the binary
 # does not depend on the host's paths.
 RUN cmake -S /src/deconwolf -B /src/build -DENABLE_GPU=ON -DCMAKE_BUILD_TYPE=Release \

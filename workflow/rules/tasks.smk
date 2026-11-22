@@ -19,6 +19,15 @@
     identity field, its outputs may not (fovs/{fov}/... has no {sample}); the group's tasks are then split by the values
     of the fields its outputs lack, one rule per value, with those values written into the record and log templates.
     Rules are named <kind>_<group index>, and <kind>_<group index>_<part> when a group is split.
+
+    A deconvolved copy outside the output root (deconvolution.copy_root beside or an absolute path) is shared by every
+    output root that plans it, and its psf and deconvolve tasks verify and reuse it (design/specs/deconvolution.md,
+    "Reuse and staleness"). Its files are therefore neither outputs nor inputs of any rule here: Snakemake removes a
+    job's existing outputs before it runs the job (snakemake/jobs.py:797-809 in 9.27.1), touches them after it
+    succeeds (dag.py:848-853) and removes them after it fails (jobs.py:955-958, called at 1322-1323); each would
+    change a copy that another root's records name, and update() keeps them from the first only. The tasks stay
+    ordered by the records of the tasks they need; the commands check the copy's files (the deconvolve task before
+    reuse, a consumer before it reads them).
 """
 
 import json
@@ -97,8 +106,21 @@ def _job(tasks, names):
     return lambda wildcards: tasks[tuple(wildcards[name] for name in names)]
 
 
+# The folder of a deconvolved copy outside the output root (the manifest names it absolute), or None.
+_COPY = (MANIFEST.get("deconvolution") or {}).get("copy")
+SHARED_COPY = _path(_COPY).rstrip("/") + "/" if _COPY and os.path.isabs(_COPY) else None
+
+
+def _shared(path):
+    """Whether a declared path or template lies in the shared copy (a template's braces are doubled)."""
+    if SHARED_COPY is None:
+        return False
+    return _path(path).startswith(SHARED_COPY) or _path(path).startswith(
+        SHARED_COPY.replace("{", "{{").replace("}", "}}"))
+
+
 def _inputs(job, by_id):
-    return lambda wildcards: [_path(i) for i in job(wildcards)["inputs"]] + \
+    return lambda wildcards: [_path(i) for i in job(wildcards)["inputs"] if not _shared(i)] + \
         [_path(by_id[need]["record"]) for need in job(wildcards)["needs"]]
 
 
@@ -148,17 +170,21 @@ RULES = _rules()
 BY_ID = {task["id"]: task for task in MANIFEST["tasks"]}
 # The targets of the dispatcher's rule all: every task's record and non-temporary declared outputs, so a missing
 # output reruns its producer even when its record remains. Removed temporary outputs stay exempt after completion;
-# an explicit snakemake <record> target still selects only that task and its upstream.
+# an explicit snakemake <record> target still selects only that task and its upstream. A shared copy's files are not
+# targets (above).
 _GROUPS = {group["name"]: group for group in MANIFEST["groups"]}
 TASK_RECORDS = [_path(task["record"]) for task in MANIFEST["tasks"]] + [
     _path(output) for task in MANIFEST["tasks"] for output in task["outputs"]
-    if output not in {_fill(template, task["identity"]) for template in _GROUPS[task["group"]]["temporary"]}]
+    if output not in {_fill(template, task["identity"]) for template in _GROUPS[task["group"]]["temporary"]}
+    and not _shared(output)]
 
 
 for _name, _group, _tasks, _names, _fixed in RULES:
     _job_of = _job(_tasks, _names)
     _outputs = []
     for _template in _group["outputs"]:
+        if _shared(_template):
+            continue
         _output = _path(_fill(_template, _fixed))
         if _template in _group["temporary"]:
             _output = temp(_output)

@@ -286,7 +286,9 @@ declared outputs are its own label files and its own record folder, so a failure
 `reference_stain` task removes or rewrites nothing of the reference round's task, and the reverse.
 Each task's record is the completion of its own deconvolved round only.
 
-**Snakemake.** `rules/tasks.smk` needs no change: it makes one rule per group of the manifest. A
+**Snakemake.** `rules/tasks.smk` makes one rule per group of the manifest (amended by W-928: a copy outside the
+output root is neither an output nor an input of its rules, so that Snakemake removes, touches and rewrites none of
+the files another output root reuses; orchestration-engines, "The Snakefile over the manifest"). A
 `deconvolve.<round name>` group's outputs have the wildcard `{fov}`, and `{round}` too for a
 sequencing or additional round, and lack `{sample}`, so the group is split by the fields its
 outputs lack, as `fov`'s is split by sample. A GPU task gets `resources: gpu=1` and, on UGER,

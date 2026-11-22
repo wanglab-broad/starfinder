@@ -737,6 +737,23 @@ def test_ru4_a_consumer_checks(work):
     assert str(target) in message and recorded in message and D.sha256(target) in message
 
 
+@pytest.mark.parametrize("channels", ["empty", "one missing"])
+def test_ru4_a_record_that_names_too_few_files(work, channels):
+    """A round record whose ``channels`` list is empty, or lacks one channel, fails the consumer, naming the round
+    and the file it reads that the record does not name."""
+    dw, _ = D.stand_in(work / "bin")
+    manifest, path, copy, statuses = stage(work, "ru4b", block(work), dw, kinds=("psf", "deconvolve"))
+    target = copy / "records" / "round2" / FOV / "deconvolution.json"
+    rec = json.loads(target.read_text())
+    rec["channels"] = [] if channels == "empty" else [c for c in rec["channels"] if c["label"] != "ch01"]
+    target.write_text(json.dumps(rec))
+    assert D.run(path, f"fov/{SAMPLE}/{FOV}") == 1
+    message = failed_record(path, f"fov/{SAMPLE}/{FOV}")["error"]["message"]
+    missing = "ch00.tif" if channels == "empty" else "ch01.tif"
+    assert "round round2 " in message and str(copy / "round2" / FOV / missing) in message
+    assert not (path.parents[1] / "fovs" / FOV / "run.json").exists()
+
+
 def test_ru5_resume_and_saved_sets(work):
     """A verified resume after the copy was redone with other values is refused on the input hashes; a saved set made
     without the block is refused by a run with it, naming both copy ids; a set and a run of one copy id are accepted."""
