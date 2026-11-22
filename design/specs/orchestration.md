@@ -664,6 +664,7 @@ execution:
   fiji: null                    # the BigStitcher engine task's tool (D3)
   resume_from_checkpoint: false
   code_version: keep            # or rerun: a new code version reruns the tasks (A4)
+  image_compression: zlib       # or none: the codec of the kept images, outside every hash (W-909)
 ```
 
 % Amended 2026-11-01 for W-760: container interpretation depends on the engine/profile; null leaves the profile's choice.
@@ -679,7 +680,7 @@ execution:
 | `stitching` | As today; and `dataset_xml` with `view_map` (a supplied BigStitcher result and its view map, each a file pattern with `{sample}`, which skip the macro and the Fiji task, D3) | `stitch`, or `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import` |
 | `assembly`, `export` | As today; `export.previews` (P5) | `export` per sample |
 | `report` | As today | `report` per sample, `compare` |
-| `execution` | `defaults` and `tasks.<kind>` (`threads`, `memory_mb`, `runtime_min`, `gpu`), `container`, `fiji`, `resume_from_checkpoint`, `code_version`, `log_level` | none; passed through to each task's `execution`, except `code_version`, which the plan reads for the fingerprint |
+| `execution` | `defaults` and `tasks.<kind>` (`threads`, `memory_mb`, `runtime_min`, `gpu`), `container`, `fiji`, `resume_from_checkpoint`, `code_version`, `log_level`, `image_compression` (`zlib`, the default, or `none`; W-909) | none; passed through to each task's `execution`, except `code_version`, which the plan reads for the fingerprint, and `image_compression`, which the `fov`, `tile_global`, `tile_merge` and `morphology` commands read from the resolved configuration (the codec of the stage `registered`, the reference image and the prepared images) |
 
 No scientific default changes: scoring stays on whenever the block decodes, deduplication stays
 off without its block, and every translator default (for example the WTA decoder's `diagnostics:
@@ -726,6 +727,8 @@ Recommendation: A; `execution` is outside the configuration hash.
 | | B. A method `bigstitcher_import` | A method name outside `STITCHING_METHODS` | Two names for one method config |
 | Verified resume (D8) | A. `execution.resume_from_checkpoint` (recommended) | None | Resuming never changes a result, so it stays outside the configuration hash |
 | | B. `processing.resume_from_checkpoint` | None | Turning resume on would change the hash that resume compares |
+| The image codec (W-909, decided 2026-11-21; implemented by W-922) | A. `execution.image_compression` (decided) | One key | The codec never changes an array, so it stays outside every hash, as resume does: switching it reruns no task and refuses no resume; the records name each file's codec ([compressed-image-outputs](compressed-image-outputs.md), K1) |
+| | B. `processing.checkpoints` as a mapping | None | Inside the `fov` task's hash: switching the codec would rerun every `fov` task and refuse every resume |
 | The morphology channel images | A. `morphology.channel_images`, off by default (recommended) | One key | D6 retires their readers; the golden comparison turns it on to compare them |
 | | B. Always written | Disk per FOV and round | Files nothing reads |
 | | C. Removed | None | The golden baseline's morphology images (W-642, A) have no counterpart |
@@ -942,7 +945,7 @@ guide's table (written when the implementation lands) is generated from this one
 New keys, which no current key maps to: `processing.mode`, `processing.tiled` (W-644),
 `morphology` and its `rounds`, `recipe`, `channel_images`, `assignment.previews`,
 `export.previews`, `stitching.dataset_xml`, `stitching.view_map`, and `execution` with `defaults`, `tasks`, `container`,
-`fiji`, `resume_from_checkpoint`, `code_version` and `log_level`.
+`fiji`, `resume_from_checkpoint`, `code_version`, `log_level` and `image_compression` (W-909).
 
 ## Declared outputs
 

@@ -315,9 +315,13 @@ def _registered_image(directory, round_name):
     return earlier if not path.is_file() and earlier.is_file() else path
 
 
-def write_registered_round(directory, round_name, image, metadata, snapshot=None):
-    """Write one registered ZYXC round (or its snapshot) as OME-TIFF with its geometry."""
-    from starfinder.io.tiff import save_volume
+def write_registered_round(directory, round_name, image, metadata, snapshot=None, *, image_compression="zlib"):
+    """Write one registered ZYXC round (or its snapshot) as OME-TIFF with its geometry.
+
+    ``image_compression`` is the codec: ``zlib`` (deflate, level 6, no predictor) or ``none``.
+    """
+    from starfinder.io.tiff import _check_compression, save_volume
+    _check_compression(image_compression)
     if np.asarray(image).ndim != 4:
         raise ValueError(f"registered checkpoint requires ZYXC images; {round_name} is not")
     for label in (round_name, snapshot):
@@ -325,8 +329,17 @@ def write_registered_round(directory, round_name, image, metadata, snapshot=None
             raise ValueError(f"label {label!r} is not a plain file name")
     path = registered_image_path(directory, round_name, snapshot)
     with atomic_file(path) as tmp:
-        save_volume(image, tmp, metadata=metadata)
+        save_volume(image, tmp, compress=image_compression == "zlib", metadata=metadata)
     return path
+
+
+def stage_compression(header):
+    """The codec of a registered stage's round images and snapshots; a header without the key is uncompressed.
+
+    A stage record without ``image_compression`` was written before the codec was recorded (before W-909).
+    """
+    # Before W-909
+    return header.get("image_compression", "none")
 
 
 def _transform_json(result, index, field_name, application_config=None):
@@ -358,12 +371,15 @@ def _transform_json(result, index, field_name, application_config=None):
 _BSPLINE_FIELDS = ("grid_size_xyz", "grid_origin_xyz", "grid_spacing_xyz", "grid_direction_xyz", "order", "spacing_zyx")
 
 
-def write_registered_header(directory, header, registration_results, registration_record=None, images=()):
+def write_registered_header(directory, header, registration_results, registration_record=None, images=(), *,
+                            image_compression="zlib"):
     """Write transforms.json and a <round>_field.npz per round with dense fields or B-spline coefficients.
 
     ``images`` are the ``files`` entries (payload) of the round images and
     snapshots already written, relative to ``registered/``; the field files
-    follow them, hashed as they are written. registration_record
+    follow them, hashed as they are written. ``image_compression`` is the
+    codec those images were written with (``zlib`` or ``none``), recorded at
+    the top level of the header. registration_record
     (FOV.registration_record) gives the semantics
     (``recipe``: one application entry per round with its WarpConfig;
     ``sequential``: a per-result application_config, as read from version 1)
@@ -396,7 +412,7 @@ def write_registered_header(directory, header, registration_results, registratio
                   applications={} if semantics == "sequential" else
                   {name: {"application_config": applications.get(name, results[-1].application_config)}
                    for name, results in registration_results.items() if results},
-                  files=list(images) + payload(directory, files))
+                  image_compression=image_compression, files=list(images) + payload(directory, files))
     write_json(header, directory / TRANSFORMS_FILE)
     return files + [TRANSFORMS_FILE]
 

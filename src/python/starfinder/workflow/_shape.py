@@ -89,7 +89,8 @@ STAGES = ("registered", "candidates", "pre_qc")
 #: The execution defaults (today's DEFAULT_RESOURCES and rule threads, common.smk:156-159 and the rule files).
 EXECUTION_DEFAULTS = {"threads": 1, "memory_mb": 8000, "runtime_min": 30, "gpu": False}
 KIND_THREADS = {"fov": 4, "tile_global": 4, "tile": 4, "bigstitcher_engine": 4}
-EXECUTION_KEYS = ("defaults", "tasks", "container", "fiji", "resume_from_checkpoint", "code_version", "log_level")
+EXECUTION_KEYS = ("defaults", "tasks", "container", "fiji", "resume_from_checkpoint", "code_version", "log_level",
+                  "image_compression")
 RESOURCE_KEYS = ("threads", "memory_mb", "runtime_min", "gpu")
 CODE_VERSIONS = ("keep", "rerun")
 LOG_LEVELS = ("INFO", "DEBUG")

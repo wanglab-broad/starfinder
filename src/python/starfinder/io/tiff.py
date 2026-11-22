@@ -17,6 +17,10 @@ from starfinder.io.conversion import ImageConversionConfig, convert_image
 
 # Namespace of the OME-XML CommentAnnotation holding ImageMetadata as JSON.
 METADATA_NAMESPACE = "starfinder.image.ImageMetadata"
+# The codec settings of the kept image outputs (design/specs/compressed-image-outputs.md, "The codec"): zlib is
+# deflate at level 6 without a predictor (TIFF Compression 8), none is uncompressed (Compression 1).
+IMAGE_COMPRESSIONS = ("zlib", "none")
+ZLIB_LEVEL = 6
 # Namespace of the name-based OME UUIDs: the UUID of a file is uuid5 of the SHA-256 of what is written.
 _UUID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "starfinder.io.ome_uuid")
 
@@ -554,7 +558,7 @@ def save_volume(image: np.ndarray, path: Path | str, compress: bool = False, *, 
     path : pathlib.Path or str
         Destination TIFF path.
     compress : bool
-        Whether to apply zlib compression.
+        Whether to apply zlib compression (deflate at level 6, no predictor).
     metadata : ImageMetadata or None
         Geometry to store with the image; ``None`` omits STARfinder geometry
         metadata.
@@ -582,17 +586,48 @@ def save_volume(image: np.ndarray, path: Path | str, compress: bool = False, *, 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     compression = "zlib" if compress else None
+    # The level is given explicitly; it is tifffile's default with the locked imagecodecs, so the bytes are those
+    # written without it (design/specs/compressed-image-outputs.md, CW4).
+    options = {"compressionargs": {"level": ZLIB_LEVEL}} if compress else {}
     if image.ndim == 3:
         info = {"axes": "ZYX"}
         if metadata is not None:
             info["starfinder_metadata"] = asdict(metadata)
         if _writes_ome(path):
             info["UUID"] = _content_uuid(image, dict(info, compression=compression))
-        tifffile.imwrite(path, image, compression=compression, photometric="minisblack", metadata=info)
+        tifffile.imwrite(path, image, compression=compression, photometric="minisblack", metadata=info, **options)
         return
     info = {"axes": "ZCYX"}
     if metadata is not None:
         info["CommentAnnotation"] = {"Namespace": METADATA_NAMESPACE, "Value": json.dumps(asdict(metadata))}
     info["UUID"] = _content_uuid(image, dict(info, compression=compression))
     tifffile.imwrite(path, np.moveaxis(image, 3, 1), ome=True, compression=compression,
-                     photometric="minisblack", metadata=info)
+                     photometric="minisblack", metadata=info, **options)
+
+
+def _check_compression(value, name="image_compression") -> str:
+    """``value`` when it is a codec setting (IMAGE_COMPRESSIONS); otherwise ValueError naming ``name``."""
+    if value not in IMAGE_COMPRESSIONS:
+        raise ValueError(f"{name} must be zlib or none; got {value!r}")
+    return value
+
+
+def _compression_options(image_compression) -> dict:
+    """The tifffile.imwrite options of a codec setting: zlib at level 6 without a predictor, or none."""
+    if _check_compression(image_compression) == "none":
+        return {}
+    return {"compression": "zlib", "compressionargs": {"level": ZLIB_LEVEL}}
+
+
+def _tiff_compression(path: Path | str) -> str:
+    """The codec setting a TIFF was written with: ``zlib`` when every page is deflate, ``none`` when none is.
+
+    A file of another codec, or of mixed pages, raises ValueError.
+    """
+    with tifffile.TiffFile(path) as tif:
+        codes = {int(page.compression) for page in tif.pages}
+    if codes == {8}:
+        return "zlib"
+    if codes == {1}:
+        return "none"
+    raise ValueError(f"{path} has TIFF Compression {sorted(codes)}, neither zlib (8) nor none (1)")

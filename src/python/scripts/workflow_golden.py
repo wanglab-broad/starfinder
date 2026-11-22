@@ -794,11 +794,11 @@ _FOV = r"fovs/FOV_\d+/"
 # Each difference that the exceptions leave, by decision: (decision, pattern of the comparison's line, why).
 EXCEPTIONS = (
     ("OC3", _RECORD + _FOV + r"run\.json\.outputs\.reference_image\.sha256: ",
-     "the reference image's digest: its stored metadata holds the frame id"),
+     "the reference image's digest: its stored metadata holds the frame id, and since W-909 the file is zlib"),
     ("OC3", _RECORD + r"stitching/[^/]+/placement\.json\.inputs\.FOV_\d+\.file_sha256: ",
-     "the placement's digest of each FOV's reference image"),
+     "the placement's digest of each FOV's reference image (the frame id, and since W-909 the codec)"),
     ("OC3", _RECORD + r"export/[^/]+/export\.json\.fusion\.fovs\[\d+\]\.images\.reference_merged\.sha256: ",
-     "the export's digest of each fused reference image"),
+     "the export's digest of each fused reference image (the frame id, and since W-909 the codec)"),
     ("OC3", _RECORD + r"(?:" + _FOV + r"assignment/[^/]+/assignment\.json\.inputs\.cells\.file|"
      r"export/[^/]+/(?:export\.json|sample\.h5ad\.uns\.json)\.(?:labels\.fovs\[\d+\]|assembly\.fovs\[\d+\]\.territories))"
      r"\.sha256: ",
@@ -829,6 +829,10 @@ EXCEPTIONS = (
      "the outputs of the morphology task's saved forms and of the segment task, which no rule of A to D wrote"),
     ("D8", r"^file:workflow/.+: only in actual$", "the plan's files, the task records and the task logs"),
     ("D8", _RECORD + _FOV + r"run\.json\.workflow: only in actual$", "run.json's workflow section"),
+    ("W-909", _RECORD + _FOV + r"run\.json\.(?:config\.checkpoints\.image_compression|"
+     r"outputs\.reference_image\.compression): only in actual$",
+     "the codec of the saved images (design/specs/compressed-image-outputs.md, migration M3): the CheckpointConfig "
+     "field and the reference image's entry"),
     ("IR", _RECORD + r"(?:" + _FOV + r"assignment/[^/]+/assignment\.json|"
      r"export/[^/]+/(?:export\.json|sample\.h5ad\.uns\.json)\.assembly\.assignment)"
      r"\.inputs\.cells\.record\.format_version: 2 != 1 \(exact\)$",

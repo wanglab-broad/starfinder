@@ -46,7 +46,7 @@ def check_writable(directory, overwrite) -> None:
 
 
 def write_image(directory, *, identity, name, image, metadata, channels, rotation, entry, chain_results=None,
-                application=None, attempts=None) -> dict:
+                application=None, attempts=None, image_compression="zlib") -> dict:
     """Write one prepared image's folder; return the written record.
 
     identity holds dataset_id, sample_id, fov_id and subtile_id; channels the
@@ -54,12 +54,15 @@ def write_image(directory, *, identity, name, image, metadata, channels, rotatio
     diagnostics (None without rotation); entry the image's
     registration_record["rounds"] entry. A registered round also passes its
     RegistrationResult list, its application WarpConfig and its attempts.
+    image_compression is the codec of image.ome.tif (``zlib``: deflate,
+    level 6, no predictor; or ``none``), recorded as ``image.compression``.
     """
     from starfinder._records import atomic_file, write_json
     from starfinder._checkpoint import _transform_json
-    from starfinder.io.tiff import save_volume
+    from starfinder.io.tiff import _check_compression, save_volume
     from starfinder.registration import BSplineTransform, DenseDisplacementTransform
     from starfinder._records import file_sha256, software
+    _check_compression(image_compression)
     directory = Path(directory)
     for file_name in FILES:
         (directory / file_name).unlink(missing_ok=True)
@@ -67,7 +70,7 @@ def write_image(directory, *, identity, name, image, metadata, channels, rotatio
     image = np.asarray(image)
     path = directory / IMAGE_FILE
     with atomic_file(path) as tmp:
-        save_volume(image, tmp, metadata=metadata)
+        save_volume(image, tmp, compress=image_compression == "zlib", metadata=metadata)
     registration = dict(entry, **dict.fromkeys(CHAIN_KEYS))
     field = None
     if chain_results is not None:
@@ -88,7 +91,7 @@ def write_image(directory, *, identity, name, image, metadata, channels, rotatio
                   channels=list(channels), rotation=rotation, registration=registration,
                   image={"path": IMAGE_FILE, "shape": list(image.shape), "dtype": str(image.dtype),
                          "metadata": asdict(metadata), "sha256": image_sha256(image),
-                         "file_sha256": file_sha256(path)},
+                         "file_sha256": file_sha256(path), "compression": image_compression},
                   software=software())
     write_json(record, directory / RECORD_FILE)
     return json.loads((directory / RECORD_FILE).read_text())
@@ -99,7 +102,8 @@ def read_image(directory, name, identity, channel_labels) -> dict:
 
     Returns the record, the image, its metadata, its registration_record["rounds"]
     entry and, for a registered round, the RegistrationResult list and the
-    application WarpConfig (else None).
+    application WarpConfig (else None). The image file may have either codec
+    (``image.compression``; a record without the key was written uncompressed).
     ValueError for a record of another version or image, a missing file or
     one whose SHA-256 differs from the record (naming both hashes), stored
     metadata other than the recorded, an identity (dataset_id, sample_id,

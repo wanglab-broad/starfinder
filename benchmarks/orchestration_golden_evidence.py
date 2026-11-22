@@ -5,7 +5,8 @@ refactored workflow (``workflow/Snakefile``, the dispatcher over the plan's mani
 migrated to the Python shape (``scripts/workflow_golden.py``, ``migrated_configurations``) and compares the outputs
 with the expected values that W-642 (invocations A, A2, B and C, G1) and W-643 (invocation D, G2) recorded with the
 workflow before the dispatcher, except the contract's exceptions (design/specs/orchestration.md, "The exception of the
-golden comparison"), each difference named by its decision (``workflow_golden.compare_migrated``: OC3, D6, D8, IR).
+golden comparison"), each difference named by its decision (``workflow_golden.compare_migrated``: OC3, D6, D8, IR,
+W-909).
 The tests of ``compare_migrated`` check that each exception explains only its own difference. W-898 moved these tests
 out of the suite (category K7 of design/proposals/test-suite-slimming.md): a pin of a finished refactor, whose task
 commands' values ``test_workflow_core_golden.py``, ``test_workflow_cell_golden.py`` and
@@ -58,8 +59,9 @@ HERE = "benchmarks/orchestration_golden_evidence.py"
 ORIGIN = "src/python/test/test_workflow_orchestration_golden.py"
 NO_SNAKEMAKE = "the golden comparison runs the workflow with Snakemake 9, which this environment does not have"
 #: The decisions that may explain a difference (the contract's exceptions; OC4 explains none here: the records'
-#: absolute paths under the work folder are written <work> on both sides).
-DECISIONS = {"OC3", "OC4", "D6", "D8", "IR"}
+#: absolute paths under the work folder are written <work> on both sides). W-909: the two keys of the codec in run.json
+#: (design/specs/compressed-image-outputs.md, migration M3).
+DECISIONS = {"OC3", "OC4", "D6", "D8", "IR", "W-909"}
 
 
 def _snakemake():

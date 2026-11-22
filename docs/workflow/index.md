@@ -227,8 +227,10 @@ The workflow's own files are in `workflow/`:
   the segmentation runs and the assignment of molecules to cells.
 * `stitching`, `assembly`, `export` and `report`: the sample outputs.
 * `execution`: each task kind's threads, memory, runtime and GPU, the image, the
-  Fiji path, a verified resume of `fov` tasks (`resume_from_checkpoint`) and
-  whether a new package version reruns finished tasks (`code_version`).
+  Fiji path, a verified resume of `fov` tasks (`resume_from_checkpoint`),
+  whether a new package version reruns finished tasks (`code_version`) and the
+  codec of the kept images (`image_compression`: `zlib`, the default, or
+  `none`), which reruns no task and refuses no resume.
 
 The {doc}`reference <reference>` lists every key with its default, and the
 {doc}`migration guide <../migration>` maps the keys of earlier configurations.
@@ -276,6 +278,14 @@ bit-identical keeps the set valid. A change to that output makes the set stale,
 which the task cannot see from the version, so make the set again at the new
 version. A set is a run's output root: keep it as long as runs read it, and
 copy it with its `run.json` files.
+
+A set of either codec is read as it is: one written with
+`execution.image_compression: zlib` (the default), one written
+uncompressed, with `none` or by an earlier package version. The codec is not
+compared. The run that reads a set writes its own files with its own setting.
+Do not recompress a set in place: its stage record and `run.json` hold the
+SHA-256 of every file, and the task refuses a set whose files differ from them.
+To get a compressed set, make the set again.
 `backend: matlab` runs the {doc}`MATLAB legacy workflow <matlab-legacy>` instead.
 
 ## Limits

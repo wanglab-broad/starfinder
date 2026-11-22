@@ -196,6 +196,7 @@ def resolve(config, source, output_root=None):
     e.setdefault("resume_from_checkpoint", False)
     e.setdefault("code_version", "keep")
     e.setdefault("log_level", "INFO")
+    e.setdefault("image_compression", "zlib")
     check_names(r)
     if (r.get("processing") or {}).get("mode") == "tiled":
         check_tiled(r)

@@ -25,6 +25,7 @@ fov.run(pipeline, execution=execution, checkpoints=CheckpointConfig())
 | `table_format` | `"csv"` | `"csv"` or `"parquet"` (requires the `checkpoint` extra, `pyarrow>=15`). |
 | `hash_inputs` | `True` | Record a streamed SHA-256 of every loaded TIFF. |
 | `overwrite` | `False` | Replace the run's own files: the FOV folder's `run.json` and `checkpoints/`. |
+| `image_compression` | `"zlib"` | The TIFF codec of the images the checkpointed calls write: `"zlib"` (deflate, level 6, no predictor) or `"none"` (since 2026-11-22). |
 
 `run` checks everything before it loads or processes any image. It raises
 `FileExistsError` if the FOV folder already holds a `run.json` or a `checkpoints/`
@@ -50,11 +51,11 @@ folder holds the restart material of `FOV.run`, the three stages.
     run.json                                  # the run record of FOV.run
     molecules.csv | reads.csv                 # FOV.export_spots
     nuclei_registration.json                  # FOV.save_registration_record
-    reference.tif                             # FOV.save_reference_image (reference_image, the default)
+    reference.tif                             # FOV.save_reference_image (reference_image, the default); zlib
     checkpoints/                              # the restart material of FOV.run (CheckpointConfig.stages)
         registered/
-            <round>.ome.tif                   # ZYXC OME-TIFF, dtype preserved, ImageMetadata
-            <snapshot>/<round>.ome.tif        # the recipe's extraction source, when set
+            <round>.ome.tif                   # ZYXC OME-TIFF, dtype preserved, ImageMetadata; zlib
+            <snapshot>/<round>.ome.tif        # the recipe's extraction source, when set; zlib
             <round>_field.npz                 # dense transforms only
             transforms.json
         candidates.csv | candidates.parquet
@@ -62,7 +63,7 @@ folder holds the restart material of `FOV.run`, the three stages.
         pre_qc.csv | pre_qc.parquet
         pre_qc.json
     other_rounds/<name>/                      # FOV.prepare_morphology / FOV.register(checkpoints=…)
-        image.ome.tif                         # the prepared image, ZYXC, every channel, ImageMetadata
+        image.ome.tif                         # the prepared image, ZYXC, every channel, ImageMetadata; zlib
         registration.json
         field.npz                             # only for a chain with a dense or B-spline transform
     segmentation/<run>/                       # FOV.segment(checkpoints=…), one folder per run
@@ -93,6 +94,16 @@ declares `reference_image_import` reads an imported image instead and writes non
 the readers of the sample stages (stitching, export, the report) read the default
 `<output_root>/fovs/`.
 
+% Amended 2026-11-22 for W-922 (design/specs/compressed-image-outputs.md, W-909).
+
+The images marked zlib above (the registered rounds and their snapshots, the reference
+image and the prepared images) are written as TIFF with deflate at level 6 and no predictor
+(TIFF Compression 8) by default, and uncompressed (Compression 1) with
+`CheckpointConfig.image_compression="none"` (`FOV.save_reference_image(image_compression=…)`
+for the reference image; the workflow's `execution.image_compression`). Every reader takes
+either codec: tifffile reads it from the file. The segmentation and assignment label images
+and the segmentation input were zlib already; the dense fields (`.npz`) are not changed.
+
 The `other_rounds/`, `segmentation/` and `assignment/` folders are written by
 `FOV.prepare_morphology` (or `FOV.register`), `FOV.segment` and `FOV.assign_molecules`, not
 by `FOV.run`: they are not checkpoint stages, `CheckpointConfig.stages` does not name
@@ -113,7 +124,9 @@ round is saved under `other_rounds/` ("Prepared morphology images" below), and i
 transforms and attempts are not written here. It is written with {py:func}`~starfinder.io.save_volume` as
 OME-TIFF and read with {py:func}`~starfinder.io.load_volume_zyxc`, which keeps
 singleton Z and C, the dtype (float64 included) and the stored
-{py:class}`~starfinder.image.ImageMetadata`. Checkpoints written before the
+{py:class}`~starfinder.image.ImageMetadata`. Its codec is
+`CheckpointConfig.image_compression`, `zlib` by default (since 2026-11-22; before, every
+round image was uncompressed); the snapshots take the same codec. Checkpoints written before the
 OME-TIFF change named this file `<round>.tif` and stored it in tifffile's own
 ZYXC layout; loading still accepts that name and layout when no `.ome.tif` file
 is present.
@@ -163,6 +176,13 @@ images gives the registered images bit for bit.
 `load_checkpoint("registered")` reads each round with the patterns of its
 `channels` entry and falls back to `channel_labels` for a header without the key
 (written before 2026-10-05); the key is additive, so the stage's `format_version` stays 2.
+
+`transforms.json` also records `image_compression` at its top level (since 2026-11-22,
+W-922): `zlib` or `none`, the codec of every round image and snapshot it lists. A header
+without the key was written before and its images are uncompressed. The key is additive: the
+`format_version` stays 3 and the `files` entries stay exactly `{path, sha256}`, so v0.3.0's
+reader loads a compressed stage. No reader needs the key. A verified resume keeps a stage
+with its own codec, and the files written after it take the resuming run's.
 
 % W-337
 
@@ -350,14 +370,14 @@ All JSON files are strict JSON: a non-finite diagnostic or configuration value
 image (the reference stain `reference_stain` and each other round) to
 `other_rounds/<name>/`; `fov.register(recipe, rounds=…, checkpoints=…)` writes each
 round it registers the same way ([coordination](coordination.md), "Sequencing rounds and other
-rounds"). Only `directory` and `overwrite` are used. An existing folder raises
+rounds"). Only `directory`, `overwrite` and `image_compression` are used. An existing folder raises
 `FileExistsError` before anything is loaded or estimated unless `overwrite=True`, which
 replaces its files.
 
 | File | Content |
 | --- | --- |
-| `image.ome.tif` | The prepared image in the reference frame: ZYXC OME-TIFF by `save_volume`, every channel in the round's C order, with its `ImageMetadata` (the reference round's). |
-| `registration.json` | The record, `format_version` 1 and `stage` `prepared_image`: the name; `dataset_id`, `sample_id`, `fov_id` and `subtile_id`; `channels` (the `ChannelInfo` entries); `rotation` (the rotation diagnostics, or null); `registration` (the `registration_record["rounds"]` entry: for a round the recipe summary, the reference label and `reference_sha256`, with `transforms` (the step results, in the form of `transforms.json`), `application_config` and `attempts`; for `reference_stain` the `relation` `same acquisition as the reference round` and no transform or attempt); `image` (path, shape, dtype, metadata, `sha256` of the image's C-order bytes and `file_sha256` of the file); `software` (as in `run.json`). |
+| `image.ome.tif` | The prepared image in the reference frame: ZYXC OME-TIFF by `save_volume`, every channel in the round's C order, with its `ImageMetadata` (the reference round's), written with the codec `CheckpointConfig.image_compression` (`zlib` by default since 2026-11-22). |
+| `registration.json` | The record, `format_version` 1 and `stage` `prepared_image`: the name; `dataset_id`, `sample_id`, `fov_id` and `subtile_id`; `channels` (the `ChannelInfo` entries); `rotation` (the rotation diagnostics, or null); `registration` (the `registration_record["rounds"]` entry: for a round the recipe summary, the reference label and `reference_sha256`, with `transforms` (the step results, in the form of `transforms.json`), `application_config` and `attempts`; for `reference_stain` the `relation` `same acquisition as the reference round` and no transform or attempt); `image` (path, shape, dtype, metadata, `sha256` of the image's C-order bytes, `file_sha256` of the file and `compression`, `zlib` or `none`: an additive key since 2026-11-22, absent from a record written before, whose image is uncompressed; the format version stays 1); `software` (as in `run.json`). |
 | `field.npz` | Only for a chain with a dense or B-spline transform: `result_<i>` as in `<round>_field.npz`, with its `file_sha256` in the record. |
 
 `fov.load_registered_round(name, checkpoints=CheckpointConfig(directory=…))` reads the
@@ -404,7 +424,10 @@ another tool or rule produced is declared with `reference_image_import`, a patte
 same form that excludes `reference_image`: every reader reads that file,
 `FOV.save_reference_image` raises instead of writing it, and the workflow's `fov` and
 `tile_global` tasks write no reference image. The TIFF content, calibration and projection metadata are as
-before. A segmentation run that reads the saved image records it by its path relative to
+before. The file is zlib (deflate, level 6, no predictor) by default and uncompressed with
+`image_compression="none"`, ZYX and the projected YX alike (since 2026-11-22; the workflow's
+`fov` and `tile_global` tasks pass `execution.image_compression`, so direct and tiled write the
+same bytes). A segmentation run that reads the saved image records it by its path relative to
 the output root, or by its absolute path when it lies outside, with its SHA-256 (since
 2026-10-24; [migration](../../docs/migration.md)).
 
@@ -583,7 +606,7 @@ depends on where the output tree or the input tree lies.
 | `error` | `null`, or the failing `step` and `round`, the exception `type`, `message` and `traceback`. |
 | `code` | Package `version`, `version_source` (`checkout`, `build` or `dist`), `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded when the package runs from a starfinder checkout, never from an enclosing repository, or from the build information of an image (W-827). |
 | `environment` | Python, platform and package versions (`null` when not installed). |
-| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, `readout_mode`, the dataset's readout mode (since 2026-10-02), and `encoding`, the codebook's encoding as in `pre_qc.json` (`null` without a codebook or in readout mode `direct`; since 2026-10-04). `checkpoints.directory`, the parent of the FOV folders when the configuration names one, is relative to the FOV folder (`..`; `../..` for a subtile), else `null`. The other configurations are recorded as given. |
+| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, `readout_mode`, the dataset's readout mode (since 2026-10-02), and `encoding`, the codebook's encoding as in `pre_qc.json` (`null` without a codebook or in readout mode `direct`; since 2026-10-04). `checkpoints.directory`, the parent of the FOV folders when the configuration names one, is relative to the FOV folder (`..`; `../..` for a subtile), else `null`. `checkpoints.image_compression` is the codec of the images the run wrote (since 2026-11-22; a record without it was written uncompressed); a verified resume records the resuming attempt's, while the kept registered stage's record keeps its own. The other configurations are recorded as given. |
 | `workflow_config` | `{path, sha256}` of the workflow configuration file a workflow rule ran with (the top-level `config_path`: absolute, or relative to the input root when it lies there; `sha256` of its bytes, `null` when no file is there), kept on the `Dataset` by `from_workflow_config`; for a task of the `starfinder workflow` commands, of the resolved configuration it ran with (`workflow/resolved.json`, relative to the output root, and the `sha256:` of its bytes; since 2026-10-31); `null` for a run outside the workflow (since 2026-10-12). |
 | `channels` | The channels of each configured round, and of `reference_stain` when `Dataset.reference_stains` is set: per round, in C order, one entry with `channel` (the file pattern), `name` (`null` when not given) and `wavelength` (nm, or `"unavailable"`), from `Dataset.channel_info` ([coordination](coordination.md), "Channels"; since 2026-10-05). An additive key: a `run.json` without it still loads. |
 | `rounds` | The round roles of the run, as `RoundState` holds them: `sequencing_rounds`, `other_rounds` and `reference_round` (since 2026-10-23). |
@@ -596,7 +619,7 @@ depends on where the output tree or the input tree lies.
 | `counts` | Spots, intensities, decoding call statuses, scoring counts (`scoring`: total, scored, `no_assignment` and `background_unavailable`, since 2026-10-02, when the reads were scored), deduplication counts (`deduplication`: total, groups, `merged_reads` and `conflicting_groups`, since 2026-10-02, when the reads were deduplicated) and filtering counts (`filtering`: total, accepted and rejected; when the filter checked endpoints, with `end_bases` or a codebook layout's segment ends, also `endpoint_valid`, the reads of the correct form, and with segment ends `endpoint_valid_segments`, that count per segment; since 2026-10-12; and `fractions`, the filter result's `accepted` and, when it checked endpoints, `endpoint_valid` over all reads, `null` without reads; since 2026-10-23). Whenever reads were decoded, `summary` holds the population summary of {py:func}`~starfinder.readout.summarize_reads` of the latest reads (since 2026-10-02 for scored or deduplicated reads; since 2026-10-23 also without scoring or deduplication). |
 | `checkpoint_directory` | `checkpoints`, the FOV folder's checkpoint folder, relative to the FOV folder. |
 | `checkpoints` | Per stage written, the stage record the run relies on: `path` (`checkpoints/candidates.json`, `checkpoints/pre_qc.json` or `checkpoints/registered/transforms.json`, relative to the FOV folder) and `sha256` (of the record's bytes). The record names and hashes its payload files (`files`, see "registered" under "Layout"); a stage whose record was not written (a run that failed before it) has no entry. |
-| `outputs` | `{}` when the processing ends; then, per slot, each file written after the processing, added by its writer when the FOV's latest `run` had checkpoints and succeeded, the record rewritten atomically (a later `run` writes a new record without them). Every entry has `path` (relative to the FOV folder, POSIX) and `sha256` (of the file's bytes). `molecules` and `reads` ({py:meth}`~starfinder.dataset.FOV.export_spots`, since 2026-10-23) also have `molecules_sha256` (the keyed hash of the six molecule columns, `MoleculeTable.sha256`; `null` for `reads` or a file without those columns), `dtypes` (the column dtypes) and `rows`; `reference_image` ({py:meth}`~starfinder.dataset.FOV.save_reference_image`). The declared outputs of the `fov` and `tile_merge` tasks are all recorded here (since 2026-10-24); the subtile slots `subtile_coords`, `subtile_data` and `subtile_spots` went with the subtile API (W-735, 2026-10-31). |
+| `outputs` | `{}` when the processing ends; then, per slot, each file written after the processing, added by its writer when the FOV's latest `run` had checkpoints and succeeded, the record rewritten atomically (a later `run` writes a new record without them). Every entry has `path` (relative to the FOV folder, POSIX) and `sha256` (of the file's bytes). `molecules` and `reads` ({py:meth}`~starfinder.dataset.FOV.export_spots`, since 2026-10-23) also have `molecules_sha256` (the keyed hash of the six molecule columns, `MoleculeTable.sha256`; `null` for `reads` or a file without those columns), `dtypes` (the column dtypes) and `rows`; `reference_image` ({py:meth}`~starfinder.dataset.FOV.save_reference_image`) also has `compression`, the file's codec, `zlib` or `none` (since 2026-11-22; the `tile_merge` task reads it from the file the `tile_global` task wrote). The declared outputs of the `fov` and `tile_merge` tasks are all recorded here (since 2026-10-24); the subtile slots `subtile_coords`, `subtile_data` and `subtile_spots` went with the subtile API (W-735, 2026-10-31). |
 | `tiled` | Written by the merge of tiled execution ([orchestration-tiled](orchestration-tiled.md), "The merge"; since 2026-10-31): `grid` (`tile_size_yx`, `n_yx`, `halo`, `chunk_zyxc`, `local_registration`), `checkpoint` (the chunked checkpoint's path relative to the FOV folder, the SHA-256 of each round's array, and whether it was kept), `tiles` (per tile its `core_yx`, `window_yx`, `candidates`, `reads`, the SHA-256 of its three files and its attempt) and `statistics` (the FOV-level thresholds and image background the tiles used). An additive key: a record without it loads as direct's. |
 | `workflow` | Written by the workflow's `fov` task ([orchestration](orchestration.md), "Logging and records"; since 2026-10-31): `task` (id and kind), `backend` (`python` and the device), `fallback`, `configuration_sha256`, `blocks_sha256`, `manifest_sha256`, `fingerprint`, `token`, `code`, `execution_context` (`engine`, `engine_version`, `job_id`, `attempt`, `image`, `host`), `resumed_from` (the stage a verified resume continued after, or `null`) and the task's `wall_s`, `cpu_s` and `peak_rss_kib`. Written when the run starts, so that a stopped attempt's record holds `blocks_sha256` for a verified resume, and again with the final measurements before the task record; the task record holds the same section. An additive key: a record without it still loads, and is not resumed. |
 | `spot_finding_input` | Written by the workflow's `fov` task that reads a saved set ([orchestration](orchestration.md), "Checkpoints and resume", amendment W-889; since 2026-11-20): `path` (the set's output root, absolute), `run_record` and `registered` (`{path, sha256}` of the set's `run.json` and of its FOV's `checkpoints/registered/transforms.json`, absolute paths), `code` (the set's code identity) and `ended_at` (the set's run's end). Such a record's `inputs` (re-expressed against this run's input root), `preprocessing`, `registration`, `transforms` and the `steps` before the set's registered stage was written (without those writes, `find_spots`, `find_round_spots` and `extract_round`) are the set's; `config.pipeline` is this run's whole pipeline; `checkpoints` has no `registered` entry. An additive key: absent in every other record. |

@@ -161,5 +161,51 @@ is submitted (W-910's process note).
 
 ## Implemented checks
 
-The implementation issue adds the table that maps each row above to its test, with the measured
-time of each test that takes 1 s or more.
+% Added 2026-11-22 by W-922, the implementation.
+
+The table maps each package check above to its tests. Files are under `src/python/test/` unless
+they start with `benchmarks/`. "Time" is each new test's measured call time in seconds on one CPU
+and one numerical thread, all its parameters together, where it is 1 s or more; "—" is below 1 s.
+"Selection" marks a test that W-922 did not write, which the controller's selections run. The times
+were measured under the records' tracer, which inflates them somewhat (W-922's run folder,
+`results/tables/new-tests-1s.csv` and `test-times.csv`). Only the Zarr comparison reaches 5 s in one
+parameter, and it is marked `slow`.
+`test_dataset_image_compression_docs_contract.py` checks that every row names tests that exist.
+
+* **Fixtures.** `image_compression_cases.py` holds the page's `volumes` and the writers and readers
+  both revisions run. `base_reader` is `image_compression_cases.base_source`: `git archive` of
+  `70edc72` into the test's temporary folder, run in a subprocess whose `PYTHONPATH` starts with
+  its `src/python`. Where Git or the revision is absent, the test skips and names the reason.
+* **CR1 and CW1** use two fixtures instead of `session_dataset`, which has no other round. One is a
+  hand-built resident FOV of two rounds and one other round. The other is the tiny workflow fixture
+  run through the commands.
+* **WF2** stops the task at `_assemble_intensities`, after the stage `registered` is written.
+* **ID5** runs the specification's tests (`compressed-image-outputs-tests`) as they are, with the
+  default. A second run switches the package's defaults to `none` with a `sitecustomize` module
+  (W-922's run folder, step `test-id5-none`) and logs the codec each writer call used.
+
+(compressed-image-outputs-implemented-checks)=
+
+| Check | File | Tests | Time (s, one CPU) |
+| --- | --- | --- | --- |
+| CW1 | `test_dataset_image_compression.py`; `test_workflow_image_compression.py` | `test_cw1_the_writers_of_i1_to_i4_write_their_codec`, `test_cw1_the_writers_that_compress_already_keep_zlib_and_the_others_stay_uncompressed`, `test_cw1_the_synthetic_writers_stay_uncompressed`, `test_cw1_the_zarr_outputs_keep_the_codec_of_v0_3_0`; `test_cw1_cr1_the_tasks_write_and_record_the_setting`, `test_wf4_direct_and_tiled_write_the_same_reference_image_and_an_unfiltered_chunked_checkpoint`, `test_mt1_the_channel_images_are_unchanged` | Zarr 25.4 (`slow`); tasks 1.8, WF4 3.2, MT1 5.0 (two parameters, at most 2.5 each); the others —; the synthetic writers' test pays the session dataset's 3.3 s setup when it is the first to use it |
+| CW2 | `test_dataset_image_compression.py` | `test_cw2_each_reader_returns_the_written_array_and_metadata` | — |
+| CW3 | `test_dataset_image_compression.py` | `test_cw3_the_opt_out_writes_the_bytes_of_v0_3_0` | 1.3 |
+| CW4 | `test_dataset_image_compression.py` | `test_cw4_the_writers_that_compress_today_keep_their_bytes` | 1.3 |
+| CW5 | `test_dataset_image_compression.py`; `test_workflow_image_compression.py` | `test_cw5_checkpoint_config_refuses_another_codec`, `test_cw5_the_writers_refuse_another_codec`; `test_cw5_the_plan_refuses_another_codec` | — |
+| CW6 | `test_dataset_image_compression.py` | `test_cw6_the_default_is_zlib_level_6_without_a_predictor` | — |
+| CR1 | `test_dataset_image_compression.py`; `test_workflow_image_compression.py` | `test_cr1_the_records_name_the_codec_of_each_file`; `test_cw1_cr1_the_tasks_write_and_record_the_setting` | —; 1.8 (the tasks, as CW1) |
+| CR2 | `test_dataset_image_compression.py` | `test_cr2_records_without_the_key_load_as_uncompressed_without_a_warning` | 1.2 (the parameter v0.3.0) |
+| CR3 | `test_dataset_image_compression.py` | `test_cr3_v0_3_0_reads_a_compressed_stage` | 1.1 |
+| CR4 | `test_dataset_image_compression.py` | `test_cr4_a_changed_byte_of_a_round_image_refuses_the_stage` | — |
+| WF1 | `test_workflow_image_compression.py`; `test_workflow_plan.py` | `test_wf1_the_codec_is_outside_every_hash`; `test_the_plan_writes_the_expected_manifest_of_each_variant` | —; selection |
+| WF2 | `test_workflow_image_compression.py` | `test_wf2_a_resume_after_a_switch_keeps_the_stage_and_its_codec` | 1.1 |
+| WF3 | `test_workflow_image_compression.py` | `test_wf3_a_saved_set_of_either_codec_is_read` | 4.8 (two parameters; v0.3.0 4.0) |
+| WF4 | `test_workflow_image_compression.py`; `test_workflow_tiled_tasks.py` | `test_wf4_direct_and_tiled_write_the_same_reference_image_and_an_unfiltered_chunked_checkpoint`; `test_the_tiled_tasks_write_the_declared_files_of_direct` | 3.2; selection (1.7) |
+| WF5 | `test_workflow_engines_e2e.py` | `test_x3_engines_have_byte_equal_declared_outputs` | selection (`nextflow`, `slow`; 257.9 for its two parameters) |
+| ID1 | `test_report_records_golden.py` | `test_run_record_holds_every_pinned_key_and_value` | selection |
+| ID2 | `test_workflow_core_golden.py` | `test_the_fov_command_reproduces_the_core_values` | selection (`extended`, `slow`; 13.0) |
+| ID3 | `test_workflow_image_compression.py`; `benchmarks/orchestration_golden_evidence.py` | `test_id3_the_w909_exception_explains_the_two_codec_keys_and_nothing_else`; `test_the_refactored_workflow_reproduces_the_golden_values`, `test_the_refactored_workflow_reproduces_the_golden_values_of_the_export`, `test_the_migrated_comparison_explains_only_the_contracts_exceptions` | —; the evidence script |
+| ID4 | `test_synthetic_sample_golden.py`; `test_synthetic_appearance_golden.py`; `test_assignment.py`; `test_io.py`; `test_ome_tiff.py`; `test_stitching_ome_uuid.py`; `test_workflow_nextflow_cache.py`; `test_workflow_recovery.py`; `test_workflow_plan.py` | `test_saved_preset_outputs_equal_the_pins`; `test_saved_context_preset_outputs_equal_the_base_revision_pins`; `test_a19_three_single_thread_processes_give_identical_tables`; `TestSaveStack::test_save_with_compression`; `test_equal_content_gives_equal_bytes_in_two_processes`, `test_compressed_volume_without_metadata_has_a_content_uuid`; `test_write_ome_tiff_uuid_is_a_function_of_the_content`, `test_two_exports_in_two_processes_write_identical_ome_tiffs`; `test_fingerprints_and_fresh_tokens_rerun_only_affected_tasks`; `test_x11_stale_results_rerun_only_readers_and_downstream`; `test_the_plan_writes_the_expected_manifest_of_each_variant` | selection |
+| ID5 | the specification's table `compressed-image-outputs-tests` | its 38 tests, with the default; again with `none` (W-922's run folder, step `test-id5-none`) | selection; the run folder's steps |
+| MT1 | `test_workflow_image_compression.py` | `test_mt1_the_channel_images_are_unchanged` | 5.0 (two parameters, at most 2.5 each) |
