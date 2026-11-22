@@ -1,7 +1,5 @@
 """CLI generation in both modes, the saved layout and the benchmark code that reads it."""
 import json
-import re
-import subprocess
 import sys
 
 import numpy as np
@@ -11,6 +9,8 @@ import tifffile
 
 from starfinder.__main__ import main
 from starfinder.synthetic import BENCHMARK_PRESETS, DEFORMATION_PRESETS, SCENE_PRESETS
+
+from .measured_process import run_measured
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.benchmark]
 
@@ -175,17 +175,14 @@ def test_small_registration_cli(tmp_path):
 
 
 def timed_cli(tmp_path, mode, preset):
-    """Run the CLI in a child under /usr/bin/time -v; return (output, seconds, max RSS KiB)."""
+    """Run the CLI in its own process, measured from its rusage (``run_measured``); return (output, seconds,
+    max RSS KiB)."""
     output = tmp_path / f'{preset}-{mode}'
-    completed = subprocess.run(
-        ['/usr/bin/time', '-v', sys.executable, '-m', 'starfinder', 'synthetic', 'generate', '--mode', mode,
-         '--preset', preset, '--seed', '42', '--owner', 'pytest', '--output', str(output)],
-        capture_output=True, text=True, timeout=1200)
-    assert completed.returncode == 0, completed.stderr[-2000:]
-    clock = re.search(r'Elapsed \(wall clock\) time \(h:mm:ss or m:ss\): ([\d:.]+)', completed.stderr).group(1)
-    seconds = sum(float(part) * 60**i for i, part in enumerate(reversed(clock.split(':'))))
-    rss = int(re.search(r'Maximum resident set size \(kbytes\): (\d+)', completed.stderr).group(1))
-    return output, seconds, rss
+    done = run_measured(
+        [sys.executable, '-m', 'starfinder', 'synthetic', 'generate', '--mode', mode,
+         '--preset', preset, '--seed', '42', '--owner', 'pytest', '--output', str(output)], timeout=1200)
+    assert done.returncode == 0, done.stderr[-2000:]
+    return output, done.wall_s, done.peak_rss_kib
 
 
 @pytest.mark.extended

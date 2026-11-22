@@ -15,7 +15,7 @@ there. The routine part of GA24, GA8 to GA18 and the closed-form bank checks sta
 Checks, in the order the tests ran (``--check`` selects some; GA23 measures the scenes GA24 generated, so selecting
 GA23 also generates them):
 
-* ``GA24-slow``: each ``slow`` preset generated in its own process under /usr/bin/time -v, within RG1;
+* ``GA24-slow``: each ``slow`` preset generated in its own process, measured from its rusage, within RG1;
 * ``GA24-acquired``: the 2D tissue and culture ``slow`` presets at the acquired pixel, within RG1;
 * ``GA24-build``: each real bank rebuilt from its build configuration in its own process, within RG1;
 * ``GA26``: the real banks against their records, W-392's inventory and W-513's counts;
@@ -26,8 +26,8 @@ Each step runs on one CPU with one numerical thread; the scenes are saved under 
 empty, and the rebuilt bank files are deleted once measured. The printed lines are those of the tests (``GA23 CSV
 BEGIN``/``END`` blocks, ``GA23 ROW`` JSON lines). ``--output`` also receives ``results.json`` (each case's outcome
 and wall time, the bank identities, the seeds and the revisions) and ``ga23_targets.csv``. Exit status 0 when every
-selected case passed, 1 when one failed, 2 when none failed but one was skipped (a missing bank, inventory or
-/usr/bin/time, each named). Do not run with ``python -O``, which drops the assertions.
+selected case passed, 1 when one failed, 2 when none failed but one was skipped (a missing bank or inventory,
+each named). Do not run with ``python -O``, which drops the assertions.
 """
 import argparse
 import importlib.util
@@ -134,7 +134,7 @@ class Evidence:
         self.output, self.measures, self.scenes = output, measures, scenes
         self.generated, self.rebuilt_banks, self.ga23_rows = {}, {}, []
 
-    # ``app_slow`` and ``app_slow_acquired``: a slow preset generated once in its own process under /usr/bin/time -v.
+    # ``app_slow`` and ``app_slow_acquired``: a slow preset generated once in its own process (``generate_measured``).
     def app_slow(self, name, acquired=False):
         s = self.scenes
         if (name, acquired) not in self.generated:
@@ -144,7 +144,7 @@ class Evidence:
                 name, directory, s.ACQUIRED_SPACING[name] if acquired else None)
         return self.generated[name, acquired]
 
-    # GA27's rebuild of each real bank, once, in its own process under /usr/bin/time -v.
+    # GA27's rebuild of each real bank, once, in its own process (``rebuild_measured``).
     def rebuilt(self, name):
         s = self.scenes
         if name not in self.rebuilt_banks:

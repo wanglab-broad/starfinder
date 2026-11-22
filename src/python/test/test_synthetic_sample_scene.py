@@ -30,6 +30,7 @@ from starfinder.synthetic import (SAMPLE_PRESET_VERSION, SAMPLE_PRESETS, SAMPLE_
 from starfinder.synthetic._observation import evaluate_background_translated
 
 from .formed_oracle import kernel_radius
+from .measured_process import run_measured
 
 pytestmark = pytest.mark.synthetic
 
@@ -1027,13 +1028,13 @@ print(len(scene.molecules), int(scene.molecules.in_sample.sum()), len(scene.cell
 
 @pytest.mark.slow
 def test_small_preset_time_and_peak_rss(tmp_path):
-    result = subprocess.run(["/usr/bin/time", "-v", sys.executable, "-c", SMALL, str(tmp_path / "small")],
-                            capture_output=True, text=True, timeout=1800, check=True)
-    rss = int(re.search(r"Maximum resident set size \(kbytes\): (\d+)", result.stderr).group(1))
-    elapsed = re.search(r"Elapsed \(wall clock\) time \(h:mm:ss or m:ss\): (\S+)", result.stderr).group(1)
+    result = run_measured([sys.executable, "-c", SMALL, str(tmp_path / "small")], timeout=1800)
+    assert result.returncode == 0, result.stderr[-2000:]
+    rss = result.peak_rss_kib
     size = sum(p.stat().st_size for p in (tmp_path / "small").rglob("*") if p.is_file())
     molecules, sample, cells, generated = result.stdout.split()
-    print(f"sample-small-v1: wall {elapsed}, generation {generated} s, peak RSS {rss} KiB, saved {size} bytes, "
+    print(f"sample-small-v1: wall {result.wall_s:.2f} s, generation {generated} s, peak RSS {rss} KiB, "
+          f"saved {size} bytes, "
           f"{molecules} molecules ({sample} in the sample), {cells} cells")
     assert rss < 4 * 1024 * 1024
     assert int(cells) == 18

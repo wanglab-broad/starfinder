@@ -1048,7 +1048,8 @@ the ellipsoid columns null, versioned by `APPEARANCE_TRUTH_VERSION` in `appearan
   the configuration rules, the nominal grid and placement truth, the rendering identities,
   the cellular identities, stream isolation, the single-plane case below, the saved files
   read without a segmenter and cross-process repeatability; among them is
-  one `slow` test that generates `sample-small-v1` under `/usr/bin/time -v` and records its
+  one `slow` test that generates `sample-small-v1` in its own process (`/usr/bin/time -v`
+  until W-920, now from the child's rusage) and records its
   time and peak RSS, as `test_medium_cli_both_modes_time_and_peak_rss` does for the
   benchmark presets.
 * **The single-plane case.** No preset has Z=1, and none is added. The test supplies the

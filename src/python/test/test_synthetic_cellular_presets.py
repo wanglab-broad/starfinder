@@ -2,7 +2,8 @@
 
 GN7 on the routine presets (``context_routine``): K1 for every pair of sites recomputed by the test oracle,
 the placement record, and F2's floor reached, with the reached density read back from the saved ``context.json``.
-GN24 on the routine presets: each generated in its own process under ``/usr/bin/time -v``, within the project's 4 GiB.
+GN24 on the routine presets: each generated in its own process, measured from its rusage (``run_measured``, W-920),
+within the project's 4 GiB.
 GN7 and GN5 (W-486) on ``context_slow`` were moved by W-899 (W-893's K5) to ``benchmarks/synthetic_scene_evidence.py``,
 which imports ``generate`` and ``check_packing`` from here; GN5 on the routine presets is
 ``test_synthetic_cellular_routine.py``'s.
@@ -15,9 +16,7 @@ Each GN24 row is printed as one ``GN24 ROW`` JSON line, so a run with ``-s`` hol
 from dataclasses import replace
 import json
 import math
-import re
 import shutil
-import subprocess
 import sys
 
 import numpy as np
@@ -26,6 +25,7 @@ import pytest
 from starfinder.synthetic import cellular_scene_preset, generate_cellular_scene, save_cellular_scene
 
 from .cellular_oracle import Oracle
+from .measured_process import run_measured
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.validation]
 
@@ -126,24 +126,14 @@ seconds = time.perf_counter() - start
 print(json.dumps(dict(generation_s=seconds, nuclei=len(scene.sample.nuclei), cells=len(scene.sample.cells),
                       molecules=len(scene.sample.molecules), bright_regions=len(scene.bright_regions))))
 """
-TIME_FIELDS = {"wall_s": r"Elapsed \(wall clock\) time \(h:mm:ss or m:ss\): (\S+)",
-               "user_s": r"User time \(seconds\): (\S+)", "system_s": r"System time \(seconds\): (\S+)",
-               "peak_rss_kib": r"Maximum resident set size \(kbytes\): (\d+)", "exit_status": r"Exit status: (\d+)"}
-
-
-def clock(text):
-    parts = [float(p) for p in text.split(":")]
-    return sum(p * 60 ** i for i, p in enumerate(reversed(parts)))
-
-
 def generate_in_own_process(name, spacing):
-    result = subprocess.run(["/usr/bin/time", "-v", sys.executable, "-c", GENERATE, name, json.dumps(spacing)],
-                            capture_output=True, text=True, timeout=BOUND_S + 60)
-    found = {key: re.search(pattern, result.stderr) for key, pattern in TIME_FIELDS.items()}
-    assert all(found.values()), result.stderr[-2000:]
-    row = {key: clock(m.group(1)) if key == "wall_s" else float(m.group(1)) for key, m in found.items()}
-    assert result.returncode == 0 and row["exit_status"] == 0, result.stderr[-2000:]
-    row.update(json.loads(result.stdout.strip().splitlines()[-1]))
+    """Generate the preset ``name`` (at ``spacing``, or the preset's) in its own process; the row of GN24: wall, user
+    and system seconds, peak RSS (KiB) and exit status from the child's rusage, and the scene's counts."""
+    done = run_measured([sys.executable, "-c", GENERATE, name, json.dumps(spacing)], timeout=BOUND_S + 60)
+    assert done.returncode == 0, done.stderr[-2000:]
+    row = dict(wall_s=done.wall_s, user_s=done.user_s, system_s=done.system_s, peak_rss_kib=done.peak_rss_kib,
+               exit_status=done.returncode)
+    row.update(json.loads(done.stdout.strip().splitlines()[-1]))
     return row
 
 

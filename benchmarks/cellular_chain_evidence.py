@@ -22,13 +22,13 @@ Checks, the rows of the chain tables (``--check`` selects some, or a context: ``
 ``culture``): ``CD0`` to ``CD5``, ``CT0`` to ``CT5`` and ``CU0`` to ``CU5``. A row's cases run in the order the
 tests ran; a case whose chain stage failed earlier fails at once, so that no step runs twice.
 
-Each step (generation, stitch, segmentation, assignment and export, report) runs in its own process under
-/usr/bin/time -v with one numerical thread and no GPU. ``--output`` (new or empty, outside the repository) receives
+Each step (generation, stitch, segmentation, assignment and export, report) runs in its own process, measured
+from its rusage, with one numerical thread and no GPU. ``--output`` (new or empty, outside the repository) receives
 the scenes and exports under ``chains/``, the per-object tables and step logs under ``tables/`` (or where
 ``STARFINDER_CHAIN_OUTPUT`` names), and ``results.json``: the revision and its dirty state, the bank and model
 identities, the seeds, each step's wall time, peak RSS and exit status, and each case's outcome, wall time and the
 node ID it was. Exit status 0 when every selected case passed, 1 when one failed, 2 when none failed but one was
-skipped (a missing extra, model, bank or /usr/bin/time, each named). ``--list`` and ``--help`` read no bank.
+skipped (a missing extra, model or bank, each named). ``--list`` and ``--help`` read no bank.
 """
 import argparse
 import importlib.util
@@ -94,8 +94,8 @@ def node_id(test, seed):
 def parse(argv):
     parser = argparse.ArgumentParser(
         description="Run the slow tier of the chain checks CD, CT and CU of design/validation/synthetic-cellular-scene.md "
-                    "on the real banks, moved out of the test suite by W-603. Each step runs in its own process "
-                    "under /usr/bin/time -v; W-542 measured about 2 h on one CPU and up to 13 GiB.",
+                    "on the real banks, moved out of the test suite by W-603. Each step runs in its own process, "
+                    "measured from its rusage; W-542 measured about 2 h on one CPU and up to 13 GiB.",
         epilog="Run from src/python: uv run python ../../benchmarks/cellular_chain_evidence.py --output <run dir>/chain")
     parser.add_argument("--output", type=Path, help="new or empty directory outside the repository for the scenes, "
                                                      "the tables and results.json")
