@@ -1,12 +1,12 @@
 """Generator checks of the routine appearance presets (design/validation/synthetic-real-appearance-scene.md).
 
-GA8 (labels against the placements), GA9 (ownership and anchors), GA10 (placement and its stop), GA11 (territories) and
-GA18 (projection truth) on ``app_routine``, the three routine appearance presets on their closed-form banks (DN3), as
-generated; recomputed by the test oracle (``cellular_appearance_oracle.py``) with the helpers of the layout's checks
-(``test_synthetic_appearance_scene.py``). GA24's routine part: each routine preset generated in its own process under
-/usr/bin/time -v within the project's 4 GiB. These checks read no real data. The real-bank checks GA23, GA26, GA27
-and GA24's ``slow`` presets, acquired variants and bank builds were moved by W-536 to
-``benchmarks/appearance_evidence.py``, run by the Chapter II evidence project. Reported values are printed.
+GA8 (labels against the placements), GA9 (ownership and anchors), GA10 (placement and its stop), GA11 (territories)
+and GA18 (projection truth) on ``app_routine``, the three routine appearance presets on their closed-form banks (DN3),
+as generated; recomputed by the test oracle (``cellular_appearance_oracle.py``) with the helpers of the layout's
+checks (``test_synthetic_appearance_scene.py``). GA24's routine part: each routine preset generated in its own
+process, measured from its rusage (``run_measured``), within the project's 4 GiB. These checks read no real data. The
+real-bank checks GA23, GA26, GA27 and GA24's ``slow`` presets, acquired variants and bank builds were moved by W-536
+to ``benchmarks/appearance_evidence.py``, run by the Chapter II evidence project. Reported values are printed.
 """
 import numpy as np
 import pandas as pd

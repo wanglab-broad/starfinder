@@ -38,15 +38,15 @@ Every chain: the molecules at their truth positions (each FOV's legacy CSV, V2 a
 tissue: when TH5 holds) and the truth placement otherwise (SC1); ``Dataset.export``; ``Dataset.report`` and
 ``load_report``. The truth-label chain uses the placement its method chain uses.
 
-Each stage that generates, stitches, segments, assigns and exports, or reports runs in its own process under
-``/usr/bin/time -v`` (one CPU thread, no GPU, ``HF_HUB_OFFLINE``), so that each step's wall time and peak RSS are
-measured; the test process compares. ``STARFINDER_CHAIN_STEP_WRAPPER`` names a command prefixed to each step (the
-worker's record of a run); ``STARFINDER_CHAIN_OUTPUT`` names the folder of the per-object tables and step logs
-(default: the module's temporary folder). The models are read by path (``STARFINDER_STARDIST_3D_SPLEEN``,
-``STARFINDER_WEIGHTS_DIR``) and checked against the SHA-256 of W-392's ``inventory/models.json``, the banks through
-``STARFINDER_APPEARANCE_BANKS`` with the SHA-256 their preset names; a test whose extra, model or bank is absent
-skips with its reason, and nothing is downloaded. The thresholds TH1 to TH5 are W-393's, approved for the appearance
-presets at W-515, unchanged; a miss is a finding ("What a failure means").
+Each stage that generates, stitches, segments, assigns and exports, or reports runs in its own process (one CPU
+thread, no GPU, ``HF_HUB_OFFLINE``), and each step's wall time, CPU time and peak RSS are measured from that process's
+rusage (``run_measured``, W-920); the test process compares. ``STARFINDER_CHAIN_STEP_WRAPPER`` names a command
+prefixed to each step (the worker's record of a run); ``STARFINDER_CHAIN_OUTPUT`` names the folder of the per-object
+tables and step logs (default: the module's temporary folder). The models are read by path
+(``STARFINDER_STARDIST_3D_SPLEEN``, ``STARFINDER_WEIGHTS_DIR``) and checked against the SHA-256 of W-392's
+``inventory/models.json``, the banks through ``STARFINDER_APPEARANCE_BANKS`` with the SHA-256 their preset names; a
+test whose extra, model or bank is absent skips with its reason, and nothing is downloaded. The thresholds TH1 to TH5
+are W-393's, approved for the appearance presets at W-515, unchanged; a miss is a finding ("What a failure means").
 
 The suite collects the routine tier only (``SUITE_TIERS``; W-603). The ``slow`` tier, the ``chain_*`` fixtures on the
 real banks above, runs in the Chapter II evidence project as ``benchmarks/cellular_chain_evidence.py``, which calls
@@ -59,9 +59,7 @@ import hashlib
 import importlib.util
 import json
 import os
-import re
 import shutil
-import subprocess
 import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -76,6 +74,7 @@ from starfinder.evaluation._segmentation_helpers import match_nuclei
 
 from .cellular_measures import object_shapes, touching_share, volume_fraction
 from .coordination_helpers import write_molecules_csv
+from .measured_process import run_measured
 
 pytestmark = [pytest.mark.integration, pytest.mark.validation]
 
@@ -140,7 +139,6 @@ MODELS = {
 }
 STEP_WRAPPER = "STARFINDER_CHAIN_STEP_WRAPPER"
 OUTPUT = "STARFINDER_CHAIN_OUTPUT"
-TIME = Path("/usr/bin/time")
 THREADS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "NUMBA_NUM_THREADS")
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 AXES = "zyx"
@@ -574,13 +572,6 @@ def _main(step, arguments):
 
 # ============================================================================================ running the steps
 
-def _seconds(clock):
-    seconds = 0.0
-    for part in clock.split(":"):
-        seconds = 60 * seconds + float(part)
-    return seconds
-
-
 def _output_dir(base):
     path = Path(os.environ[OUTPUT]) if os.environ.get(OUTPUT) else Path(base) / "tables"
     path.mkdir(parents=True, exist_ok=True)
@@ -589,7 +580,7 @@ def _output_dir(base):
 
 @dataclass
 class Runner:
-    """Runs each step in its own process under /usr/bin/time -v and keeps one row per step."""
+    """Runs each step in its own process (``run_measured``) and keeps one row per step."""
 
     base: Path
     rows: list = field(default_factory=list)
@@ -605,20 +596,14 @@ class Runner:
                                                                   else [])])
         logs = self.output / "steps"
         logs.mkdir(parents=True, exist_ok=True)
-        log = logs / f"{tag}.time.log"
         command = [sys.executable, "-c", BOOT, step, json.dumps(arguments)]
         if os.environ.get(STEP_WRAPPER):
             command = [*os.environ[STEP_WRAPPER].split(), tag, *command]
-        done = subprocess.run([str(TIME), "-v", "-o", str(log), *command], env=env, cwd=PACKAGE_ROOT,
-                              capture_output=True, text=True)
+        done = run_measured(command, env=env, cwd=PACKAGE_ROOT)
         (logs / f"{tag}.output.log").write_text(done.stdout + done.stderr, encoding="utf-8")
-        text = log.read_text(encoding="utf-8")
-        row = dict(tag=tag, step=step, exit=done.returncode,
-                   wall_s=_seconds(re.search(r"Elapsed \(wall clock\) time \(h:mm:ss or m:ss\): (\S+)", text)
-                                   .group(1)),
-                   cpu_s=float(re.search(r"User time \(seconds\): (\S+)", text).group(1))
-                   + float(re.search(r"System time \(seconds\): (\S+)", text).group(1)),
-                   peak_rss_kib=int(re.search(r"Maximum resident set size \(kbytes\): (\d+)", text).group(1)))
+        (logs / f"{tag}.rusage.json").write_text(json.dumps(done.usage()), encoding="utf-8")
+        row = dict(tag=tag, step=step, exit=done.returncode, wall_s=done.wall_s, cpu_s=done.cpu_s,
+                   peak_rss_kib=done.peak_rss_kib)
         self.rows.append(row)
         pd.DataFrame(self.rows).to_csv(self.output / "steps.csv", index=False)
         print(f"\nSTEP {tag}: exit {row['exit']}, wall {row['wall_s']:.2f} s, cpu {row['cpu_s']:.2f} s, "
@@ -797,8 +782,6 @@ class Chains:
     def scene(self, context, tier, seed):
         """The generated scene, its stitch and the placement used (and in 2D tissue the truth on the grid)."""
         require("anndata", "multiview_stitcher")
-        if not TIME.is_file():
-            pytest.skip(f"no file {TIME}: every chain step is measured under /usr/bin/time -v")
         if tier == "slow":
             checked_bank(context)
 

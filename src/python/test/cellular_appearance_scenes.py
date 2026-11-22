@@ -25,6 +25,7 @@ from starfinder.synthetic import (AppearanceSceneConfig, AugmentationConfig, Ban
 from starfinder.synthetic._appearance_layout import _place_appearance
 
 from .cellular_scenes import float64, plane, tiny
+from .measured_process import run_measured
 
 ROUTINE = ("context-dense3d-v1", "context-tissue2d-v1", "context-culture-v1")
 SEEDS = (42, 43, 44, 45)
@@ -523,8 +524,8 @@ def bg2_settings(preset, name):
 # presets on their closed-form banks, DN3, as generated), ``real_banks`` (the three bank files with their build
 # records and configurations, read through STARFINDER_APPEARANCE_BANKS), ``app_slow`` and ``app_slow_acquired`` (the
 # ``slow`` presets on the real banks, and the 2D tissue and culture presets at the acquired pixel, each generated in its
-# own process under /usr/bin/time -v, GA24). A real-bank fixture skips with a reason naming the variable or the file
-# where either is missing; the routine fixture reads no real data.
+# own process, measured from its rusage by ``run_measured``, GA24). A real-bank fixture skips with a reason naming the
+# variable or the file where either is missing; the routine fixture reads no real data.
 
 ROUTINE_PRESETS = ("appearance-dense3d-v1", "appearance-tissue2d-v1", "appearance-culture-v1")
 SLOW_PRESETS = ("appearance-dense3d-slow-v1", "appearance-tissue2d-slow-v1", "appearance-culture-slow-v1")
@@ -540,7 +541,6 @@ ACQUIRED_SPACING = {"appearance-tissue2d-slow-v1": (0.346255, 0.094635, 0.094635
 RG1_SECONDS = 3600.0
 RG1_RSS_KIB = 16 * 1024 * 1024
 ROUTINE_RSS_KIB = 4 * 1024 * 1024
-TIME = Path("/usr/bin/time")
 
 
 @cache
@@ -592,35 +592,24 @@ def real_bank(name):
 
 
 def _measured(script, directory, arguments):
-    """Run ``script`` (Python source) with ``arguments`` in its own process under /usr/bin/time -v, one thread, the
+    """Run ``script`` (Python source) with ``arguments`` in its own process (``run_measured``), one thread, the
     package of this test run first on the path; returns its wall time (s), peak RSS (KiB), exit status, the JSON
-    summary it writes to ``directory/summary.json`` and its output."""
+    summary it writes to ``directory/summary.json`` and its output. The measurement is also written to
+    ``directory/rusage.json``."""
     import os
-    import re
-    import subprocess
     import sys
-    import pytest
     from types import SimpleNamespace
     import starfinder
-    if not TIME.is_file():
-        pytest.skip(f"no file {TIME}: GA24 measures each step under /usr/bin/time -v")
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, **{k: "1" for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                                                "NUMEXPR_NUM_THREADS", "NUMBA_NUM_THREADS")})
     package = str(Path(starfinder.__file__).resolve().parents[1])
     env["PYTHONPATH"] = os.pathsep.join([package, *([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])])
-    log = directory / "time.log"
-    done = subprocess.run([str(TIME), "-v", "-o", str(log), sys.executable, "-c", script, str(directory),
-                           *arguments], env=env, capture_output=True, text=True)
-    text = log.read_text(encoding="utf-8")
-    clock = re.search(r"Elapsed \(wall clock\) time \(h:mm:ss or m:ss\): (\S+)", text).group(1)
-    seconds = 0.0
-    for part in clock.split(":"):
-        seconds = 60 * seconds + float(part)
-    rss = int(re.search(r"Maximum resident set size \(kbytes\): (\d+)", text).group(1))
+    done = run_measured([sys.executable, "-c", script, str(directory), *arguments], env=env)
+    (directory / "rusage.json").write_text(json.dumps(done.usage()), encoding="utf-8")
     summary = directory / "summary.json"
-    return SimpleNamespace(wall_s=seconds, peak_rss_kib=rss, exit=done.returncode,
+    return SimpleNamespace(wall_s=done.wall_s, peak_rss_kib=done.peak_rss_kib, exit=done.returncode,
                            summary=json.loads(summary.read_text(encoding="utf-8")) if summary.is_file() else None,
                            output=(done.stdout + done.stderr)[-4000:], directory=directory)
 
@@ -650,7 +639,7 @@ record = scene.record
 
 
 def generate_measured(name, directory, spacing=None):
-    """GA24's generation of a preset in its own process under /usr/bin/time -v, the scene saved by
+    """GA24's generation of a preset in its own process (``_measured``), the scene saved by
     ``save_appearance_scene`` under ``directory/scene`` (``app_slow``, ``app_slow_acquired`` with ``spacing``, and the
     routine presets' cost)."""
     arguments = [name] + ([",".join(repr(float(v)) for v in spacing)] if spacing is not None else [])
@@ -672,7 +661,7 @@ record = build_appearance_bank(config, directory / f"{config['bank']}.npz")
 
 def rebuild_measured(bank, directory):
     """GA27's rebuild of a real bank (``real_bank``) from its build configuration into ``directory``, in its own
-    process under /usr/bin/time -v (GA24's cost of a build); the rebuilt bank file is deleted once it is measured."""
+    process (``_measured``, GA24's cost of a build); the rebuilt bank file is deleted once it is measured."""
     result = _measured(_REBUILD, directory, [str(bank.config_path)])
     for suffix in (".npz", ".record.json"):
         (Path(directory) / f"{bank.name}{suffix}").unlink(missing_ok=True)

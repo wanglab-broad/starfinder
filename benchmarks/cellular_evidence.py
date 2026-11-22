@@ -16,7 +16,7 @@ Checks, in the order the tests ran (``--check`` selects some):
 
 * ``GN23-slow``: each ``slow`` context preset, generated in this process, in its target ranges;
 * ``GN23-acquired``: the 2D tissue and culture ``slow`` presets at the acquired pixel, TR4 and TR5;
-* ``GN24-slow`` and ``GN24-acquired``: each generated in its own process under /usr/bin/time -v, within RG1.
+* ``GN24-slow`` and ``GN24-acquired``: each generated in its own process, measured from its rusage, within RG1.
 
 The printed lines are those of the tests (``GN23 ROW`` and ``GN24 ROW`` JSON lines). ``--output`` (new or empty)
 receives ``results.json`` (each case's outcome and wall time, the presets' seeds and the revisions), ``gn23_rows.jsonl``
