@@ -357,9 +357,11 @@ The block needs `voxel_size_xy` and `voxel_size_z`. A generated PSF needs the
 * **FFTW wisdom.** A CPU task plans its FFTs with `--noplan` unless
   `execution.deconwolf_wisdom` names a store that holds a plan for its key (image
   and PSF shape, threads, CPU model, FFTW and deconwolf). Make one with
-  `starfinder deconvolve wisdom --store <dir> --shape <z y x> --psf-shape <z y x>
-  --threads <n>` once per node type, shape and thread count; tasks only read the
-  store. The {doc}`UGER guide <broad-uger>` gives the resources.
+  `starfinder deconvolve wisdom --store <dir> --shape <z y x> --psf <file>
+  --threads <n>` once per node type, shape, PSF and thread count, with the run's own
+  PSF file; tasks only read the store, and each channel's record says whether the
+  stored plan matched the job deconwolf reported. The {doc}`UGER guide <broad-uger>`
+  gives the resources and how to make the store again after W-937.
 
 ## Limits
 

@@ -1,6 +1,6 @@
 # Validation design: the deconvolution stage
 
-% Status: Approved with the specification (Jiahao, 2026-11-21, W-918); the scaling checks follow decision 3 as changed. Written against `70edc72` (v0.3.0). Amended 2026-11-22 by Jiahao's decision on W-933 (option A): SC1's zero round with the stand-in's refusal on, SC9 and DW4.
+% Status: Approved with the specification (Jiahao, 2026-11-21, W-918); the scaling checks follow decision 3 as changed. Written against `70edc72` (v0.3.0). Amended 2026-11-22 by Jiahao's decision on W-933 (option A): SC1's zero round with the stand-in's refusal on, SC9 and DW4. Amended 2026-11-23 by Jiahao's decision on W-937 (A1 and A2): WI4, WI6, the new WI8 and DW5, and the stand-in's `image/psf/job` line.
 
 This is the validation plan for implementing [deconvolution](../specs/deconvolution.md). It has
 three parts:
@@ -38,11 +38,11 @@ as the project guidance bounds them.
 
 | Fixture | Construction | Needs |
 | --- | --- | --- |
-| `stand_in_dw` | A Python script installed as `dw` in a temporary folder and named by `execution.deconwolf`. It accepts v0.4.5's options that the stage passes (`--iter`, `--threads`, `--gpu`, `--tilesize`, `--noplan`, `--float`, `--offset`, `--out`, the image and the PSF). It writes the float32 output y = x + 5 untiled and y = x tiled, so that the expected copy is known exactly, and a log with `scaling:` and `Iteration` lines. Unless `--noplan` or `--gpu` is given, it writes `fftw_wisdom_float_inplace_threads_<n>.dat` where v0.4.5 would: under `$HOME/.config/deconwolf/` when `$HOME/.config` exists, else in its working directory. It appends its arguments, `HOME`, `OMP_NUM_THREADS`, its working directory and the wisdom files it found to a call log, before it reads its input, so that a refused call is logged too and an empty log shows that it was not called (W-933). `--version` prints a v0.4.5 text. Options make it fail on a given channel, or write an output whose minimum breaks the offset rule. | hand-built |
+| `stand_in_dw` | A Python script installed as `dw` in a temporary folder and named by `execution.deconwolf`. It accepts v0.4.5's options that the stage passes (`--iter`, `--threads`, `--gpu`, `--tilesize`, `--noplan`, `--float`, `--offset`, `--out`, the image and the PSF). It writes the float32 output y = x + 5 untiled and y = x tiled, so that the expected copy is known exactly, and a log with `scaling:` and `Iteration` lines. Unless `--noplan` or `--gpu` is given, it writes `fftw_wisdom_float_inplace_threads_<n>.dat` where v0.4.5 would: under `$HOME/.config/deconwolf/` when `$HOME/.config` exists, else in its working directory. It appends its arguments, `HOME`, `OMP_NUM_THREADS`, its working directory and the wisdom files it found to a call log, before it reads its input, so that a refused call is logged too and an empty log shows that it was not called (W-933). `--version` prints a v0.4.5 text. Like v0.4.5, it prints `image: [x y z], psf: [x y z], job: [x y z]` (each `ixjxk`, X, Y, Z order), the job being the image plus the PSF less one per axis (W-937). Options make it fail on a given channel, write an output whose minimum breaks the offset rule, report the PSF cropped in Y and X (for every input or a named channel) with the smaller job that follows, or leave that line out. | hand-built |
 | `input_root` | A synthetic input root of 2 FOVs × 2 rounds × 2 labels, 8 × 32 × 32 uint8, sparse Gaussian spots, in the default `{round}/{fov}` layout, with `fovs.csv`, a codebook and one reference stain label, `dapi`, in the reference round's folder beside its sequencing labels `ch00` and `ch01`. Raw names hold the FOV id, as real names do (`Position001_ch00.tif`). `voxel_size_xy` 0.1 and `voxel_size_z` 0.3. Every channel is a plain TIFF written by `tifffile.imwrite` without `starfinder_metadata`, the case of raw microscope files: `load_volume` reports `metadata_source` `unknown`, and each channel's frame is built from its own path (`io/tiff.py:260`, `:268`). | hand-built |
 | `input_root_stored` | `input_root` with every channel written by `save_volume` with one `ImageMetadata` per round folder: frame id `raw:<round>/<fov>`, spacing (0.3, 0.1, 0.1) µm, a non-zero origin. All channels of a folder share it, so the raw round loads. | hand-built |
 | `workflow_examples` | The worked-example configurations of `test/workflow_examples.py` (X), with a `deconvolution` block added per row. | existing |
-| `wisdom_store` | A store folder with a manifest and one wisdom file for the key the stand-in's task computes, and one for another key. | hand-built |
+| `wisdom_store` | A store folder with a manifest of format `starfinder.deconwolf-wisdom/2` and one wisdom file for the key the stand-in's task computes, and one for another key, each entry with the job and PSF deconwolf reported equal to its key's. Variants: format `/1`, and entries without `reported_job_zyx` (W-937). | hand-built |
 | `psf_small` | A 7 × 9 × 9 float32 Gaussian with full support: G(z, y, x) = exp(−(z − 3)²/2 − ((y − 4)² + (x − 4)²)/(2 × 1.5²)), computed in float64, divided by its sum, then cast to float32. The peak is at the centre (3, 4, 4). Also the same array rolled by +2 planes and +1 row (`np.roll`, shift (2, 1, 0)). | hand-built |
 | `psf_core` | A 7 × 9 × 9 float32 array with zero support near the edges: G of `psf_small` on the core z ∈ {2, 3, 4}, y ∈ {2, …, 6}, x ∈ {2, …, 6}, exactly 0 elsewhere, divided by its sum in float64, then cast to float32. Also the same array rolled by (2, 1, 0). The roll moves the core to z ∈ {4, 5, 6}, y ∈ {3, …, 7}, inside the array, and the slices it wraps (planes 0–1 and row 0 of the rolled array) are all 0. | hand-built |
 | `real_dw` | The deconwolf binary, when `dw` is on `PATH` or `STARFINDER_TEST_DECONWOLF` names it. Tests that need it skip with that reason otherwise. They do not run in the CI environment. | the image, or a host build |
@@ -112,10 +112,11 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 | WI1 | The key | hand-built field values | The key is the SHA-256 of the canonical JSON of the specification's fields. Each field changed alone changes it. Two PSFs of one shape and different values give one key. | exact (hashes) | H |
 | WI2 | A matching key | `wisdom_store`, a CPU task | The stand-in's call log shows `HOME` under the task's temporary root, its working directory there too, and the store's file found under `$HOME/.config/deconwolf/` with the name for the task's threads; no `--noplan`. The record says `measure`, the key and the file's SHA-256. The store's files and manifest have the same SHA-256, size and modification time after the task. | exact | H |
 | WI3 | No match, or no store | `wisdom_store` with another key; `deconwolf_wisdom: null` | `--noplan`, an empty wisdom folder, and the record's reason (`no matching key`, `no store`). | exact | H |
-| WI4 | A damaged store | `wisdom_store` with a file whose SHA-256 differs from its manifest | The task fails, naming the file. | exact | H |
+| WI4 | A damaged store | `wisdom_store` with a file whose SHA-256 differs from its manifest; `wisdom_store` of format `/1`; a `/2` entry for the task's key without `reported_job_zyx` (amended 2026-11-23, W-937) | The task fails, naming the file. The `/1` store fails the task before deconwolf is called, naming the store, its format and that it must be made again with the current command; the entry without `reported_job_zyx` fails it, naming the store and the key as damaged. No copy file is left and the store is unchanged. | exact | H |
 | WI5 | Nothing written outside the task | a CPU task with `stand_in_dw` writing wisdom back | After the task, no file is new or changed outside the task's temporary root and its declared outputs: not the store, not the engine's working directory, not the real `HOME`. | exact (file lists, hashes) | H |
-| WI6 | One generating job per key | `starfinder deconvolve wisdom` with `stand_in_dw` | It adds the key's file and its manifest entry. A second call for the key exits non-zero without writing. Two concurrent calls leave one entry and one file, and the manifest parses. | exact | H |
-| WI7 | GPU tasks | a task with `gpu: true` | `--gpu --threads 1`, an empty wisdom folder, and the record's planning `gpu`. | exact | H |
+| WI6 | One generating job per key | `starfinder deconvolve wisdom --psf <file>` with `stand_in_dw` and `psf_small` as a file; `psf_core` rolled and scaled by 3 in float64; `stand_in_dw` reporting the PSF cropped to 5 × 5; `stand_in_dw` without its `image/psf/job` line; a store of format `/1`; a PSF path that does not exist (amended 2026-11-23, W-937) | It adds the key's file and its manifest entry; the manifest has format `/2`, the entry's `psf_shape_zyx` is the file's shape (7 × 9 × 9), and its `reported_job_zyx` and `reported_psf_zyx` equal the key's job and the file's shape. deconwolf is given the file's values (the scaled `psf_core` is accepted and renormalised). A second call for the key exits non-zero without writing. Two concurrent calls leave one entry and one file, and the manifest parses. The cropped PSF exits 1 with a message naming the reported PSF 7 × 5 × 5 and job 14 × 36 × 36, the file's 7 × 9 × 9 and the key's job 14 × 40 × 40, and that deconwolf cropped the PSF; the missing line, the `/1` store and the missing file each exit 1, naming the cause. None of the four writes or changes a file. | exact | H |
+| WI7 | GPU tasks | a task with `gpu: true` | `--gpu --threads 1`, an empty wisdom folder, and the record's planning `gpu`. Each channel records the job the stand-in reported and `plan_matched` null (W-937). | exact | H |
+| WI8 | The reported job in the task | a store made by `starfinder deconvolve wisdom` with `stand_in_dw` and the run's PSF; `wisdom_store` with `stand_in_dw` reporting `ch01`'s PSF cropped to 5 × 5; `wisdom_store` with another key; `stand_in_dw` without its line under `measure` (added 2026-11-23, W-937) | **Matching key, uncropped PSF.** The record's planning is `measure` with `job_shape_zyx` 14 × 40 × 40, and each channel holds `reported_job_zyx` 14 × 40 × 40, `reported_psf_zyx` 7 × 9 × 9 and `plan_matched: true`. **A cropped channel.** `ch00` as above; `ch01` holds `reported_job_zyx` 14 × 36 × 36, `reported_psf_zyx` 7 × 5 × 5 and `plan_matched: false`; the task log warns once, naming `ch01`, both jobs, the key and a PSF that deconwolf crops; the task succeeds and the copy equals SC1's. **An `estimate` channel** holds the reported shapes and `plan_matched` null. **No line:** the shapes and `plan_matched` are null and the log warns once per channel. | exact (record keys, lists, strings, integer arrays) | H |
 
 ### Records (RC)
 
@@ -151,6 +152,7 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 | DW2 | The offset rule and determinism | `real_dw`, 16 × 64 × 64 point sources blurred by `psf_small`, CPU, `--noplan`, 3 iterations; the peak in its own untiled run at 6 iterations | The untiled float output's minimum is within 0.5 of 5; a tiled run (`--tilesize 32`) has minimum below 0.5. Two untiled runs at 1 and 2 threads are byte-identical (W-916: thread counts change no byte). In its own untiled run with `--iter 6`, the brightest point's peak less the offset 5 rises above its input value. v0.4.5's `--iter 3` makes two Richardson–Lucy updates, after which the output at that point, offset included, is 25.28 against the input's 28.35; at `--iter 6` the peak less 5 measured 54.355 on the CPU, the A5000 and the A30 (amended 2026-11-22, Jiahao's decision D2, W-929). | exact (hashes); the 0.5 bands of W-916 | D |
 | DW3 | The stage on the real binary | `input_root` with `real_dw`, CPU | The tasks succeed; SC6 and RC1 hold; the record's planning is `estimate`. | exact | D, S if over 5 s |
 | DW4 | A channel of zeros on the real binary | `input_root` with `ch01` of `round1` all 0, `real_dw`, CPU (added 2026-11-22, W-933) | The task succeeds, although v0.4.5 refuses an image whose maximum is below 1. `ch01` stores zeros and its record names the skip as in SC9; `ch00` is deconvolved (`iterations_done` 3) and the round's M is its maximum after the offset. | exact (integer arrays, record keys, strings) | D, S if over 5 s |
+| DW5 | The PSF crop on the real binary | `real_dw`; `starfinder deconvolve wisdom` with the command's old PSF, exp(−r²/2) with σ = 1 voxel, 21 × 33 × 33, sum 1, on a 30 × 64 × 64 volume; then with `psf_small`, which deconwolf does not crop, on `input_root`'s 8 × 32 × 32 at 2 threads, and two stage runs into two output roots with that PSF and that store (added 2026-11-23, W-937) | The old PSF: exit 1, the message naming the reported PSF 21 × 7 × 7 and job 50 × 70 × 70 (deconwolf's `psf: [7x7x21], job: [70x70x50]`, the coordinating session's reproduction) against the key's 50 × 96 × 96, and no store folder written. `psf_small`: the command succeeds and its entry reports the key's job 14 × 40 × 40; both runs deconvolve (not reused) with planning `measure` and that key, each channel reports the key's job and `plan_matched: true`, the two copies' files are byte-identical, and the store is unchanged. | exact (strings, hashes) | D, S |
 
 ### MATLAB (MT)
 
@@ -160,9 +162,9 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 
 ### What the default tier covers
 
-PL1–PL8 with PL2b, EN1, SC1–SC9 with SC1b, PS1, PS2, WI1–WI7, RC1–RC5, RU1–RU4, RU6–RU10 and MT1 run in the
+PL1–PL8 with PL2b, EN1, SC1–SC9 with SC1b, PS1, PS2, WI1–WI8, RC1–RC5, RU1–RU4, RU6–RU10 and MT1 run in the
 routine tier, each under 5 s on one CPU or marked `slow`. EN2 and EN3 run in the engine
-selections; PS3, PS4 and RU11 where the extra is installed; DW1–DW4 where the binary is. The implementation reports the measured
+selections; PS3, PS4 and RU11 where the extra is installed; DW1–DW5 where the binary is. The implementation reports the measured
 time of every new test that takes 1 s or more.
 
 ## Image checks
@@ -237,7 +239,7 @@ them somewhat (W-923's run folder, `results/tables/new-tests-1s.csv`). W-928, th
 measured the RU1 and RU4 rows again with the tests it added, and its repair the RC4 and RU6 rows (W-928's run folder,
 the same table). W-929 measured the WI6 row again with its new test, 6.8 s and 0.4 s (W-929's run folder,
 `results/tables/new-tests.csv`). W-933 measured the SC1 and SC9 rows with its tests (W-933's run folder, the same
-table). No test but EN2, EN3,
+table), and W-937 the WI4, WI6 and WI8 rows (W-937's run folder, the same table). No test but EN2, EN3,
 WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are marked `slow`.
 `test_workflow_deconvolution_docs_contract.py` checks that every row names tests that exist.
 
@@ -251,11 +253,12 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
   `nextflow` and `slow`, in the engine selections. RU1's engine tests (W-928) run two output roots one after the
   other with an absolute `copy_root`: the Snakemake one is `slow` and runs in the slow selection, the Nextflow one is
   `nextflow` and `slow`. `test_ru1_ru2_ru3_verified_reuse` runs the same reuse by the task commands. RU5 runs in the
-  routine tier (3.7 s). WI6's command test is `slow` (6.5 s under the tracer, 6.8 s in W-929's run: two concurrent `starfinder deconvolve wisdom` processes and a stand-in
+  routine tier (3.7 s). WI6's command test is `slow` (6.5 s under the tracer, 6.8 s in W-929's run, 7.0 s in W-937's: two concurrent `starfinder deconvolve wisdom` processes and a stand-in
   that waits 1 s). PS3, PS4 and RU11 skip without
-  psfmodels, naming the extra; DW1 to DW4 skip without `dw` on PATH or `STARFINDER_TEST_DECONWOLF`, and so do
+  psfmodels, naming the extra; DW1 to DW5 skip without `dw` on PATH or `STARFINDER_TEST_DECONWOLF`, and so do
   WI6's run of `starfinder deconvolve wisdom` on the real binary and DW2's peak run at 6 iterations (W-929), which
-  the image's evidence issue runs.
+  the image's evidence issue runs. DW5's two stage runs on the real binary are `slow`; its refusal of the old PSF is
+  not (W-937).
   X4 (PL1) is `extended`; G3 runs in `benchmarks/orchestration_golden_evidence.py`, which the
   coordinating session runs.
 * **What differs from the rows above.** PL3's stain label equal to a sequencing label is refused
@@ -275,7 +278,11 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
   command's volume, with values from 1 to 255, makes the key's file; on the real binary it checks that the store
   holds the key. SC1's round of zeros ran with the refusal off from W-929 until W-933, which made the stage skip
   deconwolf for a channel of zeros: since then SC1 and SC9 run with the refusal on, and the call log shows that the
-  stand-in was not called for such a channel.
+  stand-in was not called for such a channel. Since W-937 the stand-in prints deconwolf's `image/psf/job` line on
+  every run it deconvolves; WI6 checks the values the command passes deconwolf by wrapping the command's call of
+  deconwolf in the test, as the stand-in's call log holds only the arguments. WI8's matching store is made by the
+  command itself with the stand-in that the stage then runs, since the key holds the binary's SHA-256; its cropped
+  case uses `wisdom_store` for the cropping stand-in.
 
 (deconvolution-implemented-checks)=
 
@@ -310,10 +317,11 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
 | WI1 | `test_workflow_deconvolution_tasks.py` | `test_wi1_the_key` | — |
 | WI2 | `test_workflow_deconvolution_tasks.py` | `test_wi2_a_matching_key` | — |
 | WI3 | `test_workflow_deconvolution_tasks.py` | `test_wi3_no_match_or_no_store` | — |
-| WI4 | `test_workflow_deconvolution_tasks.py` | `test_wi4_a_damaged_store` | — |
+| WI4 | `test_workflow_deconvolution_tasks.py` | `test_wi4_a_damaged_store`, `test_wi4_a_store_of_format_1_or_an_entry_without_the_reported_job` | — |
 | WI5 | `test_workflow_deconvolution_tasks.py` | `test_wi5_nothing_written_outside_the_task` | — |
-| WI6 | `test_workflow_deconvolution_tasks.py` | `test_wi6_one_generating_job_per_key`, `test_wi6_the_planning_volume_is_bright_enough`, `test_wi6_the_command_on_the_real_binary` | 7.2 |
+| WI6 | `test_workflow_deconvolution_tasks.py` | `test_wi6_one_generating_job_per_key`, `test_wi6_the_planning_volume_is_bright_enough`, `test_wi6_the_command_plans_with_the_given_psf`, `test_wi6_the_command_refuses_and_writes_nothing`, `test_wi6_the_command_on_the_real_binary` | 8.2 |
 | WI7 | `test_workflow_deconvolution_tasks.py` | `test_wi7_gpu_tasks` | — |
+| WI8 | `test_workflow_deconvolution_tasks.py` | `test_wi8_a_matching_key_and_an_uncropped_psf`, `test_wi8_a_cropped_channel_does_not_match`, `test_wi8_an_estimate_channel_or_no_job_line` | 2.0 |
 | RC1 | `test_workflow_deconvolution_tasks.py` | `test_rc1_rc2_the_round_record_and_copy_json` | — |
 | RC2 | `test_workflow_deconvolution_tasks.py` | `test_rc1_rc2_the_round_record_and_copy_json` | — |
 | RC3 | `test_workflow_deconvolution_tasks.py` | `test_rc3_run_json_names_the_copy` | 1.1 |
@@ -334,4 +342,5 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
 | DW2 | `test_workflow_deconvolution_tasks.py` | `test_dw2_the_offset_rule_and_determinism`, `test_dw2_the_peak_rises_at_6_iterations` | skips here (D) |
 | DW3 | `test_workflow_deconvolution_tasks.py` | `test_dw3_the_stage_on_the_real_binary` | skips here (D) |
 | DW4 | `test_workflow_deconvolution_tasks.py` | `test_dw4_a_channel_of_zeros_on_the_real_binary` | skips here (D) |
+| DW5 | `test_workflow_deconvolution_tasks.py` | `test_dw5_the_command_refuses_a_psf_deconwolf_crops`, `test_dw5_a_matched_plan_on_the_real_binary` | skips here (D) |
 | MT1 | `test_workflow_deconvolution_plan.py` | `test_mt1_matlab_is_untouched` | — |

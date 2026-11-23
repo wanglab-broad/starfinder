@@ -1,9 +1,9 @@
 """The task checks of design/validation/deconvolution.md (W-923): SC1 to SC7 with SC1b, SC9 (W-933), PS1 to PS4, WI1
-to WI7, RC1 to RC5, RU1 to RU11 and DW1 to DW4.
+to WI8 (WI8, W-937), RC1 to RC5, RU1 to RU11 and DW1 to DW5 (DW5, W-937).
 
 The psf and deconvolve tasks run in this process on ``input_root`` (``deconvolution_cases``) with the stand-in ``dw``,
 which writes ``y = x + 5`` untiled and ``y = x`` tiled, so that every expected copy is an exact integer array.
-PS3, PS4 and RU11 need psfmodels (the ``deconvolution`` extra) and skip without it; DW1 to DW4 need the deconwolf
+PS3, PS4 and RU11 need psfmodels (the ``deconvolution`` extra) and skip without it; DW1 to DW5 need the deconwolf
 binary (``dw`` on PATH or ``STARFINDER_TEST_DECONWOLF``) and skip without it.
 """
 from __future__ import annotations
@@ -22,8 +22,8 @@ import tifffile
 
 from starfinder.io import load_round, load_volume
 from starfinder.io.tiff import ImageLoadConfig
-from starfinder.workflow._deconvolve import (centre_psf, cpu_identity, deconwolf_identity, fwhm, wisdom_fields,
-    wisdom_key, wisdom_name)
+from starfinder.workflow._deconvolve import (WISDOM_FORMAT, centre_psf, cpu_identity, deconwolf_identity, fwhm,
+    wisdom_fields, wisdom_key, wisdom_name)
 
 from . import deconvolution_cases as D
 from . import workflow_fixture as F
@@ -518,27 +518,30 @@ def test_wi1_the_key():
         wisdom_key(wisdom_fields(**dict(base, psf_shape=core.shape))) == key
 
 
-def store_for(work, dw, threads, *, matching=True, damaged=False):
-    """``wisdom_store``: a manifest with the key the task computes (or another) and one other key."""
+def store_for(work, dw, threads, *, matching=True, damaged=False, form=WISDOM_FORMAT, reported=True):
+    """``wisdom_store``: a manifest of format ``form`` with the key the task computes (or another) and one other key,
+    each entry with the job and PSF deconwolf reported unless ``reported`` is false."""
     store = work / "store"
     identity = deconwolf_identity(str(dw))
     fields = wisdom_fields(D.SHAPE, (7, 9, 9), 2, None, threads, cpu_identity()["sha256"], identity)
     keys = {wisdom_key(fields) if matching else "f" * 64: fields, "e" * 64: dict(fields, threads=99)}
-    manifest = {"format": "starfinder.deconwolf-wisdom/1", "keys": {}}
+    manifest = {"format": form, "keys": {}}
     for key, value in keys.items():
         file = store / key / wisdom_name(value["threads"])
         file.parent.mkdir(parents=True)
         file.write_text(f"wisdom of {key}\n")
         manifest["keys"][key] = {"fields": value, "file": f"{key}/{file.name}", "bytes": file.stat().st_size,
                                  "sha256": D.sha256(file)}
+        if reported:
+            manifest["keys"][key].update(reported_job_zyx=value["job_shape_zyx"], reported_psf_zyx=[7, 9, 9])
         if damaged:
             file.write_text("damaged\n")
     (store / "manifest.json").write_text(json.dumps(manifest))
     return store, wisdom_key(fields)
 
 
-def run_with_store(work, store, name, threads=2):
-    dw, calls = D.stand_in(work / "bin")
+def run_with_store(work, store, name, threads=2, **stand_in):
+    dw, calls = D.stand_in(work / "bin", **stand_in)
     execution = {"tasks": {"fov": {"threads": 1}, "deconvolve": {"threads": threads}}}
     if store is not None:
         execution["deconwolf_wisdom"] = str(store)
@@ -563,6 +566,7 @@ def test_wi2_a_matching_key(work, tmp_path):
     planning = record(copy, "round1")["planning"]
     assert planning["mode"] == "measure" and planning["wisdom_key"] == key
     assert planning["wisdom_sha256"] == D.sha256(store / key / wisdom_name(2))
+    assert planning["job_shape_zyx"] == [14, 40, 40]
     assert D.tree(store) == before
 
 
@@ -572,8 +576,10 @@ def test_wi3_no_match_or_no_store(work, case):
     store = store_for(work, dw, 2, matching=False)[0] if case == "no matching key" else None
     manifest, path, copy, statuses, calls = run_with_store(work, store, "wi3")
     assert all("--noplan" in call["argv"] and call["wisdom_found"] == [] for call in calls)
-    planning = record(copy, "round1")["planning"]
-    assert planning["mode"] == "estimate" and planning["reason"] == case
+    rec = record(copy, "round1")
+    assert rec["planning"]["mode"] == "estimate" and rec["planning"]["reason"] == case
+    assert "job_shape_zyx" not in rec["planning"]
+    assert [c["plan_matched"] for c in rec["channels"]] == [None, None]
 
 
 def test_wi4_a_damaged_store(work):
@@ -582,6 +588,28 @@ def test_wi4_a_damaged_store(work):
     manifest, path, copy, statuses, calls = run_with_store(work, store, "wi4")
     assert statuses[deconvolve_id("round1")] == 1
     assert str(store / key / wisdom_name(2)) in failed_record(path, deconvolve_id("round1"))["error"]["message"]
+
+
+@pytest.mark.parametrize("case", ["format /1", "no reported job"])
+def test_wi4_a_store_of_format_1_or_an_entry_without_the_reported_job(work, case):
+    """A /1 store, whose plans may have been made for a cropped PSF, and a /2 entry without ``reported_job_zyx`` fail
+    the task, naming the store (and the key); deconwolf is not called and no copy file is left (W-937)."""
+    dw, _ = D.stand_in(work / "bin")
+    if case == "format /1":
+        store, key = store_for(work, dw, 2, form="starfinder.deconwolf-wisdom/1")
+    else:
+        store, key = store_for(work, dw, 2, reported=False)
+    before = D.tree(store)
+    manifest, path, copy, statuses, calls = run_with_store(work, store, "wi4-format")
+    assert statuses[deconvolve_id("round1")] == 1 and calls == []
+    message = failed_record(path, deconvolve_id("round1"))["error"]["message"]
+    assert f"the wisdom store {store}" in message
+    if case == "format /1":
+        assert "'starfinder.deconwolf-wisdom/1', not starfinder.deconwolf-wisdom/2" in message
+        assert "make the store again with the current starfinder deconvolve wisdom" in message
+    else:
+        assert f"the entry of key {key} has no reported_job_zyx" in message and "damaged" in message
+    assert not list((copy / "round1").rglob("*.tif")) and D.tree(store) == before
 
 
 def test_wi5_nothing_written_outside_the_task(work, tmp_path, monkeypatch):
@@ -618,7 +646,7 @@ def test_wi6_one_generating_job_per_key(work, tmp_path):
     dw, calls = D.stand_in(work / "bin", delay=1.0)
     store = tmp_path / "store"
     command = [sys.executable, "-m", "starfinder", "deconvolve", "wisdom", "--store", str(store), "--shape", "8",
-               "32", "32", "--psf-shape", "7", "9", "9", "--threads", "2", "--deconwolf", str(dw)]
+               "32", "32", "--psf", psf_files(work)["ch00"], "--threads", "2", "--deconwolf", str(dw)]
     first = subprocess.run(command, capture_output=True, text=True)
     assert first.returncode == 0, first.stderr
     key = json.loads(first.stdout)["key"]
@@ -640,22 +668,29 @@ def test_wi6_one_generating_job_per_key(work, tmp_path):
         ["manifest.json", manifest["keys"][next(iter(manifest["keys"]))]["file"]])
 
 
-def wisdom_command(store, dw, threads=1):
-    """``starfinder deconvolve wisdom`` in this process for the fixture's shape and a 7 × 9 × 9 PSF; (exit status, the
-    key the stage computes for that job)."""
+def wisdom_command(store, dw, psf, threads=1, shape=D.SHAPE):
+    """``starfinder deconvolve wisdom`` in this process for ``shape`` (the fixture's) and the PSF file ``psf``; (exit
+    status, the key the stage computes for that job)."""
     from starfinder.__main__ import main
-    status = main(["deconvolve", "wisdom", "--store", str(store), "--shape", *map(str, D.SHAPE), "--psf-shape", "7",
-                   "9", "9", "--threads", str(threads), "--deconwolf", str(dw)])
-    fields = wisdom_fields(D.SHAPE, (7, 9, 9), 2, None, threads, cpu_identity()["sha256"], deconwolf_identity(str(dw)))
+    status = main(["deconvolve", "wisdom", "--store", str(store), "--shape", *map(str, shape), "--psf", str(psf),
+                   "--threads", str(threads), "--deconwolf", str(dw)])
+    fields = wisdom_fields(shape, tifffile.imread(psf).shape, 2, None, threads, cpu_identity()["sha256"],
+                           deconwolf_identity(str(dw)))
     return status, wisdom_key(fields)
 
 
-def assert_store_holds(store, key):
+def assert_store_holds(store, key, threads=1, psf_shape=(7, 9, 9), shape=D.SHAPE):
+    """The store holds ``key`` only, its file with the manifest's SHA-256 and bytes, and the job and PSF deconwolf
+    reported, equal to the key's (W-937)."""
     manifest = json.loads((store / "manifest.json").read_text())
-    assert list(manifest["keys"]) == [key]
+    assert manifest["format"] == "starfinder.deconwolf-wisdom/2" and list(manifest["keys"]) == [key]
     entry = manifest["keys"][key]
-    assert entry["file"] == f"{key}/{wisdom_name(1)}"
+    assert entry["file"] == f"{key}/{wisdom_name(threads)}"
     assert D.sha256(store / entry["file"]) == entry["sha256"] and entry["bytes"] == (store / entry["file"]).stat().st_size
+    assert entry["fields"]["psf_shape_zyx"] == list(psf_shape)
+    assert entry["reported_psf_zyx"] == list(psf_shape)
+    job = [i + p - 1 for i, p in zip(shape, psf_shape)]
+    assert entry["reported_job_zyx"] == entry["fields"]["job_shape_zyx"] == job
 
 
 def test_wi6_the_planning_volume_is_bright_enough(tmp_path):
@@ -674,14 +709,72 @@ def test_wi6_the_planning_volume_is_bright_enough(tmp_path):
     assert sorted(p.name for p in old.iterdir()) == ["psf.tif", "volume.tif"]
     # The command's own volume passes the stand-in's check and makes the key's file.
     store = tmp_path / "store"
-    status, key = wisdom_command(store, dw)
+    status, key = wisdom_command(store, dw, D.write_psf_files(tmp_path / "psf", labels=("ch00",))["ch00"])
     assert status == 0 and len(D.calls(calls)) == 2
     assert_store_holds(store, key)
 
 
+def test_wi6_the_command_plans_with_the_given_psf(tmp_path, monkeypatch):
+    """The command passes deconwolf the PSF file's values (renormalised to sum 1 and float32, as the psf task writes a
+    supplied file) and takes the key's PSF shape from it; the manifest entry holds the shapes deconwolf reported
+    (W-937)."""
+    from starfinder.workflow import _deconvolve
+    dw, calls = D.stand_in(tmp_path / "bin")
+    psf = tmp_path / "psf.tif"
+    given = D.psf_core((2, 1, 0)).astype(np.float64) * 3
+    tifffile.imwrite(psf, given)
+    passed = []
+    run_deconwolf = _deconvolve.run_deconwolf
+
+    def spy(argv, home, threads):
+        passed.append(tifffile.imread(argv[-1]))
+        return run_deconwolf(argv, home, threads)
+    monkeypatch.setattr(_deconvolve, "run_deconwolf", spy)
+    store = tmp_path / "store"
+    status, key = wisdom_command(store, dw, psf, threads=2)
+    assert status == 0
+    assert_store_holds(store, key, threads=2)
+    planned = D.calls(calls)[-1]["argv"]
+    assert planned[-2].endswith("volume.tif") and planned[-1].endswith("psf.tif") and "--noplan" not in planned
+    assert len(passed) == 1 and passed[0].dtype == np.float32
+    np.testing.assert_allclose(passed[0], given / given.sum(), rtol=1e-6, atol=1e-9)
+
+
+@pytest.mark.parametrize("case", ["cropped", "no job line", "format /1", "no PSF file"])
+def test_wi6_the_command_refuses_and_writes_nothing(tmp_path, capsys, case):
+    """A PSF the stand-in reports as cropped, a run without deconwolf's job line, a store of format /1 and a missing
+    PSF file: exit 1, the reason on stderr, and no file written or changed (W-937)."""
+    dw, calls = D.stand_in(tmp_path / "bin", crop_xy=5 if case == "cropped" else None,
+                           no_job_line=case == "no job line")
+    psf = D.write_psf_files(tmp_path / "psf", labels=("ch00",))["ch00"]
+    store = tmp_path / "store"
+    if case == "format /1":
+        store.mkdir()
+        (store / "manifest.json").write_text(json.dumps({"format": "starfinder.deconwolf-wisdom/1", "keys": {}}))
+    if case == "no PSF file":
+        psf = tmp_path / "psf" / "absent.tif"
+    before = D.tree(store) if store.exists() else None
+    from starfinder.__main__ import main
+    status = main(["deconvolve", "wisdom", "--store", str(store), "--shape", *map(str, D.SHAPE), "--psf", str(psf),
+                   "--threads", "1", "--deconwolf", str(dw)])
+    err = capsys.readouterr().err
+    assert status == 1
+    assert (D.tree(store) if store.exists() else None) == before
+    if case == "cropped":
+        assert "deconwolf reported the PSF [7, 5, 5] and the job [14, 36, 36] (Z, Y, X)" in err
+        assert "has the shape [7, 9, 9] and the key the job [14, 40, 40]: deconwolf cropped the PSF" in err
+        assert "no stored plan could match a task with this PSF" in err and len(D.calls(calls)) == 1
+    elif case == "no job line":
+        assert "deconwolf printed no 'image: [..], psf: [..], job: [..]' line" in err
+    elif case == "format /1":
+        assert f"the wisdom store {store} has format 'starfinder.deconwolf-wisdom/1'" in err and D.calls(calls) == []
+    else:
+        assert f"the PSF file {psf} does not exist" in err and D.calls(calls) == []
+
+
 def test_wi6_the_command_on_the_real_binary(real_dw, tmp_path):
     store = tmp_path / "store"
-    status, key = wisdom_command(store, real_dw)
+    status, key = wisdom_command(store, real_dw, D.write_psf_files(tmp_path / "psf", labels=("ch00",))["ch00"])
     assert status == 0
     assert_store_holds(store, key)
     assert (store / key / wisdom_name(1)).stat().st_size > 0
@@ -696,6 +789,74 @@ def test_wi7_gpu_tasks(work):
         assert call["wisdom_found"] == []
     rec = record(copy, "round1")
     assert rec["planning"] == {"mode": "gpu"} and rec["device"]["kind"] == "gpu"
+    for channel in rec["channels"]:
+        assert channel["reported_job_zyx"] == [14, 40, 40] and channel["plan_matched"] is None
+
+
+# --- WI8: the job deconwolf reports, in the task (W-937) ------------------------------------------------------------
+
+def task_log(path, task_id):
+    return (path.parents[1] / "workflow" / "logs" / f"{task_id.replace('/', '.')}.log").read_text()
+
+
+def test_wi8_a_matching_key_and_an_uncropped_psf(work):
+    """A store made by ``starfinder deconvolve wisdom`` with the run's PSF: the task plans with it, and each channel
+    records the job and the PSF the stand-in reported, equal to the key's, and ``plan_matched: true``."""
+    dw, _ = D.stand_in(work / "bin")
+    store = work / "store"
+    status, key = wisdom_command(store, dw, psf_files(work)["ch00"], threads=2)
+    assert status == 0
+    manifest, path, copy, statuses, calls = run_with_store(work, store, "wi8")
+    assert statuses[deconvolve_id("round1")] == 0 and all("--noplan" not in call["argv"] for call in calls)
+    rec = record(copy, "round1")
+    assert rec["planning"]["mode"] == "measure" and rec["planning"]["wisdom_key"] == key
+    assert rec["planning"]["job_shape_zyx"] == [14, 40, 40]
+    for channel in rec["channels"]:
+        assert channel["reported_job_zyx"] == [14, 40, 40] and channel["reported_psf_zyx"] == [7, 9, 9]
+        assert channel["plan_matched"] is True
+    assert "the stored plan did not apply" not in task_log(path, deconvolve_id("round1"))
+
+
+def test_wi8_a_cropped_channel_does_not_match(work):
+    """A channel whose PSF the stand-in reports as cropped to 5 × 5 in XY, beside one it does not crop: the cropped
+    channel's record holds the smaller job and ``plan_matched: false``, the log warns once naming the channel, both
+    shapes and the cause, and the task succeeds with the copy SC1 expects."""
+    dw, _ = D.stand_in(work / "bin", crop_xy=5, crop_on="ch01")
+    store, key = store_for(work, dw, 2)
+    manifest, path, copy, statuses, calls = run_with_store(work, store, "wi8-cropped", crop_xy=5, crop_on="ch01")
+    assert statuses[deconvolve_id("round1")] == 0
+    rec = record(copy, "round1")
+    assert rec["planning"]["mode"] == "measure" and rec["planning"]["job_shape_zyx"] == [14, 40, 40]
+    channels = {c["label"]: c for c in rec["channels"]}
+    assert channels["ch00"]["reported_job_zyx"] == [14, 40, 40] and channels["ch00"]["plan_matched"] is True
+    assert channels["ch01"]["reported_job_zyx"] == [14, 36, 36] and channels["ch01"]["reported_psf_zyx"] == [7, 5, 5]
+    assert channels["ch01"]["plan_matched"] is False
+    log = task_log(path, deconvolve_id("round1"))
+    assert log.count("the stored plan did not apply") == 1
+    assert (f"ch01 of round round1: deconwolf reported the job [14, 36, 36] (Z, Y, X) and the PSF [7, 5, 5], the "
+            f"wisdom key {key} the job [14, 40, 40]") in log and "the likely cause is a PSF that deconwolf crops" in log
+    expected, f, m = expected_uint8(raw_arrays(work))
+    for label in D.LABELS:
+        assert np.array_equal(stored_values(copy / "round1" / FOV / f"{label}.tif"), expected[label])
+
+
+@pytest.mark.parametrize("case", ["estimate", "no job line"])
+def test_wi8_an_estimate_channel_or_no_job_line(work, case):
+    """An ``estimate`` channel records the reported shapes and ``plan_matched`` null; without deconwolf's line the
+    shapes are null too and the log warns per channel, under ``measure`` as well."""
+    dw, _ = D.stand_in(work / "bin", no_job_line=case == "no job line")
+    store = store_for(work, dw, 2, matching=case == "no job line")[0]
+    manifest, path, copy, statuses, calls = run_with_store(work, store, "wi8-" + case.replace(" ", "-"),
+                                                           no_job_line=case == "no job line")
+    assert statuses[deconvolve_id("round1")] == 0
+    rec = record(copy, "round1")
+    assert rec["planning"]["mode"] == ("estimate" if case == "estimate" else "measure")
+    shapes = ([14, 40, 40], [7, 9, 9]) if case == "estimate" else (None, None)
+    for channel in rec["channels"]:
+        assert (channel["reported_job_zyx"], channel["reported_psf_zyx"]) == shapes
+        assert channel["plan_matched"] is None
+    log = task_log(path, deconvolve_id("round1"))
+    assert log.count("deconwolf printed no 'image: [..], psf: [..], job: [..]' line") == (2 if shapes[0] is None else 0)
 
 
 # --- RC1 to RC5: records ------------------------------------------------------------------------------------------
@@ -1115,13 +1276,13 @@ def test_ru11_the_spacing_reaches_a_generated_psf(work):
         changed["voxel_size_xy"]
 
 
-# --- DW1 to DW4: deconwolf itself ---------------------------------------------------------------------------------
+# --- DW1 to DW5: deconwolf itself ---------------------------------------------------------------------------------
 
 @pytest.fixture
 def real_dw():
     path = os.environ.get("STARFINDER_TEST_DECONWOLF") or shutil.which("dw")
     if not path:
-        pytest.skip("DW1 to DW4 and WI6's run on the real binary need the deconwolf binary: dw on PATH or "
+        pytest.skip("DW1 to DW5 and WI6's run on the real binary need the deconwolf binary: dw on PATH or "
                     "STARFINDER_TEST_DECONWOLF, which this host lacks (the image has it)")
     return path
 
@@ -1200,3 +1361,52 @@ def test_dw4_a_channel_of_zeros_on_the_real_binary(real_dw, work):
     assert channels["ch00"]["deconwolf_skipped"] is False and channels["ch00"]["iterations_done"] == 3
     assert rec["storage"]["round_max"] == channels["ch00"]["max_after_offset"] > 0
     assert rec["planning"]["mode"] == "estimate"
+
+
+def old_wisdom_psf(shape=(21, 33, 33)):
+    """The synthetic PSF ``starfinder deconvolve wisdom`` planned with before W-937: exp(−r²/2), σ = 1 voxel,
+    centred on the array, divided by its sum, float32."""
+    grid = np.indices(shape).astype(np.float64)
+    centre = np.array([(n - 1) / 2 for n in shape]).reshape(3, 1, 1, 1)
+    kernel = np.exp(-((grid - centre) ** 2).sum(axis=0) / 2)
+    return (kernel / kernel.sum()).astype(np.float32)
+
+
+def test_dw5_the_command_refuses_a_psf_deconwolf_crops(real_dw, tmp_path, capsys):
+    """v0.4.5 crops the old σ = 1 PSF of 21 × 33 × 33 to 7 × 7 in XY (W-937: ``psf: [7x7x21], job: [70x70x50]`` on a
+    30 × 64 × 64 volume), so the command exits 1, naming the crop, and writes nothing."""
+    psf = tmp_path / "old-psf.tif"
+    tifffile.imwrite(psf, old_wisdom_psf())
+    store = tmp_path / "store"
+    status, key = wisdom_command(store, real_dw, psf, shape=(30, 64, 64))
+    err = capsys.readouterr().err
+    assert status == 1 and not store.exists()
+    assert "deconwolf reported the PSF [21, 7, 7] and the job [50, 70, 70] (Z, Y, X)" in err
+    assert "has the shape [21, 33, 33] and the key the job [50, 96, 96]: deconwolf cropped the PSF" in err
+
+
+@pytest.mark.slow
+def test_dw5_a_matched_plan_on_the_real_binary(real_dw, work):
+    """A PSF deconwolf does not crop (``psf_small``): the command adds the key, and two stage runs with that PSF and
+    that store each report the key's job, give ``plan_matched: true`` and write byte-identical copies."""
+    store = work / "store"
+    status, key = wisdom_command(store, real_dw, psf_files(work)["ch00"], threads=2)
+    assert status == 0
+    assert_store_holds(store, key, threads=2)
+    before = D.tree(store)
+    copies, outputs = [], []
+    for name in ("dw5-a", "dw5-b"):
+        execution = {"tasks": {"fov": {"threads": 1}, "deconvolve": {"threads": 2}}, "deconwolf_wisdom": str(store)}
+        manifest, path, copy, statuses = stage(work, name, block(work, rounds=["round1"]), real_dw,
+                                               execution=execution)
+        assert set(statuses.values()) == {0}
+        assert task_record(path, deconvolve_id("round1"))["reused"] is False
+        rec = record(copy, "round1")
+        assert rec["planning"]["mode"] == "measure" and rec["planning"]["wisdom_key"] == key
+        for channel in rec["channels"]:
+            assert channel["reported_job_zyx"] == rec["planning"]["job_shape_zyx"] == [14, 40, 40]
+            assert channel["reported_psf_zyx"] == [7, 9, 9] and channel["plan_matched"] is True
+        copies.append(copy)
+        outputs.append({c["label"]: c["output"]["file_sha256"] for c in rec["channels"]})
+    assert copies[0] != copies[1] and outputs[0] == outputs[1]
+    assert D.tree(store) == before

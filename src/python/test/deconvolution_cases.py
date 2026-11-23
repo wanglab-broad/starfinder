@@ -6,7 +6,9 @@ the options of deconwolf v0.4.5 that the stage passes, writes the float32 output
 tiled (plus ``shift`` when given), a log with ``scaling:`` and ``Iteration`` lines beside it, and, unless ``--noplan``
 or ``--gpu`` is given, appends to ``fftw_wisdom_float_inplace_threads_<n>.dat`` where v0.4.5 would write it. Like
 v0.4.5, it refuses an input whose maximum is below ``MIN_INTENSITY`` (1) with v0.4.5's message and exit status 1,
-writing nothing. Each call
+writing nothing. Like v0.4.5, it prints the line ``image: [x y z], psf: [x y z], job: [x y z]`` (each ``ixjxk``),
+with the job the image plus the PSF less one per axis; it can be told to report a PSF cropped in XY, and the smaller
+job that follows, or to leave the line out (W-937). Each call
 appends its arguments, ``HOME``, ``OMP_NUM_THREADS``, its working directory and the wisdom files it found to a call
 log, before it reads its input: a refused call is logged too, and an empty log shows that it was not called (W-933).
 ``input_root`` is 2 FOVs × 2 rounds × 2 labels of 8 × 32 × 32 uint8 with sparse Gaussian spots and the reference
@@ -90,6 +92,14 @@ x = tifffile.imread(image).astype(np.float32)
 if OPTIONS["min_intensity"] is not None and float(x.max()) < OPTIONS["min_intensity"]:
     print("ERROR: The image has too low intensity, can not continue!", file=sys.stderr)
     sys.exit(1)
+# v0.4.5's line, in X, Y, Z order: the job is the image plus the PSF less one per axis (border quality 2), after its
+# crop of the PSF in XY, which the stand-in makes to crop_xy pixels when asked (for every image or those named crop_on).
+p = list(tifffile.imread(psf).shape)
+if OPTIONS["crop_xy"] is not None and (OPTIONS["crop_on"] is None or OPTIONS["crop_on"] in Path(image).name):
+    p = [p[0], min(p[1], OPTIONS["crop_xy"]), min(p[2], OPTIONS["crop_xy"])]
+xyz = lambda zyx: "x".join(str(n) for n in zyx[::-1])
+if not OPTIONS["no_job_line"]:
+    print(f"image: [{{xyz(x.shape)}}], psf: [{{xyz(p)}}], job: [{{xyz([i + q - 1 for i, q in zip(x.shape, p)])}}]")
 tiled = "--tilesize" in values
 y = x + np.float32((0 if tiled or OPTIONS["min_zero"] else 5) + OPTIONS["shift"])
 out = Path(values["--out"])
@@ -112,14 +122,16 @@ if "--noplan" not in flags and "--gpu" not in flags:
 
 
 def stand_in(folder, *, version="0.4.5", fail_on=None, min_zero=False, shift=0, no_float=False, delay=0.0,
-             name="dw", min_intensity=MIN_INTENSITY):
+             name="dw", min_intensity=MIN_INTENSITY, crop_xy=None, crop_on=None, no_job_line=False):
     """Install the stand-in ``dw`` in ``folder``; (its path, its call log). ``min_intensity=None`` accepts any
-    input."""
+    input. ``crop_xy`` makes it report the PSF cropped to that many pixels in Y and X, and the job that follows, for
+    every input or for those whose name holds ``crop_on``; ``no_job_line`` leaves deconwolf's line out (W-937)."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     call_log = folder / f"{name}.calls.jsonl"
     options = {"version": version, "fail_on": fail_on, "min_zero": min_zero, "shift": shift, "no_float": no_float,
-               "delay": delay, "call_log": str(call_log), "min_intensity": min_intensity}
+               "delay": delay, "call_log": str(call_log), "min_intensity": min_intensity, "crop_xy": crop_xy,
+               "crop_on": crop_on, "no_job_line": no_job_line}
     path = folder / name
     path.write_text(STAND_IN.format(python=sys.executable, options=repr(options)))
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)

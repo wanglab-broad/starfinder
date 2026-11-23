@@ -1,6 +1,6 @@
 # Deconvolution stage: a deconvolved TIFF + zlib copy of the images, made by deconwolf before the FOV tasks
 
-% Status: Approved (Jiahao, 2026-11-21, W-918), with decision 3 changed: uint8 with one stretch factor per (FOV, round) by default, as Huygens' exports, and uint16 with an adjustable scale on request ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`. Amended 2026-11-22 by Jiahao's decision on W-933 (option A): a channel whose raw values are all 0 skips deconwolf and stores zeros ("The scaling", "A channel of zeros skips deconwolf").
+% Status: Approved (Jiahao, 2026-11-21, W-918), with decision 3 changed: uint8 with one stretch factor per (FOV, round) by default, as Huygens' exports, and uint16 with an adjustable scale on request ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`. Amended 2026-11-22 by Jiahao's decision on W-933 (option A): a channel whose raw values are all 0 skips deconwolf and stores zeros ("The scaling", "A channel of zeros skips deconwolf"). Amended 2026-11-23 by Jiahao's decision on W-937 (A1 and A2): `starfinder deconvolve wisdom` plans with the run's own PSF file, and the command and the task check the job deconwolf reports ("FFTW wisdom", "Records").
 
 This page specifies deconvolution as a workflow stage of its own. Jiahao decided on 2026-11-20
 (W-855, comment 70988672) to make deconwolf the primary deconvolution and to arrange a rule for
@@ -681,28 +681,79 @@ it into the steps' shared working directory).
   | Field | Value |
   | --- | --- |
   | `job_shape_zyx` | The padded shape deconwolf transforms: the image shape plus the PSF shape less one in each axis (border quality 2), for example 50 × 3,104 × 3,104 |
-  | `psf_shape_zyx` | The PSF's shape. The PSF's values do not affect FFTW's plans, so its hash is not in the key |
+  | `psf_shape_zyx` | The shape of the PSF file the task passes deconwolf, and the command's `--psf` file. Its values are not in the key, so two PSFs of one shape give one key (WI1). But they are not irrelevant: they decide deconwolf's crop of the PSF, which decides the job ("deconwolf crops the PSF" below) |
   | `border_quality`, `tile_size` | The two settings that change the transform sizes |
   | `threads` | The task's threads; deconwolf's file name holds it too |
   | `cpu` | `model name` and the sorted `flags` of `/proc/cpuinfo`, hashed |
   | `fftw`, `deconwolf` | The FFT backend line of `dw --version` (for example `fftw-3.3.8-sse2-avx`) and deconwolf's version and binary SHA-256 |
 
+* **deconwolf crops the PSF** (amended 2026-11-23, W-937). Before it plans, deconwolf v0.4.5 crops
+  the PSF in Y and X by the PSF's values (its log: "XY crop factor: 0.001000"), and the job is the
+  image plus the cropped PSF less one. So the sizes FFTW plans for depend on the PSF's values, not
+  only on its shape.
+  * **What went wrong.** Until W-937 the command planned on a synthetic Gaussian PSF exp(−r²/2),
+    σ = 1 voxel, of the key's PSF shape. deconwolf cropped it to 7 × 7: on a 30 × 64 × 64 volume
+    with a 21 × 33 × 33 PSF, it printed `psf: [7x7x21], job: [70x70x50]` (the coordinating
+    session, in the v0.4.0 image). In W-935 the planning run therefore planned a job of
+    50 × 3,078 × 3,078, while the key and the task named 50 × 3,104 × 3,104. The task's log reads
+    `image: [3072x3072x30], psf: [33x33x21], job: [3104x3104x50]`, then "Importing FFTW wisdom" and
+    "--- fftw3 training ---": FFTW wisdom holds plans for exact sizes, so every `measure` task
+    planned from scratch, took 2.09 times the wall time of `--noplan`, and wrote outputs that
+    differ byte for byte between runs. W-925's RD3 is the same effect.
+  * **The rule.** A key is valid only for a PSF that deconwolf does not crop: the key names the
+    uncropped PSF's job. The command plans with the run's own PSF file (A1), so deconwolf crops it
+    exactly as a task with that PSF does, and both the command and the task read the job deconwolf
+    reports and compare it with the key (A2), which is the check.
+  * **The reported job.** deconwolf prints one line, `image: [x y z], psf: [x y z], job: [x y z]`
+    (for example `image: [3072x3072x30], psf: [33x33x21], job: [3104x3104x50]`), in X, Y, Z
+    order, before it plans. The stage reads the first such line of deconwolf's output and turns
+    each shape to Z, Y, X. The same values appear again in deconwolf's own log file
+    (`<out>.log.txt`), which the stage appends to the channel's log, but there one per line and
+    among `image:` and `psf:` lines that name the input files. The stage reads the line of the
+    output, the one line that holds all three shapes, as W-935's logs show it.
 * **The store.** `execution.deconwolf_wisdom` names a folder: `<store>/<key>/<deconwolf's file
   name>` and `<store>/manifest.json`, which lists each key with its fields, the file's bytes and
-  SHA-256, and when, where (host, job id) and by which command it was made. The manifest is
-  rewritten atomically, under a lock file made with `O_EXCL`.
+  SHA-256, the job and the PSF deconwolf reported when it planned (`reported_job_zyx`,
+  `reported_psf_zyx`, Z, Y, X), and when, where (host, job id) and by which command it was made.
+  The manifest is rewritten atomically, under a lock file made with `O_EXCL`.
+* **The store's format** is `starfinder.deconwolf-wisdom/2` (W-937). An entry of format `/1` may
+  hold plans for a cropped PSF's job under a key that names the uncropped job, and nothing in the
+  entry tells the two apart. So a task given a store whose manifest has another format fails,
+  naming the store and saying to make it again with the current command; the command refuses to
+  add to such a store. A `/2` entry without `reported_job_zyx` is damaged, and fails the task like
+  a file whose SHA-256 differs.
 * **One generating job per new key.** `starfinder deconvolve wisdom --store <dir> --shape <z y x>
-  --psf-shape <z y x> --threads <n>` plans for that key on the node it runs on, with deconwolf's
-  FFTW_MEASURE on a synthetic volume of the image shape. The plans depend on the sizes only. It
-  takes the store's lock for the key, refuses if the key exists, and adds the file and its
-  manifest entry. It is run by hand or as a job, once per (CPU model, shape, threads) of a
-  deployment, outside the plan (WS2's reason). W-916's planning took 1,617 s at 6 threads.
+  --psf <file> --threads <n>` plans for that key on the node it runs on, with deconwolf's
+  FFTW_MEASURE on a synthetic volume of the image shape (`1 + 254 u`, values from 1 to 255) and
+  the PSF file: `<copy>/psf/<label>.tif` as the `psf` task writes it, or a supplied PSF, which the
+  command checks and writes in float32 as the `psf` task writes a supplied file. The key's
+  `psf_shape_zyx` is the file's shape. FFTW's plans depend on the transform sizes, the threads and
+  the options, not on the image's values, which is why a synthetic volume serves; the PSF's
+  values decide the sizes through the crop, which is why the PSF must be the run's. The command
+  takes the store's lock for the key, refuses if the key exists, and runs deconwolf. It then reads
+  deconwolf's reported line: when the line is missing, when the reported job differs from the
+  key's `job_shape_zyx`, or when the reported PSF differs from the file's shape, it exits 1 and
+  writes nothing, with a message that names both shapes and says that deconwolf cropped the PSF,
+  so that no stored plan could match a task; tasks with that PSF then run `--noplan`, as no key
+  matches. Otherwise it adds the file and its manifest entry. It is run by hand or as a job, once
+  per (CPU model, shape, PSF, threads) of a deployment, outside the plan (WS2's reason). W-916's
+  planning took 1,617 s at 6 threads.
 * **Read-only use.** A CPU `deconvolve` task computes its key, and when the store's manifest lists
   it, it checks the file's SHA-256 against the manifest and copies the file into its own
   `$HOME/.config/deconwolf/`. A file whose SHA-256 differs from the manifest fails the task,
   naming the file: a damaged store is reported, not worked around. Whatever deconwolf writes back
   into that private folder is deleted with the task's temporary folder. The store is never opened for writing
   by a task.
+* **The task checks the reported job** (W-937). For each channel deconwolf runs on, CPU or GPU, the
+  channel's record holds `reported_job_zyx` and `reported_psf_zyx` from deconwolf's line, null
+  when the line is missing, which the task log warns about. A `measure` round's `planning` holds
+  the key's `job_shape_zyx`. When a channel ran under `measure` and its reported job differs from
+  the key's, its record says `plan_matched: false` and the log warns, naming the channel, both
+  shapes and the likely cause, a PSF that deconwolf crops: deconwolf then planned that channel
+  itself. The task still succeeds, because the output is valid; only the plan did not apply. A
+  matched channel says `plan_matched: true`; `estimate` and GPU channels, and a channel without
+  the line, say null. This catches a channel whose PSF crops otherwise than the PSF the store was
+  planned with.
 * **`--noplan` when no key matches**, and when the store is unset. The record says so.
 * **Finding the store.** The command runs deconwolf with `HOME` set to a private folder under the
   task's temporary root, with `.config/deconwolf/` created first (holding the copy or nothing), and
@@ -714,6 +765,11 @@ it into the steps' shared working directory).
 * **The values.** Planning changes the output by up to 1.6 × 10⁻⁵ of the maximum (W-916: ESTIMATE
   against MEASURE). Threads and reused wisdom change no byte within one planning mode. So the mode
   is recorded per task and stays outside the hash (question 5).
+* **Decision (Jiahao, 2026-11-23, about 14:40 EST: "按 A1+A2 修").** A1: the command plans with
+  the run's own PSF file (`--psf` replaces `--psf-shape`, with no compatibility option). A2: the
+  command and the task read the `image/psf/job` line deconwolf prints and compare it with the key.
+  The `--noplan` path, the GPU path, the storage arithmetic, W-933's zero-channel rule, the lock
+  and the engines' routing are unchanged.
 
 ## Records
 
@@ -735,8 +791,8 @@ it into the steps' shared working directory).
 | `device` | `cpu` with the CPU model and threads, or `gpu` with the OpenCL device name and `CUDA_VISIBLE_DEVICES` |
 | `options` | Iterations, method, border quality, tile size and padding, offset, background, and the argument list passed |
 | `storage` | `{dtype: uint8, stretch_factor, round_max}`: the one factor and maximum the round's channels share; or `{dtype: uint16}`, each channel's scale then in `channels[]` |
-| `planning` | `{mode: measure, wisdom_key, wisdom_sha256}`, or `{mode: estimate}` with the reason (`no store` or `no matching key`), or `{mode: gpu}`; `{mode: none}` with the reason `no channel passed to deconwolf` for a round whose channels are all 0 (W-933) |
-| `channels[]` | Per label: the input `path`, `file_sha256`, and decoded `dtype`, `shape` and `sha256`; the PSF `path` and `file_sha256`; `deconwolf_skipped`; deconwolf's `iterations_done`; the float output's minimum and maximum; the kept offset removed; the scale (uint16); the counts clipped at 0 and at the dtype's maximum; the output `path`, `file_sha256` and decoded `sha256`; the log's path and SHA-256; the wall and CPU seconds. A channel of zeros also holds `skip_reason`, and its deconwolf fields are null ([The scaling](#the-scaling), "A channel of zeros skips deconwolf") |
+| `planning` | `{mode: measure, wisdom_key, wisdom_sha256, store, job_shape_zyx}` (the key's job, W-937), or `{mode: estimate}` with the reason (`no store` or `no matching key`), or `{mode: gpu}`; `{mode: none}` with the reason `no channel passed to deconwolf` for a round whose channels are all 0 (W-933) |
+| `channels[]` | Per label: the input `path`, `file_sha256`, and decoded `dtype`, `shape` and `sha256`; the PSF `path` and `file_sha256`; `deconwolf_skipped`; deconwolf's `iterations_done`; the float output's minimum and maximum; the kept offset removed; the scale (uint16); the counts clipped at 0 and at the dtype's maximum; the output `path`, `file_sha256` and decoded `sha256`; the log's path and SHA-256; the wall and CPU seconds; `reported_job_zyx` and `reported_psf_zyx`, the job and the PSF deconwolf reported (Z, Y, X; null without its line), and `plan_matched`, true or false under `measure`, else null ([FFTW wisdom](#fftw-wisdom), W-937). A channel of zeros also holds `skip_reason`, and its deconwolf fields, the three of W-937 included, are null ([The scaling](#the-scaling), "A channel of zeros skips deconwolf") |
 | `code` | The package's code identity (`orchestration.md`, "The code identity") |
 | `started_at`, `ended_at`, `host`, `job_id` | Where and when |
 

@@ -130,21 +130,34 @@ defaults of a `deconvolve` task are for four channels of 30 × 3,072 × 3,072:
 These figures were measured on GP099-29C (W-916); UGER's CPUs were not measured, and
 a retry doubles the memory and runtime. A CPU task without FFTW wisdom plans with
 `--noplan`, about twice the time of a planned run. To make wisdom for a node type,
-run once per (CPU model, image shape, PSF shape, threads), as a job on that node type
-and in the image:
+run once per (CPU model, image shape, PSF, threads), as a job on that node type
+and in the image, with the run's own PSF file: the copy's `psf/<label>.tif`, which
+the `psf` task writes, or the file `deconvolution.psf.files` supplies:
 
 ```bash
 starfinder deconvolve wisdom --store /stanley/WangLab/<user>/dw-wisdom \
-  --shape 30 3072 3072 --psf-shape 21 33 33 --threads 4
+  --shape 30 3072 3072 --psf <copy>/psf/ch00.tif --threads 4
 ```
 
 It runs deconwolf on a synthetic volume of that shape, with values from 1 to 255
-because deconwolf refuses an image whose maximum is below 1; the plans depend on
-the sizes only. It plans for about half an hour at six threads (W-916: 1,617 s), adds one file and
-its entry to the store's `manifest.json` under the store's lock, and refuses a key
-the store already holds. Then set `execution.deconwolf_wisdom` to the store: each CPU
-task copies the file of its key into a private folder and never writes the store, and
-a task on another CPU model, whose key the store lacks, runs with `--noplan`.
+because deconwolf refuses an image whose maximum is below 1, and with that PSF:
+deconwolf crops a PSF in Y and X by its values, and the crop sets the sizes it
+plans for. It plans for about half an hour at six threads (W-916: 1,617 s). When
+deconwolf reports the job and the PSF shape the key names, it adds one file and its
+entry to the store's `manifest.json` under the store's lock; it refuses a key the
+store already holds. When deconwolf crops the PSF, it exits 1, names both shapes and
+writes nothing, as no stored plan could match a task: tasks with that PSF run with
+`--noplan`. Then set `execution.deconwolf_wisdom` to the store: each CPU task copies
+the file of its key into a private folder and never writes the store, and a task on
+another CPU model, whose key the store lacks, runs with `--noplan`. Each channel's
+record says whether the stored plan matched the job deconwolf reported
+(`plan_matched`), and the task log warns when it did not.
+
+A store made before W-937 (format `starfinder.deconwolf-wisdom/1`, by the command's
+`--psf-shape`) planned on a synthetic PSF that deconwolf cropped, so its plans never
+matched a task. A task given such a store fails, naming it, and the command refuses
+to add to it. Make the store again: move or delete the old folder, then run the
+command above once per key into a new folder.
 
 (broad-uger-image-build)=
 The `Containerfile`'s build context has no `.git`, so the build takes the code identity as build arguments, and the image

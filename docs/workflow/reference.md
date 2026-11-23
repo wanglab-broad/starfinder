@@ -21,6 +21,27 @@ changes what a task does.
 --attempt: The engine's attempt number, recorded in the task record
 ```
 
+(workflow-wisdom-command)=
+`starfinder deconvolve wisdom` makes the FFTW wisdom store that CPU `deconvolve`
+tasks read (`execution.deconwolf_wisdom`). It is run by hand or as a job, outside
+the plan, once per key:
+
+| Option | Meaning |
+| --- | --- |
+| `--store DIR` | The store's folder; required |
+| `--shape Z Y X` | The image shape of the volumes the tasks deconvolve; required |
+| `--psf FILE` | The tasks' PSF file: the copy's `psf/<label>.tif` as the `psf` task writes it, or a supplied PSF; its shape is the key's PSF shape; required. It replaced `--psf-shape` (W-937) |
+| `--threads N` | The tasks' threads; required |
+| `--deconwolf PATH` | The `dw` executable; default `dw` on `PATH` |
+| `--border-quality N` | `deconvolution.border_quality`; default 2 |
+| `--tile-size N` | `deconvolution.tile_size`; default untiled |
+
+It exits 0 when it added the key, printing the key, the file and its SHA-256 as
+JSON; 1, writing nothing, when the store already holds the key or has a format other
+than `starfinder.deconwolf-wisdom/2`, when deconwolf fails, or when the job or the
+PSF shape deconwolf reports differs from the key's (deconwolf cropped the PSF); 2
+for invalid arguments. The {doc}`UGER guide <broad-uger>` shows a run.
+
 (workflow-exit-status)=
 ## Exit status
 
