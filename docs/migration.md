@@ -174,6 +174,7 @@ need adjustment in the stage entries below.
 | `starfinder.benchmark._experiment.expand_experiment(path, output)` | `starfinder experiment expand --config PATH --output DIR` (a new or empty output folder) |
 | Evaluating saved workflow outputs, checkpoints or trial outputs | `starfinder experiment evaluate --sources PATH --metrics PATH --output DIR` |
 | The engine comparison of `scripts/workflow_golden.py` | `starfinder.evaluation.workflow` (the script calls it) |
+| `starfinder deconvolve wisdom --psf-shape Z Y X`, which planned on a synthetic PSF of that shape, and its store format `starfinder.deconwolf-wisdom/1` | `starfinder deconvolve wisdom --psf FILE` with the run's own PSF file, the key's PSF shape being the file's; the command checks the job deconwolf reports and writes nothing when deconwolf crops the PSF. The store format is `starfinder.deconwolf-wisdom/2`, whose entries hold `reported_job_zyx` and `reported_psf_zyx`. A `/1` store fails the task that is given it and is refused by the command: make it again with `--psf` (W-937; {doc}`UGER guide <workflow/broad-uger>`). `--psf-shape` has no compatibility option |
 
 See the {doc}`experiments guide <benchmark/experiments>` and the
 {doc}`report guide <benchmark/report>`.

@@ -42,7 +42,9 @@ UNTILED_MINIMUM = 4.5
 #: continue!", exit 1; ``src/dw.c`` 2522–2532). A channel whose raw values are all 0 skips deconwolf (W-933).
 DECONWOLF_FLOOR = 1.0
 SKIP_REASON = f"raw values all 0; deconwolf v{DECONWOLF_VERSION} refuses a maximum below 1"
-WISDOM_FORMAT = "starfinder.deconwolf-wisdom/1"
+#: /2 (W-937): each entry holds the job and the PSF deconwolf reported. A /1 entry may hold plans for a cropped PSF's
+#: job under a key that names the uncropped one, so a /1 store is refused, not read.
+WISDOM_FORMAT = "starfinder.deconwolf-wisdom/2"
 WISDOM_MANIFEST = "manifest.json"
 #: psfmodels' defaults that a generated PSF uses and records (W-855): coverslip, working distance, oversampling.
 PSFMODELS_DEFAULTS = {"tg": 170, "tg0": 170, "ng": 1.515, "ng0": 1.515, "ti0": 150, "oversample_factor": 3}
@@ -129,18 +131,30 @@ def wisdom_key(fields):
 
 
 def _store_manifest(store):
+    """The store's manifest, or an empty one of the current format when it has none. A manifest of another format
+    raises ValueError naming the store: a /1 store's plans may have been made for a PSF deconwolf cropped (W-937)."""
     path = Path(store) / WISDOM_MANIFEST
     if not path.is_file():
         return {"format": WISDOM_FORMAT, "keys": {}}
-    return json.loads(path.read_text())
+    manifest = json.loads(path.read_text())
+    found = manifest.get("format") if isinstance(manifest, dict) else None
+    if found != WISDOM_FORMAT:
+        raise ValueError(f"the wisdom store {store} has format {found!r}, not {WISDOM_FORMAT}: its plans may have "
+                         "been made for a PSF that deconwolf cropped, under a key that names the uncropped job "
+                         "(W-937); make the store again with the current starfinder deconvolve wisdom")
+    return manifest
 
 
 def find_wisdom(store, key):
     """The store's file for ``key`` checked against the manifest: (path, SHA-256), or None when the store has no such
-    key. A file whose SHA-256 differs from the manifest raises ValueError naming it (a damaged store)."""
+    key. A store of another format, an entry without ``reported_job_zyx``, or a file whose SHA-256 differs from the
+    manifest raises ValueError naming it (a damaged store)."""
     entry = _store_manifest(store)["keys"].get(key)
     if entry is None:
         return None
+    if entry.get("reported_job_zyx") is None:
+        raise ValueError(f"the wisdom store {store}: the entry of key {key} has no reported_job_zyx, which every "
+                         f"{WISDOM_FORMAT} entry holds: the store is damaged")
     path = Path(store) / entry["file"]
     found = file_sha256(path) if path.is_file() else None
     if found != entry["sha256"]:
@@ -186,6 +200,21 @@ def run_deconwolf(argv, home, threads):
     after = resource.getrusage(resource.RUSAGE_CHILDREN)
     cpu = (after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime)
     return done.returncode, done.stdout, time.perf_counter() - start, cpu
+
+
+_JOB_LINE = re.compile(r"image: \[(\d+)x(\d+)x(\d+)\], psf: \[(\d+)x(\d+)x(\d+)\], job: \[(\d+)x(\d+)x(\d+)\]")
+
+
+def reported_shapes(output):
+    """The shapes in deconwolf's line ``image: [x y z], psf: [x y z], job: [x y z]`` (``ixjxk`` each), the first in
+    its output: {"image_zyx", "psf_zyx", "job_zyx"}, each converted from deconwolf's X, Y, Z order to Z, Y, X, or None
+    when the output has no such line. The PSF and the job are those after deconwolf's crop of the PSF (W-937)."""
+    text = output.decode(errors="replace") if isinstance(output, bytes) else output
+    found = _JOB_LINE.search(text)
+    if found is None:
+        return None
+    n = [int(v) for v in found.groups()]
+    return {"image_zyx": n[2::-1], "psf_zyx": n[5:2:-1], "job_zyx": n[8:5:-1]}
 
 
 # --- the PSF --------------------------------------------------------------------------------------------------------
@@ -488,7 +517,8 @@ def _deconvolve_round(run, entry, copy, records, inputs, psfs):
     channel and its maximum. The planning is decided at the first channel passed to deconwolf; a round with none
     records ``{mode: none}`` and looks up no wisdom. Then each other channel is deconvolved to float32 in the private
     temporary folder, M is taken over the round, and each channel's file is written with the round's factor (uint8) or
-    its scale (uint16)."""
+    its scale (uint16). Each channel passed to deconwolf records the job and the PSF deconwolf reported and whether a
+    ``measure`` plan matched that job (``_reported``, W-937); a skipped channel holds null for the three."""
     from starfinder.io import load_volume, save_volume
     from starfinder.workflow._commands import image_compression
     from starfinder.workflow._plan import package_identity
@@ -528,7 +558,8 @@ def _deconvolve_round(run, entry, copy, records, inputs, psfs):
                     "psf": {"path": f"{PSF_DIR}/{label}.tif", "file_sha256": psfs[label][1]},
                     "deconwolf_skipped": True, "skip_reason": SKIP_REASON, "iterations_done": None,
                     "float_min": None, "float_max": None, "kept_offset": None, "max_after_offset": 0.0,
-                    "clipped_low": 0, "arguments": None, "wall_s": None, "cpu_s": None})
+                    "clipped_low": 0, "arguments": None, "wall_s": None, "cpu_s": None,
+                    "reported_job_zyx": None, "reported_psf_zyx": None, "plan_matched": None})
                 logs[label] = tmp / f"{label}.dw.log"
                 logs[label].write_text(f"deconwolf skipped for {label} of round {name}: {SKIP_REASON}\n")
                 logger.info(f"{label} of round {name}: {SKIP_REASON}; deconwolf skipped, the copy stores zeros")
@@ -574,7 +605,8 @@ def _deconvolve_round(run, entry, copy, records, inputs, psfs):
                 "psf": {"path": f"{PSF_DIR}/{label}.tif", "file_sha256": psfs[label][1]}, "deconwolf_skipped": False,
                 "iterations_done": max(done) if done else None, "float_min": lowest, "float_max": highest,
                 "kept_offset": kept, "max_after_offset": float(max(values.max(), 0.0)),
-                "clipped_low": int((values < 0).sum()), "arguments": argv, "wall_s": wall, "cpu_s": cpu})
+                "clipped_low": int((values < 0).sum()), "arguments": argv, "wall_s": wall, "cpu_s": cpu,
+                **_reported(output, planning, label, name)})
             outputs[label] = out
         # The second pass: one channel in memory at a time, from the float outputs kept in the temporary folder.
         storage = {"dtype": block["dtype"]}
@@ -647,6 +679,27 @@ def _float_output(path, identity, log, label):
     return y / float(scaling[-1])
 
 
+def _reported(output, planning, label, name):
+    """A channel's ``reported_job_zyx`` and ``reported_psf_zyx``, from deconwolf's ``image/psf/job`` line in its output
+    (null, with a warning, when the line is missing), and ``plan_matched``: under ``measure``, whether the reported job
+    equals the key's job, a mismatch logged as a warning; null for ``estimate`` and ``gpu`` (W-937). A mismatch does not
+    fail the task: the output is valid, only the stored plan did not apply."""
+    shapes = reported_shapes(output)
+    if shapes is None:
+        logger.warning(f"deconwolf printed no 'image: [..], psf: [..], job: [..]' line for {label} of round {name}: "
+                       "its reported job and PSF are null")
+        return {"reported_job_zyx": None, "reported_psf_zyx": None, "plan_matched": None}
+    matched = None
+    if planning["mode"] == "measure":
+        matched = shapes["job_zyx"] == planning["job_shape_zyx"]
+        if not matched:
+            logger.warning(f"{label} of round {name}: deconwolf reported the job {shapes['job_zyx']} (Z, Y, X) and the "
+                           f"PSF {shapes['psf_zyx']}, the wisdom key {planning['wisdom_key']} the job "
+                           f"{planning['job_shape_zyx']}: the stored plan did not apply, so deconwolf planned this "
+                           "channel itself; the likely cause is a PSF that deconwolf crops")
+    return {"reported_job_zyx": shapes["job_zyx"], "reported_psf_zyx": shapes["psf_zyx"], "plan_matched": matched}
+
+
 def _opencl_device(text):
     found = re.search(r"(?:CL_DEVICE_NAME|Device name|device)\s*[:=]\s*(.+)", text)
     return found.group(1).strip() if found else None
@@ -654,7 +707,7 @@ def _opencl_device(text):
 
 def _planning(execution, gpu, shape, psf_path, block, threads, identity, home):
     """The task's planning: ``gpu``; ``measure`` with the store's file for its key copied into the private
-    ``.config/deconwolf/``; or ``estimate`` (``--noplan``) with the reason."""
+    ``.config/deconwolf/`` and the key's job shape; or ``estimate`` (``--noplan``) with the reason."""
     if gpu:
         return {"mode": "gpu"}
     store = execution.get("deconwolf_wisdom")
@@ -670,7 +723,8 @@ def _planning(execution, gpu, shape, psf_path, block, threads, identity, home):
     if found is None:
         return {"mode": "estimate", "reason": "no matching key", "wisdom_key": key}
     shutil.copyfile(found[0], home / ".config" / "deconwolf" / wisdom_name(threads))
-    return {"mode": "measure", "wisdom_key": key, "wisdom_sha256": found[1], "store": str(store)}
+    return {"mode": "measure", "wisdom_key": key, "wisdom_sha256": found[1], "store": str(store),
+            "job_shape_zyx": fields["job_shape_zyx"]}
 
 
 # --- a consumer's check -------------------------------------------------------------------------------------------
@@ -732,63 +786,92 @@ def run_copy_id(manifest):
 
 # --- the wisdom store's command -----------------------------------------------------------------------------------
 
-def add_wisdom(store, shape, psf_shape, threads, binary=None, border_quality=2, tile_size=None, timeout=7200):
+def add_wisdom(store, shape, psf, threads, binary=None, border_quality=2, tile_size=None, timeout=7200):
     """Plan FFTW wisdom for one key on this node and add it to the store (``starfinder deconvolve wisdom``).
 
-    Under the store's lock, a key the manifest already holds is refused (FileExistsError, nothing written); otherwise
-    deconwolf runs on a synthetic volume of ``shape`` with a PSF of ``psf_shape`` and planning on, in a private HOME,
-    and its wisdom file is copied to ``<store>/<key>/`` and listed in the manifest, which is rewritten atomically.
-    Returns the manifest entry.
+    ``psf`` is a PSF file: one the psf task wrote (``<copy>/psf/<label>.tif``) or a supplied one, checked and written
+    in float32 as the psf task writes a supplied file. The key's ``psf_shape_zyx`` is its shape. Under the store's
+    lock, a store of another format (``_store_manifest``) and a key the manifest already holds are refused
+    (ValueError, FileExistsError); otherwise deconwolf runs on a synthetic volume of ``shape`` with that PSF and
+    planning on, in a private HOME. Its line ``image: [..], psf: [..], job: [..]`` must report the key's job and the
+    file's shape: deconwolf crops a PSF in XY by its values (v0.4.5's "XY crop factor"), and a cropped PSF makes a
+    smaller job, whose plans no task with the uncropped key could use (W-935, W-937). A missing line or another shape
+    raises RuntimeError. Only then is the wisdom file copied to ``<store>/<key>/`` and listed in the manifest, with the
+    reported job and PSF, and the manifest rewritten atomically. A refusal writes nothing, and a store folder the call
+    made is removed again. Returns the manifest entry.
 
     The volume is ``1 + 254 u`` in float32, u uniform on [0, 1) with seed 0: values from 1 to 255, the range of an
     8-bit image. deconwolf v0.4.5 refuses an image whose maximum is below 1 ("ERROR: The image has too low intensity,
     can not continue!", exit 1; ``src/dw.c``) or that holds a negative value, so the volume uniform on [0, 1) that
     this command wrote before made no wisdom (W-925's RD3, W-929). With 1 as the lower bound every voxel passes, so
-    the check holds at any shape. FFTW's plans depend on the sizes, the threads and the options, not on the values, so
-    the key, its fields and the store are those of the specification.
+    the check holds at any shape. FFTW's plans depend on the transform sizes, the threads and the options, not on the
+    image's values; the PSF's values decide deconwolf's crop and so the sizes, which is why the command plans with the
+    run's own PSF and checks the job deconwolf reports.
     """
     import tifffile
     store = Path(store)
-    store.mkdir(parents=True, exist_ok=True)
+    if not Path(psf).is_file():
+        raise ValueError(f"the PSF file {psf} does not exist")
+    kernel = read_supplied_psf(psf)[0].astype(np.float32)
+    psf_shape = [int(n) for n in kernel.shape]
     binary = deconwolf_binary({"deconwolf": binary})
     identity = deconwolf_identity(binary)
     fields = wisdom_fields(shape, psf_shape, border_quality, tile_size, threads, cpu_identity()["sha256"], identity)
     key = wisdom_key(fields)
-    with exclusive(store / ".lock", timeout, "starfinder deconvolve wisdom"):
-        manifest = _store_manifest(store)
-        if key in manifest["keys"]:
-            raise FileExistsError(f"the wisdom store {store} already holds the key {key}")
-        tmp = Path(tempfile.mkdtemp(prefix="starfinder-wisdom-"))
-        try:
-            home = _private_home(tmp)
-            rng = np.random.default_rng(0)
-            volume = np.float32(1) + np.float32(254) * rng.random(tuple(shape), dtype=np.float32)
-            tifffile.imwrite(home / "volume.tif", volume)
-            grid = np.indices(tuple(psf_shape)).astype(np.float64)
-            centre = np.array([(n - 1) / 2 for n in psf_shape]).reshape(3, 1, 1, 1)
-            kernel = np.exp(-((grid - centre) ** 2).sum(axis=0) / 2)
-            tifffile.imwrite(home / "psf.tif", (kernel / kernel.sum()).astype(np.float32))
-            argv = [binary, "--iter", "1", "--threads", str(threads), "--offset", str(OFFSET)]
-            if border_quality != 2:
-                argv += ["--bq", str(border_quality)]
-            if tile_size:
-                argv += ["--tilesize", str(tile_size)]
-            argv += ["--float", "--out", str(home / "out.tif"), str(home / "volume.tif"), str(home / "psf.tif")]
-            status, output, wall, cpu = run_deconwolf(argv, home, threads)
-            made = home / ".config" / "deconwolf" / wisdom_name(threads)
-            if status != 0 or not made.is_file():
-                raise RuntimeError(f"deconwolf exited with status {status} and wrote no {made.name}: "
-                                   f"{output.decode(errors='replace')[-2000:]}")
-            target = store / key / made.name
-            with atomic_file(target) as tmp_file:
-                shutil.copyfile(made, tmp_file)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-        entry = {"fields": fields, "file": f"{key}/{made.name}", "bytes": target.stat().st_size,
-                 "sha256": file_sha256(target), "made_at": _now(), "host": socket.gethostname(),
-                 "job_id": os.environ.get("JOB_ID"), "command": argv, "wall_s": wall, "cpu_s": cpu}
-        manifest["keys"][key] = entry
-        _write_json(store / WISDOM_MANIFEST, manifest)
+    created = not store.exists()
+    store.mkdir(parents=True, exist_ok=True)
+    try:
+        with exclusive(store / ".lock", timeout, "starfinder deconvolve wisdom"):
+            manifest = _store_manifest(store)
+            if key in manifest["keys"]:
+                raise FileExistsError(f"the wisdom store {store} already holds the key {key}")
+            tmp = Path(tempfile.mkdtemp(prefix="starfinder-wisdom-"))
+            try:
+                home = _private_home(tmp)
+                rng = np.random.default_rng(0)
+                volume = np.float32(1) + np.float32(254) * rng.random(tuple(shape), dtype=np.float32)
+                tifffile.imwrite(home / "volume.tif", volume)
+                tifffile.imwrite(home / "psf.tif", kernel)
+                argv = [binary, "--iter", "1", "--threads", str(threads), "--offset", str(OFFSET)]
+                if border_quality != 2:
+                    argv += ["--bq", str(border_quality)]
+                if tile_size:
+                    argv += ["--tilesize", str(tile_size)]
+                argv += ["--float", "--out", str(home / "out.tif"), str(home / "volume.tif"), str(home / "psf.tif")]
+                status, output, wall, cpu = run_deconwolf(argv, home, threads)
+                made = home / ".config" / "deconwolf" / wisdom_name(threads)
+                if status != 0 or not made.is_file():
+                    raise RuntimeError(f"deconwolf exited with status {status} and wrote no {made.name}: "
+                                       f"{output.decode(errors='replace')[-2000:]}")
+                reported = reported_shapes(output)
+                if reported is None:
+                    raise RuntimeError("deconwolf printed no 'image: [..], psf: [..], job: [..]' line, so the job "
+                                       "it planned is unknown; nothing written: "
+                                       f"{output.decode(errors='replace')[-2000:]}")
+                if reported["job_zyx"] != fields["job_shape_zyx"] or reported["psf_zyx"] != psf_shape:
+                    cause = ("deconwolf cropped the PSF" if reported["psf_zyx"] != psf_shape else
+                             "deconwolf's job differs from the key's")
+                    raise RuntimeError(
+                        f"deconwolf reported the PSF {reported['psf_zyx']} and the job {reported['job_zyx']} "
+                        f"(Z, Y, X); the PSF file {psf} has the shape {psf_shape} and the key the job "
+                        f"{fields['job_shape_zyx']}: "
+                        f"{cause}, so no stored plan could match a task with this PSF. Nothing written; tasks with "
+                        "this PSF run with --noplan")
+                target = store / key / made.name
+                with atomic_file(target) as tmp_file:
+                    shutil.copyfile(made, tmp_file)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            entry = {"fields": fields, "file": f"{key}/{made.name}", "bytes": target.stat().st_size,
+                     "sha256": file_sha256(target), "reported_job_zyx": reported["job_zyx"],
+                     "reported_psf_zyx": reported["psf_zyx"], "made_at": _now(), "host": socket.gethostname(),
+                     "job_id": os.environ.get("JOB_ID"), "command": argv, "wall_s": wall, "cpu_s": cpu}
+            manifest["keys"][key] = entry
+            _write_json(store / WISDOM_MANIFEST, manifest)
+    except BaseException:
+        if created and store.is_dir() and not any(store.iterdir()):
+            store.rmdir()
+        raise
     return dict(entry, key=key)
 
 
@@ -800,14 +883,17 @@ def add_parser(groups):
         "wisdom", help="Plan FFTW wisdom for one key on this node and add it to a store",
         description="Plan deconwolf's FFTs (FFTW_MEASURE) for one key (job shape, PSF shape, border quality, tile "
                     "size, threads, this CPU, the FFT backend and deconwolf) on a synthetic volume with values from 1 "
-                    "to 255 (deconwolf refuses an image whose maximum is below 1), and add the file "
-                    "and its manifest entry to the store under its lock. Exit 0 with the key added, 1 when the store "
-                    "already holds the key or deconwolf fails (nothing written), 2 for invalid arguments.")
+                    "to 255 (deconwolf refuses an image whose maximum is below 1) and the run's own PSF file, check "
+                    "that deconwolf reports the key's job and the file's PSF shape (deconwolf crops some PSFs), and "
+                    "add the file and its manifest entry to the store under its lock. Exit 0 with the key added, 1 "
+                    "when the store already holds the key or has another format, deconwolf fails, or deconwolf "
+                    "reports another job or PSF shape (nothing written), 2 for invalid arguments.")
     wisdom.add_argument("--store", type=Path, required=True, help="The store's folder (execution.deconwolf_wisdom)")
     wisdom.add_argument("--shape", type=int, nargs=3, required=True, metavar=("Z", "Y", "X"),
                         help="The image shape of the volumes the tasks deconvolve")
-    wisdom.add_argument("--psf-shape", type=int, nargs=3, required=True, metavar=("Z", "Y", "X"),
-                        help="The PSF's shape (deconvolution.psf.shape_zyx)")
+    wisdom.add_argument("--psf", type=Path, required=True, metavar="FILE",
+                        help="The tasks' PSF file: <copy>/psf/<label>.tif as the psf task writes it, or a supplied "
+                             "PSF; its shape is the key's PSF shape")
     wisdom.add_argument("--threads", type=int, required=True, help="The tasks' threads")
     wisdom.add_argument("--deconwolf", help="The dw executable; default dw on PATH")
     wisdom.add_argument("--border-quality", type=int, default=2, help="deconvolution.border_quality (default 2)")
@@ -819,7 +905,7 @@ def run_command(args):
     """Run ``starfinder deconvolve wisdom``; the exit status."""
     import sys
     try:
-        entry = add_wisdom(args.store, args.shape, args.psf_shape, args.threads, binary=args.deconwolf,
+        entry = add_wisdom(args.store, args.shape, args.psf, args.threads, binary=args.deconwolf,
                            border_quality=args.border_quality, tile_size=args.tile_size)
     except (FileExistsError, RuntimeError, ValueError, TimeoutError) as error:
         print(f"deconvolve wisdom: {error}", file=sys.stderr)
