@@ -688,6 +688,13 @@ def add_wisdom(store, shape, psf_shape, threads, binary=None, border_quality=2, 
     deconwolf runs on a synthetic volume of ``shape`` with a PSF of ``psf_shape`` and planning on, in a private HOME,
     and its wisdom file is copied to ``<store>/<key>/`` and listed in the manifest, which is rewritten atomically.
     Returns the manifest entry.
+
+    The volume is ``1 + 254 u`` in float32, u uniform on [0, 1) with seed 0: values from 1 to 255, the range of an
+    8-bit image. deconwolf v0.4.5 refuses an image whose maximum is below 1 ("ERROR: The image has too low intensity,
+    can not continue!", exit 1; ``src/dw.c``) or that holds a negative value, so the volume uniform on [0, 1) that
+    this command wrote before made no wisdom (W-925's RD3, W-929). With 1 as the lower bound every voxel passes, so
+    the check holds at any shape. FFTW's plans depend on the sizes, the threads and the options, not on the values, so
+    the key, its fields and the store are those of the specification.
     """
     import tifffile
     store = Path(store)
@@ -704,7 +711,8 @@ def add_wisdom(store, shape, psf_shape, threads, binary=None, border_quality=2, 
         try:
             home = _private_home(tmp)
             rng = np.random.default_rng(0)
-            tifffile.imwrite(home / "volume.tif", rng.random(tuple(shape), dtype=np.float32))
+            volume = np.float32(1) + np.float32(254) * rng.random(tuple(shape), dtype=np.float32)
+            tifffile.imwrite(home / "volume.tif", volume)
             grid = np.indices(tuple(psf_shape)).astype(np.float64)
             centre = np.array([(n - 1) / 2 for n in psf_shape]).reshape(3, 1, 1, 1)
             kernel = np.exp(-((grid - centre) ** 2).sum(axis=0) / 2)
@@ -740,7 +748,8 @@ def add_parser(groups):
     wisdom = commands.add_parser(
         "wisdom", help="Plan FFTW wisdom for one key on this node and add it to a store",
         description="Plan deconwolf's FFTs (FFTW_MEASURE) for one key (job shape, PSF shape, border quality, tile "
-                    "size, threads, this CPU, the FFT backend and deconwolf) on a synthetic volume, and add the file "
+                    "size, threads, this CPU, the FFT backend and deconwolf) on a synthetic volume with values from 1 "
+                    "to 255 (deconwolf refuses an image whose maximum is below 1), and add the file "
                     "and its manifest entry to the store under its lock. Exit 0 with the key added, 1 when the store "
                     "already holds the key or deconwolf fails (nothing written), 2 for invalid arguments.")
     wisdom.add_argument("--store", type=Path, required=True, help="The store's folder (execution.deconwolf_wisdom)")

@@ -138,7 +138,9 @@ starfinder deconvolve wisdom --store /stanley/WangLab/<user>/dw-wisdom \
   --shape 30 3072 3072 --psf-shape 21 33 33 --threads 4
 ```
 
-It plans for about half an hour at six threads (W-916: 1,617 s), adds one file and
+It runs deconwolf on a synthetic volume of that shape, with values from 1 to 255
+because deconwolf refuses an image whose maximum is below 1; the plans depend on
+the sizes only. It plans for about half an hour at six threads (W-916: 1,617 s), adds one file and
 its entry to the store's `manifest.json` under the store's lock, and refuses a key
 the store already holds. Then set `execution.deconwolf_wisdom` to the store: each CPU
 task copies the file of its key into a private folder and never writes the store, and

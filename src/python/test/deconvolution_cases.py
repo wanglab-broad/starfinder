@@ -4,7 +4,9 @@
 ``stand_in_dw`` is a Python script installed as ``dw`` in a folder and named by ``execution.deconwolf``. It accepts
 the options of deconwolf v0.4.5 that the stage passes, writes the float32 output ``y = x + 5`` untiled and ``y = x``
 tiled (plus ``shift`` when given), a log with ``scaling:`` and ``Iteration`` lines beside it, and, unless ``--noplan``
-or ``--gpu`` is given, appends to ``fftw_wisdom_float_inplace_threads_<n>.dat`` where v0.4.5 would write it. Each call
+or ``--gpu`` is given, appends to ``fftw_wisdom_float_inplace_threads_<n>.dat`` where v0.4.5 would write it. Like
+v0.4.5, it refuses an input whose maximum is below ``MIN_INTENSITY`` (1) with v0.4.5's message and exit status 1,
+writing nothing. Each call
 appends its arguments, ``HOME``, ``OMP_NUM_THREADS``, its working directory and the wisdom files it found to a call
 log. ``input_root`` is 2 FOVs × 2 rounds × 2 labels of 8 × 32 × 32 uint8 with sparse Gaussian spots and the reference
 stain ``dapi`` in the reference round's folder; ``stored=True`` writes each channel with ``save_volume`` and one
@@ -33,6 +35,9 @@ OTHER = "other"
 OTHER_LABELS = (STAIN, "ch02")
 SHAPE = (8, 32, 32)
 VOXEL_XY, VOXEL_Z = 0.1, 0.3
+#: deconwolf v0.4.5 refuses an input image whose maximum is below 1 (``src/dw.c``: "ERROR: The image has too low
+#: intensity, can not continue!", exit 1); the stand-in does the same unless asked not to (W-929).
+MIN_INTENSITY = 1.0
 
 STAND_IN = r'''#!{python}
 """A stand-in for deconwolf v0.4.5 (design/validation/deconvolution.md, fixture stand_in_dw)."""
@@ -81,6 +86,9 @@ if OPTIONS["fail_on"] and OPTIONS["fail_on"] in Path(image).name:
     sys.exit(3)
 time.sleep(OPTIONS["delay"])
 x = tifffile.imread(image).astype(np.float32)
+if OPTIONS["min_intensity"] is not None and float(x.max()) < OPTIONS["min_intensity"]:
+    print("ERROR: The image has too low intensity, can not continue!", file=sys.stderr)
+    sys.exit(1)
 tiled = "--tilesize" in values
 y = x + np.float32((0 if tiled or OPTIONS["min_zero"] else 5) + OPTIONS["shift"])
 out = Path(values["--out"])
@@ -103,13 +111,14 @@ if "--noplan" not in flags and "--gpu" not in flags:
 
 
 def stand_in(folder, *, version="0.4.5", fail_on=None, min_zero=False, shift=0, no_float=False, delay=0.0,
-             name="dw"):
-    """Install the stand-in ``dw`` in ``folder``; (its path, its call log)."""
+             name="dw", min_intensity=MIN_INTENSITY):
+    """Install the stand-in ``dw`` in ``folder``; (its path, its call log). ``min_intensity=None`` accepts any
+    input."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     call_log = folder / f"{name}.calls.jsonl"
     options = {"version": version, "fail_on": fail_on, "min_zero": min_zero, "shift": shift, "no_float": no_float,
-               "delay": delay, "call_log": str(call_log)}
+               "delay": delay, "call_log": str(call_log), "min_intensity": min_intensity}
     path = folder / name
     path.write_text(STAND_IN.format(python=sys.executable, options=repr(options)))
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)

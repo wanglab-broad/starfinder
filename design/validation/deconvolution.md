@@ -147,7 +147,7 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 | # | Check | Fixture | Expected | Tolerance | Needs |
 | --- | --- | --- | --- | --- | --- |
 | DW1 | The options exist | `real_dw` | `dw --version` names 0.4.5. `dw --help` lists every option the stage passes: `--iter`, `--threads`, `--gpu`, `--tilesize`, `--noplan`, `--offset`, `--out` and `--float`. If `--float` is missing, the specification's fallback (deconwolf's uint16 and its logged scale) is the implemented path, and RD1's and RD1b's bounds gain one step of that scale. | exact (strings) | D |
-| DW2 | The offset rule and determinism | `real_dw`, 16 × 64 × 64 point sources blurred by `psf_small`, CPU, `--noplan`, 3 iterations | The untiled float output's minimum is within 0.5 of 5; a tiled run (`--tilesize 32`) has minimum below 0.5. Two untiled runs at 1 and 2 threads are byte-identical (W-916: thread counts change no byte). The brightest point's peak rises above its input value. | exact (hashes); the 0.5 bands of W-916 | D |
+| DW2 | The offset rule and determinism | `real_dw`, 16 × 64 × 64 point sources blurred by `psf_small`, CPU, `--noplan`, 3 iterations; the peak in its own untiled run at 6 iterations | The untiled float output's minimum is within 0.5 of 5; a tiled run (`--tilesize 32`) has minimum below 0.5. Two untiled runs at 1 and 2 threads are byte-identical (W-916: thread counts change no byte). In its own untiled run with `--iter 6`, the brightest point's peak less the offset 5 rises above its input value. v0.4.5's `--iter 3` makes two Richardson–Lucy updates, after which the output at that point, offset included, is 25.28 against the input's 28.35; at `--iter 6` the peak less 5 measured 54.355 on the CPU, the A5000 and the A30 (amended 2026-11-22, Jiahao's decision D2, W-929). | exact (hashes); the 0.5 bands of W-916 | D |
 | DW3 | The stage on the real binary | `input_root` with `real_dw`, CPU | The tasks succeed; SC6 and RC1 hold; the record's planning is `estimate`. | exact | D, S if over 5 s |
 
 ### MATLAB (MT)
@@ -208,7 +208,7 @@ that their bounds test the stage's arithmetic; RD1b checks the default.
 | # | Check | Data | Expected and bound |
 | --- | --- | --- | --- |
 | RD0 | The generated PSF | The `psf` task with W-855's parameters for the four channels at depth 0 | Each decoded array equals W-855's centred PSF of that channel (`results/psf/centred/psf_ch0<c>_pz0.0.tif`). With psfmodels 0.3.3, W-855's version, equality is expected; the bound is 1 × 10⁻⁷ of the PSF's peak, for float32 rounding after a float64 normalisation. The centring shift is 0 on every channel, as W-855 found at depth 0. |
-| RD1 | The stage reproduces W-915 | Position022, four channels; `psf.source: file` with W-855's centred PSFs (so that RD0 and RD1 test one thing each); `iterations: 5`; untiled; GPU on the host's RTX A5000, the card of W-915; the image's deconwolf | Per channel: max \|v_s − v_w\| ≤ 1 / scaling_w + 0.5 / s + 2 × 10⁻⁵ × max(v_w). The first term is W-915's quantization step, a full step because deconwolf's rounding rule was not recorded. The second is the copy's half step. The third covers a build or device difference at W-916's agreement between modes. For ch00 (scaling_w 101.886, max 638.2) the bound is 0.0098 + 0.0078 + 0.0128 = 0.0304 grey levels. Also per channel: NCC(v_s, v_w) ≥ 1 − 10⁻⁶ (W-916's untiled arms: 1 − 10⁻¹⁰). Spot F1 against W-915's spots: ≥ 0.999 at adaptive 0.2 and at noise 5.0. W-916's CPU arms, a perturbation of the same size, gave 1.0000 and 0.999999. The records name the copy, the PSF hashes, `iterations_done` 5 and the kept offset 5. Reported: the fraction of voxels within the first two terms alone, which is 1 if the float output reproduces W-915's exactly. |
+| RD1 | The stage reproduces W-915 | Position022, four channels; `psf.source: file` with W-855's centred PSFs (so that RD0 and RD1 test one thing each); `iterations: 5`; untiled; GPU on the host's RTX A5000, the card of W-915; the image's deconwolf | Per channel: max \|v_s − v_w\| ≤ 1 / scaling_w + 0.5 / s + 2 × 10⁻⁵ × max(v_w). The first term is W-915's quantization step, a full step because deconwolf's rounding rule was not recorded. The second is the copy's half step. The third covers a build or device difference at W-916's agreement between modes. For ch00 (scaling_w 101.886, max 638.2) the bound is 0.0098 + 0.0078 + 0.0128 = 0.0304 grey levels. Also per channel: NCC(v_s, v_w) ≥ 1 − 10⁻⁶ (W-916's untiled arms: 1 − 10⁻¹⁰). Spot F1 against W-915's spots at adaptive 0.2: ≥ 0.999. At noise 5.0, two conditions: the spot F1 against W-915's spots is within 0.0005 of the quantization control's spot F1 against W-915's spots, the control being W-915's values requantized to rint(v × 64) / 64; and the spot F1 against the control's spots is ≥ 0.999. The bound first written for noise 5.0, F1 against W-915's spots ≥ 0.999, rested on W-916's CPU arms, a perturbation of about this size, which gave 1.0000 and 0.999999. That premise fails for the uint16 copy: the copy's rounding is absolute, ±0.5 / 64 grey level, while W-916's mode differences were relative. The control alone gives 0.998862, 0.998598 and 0.998283 against W-915's spots for ch01–ch03 (W-925). Scale 64 stays (amended 2026-11-22, Jiahao's decision D3, option A, W-929). The records name the copy, the PSF hashes, `iterations_done` 5 and the kept offset 5. Reported: the fraction of voxels within the first two terms alone, which is 1 if the float output reproduces W-915's exactly. |
 | RD1b | The default uint8 copy | As RD1, at the default `dtype` | The record's f equals 255 / M with M its recorded round maximum, and M agrees with the maximum of v_w over the four channels within RD1's bound for that channel. f is one value for the four channels. Per channel: max \|v_8 − v_w\| ≤ 1 / scaling_w + 0.5 / f + 2 × 10⁻⁵ × max(v_w) + max(v_w) × δ_M / M: RD1's bound with the uint8 half step, and a last term for f, whose M is known within δ_M, RD1's bound for the channel that holds M. Reported, not bounded: spot F1 against W-915's spots at adaptive 0.2 and at noise 5.0; the coordinating session's measurement, with a factor per channel volume, gave 0.982–0.983 and 0.83–0.91. |
 | RD2 | The CPU mode on RedHat 8 | Position022 ch00, CPU, 4 threads, `--noplan`, `dtype: uint16`, scale 64, one UGER RedHat 8 node, the SIF | max \|Δv\| against RD1's ch00 ≤ 2 × 10⁻⁵ × max(v) + 1 / s, which is W-916's CPU–GPU agreement plus one step of each copy's rounding. Reported: wall time, CPU time, VmPeak and RSS. The task's `h_vmem` of 3,500 MB per slot × 4 slots holds, with no kill. |
 | RD3 | The wisdom store | `starfinder deconvolve wisdom` once on RD2's node class (6 threads, ch00's shape and PSF shape), then RD2 again at 6 threads with the store | The second run's record says `measure` and names the key. Its output agrees with RD2 within RD2's bound. The store's files have the same SHA-256 before and after. Reported: the planning time against W-916's 1,617 s and the warm time against W-916's 74 s. |
@@ -233,7 +233,8 @@ all their parameters, where it is 1 s or more; "—" is below 1 s (a test writte
 PL1's C1 and X4, is not counted). The times were measured under the records' tracer, which inflates
 them somewhat (W-923's run folder, `results/tables/new-tests-1s.csv`). W-928, the repair of W-923's review,
 measured the RU1 and RU4 rows again with the tests it added, and its repair the RC4 and RU6 rows (W-928's run folder,
-the same table). No test but EN2, EN3,
+the same table). W-929 measured the WI6 row again with its new test, 6.8 s and 0.4 s (W-929's run folder,
+`results/tables/new-tests.csv`). No test but EN2, EN3,
 WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are marked `slow`.
 `test_workflow_deconvolution_docs_contract.py` checks that every row names tests that exist.
 
@@ -247,9 +248,11 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
   `nextflow` and `slow`, in the engine selections. RU1's engine tests (W-928) run two output roots one after the
   other with an absolute `copy_root`: the Snakemake one is `slow` and runs in the slow selection, the Nextflow one is
   `nextflow` and `slow`. `test_ru1_ru2_ru3_verified_reuse` runs the same reuse by the task commands. RU5 runs in the
-  routine tier (3.7 s). WI6 is `slow` (6.5 s under the tracer: two concurrent `starfinder deconvolve wisdom` processes and a stand-in
+  routine tier (3.7 s). WI6's command test is `slow` (6.5 s under the tracer, 6.8 s in W-929's run: two concurrent `starfinder deconvolve wisdom` processes and a stand-in
   that waits 1 s). PS3, PS4 and RU11 skip without
-  psfmodels, naming the extra; DW1 to DW3 skip without `dw` on PATH or `STARFINDER_TEST_DECONWOLF`.
+  psfmodels, naming the extra; DW1 to DW3 skip without `dw` on PATH or `STARFINDER_TEST_DECONWOLF`, and so do
+  WI6's run of `starfinder deconvolve wisdom` on the real binary and DW2's peak run at 6 iterations (W-929), which
+  the image's evidence issue runs.
   X4 (PL1) is `extended`; G3 runs in `benchmarks/orchestration_golden_evidence.py`, which the
   coordinating session runs.
 * **What differs from the rows above.** PL3's stain label equal to a sequencing label is refused
@@ -263,7 +266,12 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
   record's write made to fail) removes no copy file, and that a redo failing at its round record removes exactly
   the label files and logs it wrote; RU6 checks that a task whose round lock is never released fails, naming the
   lock, and removes no copy file (its wait shortened to 0.5 s in the test, as `runtime_min` is at least a minute)
-  (W-928's repair).
+  (W-928's repair). `stand_in_dw` also refuses an input whose maximum is below 1, as deconwolf v0.4.5 does
+  (`src/dw.c`: "ERROR: The image has too low intensity, can not continue!", exit 1), writing nothing. WI6 also checks
+  that it refuses the volume uniform on [0, 1) that `starfinder deconvolve wisdom` wrote before W-929, and that the
+  command's volume, with values from 1 to 255, makes the key's file; on the real binary it checks that the store
+  holds the key. SC1's round of zeros turns the refusal off: it checks the stage's rule for a zero round, which
+  v0.4.5 itself would refuse (W-929).
 
 (deconvolution-implemented-checks)=
 
@@ -299,7 +307,7 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
 | WI3 | `test_workflow_deconvolution_tasks.py` | `test_wi3_no_match_or_no_store` | — |
 | WI4 | `test_workflow_deconvolution_tasks.py` | `test_wi4_a_damaged_store` | — |
 | WI5 | `test_workflow_deconvolution_tasks.py` | `test_wi5_nothing_written_outside_the_task` | — |
-| WI6 | `test_workflow_deconvolution_tasks.py` | `test_wi6_one_generating_job_per_key` | 6.5 |
+| WI6 | `test_workflow_deconvolution_tasks.py` | `test_wi6_one_generating_job_per_key`, `test_wi6_the_planning_volume_is_bright_enough`, `test_wi6_the_command_on_the_real_binary` | 7.2 |
 | WI7 | `test_workflow_deconvolution_tasks.py` | `test_wi7_gpu_tasks` | — |
 | RC1 | `test_workflow_deconvolution_tasks.py` | `test_rc1_rc2_the_round_record_and_copy_json` | — |
 | RC2 | `test_workflow_deconvolution_tasks.py` | `test_rc1_rc2_the_round_record_and_copy_json` | — |
@@ -318,6 +326,6 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
 | RU10 | `test_workflow_deconvolution_tasks.py` | `test_ru10_a_damaged_copys_psf` | 1.5 |
 | RU11 | `test_workflow_deconvolution_tasks.py` | `test_ru11_the_spacing_reaches_a_generated_psf` | skips here (P) |
 | DW1 | `test_workflow_deconvolution_tasks.py` | `test_dw1_the_options_exist` | skips here (D) |
-| DW2 | `test_workflow_deconvolution_tasks.py` | `test_dw2_the_offset_rule_and_determinism` | skips here (D) |
+| DW2 | `test_workflow_deconvolution_tasks.py` | `test_dw2_the_offset_rule_and_determinism`, `test_dw2_the_peak_rises_at_6_iterations` | skips here (D) |
 | DW3 | `test_workflow_deconvolution_tasks.py` | `test_dw3_the_stage_on_the_real_binary` | skips here (D) |
 | MT1 | `test_workflow_deconvolution_plan.py` | `test_mt1_matlab_is_untouched` | — |

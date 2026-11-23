@@ -141,7 +141,8 @@ def test_sc1_sc2_offset_and_stretch_factor(work, tiled):
 def test_sc1_a_round_of_zeros_stores_zeros(work):
     for label in D.LABELS:
         tifffile.imwrite(raw(work, "round2", label), np.zeros(D.SHAPE, dtype=np.uint8))
-    dw, _ = D.stand_in(work / "bin")
+    # deconwolf v0.4.5 refuses an input whose maximum is below 1; this checks the stage's rule for a zero round alone.
+    dw, _ = D.stand_in(work / "bin", min_intensity=None)
     manifest, path, copy, statuses = stage(work, "sc1-zero", block(work, rounds=["round2"]), dw)
     rec = record(copy, "round2")
     assert rec["storage"] == {"dtype": "uint8", "stretch_factor": 1.0, "round_max": 0.0}
@@ -530,6 +531,53 @@ def test_wi6_one_generating_job_per_key(work, tmp_path):
     assert len(manifest["keys"]) == 1
     assert sorted(p.relative_to(other).as_posix() for p in other.rglob("*") if p.is_file()) == sorted(
         ["manifest.json", manifest["keys"][next(iter(manifest["keys"]))]["file"]])
+
+
+def wisdom_command(store, dw, threads=1):
+    """``starfinder deconvolve wisdom`` in this process for the fixture's shape and a 7 × 9 × 9 PSF; (exit status, the
+    key the stage computes for that job)."""
+    from starfinder.__main__ import main
+    status = main(["deconvolve", "wisdom", "--store", str(store), "--shape", *map(str, D.SHAPE), "--psf-shape", "7",
+                   "9", "9", "--threads", str(threads), "--deconwolf", str(dw)])
+    fields = wisdom_fields(D.SHAPE, (7, 9, 9), 2, None, threads, cpu_identity()["sha256"], deconwolf_identity(str(dw)))
+    return status, wisdom_key(fields)
+
+
+def assert_store_holds(store, key):
+    manifest = json.loads((store / "manifest.json").read_text())
+    assert list(manifest["keys"]) == [key]
+    entry = manifest["keys"][key]
+    assert entry["file"] == f"{key}/{wisdom_name(1)}"
+    assert D.sha256(store / entry["file"]) == entry["sha256"] and entry["bytes"] == (store / entry["file"]).stat().st_size
+
+
+def test_wi6_the_planning_volume_is_bright_enough(tmp_path):
+    # deconwolf v0.4.5 refuses an image whose maximum is below 1, and so does the stand-in: here the volume uniform on
+    # [0, 1) that the command wrote before W-929, which made no wisdom with the real binary (W-925's RD3).
+    dw, calls = D.stand_in(tmp_path / "bin")
+    old = tmp_path / "old"
+    old.mkdir()
+    tifffile.imwrite(old / "volume.tif", np.random.default_rng(0).random(D.SHAPE, dtype=np.float32))
+    tifffile.imwrite(old / "psf.tif", D.psf_small())
+    refused = subprocess.run([str(dw), "--iter", "1", "--threads", "1", "--float", "--out", str(old / "out.tif"),
+                              str(old / "volume.tif"), str(old / "psf.tif")],
+                             cwd=old, env=dict(os.environ, HOME=str(old)), capture_output=True, text=True)
+    assert refused.returncode == 1
+    assert "ERROR: The image has too low intensity, can not continue!" in refused.stderr
+    assert sorted(p.name for p in old.iterdir()) == ["psf.tif", "volume.tif"]
+    # The command's own volume passes the stand-in's check and makes the key's file.
+    store = tmp_path / "store"
+    status, key = wisdom_command(store, dw)
+    assert status == 0 and len(D.calls(calls)) == 2
+    assert_store_holds(store, key)
+
+
+def test_wi6_the_command_on_the_real_binary(real_dw, tmp_path):
+    store = tmp_path / "store"
+    status, key = wisdom_command(store, real_dw)
+    assert status == 0
+    assert_store_holds(store, key)
+    assert (store / key / wisdom_name(1)).stat().st_size > 0
 
 
 def test_wi7_gpu_tasks(work):
@@ -966,8 +1014,8 @@ def test_ru11_the_spacing_reaches_a_generated_psf(work):
 def real_dw():
     path = os.environ.get("STARFINDER_TEST_DECONWOLF") or shutil.which("dw")
     if not path:
-        pytest.skip("DW1 to DW3 need the deconwolf binary: dw on PATH or STARFINDER_TEST_DECONWOLF, which this host "
-                    "lacks (the image has it)")
+        pytest.skip("DW1 to DW3 and WI6's run on the real binary need the deconwolf binary: dw on PATH or "
+                    "STARFINDER_TEST_DECONWOLF, which this host lacks (the image has it)")
     return path
 
 
@@ -979,31 +1027,45 @@ def test_dw1_the_options_exist(real_dw):
         assert option in text.stdout + text.stderr, option
 
 
-@pytest.mark.slow
-def test_dw2_the_offset_rule_and_determinism(real_dw, tmp_path):
+def dw2_points(folder):
+    """DW2's input: 16 × 64 × 64 point sources blurred by ``psf_small``, written with the PSF in ``folder``; a
+    function that runs ``real_dw`` on it untiled, CPU, ``--noplan`` and ``--float`` (the output's path)."""
     from scipy.ndimage import convolve
     image = np.zeros((16, 64, 64), dtype=np.float64)
     for z, y, x, value in ((8, 20, 20, 1000.0), (6, 40, 44, 600.0), (10, 30, 12, 400.0)):
         image[z, y, x] = value
     blurred = convolve(image, D.psf_small().astype(np.float64), mode="constant").astype(np.float32)
-    tifffile.imwrite(tmp_path / "image.tif", blurred)
-    tifffile.imwrite(tmp_path / "psf.tif", D.psf_small())
-    home = tmp_path / "home"
+    tifffile.imwrite(folder / "image.tif", blurred)
+    tifffile.imwrite(folder / "psf.tif", D.psf_small())
+    home = folder / "home"
     (home / ".config" / "deconwolf").mkdir(parents=True)
 
-    def run(name, *extra, threads=1):
-        out = tmp_path / f"{name}.tif"
-        argv = [real_dw, "--iter", "3", "--threads", str(threads), "--noplan", "--float", *extra, "--out", str(out),
-                str(tmp_path / "image.tif"), str(tmp_path / "psf.tif")]
+    def run(real_dw, name, iterations, *extra, threads=1):
+        out = folder / f"{name}.tif"
+        argv = [real_dw, "--iter", str(iterations), "--threads", str(threads), "--noplan", "--float", *extra,
+                "--out", str(out), str(folder / "image.tif"), str(folder / "psf.tif")]
         done = subprocess.run(argv, cwd=home, env=dict(os.environ, HOME=str(home), OMP_NUM_THREADS=str(threads)),
                               capture_output=True)
         assert done.returncode == 0, done.stderr
         return out
-    one, two = run("one"), run("two", threads=2)
+    return blurred, run
+
+
+@pytest.mark.slow
+def test_dw2_the_offset_rule_and_determinism(real_dw, tmp_path):
+    blurred, run = dw2_points(tmp_path)
+    one, two = run(real_dw, "one", 3), run(real_dw, "two", 3, threads=2)
     assert abs(float(tifffile.imread(one).min()) - 5) <= 0.5
     assert D.sha256(one) == D.sha256(two)
-    assert float(tifffile.imread(run("tiled", "--tilesize", "32")).min()) < 0.5
-    assert float(tifffile.imread(one)[8, 20, 20]) - 5 > float(blurred[8, 20, 20])
+    assert float(tifffile.imread(run(real_dw, "tiled", 3, "--tilesize", "32")).min()) < 0.5
+
+
+def test_dw2_the_peak_rises_at_6_iterations(real_dw, tmp_path):
+    # v0.4.5's --iter 3 makes two Richardson–Lucy updates: the output there, offset included, is 25.28 against the
+    # input's 28.35. At --iter 6 the peak less 5 measured 54.355 on the CPU, the A5000 and the A30 (the page's DW2).
+    blurred, run = dw2_points(tmp_path)
+    peak = run(real_dw, "peak", 6)
+    assert float(tifffile.imread(peak)[8, 20, 20]) - 5 > float(blurred[8, 20, 20])
 
 
 @pytest.mark.slow
