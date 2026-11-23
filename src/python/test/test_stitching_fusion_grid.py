@@ -229,9 +229,14 @@ def test_missing_extra_records_not_run(tmp_path, monkeypatch):
     check_export(tmp_path)
 
 
-def test_import_loads_no_optional_library():
+def test_import_loads_no_optional_library(tmp_path):
+    """The child gets a bare environment, so what keeps it from writing bytecode (W-930) is set in it, and a pycache
+    prefix of its own shows whether it wrote any: the checkout and the environment it imports from stay untouched."""
     code = ("import sys, starfinder.export; "
             "print([m for m in ('multiview_stitcher', 'zarr', 'spatialdata') if m in sys.modules])")
+    prefix = tmp_path / "pycache"
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True,
-                         env={"PYTHONPATH": str(SRC), "PATH": "/usr/bin:/bin"})
+                         env={"PYTHONPATH": str(SRC), "PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1",
+                              "PYTHONPYCACHEPREFIX": str(prefix)})
     assert out.stdout.strip() == "[]"
+    assert not prefix.exists() or not any(prefix.rglob("*")), sorted(p.name for p in prefix.rglob("*.pyc*"))

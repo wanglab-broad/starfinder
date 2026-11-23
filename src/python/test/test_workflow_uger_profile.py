@@ -91,7 +91,8 @@ from pathlib import Path
 Path(os.environ["CALLS"]).write_text(json.dumps(sys.argv[1:]))
 a = sys.argv[1:]
 assert a.pop(0) == "exec"
-env = {"PATH": os.environ["PATH"]}
+# PYTHONDONTWRITEBYTECODE keeps a command that runs outside any container, as it does here, from writing bytecode (W-930).
+env = {"PATH": os.environ["PATH"], "PYTHONDONTWRITEBYTECODE": "1"}
 while a[0].startswith("--"):
     option = a.pop(0)
     if option == "--env":
