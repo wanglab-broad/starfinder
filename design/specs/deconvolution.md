@@ -1,6 +1,6 @@
 # Deconvolution stage: a deconvolved TIFF + zlib copy of the images, made by deconwolf before the FOV tasks
 
-% Status: Approved (Jiahao, 2026-11-21, W-918), with decision 3 changed: uint8 with one stretch factor per (FOV, round) by default, as Huygens' exports, and uint16 with an adjustable scale on request ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`.
+% Status: Approved (Jiahao, 2026-11-21, W-918), with decision 3 changed: uint8 with one stretch factor per (FOV, round) by default, as Huygens' exports, and uint16 with an adjustable scale on request ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`. Amended 2026-11-22 by Jiahao's decision on W-933 (option A): a channel whose raw values are all 0 skips deconwolf and stores zeros ("The scaling", "A channel of zeros skips deconwolf").
 
 This page specifies deconvolution as a workflow stage of its own. Jiahao decided on 2026-11-20
 (W-855, comment 70988672) to make deconwolf the primary deconvolution and to arrange a rule for
@@ -281,12 +281,18 @@ rounds; both may share an image folder, with different label files.
 **Completion and staleness.** Both kinds follow the success rule of D8 unchanged (orchestration,
 "Completion"): the task record lists every declared output with its SHA-256, and a failed
 attempt removes the outputs it wrote. A `deconvolve` task that reuses a verified copy writes no
-image and so removes none when it fails ([Reuse and staleness](#reuse-and-staleness)). A task's
+image and so removes none when it fails ([Reuse and staleness](#reuse-and-staleness)). (W-928: the
+task runner removes, for these two kinds only, the declared outputs the attempt marked before writing
+them: a `psf` task each file it writes; a `deconvolve` task its round's label files, logs and record
+once it redoes the round under the lock, and nothing after a reuse, a lock that is not released or a
+failure before that.) A task's
 declared outputs are its own label files and its own record folder, so a failure or a rerun of the
 `reference_stain` task removes or rewrites nothing of the reference round's task, and the reverse.
 Each task's record is the completion of its own deconvolved round only.
 
-**Snakemake.** `rules/tasks.smk` needs no change: it makes one rule per group of the manifest. A
+**Snakemake.** `rules/tasks.smk` makes one rule per group of the manifest (amended by W-928: a copy outside the
+output root is neither an output nor an input of its rules, so that Snakemake removes, touches and rewrites none of
+the files another output root reuses; orchestration-engines, "The Snakefile over the manifest"). A
 `deconvolve.<round name>` group's outputs have the wildcard `{fov}`, and `{round}` too for a
 sequencing or additional round, and lack `{sample}`, so the group is split by the fields its
 outputs lack, as `fov`'s is split by sample. A GPU task gets `resources: gpu=1` and, on UGER,
@@ -469,6 +475,31 @@ draft had recommended SC1 alone, at scale 64.
   * **The record** holds f and M, and each channel's maximum after the offset is removed.
   * **The factor couples the round's channels.** A channel is never redone alone: a change to any
     channel's input redoes the round, as reuse is per round ([Reuse and staleness](#reuse-and-staleness)).
+* **A channel of zeros skips deconwolf** (amended 2026-11-22, W-933). deconwolf v0.4.5 refuses an
+  image whose maximum is below 1: "ERROR: The image has too low intensity, can not continue!", exit
+  status 1, nothing written (`src/dw.c` 2522–2532, W-929). A raw channel whose values are all 0 would
+  therefore fail its round, and the rule above for a round whose M is 0 could not be reached.
+  * **The rule.** Before it calls deconwolf, the task reads every channel of its round and takes
+    its maximum. A channel whose raw values are all 0 is not passed to deconwolf, untiled or
+    tiled. Its values after the offset are 0 everywhere, which is exact: deconvolving an all-zero
+    volume gives zero. It takes part in the round's M as 0, so f comes from the other channels, and
+    a round whose channels are all 0 stores zeros with f = 1. With `dtype: uint16` it stores zeros.
+  * **A float channel below 1.** A channel that is not all 0 but whose maximum is below 1 cannot
+    come from the stage's integer raw images. Skipping it would not be exact, so the task fails
+    before it calls deconwolf for any channel, with a message that names the round, the channel,
+    its maximum and deconwolf's floor of 1.
+  * **The record.** The channel's entry in `channels[]` holds `deconwolf_skipped: true` and
+    `skip_reason` "raw values all 0; deconwolf v0.4.5 refuses a maximum below 1"; its
+    `arguments`, `iterations_done`, `float_min`, `float_max`, `kept_offset`, `wall_s` and `cpu_s`
+    are null, `max_after_offset` and `clipped_low` are 0. Its log, `<label>.dw.log`, holds one line
+    naming the skip. A channel passed to deconwolf holds `deconwolf_skipped: false`.
+  * **Planning and reuse.** The task decides its planning at the first channel it passes to
+    deconwolf, so a round whose channels are all 0 records `{mode: none}` and looks up no wisdom.
+    Verified reuse is unchanged: it compares the skipped channel's input, PSF and output hashes as
+    any other's, and a change of its raw file redoes the round.
+  * **Decision (Jiahao, 2026-11-22, about 22:10 EST: "W-933,A").** Option A: the stage skips
+    deconwolf for such a channel and stores zeros. Option B, keeping the failure with a clearer
+    message, was not chosen.
 * **Intensities across FOVs.** With SC3 each FOV has its own factor, as with Huygens' exports. The FOV
   tasks read the stored uint8 values unchanged, and no consumer divides by f (Jiahao, 2026-11-21:
   "原样读取吧"; the alternative, dividing by f on load, would give every consumer float32 input).
@@ -704,8 +735,8 @@ it into the steps' shared working directory).
 | `device` | `cpu` with the CPU model and threads, or `gpu` with the OpenCL device name and `CUDA_VISIBLE_DEVICES` |
 | `options` | Iterations, method, border quality, tile size and padding, offset, background, and the argument list passed |
 | `storage` | `{dtype: uint8, stretch_factor, round_max}`: the one factor and maximum the round's channels share; or `{dtype: uint16}`, each channel's scale then in `channels[]` |
-| `planning` | `{mode: measure, wisdom_key, wisdom_sha256}`, or `{mode: estimate}` with the reason (`no store` or `no matching key`), or `{mode: gpu}` |
-| `channels[]` | Per label: the input `path`, `file_sha256`, and decoded `dtype`, `shape` and `sha256`; the PSF `path` and `file_sha256`; deconwolf's `iterations_done`; the float output's minimum and maximum; the kept offset removed; the scale (uint16); the counts clipped at 0 and at the dtype's maximum; the output `path`, `file_sha256` and decoded `sha256`; the log's path and SHA-256; the wall and CPU seconds |
+| `planning` | `{mode: measure, wisdom_key, wisdom_sha256}`, or `{mode: estimate}` with the reason (`no store` or `no matching key`), or `{mode: gpu}`; `{mode: none}` with the reason `no channel passed to deconwolf` for a round whose channels are all 0 (W-933) |
+| `channels[]` | Per label: the input `path`, `file_sha256`, and decoded `dtype`, `shape` and `sha256`; the PSF `path` and `file_sha256`; `deconwolf_skipped`; deconwolf's `iterations_done`; the float output's minimum and maximum; the kept offset removed; the scale (uint16); the counts clipped at 0 and at the dtype's maximum; the output `path`, `file_sha256` and decoded `sha256`; the log's path and SHA-256; the wall and CPU seconds. A channel of zeros also holds `skip_reason`, and its deconwolf fields are null ([The scaling](#the-scaling), "A channel of zeros skips deconwolf") |
 | `code` | The package's code identity (`orchestration.md`, "The code identity") |
 | `started_at`, `ended_at`, `host`, `job_id` | Where and when |
 

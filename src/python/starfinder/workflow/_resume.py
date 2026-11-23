@@ -71,6 +71,8 @@ def check(run, record, now_code):
     recorded = {entry["path"] for entry in record.get("inputs") or []}
     images = {d for d in declared if any(d == c["path"] for rounds in run.manifest["inputs"]["images"].values()
                                           for labels in rounds.values() for c in labels.values())}
+    # The deconvolved copy's files the task reads, as run.json names them (relative to the input root, else absolute).
+    images |= copy_inputs(run)
     for path in sorted(images ^ recorded):
         differences.append(f"inputs {path} is {'not ' if path not in recorded else ''}recorded"
                            f"{'' if path in images else ' and no input of this task'}")
@@ -100,6 +102,13 @@ def check(run, record, now_code):
             if not payload.is_file() or file_sha256(payload) != item.get("sha256"):
                 differences.append(f"checkpoints.{stage} file {item['path']} sha256 differs")
     return differences
+
+
+def copy_inputs(run):
+    """The deconvolved copy's image files a task declares, as run.json names its inputs (``source_path``)."""
+    from starfinder.dataset._run_record import source_path
+    produced = {o for t in run.manifest["tasks"] if t["kind"] == "deconvolve" for o in t["outputs"]}
+    return {str(source_path(run.path(i), run.root)) for i in run.task["inputs"] if i in produced and i.endswith(".tif")}
 
 
 def _file_differences(field, recorded, digest, now, record, root):
@@ -303,6 +312,14 @@ def check_input(run, root, record, pipeline, fov_, supplied):
     now = None if supplied is None else file_sha256(supplied)
     if digest != now:
         differences.append(f"preprocessing.supplied_statistics sha256 is {_short(digest)} (recorded), {_short(now)} "
+                           "(now)")
+    # The deconvolved copy the set's run read must be this run's (design/specs/deconvolution.md, "Verified resume and
+    # saved sets"); both may be absent.
+    from starfinder.workflow._deconvolve import run_copy_id
+    recorded_copy = (record.get("deconvolution") or {}).get("copy_id")
+    now_copy = run_copy_id(run.manifest)
+    if recorded_copy != now_copy:
+        differences.append(f"deconvolution.copy_id is {recorded_copy or 'absent'} (recorded), {now_copy or 'absent'} "
                            "(now)")
     return differences
 

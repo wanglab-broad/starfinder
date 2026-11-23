@@ -107,6 +107,8 @@ def _parser():
                          help='Also write each model input as inputs/<fov>/<recipe>.ome.tif')
     from starfinder.workflow._cli import add_parser
     add_parser(groups)
+    from starfinder.workflow._deconvolve import add_parser as add_deconvolve
+    add_deconvolve(groups)
     return parser
 
 
@@ -119,6 +121,9 @@ def main(argv=None):
     if args.group == 'workflow':
         # §2.13: the task commands map their own outcomes to exit 0, 1, 2 and 3.
         return run_workflow(args, list(sys.argv[1:] if argv is None else argv)[1:])
+    if args.group == 'deconvolve':
+        from starfinder.workflow._deconvolve import run_command
+        return run_command(args)
     try:
         if args.group == 'weights':
             return _weights(args)

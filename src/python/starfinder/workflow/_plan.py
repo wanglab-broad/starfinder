@@ -19,8 +19,8 @@ import numpy as np
 
 from starfinder import _layout
 from starfinder.workflow import _translate
-from starfinder.workflow._shape import (CHECKPOINT_STAGES, COMMANDS, EXECUTION_DEFAULTS, ID_FIELDS, KIND_THREADS,
-    LEFT_KEYS, MANIFEST_FORMAT, MATLAB_KEYS, PROCESSING_LEFT, RESOLVED_FORMAT, TASK_BLOCKS, TILED_DEFAULTS,
+from starfinder.workflow._shape import (CHECKPOINT_STAGES, COMMANDS, DECONVOLVE_RESOURCES, EXECUTION_DEFAULTS, ID_FIELDS,
+    KIND_THREADS, LEFT_KEYS, MANIFEST_FORMAT, MATLAB_KEYS, PROCESSING_LEFT, RESOLVED_FORMAT, TASK_BLOCKS, TILED_DEFAULTS,
     blocks_sha256, canonical, configuration_sha256, sha256)
 
 #: The message of D7: a configuration without backend that holds MATLAB-dialect keys.
@@ -60,6 +60,9 @@ def check_shape(config):
         if matlab:
             raise PlanRefused(MATLAB_DIALECT.format(keys=", ".join(matlab)))
     elif backend == "matlab":
+        if "deconvolution" in config:
+            raise PlanRefused("deconvolution: backend: matlab refuses the deconvolution block; the stage runs in the "
+                              "Python workflow only, and no file or key that MATLAB reads changes (MT1)")
         raise PlanRefused(MATLAB_BACKEND)
     elif backend != "python":
         raise PlanRefused(f"backend must be python (the default) or matlab; got {backend!r}")
@@ -197,6 +200,13 @@ def resolve(config, source, output_root=None):
     e.setdefault("code_version", "keep")
     e.setdefault("log_level", "INFO")
     e.setdefault("image_compression", "zlib")
+    if "deconvolution" in r:
+        # The stage's block and its two execution keys, written only with the block, so that a run without it
+        # resolves as before (design/specs/deconvolution.md).
+        from starfinder.workflow._deconvolution import resolve_block
+        r["deconvolution"] = resolve_block(r["deconvolution"], r)
+        e.setdefault("deconwolf", None)
+        e.setdefault("deconwolf_wisdom", None)
     check_names(r)
     if (r.get("processing") or {}).get("mode") == "tiled":
         check_tiled(r)
@@ -477,6 +487,8 @@ class Graph:
         self.out = Path(out)
         self.manifest_path = Path(manifest_path)
         self.tasks, self.by_id, self.groups = [], {}, {}
+        # The deconvolution stage (_deconvolution.Stage) of a plan with the block, else None.
+        self.stage = None
         # The export routes of each sample (W-876): {sample: [route entry]}, the manifest's ``routes``.
         self.routes = {}
 
@@ -511,12 +523,22 @@ class Graph:
             pattern = Path(self.r["reference_image_import"] or self.r["reference_image"])
             declared = self.rel(pattern if pattern.is_absolute() else self.out / pattern)
             return "{fov}".join(_escape(part) for part in declared.split("{fov_id}"))
+        if self.stage is not None:
+            # The deconvolved copy's own folder is literal: its sample_id or a part of an absolute copy_root may equal
+            # a wildcard's value.
+            prefix = self.rel(self.stage.copy) + "/"
+            if path.startswith(prefix):
+                return _escape(prefix) + self._fill(path[len(prefix):], identity, wildcards)
         return self._fill(path, identity, wildcards)
 
     def execution(self, kind, gpu=False):
         e = self.r["execution"]
         values = {**e["defaults"], **({"threads": KIND_THREADS[kind]} if kind in KIND_THREADS else {}),
                   **(e["tasks"].get(kind) or {})}
+        if kind == "deconvolve":
+            # The device's resources replace the defaults; the task's own settings replace them.
+            given = e["tasks"].get(kind) or {}
+            values = {**e["defaults"], **DECONVOLVE_RESOURCES[bool(given.get("gpu"))], **given}
         if gpu:
             values["gpu"] = True
         values = {key: values[key] for key in ("threads", "memory_mb", "runtime_min", "gpu")}
@@ -525,9 +547,11 @@ class Graph:
             values["tool"] = {"name": "fiji", "path": e["fiji"]}
         return values
 
-    def add(self, kind, identity, needs, inputs, outputs, *, group=None, gpu=False, tool_command=None, temporary=()):
-        """Add one task; ``outputs`` are Paths (or output-root-relative strings ending in ``/`` for a folder), and
-        ``temporary`` those of them that the group marks temporary (Snakemake's ``temp()``)."""
+    def add(self, kind, identity, needs, inputs, outputs, *, group=None, gpu=False, tool_command=None, temporary=(),
+            extra=None):
+        """Add one task; ``outputs`` are Paths (or output-root-relative strings ending in ``/`` for a folder),
+        ``temporary`` those of them that the group marks temporary (Snakemake's ``temp()``) and ``extra`` keys of the
+        task entry (the deconvolution stage's ``deconvolution`` and a consumer's ``deconvolved``), when given."""
         parts = [kind] + [str(identity[k]) for k in ID_FIELDS if k in identity]
         task_id = "/".join(parts)
         if task_id in self.by_id:
@@ -535,7 +559,7 @@ class Graph:
         record = self.rel(_layout.task_record(self.out, task_id))
         log = self.rel(_layout.task_log(self.out, task_id))
         # The record's and the log's templates: the task's file name, each wildcard's part written {field}.
-        name = ".".join([kind] + [f"{{{k}}}" if k in ("sample", "step", "fov", "tile") else _escape(identity[k])
+        name = ".".join([kind] + [f"{{{k}}}" if k in ("sample", "step", "fov", "round", "tile") else _escape(identity[k])
                                   for k in ID_FIELDS if k in identity])
         declared = sorted({self.rel(o) if isinstance(o, Path) else o for o in outputs})
         command = ["starfinder", "workflow", COMMANDS[kind], "--manifest", str(self.out / self.manifest_path),
@@ -548,6 +572,8 @@ class Graph:
                 "record": record, "log": log, "command": command}
         if tool_command is not None:
             task["tool_command"] = tool_command
+        if extra:
+            task.update(extra)
         task["execution"] = self.execution(kind, gpu)
         task["blocks"] = list(TASK_BLOCKS[kind])
         templates = sorted(self._template(o, identity, wildcards) for o in declared)
@@ -565,6 +591,20 @@ class Graph:
         return task_id
 
     # -- per-FOV products -------------------------------------------------------------------------------------
+
+    def images(self, fov, names):
+        """(declared inputs, needs, deconvolved rounds' folders) of a task that reads the rounds ``names`` of a FOV:
+        the raw files, or with the deconvolution stage the copy's files of each deconvolved round, its record and the
+        deconvolve task that makes them (design/specs/deconvolution.md, "The graph")."""
+        if self.stage is None:
+            return self.inputs.image_inputs(fov, names), [], {}
+        return self.stage.images(fov, names)
+
+    @staticmethod
+    def deconvolved(folders):
+        """The entry key ``deconvolved`` of a consumer that reads deconvolved rounds, or None."""
+        return {"deconvolved": folders} if folders else None
+
 
     def fov_dir(self, fov):
         return _layout.fov_dir(self.out, fov)
@@ -592,6 +632,11 @@ class Graph:
         # fov_task: the producer of a FOV's run record and molecules (fov, or tile_merge); reference_task: of its
         # reference image (fov, or tile_global).
         fov_task, reference_task, stats_file = {}, {}, {}
+        if "deconvolution" in r:
+            # The stage first: the psf task and the deconvolve tasks, which every consumer below may need.
+            from starfinder.workflow._deconvolution import Stage, read_rounds
+            self.stage = Stage(r, self)
+            self.stage.add_tasks(samples, read_rounds(r))
         # The two-pass statistics: per sample and supplied step in recipe order, one summarize per FOV and one merge;
         # a later step is summarized on the earlier step's file.
         for sample, members in samples.items():
@@ -599,10 +644,13 @@ class Graph:
             for step in two_pass(r):
                 folder = _layout.statistics_dir(out, sample, step)
                 earlier = [stats_file[sample]] if previous else []
-                summaries = [self.add("summarize", {"sample": sample, "step": step, "fov": fov}, [previous],
-                                      self.inputs.image_inputs(fov, sequencing) + earlier,
-                                      [folder / "histograms" / f"{fov}.npz"], group=f"summarize.{step}")
-                             for fov in members]
+                summaries = []
+                for fov in members:
+                    images, needs, folders = self.images(fov, sequencing)
+                    summaries.append(self.add("summarize", {"sample": sample, "step": step, "fov": fov},
+                                              [previous, *needs], images + earlier,
+                                              [folder / "histograms" / f"{fov}.npz"], group=f"summarize.{step}",
+                                              extra=self.deconvolved(folders)))
                 previous = self.add("merge", {"sample": sample, "step": step}, summaries,
                                     [self.by_id[t]["outputs"][0] for t in summaries] + earlier,
                                     [folder / _layout.SUPPLIED_FILE], group=f"merge.{step}")
@@ -621,8 +669,9 @@ class Graph:
                 for fov in members:
                     stats = [stats_file[sample]] if sample in stats_file else (
                         [supplied_input] if supplied_input else [])
+                    needs, folders = [], {}
                     if spot_finding_input(r) is None:
-                        images = self.inputs.image_inputs(fov, sequencing)
+                        images, needs, folders = self.images(fov, sequencing)
                     else:
                         # The saved set replaces the raw images: the FOV's run.json and its registered stage record.
                         images = [self.inputs.add_file(f"spot_finding_input:{fov}:{path.name}", path,
@@ -630,8 +679,9 @@ class Graph:
                                   for path in spot_finding_input_files(r, fov)]
                     inputs = images + [codebook] + stats
                     if r["processing"]["mode"] == "tiled":
-                        fov_task[fov], reference_task[fov] = self.tiled(sample, fov, merges[-1:],
-                                                                         [i for i in inputs if i])
+                        fov_task[fov], reference_task[fov] = self.tiled(sample, fov, merges[-1:] + needs,
+                                                                         [i for i in inputs if i],
+                                                                         self.deconvolved(folders))
                         continue
                     outputs = [_layout.run_record(out, fov)]
                     if not r["reference_image_import"]:
@@ -642,8 +692,8 @@ class Graph:
                                 for name in sorted({n for _, n in sequencing_inputs(r)})]
                     outputs += self.stage_records(fov)
                     fov_task[fov] = reference_task[fov] = self.add("fov", {"sample": sample, "fov": fov},
-                                                                   merges[-1:], [i for i in inputs if i], outputs,
-                                                                   gpu=gpu)
+                                                                   merges[-1:] + needs, [i for i in inputs if i],
+                                                                   outputs, gpu=gpu, extra=self.deconvolved(folders))
         morph = {}
         if "morphology" in r:
             m = r["morphology"]
@@ -664,8 +714,9 @@ class Graph:
                             if e["round_name"] in m["rounds"]:
                                 outputs += [_layout.image_file(out, fov, e["round_name"], _label(c))
                                             for c in e.get("channel_order") or []]
-                    morph[fov] = self.add("morphology", {"sample": sample, "fov": fov}, [],
-                                          self.inputs.image_inputs(fov, ["reference_stain", *m["rounds"]]), outputs)
+                    images, needs, folders = self.images(fov, ["reference_stain", *m["rounds"]])
+                    morph[fov] = self.add("morphology", {"sample": sample, "fov": fov}, needs, images, outputs,
+                                          extra=self.deconvolved(folders))
         seg = {}
         if "segmentation" in r:
             s = r["segmentation"]
@@ -907,13 +958,16 @@ class Graph:
         if float(angle) % 180 == 90:
             y, x = x, y
         dtype = header[2]
+        if self.stage is not None and (fov, name) in self.stage.tasks:
+            # The deconvolved copy has the raw shape and the block's dtype.
+            dtype = np.dtype(r["deconvolution"]["dtype"])
         pipeline = _translate.processing(r).workflow.pipeline
         for step in (pipeline.preprocessing.steps if pipeline.preprocessing is not None else ()):
             if getattr(step.config, "output_dtype", None) is not None:
                 dtype = np.dtype(step.config.output_dtype)
         return (int(z), int(y), int(x)), dtype.itemsize
 
-    def tiled(self, sample, fov, needs, inputs):
+    def tiled(self, sample, fov, needs, inputs, extra=None):
         """The tiled tasks of one FOV (design/specs/orchestration-tiled.md, "Declared files of the tiled task kinds"):
         tile_global, one tile per tile of the grid, tile_merge; returns (tile_merge's id, tile_global's id).
 
@@ -945,7 +999,8 @@ class Graph:
             outputs.append(self.reference_image(fov))
         kept = "registered" in p["checkpoints"]
         identity = {"sample": sample, "fov": fov}
-        global_task = self.add("tile_global", identity, needs, inputs, outputs, temporary=[] if kept else [store])
+        global_task = self.add("tile_global", identity, needs, inputs, outputs, temporary=[] if kept else [store],
+                               extra=extra)
         codebook = self.inputs.codebook
         tiles = []
         for tile in tile_grid(shape[1:], t["tile_size_yx"], t["halo"]):
@@ -1092,7 +1147,11 @@ def plan(config_path, output_root=None) -> dict:
     produces). With ``processing.spot_finding_input`` the plan refuses mode tiled, a block without spot_finding, the
     stage registered and ``execution.resume_from_checkpoint`` (``check_spot_finding_input``), and each fov task
     declares the saved set's ``run.json`` and registered stage record of its FOV, which must exist, in place of the
-    raw images. In a round's folder only the one file of each configured channel label is listed; other files are
+    raw images. With a ``deconvolution`` block the plan adds one ``psf`` task and one ``deconvolve`` task per (FOV,
+    deconvolved round) that a consumer reads, and each consumer declares the copy's files in place of the raw ones
+    (design/specs/deconvolution.md; the manifest then holds ``deconvolution``: the copy, its id and rounds); a uint8
+    copy that feeds a two-pass statistic or a ``global`` or ``absolute`` spot threshold warns once each (UserWarning).
+    In a round's folder only the one file of each configured channel label is listed; other files are
     not read, and a label that matches two files is refused. The resolved configuration writes every default the
     contract defines and ``api``, the API configs of each block; its hash leaves out ``execution`` and the roots.
     The manifest lists the inputs (path relative to the input root, or absolute outside it, bytes, modification
@@ -1141,6 +1200,9 @@ def plan(config_path, output_root=None) -> dict:
             raise PlanRefused(str(error)) from None
     check_producers(r)
     check_spot_finding_input(r)
+    if "deconvolution" in r:
+        from starfinder.workflow._deconvolution import check_stage
+        check_stage(r)
     inputs = Inputs(r, membership, _needs_rounds(r), _needs_codebook(r))
     manifest_path = _layout.manifest_file(out)
     graph = Graph(r, membership, inputs, out, manifest_path.relative_to(out))
@@ -1161,6 +1223,9 @@ def plan(config_path, output_root=None) -> dict:
         "routes": graph.routes,
         "groups": list(graph.groups.values()),
         "tasks": tasks}
+    if graph.stage is not None:
+        # Only with the block, so that a run without it writes the manifest it wrote before (PL1).
+        manifest["deconvolution"] = graph.stage.manifest_entry()
     # The route that supplied the identity (version_source) is not part of what ran: one commit has one fingerprint.
     code = ({k: v for k, v in manifest["package"].items() if k != "version_source"}
             if r["execution"]["code_version"] == "rerun" else None)

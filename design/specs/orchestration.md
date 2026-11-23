@@ -167,9 +167,11 @@ Recommendation: A.
 * **Task**: one call of one command of the CLI on one identity (a FOV, a FOV and a tile, a FOV and
   a segmentation run, a sample, a sample and a statistics step, or the run), or one engine-side tool
   run (Fiji). A task reads only its declared inputs and writes only its declared outputs.
-* **Task kind**: the command a task calls: `summarize`, `merge`, `fov`, `tile_global`, `tile`,
+* **Task kind**: the command a task calls: `psf`, `deconvolve`, `summarize`, `merge`, `fov`, `tile_global`, `tile`,
   `tile_merge`, `morphology`, `segment`, `assign`, `bigstitcher_macro`, `bigstitcher_engine`,
-  `bigstitcher_import`, `stitch`, `export`, `report`, `compare`.
+  `bigstitcher_import`, `stitch`, `export`, `report`, `compare`. `psf` (one per run) and `deconvolve` (one per FOV and
+  deconvolved round, identity field `round` after `fov`) are the deconvolution stage's
+  ([deconvolution](deconvolution.md), W-923).
 * **Plan**: the command that runs once before fan-out and writes the resolved configuration and the
   manifest.
 * **Manifest**: the file that lists every task of a run with its identity, dependencies, declared
@@ -422,9 +424,10 @@ is decided by the narrower hash below.
 the blocks the task's kind reads, an absent block written as null. The common part is every top-level
 key of `configuration` outside the blocks, `execution` and the two roots: the dataset keys such as
 `n_rounds`, `ref_round`, `seq_channel_order`, `rotate_angle` and `voxel_size_xy`, which every kind may
-read. The FOV-level kinds, `summarize`, `fov`, `tile_global`, `tile`, `tile_merge`, `morphology`,
+read. The FOV-level kinds, `deconvolve`, `summarize`, `fov`, `tile_global`, `tile`, `tile_merge`, `morphology`,
 `segment` and `assign`, each work on one FOV, and their hash leaves `selected_fovs` and `output_id`
-out of the common part: a run extended by FOVs, or planned under another output id into the same
+out of the common part (so does that of `psf`, which is run-level, so that a larger selection keeps the copy's PSFs
+and every finished `deconvolve` task; W-923): a run extended by FOVs, or planned under another output id into the same
 output root, keeps its finished FOV tasks. The sample-level kinds (`merge`, the placing kinds,
 `export`, `report` and `compare`), whose inputs change with the selection, keep both keys. With
 `reference_image_import` the FOV-level hash keeps `output_id`: a supplied reference image without
@@ -438,6 +441,7 @@ segmentation and assignment record and the export compares with the frame it dec
 
 | Task kinds | Blocks | Why |
 | --- | --- | --- |
+| `psf`, `deconvolve` | `deconvolution` | The deconvolution stage ([deconvolution](deconvolution.md)); the block has no API translation, so the commands read its resolved keys |
 | `summarize`, `merge`, `fov`, `tile_global`, `tile`, `tile_merge` | `processing` | The per-FOV core and its supplied statistics |
 | `morphology` | `morphology` | |
 | `segment` | `segmentation` | |
@@ -450,6 +454,7 @@ segmentation and assignment record and the export compares with the frame it dec
 % Amended 2026-10-31 after W-647's review: the rows of export, report and compare (the operator's decision on W-152).
 % Amended 2026-11-04 W-807: the report row also reads `assignment`, which names the report's assignment when there is no `assembly` block.
 % Amended 2026-11-20 W-891: the export row also reads `segmentation`, whose `input_recipes` the runs of `export.segmentation` name by name (design/specs/segmentation-input-recipe.md, option RL1).
+% Amended 2026-11-22 W-923: the row of `psf` and `deconvolve` (design/specs/deconvolution.md, approved 2026-11-21).
 
 **The map is also the command's access.** A command reads `configuration` and `api` only through a
 view limited to the common part and its kind's blocks; reading anything else raises, in every run,
@@ -571,6 +576,8 @@ Each data product has one producer; each consumer `needs` the producer's task:
 
 | Data product | Produced by | Read by |
 | --- | --- | --- |
+| The deconvolved copy's PSFs and `copy.json` (`<copy>/psf/`) | `psf`, with a `deconvolution` block | every `deconvolve` |
+| A deconvolved round of a FOV (`<copy>/<image dir>/<label>.tif` and `<copy>/records/<round>/<fov>/`) | `deconvolve`, for each (FOV, round of `deconvolution.rounds`) that a reader below reads | `summarize`, `fov`, `tile_global` (the sequencing rounds), `morphology` (`reference_stain` and the other rounds), in place of the raw files |
 | The supplied statistics of a sample and step | `merge` (after the `summarize` of each FOV of the sample) | the next `summarize` of a later supplied step; `fov` or `tile_global` |
 | A FOV's reference image (`reference_image`) | `fov` or `tile_global`; none with `reference_image_import` (an input) | `segment` (the grid; `reference_merged` and composite inputs), `assign` (the grid), `stitch`, `bigstitcher_macro`, `bigstitcher_import` (the grids), `export` (the grids on the route after fusion, and the fusion of `reference_merged`) |
 | A FOV's molecules (`fovs/<fov>/molecules.csv`) | `fov` or `tile_merge`, with `spot_finding`, `reads_extraction` and `reads_filtration` | `assign`; `export` on the routes after fusion and molecules only |
@@ -602,6 +609,12 @@ The cases D4 names:
   makes the plan add, per sample and per supplied step in recipe order, one `summarize` per FOV and
   one `merge`; every `fov` (or `tile_global`) task of the sample needs the last `merge`
   ([the two-pass statistics tasks](#the-two-pass-statistics-tasks)).
+* **The deconvolution stage.** A `deconvolution` block makes the plan add one `psf` task, with no needs, and one
+  `deconvolve` task per (FOV, deconvolved round) that a reader reads, needing `psf`, in one group per round name
+  (`deconvolve.<round>`). Each reader declares the copy's files and the round's record in place of the raw files,
+  needs those tasks and names their image folders in its entry (`deconvolved`), which its command loads them from. A
+  `fov` task that reads a saved set (`spot_finding_input`) reads no sequencing image, so it adds no task for them.
+  Without the block the plan is unchanged ([deconvolution](deconvolution.md), "The graph"; W-923).
 * **The export routes.** `per_fov` needs every FOV's saved assignment; `after_fusion` needs the
   molecules and the reference images (the export segments the fused projection itself);
   `molecules_only` (`assembly.assignment: null`) needs the molecules. The route is resolved by
@@ -632,7 +645,7 @@ dataset_id: aging
 sample_id: sample1
 root_output_path: /results
 output_id: run1
-n_rounds: 4
+n_rounds: 4                     # with a deconvolution block, voxel_size_xy and voxel_size_z are required
 ref_round: round1
 seq_channel_order: [ch00, ch01, ch02, ch03]
 reference_stains: [{channel: ch04, name: DAPI}]
@@ -641,6 +654,8 @@ additional_round: [{round_name: flamingo, channel_order: [{channel: ch04, name: 
 rotate_angle: 0                 # 0: no rotation (OC3)
 voxel_size_xy: 0.5
 voxel_size_z: 1.0
+deconvolution:                  # the deconvolution stage, first because it runs first (W-923)
+  iterations: 5                 # required; rounds, copy_root, dtype, psf, ... (design/specs/deconvolution.md)
 processing:                     # the per-FOV core: direct or tiled
   mode: direct                  # or tiled (W-644)
   preprocessing: {steps: [...]}
@@ -665,6 +680,8 @@ execution:
   resume_from_checkpoint: false
   code_version: keep            # or rerun: a new code version reruns the tasks (A4)
   image_compression: zlib       # or none: the codec of the kept images, outside every hash (W-909)
+  deconwolf: null               # with a deconvolution block: the dw executable and the wisdom store, outside every
+  deconwolf_wisdom: null        #   hash (W-923); the plan writes both only with the block
 ```
 
 % Amended 2026-11-01 for W-760: container interpretation depends on the engine/profile; null leaves the profile's choice.
@@ -673,6 +690,7 @@ execution:
 
 | Block | Its keys | Its tasks |
 | --- | --- | --- |
+| `deconvolution` | `rounds`, `copy_root`, `iterations` (required), `method`, `border_quality`, `tile_size`, `dtype`, `scale`, `psf` ([deconvolution](deconvolution.md), "The configuration"; W-923) | `psf` per run, `deconvolve` per (FOV, round) |
 | `processing` | Today's processing rule parameters without the `run` flags: `preprocessing`, `registration`, `reference_image_view` (with `projection`), `spot_finding`, `reads_extraction`, `reads_filtration`, `decoding`, `scoring` (`false` turns it off), `deduplication`, `load_codebook`, `load_raw_images`, `streaming`, `device`; and `mode` (`direct` or `tiled`), `tiled` (W-644), `checkpoints` and `spot_finding_input` (W-889) | `fov`, or `tile_global`, `tile`, `tile_merge`; `summarize` and `merge` for supplied steps |
 | `morphology` | `rounds` (default every other round), `recipe` (a registration recipe; default one translation step on the shared stain, `MorphologyConfig`), `channel_images` (null; or `{projection: null or max}` to write `images/<round>/<label>/<fov>.tif` as today) | `morphology` |
 | `segmentation` | As today: `device`, `runs` | `segment` per (FOV, run) |
@@ -680,7 +698,7 @@ execution:
 | `stitching` | As today; and `dataset_xml` with `view_map` (a supplied BigStitcher result and its view map, each a file pattern with `{sample}`, which skip the macro and the Fiji task, D3) | `stitch`, or `bigstitcher_macro`, `bigstitcher_engine`, `bigstitcher_import` |
 | `assembly`, `export` | As today; `export.previews` (P5) | `export` per sample |
 | `report` | As today | `report` per sample, `compare` |
-| `execution` | `defaults` and `tasks.<kind>` (`threads`, `memory_mb`, `runtime_min`, `gpu`), `container`, `fiji`, `resume_from_checkpoint`, `code_version`, `log_level`, `image_compression` (`zlib`, the default, or `none`; W-909) | none; passed through to each task's `execution`, except `code_version`, which the plan reads for the fingerprint, and `image_compression`, which the `fov`, `tile_global`, `tile_merge` and `morphology` commands read from the resolved configuration (the codec of the stage `registered`, the reference image and the prepared images) |
+| `execution` | `defaults` and `tasks.<kind>` (`threads`, `memory_mb`, `runtime_min`, `gpu`), `container`, `fiji`, `resume_from_checkpoint`, `code_version`, `log_level`, `image_compression` (`zlib`, the default, or `none`; W-909), and with a `deconvolution` block `deconwolf` and `deconwolf_wisdom` (W-923) | none; passed through to each task's `execution`, except `code_version`, which the plan reads for the fingerprint, `image_compression`, which the `fov`, `tile_global`, `tile_merge`, `morphology` and `deconvolve` commands read from the resolved configuration (the codec of the stage `registered`, the reference image, the prepared images and the deconvolved copy), and `deconwolf` and `deconwolf_wisdom`, which the `deconvolve` command reads |
 
 No scientific default changes: scoring stays on whenever the block decodes, deduplication stays
 off without its block, and every translator default (for example the WTA decoder's `diagnostics:
@@ -1344,7 +1362,9 @@ package. The engine reads, for every task: `id`, `kind`, `needs`, `inputs`, `out
 
 | Task kind | What the command reads | From where | What the engine adds |
 | --- | --- | --- | --- |
-| `summarize` | the FOV's raw images, the earlier supplied file, the step and its recipe | `inputs`; the resolved configuration through the manifest | nothing |
+| `psf` | the deconvolution block, the spacing, the supplied PSF files | `inputs`, the entry's `deconvolution`; the resolved configuration | nothing |
+| `deconvolve` | the round's raw images, the copy's PSFs, the block, `execution.deconwolf` and `deconwolf_wisdom` | `inputs`, the entry's `deconvolution`; the resolved configuration | a GPU when `execution.gpu` says so (`execution.tasks.deconvolve.gpu`) |
+| `summarize` | the FOV's raw images (or the copy's, by the entry's `deconvolved`), the earlier supplied file, the step and its recipe | `inputs`; the resolved configuration through the manifest | nothing |
 | `merge` | the histogram files of the sample, the earlier supplied file | `inputs` | nothing |
 | `fov` | the raw images, the codebook, the supplied file, the processing block, the stages | `inputs`; the resolved configuration | a GPU when `execution.gpu` says so (Spotiflow or Piscis on `cuda`) |
 | `tile_global`, `tile`, `tile_merge` | the raw images, the chunked checkpoint, the tile's window and halo, the tiles' outputs | `inputs`, `identity.tile`; the window and halo by W-644 | nothing: the tiles are tasks of the manifest |
@@ -1365,6 +1385,7 @@ manifest" for every kind; a cell that is not "manifest" names the exception:
 
 | Task kind | Identity | Paths | Parameters | Resources | Command line | Package import in the engine file |
 | --- | --- | --- | --- | --- | --- | --- |
+| `psf`, `deconvolve` | manifest | manifest (the copy's paths, absolute outside the output root) | resolved configuration | manifest (`gpu` from `execution.tasks.deconvolve.gpu`) | manifest | none |
 | `summarize`, `merge` | manifest | manifest | resolved configuration | manifest | manifest | none |
 | `fov` | manifest | manifest | resolved configuration | manifest (`gpu` from `processing.spot_finding.device`) | manifest | none |
 | `tile_global`, `tile`, `tile_merge` | manifest (the tile list is the plan's, W-644) | manifest | resolved configuration | manifest | manifest | none |

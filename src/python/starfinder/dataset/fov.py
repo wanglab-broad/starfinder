@@ -436,9 +436,15 @@ class FOV:
             load_config = config or ImageLoadConfig(
                 channel_labels=self.dataset.channel_labels(round_name), subdir=subdir,
             )
-            # The reference stains are files of the reference round's folder.
+            # The reference stains are files of the reference round's folder. A round the workflow deconvolved is
+            # read from its image folder in the copy (design/specs/deconvolution.md, "The graph").
             folder = self.rounds.reference_round if round_name == REFERENCE_STAIN else round_name
-            loaded = load_round(self.input_dir(folder), config=load_config)
+            copied = (getattr(self.dataset, "_deconvolved", None) or {}).get(round_name)
+            if copied is None:
+                loaded = load_round(self.input_dir(folder), config=load_config)
+            else:
+                # The copy holds the channel files in the image folder itself, whatever subfolder the raw round used.
+                loaded = load_round(copied, config=replace(load_config, subdir=""))
             self.images[round_name] = loaded.image
             self.metadata[round_name] = loaded.metadata
             xy, z = self.dataset.voxel_size_xy, self.dataset.voxel_size_z

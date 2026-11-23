@@ -143,3 +143,24 @@ def test_the_import_check_refuses_to_run_with_a_visible_device(monkeypatch, chec
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
     with pytest.raises(AssertionError, match="CUDA_VISIBLE_DEVICES"):
         check.import_versions()
+
+
+# --- the deconwolf check (W-923, design/validation/deconvolution.md IM1) ------------------------------------------
+
+#: The text of v0.4.5's --version, as W-916's build printed it (the backends' lines).
+DW_VERSION = ("deconwolf: '0.4.5'\nBUILD_DATE: 'Nov 20 2026'\nFFT Backend: 'fftw-3.3.8-sse2-avx'\n"
+              "OpenMP: YES\nOpenCL: YES\nVkFFT: YES\n")
+LDD = "\tlibtrafo.so => /opt/deconwolf/lib/libtrafo.so (0x0)\n\tlibOpenCL.so.1 => /lib/libOpenCL.so.1 (0x0)\n"
+
+
+def test_the_deconwolf_check_accepts_the_image_binary(check):
+    assert check.deconwolf_problems(DW_VERSION, LDD, "a" * 64, "a" * 64) == []
+    assert check.deconwolf_problems(DW_VERSION, LDD, "a" * 64, None) == []
+
+
+def test_the_deconwolf_check_names_what_is_missing(check):
+    problems = check.deconwolf_problems(DW_VERSION.replace("0.4.5", "0.4.6").replace("VkFFT: YES", "VkFFT: NO"),
+                                        LDD + "\tlibgsl.so.27 => not found\n", "a" * 64, "b" * 64)
+    assert problems == ["dw --version does not say deconwolf: '0.4.5'", "dw --version does not say VkFFT: YES",
+                        "ldd: libgsl.so.27 => not found",
+                        f"the binary's SHA-256 {'a' * 64} differs from the label's {'b' * 64}"]

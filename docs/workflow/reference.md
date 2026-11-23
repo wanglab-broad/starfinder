@@ -27,7 +27,7 @@ changes what a task does.
 | Status | Meaning | Snakemake | Nextflow |
 | --- | --- | --- | --- |
 | 0 | The task succeeded; its record was written last | Done | Done |
-| 1 | The task failed; its declared outputs were removed and `<task>.failed.json` written | Retried up to `--retries` | Retried up to `--max_retries` (default 2); `--max_retries 0` runs the task once and finishes the run |
+| 1 | The task failed; its declared outputs were removed (a `psf` or `deconvolve` task removes only the copy's files this attempt wrote: none after a reuse or a wait on a round's lock) and `<task>.failed.json` written | Retried up to `--retries` | Retried up to `--max_retries` (default 2); `--max_retries 0` runs the task once and finishes the run |
 | 2 | Refused before any work; nothing was written | Retried like 1 | Not retried; the run finishes |
 | 3 | A verified resume was refused | Retried like 1 | Not retried; the run finishes |
 | 4 | The export was held for review: its placement needs review and `approvals.json` holds no approval of its tables; it failed as 1 does, its failed record says `held`, and it wrote the held page `workflow/held/<sample>/<route>.html` and no report ({ref}`the route <workflow-placement-review>`) | Retried like 1 | Not retried; the run finishes |
@@ -78,9 +78,11 @@ that route's report. `verify` prints a found route's state to stderr, so that it
 standard output keeps one line per task of the plan. An output root with one route
 lists one route.
 
-The FOV-level kinds, `summarize`, `fov`, `tile_global`, `tile`, `tile_merge`,
+The FOV-level kinds, `deconvolve`, `summarize`, `fov`, `tile_global`, `tile`, `tile_merge`,
 `morphology`, `segment` and `assign`, work on one FOV each, and their fingerprint
-leaves out `selected_fovs` and `output_id`. The sample-level kinds, `merge`, the
+leaves out `selected_fovs` and `output_id`; so does that of `psf`, which is one task
+per run, so that a larger selection keeps the copy's PSFs and every finished
+`deconvolve` task. The sample-level kinds, `merge`, the
 placing kinds, `export`, `report` and `compare`, keep both. A run extended by FOVs,
 or planned under another `output_id` into the same output root (`plan --output-root`),
 therefore keeps its finished FOV tasks and runs the new FOVs and the sample-level
@@ -139,6 +141,35 @@ image_dir_template: The folder of one round of one FOV under the input folder.
 readout_mode: multiplexed reads a codebook; direct reads a direct panel.
 codebook: The codebook of readout_mode multiplexed, absolute or relative to the input folder; null is genes.csv.
 direct_panel: The direct panel of readout_mode direct, absolute or relative to the input folder; null is genes.csv.
+```
+
+(workflow-keys-deconvolution)=
+### `deconvolution`
+
+The {ref}`deconvolution stage <workflow-deconvolution>`: one `psf` task and one
+`deconvolve` task per (FOV, deconvolved round), which write a deconvolved copy that
+the `summarize`, `fov`, `tile_global` and `morphology` tasks read in place of the raw
+images. `iterations` is required and has no default, and the optics have none: they
+belong to the microscope. The block requires `voxel_size_xy` and `voxel_size_z`,
+which the generated PSF and the copy id read. Every key but `copy_root` is in the copy
+id, so a change gives a new copy beside the old one; `execution.deconwolf`,
+`execution.deconwolf_wisdom` and the resources of `execution.tasks.deconvolve` are
+outside every hash. `backend: matlab` refuses the block.
+
+```{workflow-keys} deconvolution
+```
+
+```{workflow-keys} deconvolution.psf
+source: generate (psfmodels' confocal_psf, vectorial, from the optics below and the dataset's voxel size) or file.
+files: With file: one PSF file per label, {<label>: path}, absolute or relative to the input folder; float or integer ZYX, no negative value, renormalised to sum 1 when it is not.
+voxel_size_um: With file: the files' declared spacing {xy, z} in micrometres, which must equal voxel_size_xy and voxel_size_z within 1 part in 10^6.
+na: The objective's numerical aperture.
+immersion_ri: The immersion medium's refractive index (ni = ni0).
+sample_ri: The sample's refractive index (ns).
+pinhole_radius_nm: The pinhole radius back-projected into the sample, in nm; the PSF takes it in Airy units, radius / (0.61 × emission / NA).
+depth_um: The depth of the PSF below the coverslip (psfmodels' pz), in micrometres.
+shape_zyx: The PSF's shape; square in Y and X. It sets deconwolf's padding and enters the wisdom key.
+channels: Per label: excitation_nm and emission_nm, for every label of a deconvolved round.
 ```
 
 (workflow-keys-processing)=
@@ -268,11 +299,13 @@ fiji: The Fiji executable of the bigstitcher_engine task.
 resume_from_checkpoint: true lets a fov task resume from its checkpoints after it checks run.json; a mismatch exits 3.
 code_version: keep, or rerun to rerun finished tasks after the package version changes.
 log_level: The level of the task logs.
-image_compression: The TIFF codec of the images the tasks keep, the stage registered, the reference image and the prepared images: zlib (deflate, level 6, no predictor) or none; outside every hash, so a change reruns no task and refuses no resume, and the records name each file's codec.
+image_compression: The TIFF codec of the images the tasks keep, the stage registered, the reference image and the prepared images, and the deconvolved copy: zlib (deflate, level 6, no predictor) or none; outside every hash, so a change reruns no task and refuses no resume, and the records name each file's codec.
+deconwolf: The deconwolf executable of the deconvolve tasks; null runs dw on PATH (the image has v0.4.5). Its SHA-256 is recorded, not hashed.
+deconwolf_wisdom: The FFTW wisdom store that CPU deconvolve tasks read (starfinder deconvolve wisdom adds to it); null plans every CPU task with --noplan. Outside every hash.
 ```
 
 ```{workflow-keys} execution.defaults
-threads: The threads of a task; the fov, tile_global, tile and bigstitcher_engine kinds default to 4.
+threads: The threads of a task; the fov, tile_global, tile, bigstitcher_engine and deconvolve kinds default to 4 (a deconvolve task with gpu true to 1, with memory_mb 26000 and runtime_min 30; on the CPU 14000 and 60).
 memory_mb: The memory of a task in MB.
 runtime_min: The runtime of a task in minutes.
 gpu: true requests a GPU.

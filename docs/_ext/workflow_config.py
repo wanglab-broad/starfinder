@@ -229,9 +229,17 @@ def _placeholder(root, config):
     runpy.run_path(str(EXAMPLES / "prepare_workflow.py"))["placeholder_inputs"](config, root)
 
 
+#: The deconvolution block of the tiled probe: 9735seqA1's optics (design/specs/deconvolution.md, "The
+#: configuration"), which are an example and no default.
+PROBE_DECONVOLUTION = {"iterations": 5, "psf": {
+    "na": 1.30, "immersion_ri": 1.518, "sample_ri": 1.338, "pinhole_radius_nm": 307,
+    "channels": {"ch00": {"excitation_nm": 499, "emission_nm": 529}, "ch01": {"excitation_nm": 598, "emission_nm": 634},
+                 "ch02": {"excitation_nm": 557, "emission_nm": 577}, "ch03": {"excitation_nm": 653, "emission_nm": 692}}}}
+
+
 def _probes(save_dir):
     """Configurations whose plans hold every task kind: the full example, and the full example in mode tiled with a
-    BigStitcher placement and segmentation runs by a method instead of imported labels."""
+    BigStitcher placement, segmentation runs by a method instead of imported labels and a deconvolution block."""
     full = yaml.safe_load((EXAMPLES / "workflow-full.yaml").read_text())
     tiled = copy.deepcopy(full)
     tiled["processing"]["mode"] = "tiled"
@@ -243,6 +251,7 @@ def _probes(save_dir):
          "inputs": [{"role": "nuclear", "round": "reference_stain", "channel": "DAPI"}]},
         {"name": "cell", "target": "cell", "seeds": "nucleus", "method": "seeded_watershed",
          "inputs": [{"role": "amplicon", "reference_merged": True}]}]
+    tiled["deconvolution"] = copy.deepcopy(PROBE_DECONVOLUTION)
     return [full, tiled]
 
 
@@ -265,6 +274,8 @@ def task_rows():
             # A run, an assignment name, an export route and another round are literal parts of the templates:
             # written as such.
             names = {f"/{e['round_name']}/": "/<round>/" for e in config.get("additional_round") or []}
+            if "deconvolution" in manifest:
+                names[f"/dw-{manifest['deconvolution']['copy_id']}/"] = "/dw-<copy id>/"
             for task in manifest["tasks"]:
                 kind, identity, group = task["kind"], task["identity"], groups[task["group"]]
                 identities.setdefault(kind, [k for k in ID_FIELDS if k in identity])
@@ -296,12 +307,19 @@ def _defaults_probe():
                                           "path": "labels/{fov_id}.tif"}]},
                   assignment={}, stitching={"bigstitcher_save_dir": "/save", "positions": {"source": "table",
                                                                                           "table": "positions.csv"}},
-                  assembly={}, export={"route": "per_fov"}, report={})
+                  assembly={}, export={"route": "per_fov"}, report={},
+                  deconvolution=copy.deepcopy(PROBE_DECONVOLUTION), voxel_size_xy=0.5, voxel_size_z=1.0)
     return [(given, resolve(copy.deepcopy(given), None)["configuration"]) for given in (minimal, blocks)]
 
 
 #: Defaults the plan derives from other keys (starfinder/workflow/_plan.py, resolve), written in words.
 DERIVED = {("morphology", "rounds"): "every additional_round",
+           # Written with a deconvolution block only, so that a run without it resolves as before.
+           ("execution", "deconwolf"): "null with a deconvolution block (dw on PATH); none without it",
+           ("execution", "deconwolf_wisdom"): "null with a deconvolution block (CPU tasks plan with --noplan); none "
+                                              "without it",
+           # resolve_block writes 64 with dtype uint16 and leaves the key out with uint8.
+           ("deconvolution", "scale"): "64 with dtype uint16; none with uint8",
            # check_tiled writes the minimum in place of null (_plan.py, check_tiled).
            ("processing.tiled", "halo"): "the minimum: the largest footprint of the tile's operations; "
                                          "regional maxima must also fit the window (checked by the tile task)"}

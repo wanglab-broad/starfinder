@@ -250,7 +250,10 @@ def _stats(manifest):
 
 #: The FOV-level task kinds (design/specs/orchestration.md, "The blocks of a task kind"), whose hash leaves out
 #: selected_fovs and output_id; every other kind is sample-level.
-FOV_LEVEL = {"summarize", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment", "assign"}
+#: The kinds whose hash leaves the selection keys out: the FOV-level kinds, and the deconvolution stage's psf, which is
+#: run-level but follows the same rule (design/specs/deconvolution.md, "The hash").
+FOV_LEVEL = {"summarize", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment", "assign",
+             "deconvolve", "psf"}
 
 
 def _fingerprints(manifest, code=None):

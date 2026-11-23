@@ -33,6 +33,23 @@
 #     --build-arg UV_LOCK_SHA256=<sha256 of src/python/uv.lock> \
 #     --output type=oci,dest=starfinder-learned-cuda-<version>.oci.tar .
 #
+# deconwolf v0.4.5 (the deconvolution stage, design/specs/deconvolution.md, decision 6) is built from source in the
+# stage `build-deconwolf`, from the tag's archive pinned by its SHA-256, and copied with its libraries into
+# `runtime`, so that `cpu`, `learned` and `learned-cuda` all have `dw`. Its SHA-256 is a label: build that stage first,
+# take the binary's SHA-256 and pass it in, and the build stops if the binary differs:
+#
+#   docker buildx build --file Containerfile --builder <docker-container builder> --target build-deconwolf \
+#     --output type=local,dest=<folder> .            # then: sha256sum <folder>/opt/deconwolf/bin/dw
+#   ... --build-arg DECONWOLF_SHA256=<that SHA-256> (with the other build arguments, every target)
+#
+# The source is the tag's archive, https://github.com/elgw/deconwolf/archive/refs/tags/v0.4.5.tar.gz, fetched by
+# `ADD --checksum=sha256:<its SHA-256>` as the base images are pinned by digest (W-928: the archive's pax header names
+# the commit ca062c49eedd6bf60fcd9804df467e64cfc3c113; CMakeLists.txt sets the version, so the build needs no Git). A
+# remote ADD does not unpack: a RUN step does. `ADD --checksum` for an HTTP source needs a builder whose Dockerfile
+# frontend is 1.6 or newer; the file names no `# syntax=` line, so the builder's own frontend parses it.
+# psfmodels 0.3.3 (the `deconvolution` extra) has no wheel for Python 3.12 on Linux in the lock, so the CPU extras build
+# it from its source distribution: the build stage has a C++ compiler.
+#
 # After a build, `src/python/scripts/image_check.py` checks the image (docs/workflow/broad-uger.md, "Checking a built
 # image"): `uv pip check` may report only the one line that `piscis` requires `opencv-python`, which the lock leaves out
 # on purpose (W-813, W-878), and `cv2`, `cellpose`, `piscis` and `stardist` must import together on the CPU.
@@ -40,13 +57,33 @@
 # Every target has `ps` (procps) for Nextflow's trace, report and timeline (W-786), and none has Fiji, MATLAB, Java
 # or Nextflow.
 
-ARG CPU_EXTRAS="--extra ome --extra local-registration --extra checkpoint --extra anndata --extra multiview-stitcher --extra spatialdata"
+ARG CPU_EXTRAS="--extra ome --extra local-registration --extra checkpoint --extra anndata --extra multiview-stitcher --extra spatialdata --extra deconvolution"
 ARG LEARNED_EXTRAS="--extra stardist --extra cellpose --extra spotiflow --extra piscis"
 ARG CUDA_EXTRAS="--extra cuda"
 
 FROM ghcr.io/astral-sh/uv:0.9.28@sha256:59240a65d6b57e6c507429b45f01b8f2c7c0bbeee0fb697c41a39c6a8e3a4cfb AS uv
 
+FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS build-deconwolf
+# bookworm's CMake 3.25 and the libraries deconwolf links: FFTW (single and double precision, with OpenMP), libtiff,
+# GSL, libpng, the OpenCL ICD loader and headers.
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake pkg-config ca-certificates \
+      libfftw3-dev libtiff-dev libgsl-dev libpng-dev ocl-icd-opencl-dev opencl-headers \
+    && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:b9ff86f3ebb9d4b3c907d131ff018302a9eb0f5ebfb978cae29d40f75599ef67 https://github.com/elgw/deconwolf/archive/refs/tags/v0.4.5.tar.gz /src/deconwolf-0.4.5.tar.gz
+RUN mkdir /src/deconwolf && tar -xzf /src/deconwolf-0.4.5.tar.gz -C /src/deconwolf --strip-components=1 \
+    && rm /src/deconwolf-0.4.5.tar.gz
+# -include inttypes.h: src/dw_imshift.c uses PRId64 without the header (W-915). The build folder is fixed, so the binary
+# does not depend on the host's paths.
+RUN cmake -S /src/deconwolf -B /src/build -DENABLE_GPU=ON -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_C_FLAGS="-include inttypes.h" \
+    && cmake --build /src/build -j 4 \
+    && install -D -m 0755 /src/build/dw /opt/deconwolf/bin/dw \
+    && install -D -m 0644 /src/build/src/trafo/libtrafo.so /opt/deconwolf/lib/libtrafo.so \
+    && /src/build/dw --version | grep -q "deconwolf: '0.4.5'"
+
 FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS build
+# A C++ compiler for psfmodels' source distribution (the deconvolution extra).
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_LOCKED=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/opt/starfinder \
     UV_CACHE_DIR=/root/.cache/uv
@@ -109,8 +146,20 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN /opt/starfinder/bin/python -c "import cv2, cellpose, piscis"
 
 FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS runtime
-# bookworm's only procps release (main, updates and security on 2026-11-03).
-RUN apt-get update && apt-get install -y --no-install-recommends procps=2:4.0.2-3 && rm -rf /var/lib/apt/lists/*
+# bookworm's only procps release (main, updates and security on 2026-11-03); deconwolf's runtime libraries (FFTW single
+# and double precision with OpenMP, libtiff, GSL, libpng, the OpenCL ICD loader, libgomp).
+RUN apt-get update && apt-get install -y --no-install-recommends procps=2:4.0.2-3 \
+      libfftw3-single3 libfftw3-double3 libtiff6 libgsl27 libpng16-16 ocl-icd-libopencl1 libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+# deconwolf and its libtrafo.so; the NVIDIA OpenCL driver, which `apptainer --nv` and `docker --gpus` bind from the host,
+# is named for the ICD loader.
+COPY --from=build-deconwolf /opt/deconwolf /opt/deconwolf
+RUN mkdir -p /etc/OpenCL/vendors && echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd \
+    && ln -s /opt/deconwolf/bin/dw /usr/local/bin/dw \
+    && echo /opt/deconwolf/lib > /etc/ld.so.conf.d/deconwolf.conf && ldconfig \
+    && ! ldd /opt/deconwolf/bin/dw | grep -q "not found"
+ARG DECONWOLF_SHA256
+RUN echo "${DECONWOLF_SHA256}  /opt/deconwolf/bin/dw" | sha256sum -c -
 ENV PATH=/opt/starfinder/bin:$PATH OMP_NUM_THREADS=1 MPLBACKEND=Agg
 ARG STARFINDER_VERSION
 ARG STARFINDER_REVISION
@@ -120,7 +169,9 @@ LABEL org.opencontainers.image.title=starfinder \
       org.opencontainers.image.version=$STARFINDER_VERSION \
       org.opencontainers.image.revision=$STARFINDER_REVISION \
       org.starfinder.dirty=$STARFINDER_DIRTY \
-      org.starfinder.uv-lock-sha256=$UV_LOCK_SHA256
+      org.starfinder.uv-lock-sha256=$UV_LOCK_SHA256 \
+      org.starfinder.deconwolf=0.4.5 \
+      org.starfinder.deconwolf-sha256=$DECONWOLF_SHA256
 
 FROM runtime AS learned
 COPY --from=build-learned /opt/starfinder /opt/starfinder

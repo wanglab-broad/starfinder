@@ -22,8 +22,9 @@ TASK_FORMAT = "starfinder.workflow.task/1"
 FAILED_FORMAT = "starfinder.workflow.task-failed/1"
 VERIFY_FORMAT = "starfinder.workflow.verify/1"
 
-#: The step blocks of the Python shape, in the order of the contract; a present block enables its step (D4).
-BLOCKS = ("processing", "morphology", "segmentation", "assignment", "stitching", "assembly", "export", "report")
+#: The step blocks of the Python shape, in the order of the contract; a present block enables its step (D4). The
+#: deconvolution block comes first because its stage runs first (design/specs/deconvolution.md).
+BLOCKS = ("deconvolution", "processing", "morphology", "segmentation", "assignment", "stitching", "assembly", "export", "report")
 #: The top-level keys outside the blocks and execution (the dataset keys); every kind may read them.
 DATASET_KEYS = ("backend", "root_input_path", "dataset_id", "sample_id", "root_output_path", "output_id",
                 "fov_list", "selected_fovs", "n_rounds", "ref_round", "ref_channel", "reference_stains", "seq_channel_order",
@@ -88,15 +89,22 @@ CHECKPOINT_STAGES = ("candidates", "pre_qc")
 STAGES = ("registered", "candidates", "pre_qc")
 #: The execution defaults (today's DEFAULT_RESOURCES and rule threads, common.smk:156-159 and the rule files).
 EXECUTION_DEFAULTS = {"threads": 1, "memory_mb": 8000, "runtime_min": 30, "gpu": False}
-KIND_THREADS = {"fov": 4, "tile_global": 4, "tile": 4, "bigstitcher_engine": 4}
+KIND_THREADS = {"fov": 4, "tile_global": 4, "tile": 4, "bigstitcher_engine": 4, "deconvolve": 4}
+#: The resources of a deconvolve task by device (design/specs/deconvolution.md, "Resources per task"): they replace
+#: execution.defaults, and execution.tasks.deconvolve replaces them.
+DECONVOLVE_RESOURCES = {False: {"threads": 4, "memory_mb": 14000, "runtime_min": 60},
+                        True: {"threads": 1, "memory_mb": 26000, "runtime_min": 30}}
+#: The execution keys; deconwolf and deconwolf_wisdom, like fiji, are outside every hash (the plan writes their
+#: defaults only with a deconvolution block, so that a run without it resolves as before).
 EXECUTION_KEYS = ("defaults", "tasks", "container", "fiji", "resume_from_checkpoint", "code_version", "log_level",
-                  "image_compression")
+                  "image_compression", "deconwolf", "deconwolf_wisdom")
 RESOURCE_KEYS = ("threads", "memory_mb", "runtime_min", "gpu")
 CODE_VERSIONS = ("keep", "rerun")
 LOG_LEVELS = ("INFO", "DEBUG")
 
 #: The task kinds (design/specs/orchestration.md, "Terms") and the blocks each reads besides the common part.
 TASK_BLOCKS = {
+    "psf": ("deconvolution",), "deconvolve": ("deconvolution",),
     "summarize": ("processing",), "merge": ("processing",), "fov": ("processing",),
     "tile_global": ("processing",), "tile": ("processing",), "tile_merge": ("processing",),
     "morphology": ("morphology",), "segment": ("segmentation",), "assign": ("assignment",),
@@ -108,16 +116,20 @@ TASK_BLOCKS = {
 KINDS = tuple(TASK_BLOCKS)
 #: The FOV-level kinds: each task works on one FOV (or one tile of it), whatever other FOVs the run selects. The other
 #: kinds (merge, the placing kinds, export, report, compare) are sample-level: they read every selected FOV.
-FOV_KINDS = ("summarize", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment", "assign")
+FOV_KINDS = ("deconvolve", "summarize", "fov", "tile_global", "tile", "tile_merge", "morphology", "segment", "assign")
 #: The keys of the common part that a FOV-level kind's hash leaves out (W-877): the FOV selection and the output id,
 #: so that a run extended by FOVs, or planned under another output id into the same output root, keeps its finished
 #: FOV tasks.
 SELECTION_KEYS = ("selected_fovs", "output_id")
+#: The kinds whose hash leaves the selection keys out: the FOV-level kinds and psf, which is run-level but keeps its
+#: PSF when the selection grows, so that every finished deconvolve task is kept (design/specs/deconvolution.md).
+SELECTION_FREE_KINDS = (*FOV_KINDS, "psf")
 #: The command of each kind: the kind with ``-``; the Fiji task's record is written by bigstitcher-check.
 COMMANDS = {kind: kind.replace("_", "-") for kind in KINDS} | {"bigstitcher_engine": "bigstitcher-check"}
 #: The identity fields of a task id, in the id's order. ``route`` is the export route of the export and report tasks
-#: (``export/<sample>/<route>``), so that the routes' tasks have records of their own in one output root.
-ID_FIELDS = ("sample", "route", "step", "fov", "tile", "run", "name")
+#: (``export/<sample>/<route>``), so that the routes' tasks have records of their own in one output root. ``round`` is
+#: the round name of a deconvolve task (a sequencing or additional round, or ``reference_stain``).
+ID_FIELDS = ("sample", "route", "step", "fov", "round", "tile", "run", "name")
 
 
 # --- the canonical serialization -------------------------------------------------------------------------------
@@ -177,8 +189,8 @@ def hashed_common_part(configuration, kind) -> dict:
     Returns
     -------
     dict
-        ``common_part(configuration)``; for a kind of ``FOV_KINDS`` without ``selected_fovs``, and without
-        ``output_id`` unless ``reference_image_import`` is set.
+        ``common_part(configuration)``; for a kind of ``FOV_KINDS`` and for ``psf`` without ``selected_fovs``, and
+        without ``output_id`` unless ``reference_image_import`` is set.
 
     Notes
     -----
@@ -189,7 +201,7 @@ def hashed_common_part(configuration, kind) -> dict:
     sample-level tasks compare with the frame they declare.
     """
     part = common_part(configuration)
-    if kind not in FOV_KINDS:
+    if kind not in SELECTION_FREE_KINDS:
         return part
     left = {"selected_fovs"} if configuration.get("reference_image_import") else set(SELECTION_KEYS)
     return {k: v for k, v in part.items() if k not in left}

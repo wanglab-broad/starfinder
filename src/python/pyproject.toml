@@ -83,6 +83,9 @@ anndata = [
 ]
 visualization = ["napari>=0.4"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
+deconvolution = [
+    "psfmodels==0.3.3",
+]
 
 [project.scripts]
 starfinder = "starfinder.__main__:main"

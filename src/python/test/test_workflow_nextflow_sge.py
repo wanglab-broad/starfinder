@@ -55,8 +55,9 @@ while [[ "$1" == -* ]]; do
 done
 shift
 for name in $(compgen -e APPTAINERENV_); do pairs+=("${name#APPTAINERENV_}=${!name}"); done
-# As the container starts: nothing of the job script's environment but PATH, the --env pairs and the APPTAINERENV_ ones.
-exec env -i PATH="$PATH" "${pairs[@]}" "$@"
+# As the container starts: nothing of the job script's environment but PATH, the --env pairs and the APPTAINERENV_ ones,
+# and PYTHONDONTWRITEBYTECODE, which keeps the task's own Python from writing bytecode into the checkout (W-930).
+exec env -i PATH="$PATH" PYTHONDONTWRITEBYTECODE=1 "${pairs[@]}" "$@"
 '''
 # The task commands of the render that does not stub: the plan and the verification are this checkout's package (the
 # job script clears the environment, PYTHONPATH with it); a task's command writes the record Nextflow copies, holding

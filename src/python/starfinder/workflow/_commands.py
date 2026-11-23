@@ -166,6 +166,7 @@ def _resume(run, fov_, adapted, pipeline, stages):
             sequencing_rounds=[ref] if ref in rounds.sequencing_rounds else [], other_rounds=list(rounds.other_rounds),
             reference_round=ref))
         alone.input_root, alone.output_root = adapted.dataset.input_root, adapted.dataset.output_root
+        alone._deconvolved = getattr(adapted.dataset, "_deconvolved", {})
         reference = alone.fov(run.identity["fov"])
         reference.run(PipelineConfig(load=pipeline.load, rotation_degrees=pipeline.rotation_degrees,
                                      preprocessing=pipeline.preprocessing),
@@ -873,8 +874,20 @@ def compare(run):
     run.dataset().compare_samples(samples, report_root=_layout.report_root(run.out), routes=routes)
 
 
+def psf(run):
+    """The deconvolution stage's PSFs and copy.json (``_deconvolve.psf``)."""
+    from starfinder.workflow._deconvolve import psf as make_psf
+    make_psf(run)
+
+
+def deconvolve(run):
+    """One (FOV, round name) of the deconvolution stage (``_deconvolve.deconvolve``)."""
+    from starfinder.workflow._deconvolve import deconvolve as run_round
+    run_round(run)
+
+
 #: The function of each kind.
-FUNCTIONS = {"summarize": summarize, "merge": merge, "fov": fov, "tile_global": tile_global, "tile": tile,
+FUNCTIONS = {"psf": psf, "deconvolve": deconvolve, "summarize": summarize, "merge": merge, "fov": fov, "tile_global": tile_global, "tile": tile,
              "tile_merge": tile_merge, "morphology": morphology, "segment": segment, "assign": assign,
              "stitch": stitch,
              "bigstitcher_macro": bigstitcher_macro, "bigstitcher_engine": bigstitcher_check,

@@ -53,7 +53,7 @@ def test_google_batch_profile_resolves_offline(tmp_path, profile, executor, veri
         "'us-central1-docker.pkg.dev/<project>/<repository>/starfinder@sha256:<cpu-image-digest>'")
     assert values["process.maxRetries"] == "2"
     assert values["process.machineType"] == "'n2-standard-4'"
-    assert values["process.withName:FOV|TILE_GLOBAL.machineType"] == "'n2-highmem-4'"
+    assert values["process.withName:FOV|TILE_GLOBAL|DECONVOLVE.machineType"] == "'n2-highmem-4'"
     assert values["process.withLabel:gpu.machineType"] == "'g2-standard-4'"
     assert values["process.withLabel:gpu.container"].endswith("sha256:<gpu-image-digest>'")
     assert "nvidia-l4" in values["process.withLabel:gpu.accelerator"]

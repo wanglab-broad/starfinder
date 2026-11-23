@@ -136,9 +136,10 @@ def test_no_second_scheduler_and_no_new_task_kind():
     import starfinder.benchmark._experiment as experiment
     import starfinder.benchmark._trial as trial
     from starfinder.workflow._shape import COMMANDS
-    assert set(COMMANDS) == {"summarize", "merge", "fov", "tile_global", "tile", "tile_merge", "morphology",
-                             "segment", "assign", "bigstitcher_macro", "bigstitcher_engine", "bigstitcher_import",
-                             "stitch", "export", "report", "compare"}
+    # psf and deconvolve are the deconvolution stage's kinds (W-923, design/specs/deconvolution.md), not the commands'.
+    assert set(COMMANDS) == {"psf", "deconvolve", "summarize", "merge", "fov", "tile_global", "tile", "tile_merge",
+                             "morphology", "segment", "assign", "bigstitcher_macro", "bigstitcher_engine",
+                             "bigstitcher_import", "stitch", "export", "report", "compare"}
     for module in (trial, experiment, evaluate):
         source = inspect.getsource(module)
         for word in ("subprocess", "retry", "Snakefile", "nextflow", "qsub", "concurrent.futures", "multiprocessing"):
