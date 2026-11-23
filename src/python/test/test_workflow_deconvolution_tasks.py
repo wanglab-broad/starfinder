@@ -1,9 +1,9 @@
-"""The task checks of design/validation/deconvolution.md (W-923): SC1 to SC7 with SC1b, PS1 to PS4, WI1 to WI7, RC1 to
-RC5, RU1 to RU11 and DW1 to DW3.
+"""The task checks of design/validation/deconvolution.md (W-923): SC1 to SC7 with SC1b, SC9 (W-933), PS1 to PS4, WI1
+to WI7, RC1 to RC5, RU1 to RU11 and DW1 to DW4.
 
 The psf and deconvolve tasks run in this process on ``input_root`` (``deconvolution_cases``) with the stand-in ``dw``,
 which writes ``y = x + 5`` untiled and ``y = x`` tiled, so that every expected copy is an exact integer array.
-PS3, PS4 and RU11 need psfmodels (the ``deconvolution`` extra) and skip without it; DW1 to DW3 need the deconwolf
+PS3, PS4 and RU11 need psfmodels (the ``deconvolution`` extra) and skip without it; DW1 to DW4 need the deconwolf
 binary (``dw`` on PATH or ``STARFINDER_TEST_DECONWOLF``) and skip without it.
 """
 from __future__ import annotations
@@ -138,16 +138,29 @@ def test_sc1_sc2_offset_and_stretch_factor(work, tiled):
         assert stored.dtype == np.uint8 and np.array_equal(stored, expected[channel["label"]])
 
 
-def test_sc1_a_round_of_zeros_stores_zeros(work):
+@pytest.mark.parametrize("tiled", [False, True])
+def test_sc1_a_round_of_zeros_stores_zeros(work, tiled):
+    """A round of zeros stores zeros with f = 1, with the stand-in's refusal of a maximum below 1 on: no channel is
+    passed to it (W-933). A wisdom store whose manifest does not parse shows that the round looks up no wisdom: a
+    round with signal fails on it."""
     for label in D.LABELS:
         tifffile.imwrite(raw(work, "round2", label), np.zeros(D.SHAPE, dtype=np.uint8))
-    # deconwolf v0.4.5 refuses an input whose maximum is below 1; this checks the stage's rule for a zero round alone.
-    dw, _ = D.stand_in(work / "bin", min_intensity=None)
-    manifest, path, copy, statuses = stage(work, "sc1-zero", block(work, rounds=["round2"]), dw)
+    dw, calls = D.stand_in(work / "bin")
+    store = work / "unreadable-store"
+    store.mkdir()
+    (store / "manifest.json").write_text("not JSON\n")
+    keys = {"rounds": ["round1", "round2"], **({"tile_size": 64} if tiled else {})}
+    manifest, path, copy, statuses = stage(work, "sc1-zero", block(work, **keys), dw,
+                                           execution={"deconwolf_wisdom": str(store)})
+    assert statuses[deconvolve_id("round2")] == 0 and D.calls(calls) == []
+    assert statuses[deconvolve_id("round1")] == 1
     rec = record(copy, "round2")
     assert rec["storage"] == {"dtype": "uint8", "stretch_factor": 1.0, "round_max": 0.0}
+    assert rec["planning"] == {"mode": "none", "reason": "no channel passed to deconwolf"}
     for label in D.LABELS:
         assert not stored_values(copy / "round2" / FOV / f"{label}.tif").any()
+    for channel in rec["channels"]:
+        assert_skipped(channel, copy / "records" / "round2" / FOV)
 
 
 @pytest.mark.parametrize("tiled", [False, True])
@@ -302,6 +315,100 @@ def test_sc7_the_copy_loads_as_the_raw_round_loads(work, stored_work, fixture):
                         metadata=loaded.metadata)
         with pytest.raises(ValueError, match="channel frames differ"):
             load_round(control, config=ImageLoadConfig(channel_labels=D.LABELS))
+
+
+# --- SC9: a channel of zeros skips deconwolf (W-933) ----------------------------------------------------------------
+
+SKIP_REASON = "raw values all 0; deconwolf v0.4.5 refuses a maximum below 1"
+#: The deconwolf fields that a skipped channel's record holds as null.
+DECONWOLF_FIELDS = ("arguments", "iterations_done", "float_min", "float_max", "kept_offset", "wall_s", "cpu_s")
+
+
+def inputs_called(call_log):
+    """The input file of each of the stand-in's calls, by name, in order."""
+    return [Path(call["argv"][-2]).name for call in D.calls(call_log)]
+
+
+def assert_skipped(channel, folder):
+    """A skipped channel's record: the skip and its reason, no deconwolf fields, 0 after the offset; its log (in the
+    record folder ``folder``) names the skip."""
+    assert channel["deconwolf_skipped"] is True and channel["skip_reason"] == SKIP_REASON
+    log = folder / channel["log"]["path"]
+    assert channel["log"]["sha256"] == D.sha256(log) and log.read_text() == (
+        f"deconwolf skipped for {channel['label']} of round {folder.parent.name}: {SKIP_REASON}\n")
+    assert {key: channel[key] for key in DECONWOLF_FIELDS} == dict.fromkeys(DECONWOLF_FIELDS)
+    assert channel["max_after_offset"] == 0.0 and channel["clipped_low"] == 0 and channel["clipped_high"] == 0
+
+
+@pytest.mark.parametrize("dtype", ["uint8", "uint16"])
+@pytest.mark.parametrize("tiled", [False, True])
+def test_sc9_a_channel_of_zeros_skips_deconwolf(work, tiled, dtype):
+    """One channel of zeros and one with signal: the stand-in, whose refusal of a maximum below 1 is on, is called
+    for the signal only; the zero channel stores zeros; f comes from the other channel; the record names the skip."""
+    tifffile.imwrite(raw(work, "round1", "ch01"), np.zeros(D.SHAPE, dtype=np.uint8))
+    dw, calls = D.stand_in(work / "bin")
+    keys = {"rounds": ["round1"], "dtype": dtype, **({"scale": 64} if dtype == "uint16" else {}),
+            **({"tile_size": 64} if tiled else {})}
+    manifest, path, copy, statuses = stage(work, "sc9", block(work, **keys), dw)
+    assert statuses[deconvolve_id("round1")] == 0
+    assert inputs_called(calls) == ["ch00.input.tif"]
+    x = {"ch00": tifffile.imread(raw(work, "round1", "ch00"))}
+    rec = record(copy, "round1")
+    if dtype == "uint8":
+        expected, f, m = expected_uint8(x)
+        assert rec["storage"]["round_max"] == m > 0
+        assert rec["storage"]["stretch_factor"] == pytest.approx(f, rel=1e-12, abs=0)
+    else:
+        expected = expected_uint16(x, {"ch00": 64})
+    channels = {c["label"]: c for c in rec["channels"]}
+    assert_skipped(channels["ch01"], copy / "records" / "round1" / FOV)
+    assert channels["ch00"]["deconwolf_skipped"] is False and channels["ch00"]["iterations_done"] == 3
+    assert channels["ch00"]["kept_offset"] == (0 if tiled else 5)
+    zero = stored_values(copy / "round1" / FOV / "ch01.tif")
+    assert zero.dtype == np.dtype(dtype) and zero.shape == D.SHAPE and not zero.any()
+    assert np.array_equal(stored_values(copy / "round1" / FOV / "ch00.tif"), expected["ch00"])
+    assert channels["ch01"]["output"]["file_sha256"] == D.sha256(copy / "round1" / FOV / "ch01.tif")
+    assert sorted(p.name for p in (copy / "records" / "round1" / FOV).iterdir()) == ["ch00.dw.log", "ch01.dw.log",
+                                                                                     "deconvolution.json"]
+
+
+def test_sc9_a_float_channel_below_1_fails_before_deconwolf(work):
+    """A float channel with maximum 0.5, after a channel with signal: the task fails before the stand-in is called,
+    naming the round, the channel, its maximum and deconwolf's floor of 1."""
+    dim = np.zeros(D.SHAPE, dtype=np.float32)
+    dim[4, 16, 16], dim[2, 3, 5] = 0.5, 0.25
+    tifffile.imwrite(raw(work, "round1", "ch01"), dim)
+    dw, calls = D.stand_in(work / "bin")
+    manifest, path, copy, statuses = stage(work, "sc9-float", block(work, rounds=["round1"]), dw)
+    task = deconvolve_id("round1")
+    assert statuses["psf"] == 0 and statuses[task] == 1 and D.calls(calls) == []
+    message = failed_record(path, task)["error"]["message"]
+    assert "round round1, channel ch01: its raw maximum is 0.5" in message and "floor of 1 " in message
+    assert not list((copy / "round1").rglob("*.tif"))
+    assert not (copy / "records" / "round1" / FOV / "deconvolution.json").exists()
+
+
+def test_sc9_reuse_of_a_round_with_a_skipped_channel(work):
+    """Verified reuse accepts a round with a skipped channel, and redoes it when the zero channel's raw file
+    changes."""
+    tifffile.imwrite(raw(work, "round1", "ch01"), np.zeros(D.SHAPE, dtype=np.uint8))
+    dw, calls = D.stand_in(work / "bin")
+
+    def config(output_id):
+        return D.configuration(work, output_id, deconvolution=block(work, copy_root=str(work / "copies"),
+                                                                    rounds=["round1"]), dw=dw, selected_fovs=[FOV])
+    first, path, copy = run_stage(work, "sc9-a", config("sc9-a"))
+    assert inputs_called(calls) == ["ch00.input.tif"]
+    before = D.tree(copy)
+    second, path, copy2 = run_stage(work, "sc9-b", config("sc9-b"))
+    assert copy2 == copy and task_record(path, deconvolve_id("round1"))["reused"] is True
+    assert len(D.calls(calls)) == 1 and D.tree(copy) == before
+    tifffile.imwrite(raw(work, "round1", "ch01"), D.spots(321))
+    third, path, copy3 = run_stage(work, "sc9-c", config("sc9-c"))
+    assert copy3 == copy and task_record(path, deconvolve_id("round1"))["reused"] is False
+    assert inputs_called(calls) == ["ch00.input.tif", "ch00.input.tif", "ch01.input.tif"]
+    assert [c["deconwolf_skipped"] for c in record(copy, "round1")["channels"]] == [False, False]
+    assert stored_values(copy / "round1" / FOV / "ch01.tif").any()
 
 
 # --- PS1, PS2: the PSF's centring and a supplied file ---------------------------------------------------------------
@@ -1008,13 +1115,13 @@ def test_ru11_the_spacing_reaches_a_generated_psf(work):
         changed["voxel_size_xy"]
 
 
-# --- DW1 to DW3: deconwolf itself ---------------------------------------------------------------------------------
+# --- DW1 to DW4: deconwolf itself ---------------------------------------------------------------------------------
 
 @pytest.fixture
 def real_dw():
     path = os.environ.get("STARFINDER_TEST_DECONWOLF") or shutil.which("dw")
     if not path:
-        pytest.skip("DW1 to DW3 and WI6's run on the real binary need the deconwolf binary: dw on PATH or "
+        pytest.skip("DW1 to DW4 and WI6's run on the real binary need the deconwolf binary: dw on PATH or "
                     "STARFINDER_TEST_DECONWOLF, which this host lacks (the image has it)")
     return path
 
@@ -1077,3 +1184,19 @@ def test_dw3_the_stage_on_the_real_binary(real_dw, work):
     for channel in rec["channels"]:
         assert channel["iterations_done"] == 3
         assert tags(copy / channel["output"]["path"])[:3] == ({8}, False, "ZYX")
+
+
+@pytest.mark.slow
+def test_dw4_a_channel_of_zeros_on_the_real_binary(real_dw, work):
+    """The stage on the real binary with one channel of zeros, which v0.4.5 would refuse: the task succeeds, the
+    channel stores zeros and its record names the skip (W-933)."""
+    tifffile.imwrite(raw(work, "round1", "ch01"), np.zeros(D.SHAPE, dtype=np.uint8))
+    manifest, path, copy, statuses = stage(work, "dw4", block(work, rounds=["round1"]), real_dw)
+    assert set(statuses.values()) == {0}
+    rec = record(copy, "round1")
+    channels = {c["label"]: c for c in rec["channels"]}
+    assert_skipped(channels["ch01"], copy / "records" / "round1" / FOV)
+    assert not stored_values(copy / "round1" / FOV / "ch01.tif").any()
+    assert channels["ch00"]["deconwolf_skipped"] is False and channels["ch00"]["iterations_done"] == 3
+    assert rec["storage"]["round_max"] == channels["ch00"]["max_after_offset"] > 0
+    assert rec["planning"]["mode"] == "estimate"

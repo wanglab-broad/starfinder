@@ -1,6 +1,6 @@
 # Validation design: the deconvolution stage
 
-% Status: Approved with the specification (Jiahao, 2026-11-21, W-918); the scaling checks follow decision 3 as changed. Written against `70edc72` (v0.3.0).
+% Status: Approved with the specification (Jiahao, 2026-11-21, W-918); the scaling checks follow decision 3 as changed. Written against `70edc72` (v0.3.0). Amended 2026-11-22 by Jiahao's decision on W-933 (option A): SC1's zero round with the stand-in's refusal on, SC9 and DW4.
 
 This is the validation plan for implementing [deconvolution](../specs/deconvolution.md). It has
 three parts:
@@ -38,7 +38,7 @@ as the project guidance bounds them.
 
 | Fixture | Construction | Needs |
 | --- | --- | --- |
-| `stand_in_dw` | A Python script installed as `dw` in a temporary folder and named by `execution.deconwolf`. It accepts v0.4.5's options that the stage passes (`--iter`, `--threads`, `--gpu`, `--tilesize`, `--noplan`, `--float`, `--offset`, `--out`, the image and the PSF). It writes the float32 output y = x + 5 untiled and y = x tiled, so that the expected copy is known exactly, and a log with `scaling:` and `Iteration` lines. Unless `--noplan` or `--gpu` is given, it writes `fftw_wisdom_float_inplace_threads_<n>.dat` where v0.4.5 would: under `$HOME/.config/deconwolf/` when `$HOME/.config` exists, else in its working directory. It appends its arguments, `HOME`, `OMP_NUM_THREADS`, its working directory and the wisdom files it found to a call log. `--version` prints a v0.4.5 text. Options make it fail on a given channel, or write an output whose minimum breaks the offset rule. | hand-built |
+| `stand_in_dw` | A Python script installed as `dw` in a temporary folder and named by `execution.deconwolf`. It accepts v0.4.5's options that the stage passes (`--iter`, `--threads`, `--gpu`, `--tilesize`, `--noplan`, `--float`, `--offset`, `--out`, the image and the PSF). It writes the float32 output y = x + 5 untiled and y = x tiled, so that the expected copy is known exactly, and a log with `scaling:` and `Iteration` lines. Unless `--noplan` or `--gpu` is given, it writes `fftw_wisdom_float_inplace_threads_<n>.dat` where v0.4.5 would: under `$HOME/.config/deconwolf/` when `$HOME/.config` exists, else in its working directory. It appends its arguments, `HOME`, `OMP_NUM_THREADS`, its working directory and the wisdom files it found to a call log, before it reads its input, so that a refused call is logged too and an empty log shows that it was not called (W-933). `--version` prints a v0.4.5 text. Options make it fail on a given channel, or write an output whose minimum breaks the offset rule. | hand-built |
 | `input_root` | A synthetic input root of 2 FOVs × 2 rounds × 2 labels, 8 × 32 × 32 uint8, sparse Gaussian spots, in the default `{round}/{fov}` layout, with `fovs.csv`, a codebook and one reference stain label, `dapi`, in the reference round's folder beside its sequencing labels `ch00` and `ch01`. Raw names hold the FOV id, as real names do (`Position001_ch00.tif`). `voxel_size_xy` 0.1 and `voxel_size_z` 0.3. Every channel is a plain TIFF written by `tifffile.imwrite` without `starfinder_metadata`, the case of raw microscope files: `load_volume` reports `metadata_source` `unknown`, and each channel's frame is built from its own path (`io/tiff.py:260`, `:268`). | hand-built |
 | `input_root_stored` | `input_root` with every channel written by `save_volume` with one `ImageMetadata` per round folder: frame id `raw:<round>/<fov>`, spacing (0.3, 0.1, 0.1) µm, a non-zero origin. All channels of a folder share it, so the raw round loads. | hand-built |
 | `workflow_examples` | The worked-example configurations of `test/workflow_examples.py` (X), with a `deconvolution` block added per row. | existing |
@@ -85,7 +85,7 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 
 | # | Check | Fixture | Expected | Tolerance | Needs |
 | --- | --- | --- | --- | --- | --- |
-| SC1 | Offset and stretch factor, untiled (the default uint8) | `stand_in_dw`, untiled, the default `dtype` | The stand-in returns x + 5. With M the maximum of x over the round's channels and f = 255 / M, each copy file equals `clip(rint(x × f), 0, 255)` of its raw channel as uint8, with one f for all channels of the round. The record says kept offset 5 and holds f and M under `storage`. A round whose x is all 0 stores zeros, with f = 1. | exact (integer arrays; f and M as the float64 the record holds) | H |
+| SC1 | Offset and stretch factor, untiled (the default uint8) | `stand_in_dw`, untiled, the default `dtype` | The stand-in returns x + 5. With M the maximum of x over the round's channels and f = 255 / M, each copy file equals `clip(rint(x × f), 0, 255)` of its raw channel as uint8, with one f for all channels of the round. The record says kept offset 5 and holds f and M under `storage`. A round whose x is all 0 stores zeros, with f = 1, untiled and tiled, with the stand-in's refusal of a maximum below 1 on: the stand-in is not called, the record's planning is `none` and no wisdom is looked up (a store whose manifest does not parse fails a round with signal and not this one), and each channel's record names the skip as in SC9 (amended 2026-11-22, W-933). | exact (integer arrays; f and M as the float64 the record holds) | H |
 | SC1b | Offset and scale, untiled (uint16) | as SC1 with `dtype: uint16`, scale 64 | Each copy file equals `clip(rint(x × 64), 0, 65535)` of its raw channel as uint16. | exact (integer arrays) | H |
 | SC2 | Offset and scale, tiled | as SC1 and SC1b with `tile_size` | Kept offset 0; the same expected array. | exact | H |
 | SC3 | The offset rule is checked | `stand_in_dw` writing an untiled output with minimum 0; `stand_in_dw` whose `--version` names 0.4.6 | Each task fails, naming the rule or the version; no copy file or record is left; the failed record lists what was removed. A tiled output with minimum 5 does not fail, and its record holds the minimum. | exact (exit status, strings) | H |
@@ -94,6 +94,7 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 | SC6 | The file and its metadata | the copies of SC1 from `input_root` (plain TIFFs) and from `input_root_stored` | ZYX uint8 (SC1) and uint16 (SC1b), TIFF Compression 8 and no Predictor tag (W-909's codec). Only `<label>.tif` files lie in the image folder. From `input_root`: no copy file holds `starfinder_metadata`, and `load_volume` reports `metadata_source` `unknown` for each, as for its raw file. From `input_root_stored`: each copy file holds `starfinder_metadata` equal, field for field, to its raw file's, and `load_volume` reports `stored`. | exact (tags, strings, dataclass equality) | H |
 | SC7 | The copy loads as the raw round loads | the copies of SC6; `load_round` with the configured labels on the raw folder and on `<copy>/<image dir>`, for every round with two or more channels, the reference round with its stains included | Both loads succeed through the same loader, neither raising "channel frames differ" or "channel geometry differs". Labels are in configured order, the dtype is the copy's (uint8 by default), and the arrays are SC1's. The geometry (`spacing_zyx`, `origin_zyx`, `direction_zyx`, `spatial_unit`) of the copy's round equals the raw round's. From `input_root`, the copy round's frame id is the copy folder's resolved path, as the raw round's is its folder's (`io/tiff.py:449`). From `input_root_stored`, the two rounds' `ImageMetadata` are equal, the frame id included. A negative control stores the raw file's path-built `ImageMetadata` in each copy file of a plain round: `load_round` then raises "channel frames differ", which is the defect this rule avoids. A `fov` task of `workflow_examples` with the block runs to `succeeded` on the copy of each fixture. | exact (strings, dataclass equality, integer arrays) | H, WF |
 | SC8 | The warning for intensities across FOVs | a plan with the block at the default `dtype` and a preprocessing step with `fit: supplied`; one with a `global` spot threshold; one with an `absolute` threshold; the three again with `dtype: uint16` | The first three plans warn once each among the plan's warnings, naming `dtype: uint16`; the uint16 plans, and a uint8 plan that feeds none of the three, do not warn; no plan is refused. | exact (strings) | H |
+| SC9 | A channel of zeros skips deconwolf | `stand_in_dw` with its refusal of a maximum below 1 on; `ch01` of `round1` written all 0 beside `ch00` with signal; untiled and tiled, at the default `dtype` and at `dtype: uint16`, scale 64; then `ch01` written as float32, all 0 but two voxels of 0.5 and 0.25; then the zero round run twice into one absolute `copy_root`, and again after `ch01` is rewritten with spots (added 2026-11-22, W-933) | The stand-in is called once, for `ch00`, and never for `ch01`. `ch01` stores zeros in the copy's dtype. `ch00` equals SC1's (or SC1b's) expected array with f = 255 / M, M the maximum of `ch00`'s x alone. `ch01`'s record holds `deconwolf_skipped: true`, `skip_reason` "raw values all 0; deconwolf v0.4.5 refuses a maximum below 1", null `arguments`, `iterations_done`, `float_min`, `float_max`, `kept_offset`, `wall_s` and `cpu_s`, `max_after_offset` 0 and no clipped voxel, and its log names the skip; `ch00`'s holds `deconwolf_skipped: false`. The float channel fails the task before the stand-in is called (an empty call log), with a message naming the round, the channel, its maximum 0.5 and deconwolf's floor of 1; no copy file or round record is left. The second run reuses the round with no stand-in call and the copy keeps every file's bytes and modification time; after the rewrite the round is redone, the stand-in called for both channels. | exact (integer arrays, calls, strings; f and M as the float64 the record holds) | H |
 
 ### The PSF (PS)
 
@@ -149,6 +150,7 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 | DW1 | The options exist | `real_dw` | `dw --version` names 0.4.5. `dw --help` lists every option the stage passes: `--iter`, `--threads`, `--gpu`, `--tilesize`, `--noplan`, `--offset`, `--out` and `--float`. If `--float` is missing, the specification's fallback (deconwolf's uint16 and its logged scale) is the implemented path, and RD1's and RD1b's bounds gain one step of that scale. | exact (strings) | D |
 | DW2 | The offset rule and determinism | `real_dw`, 16 × 64 × 64 point sources blurred by `psf_small`, CPU, `--noplan`, 3 iterations; the peak in its own untiled run at 6 iterations | The untiled float output's minimum is within 0.5 of 5; a tiled run (`--tilesize 32`) has minimum below 0.5. Two untiled runs at 1 and 2 threads are byte-identical (W-916: thread counts change no byte). In its own untiled run with `--iter 6`, the brightest point's peak less the offset 5 rises above its input value. v0.4.5's `--iter 3` makes two Richardson–Lucy updates, after which the output at that point, offset included, is 25.28 against the input's 28.35; at `--iter 6` the peak less 5 measured 54.355 on the CPU, the A5000 and the A30 (amended 2026-11-22, Jiahao's decision D2, W-929). | exact (hashes); the 0.5 bands of W-916 | D |
 | DW3 | The stage on the real binary | `input_root` with `real_dw`, CPU | The tasks succeed; SC6 and RC1 hold; the record's planning is `estimate`. | exact | D, S if over 5 s |
+| DW4 | A channel of zeros on the real binary | `input_root` with `ch01` of `round1` all 0, `real_dw`, CPU (added 2026-11-22, W-933) | The task succeeds, although v0.4.5 refuses an image whose maximum is below 1. `ch01` stores zeros and its record names the skip as in SC9; `ch00` is deconvolved (`iterations_done` 3) and the round's M is its maximum after the offset. | exact (integer arrays, record keys, strings) | D, S if over 5 s |
 
 ### MATLAB (MT)
 
@@ -158,9 +160,9 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 
 ### What the default tier covers
 
-PL1–PL8 with PL2b, EN1, SC1–SC8 with SC1b, PS1, PS2, WI1–WI7, RC1–RC5, RU1–RU4, RU6–RU10 and MT1 run in the
+PL1–PL8 with PL2b, EN1, SC1–SC9 with SC1b, PS1, PS2, WI1–WI7, RC1–RC5, RU1–RU4, RU6–RU10 and MT1 run in the
 routine tier, each under 5 s on one CPU or marked `slow`. EN2 and EN3 run in the engine
-selections; PS3, PS4 and RU11 where the extra is installed; DW1–DW3 where the binary is. The implementation reports the measured
+selections; PS3, PS4 and RU11 where the extra is installed; DW1–DW4 where the binary is. The implementation reports the measured
 time of every new test that takes 1 s or more.
 
 ## Image checks
@@ -234,7 +236,8 @@ PL1's C1 and X4, is not counted). The times were measured under the records' tra
 them somewhat (W-923's run folder, `results/tables/new-tests-1s.csv`). W-928, the repair of W-923's review,
 measured the RU1 and RU4 rows again with the tests it added, and its repair the RC4 and RU6 rows (W-928's run folder,
 the same table). W-929 measured the WI6 row again with its new test, 6.8 s and 0.4 s (W-929's run folder,
-`results/tables/new-tests.csv`). No test but EN2, EN3,
+`results/tables/new-tests.csv`). W-933 measured the SC1 and SC9 rows with its tests (W-933's run folder, the same
+table). No test but EN2, EN3,
 WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are marked `slow`.
 `test_workflow_deconvolution_docs_contract.py` checks that every row names tests that exist.
 
@@ -250,7 +253,7 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
   `nextflow` and `slow`. `test_ru1_ru2_ru3_verified_reuse` runs the same reuse by the task commands. RU5 runs in the
   routine tier (3.7 s). WI6's command test is `slow` (6.5 s under the tracer, 6.8 s in W-929's run: two concurrent `starfinder deconvolve wisdom` processes and a stand-in
   that waits 1 s). PS3, PS4 and RU11 skip without
-  psfmodels, naming the extra; DW1 to DW3 skip without `dw` on PATH or `STARFINDER_TEST_DECONWOLF`, and so do
+  psfmodels, naming the extra; DW1 to DW4 skip without `dw` on PATH or `STARFINDER_TEST_DECONWOLF`, and so do
   WI6's run of `starfinder deconvolve wisdom` on the real binary and DW2's peak run at 6 iterations (W-929), which
   the image's evidence issue runs.
   X4 (PL1) is `extended`; G3 runs in `benchmarks/orchestration_golden_evidence.py`, which the
@@ -270,8 +273,9 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
   (`src/dw.c`: "ERROR: The image has too low intensity, can not continue!", exit 1), writing nothing. WI6 also checks
   that it refuses the volume uniform on [0, 1) that `starfinder deconvolve wisdom` wrote before W-929, and that the
   command's volume, with values from 1 to 255, makes the key's file; on the real binary it checks that the store
-  holds the key. SC1's round of zeros turns the refusal off: it checks the stage's rule for a zero round, which
-  v0.4.5 itself would refuse (W-929).
+  holds the key. SC1's round of zeros ran with the refusal off from W-929 until W-933, which made the stage skip
+  deconwolf for a channel of zeros: since then SC1 and SC9 run with the refusal on, and the call log shows that the
+  stand-in was not called for such a channel.
 
 (deconvolution-implemented-checks)=
 
@@ -289,7 +293,7 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
 | EN1 | `test_workflow_deconvolution_plan.py` | `test_en1_snakemake` | 4.4 |
 | EN2 | `test_workflow_deconvolution_engines.py` | `test_en2_nextflow` | 42.8 |
 | EN3 | `test_workflow_deconvolution_engines.py` | `test_en3_the_engines_agree` | 60.0 |
-| SC1 | `test_workflow_deconvolution_tasks.py` | `test_sc1_sc2_offset_and_stretch_factor`, `test_sc1_a_round_of_zeros_stores_zeros` | 1.1 |
+| SC1 | `test_workflow_deconvolution_tasks.py` | `test_sc1_sc2_offset_and_stretch_factor`, `test_sc1_a_round_of_zeros_stores_zeros` | 2.5 |
 | SC1b | `test_workflow_deconvolution_tasks.py` | `test_sc1b_sc2_offset_and_scale_uint16` | — |
 | SC2 | `test_workflow_deconvolution_tasks.py` | `test_sc1_sc2_offset_and_stretch_factor`, `test_sc1b_sc2_offset_and_scale_uint16` | 1.5 |
 | SC3 | `test_workflow_deconvolution_tasks.py` | `test_sc3_the_offset_rule_is_checked`, `test_sc3_a_tiled_minimum_of_5_does_not_fail` | — |
@@ -298,6 +302,7 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
 | SC6 | `test_workflow_deconvolution_tasks.py` | `test_sc6_the_file_and_its_metadata`, `test_sc6_the_copy_follows_image_compression` | 2.7 |
 | SC7 | `test_workflow_deconvolution_tasks.py` | `test_sc7_the_copy_loads_as_the_raw_round_loads` | 2.0 |
 | SC8 | `test_workflow_deconvolution_plan.py` | `test_sc8_the_warning_for_intensities_across_fovs`, `test_sc8_no_warning_without_a_feed` | — |
+| SC9 | `test_workflow_deconvolution_tasks.py` | `test_sc9_a_channel_of_zeros_skips_deconwolf`, `test_sc9_a_float_channel_below_1_fails_before_deconwolf`, `test_sc9_reuse_of_a_round_with_a_skipped_channel` | 1.6 |
 | PS1 | `test_workflow_deconvolution_tasks.py` | `test_ps1_centring` | — |
 | PS2 | `test_workflow_deconvolution_tasks.py` | `test_ps2_a_supplied_file` | — |
 | PS3 | `test_workflow_deconvolution_tasks.py` | `test_ps3_generation` | skips here (P) |
@@ -328,4 +333,5 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
 | DW1 | `test_workflow_deconvolution_tasks.py` | `test_dw1_the_options_exist` | skips here (D) |
 | DW2 | `test_workflow_deconvolution_tasks.py` | `test_dw2_the_offset_rule_and_determinism`, `test_dw2_the_peak_rises_at_6_iterations` | skips here (D) |
 | DW3 | `test_workflow_deconvolution_tasks.py` | `test_dw3_the_stage_on_the_real_binary` | skips here (D) |
+| DW4 | `test_workflow_deconvolution_tasks.py` | `test_dw4_a_channel_of_zeros_on_the_real_binary` | skips here (D) |
 | MT1 | `test_workflow_deconvolution_plan.py` | `test_mt1_matlab_is_untouched` | — |

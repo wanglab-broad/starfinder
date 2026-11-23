@@ -336,7 +336,11 @@ The block needs `voxel_size_xy` and `voxel_size_z`. A generated PSF needs the
   statistic (`fit: supplied`) or a `global` or `absolute` spot threshold.
   `dtype: uint16` stores rint(value × scale) instead, with one `scale` (64 by
   default, or one per round and label) for every FOV. The files are TIFF with the
-  codec of `execution.image_compression` (zlib by default).
+  codec of `execution.image_compression` (zlib by default). A channel whose raw
+  values are all 0 is not passed to deconwolf, which refuses an image whose maximum
+  is below 1: it stores zeros, counts as 0 in the round's maximum, and its record
+  says `deconwolf_skipped: true` with the reason. A channel that is not all 0 but
+  has its maximum below 1 fails the task before deconwolf runs.
 * **Reuse.** A `deconvolve` task whose round is already in the copy reuses it when
   the raw files, the PSFs and the outputs have the SHA-256 that its record holds,
   and runs no deconwolf, under Snakemake and Nextflow alike; the copy's files keep

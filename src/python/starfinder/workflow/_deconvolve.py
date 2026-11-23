@@ -38,6 +38,10 @@ DECONWOLF_VERSION = "0.4.5"
 OFFSET = 5
 #: An untiled output whose minimum is below this has not kept the offset.
 UNTILED_MINIMUM = 4.5
+#: deconwolf v0.4.5 refuses an image whose maximum is below this ("ERROR: The image has too low intensity, can not
+#: continue!", exit 1; ``src/dw.c`` 2522–2532). A channel whose raw values are all 0 skips deconwolf (W-933).
+DECONWOLF_FLOOR = 1.0
+SKIP_REASON = f"raw values all 0; deconwolf v{DECONWOLF_VERSION} refuses a maximum below 1"
 WISDOM_FORMAT = "starfinder.deconwolf-wisdom/1"
 WISDOM_MANIFEST = "manifest.json"
 #: psfmodels' defaults that a generated PSF uses and records (W-855): coverslip, working distance, oversampling.
@@ -461,7 +465,30 @@ def deconvolve(run):
         _deconvolve_round(run, entry, copy, records, inputs, psfs)
 
 
+def _skipped(path):
+    """(whether the raw channel at ``path`` is all 0, its maximum): a channel of zeros skips deconwolf (W-933)."""
+    from starfinder.io import load_volume
+    image = load_volume(path).image
+    if not image.any():
+        return True, 0.0
+    return False, float(image.max())
+
+
 def _deconvolve_round(run, entry, copy, records, inputs, psfs):
+    """Deconvolve the round's channels and write the copy's files, the logs and the round's record
+    (design/specs/deconvolution.md, "The scaling", "Records").
+
+    The task first reads every channel and takes its maximum, before it calls deconwolf. A channel whose raw values
+    are all 0 is not passed to deconwolf, untiled or tiled, since v0.4.5 refuses a maximum below 1 (``src/dw.c``): its
+    values after the offset are 0, the exact deconvolution of zeros. Its record says ``deconwolf_skipped: true`` with
+    ``skip_reason`` and ``max_after_offset`` 0, and its deconwolf fields (``arguments``, ``iterations_done``,
+    ``float_min``, ``float_max``, ``kept_offset``, ``wall_s``, ``cpu_s``) are null; its log, a declared output, holds
+    one line naming the skip. It stores zeros and takes part in the round's maximum M as 0. A channel that is not all 0
+    but whose maximum is below 1 (a float input) fails the task before deconwolf is called, naming the round, the
+    channel and its maximum. The planning is decided at the first channel passed to deconwolf; a round with none
+    records ``{mode: none}`` and looks up no wisdom. Then each other channel is deconvolved to float32 in the private
+    temporary folder, M is taken over the round, and each channel's file is written with the round's factor (uint8) or
+    its scale (uint16)."""
     from starfinder.io import load_volume, save_volume
     from starfinder.workflow._commands import image_compression
     from starfinder.workflow._plan import package_identity
@@ -469,6 +496,13 @@ def _deconvolve_round(run, entry, copy, records, inputs, psfs):
     started_at = _now()
     block, execution = run.configuration["deconvolution"], run.configuration["execution"]
     name, labels = entry["round"], entry["labels"]
+    skipped = {}
+    for label in labels:
+        skipped[label], peak = _skipped(inputs[label][0])
+        if not skipped[label] and peak < DECONWOLF_FLOOR:
+            raise ValueError(f"round {name}, channel {label}: its raw maximum is {peak}, below deconwolf "
+                             f"v{DECONWOLF_VERSION}'s floor of {DECONWOLF_FLOOR:g} (it refuses an image whose maximum "
+                             "is below 1, src/dw.c), and the channel is not all 0; it is not passed to deconwolf")
     gpu = bool(run.task["execution"]["gpu"])
     threads = 1 if gpu else int(run.task["execution"]["threads"])
     tile = block["tile_size"]
@@ -486,6 +520,19 @@ def _deconvolve_round(run, entry, copy, records, inputs, psfs):
             loaded = load_volume(path)
             image = loaded.image
             metadata[label] = loaded.metadata if loaded.diagnostics["metadata_source"] == "stored" else None
+            described = {"path": str(path), "file_sha256": digest, "dtype": str(image.dtype),
+                         "shape": list(image.shape), "sha256": image_sha256(image)}
+            if skipped[label]:
+                channels.append({
+                    "label": label, "input": described,
+                    "psf": {"path": f"{PSF_DIR}/{label}.tif", "file_sha256": psfs[label][1]},
+                    "deconwolf_skipped": True, "skip_reason": SKIP_REASON, "iterations_done": None,
+                    "float_min": None, "float_max": None, "kept_offset": None, "max_after_offset": 0.0,
+                    "clipped_low": 0, "arguments": None, "wall_s": None, "cpu_s": None})
+                logs[label] = tmp / f"{label}.dw.log"
+                logs[label].write_text(f"deconwolf skipped for {label} of round {name}: {SKIP_REASON}\n")
+                logger.info(f"{label} of round {name}: {SKIP_REASON}; deconwolf skipped, the copy stores zeros")
+                continue
             if planning is None:
                 planning = _planning(execution, gpu, image.shape, psfs[label][0], block, threads, identity, home)
             source = tmp / f"{label}.input.tif"
@@ -523,10 +570,8 @@ def _deconvolve_round(run, entry, copy, records, inputs, psfs):
             values = y - kept
             done = [int(n) for n in re.findall(r"Iteration\s+(\d+)", decoded)]
             channels.append({
-                "label": label,
-                "input": {"path": str(path), "file_sha256": digest, "dtype": str(image.dtype),
-                          "shape": list(image.shape), "sha256": image_sha256(image)},
-                "psf": {"path": f"{PSF_DIR}/{label}.tif", "file_sha256": psfs[label][1]},
+                "label": label, "input": described,
+                "psf": {"path": f"{PSF_DIR}/{label}.tif", "file_sha256": psfs[label][1]}, "deconwolf_skipped": False,
                 "iterations_done": max(done) if done else None, "float_min": lowest, "float_max": highest,
                 "kept_offset": kept, "max_after_offset": float(max(values.max(), 0.0)),
                 "clipped_low": int((values < 0).sum()), "arguments": argv, "wall_s": wall, "cpu_s": cpu})
@@ -540,8 +585,11 @@ def _deconvolve_round(run, entry, copy, records, inputs, psfs):
         saturated = 0
         for channel in channels:
             label = channel["label"]
-            values = np.clip(_float_output(outputs[label], identity, logs[label].read_text(errors="replace"), label)
-                             - kept, 0, None)
+            if channel["deconwolf_skipped"]:
+                values = np.zeros(channel["input"]["shape"], dtype=np.float64)
+            else:
+                values = np.clip(_float_output(outputs[label], identity, logs[label].read_text(errors="replace"),
+                                               label) - kept, 0, None)
             if block["dtype"] == "uint8":
                 scaled = np.rint(values * storage["stretch_factor"])
                 stored = np.clip(scaled, 0, 255).astype(np.uint8)
@@ -566,7 +614,10 @@ def _deconvolve_round(run, entry, copy, records, inputs, psfs):
             with atomic_file(target) as tmp_file:
                 shutil.copyfile(logs[channel["label"]], tmp_file)
             channel["log"] = {"path": f"{channel['label']}.dw.log", "sha256": file_sha256(target)}
-        device = ({"kind": "gpu", "opencl_device": _opencl_device(logs[labels[0]].read_text(errors="replace")),
+        if planning is None:
+            planning = {"mode": "none", "reason": "no channel passed to deconwolf"}
+        first = next((logs[c["label"]] for c in channels if not c["deconwolf_skipped"]), None)
+        device = ({"kind": "gpu", "opencl_device": _opencl_device(first.read_text(errors="replace")) if first else None,
                    "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES")} if gpu else
                   {"kind": "cpu", "cpu_model": cpu_identity()["model"], "threads": threads})
         record = {

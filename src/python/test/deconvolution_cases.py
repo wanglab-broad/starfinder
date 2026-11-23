@@ -8,7 +8,8 @@ or ``--gpu`` is given, appends to ``fftw_wisdom_float_inplace_threads_<n>.dat`` 
 v0.4.5, it refuses an input whose maximum is below ``MIN_INTENSITY`` (1) with v0.4.5's message and exit status 1,
 writing nothing. Each call
 appends its arguments, ``HOME``, ``OMP_NUM_THREADS``, its working directory and the wisdom files it found to a call
-log. ``input_root`` is 2 FOVs × 2 rounds × 2 labels of 8 × 32 × 32 uint8 with sparse Gaussian spots and the reference
+log, before it reads its input: a refused call is logged too, and an empty log shows that it was not called (W-933).
+``input_root`` is 2 FOVs × 2 rounds × 2 labels of 8 × 32 × 32 uint8 with sparse Gaussian spots and the reference
 stain ``dapi`` in the reference round's folder; ``stored=True`` writes each channel with ``save_volume`` and one
 ``ImageMetadata`` per round folder.
 """
