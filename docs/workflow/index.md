@@ -363,7 +363,9 @@ The block needs `voxel_size_xy` and `voxel_size_z`. A generated PSF needs the
   stored plan matched the job deconwolf reported. Wisdom applies only to border
   quality 2, untiled: the command refuses other settings, and a task with them runs
   `--noplan` without reading the store (W-939). The {doc}`UGER guide <broad-uger>`
-  gives the resources and how to make the store again after W-937.
+  gives the resources and how to make the store again after W-937. The image's deconwolf
+  build is reproducible, so a store stays valid across rebuilds of the image; plan it again
+  only when the build recipe, and so the binary's pinned SHA-256, changes (W-936).
 
 ## Limits
 

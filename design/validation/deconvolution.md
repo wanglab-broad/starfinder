@@ -1,6 +1,6 @@
 # Validation design: the deconvolution stage
 
-% Status: Approved with the specification (Jiahao, 2026-11-21, W-918); the scaling checks follow decision 3 as changed. Written against `70edc72` (v0.3.0). Amended 2026-11-22 by Jiahao's decision on W-933 (option A): SC1's zero round with the stand-in's refusal on, SC9 and DW4. Amended 2026-11-23 by Jiahao's decision on W-937 (A1 and A2): WI4, WI6, the new WI8 and DW5, and the stand-in's `image/psf/job` line. Amended 2026-11-23 by Jiahao's decision on W-939 (option C): WI3, WI6 and the new DW6.
+% Status: Approved with the specification (Jiahao, 2026-11-21, W-918); the scaling checks follow decision 3 as changed. Written against `70edc72` (v0.3.0). Amended 2026-11-22 by Jiahao's decision on W-933 (option A): SC1's zero round with the stand-in's refusal on, SC9 and DW4. Amended 2026-11-23 by Jiahao's decision on W-937 (A1 and A2): WI4, WI6, the new WI8 and DW5, and the stand-in's `image/psf/job` line. Amended 2026-11-23 by Jiahao's decision on W-939 (option C): WI3, WI6 and the new DW6. Amended 2026-11-24 by Jiahao's decision on W-936 (option A): the new IB1 and IM5.
 
 This is the validation plan for implementing [deconvolution](../specs/deconvolution.md). It has
 three parts:
@@ -155,6 +155,12 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 | DW5 | The PSF crop on the real binary | `real_dw`; `starfinder deconvolve wisdom` with the command's old PSF, exp(−r²/2) with σ = 1 voxel, 21 × 33 × 33, sum 1, on a 30 × 64 × 64 volume; then with `psf_small`, which deconwolf does not crop, on `input_root`'s 8 × 32 × 32 at 2 threads, and two stage runs into two output roots with that PSF and that store (added 2026-11-23, W-937) | The old PSF: exit 1, the message naming the reported PSF 21 × 7 × 7 and job 50 × 70 × 70 (deconwolf's `psf: [7x7x21], job: [70x70x50]`, the coordinating session's reproduction) against the key's 50 × 96 × 96, and no store folder written. `psf_small`: the command succeeds and its entry reports the key's job 14 × 40 × 40; both runs deconvolve (not reused) with planning `measure` and that key, each channel reports the key's job and `plan_matched: true`, the two copies' files are byte-identical, and the store is unchanged. | exact (strings, hashes) | D, S |
 | DW6 | The job at other settings on the real binary | `real_dw`; `psf_small` (7 × 9 × 9, not cropped) on the command's synthetic volume of 8 × 64 × 64 (`1 + 254 u`, seed 0), planning on, 1 thread, in a private HOME, at `--bq 1` and at `--tilesize 49` (added 2026-11-23, W-939) | In both runs deconwolf exits 0, prints its `image/psf/job` line, reports the PSF 7 × 9 × 9, and reports a job that differs from the key's image + PSF − 1, 14 × 72 × 72. The probe of W-937 found 12 × 197 × 197 at `--bq 1` and 14 × 124 × 124 per tile at `--tilesize 96` on 8 × 192 × 192. 49 is the smallest tile size the specification's tile rule allows for this PSF (its lateral size 9 plus 20 on each side), and a larger one that still tiles a volume within 32 × 64 × 64 divides the 64-pixel side no better, so the row uses it. The row asserts nothing about the tile's reported shape beyond the difference. | exact (integer lists) | D, S |
 
+### The image build (IB)
+
+| # | Check | Fixture | Expected | Tolerance | Needs |
+| --- | --- | --- | --- | --- | --- |
+| IB1 | The `Containerfile` pins a reproducible deconwolf build (added 2026-11-24, W-936) | the repository's `Containerfile`, read as text; no image is built | The `build-deconwolf` stage sets `SOURCE_DATE_EPOCH` 1741767906 as `ARG` and `ENV`, before its CMake step. Its apt sources are `snapshot.debian.org` at one timestamp for the three suites, with `Check-Valid-Until`, and are set before the stage's `apt-get`; no other stage names the snapshot. `ARG DECONWOLF_SHA256` has a default of 64 hexadecimal digits, which the `runtime` stage checks with `sha256sum -c` before its label. IM5 checks the pinned value on real builds. | exact (strings) | H |
+
 ### MATLAB (MT)
 
 | # | Check | Expected | Needs |
@@ -163,7 +169,7 @@ factor per round), and SC1b its option, SC1 (uint16 with a scale).
 
 ### What the default tier covers
 
-PL1–PL8 with PL2b, EN1, SC1–SC9 with SC1b, PS1, PS2, WI1–WI8, RC1–RC5, RU1–RU4, RU6–RU10 and MT1 run in the
+PL1–PL8 with PL2b, EN1, SC1–SC9 with SC1b, PS1, PS2, WI1–WI8, RC1–RC5, RU1–RU4, RU6–RU10, IB1 and MT1 run in the
 routine tier, each under 5 s on one CPU or marked `slow`. EN2 and EN3 run in the engine
 selections; PS3, PS4 and RU11 where the extra is installed; DW1–DW6 where the binary is. The implementation reports the measured
 time of every new test that takes 1 s or more.
@@ -180,6 +186,7 @@ image record, not of the suite.
 | IM2 | RedHat 8 starts it | one UGER CPU node with `operating_system=RedHat8`, the SIF through `apptainer exec` | DW1 and DW2 pass inside the SIF: the case where W-916's host binary failed (glibc 2.29 against 2.28; libraries missing). One job, under 0.25 slot-h. |
 | IM3 | The GPU in the image | one UGER GPU node (A30), `apptainer exec --nv`, `CUDA_VISIBLE_DEVICES` set to a GPU without a compute process | DW2 with `--gpu` passes. deconwolf's log names an A30. While it runs, `nvidia-smi --query-compute-apps` shows its process on the chosen GPU only. One job, under 0.25 slot-h. |
 | IM4 | The host's GPU | GP099-29C, `docker run --gpus` or `apptainer --nv`, the RTX A5000 | As IM3, on the card of W-915. |
+| IM5 | A reproducible build (added 2026-11-24, W-936; run by the coordinating session after the merge) | a builder with network access, two `--no-cache` builds of `--target build-deconwolf` on different UTC days, exporting `/opt/deconwolf` | `dw` has the `Containerfile`'s pinned SHA-256 (95bb636d…) in both builds, and `libtrafo.so` has aea01a98…; the two `dw` files are equal. If the SHA-256 differs, the first build's value and the first differing section (`cmp -l`, `readelf -S`) are reported and the pin is not changed by the check. It skips where no builder is available, as IM1–IM4 skip. One build is about 1 min and the export small. |
 
 ## Real-data checks (separate evidence issue)
 
@@ -240,7 +247,7 @@ them somewhat (W-923's run folder, `results/tables/new-tests-1s.csv`). W-928, th
 measured the RU1 and RU4 rows again with the tests it added, and its repair the RC4 and RU6 rows (W-928's run folder,
 the same table). W-929 measured the WI6 row again with its new test, 6.8 s and 0.4 s (W-929's run folder,
 `results/tables/new-tests.csv`). W-933 measured the SC1 and SC9 rows with its tests (W-933's run folder, the same
-table), and W-937 the WI4, WI6 and WI8 rows (W-937's run folder, the same table). W-939's new tests each take under 1 s here. No test but EN2, EN3,
+table), and W-937 the WI4, WI6 and WI8 rows (W-937's run folder, the same table). W-939's new tests each take under 1 s here, and so does W-936's IB1. No test but EN2, EN3,
 WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are marked `slow`.
 `test_workflow_deconvolution_docs_contract.py` checks that every row names tests that exist.
 
@@ -261,6 +268,8 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
   the image's evidence issue runs. DW5's two stage runs on the real binary are `slow`; its refusal of the old PSF is
   not (W-937). DW6's two runs are `slow`, as no real-binary time is known here (W-939); the coordinating session runs
   DW6 in the image after the merge, with DW1 to DW5.
+  IB1 (W-936) reads the `Containerfile` as text and builds no image; IM5, the two builds on different UTC days,
+  is run by the coordinating session after the merge.
   X4 (PL1) is `extended`; G3 runs in `benchmarks/orchestration_golden_evidence.py`, which the
   coordinating session runs.
 * **What differs from the rows above.** PL3's stain label equal to a sequencing label is refused
@@ -350,4 +359,5 @@ WI6 and RU1's two engine tests takes 5 s or more in one parameter, and those are
 | DW4 | `test_workflow_deconvolution_tasks.py` | `test_dw4_a_channel_of_zeros_on_the_real_binary` | skips here (D) |
 | DW5 | `test_workflow_deconvolution_tasks.py` | `test_dw5_the_command_refuses_a_psf_deconwolf_crops`, `test_dw5_a_matched_plan_on_the_real_binary` | skips here (D) |
 | DW6 | `test_workflow_deconvolution_tasks.py` | `test_dw6_the_job_is_not_image_plus_psf_at_other_settings` | skips here (D) |
+| IB1 | `test_workflow_deconvolution_containerfile.py` | `test_ib1_the_deconwolf_stage_is_a_reproducible_build`, `test_ib1_only_the_deconwolf_stage_uses_the_snapshot_and_the_runtime_stage_checks_the_pinned_binary` | — |
 | MT1 | `test_workflow_deconvolution_plan.py` | `test_mt1_matlab_is_untouched` | — |
