@@ -35,12 +35,23 @@
 #
 # deconwolf v0.4.5 (the deconvolution stage, design/specs/deconvolution.md, decision 6) is built from source in the
 # stage `build-deconwolf`, from the tag's archive pinned by its SHA-256, and copied with its libraries into
-# `runtime`, so that `cpu`, `learned` and `learned-cuda` all have `dw`. Its SHA-256 is a label: build that stage first,
-# take the binary's SHA-256 and pass it in, and the build stops if the binary differs:
+# `runtime`, so that `cpu`, `learned` and `learned-cuda` all have `dw`. The build is reproducible (W-936): the stage sets
+# SOURCE_DATE_EPOCH to the v0.4.5 commit's time, so that GCC's `__DATE__` (and so the binary and its build-id) no longer
+# follows the build's day, and takes its apt packages from one snapshot.debian.org timestamp. Builds on different UTC days
+# then give one `dw`, whose SHA-256 is the default of `DECONWOLF_SHA256` below: the wisdom store's key holds it
+# (design/specs/deconvolution.md, "FFTW wisdom"), so a binary that changes with every build would make every stored plan
+# unmatched. The `runtime` stage checks the binary against that argument, so a build whose `dw` differs stops there. The
+# coordinating session's probe (runs/W-936/20261124T0315Z-repro-probe) showed it, and IM5 of
+# design/validation/deconvolution.md repeats it: two `--no-cache` builds of the stage on different UTC days give `dw` equal
+# to the default (95bb636d…) and `libtrafo.so` aea01a98….
+#
+# When the recipe changes on purpose (a new deconwolf version, a new snapshot date, new compiler flags), rebuild the stage
+# and take the new SHA-256, then update the default of `DECONWOLF_SHA256`, and plan the wisdom store again, because its
+# keys name the old binary:
 #
 #   docker buildx build --file Containerfile --builder <docker-container builder> --target build-deconwolf \
 #     --output type=local,dest=<folder> .            # then: sha256sum <folder>/opt/deconwolf/bin/dw
-#   ... --build-arg DECONWOLF_SHA256=<that SHA-256> (with the other build arguments, every target)
+#   ... --build-arg DECONWOLF_SHA256=<that SHA-256> (with the other build arguments, every target) until the default is updated
 #
 # The source is the tag's archive, https://github.com/elgw/deconwolf/archive/refs/tags/v0.4.5.tar.gz, fetched by
 # `ADD --checksum=sha256:<its SHA-256>` as the base images are pinned by digest (W-928: the archive's pax header names
@@ -64,6 +75,14 @@ ARG CUDA_EXTRAS="--extra cuda"
 FROM ghcr.io/astral-sh/uv:0.9.28@sha256:59240a65d6b57e6c507429b45f01b8f2c7c0bbeee0fb697c41a39c6a8e3a4cfb AS uv
 
 FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS build-deconwolf
+# The apt sources of this stage only: one snapshot.debian.org timestamp (bookworm, bookworm-updates and bookworm-security,
+# as the base image uses them), so that the compiler, CMake and the headers do not change when Debian publishes an update.
+# The snapshot's Release files are accepted after their Valid-Until (`Check-Valid-Until: no`). The step stops unless both
+# URIs were replaced. To move the snapshot, change the timestamp in both URIs and read the header above.
+RUN sed -i -e 's#^URIs: http://deb.debian.org/debian$#URIs: http://snapshot.debian.org/archive/debian/20261124T000000Z#' \
+      -e 's#^URIs: http://deb.debian.org/debian-security$#URIs: http://snapshot.debian.org/archive/debian-security/20261124T000000Z#' \
+      -e '/^Signed-By:/a Check-Valid-Until: no' /etc/apt/sources.list.d/debian.sources \
+    && test "$(grep -c '^URIs: http://snapshot.debian.org/archive/' /etc/apt/sources.list.d/debian.sources)" = 2
 # bookworm's CMake 3.25 and the libraries deconwolf links: FFTW (single and double precision, with OpenMP), libtiff,
 # GSL, libpng, the OpenCL ICD loader and headers.
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake pkg-config ca-certificates \
@@ -72,6 +91,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 ADD --checksum=sha256:b9ff86f3ebb9d4b3c907d131ff018302a9eb0f5ebfb978cae29d40f75599ef67 https://github.com/elgw/deconwolf/archive/refs/tags/v0.4.5.tar.gz /src/deconwolf-0.4.5.tar.gz
 RUN mkdir /src/deconwolf && tar -xzf /src/deconwolf-0.4.5.tar.gz -C /src/deconwolf --strip-components=1 \
     && rm /src/deconwolf-0.4.5.tar.gz
+# SOURCE_DATE_EPOCH is the deconwolf v0.4.5 commit's time (ca062c49, 2025-03-12T08:25:06Z), which is the mtime of every entry
+# of the tag's archive. GCC takes `__DATE__` and `__TIME__` from it, so the binary does not hold the build's day (W-936).
+# It changes only with the deconwolf version.
+ARG SOURCE_DATE_EPOCH=1741767906
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 # -include inttypes.h: src/dw_imshift.c uses PRId64 without the header (W-915). The build folder is fixed, so the binary
 # does not depend on the host's paths.
 RUN cmake -S /src/deconwolf -B /src/build -DENABLE_GPU=ON -DCMAKE_BUILD_TYPE=Release \
@@ -158,7 +182,8 @@ RUN mkdir -p /etc/OpenCL/vendors && echo libnvidia-opencl.so.1 > /etc/OpenCL/ven
     && ln -s /opt/deconwolf/bin/dw /usr/local/bin/dw \
     && echo /opt/deconwolf/lib > /etc/ld.so.conf.d/deconwolf.conf && ldconfig \
     && ! ldd /opt/deconwolf/bin/dw | grep -q "not found"
-ARG DECONWOLF_SHA256
+# The reproduced binary's SHA-256 (W-936; see the header). Pass another only for a stage whose recipe changed on purpose.
+ARG DECONWOLF_SHA256=95bb636df6fc92a74f49350bc3bcb51ffcc73b84153c8da3b8be4cbe738edfce
 RUN echo "${DECONWOLF_SHA256}  /opt/deconwolf/bin/dw" | sha256sum -c -
 ENV PATH=/opt/starfinder/bin:$PATH OMP_NUM_THREADS=1 MPLBACKEND=Agg
 ARG STARFINDER_VERSION

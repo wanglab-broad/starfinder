@@ -161,6 +161,12 @@ task with those settings does not read the store: it runs with `--noplan` and it
 gives the reason `not border quality 2, untiled` (W-939). Tiling serves a smaller GPU, where
 the plan is VkFFT's and no store applies.
 
+A store stays valid when the image is rebuilt, because the image's deconwolf build is
+reproducible: its binary's SHA-256, which is part of the key, is the same in every build of
+one `Containerfile` recipe (below). Plan the store again only when that recipe changes on
+purpose (a new deconwolf version, a new snapshot date or new compiler flags), and so the
+pinned SHA-256 with it, or for another node type, shape, PSF or thread count.
+
 A store made before W-937 (format `starfinder.deconwolf-wisdom/1`, by the command's
 `--psf-shape`) planned on a synthetic PSF that deconwolf cropped, so its plans never
 matched a task. A task given such a store fails, naming it, and the command refuses
@@ -177,11 +183,19 @@ records it ({ref}`checkpoints-code-identity`):
 | `STARFINDER_REVISION` | The full 40-digit commit; the build stops on anything else |
 | `STARFINDER_DIRTY` | `true` or `false`: whether the build host's tracked files differ from that commit; the build stops on anything else |
 | `UV_LOCK_SHA256` | The SHA-256 of `src/python/uv.lock`; the build stops if the file differs |
-| `DECONWOLF_SHA256` | The SHA-256 of `/opt/deconwolf/bin/dw` that the stage `build-deconwolf` built (build that target first); the build stops if the binary differs, and the label `org.starfinder.deconwolf-sha256` holds it |
+| `DECONWOLF_SHA256` | Optional. The SHA-256 of `/opt/deconwolf/bin/dw` that the `runtime` stage expects; its default in the `Containerfile` is the reproduced binary's, 95bb636d…, so do not pass it. The build stops if the binary differs, and the label `org.starfinder.deconwolf-sha256` holds it |
 
 The stage `build-deconwolf` fetches deconwolf's source, the archive of its tag v0.4.5, by `ADD --checksum=sha256:…`, so
 the build stops if the archive's SHA-256 differs; that form of `ADD` needs a builder whose Dockerfile frontend is 1.6 or
 newer.
+
+The stage's build is reproducible (W-936). It sets `SOURCE_DATE_EPOCH` to the time of deconwolf's v0.4.5 commit, so that
+the compiler does not write the build's day into `dw`, and takes its apt packages from one `snapshot.debian.org`
+timestamp (20261124T000000Z; the other stages keep `deb.debian.org`). Builds on different days then give the same `dw`,
+and the SHA-256 is fixed: the default of `DECONWOLF_SHA256`. The `runtime` stage checks the binary against it, so a build
+whose `dw` differs stops there; build the stage and read `sha256sum` of `opt/deconwolf/bin/dw` only after you change the
+recipe on purpose. Then update the default in the `Containerfile` and plan the wisdom store again, as the keys name the
+old binary. The `build-deconwolf` stage needs network access to `snapshot.debian.org`.
 
 The build writes the commit and the flag into `starfinder/_build_info.py` and the image's labels
 (`org.opencontainers.image.revision`, `org.starfinder.dirty`). In the image, `starfinder._records.code()` returns that

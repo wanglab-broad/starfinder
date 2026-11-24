@@ -1,6 +1,6 @@
 # Deconvolution stage: a deconvolved TIFF + zlib copy of the images, made by deconwolf before the FOV tasks
 
-% Status: Approved (Jiahao, 2026-11-21, W-918), with decision 3 changed: uint8 with one stretch factor per (FOV, round) by default, as Huygens' exports, and uint16 with an adjustable scale on request ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`. Amended 2026-11-22 by Jiahao's decision on W-933 (option A): a channel whose raw values are all 0 skips deconwolf and stores zeros ("The scaling", "A channel of zeros skips deconwolf"). Amended 2026-11-23 by Jiahao's decision on W-937 (A1 and A2): `starfinder deconvolve wisdom` plans with the run's own PSF file, and the command and the task check the job deconwolf reports ("FFTW wisdom", "Records"). Amended 2026-11-23 by Jiahao's decision on W-939 (option C): wisdom applies only to border quality 2, untiled; the command refuses other settings and the task does not read the store for them ("FFTW wisdom", "Records").
+% Status: Approved (Jiahao, 2026-11-21, W-918), with decision 3 changed: uint8 with one stretch factor per (FOV, round) by default, as Huygens' exports, and uint16 with an adjustable scale on request ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`. Amended 2026-11-22 by Jiahao's decision on W-933 (option A): a channel whose raw values are all 0 skips deconwolf and stores zeros ("The scaling", "A channel of zeros skips deconwolf"). Amended 2026-11-23 by Jiahao's decision on W-937 (A1 and A2): `starfinder deconvolve wisdom` plans with the run's own PSF file, and the command and the task check the job deconwolf reports ("FFTW wisdom", "Records"). Amended 2026-11-23 by Jiahao's decision on W-939 (option C): wisdom applies only to border quality 2, untiled; the command refuses other settings and the task does not read the store for them ("FFTW wisdom", "Records"). Amended 2026-11-24 by Jiahao's decision on W-936 (option A, a reproducible build): the `build-deconwolf` stage sets `SOURCE_DATE_EPOCH`, takes its apt packages from one snapshot and pins the binary's SHA-256 ("deconwolf in the image", "FFTW wisdom").
 
 This page specifies deconvolution as a workflow stage of its own. Jiahao decided on 2026-11-20
 (W-855, comment 70988672) to make deconwolf the primary deconvolution and to arrange a rule for
@@ -653,6 +653,31 @@ figures are W-916's, on GP099-29C; UGER's and Google's CPUs were not measured.
   as the base images are pinned by digest. Its labels gain `org.starfinder.deconwolf=0.4.5` and the
   binary's SHA-256. `image_check.py` gains a `deconwolf` check: `dw --version` names 0.4.5 with
   OpenMP, OpenCL and VkFFT, and `ldd` finds every library.
+* **The build is reproducible, and the binary's SHA-256 is pinned** (amended 2026-11-24, W-936).
+  * **Decision.** Jiahao, 2026-11-23 at about 21:40 EST, "A：可复现构建" (option A, a reproducible build). Before it,
+    builds of the stage from the same checksummed archive and the same `Containerfile` gave a different `dw` on
+    each of three UTC days (a5669552…, 8210ed03…, e41f45a0…). The wisdom key holds the binary's SHA-256, so every
+    rebuild made every stored plan unmatched, and tasks ran `--noplan` until the store was planned again.
+  * **Why the binary differed.** Only by its compile date: between two builds, 26 of 1,088,632 bytes differ, 6 of
+    them the `__DATE__` string in `.rodata` and 20 the `.note.gnu.build-id` that follows from it (the coordinating
+    session's probe, `runs/W-936/20261124T0315Z-repro-probe`). No path and no other string differs.
+  * **What the stage sets.** `SOURCE_DATE_EPOCH` 1741767906 (2025-03-12T08:25:06Z), before the CMake step. It is
+    the v0.4.5 commit's time, the mtime of every entry of the tag's archive, and it changes only with the
+    deconwolf version. GCC takes `__DATE__` from it. The stage's apt sources are `snapshot.debian.org` at
+    `20261124T000000Z` (bookworm, bookworm-updates and bookworm-security, as the base image uses them, with
+    `check-valid-until=no`), so that the compiler and headers do not drift when Debian publishes an update; on
+    the day of the probe the snapshot gave the same 210 package versions as `deb.debian.org`. The other stages
+    keep `deb.debian.org`. No `-ffile-prefix-map`, `--build-id=none` or strip is needed.
+  * **The pinned SHA-256.** `dw` is 95bb636df6fc92a74f49350bc3bcb51ffcc73b84153c8da3b8be4cbe738edfce in the
+    probe's builds (8 builds in two builder instances, one of them under a clock set to 2027), and
+    `libtrafo.so` is aea01a98… in every build. The `Containerfile`'s `ARG DECONWOLF_SHA256` takes the `dw`
+    value as its default, so a build whose binary differs stops at the `runtime` stage's `sha256sum -c`.
+    Passing the argument is optional.
+  * **When the recipe changes on purpose** (a new deconwolf version, a new snapshot date, new flags): rebuild
+    the stage, take the new SHA-256, update the default, and plan the wisdom store again.
+  * **What was shown, and what remains.** All the probe's builds ran on one UTC day (2026-11-24); the date is
+    shown not to reach the binary by a build under a clock set to 2027-01-04. Validation IM5 repeats the check with
+    two `--no-cache` builds on different UTC days.
 * `execution.deconwolf` names another binary for a run without the image (the host's own build).
   The record holds its SHA-256 either way.
 
@@ -676,6 +701,10 @@ it into the steps' shared working directory).
 
 **Recommendation: WS1.**
 
+* **A store stays valid across image rebuilds of one recipe** (amended 2026-11-24, W-936). The key holds the
+  binary's SHA-256, and the image's build is reproducible with that SHA-256 pinned ("deconwolf in the image"),
+  so a rebuilt image has the same `dw` and matches the stored plans. A store must be planned again only when the
+  recipe, and so the pinned SHA-256, changes.
 * **The key.** The SHA-256 of the canonical JSON of:
 
   | Field | Value |
