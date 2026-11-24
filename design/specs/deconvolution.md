@@ -732,13 +732,18 @@ it into the steps' shared working directory).
   So no key with another border quality or with tiling could be stored: the command refused
   every time, after deconwolf had planned (1,617 s at 6 threads at the real shape, W-916). The
   stage therefore does not store, and does not look up, wisdom at those settings: the command
-  refuses them early and a task with them runs `--noplan` (below). The two values fit border
-  quality 1 as the image plus ⌈PSF/2⌉ per axis and tiling as (tile + 20 of padding) + PSF − 1 in
-  Y and X with Z unchanged, but each fit rests on one data point; **that is inferred, not
-  verified**, and the stage relies on neither. Border quality 0 and 3 and an image that does not
-  divide into equal tiles were not probed. DW6 checks on the real binary that the reported job
-  differs from the image plus the PSF less one at border quality 1 and, within the fixture
-  limit, at the smallest tile size the plan accepts (above).
+  refuses them early and a task with them runs `--noplan` (below). At border quality 1 both
+  values fit the image plus ⌈PSF/2⌉ per axis: the probe above, and DW6's 8 × 64 × 64 image with
+  the same PSF, which gave 12 × 69 × 69 (`runs/W-939/20261124T0042Z-dw-image`). Tiling has no
+  such simple rule. At `--tilesize 49` that image became 4 tiles of 8 × 52 × 52 with jobs of
+  14 × 60 × 60, not tiles of 49 + 20. The tile size is a maximum, and each tile's size follows
+  from how deconwolf divides the image. (Corrected 2026-11-23 after DW6: this paragraph first
+  fitted the tiled job as (tile + 20 of padding) + PSF − 1, which matched the probe only because
+  96 divides 192.) Both readings are **inferred, not verified**, and the stage relies on
+  neither. Border quality 0 and 3, and an image whose sides do not divide evenly, were not
+  probed. DW6 checks on the real binary that the reported job differs from the image plus the
+  PSF less one at border quality 1 and, within the fixture limit, at the smallest tile size the
+  plan accepts (above).
   * **Decision (Jiahao, 2026-11-23, about 17:49 EST: "W-939 按 C 修").** Option C: the command and
     `add_wisdom` refuse other settings before deconwolf runs, and a task with them does not read
     the store. The options stay, with their help text stating the rule; the key's fields and
