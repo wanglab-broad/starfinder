@@ -1,9 +1,9 @@
 """The task checks of design/validation/deconvolution.md (W-923): SC1 to SC7 with SC1b, SC9 (W-933), PS1 to PS4, WI1
-to WI8 (WI8, W-937), RC1 to RC5, RU1 to RU11 and DW1 to DW5 (DW5, W-937).
+to WI8 (WI8, W-937), RC1 to RC5, RU1 to RU11 and DW1 to DW6 (DW5, W-937; DW6, W-939).
 
 The psf and deconvolve tasks run in this process on ``input_root`` (``deconvolution_cases``) with the stand-in ``dw``,
 which writes ``y = x + 5`` untiled and ``y = x`` tiled, so that every expected copy is an exact integer array.
-PS3, PS4 and RU11 need psfmodels (the ``deconvolution`` extra) and skip without it; DW1 to DW5 need the deconwolf
+PS3, PS4 and RU11 need psfmodels (the ``deconvolution`` extra) and skip without it; DW1 to DW6 need the deconwolf
 binary (``dw`` on PATH or ``STARFINDER_TEST_DECONWOLF``) and skip without it.
 """
 from __future__ import annotations
@@ -141,8 +141,8 @@ def test_sc1_sc2_offset_and_stretch_factor(work, tiled):
 @pytest.mark.parametrize("tiled", [False, True])
 def test_sc1_a_round_of_zeros_stores_zeros(work, tiled):
     """A round of zeros stores zeros with f = 1, with the stand-in's refusal of a maximum below 1 on: no channel is
-    passed to it (W-933). A wisdom store whose manifest does not parse shows that the round looks up no wisdom: a
-    round with signal fails on it."""
+    passed to it (W-933). A wisdom store whose manifest does not parse shows that the round looks up no wisdom: an
+    untiled round with signal fails on it, and a tiled one does not, as a tiled task reads no store (W-939)."""
     for label in D.LABELS:
         tifffile.imwrite(raw(work, "round2", label), np.zeros(D.SHAPE, dtype=np.uint8))
     dw, calls = D.stand_in(work / "bin")
@@ -152,8 +152,9 @@ def test_sc1_a_round_of_zeros_stores_zeros(work, tiled):
     keys = {"rounds": ["round1", "round2"], **({"tile_size": 64} if tiled else {})}
     manifest, path, copy, statuses = stage(work, "sc1-zero", block(work, **keys), dw,
                                            execution={"deconwolf_wisdom": str(store)})
-    assert statuses[deconvolve_id("round2")] == 0 and D.calls(calls) == []
-    assert statuses[deconvolve_id("round1")] == 1
+    # Only a tiled round1 reaches deconwolf (its two channels); the zero round2 never does.
+    assert statuses[deconvolve_id("round2")] == 0 and len(D.calls(calls)) == (2 if tiled else 0)
+    assert statuses[deconvolve_id("round1")] == (0 if tiled else 1)
     rec = record(copy, "round2")
     assert rec["storage"] == {"dtype": "uint8", "stretch_factor": 1.0, "round_max": 0.0}
     assert rec["planning"] == {"mode": "none", "reason": "no channel passed to deconwolf"}
@@ -582,6 +583,28 @@ def test_wi3_no_match_or_no_store(work, case):
     assert [c["plan_matched"] for c in rec["channels"]] == [None, None]
 
 
+@pytest.mark.parametrize("settings", [{"border_quality": 1}, {"tile_size": 64}, {"border_quality": 1, "tile_size": 64}],
+                         ids=["bq1", "tiled", "bq1-tiled"])
+@pytest.mark.parametrize("form", [WISDOM_FORMAT, "starfinder.deconwolf-wisdom/1"], ids=["store-2", "store-1"])
+def test_wi3_not_border_quality_2_untiled(work, settings, form):
+    """A task whose block has a border quality other than 2 or a tile size plans ``--noplan`` with the reason ``not
+    border quality 2, untiled``, an empty wisdom folder and no store read: a store of format /1, which fails any task
+    that looks it up (WI4), does not fail it, and the store is unchanged (W-939)."""
+    dw, calls = D.stand_in(work / "bin")
+    store, key = store_for(work, dw, 2, form=form)
+    before = D.tree(store)
+    execution = {"tasks": {"fov": {"threads": 1}, "deconvolve": {"threads": 2}}, "deconwolf_wisdom": str(store)}
+    manifest, path, copy, statuses = stage(work, "wi3-settings", block(work, rounds=["round1"], **settings), dw,
+                                           execution=execution)
+    calls = D.calls(calls)
+    assert statuses[deconvolve_id("round1")] == 0 and len(calls) == 2
+    assert all("--noplan" in call["argv"] and call["wisdom_found"] == [] for call in calls)
+    rec = record(copy, "round1")
+    assert rec["planning"] == {"mode": "estimate", "reason": "not border quality 2, untiled"}
+    assert [c["plan_matched"] for c in rec["channels"]] == [None, None]
+    assert D.tree(store) == before
+
+
 def test_wi4_a_damaged_store(work):
     dw, _ = D.stand_in(work / "bin")
     store, key = store_for(work, dw, 2, damaged=True)
@@ -770,6 +793,56 @@ def test_wi6_the_command_refuses_and_writes_nothing(tmp_path, capsys, case):
         assert f"the wisdom store {store} has format 'starfinder.deconwolf-wisdom/1'" in err and D.calls(calls) == []
     else:
         assert f"the PSF file {psf} does not exist" in err and D.calls(calls) == []
+
+
+@pytest.mark.parametrize("held", [False, True], ids=["no-store", "store-held"])
+@pytest.mark.parametrize("options, given", [(["--border-quality", "1"], "--border-quality 1"),
+                                            (["--tile-size", "64"], "--tile-size 64"),
+                                            (["--border-quality", "3", "--tile-size", "64"],
+                                             "--border-quality 3, --tile-size 64")],
+                         ids=["bq1", "tiled", "both"])
+def test_wi6_the_command_refuses_another_border_quality_or_tiling(tmp_path, capsys, options, given, held):
+    """``--border-quality`` other than 2 or ``--tile-size``: exit 2 before anything runs. The stand-in is never called,
+    and no store folder, lock or file is made (a store folder that exists is unchanged). ``add_wisdom`` raises
+    ValueError with the same message for the same arguments (W-939)."""
+    from starfinder.__main__ import main
+    from starfinder.workflow._deconvolve import add_wisdom
+    dw, calls = D.stand_in(tmp_path / "bin")
+    psf = D.write_psf_files(tmp_path / "psf", labels=("ch00",))["ch00"]
+    store = tmp_path / "store"
+    if held:
+        store.mkdir()
+        (store / "manifest.json").write_text(json.dumps({"format": WISDOM_FORMAT, "keys": {}}))
+    before = D.tree(store) if store.exists() else None
+    args = ["--store", str(store), "--shape", *map(str, D.SHAPE), "--psf", str(psf), "--threads", "1",
+            "--deconwolf", str(dw)]
+    status = main(["deconvolve", "wisdom", *args, *options])
+    err = capsys.readouterr().err
+    assert status == 2
+    assert err.startswith("deconvolve wisdom: FFTW wisdom applies only to border quality 2, untiled "
+                          f"({given} given): at other settings deconwolf's job is not the key's image + PSF − 1")
+    assert D.calls(calls) == []
+    assert (D.tree(store) if store.exists() else None) == before and not (store / ".lock").exists()
+    keys = dict(zip(options[::2], options[1::2]))
+    with pytest.raises(ValueError, match="FFTW wisdom applies only to border quality 2, untiled") as raised:
+        add_wisdom(store, D.SHAPE, psf, 1, binary=str(dw), border_quality=int(keys.get("--border-quality", 2)),
+                   tile_size=int(keys["--tile-size"]) if "--tile-size" in keys else None)
+    assert f"({given} given)" in str(raised.value)
+    assert D.calls(calls) == [] and (D.tree(store) if store.exists() else None) == before
+
+
+def test_wi6_border_quality_2_untiled_is_still_accepted(tmp_path):
+    """The explicit defaults ``--border-quality 2`` are not a refusal (W-939)."""
+    from starfinder.__main__ import main
+    dw, calls = D.stand_in(tmp_path / "bin")
+    psf = D.write_psf_files(tmp_path / "psf", labels=("ch00",))["ch00"]
+    store = tmp_path / "store"
+    status = main(["deconvolve", "wisdom", "--store", str(store), "--shape", *map(str, D.SHAPE), "--psf", str(psf),
+                   "--threads", "1", "--deconwolf", str(dw), "--border-quality", "2"])
+    assert status == 0 and len(D.calls(calls)) == 1
+    manifest = json.loads((store / "manifest.json").read_text())
+    (entry,) = manifest["keys"].values()
+    assert entry["fields"]["border_quality"] == 2 and entry["fields"]["tile_size"] is None
 
 
 def test_wi6_the_command_on_the_real_binary(real_dw, tmp_path):
@@ -1276,13 +1349,13 @@ def test_ru11_the_spacing_reaches_a_generated_psf(work):
         changed["voxel_size_xy"]
 
 
-# --- DW1 to DW5: deconwolf itself ---------------------------------------------------------------------------------
+# --- DW1 to DW6: deconwolf itself ---------------------------------------------------------------------------------
 
 @pytest.fixture
 def real_dw():
     path = os.environ.get("STARFINDER_TEST_DECONWOLF") or shutil.which("dw")
     if not path:
-        pytest.skip("DW1 to DW5 and WI6's run on the real binary need the deconwolf binary: dw on PATH or "
+        pytest.skip("DW1 to DW6 and WI6's run on the real binary need the deconwolf binary: dw on PATH or "
                     "STARFINDER_TEST_DECONWOLF, which this host lacks (the image has it)")
     return path
 
@@ -1410,3 +1483,34 @@ def test_dw5_a_matched_plan_on_the_real_binary(real_dw, work):
         outputs.append({c["label"]: c["output"]["file_sha256"] for c in rec["channels"]})
     assert copies[0] != copies[1] and outputs[0] == outputs[1]
     assert D.tree(store) == before
+
+
+def reported_job(real_dw, folder, shape, psf, *extra):
+    """The shapes ``real_dw`` reports for the synthetic volume of ``shape`` (the command's ``1 + 254 u``, seed 0) and
+    the PSF ``psf``, planning on, one thread, with the options ``extra``: ``starfinder deconvolve wisdom``'s own call
+    of deconwolf, which prints its line before it plans (W-939)."""
+    from starfinder.workflow._deconvolve import OFFSET, _private_home, reported_shapes, run_deconwolf
+    home = _private_home(folder)
+    volume = np.float32(1) + np.float32(254) * np.random.default_rng(0).random(tuple(shape), dtype=np.float32)
+    tifffile.imwrite(home / "volume.tif", volume)
+    tifffile.imwrite(home / "psf.tif", psf)
+    argv = [real_dw, "--iter", "1", "--threads", "1", "--offset", str(OFFSET), *extra, "--float", "--out",
+            str(home / "out.tif"), str(home / "volume.tif"), str(home / "psf.tif")]
+    status, output, _, _ = run_deconwolf(argv, home, 1)
+    assert status == 0, output.decode(errors="replace")[-2000:]
+    reported = reported_shapes(output)
+    assert reported is not None, output.decode(errors="replace")[-2000:]
+    return reported
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("extra", [("--bq", "1"), ("--tilesize", "49")], ids=["bq1", "tilesize49"])
+def test_dw6_the_job_is_not_image_plus_psf_at_other_settings(real_dw, tmp_path, extra):
+    """On 8 × 64 × 64 and ``psf_small`` (7 × 9 × 9, which deconwolf does not crop, DW5), the job deconwolf reports at
+    ``--bq 1`` and at ``--tilesize 49`` differs from the key's image + PSF − 1 = 14 × 72 × 72, so no plan made at those
+    settings could be stored under that key (W-939). 49 is the smallest tile size the specification's rule allows for
+    this PSF (its lateral size 9 plus 20 on each side), and any larger one that still tiles a volume within the
+    fixture limit divides no 64-pixel side into equal tiles either; the job of the first tile is the one reported."""
+    reported = reported_job(real_dw, tmp_path, (8, 64, 64), D.psf_small(), *extra)
+    assert reported["psf_zyx"] == [7, 9, 9]
+    assert reported["job_zyx"] != [14, 72, 72]

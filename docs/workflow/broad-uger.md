@@ -153,6 +153,14 @@ another CPU model, whose key the store lacks, runs with `--noplan`. Each channel
 record says whether the stored plan matched the job deconwolf reported
 (`plan_matched`), and the task log warns when it did not.
 
+Wisdom exists for border quality 2, untiled only. At `deconvolution.border_quality` 1 or with
+a `deconvolution.tile_size`, deconwolf's job is not the key's image + PSF − 1, so the
+command refuses `--border-quality` other than 2 and any `--tile-size` with exit 2, before it
+runs deconwolf (the planning would cost the half hour above and then be refused), and a CPU
+task with those settings does not read the store: it runs with `--noplan` and its record
+gives the reason `not border quality 2, untiled` (W-939). Tiling serves a smaller GPU, where
+the plan is VkFFT's and no store applies.
+
 A store made before W-937 (format `starfinder.deconwolf-wisdom/1`, by the command's
 `--psf-shape`) planned on a synthetic PSF that deconwolf cropped, so its plans never
 matched a task. A task given such a store fails, naming it, and the command refuses

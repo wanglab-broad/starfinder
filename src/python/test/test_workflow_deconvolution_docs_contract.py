@@ -28,7 +28,7 @@ def _tests(path):
 def test_every_check_has_a_row_naming_its_tests():
     page = docs_pages.design("validation/deconvolution.md")
     checks = CHECK.findall(docs_pages.section(page, "deconvolution-checks").split("## Image checks")[0])
-    assert len(checks) == 56 and len(set(checks)) == 56
+    assert len(checks) == 57 and len(set(checks)) == 57
     rows = docs_pages.table(page, "deconvolution-implemented-checks").splitlines()
     assert rows[0] == "| Check | File | Tests | Time (s, one CPU) |"
     listed = {}
