@@ -1,6 +1,6 @@
 # Deconvolution stage: a deconvolved TIFF + zlib copy of the images, made by deconwolf before the FOV tasks
 
-% Status: Approved (Jiahao, 2026-11-21, W-918), with decision 3 changed: uint8 with one stretch factor per (FOV, round) by default, as Huygens' exports, and uint16 with an adjustable scale on request ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`. Amended 2026-11-22 by Jiahao's decision on W-933 (option A): a channel whose raw values are all 0 skips deconwolf and stores zeros ("The scaling", "A channel of zeros skips deconwolf"). Amended 2026-11-23 by Jiahao's decision on W-937 (A1 and A2): `starfinder deconvolve wisdom` plans with the run's own PSF file, and the command and the task check the job deconwolf reports ("FFTW wisdom", "Records").
+% Status: Approved (Jiahao, 2026-11-21, W-918), with decision 3 changed: uint8 with one stretch factor per (FOV, round) by default, as Huygens' exports, and uint16 with an adjustable scale on request ("Jiahao's answers" below). Written against `70edc72` (v0.3.0); the branch changes design records only, so every code reference on this page holds at `70edc72`. Amended 2026-11-22 by Jiahao's decision on W-933 (option A): a channel whose raw values are all 0 skips deconwolf and stores zeros ("The scaling", "A channel of zeros skips deconwolf"). Amended 2026-11-23 by Jiahao's decision on W-937 (A1 and A2): `starfinder deconvolve wisdom` plans with the run's own PSF file, and the command and the task check the job deconwolf reports ("FFTW wisdom", "Records"). Amended 2026-11-23 by Jiahao's decision on W-939 (option C): wisdom applies only to border quality 2, untiled; the command refuses other settings and the task does not read the store for them ("FFTW wisdom", "Records").
 
 This page specifies deconvolution as a workflow stage of its own. Jiahao decided on 2026-11-20
 (W-855, comment 70988672) to make deconwolf the primary deconvolution and to arrange a rule for
@@ -682,7 +682,7 @@ it into the steps' shared working directory).
   | --- | --- |
   | `job_shape_zyx` | The padded shape deconwolf transforms: the image shape plus the PSF shape less one in each axis (border quality 2), for example 50 × 3,104 × 3,104 |
   | `psf_shape_zyx` | The shape of the PSF file the task passes deconwolf, and the command's `--psf` file. Its values are not in the key, so two PSFs of one shape give one key (WI1). But they are not irrelevant: they decide deconwolf's crop of the PSF, which decides the job ("deconwolf crops the PSF" below) |
-  | `border_quality`, `tile_size` | The two settings that change the transform sizes |
+  | `border_quality`, `tile_size` | The two settings that change the transform sizes. Since W-939 they are always 2 and null in a stored key: the command refuses any other value (below), and the fields and their hashing are unchanged |
   | `threads` | The task's threads; deconwolf's file name holds it too |
   | `cpu` | `model name` and the sorted `flags` of `/proc/cpuinfo`, hashed |
   | `fftw`, `deconwolf` | The FFT backend line of `dw --version` (for example `fftw-3.3.8-sse2-avx`) and deconwolf's version and binary SHA-256 |
@@ -696,10 +696,16 @@ it into the steps' shared working directory).
     with a 21 × 33 × 33 PSF, it printed `psf: [7x7x21], job: [70x70x50]` (the coordinating
     session, in the v0.4.0 image). In W-935 the planning run therefore planned a job of
     50 × 3,078 × 3,078, while the key and the task named 50 × 3,104 × 3,104. The task's log reads
-    `image: [3072x3072x30], psf: [33x33x21], job: [3104x3104x50]`, then "Importing FFTW wisdom" and
-    "--- fftw3 training ---": FFTW wisdom holds plans for exact sizes, so every `measure` task
-    planned from scratch, took 2.09 times the wall time of `--noplan`, and wrote outputs that
-    differ byte for byte between runs. W-925's RD3 is the same effect.
+    `image: [3072x3072x30], psf: [33x33x21], job: [3104x3104x50]`: FFTW wisdom holds plans for
+    exact sizes, so a `measure` task whose job (3,104) differs from the planned job (3,078)
+    could not reuse the plan, took 2.09 times the wall time of `--noplan`, and wrote outputs that
+    differ byte for byte between runs (W-935). W-925's RD3 is the same effect.
+  * **The log lines show nothing about reuse** (W-939's wording fix of W-937's text). "Importing
+    FFTW wisdom" and "--- fftw3 training ---" also appear in matched runs: W-937's real-binary
+    run (`runs/W-937/20261123T2136Z-dw-image`) found both in DW5's matched tasks and in three
+    direct runs that started with no wisdom file at all. The evidence for a plan that did not
+    apply is the job sizes (3,078 against 3,104) and W-935's byte differences between runs; the
+    matched runs of DW5, by contrast, were byte-identical.
   * **The rule.** A key is valid only for a PSF that deconwolf does not crop: the key names the
     uncropped PSF's job. The command plans with the run's own PSF file (A1), so deconwolf crops it
     exactly as a task with that PSF does, and both the command and the task read the job deconwolf
@@ -711,6 +717,33 @@ it into the steps' shared working directory).
     (`<out>.log.txt`), which the stage appends to the channel's log, but there one per line and
     among `image:` and `psf:` lines that name the input files. The stage reads the line of the
     output, the one line that holds all three shapes, as W-935's logs show it.
+* **Wisdom applies only to border quality 2, untiled** (amended 2026-11-23, W-939). The key's
+  `job_shape_zyx` is the image plus the PSF less one in every axis, which is deconwolf's job at
+  border quality 2 without tiles only. W-937's real-binary probe
+  (`runs/W-937/20261123T2136Z-dw-image`, "The probe") ran v0.4.5 (binary 8210ed03…) on an
+  8 × 192 × 192 volume with an uncropped 7 × 9 × 9 PSF, where the key's job is 14 × 200 × 200:
+
+  | Setting | deconwolf's job (Z, Y, X) |
+  | --- | --- |
+  | border quality 2, untiled (control) | 14 × 200 × 200, equal to the key's |
+  | `--bq 1` | 12 × 197 × 197 |
+  | `--tilesize 96` | 14 × 124 × 124 per tile (4 tiles) |
+
+  So no key with another border quality or with tiling could be stored: the command refused
+  every time, after deconwolf had planned (1,617 s at 6 threads at the real shape, W-916). The
+  stage therefore does not store, and does not look up, wisdom at those settings: the command
+  refuses them early and a task with them runs `--noplan` (below). The two values fit border
+  quality 1 as the image plus ⌈PSF/2⌉ per axis and tiling as (tile + 20 of padding) + PSF − 1 in
+  Y and X with Z unchanged, but each fit rests on one data point; **that is inferred, not
+  verified**, and the stage relies on neither. Border quality 0 and 3 and an image that does not
+  divide into equal tiles were not probed. DW6 checks on the real binary that the reported job
+  differs from the image plus the PSF less one at border quality 1 and, within the fixture
+  limit, at the smallest tile size the plan accepts (above).
+  * **Decision (Jiahao, 2026-11-23, about 17:49 EST: "W-939 按 C 修").** Option C: the command and
+    `add_wisdom` refuse other settings before deconwolf runs, and a task with them does not read
+    the store. The options stay, with their help text stating the rule; the key's fields and
+    hashing, the store format `starfinder.deconwolf-wisdom/2` and every store made since W-937
+    are unchanged.
 * **The store.** `execution.deconwolf_wisdom` names a folder: `<store>/<key>/<deconwolf's file
   name>` and `<store>/manifest.json`, which lists each key with its fields, the file's bytes and
   SHA-256, the job and the PSF deconwolf reported when it planned (`reported_job_zyx`,
@@ -730,16 +763,22 @@ it into the steps' shared working directory).
   `psf_shape_zyx` is the file's shape. FFTW's plans depend on the transform sizes, the threads and
   the options, not on the image's values, which is why a synthetic volume serves; the PSF's
   values decide the sizes through the crop, which is why the PSF must be the run's. The command
-  takes the store's lock for the key, refuses if the key exists, and runs deconwolf. It then reads
-  deconwolf's reported line: when the line is missing, when the reported job differs from the
+  first refuses, with exit 2 (invalid arguments), a `--border-quality` other than 2 and any
+  `--tile-size` (W-939): it runs no deconwolf, creates no store folder, takes no lock and writes
+  nothing, and its message says that FFTW wisdom applies only to border quality 2, untiled,
+  because at other settings deconwolf's job is not the key's image + PSF − 1, and names the
+  setting given. `add_wisdom` raises `ValueError` for the same cases before it touches the store.
+  The options stay, with help text stating the rule. Otherwise the command takes the store's lock
+  for the key, refuses if the key exists, and runs deconwolf. It then reads deconwolf's reported
+  line: when the line is missing, when the reported job differs from the
   key's `job_shape_zyx`, or when the reported PSF differs from the file's shape, it exits 1 and
   writes nothing, with a message that names both shapes and says that deconwolf cropped the PSF,
   so that no stored plan could match a task; tasks with that PSF then run `--noplan`, as no key
   matches. Otherwise it adds the file and its manifest entry. It is run by hand or as a job, once
   per (CPU model, shape, PSF, threads) of a deployment, outside the plan (WS2's reason). W-916's
   planning took 1,617 s at 6 threads.
-* **Read-only use.** A CPU `deconvolve` task computes its key, and when the store's manifest lists
-  it, it checks the file's SHA-256 against the manifest and copies the file into its own
+* **Read-only use.** A CPU `deconvolve` task at border quality 2, untiled computes its key, and
+  when the store's manifest lists it, it checks the file's SHA-256 against the manifest and copies the file into its own
   `$HOME/.config/deconwolf/`. A file whose SHA-256 differs from the manifest fails the task,
   naming the file: a damaged store is reported, not worked around. Whatever deconwolf writes back
   into that private folder is deleted with the task's temporary folder. The store is never opened for writing
@@ -754,7 +793,12 @@ it into the steps' shared working directory).
   matched channel says `plan_matched: true`; `estimate` and GPU channels, and a channel without
   the line, say null. This catches a channel whose PSF crops otherwise than the PSF the store was
   planned with.
-* **`--noplan` when no key matches**, and when the store is unset. The record says so.
+* **`--noplan` when no key matches**, when the store is unset, and at other settings. The record
+  says so. A CPU task whose block has a `border_quality` other than 2 or a `tile_size` (W-939) does
+  not read the store and does not compute a key: its planning is `{mode: estimate, reason: "not
+  border quality 2, untiled"}`, so even a store of another format does not fail it. The order of
+  the checks is: (1) `gpu`; (2) `no store`, when `execution.deconwolf_wisdom` is unset; (3) `not
+  border quality 2, untiled`; (4) the lookup, whose outcomes are `measure` and `no matching key`.
 * **Finding the store.** The command runs deconwolf with `HOME` set to a private folder under the
   task's temporary root, with `.config/deconwolf/` created first (holding the copy or nothing), and
   with the same folder as its working directory. So no wisdom is read or written outside the task,
@@ -769,7 +813,8 @@ it into the steps' shared working directory).
   the run's own PSF file (`--psf` replaces `--psf-shape`, with no compatibility option). A2: the
   command and the task read the `image/psf/job` line deconwolf prints and compare it with the key.
   The `--noplan` path, the GPU path, the storage arithmetic, W-933's zero-channel rule, the lock
-  and the engines' routing are unchanged.
+  and the engines' routing are unchanged. W-939's decision, above, narrows which keys exist; it
+  changes none of A1 and A2.
 
 ## Records
 
@@ -791,7 +836,7 @@ it into the steps' shared working directory).
 | `device` | `cpu` with the CPU model and threads, or `gpu` with the OpenCL device name and `CUDA_VISIBLE_DEVICES` |
 | `options` | Iterations, method, border quality, tile size and padding, offset, background, and the argument list passed |
 | `storage` | `{dtype: uint8, stretch_factor, round_max}`: the one factor and maximum the round's channels share; or `{dtype: uint16}`, each channel's scale then in `channels[]` |
-| `planning` | `{mode: measure, wisdom_key, wisdom_sha256, store, job_shape_zyx}` (the key's job, W-937), or `{mode: estimate}` with the reason (`no store` or `no matching key`), or `{mode: gpu}`; `{mode: none}` with the reason `no channel passed to deconwolf` for a round whose channels are all 0 (W-933) |
+| `planning` | `{mode: measure, wisdom_key, wisdom_sha256, store, job_shape_zyx}` (the key's job, W-937), or `{mode: estimate}` with the reason (`no store`, `not border quality 2, untiled` for a block with another border quality or a tile size (W-939), or `no matching key`), or `{mode: gpu}`; `{mode: none}` with the reason `no channel passed to deconwolf` for a round whose channels are all 0 (W-933) |
 | `channels[]` | Per label: the input `path`, `file_sha256`, and decoded `dtype`, `shape` and `sha256`; the PSF `path` and `file_sha256`; `deconwolf_skipped`; deconwolf's `iterations_done`; the float output's minimum and maximum; the kept offset removed; the scale (uint16); the counts clipped at 0 and at the dtype's maximum; the output `path`, `file_sha256` and decoded `sha256`; the log's path and SHA-256; the wall and CPU seconds; `reported_job_zyx` and `reported_psf_zyx`, the job and the PSF deconwolf reported (Z, Y, X; null without its line), and `plan_matched`, true or false under `measure`, else null ([FFTW wisdom](#fftw-wisdom), W-937). A channel of zeros also holds `skip_reason`, and its deconwolf fields, the three of W-937 included, are null ([The scaling](#the-scaling), "A channel of zeros skips deconwolf") |
 | `code` | The package's code identity (`orchestration.md`, "The code identity") |
 | `started_at`, `ended_at`, `host`, `job_id` | Where and when |

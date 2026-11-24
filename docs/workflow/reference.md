@@ -33,14 +33,18 @@ the plan, once per key:
 | `--psf FILE` | The tasks' PSF file: the copy's `psf/<label>.tif` as the `psf` task writes it, or a supplied PSF; its shape is the key's PSF shape; required. It replaced `--psf-shape` (W-937) |
 | `--threads N` | The tasks' threads; required |
 | `--deconwolf PATH` | The `dw` executable; default `dw` on `PATH` |
-| `--border-quality N` | `deconvolution.border_quality`; default 2 |
-| `--tile-size N` | `deconvolution.tile_size`; default untiled |
+| `--border-quality N` | `deconvolution.border_quality`; only 2, the default, is accepted: wisdom applies to border quality 2, untiled (W-939) |
+| `--tile-size N` | `deconvolution.tile_size`; not accepted: wisdom applies to border quality 2, untiled (W-939) |
 
 It exits 0 when it added the key, printing the key, the file and its SHA-256 as
 JSON; 1, writing nothing, when the store already holds the key or has a format other
 than `starfinder.deconwolf-wisdom/2`, when deconwolf fails, or when the job or the
 PSF shape deconwolf reports differs from the key's (deconwolf cropped the PSF); 2
-for invalid arguments. The {doc}`UGER guide <broad-uger>` shows a run.
+for invalid arguments, which include `--border-quality` other than 2 and any
+`--tile-size`: the command then runs no deconwolf and creates no store folder, lock or
+file, and its message names the setting given. At those settings deconwolf's job is not
+the key's image + PSF − 1, so no plan stored under the key could match a task (W-939).
+The {doc}`UGER guide <broad-uger>` shows a run.
 
 (workflow-exit-status)=
 ## Exit status

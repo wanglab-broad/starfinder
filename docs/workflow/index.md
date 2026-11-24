@@ -360,7 +360,9 @@ The block needs `voxel_size_xy` and `voxel_size_z`. A generated PSF needs the
   `starfinder deconvolve wisdom --store <dir> --shape <z y x> --psf <file>
   --threads <n>` once per node type, shape, PSF and thread count, with the run's own
   PSF file; tasks only read the store, and each channel's record says whether the
-  stored plan matched the job deconwolf reported. The {doc}`UGER guide <broad-uger>`
+  stored plan matched the job deconwolf reported. Wisdom applies only to border
+  quality 2, untiled: the command refuses other settings, and a task with them runs
+  `--noplan` without reading the store (W-939). The {doc}`UGER guide <broad-uger>`
   gives the resources and how to make the store again after W-937.
 
 ## Limits

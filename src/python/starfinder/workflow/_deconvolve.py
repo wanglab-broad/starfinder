@@ -45,6 +45,7 @@ SKIP_REASON = f"raw values all 0; deconwolf v{DECONWOLF_VERSION} refuses a maxim
 #: /2 (W-937): each entry holds the job and the PSF deconwolf reported. A /1 entry may hold plans for a cropped PSF's
 #: job under a key that names the uncropped one, so a /1 store is refused, not read.
 WISDOM_FORMAT = "starfinder.deconwolf-wisdom/2"
+WISDOM_SETTINGS_REASON = "not border quality 2, untiled"
 WISDOM_MANIFEST = "manifest.json"
 #: psfmodels' defaults that a generated PSF uses and records (W-855): coverslip, working distance, oversampling.
 PSFMODELS_DEFAULTS = {"tg": 170, "tg0": 170, "ng": 1.515, "ng0": 1.515, "ti0": 150, "oversample_factor": 3}
@@ -707,12 +708,21 @@ def _opencl_device(text):
 
 def _planning(execution, gpu, shape, psf_path, block, threads, identity, home):
     """The task's planning: ``gpu``; ``measure`` with the store's file for its key copied into the private
-    ``.config/deconwolf/`` and the key's job shape; or ``estimate`` (``--noplan``) with the reason."""
+    ``.config/deconwolf/`` and the key's job shape; or ``estimate`` (``--noplan``) with the reason.
+
+    The checks run in this order: ``gpu``; ``no store`` when ``execution.deconwolf_wisdom`` is unset; ``not border
+    quality 2, untiled`` for a block with another border quality or a tile size; then the lookup (``no matching key``).
+    Wisdom exists only for border quality 2, untiled, because only there is deconwolf's job the key's image + PSF − 1
+    (W-939), so a task with other settings neither reads the store nor computes a key: even a store of another format
+    does not fail it.
+    """
     if gpu:
         return {"mode": "gpu"}
     store = execution.get("deconwolf_wisdom")
     if store is None:
         return {"mode": "estimate", "reason": "no store"}
+    if block["border_quality"] != 2 or block["tile_size"] is not None:
+        return {"mode": "estimate", "reason": WISDOM_SETTINGS_REASON}
     import tifffile
     with tifffile.TiffFile(psf_path) as tif:
         psf_shape = tif.series[0].shape
@@ -786,8 +796,25 @@ def run_copy_id(manifest):
 
 # --- the wisdom store's command -----------------------------------------------------------------------------------
 
+def wisdom_settings_error(border_quality, tile_size):
+    """The refusal of a border quality other than 2 or a tile size for a wisdom key, or None for border quality 2,
+    untiled. deconwolf's job is the key's image + PSF − 1 only there (W-939)."""
+    if border_quality == 2 and tile_size is None:
+        return None
+    given = ", ".join([f"--border-quality {border_quality}"] * (border_quality != 2)
+                      + [f"--tile-size {tile_size}"] * (tile_size is not None))
+    return (f"FFTW wisdom applies only to border quality 2, untiled ({given} given): at other settings deconwolf's "
+            "job is not the key's image + PSF − 1, so no plan stored under the key could match a task (W-939); "
+            "tasks with those settings run with --noplan")
+
+
 def add_wisdom(store, shape, psf, threads, binary=None, border_quality=2, tile_size=None, timeout=7200):
     """Plan FFTW wisdom for one key on this node and add it to the store (``starfinder deconvolve wisdom``).
+
+    Wisdom is made for border quality 2, untiled only: at border quality 1 or with a tile size, deconwolf's job is not
+    the key's image + PSF − 1 (v0.4.5 reported 12 × 197 × 197 and 14 × 124 × 124 per tile where the key said
+    14 × 200 × 200), so ``border_quality`` other than 2 or a ``tile_size`` raises ValueError before the store is
+    touched or deconwolf runs (W-939).
 
     ``psf`` is a PSF file: one the psf task wrote (``<copy>/psf/<label>.tif``) or a supplied one, checked and written
     in float32 as the psf task writes a supplied file. The key's ``psf_shape_zyx`` is its shape. Under the store's
@@ -809,6 +836,9 @@ def add_wisdom(store, shape, psf, threads, binary=None, border_quality=2, tile_s
     run's own PSF and checks the job deconwolf reports.
     """
     import tifffile
+    refused = wisdom_settings_error(border_quality, tile_size)
+    if refused:
+        raise ValueError(refused)
     store = Path(store)
     if not Path(psf).is_file():
         raise ValueError(f"the PSF file {psf} does not exist")
@@ -833,10 +863,6 @@ def add_wisdom(store, shape, psf, threads, binary=None, border_quality=2, tile_s
                 tifffile.imwrite(home / "volume.tif", volume)
                 tifffile.imwrite(home / "psf.tif", kernel)
                 argv = [binary, "--iter", "1", "--threads", str(threads), "--offset", str(OFFSET)]
-                if border_quality != 2:
-                    argv += ["--bq", str(border_quality)]
-                if tile_size:
-                    argv += ["--tilesize", str(tile_size)]
                 argv += ["--float", "--out", str(home / "out.tif"), str(home / "volume.tif"), str(home / "psf.tif")]
                 status, output, wall, cpu = run_deconwolf(argv, home, threads)
                 made = home / ".config" / "deconwolf" / wisdom_name(threads)
@@ -887,7 +913,9 @@ def add_parser(groups):
                     "that deconwolf reports the key's job and the file's PSF shape (deconwolf crops some PSFs), and "
                     "add the file and its manifest entry to the store under its lock. Exit 0 with the key added, 1 "
                     "when the store already holds the key or has another format, deconwolf fails, or deconwolf "
-                    "reports another job or PSF shape (nothing written), 2 for invalid arguments.")
+                    "reports another job or PSF shape (nothing written), 2 for invalid arguments, among them a border "
+                    "quality other than 2 or a tile size: FFTW wisdom applies only to border quality 2, untiled, "
+                    "because at other settings deconwolf's job is not the key's image + PSF - 1 (W-939).")
     wisdom.add_argument("--store", type=Path, required=True, help="The store's folder (execution.deconwolf_wisdom)")
     wisdom.add_argument("--shape", type=int, nargs=3, required=True, metavar=("Z", "Y", "X"),
                         help="The image shape of the volumes the tasks deconvolve")
@@ -896,14 +924,21 @@ def add_parser(groups):
                              "PSF; its shape is the key's PSF shape")
     wisdom.add_argument("--threads", type=int, required=True, help="The tasks' threads")
     wisdom.add_argument("--deconwolf", help="The dw executable; default dw on PATH")
-    wisdom.add_argument("--border-quality", type=int, default=2, help="deconvolution.border_quality (default 2)")
-    wisdom.add_argument("--tile-size", type=int, help="deconvolution.tile_size (default untiled)")
+    wisdom.add_argument("--border-quality", type=int, default=2, help="deconvolution.border_quality; only 2, the default, is accepted: "
+                             "wisdom applies to border quality 2, untiled (W-939)")
+    wisdom.add_argument("--tile-size", type=int, help="deconvolution.tile_size; not accepted: wisdom applies to border "
+                             "quality 2, untiled (W-939)")
     return group
 
 
 def run_command(args):
-    """Run ``starfinder deconvolve wisdom``; the exit status."""
+    """Run ``starfinder deconvolve wisdom``; the exit status: 0, 1 for a refusal or failure, 2 for invalid arguments,
+    a border quality other than 2 or a tile size included (nothing is run or written, W-939)."""
     import sys
+    refused = wisdom_settings_error(args.border_quality, args.tile_size)
+    if refused:
+        print(f"deconvolve wisdom: {refused}", file=sys.stderr)
+        return 2
     try:
         entry = add_wisdom(args.store, args.shape, args.psf, args.threads, binary=args.deconwolf,
                            border_quality=args.border_quality, tile_size=args.tile_size)
