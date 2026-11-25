@@ -48,20 +48,22 @@ and deconvolution.
 
 ## Datasets
 
-Test datasets:
+### Synthetic
+
+`starfinder.synthetic` renders images together with their truth (where every molecule,
+nucleus and cell is, and where every FOV sits), so each stage can be tested against known
+answers. Four scenes build on each other: amplicon (one FOV), sample (overlapping FOVs
+with simple cells), cellular (lobed nuclei, cell types and stains) and real appearance
+(nuclei and cells taken from real images). See
+[Synthetic](https://wanglab-broad.github.io/starfinder/wiki/synthetic.html).
+
+### Real
 
 1. HeLa cell culture dataset (cell-culture-3D) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.11176779.svg)](https://doi.org/10.5281/zenodo.11176779)
 2. Mouse brain tissue section dataset (tissue-2D) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.11176779.svg)](https://doi.org/10.5281/zenodo.11176779)
 
 Additional sources: [Single Cell Portal](https://singlecell.broadinstitute.org/single_cell/study/SCP2637).
-
-## Broad / Wang Lab users
-
-The workflow runs on the UGER cluster with the provided profiles and container image; see
-[Broad UGER](https://wanglab-broad.github.io/starfinder/workflow/broad-uger.html).
-The frozen MATLAB workflow keeps its own environment,
-`conda env create -f workflow/envs/matlab-legacy.yaml`, and its
-[guide](https://wanglab-broad.github.io/starfinder/workflow/matlab-legacy.html).
+See [Real data](https://wanglab-broad.github.io/starfinder/wiki/real-data.html).
 
 ## Versions and changes
 
@@ -78,7 +80,12 @@ responsibilities, and [AGENTS.md](AGENTS.md) the operating instructions for agen
 
 ## Citation
 
-TBA
+If you use STARfinder, please cite:
+
+> Ren, J., Zeng, H., Huang, J., Tian, J., Wu, M., Shi, H., Sui, X., Wang, C. K., Zhou, H., Tang, Z., Luo, S. &
+> Wang, X. Spatially resolved in situ profiling of mRNA life cycle at transcriptome scale in intact cells and tissues
+> using STARmap PLUS, RIBOmap and TEMPOmap. *Nature Protocols* **21**, 1629–1661 (2026).
+> <https://doi.org/10.1038/s41596-025-01248-3>
 
 ## Contact
 
