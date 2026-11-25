@@ -40,6 +40,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          # The site's version comes from hatch-vcs over `git describe --match v*`: a shallow
+          # clone has no tag and publishes 0.1.devN (W-944).
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
           version: '0.9.28'

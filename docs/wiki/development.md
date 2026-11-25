@@ -35,6 +35,13 @@ Diagnoses by symptom.
 Updating callers of earlier Python interfaces.
 :::
 
+:::{grid-item-card} Release notes
+:link: ../release-notes
+:link-type: doc
+:class-card: sf-card
+What each version changed, and what a version number promises.
+:::
+
 ::::
 
 ```{toctree}
@@ -45,4 +52,5 @@ Contributing <../contributing>
 Python recipes <../recipes>
 Troubleshooting <../troubleshooting>
 Migration guide <../migration>
+Release notes <../release-notes>
 ```

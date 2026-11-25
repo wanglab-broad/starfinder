@@ -188,6 +188,12 @@ restricted to that job. PR checks have no deployment permissions. There is no
 generated-site branch and no Jekyll transformation; Sphinx's relative links keep
 `_static`, `_modules`, API and search assets under `/starfinder/`.
 
+The site's version is the package version, which hatch-vcs computes from the newest
+`v*` tag reachable from the built commit; the build job therefore checks out the full
+history with tags. For a release, push the tag before the commit reaches the selected
+branch, or the published site shows the development version of the previous tag
+(W-944).
+
 After a reviewed change is committed and pushed to the selected branch:
 
 1. Open its **Documentation** Actions run. Confirm the `docs` and `deploy` jobs
@@ -195,7 +201,8 @@ After a reviewed change is committed and pushed to the selected branch:
    Merely enabling Pages or passing a local build does not establish publication.
 2. Open `build-info.json` under the site URL. Match `revision` and `run_url` to
    the pushed commit/run; allow deployment propagation before diagnosing a stale
-   response. Record the public URL, revision and run URL in the release handoff.
+   response. For a release, check that `VERSION` in
+   `_static/documentation_options.js` is the tagged version. Record the public URL, revision and run URL in the release handoff.
 3. Open the home page and all five navigation sections (Get Started, Workflow, API, Wiki and Benchmark). Check a nested
    [Python API page](../../docs/api/python.rst), its function anchor and `[source]` backlink;
    open [MATLAB dataset methods](../../docs/api/matlab/dataset.rst) and
