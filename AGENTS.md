@@ -36,7 +36,7 @@ commits, Linear updates, checks and handoff; they take precedence over this file
 where they differ. Otherwise follow the initiative workflow linked above.
 
 Push, merge, deployment and publication require their own authorization.
-`codex/docs-autonomous` publishes the documentation site on every push; do not
+The `docs` branch publishes the documentation site on every push; do not
 change deployment guards without that authorization.
 
 ## Implementation

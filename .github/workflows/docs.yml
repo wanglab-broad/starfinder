@@ -3,8 +3,8 @@ name: Documentation
 on:
   pull_request:
   push:
-    # main is the GitHub default; dev and the pilot branch also need validation.
-    branches: [main, dev, codex/docs-autonomous]
+    # main is the GitHub default; dev and the publication branch (docs) also need validation.
+    branches: [main, dev, docs]
   workflow_dispatch:
     inputs:
       check_external_links:
@@ -18,7 +18,7 @@ permissions:
 concurrency:
   group: docs-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   # Do not interrupt a publication already in flight.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/codex/docs-autonomous' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/docs' }}
 
 jobs:
   docs:
@@ -72,7 +72,7 @@ jobs:
         run: |
           uv run --group docs sphinx-build -n -W --keep-going -b linkcheck ../../docs "$DOCS_RUN/linkcheck" 2>&1 | tee "$DOCS_RUN/linkcheck.log"
       - name: Record publication revision
-        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/docs-autonomous'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/docs'
         run: |
           uv run --group docs python - <<'PY'
           import json
@@ -91,7 +91,7 @@ jobs:
           )
           PY
       - name: Upload Pages site
-        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/docs-autonomous'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/docs'
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
           path: ${{ runner.temp }}/docs-validation/html
@@ -127,7 +127,7 @@ jobs:
 
   deploy:
     # Only the selected publication branch can deploy; PRs remain read-only.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/docs-autonomous'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/docs'
     needs: docs
     runs-on: ubuntu-24.04
     timeout-minutes: 10

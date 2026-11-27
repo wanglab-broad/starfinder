@@ -151,7 +151,7 @@ Each script refuses an existing output directory. Success ends with
 ### CI triggers and evidence
 
 `.github/workflows/docs.yml` runs on all pull requests, pushes to `main`
-(the verified GitHub default branch), `dev` and `codex/docs-autonomous`, and
+(the verified GitHub default branch), `dev` and the publication branch `docs`, and
 manual dispatch. There is no path filter: source and dependency changes can
 break autodoc even when Markdown is unchanged. The read-only job uses Ubuntu
 24.04, installs the locked runtime plus `docs` group, builds with
@@ -164,14 +164,14 @@ installation/build/example logs, interpreter/package versions, seed/config and
 example summaries for 14 days. It also retains linkcheck output when requested.
 Record the run URL, tested commit and result in the PR/issue before calling CI
 verified. Copy cited evidence to durable external storage before artifact expiry.
-Successful push runs on `codex/docs-autonomous` also publish the checked HTML
+Successful push runs on the `docs` branch also publish the checked HTML
 as described below. Pull requests, `main`, `dev` and manual dispatch validate
 only; they do not publish.
 
 ### Publish and verify a release
 
 The publication URL is <https://wanglab-broad.github.io/starfinder/>. The selected
-source branch is **`codex/docs-autonomous`**; it is independent of the repository's
+source branch is **`docs`**; it is independent of the repository's
 default branch, `main`. Repository **Settings → Pages → Build and deployment**
 must use **GitHub Actions**. The `github-pages` environment must permit the
 selected branch. Changing the publication branch requires updating both push
